@@ -1,8 +1,10 @@
 // What a build was made from and what it wrote, each file with a hash of its
 // content. The inputs are every file the bundle read, the `package.json` of
 // each package those files belong to (its `exports` and `ember-addon` fields
-// decide what an import resolves to), and the files that configure the
-// build. The outputs are every file the build wrote. The build writes the
+// decide what an import resolves to), the `tsconfig.json` nearest each of
+// those files and every config it extends (the TypeScript transform reads
+// `target`, `verbatimModuleSyntax` and the decorator options from there), and
+// the files that configure the build. The outputs are every file the build wrote. The build writes the
 // record to `inputs.json` beside its manifest. The realm server never serves
 // that file; it serves only what the manifest lists.
 //
@@ -20,6 +22,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 import type { Plugin } from 'vite';
@@ -35,6 +38,7 @@ function configFiles(root: string): string[] {
   let buildDir = join(root, 'build');
   return [
     'package.json',
+    'tsconfig.json',
     'vite.config.ts',
     join('..', '..', 'pnpm-lock.yaml'),
     ...(existsSync(buildDir)
@@ -88,6 +92,68 @@ function packageManifests(dir: string): string[] {
   return found;
 }
 
+// The `tsconfig.json` nearest `dir`, looking up to the filesystem's root as
+// the TypeScript transform does, or undefined when there is none.
+const tsconfigByDir = new Map<string, string | undefined>();
+function nearestTsconfig(dir: string): string | undefined {
+  if (tsconfigByDir.has(dir)) {
+    return tsconfigByDir.get(dir);
+  }
+  let file = join(dir, 'tsconfig.json');
+  let parent = dirname(dir);
+  let found = isFile(file)
+    ? file
+    : parent === dir
+      ? undefined
+      : nearestTsconfig(parent);
+  tsconfigByDir.set(dir, found);
+  return found;
+}
+
+// `tsconfig` and every config its `extends` names, transitively. A config is
+// JSON with comments, so `extends` is read by pattern rather than parsed; a
+// name that doesn't resolve to a file is left out, as the transform would
+// fail to read it too.
+function tsconfigChain(tsconfig: string, seen = new Set<string>()): string[] {
+  if (seen.has(tsconfig)) {
+    return [];
+  }
+  seen.add(tsconfig);
+  let source = readFileSync(tsconfig, 'utf8');
+  let match = /"extends"\s*:\s*("(?:[^"\\]|\\.)*"|\[[^\]]*\])/.exec(source);
+  let names: string[] = [];
+  if (match) {
+    try {
+      let value = JSON.parse(match[1]) as string | string[];
+      names = Array.isArray(value) ? value : [value];
+    } catch {
+      // An `extends` that isn't plain JSON names nothing this can follow.
+    }
+  }
+  let dir = dirname(tsconfig);
+  let require = createRequire(tsconfig);
+  let chain = [tsconfig];
+  for (let name of names) {
+    let candidates = name.startsWith('.')
+      ? [resolve(dir, name), resolve(dir, `${name}.json`)]
+      : [];
+    if (!name.startsWith('.')) {
+      for (let specifier of [name, `${name}.json`, `${name}/tsconfig.json`]) {
+        try {
+          candidates.push(require.resolve(specifier));
+        } catch {
+          // Not this spelling of the package's config.
+        }
+      }
+    }
+    let file = candidates.find(isFile);
+    if (file) {
+      chain.push(...tsconfigChain(file, seen));
+    }
+  }
+  return chain;
+}
+
 // The record of the inputs, for module ids as the bundler names them. A
 // virtual module (`\0…`) or one with a query has its file, if any, among
 // the ids too, so only ids that are files on disk are recorded.
@@ -96,6 +162,8 @@ export function describeInputs(
   root: string = PACKAGE_ROOT,
 ): InputsRecord {
   let paths = new Set<string>();
+  // Each package's manifest and the TypeScript configs its modules compile
+  // under.
   let manifests = new Set<string>();
   for (let id of moduleIds) {
     let file = id.split('?')[0];
@@ -103,6 +171,12 @@ export function describeInputs(
       paths.add(relative(root, file));
       for (let manifest of packageManifests(dirname(file))) {
         manifests.add(manifest);
+      }
+      let tsconfig = nearestTsconfig(dirname(file));
+      if (tsconfig) {
+        for (let config of tsconfigChain(tsconfig)) {
+          manifests.add(config);
+        }
       }
     }
   }

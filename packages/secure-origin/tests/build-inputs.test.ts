@@ -61,6 +61,15 @@ beforeEach(() => {
   write(join(repo, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
   write(join(root, 'package.json'), '{"name":"@cardstack/secure-origin"}');
   write(join(root, 'vite.config.ts'), 'export default {};');
+  write(join(root, 'tsconfig.json'), '{ "compilerOptions": {} }');
+  write(
+    join(repo, 'packages', 'pretui', 'tsconfig.json'),
+    '{\n  // a comment\n  "extends": "../../tsconfig.base",\n}\n',
+  );
+  write(
+    join(repo, 'tsconfig.base.json'),
+    '{ "compilerOptions": { "target": "es2022" } }',
+  );
   write(join(root, 'build', 'plugin.ts'), 'export {};');
   write(ownModule, '<template>page</template>');
   write(otherPackageModule, '<template>button</template>');
@@ -86,6 +95,7 @@ test('the record holds the files the bundle read and the build config', () => {
     'build/plugin.ts',
     'package.json',
     'src/page.gts',
+    'tsconfig.json',
     'vite.config.ts',
   ]);
 });
@@ -151,4 +161,19 @@ test('an output that is gone or has changed, or no record of outputs, is stale',
     JSON.stringify(describeInputs([ownModule], root)),
   );
   assert.match(staleInput(dist, root)!, /records no outputs/);
+});
+
+test("a change to the package's tsconfig, or one another package's modules compile under, is stale", () => {
+  build();
+  writeFileSync(
+    join(root, 'tsconfig.json'),
+    '{ "compilerOptions": { "target": "es2020" } }',
+  );
+  assert.equal(staleInput(dist, root), 'tsconfig.json has changed');
+  build();
+  writeFileSync(
+    join(repo, 'tsconfig.base.json'),
+    '{ "compilerOptions": { "target": "es2020" } }',
+  );
+  assert.equal(staleInput(dist, root), '../../tsconfig.base.json has changed');
 });
