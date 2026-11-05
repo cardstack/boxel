@@ -363,6 +363,11 @@ async function sample(
     branch: new Map(),
     actor: new Map(),
   };
+  // Job lines are held until every run's jobs are read. The budget is checked
+  // before each job-list request, so a sample can be abandoned partway, and
+  // lines already emitted would put an arbitrary part of the active jobs on
+  // the dashboard.
+  const jobLines: Record<string, unknown>[] = [];
 
   for (const run of runs) {
     let jobs: Job[];
@@ -455,7 +460,7 @@ async function sample(
       bump('branch', branch);
       bump('actor', actor);
 
-      emit({
+      jobLines.push({
         event_type: 'job',
         observed_at,
         repo: opts.repo,
@@ -479,6 +484,8 @@ async function sample(
       });
     }
   }
+
+  for (const line of jobLines) emit(line);
 
   for (const [dimension, m] of Object.entries(groups)) {
     for (const [key, counts] of m) {
