@@ -9,6 +9,7 @@ import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Bot from '@cardstack/boxel-icons/bot';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import Lock from '@cardstack/boxel-icons/lock';
+import Star from '@cardstack/boxel-icons/star';
 import Store from '@cardstack/boxel-icons/store';
 import { Button } from '@cardstack/pretui/components/button';
 import { Collapsible } from '@cardstack/pretui/components/collapsible';
@@ -20,7 +21,6 @@ import { modifier } from 'ember-modifier';
 import { add, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import {
   FailureBordered as FailureIcon,
-  StarFilled,
   WarningTriangleFilled as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
@@ -44,11 +44,10 @@ import Agents from './agents';
 import AgentsFlyout from './agents-flyout';
 import ArchivedWorkspace from './archived-workspace';
 import CatalogSection from './catalog-section';
-import CatalogsFlyout from './catalogs-flyout';
-import FavoritesFlyout from './favorites-flyout';
 import GetStarted from './get-started';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
+import { realmListFlyout } from './realm-list-flyout';
 import SectionHead from './section-head';
 import Workspace from './workspace';
 import {
@@ -72,10 +71,6 @@ interface Signature {
 }
 
 const log = logger('component:dashboard');
-
-// With fewer workspaces of their own than this, a user sees the catalog
-// before Workspaces: it has more to open than they do.
-export const CATALOG_LEADS_BELOW = 3;
 
 const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -274,13 +269,10 @@ export default class Dashboard extends Component<Signature> {
     },
   );
 
-  private get favoritesEmptyMessage(): string | null {
-    if (this.favoriteRealmIdentifiers.length > 0) {
-      return null;
-    }
-    return this.listedFavorites.length === 0
-      ? 'You have no favorites yet'
-      : 'No matching results';
+  // Counted before the scope filter, so a filter that hides every favorite
+  // says so instead of removing the section from the top of the page.
+  private get isFavoritesShown() {
+    return this.listedFavorites.length > 0;
   }
 
   private get userWorkspacesEmptyMessage(): string | null {
@@ -288,15 +280,6 @@ export default class Dashboard extends Component<Signature> {
       return 'No matching results';
     }
     return null;
-  }
-
-  private get catalogEmptyMessage(): string | null {
-    if (this.filteredCatalogRealmIdentifiers.length > 0) {
-      return null;
-    }
-    return this.scope === 'hosted'
-      ? 'No matching results'
-      : 'No catalogs yet. Add public realms with the gear.';
   }
 
   // Columns in the recent tiles' grid and the rows' grid, as CSS laid them
@@ -404,21 +387,13 @@ export default class Dashboard extends Component<Signature> {
   }
 
   private get renderedCatalogCount() {
-    return this.catalogEmptyMessage
-      ? 0
-      : this.filteredCatalogRealmIdentifiers.length;
+    return this.filteredCatalogRealmIdentifiers.length;
   }
 
-  // Decided once, as the dashboard opens, and kept until it closes, so
-  // archiving a workspace or realms that arrive late never swap the sections
-  // under the user. The list has loaded by then: the dashboard renders only
-  // once the session is authenticated, which sign-in sets after assembling
-  // the user's realm list. Counted before the scope filter, so switching to
-  // Hosted doesn't reorder the page.
-  private catalogLeads = this.readCatalogLeads();
-
-  private readCatalogLeads() {
-    return this.realmServer.userRealmIdentifiers.length < CATALOG_LEADS_BELOW;
+  private get catalogEmptyMessage() {
+    return this.scope === 'hosted'
+      ? 'No matching results'
+      : 'No catalogs yet. Add public realms with the gear.';
   }
 
   // Listings aren't hosted workspaces, so Hosted hides the shelf.
@@ -427,14 +402,9 @@ export default class Dashboard extends Component<Signature> {
   }
 
   // Where each part of the keyboard cursor's walk starts, in page order:
-  // Favorites, New Workspace, the recent tiles, the rows shown, and Catalogs,
-  // first or last as the page shows it.
-  private get favoritesNavBase() {
-    return this.catalogLeads ? this.renderedCatalogCount : 0;
-  }
-
+  // Favorites, New Workspace, the recent tiles, the rows shown, and Catalogs.
   private get addWorkspaceNavIndex() {
-    return this.favoritesNavBase + this.favoritesCount;
+    return this.favoritesCount;
   }
 
   private get recentNavBase() {
@@ -446,27 +416,20 @@ export default class Dashboard extends Component<Signature> {
   }
 
   private get catalogNavBase() {
-    return this.catalogLeads
-      ? 0
-      : this.rowsNavBase + this.visibleRowRealmIdentifiers.length;
+    return this.rowsNavBase + this.visibleRowRealmIdentifiers.length;
   }
 
   // What each `[data-nav-index]` shows, in page order. A workspace that is
   // also a favorite is in the walk twice, as a desk and as a tile or row.
   @cached
   private get walkKeys(): string[] {
-    let catalogs = this.catalogEmptyMessage
-      ? []
-      : this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`);
-    let workspaces = [
+    return [
       ...this.favoriteRealmIdentifiers.map((url) => `desk:${url}`),
       ...(this.isAddWorkspaceShown ? ['new-workspace'] : []),
       ...this.recentRealmIdentifiers.map((url) => `workspace:${url}`),
       ...this.visibleRowRealmIdentifiers.map((url) => `workspace:${url}`),
+      ...this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`),
     ];
-    return this.catalogLeads
-      ? [...catalogs, ...workspaces]
-      : [...workspaces, ...catalogs];
   }
 
   // Where the workspace the dashboard opened over sits in the walk, when it
@@ -493,16 +456,16 @@ export default class Dashboard extends Component<Signature> {
   }
 
   // The workspace the dashboard opened over, otherwise the first favorite or
-  // workspace, even when the catalogs lead the page. The cursor takes focus on
-  // open when it is in view, so it never starts on New Workspace while
-  // anything else is shown: the first Enter would create a workspace.
+  // workspace. The cursor takes focus on open when it is in view, so it never
+  // starts on New Workspace while anything else is shown: the first Enter
+  // would create a workspace.
   private get defaultSelectedIndex() {
     let returnIndex = this.returnNavIndex;
     if (returnIndex !== undefined) {
       return returnIndex;
     }
     if (this.favoritesCount > 0) {
-      return this.favoritesNavBase;
+      return 0;
     }
     if (this.userWorkspacesCount > 0) {
       return this.recentNavBase;
@@ -513,13 +476,31 @@ export default class Dashboard extends Component<Signature> {
     return 0;
   }
 
+  private favoritesSection: DashboardSection = {
+    id: 'favorites',
+    label: 'Favorites',
+    icon: Star,
+    count: () => this.favoritesCount,
+    flyout: realmListFlyout(
+      'Favorites',
+      () => this.favoriteRealmIdentifiers,
+      () => 'No matching results',
+    ),
+  };
+
   // No count: the rail counts a section only as its heading does, and this
-  // one's counts belong to its Favorites and Your Workspaces groups.
+  // one's counts belong to its groups.
   private workspacesSection: DashboardSection = {
     id: 'workspaces',
     label: 'Workspaces',
     icon: LayoutGrid,
-    flyout: FavoritesFlyout,
+    flyout: realmListFlyout(
+      'Workspaces',
+      () => sortByUpdatedAtDesc(this.userRealmIdentifiers, this.realm.info),
+      () =>
+        this.userWorkspacesEmptyMessage ??
+        'No workspaces yet. Create one from the Workspaces section.',
+    ),
   };
 
   private agentsSection: DashboardSection = {
@@ -538,7 +519,11 @@ export default class Dashboard extends Component<Signature> {
     label: 'Catalogs',
     icon: Store,
     count: () => this.renderedCatalogCount,
-    flyout: CatalogsFlyout,
+    flyout: realmListFlyout(
+      'Catalogs',
+      () => this.filteredCatalogRealmIdentifiers,
+      () => this.catalogEmptyMessage,
+    ),
   };
 
   private cursor = new KeyboardCursor({
@@ -610,17 +595,44 @@ export default class Dashboard extends Component<Signature> {
 
           <GetStarted @showAgents={{this.showAgents}} />
 
-          {{#if this.catalogLeads}}
-            <CatalogSection
-              @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
-              @emptyMessage={{this.catalogEmptyMessage}}
-              @count={{this.renderedCatalogCount}}
-              @showShelf={{this.isCatalogShelfShown}}
-              @leads={{true}}
-              @navBase={{this.catalogNavBase}}
-              @cursor={{this.cursor}}
-              {{@sections.register this.catalogsSection}}
-            />
+          {{#if this.isFavoritesShown}}
+            <section
+              class='dashboard-section'
+              aria-labelledby={{this.headingId 'favorites'}}
+              {{@sections.register this.favoritesSection}}
+              data-test-dashboard-section='favorites'
+              data-test-favorites-section
+            >
+              <SectionHead
+                @icon={{Star}}
+                @title='Favorites'
+                @titleId={{this.headingId 'favorites'}}
+                @count={{this.favoritesCount}}
+              >Workspaces you favorited, kept at the top.</SectionHead>
+              {{#if this.favoritesCount}}
+                <div
+                  class='desk-list'
+                  {{this.trackFavoriteCounts
+                    this.favoriteRealmIdentifiers
+                    this.realm.indexCountsRevision
+                  }}
+                  data-test-favorites-list
+                >
+                  {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
+                    <Workspace
+                      @realmIdentifier={{realmIdentifier}}
+                      @variant='desk'
+                      @navIndex={{i}}
+                      @isSelected={{eq this.cursor.currentIndex i}}
+                      @selectionActive={{this.cursor.isRingShown}}
+                    />
+                  {{/each}}
+                </div>
+              {{else}}
+                <p class='group-empty' data-test-favorites-empty>No matching
+                  results</p>
+              {{/if}}
+            </section>
           {{/if}}
 
           <section
@@ -634,48 +646,6 @@ export default class Dashboard extends Component<Signature> {
               @title='Workspaces'
               @titleId={{this.headingId 'workspaces'}}
             >Where your cards live.</SectionHead>
-
-            <div class='group' data-test-favorites-section>
-              <h3 class='group-head'>
-                <StarFilled
-                  class='group-icon'
-                  width='14'
-                  height='14'
-                  aria-hidden='true'
-                />
-                <span class='group-title'>Favorites</span>
-                {{#if this.favoritesCount}}
-                  <span class='group-count'>{{this.favoritesCount}}</span>
-                {{/if}}
-              </h3>
-              {{#if this.favoritesEmptyMessage}}
-                <p
-                  class='group-empty'
-                  data-test-favorites-empty
-                >{{this.favoritesEmptyMessage}}</p>
-              {{else}}
-                <div
-                  class='desk-list'
-                  {{this.trackFavoriteCounts
-                    this.favoriteRealmIdentifiers
-                    this.realm.indexCountsRevision
-                  }}
-                  data-test-favorites-list
-                >
-                  {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
-                    {{#let (add this.favoritesNavBase i) as |navIndex|}}
-                      <Workspace
-                        @realmIdentifier={{realmIdentifier}}
-                        @variant='desk'
-                        @navIndex={{navIndex}}
-                        @isSelected={{eq this.cursor.currentIndex navIndex}}
-                        @selectionActive={{this.cursor.isRingShown}}
-                      />
-                    {{/let}}
-                  {{/each}}
-                </div>
-              {{/if}}
-            </div>
 
             <div class='group' data-test-your-workspaces-section>
               <h3 class='group-head'>
@@ -843,17 +813,14 @@ export default class Dashboard extends Component<Signature> {
             </div>
           </section>
 
-          {{#unless this.catalogLeads}}
-            <CatalogSection
-              @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
-              @emptyMessage={{this.catalogEmptyMessage}}
-              @count={{this.renderedCatalogCount}}
-              @showShelf={{this.isCatalogShelfShown}}
-              @navBase={{this.catalogNavBase}}
-              @cursor={{this.cursor}}
-              {{@sections.register this.catalogsSection}}
-            />
-          {{/unless}}
+          <CatalogSection
+            @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
+            @emptyMessage={{this.catalogEmptyMessage}}
+            @showShelf={{this.isCatalogShelfShown}}
+            @navBase={{this.catalogNavBase}}
+            @cursor={{this.cursor}}
+            {{@sections.register this.catalogsSection}}
+          />
 
           <section
             class='dashboard-section'
@@ -928,9 +895,9 @@ export default class Dashboard extends Component<Signature> {
         --dashboard-scrim-height: 7rem;
         --dashboard-toggle-height: 2.75rem;
         --dashboard-greeting-font-size: var(--boxel-font-size-xl);
-        --dashboard-greeting-font-weight: 700;
+        --dashboard-greeting-font-weight: 500;
         --dashboard-section-title-font-size: var(--boxel-font-size-lg);
-        --dashboard-section-hint-font-size: var(--boxel-font-size-sm);
+        --dashboard-section-hint-font-size: var(--boxel-font-size-xs);
 
         /* Breakpoints follow the dashboard's own width, which is less than
            the viewport's when the AI assistant panel is open. */

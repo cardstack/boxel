@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -150,4 +151,22 @@ export default class RealmListFlyout extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+// A section's rail flyout listing the realms the page lists, so it follows
+// the page's filter.
+export function realmListFlyout(
+  title: string,
+  realmURLs: () => string[],
+  emptyMessage: () => string,
+): TemplateOnlyComponent<SectionFlyoutSignature> {
+  return <template>
+    <RealmListFlyout
+      @title={{title}}
+      @titleId={{@titleId}}
+      @close={{@close}}
+      @realmURLs={{(realmURLs)}}
+      @emptyMessage={{(emptyMessage)}}
+    />
+  </template>;
 }

@@ -146,9 +146,10 @@ function isInView(el: Element) {
   let scroller = find(
     '[data-test-dashboard-scroller]',
   )!.getBoundingClientRect();
+  // Half a pixel of slack, since layout can leave an edge a fraction past.
   return (
-    top >= Math.max(scroller.top, 0) &&
-    bottom <= Math.min(scroller.bottom, window.innerHeight)
+    top >= Math.max(scroller.top, 0) - 0.5 &&
+    bottom <= Math.min(scroller.bottom, window.innerHeight) + 0.5
   );
 }
 
@@ -462,15 +463,18 @@ module('Acceptance | dashboard', function (hooks) {
         .hasText(/^Good (morning|afternoon|evening), Ada$/);
     });
 
-    test('with fewer than three workspaces of their own, a user sees Catalogs first', async function (assert) {
+    test('with one workspace and no favorites, Workspaces comes first and Catalogs follows them', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
-      assert.deepEqual(sectionOrder(), ['catalogs', 'workspaces', 'agents']);
+      assert.deepEqual(sectionOrder(), ['workspaces', 'catalogs', 'agents']);
+      assert
+        .dom('[data-test-favorites-section]')
+        .doesNotExist('no empty Favorites box at the top');
       assert
         .dom(
           '[data-test-dashboard-section="catalogs"] [data-test-catalog-list]',
         )
-        .exists('the catalog tiles lead with their section');
+        .exists();
       assert
         .dom('[data-test-dashboard-section="workspaces"] h2')
         .hasText('Workspaces');
@@ -480,31 +484,58 @@ module('Acceptance | dashboard', function (hooks) {
       assert.dom('[data-test-dashboard-section="agents"] h2').hasText('Agents');
     });
 
-    test('the keyboard walks the catalogs first when they lead', async function (assert) {
+    test('with a favorite, Favorites comes first among the sections', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      (getService('matrix-service') as MatrixService).workspaceFavorites = [
+        realmURL,
+      ];
+      await settled();
+
+      assert.deepEqual(sectionOrder(), [
+        'favorites',
+        'workspaces',
+        'catalogs',
+        'agents',
+      ]);
+      assert
+        .dom('[data-test-favorites-section] h2')
+        .hasText('Favorites 1', 'a heading of its own, with its count');
+      assert
+        .dom(
+          '[data-test-favorites-list] [data-test-workspace-selected="Workspace A"]',
+        )
+        .exists('the new favorite takes the cursor');
+    });
+
+    test('the keyboard walks the catalogs after the workspaces', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       assert
         .dom('[data-test-workspace-selected="Workspace A"]')
-        .exists('the cursor still starts on the workspace, not a catalog');
+        .exists('the cursor starts on the workspace, not a catalog');
       assert
         .dom('[data-test-catalog-list] [data-test-workspace]')
         .exists('the fixture lists a catalog');
 
       await focus('[data-test-workspace-button="Workspace A"]');
-      await pressKey('ArrowLeft');
-      await pressKey('ArrowLeft');
-      assert.dom('[data-test-add-workspace-selected]').exists();
-
-      await pressKey('ArrowLeft');
+      await pressKey('ArrowRight');
+      await pressKey('ArrowRight');
       assert
         .dom('[data-test-catalog-list] [data-test-workspace-selected]')
-        .exists('before New Workspace come the catalogs');
+        .exists('after the last workspace come the catalogs');
+
+      await pressKey('ArrowLeft');
+      assert.dom('[data-test-workspace-selected="Workspace A"]').exists();
+      await pressKey('ArrowLeft');
+      assert
+        .dom('[data-test-add-workspace-selected]')
+        .exists('New Workspace is first, with no catalogs before it');
     });
 
-    test('the Workspaces section holds favorites, your workspaces and archived', async function (assert) {
+    test('the Workspaces section holds your workspaces and archived', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       let workspaces = '[data-test-dashboard-section="workspaces"]';
-      assert.dom(`${workspaces} [data-test-favorites-section]`).exists();
+      assert.dom(`${workspaces} [data-test-favorites-section]`).doesNotExist();
       assert
         .dom(
           `${workspaces} [data-test-workspace-list] [data-test-add-workspace]`,
@@ -603,6 +634,7 @@ module('Acceptance | dashboard', function (hooks) {
         .isNotChecked();
       assert.dom('[data-test-favorites-empty]').hasText('No matching results');
       assert.dom('[data-test-workspaces-empty]').hasText('No matching results');
+      assert.dom('[data-test-catalog-list]').doesNotExist();
       assert.dom('[data-test-catalog-empty]').hasText('No matching results');
 
       markHosted(realmURL);
@@ -624,15 +656,11 @@ module('Acceptance | dashboard', function (hooks) {
       ];
       await settled();
 
-      assert
-        .dom('[data-test-favorites-empty]')
-        .hasText('You have no favorites yet');
+      assert.dom('[data-test-favorites-section]').doesNotExist();
 
       await clickScopeOption('hosted');
 
-      assert
-        .dom('[data-test-favorites-empty]')
-        .hasText('You have no favorites yet');
+      assert.dom('[data-test-favorites-section]').doesNotExist();
     });
 
     test('All brings back the workspaces Hosted hid', async function (assert) {
@@ -1076,17 +1104,11 @@ module('Acceptance | dashboard', function (hooks) {
             .exists('the dashboard stays open');
         }
 
-        test('the section order stays as the dashboard opened while it is open', async function (assert) {
+        test('Catalogs stays after Workspaces once fewer than three workspaces are left', async function (assert) {
           await visitOperatorMode({
             workspaceChooserOpened: true,
             stacks: [[{ id: `${keptRealmURL}index`, format: 'isolated' }]],
           });
-          assert.deepEqual(sectionOrder(), [
-            'workspaces',
-            'catalogs',
-            'agents',
-          ]);
-
           await archiveRemovedWorkspace();
 
           assert.strictEqual(
@@ -1094,12 +1116,6 @@ module('Acceptance | dashboard', function (hooks) {
             2,
             'fewer than three workspaces are left',
           );
-          assert.deepEqual(
-            sectionOrder(),
-            ['workspaces', 'catalogs', 'agents'],
-            'the sections stay where they were',
-          );
-          assert.deepEqual(railOrder(), ['workspaces', 'catalogs', 'agents']);
 
           await click('[data-test-workspace-chooser-toggle]');
           assert.dom('[data-test-dashboard]').doesNotExist();
@@ -1107,10 +1123,10 @@ module('Acceptance | dashboard', function (hooks) {
 
           assert.deepEqual(
             sectionOrder(),
-            ['catalogs', 'workspaces', 'agents'],
-            'reopened, the catalog leads',
+            ['workspaces', 'catalogs', 'agents'],
+            'reopened, Catalogs still follows Workspaces',
           );
-          assert.deepEqual(railOrder(), ['catalogs', 'workspaces', 'agents']);
+          assert.deepEqual(railOrder(), ['workspaces', 'catalogs', 'agents']);
         });
 
         test('archiving it clears the stacks when one of its cards is open', async function (assert) {
@@ -1674,7 +1690,8 @@ module('Acceptance | dashboard', function (hooks) {
           assert.true(scroller.scrollTop > 0, 'the page is scrolled down');
 
           await click('[data-test-section-rail-entry="workspaces"]');
-          await waitUntil(() => scroller.scrollTop === 0);
+          // A smooth scroll this long takes over a second.
+          await waitUntil(() => scroller.scrollTop === 0, { timeout: 3000 });
 
           assert.strictEqual(scroller.scrollTop, 0, 'the page is at its top');
           assert
@@ -1815,7 +1832,7 @@ module('Acceptance | dashboard', function (hooks) {
       module('three workspaces of their own', function (hooks) {
         setupWorkspaces(hooks, 2, '40rem');
 
-        test('Workspaces leads, and Catalogs follows them', async function (assert) {
+        test('Workspaces comes first, and Catalogs follows them', async function (assert) {
           await visitOperatorMode({ workspaceChooserOpened: true });
 
           assert.deepEqual(sectionOrder(), [
@@ -2211,6 +2228,8 @@ module('Acceptance | dashboard', function (hooks) {
       const RAIL = '[data-test-section-rail]';
       const ENTRY = '[data-test-section-rail-entry="workspaces"]';
       const FLYOUT = '[data-test-section-rail-flyout="workspaces"]';
+      const FAVORITES_ENTRY = '[data-test-section-rail-entry="favorites"]';
+      const FAVORITES_FLYOUT = '[data-test-section-rail-flyout="favorites"]';
       const CATALOGS_ENTRY = '[data-test-section-rail-entry="catalogs"]';
       const CATALOGS_FLYOUT = '[data-test-section-rail-flyout="catalogs"]';
 
@@ -2221,10 +2240,10 @@ module('Acceptance | dashboard', function (hooks) {
 
       // As a browser does for Enter on a focused button: the key, then its
       // click.
-      async function pressEntry() {
-        await focus(ENTRY);
-        await triggerKeyEvent(ENTRY, 'keydown', 'Enter');
-        await click(ENTRY);
+      async function pressEntry(entry: string) {
+        await focus(entry);
+        await triggerKeyEvent(entry, 'keydown', 'Enter');
+        await click(entry);
       }
 
       function openCardIds() {
@@ -2238,8 +2257,8 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.deepEqual(
           railOrder(),
-          ['catalogs', 'workspaces', 'agents'],
-          'in page order, with Catalogs first for a user with one workspace',
+          ['workspaces', 'catalogs', 'agents'],
+          'in page order, with no Favorites entry while there are no favorites',
         );
         assert.dom(RAIL).isVisible();
         assert.dom(ENTRY).containsText('Workspaces');
@@ -2257,9 +2276,28 @@ module('Acceptance | dashboard', function (hooks) {
             'the Catalogs entry counts as its heading does',
           );
         assert
-          .dom(CATALOGS_ENTRY)
+          .dom(ENTRY)
           .hasAttribute('aria-current', 'location', 'the top section is read');
-        assert.dom(ENTRY).doesNotHaveAttribute('aria-current');
+        assert.dom(CATALOGS_ENTRY).doesNotHaveAttribute('aria-current');
+      });
+
+      test('with a favorite, the Favorites entry comes first, with its count', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        favoriteWorkspaceA();
+        await settled();
+
+        assert.deepEqual(
+          railOrder(),
+          ['favorites', 'workspaces', 'catalogs', 'agents'],
+          'the rail follows the page',
+        );
+        assert.dom(FAVORITES_ENTRY).containsText('Favorites');
+        assert
+          .dom(`${FAVORITES_ENTRY} [data-test-section-rail-count]`)
+          .hasText('1', 'the entry counts as its heading does');
+        assert
+          .dom(FAVORITES_ENTRY)
+          .hasAttribute('aria-current', 'location', 'the top section is read');
       });
 
       test('the Catalogs entry opens its flyout of catalogs, and a catalog opens its workspace', async function (assert) {
@@ -2287,23 +2325,20 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom('[data-test-dashboard]').doesNotExist();
       });
 
-      test('pressing Enter on the Workspaces entry opens its flyout of favorites, and a favorite opens its workspace', async function (assert) {
+      test('the Workspaces entry opens its flyout of workspaces, and a workspace opens it', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
-        favoriteWorkspaceA();
 
-        await focus(ENTRY);
-        assert
-          .dom(FLYOUT)
-          .doesNotExist('focus alone leaves it closed, so Tab passes the rail');
-
-        await pressEntry();
+        await pressEntry(ENTRY);
 
         assert.dom(ENTRY).hasAttribute('aria-expanded', 'true');
-        assert.dom(FLYOUT).exists();
-        assert.dom(`${FLYOUT} header`).hasText('Favorites');
-        assert
-          .dom(`${FLYOUT} [data-test-section-rail-realm]`)
-          .exists({ count: 1 });
+        assert.dom(`${FLYOUT} header`).hasText('Workspaces');
+        assert.deepEqual(
+          findAll(`${FLYOUT} [data-test-section-rail-realm]`).map((el) =>
+            el.getAttribute('data-test-section-rail-realm'),
+          ),
+          ['Workspace A'],
+          'only their own workspaces, not the catalogs',
+        );
 
         await click(`${FLYOUT} [data-test-section-rail-realm="Workspace A"]`);
 
@@ -2319,14 +2354,86 @@ module('Acceptance | dashboard', function (hooks) {
         );
       });
 
-      test('with no favorites, the flyout says how to add one', async function (assert) {
+      test('pressing Enter on the Favorites entry opens its flyout of favorites, and a favorite opens its workspace', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
+        favoriteWorkspaceA();
+        await settled();
 
-        await pressEntry();
-
+        await focus(FAVORITES_ENTRY);
         assert
-          .dom(`${FLYOUT} [data-test-section-rail-flyout-empty]`)
-          .includesText('Favorite a workspace');
+          .dom(FAVORITES_FLYOUT)
+          .doesNotExist('focus alone leaves it closed, so Tab passes the rail');
+
+        await pressEntry(FAVORITES_ENTRY);
+
+        assert.dom(FAVORITES_ENTRY).hasAttribute('aria-expanded', 'true');
+        assert.dom(FAVORITES_FLYOUT).exists();
+        assert.dom(`${FAVORITES_FLYOUT} header`).hasText('Favorites');
+        assert
+          .dom(`${FAVORITES_FLYOUT} [data-test-section-rail-realm]`)
+          .exists({ count: 1 });
+
+        await click(
+          `${FAVORITES_FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
+        );
+
+        assert.dom('[data-test-dashboard]').doesNotExist();
+        assert.strictEqual(
+          (
+            getService(
+              'operator-mode-state-service',
+            ) as OperatorModeStateService
+          ).realmURL,
+          realmURL,
+          'Workspace A is the open workspace',
+        );
+      });
+
+      test('under Hosted, each flyout lists only what the page lists', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        favoriteWorkspaceA();
+        await settled();
+        await clickScopeOption('hosted');
+
+        function flyoutNames(flyout: string) {
+          return findAll(`${flyout} [data-test-section-rail-realm]`).map((el) =>
+            el.getAttribute('data-test-section-rail-realm'),
+          );
+        }
+
+        for (let [entry, flyout] of [
+          [FAVORITES_ENTRY, FAVORITES_FLYOUT],
+          [ENTRY, FLYOUT],
+          [CATALOGS_ENTRY, CATALOGS_FLYOUT],
+        ]) {
+          await click(entry);
+          assert.deepEqual(flyoutNames(flyout), [], `${entry} lists nothing`);
+          assert
+            .dom(`${flyout} [data-test-section-rail-flyout-empty]`)
+            .hasText('No matching results');
+          await click(entry);
+        }
+
+        markHosted(realmURL);
+        await settled();
+
+        await click(FAVORITES_ENTRY);
+        assert.deepEqual(
+          flyoutNames(FAVORITES_FLYOUT),
+          ['Workspace A'],
+          'a hosted favorite is listed',
+        );
+        assert
+          .dom(`${FAVORITES_FLYOUT} [data-test-section-rail-flyout-empty]`)
+          .doesNotExist();
+        await click(FAVORITES_ENTRY);
+
+        await click(ENTRY);
+        assert.deepEqual(
+          flyoutNames(FLYOUT),
+          ['Workspace A'],
+          'a hosted workspace is listed',
+        );
       });
 
       test('Escape closes the flyout with focus back on its entry, then folds the rail', async function (assert) {
@@ -2335,20 +2442,23 @@ module('Acceptance | dashboard', function (hooks) {
           stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
         });
         favoriteWorkspaceA();
-        await pressEntry();
-        await focus(`${FLYOUT} [data-test-section-rail-realm="Workspace A"]`);
+        await settled();
+        await pressEntry(FAVORITES_ENTRY);
+        await focus(
+          `${FAVORITES_FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
+        );
 
         await triggerKeyEvent(
-          `${FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
+          `${FAVORITES_FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
           'keydown',
           'Escape',
         );
 
-        assert.dom(FLYOUT).doesNotExist();
-        assert.dom(ENTRY).isFocused('focus goes back to the entry');
+        assert.dom(FAVORITES_FLYOUT).doesNotExist();
+        assert.dom(FAVORITES_ENTRY).isFocused('focus goes back to the entry');
         assert.dom(RAIL).hasAttribute('data-test-section-rail-folded', 'false');
 
-        await triggerKeyEvent(ENTRY, 'keydown', 'Escape');
+        await triggerKeyEvent(FAVORITES_ENTRY, 'keydown', 'Escape');
 
         assert
           .dom(RAIL)
@@ -2357,7 +2467,7 @@ module('Acceptance | dashboard', function (hooks) {
             'true',
             'the second Escape folds the rail to its icons',
           );
-        assert.dom(ENTRY).isFocused('focus stays on the entry');
+        assert.dom(FAVORITES_ENTRY).isFocused('focus stays on the entry');
         assert.deepEqual(
           openCardIds(),
           [`${realmURL}index`],
