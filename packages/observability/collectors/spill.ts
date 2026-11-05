@@ -149,18 +149,20 @@ export interface PoolJob {
 
 // The workflow whose pushes to `main` take RunsOn whatever the spill says, for
 // one machine type under its memory baseline and Percy builds. A RunsOn job of
-// any other workflow, main included, is there because of the spill.
-export const ALWAYS_RUNS_ON_MAIN_WORKFLOW = 'CI Host';
+// any other workflow, main included, is there because of the spill. Matched on
+// the workflow file, which a rename of the workflow's `name:` does not change.
+export const ALWAYS_RUNS_ON_MAIN_WORKFLOW_PATH =
+  '.github/workflows/ci-host.yaml';
 
 export function isDivertible(job: {
   event: string | undefined;
   branch: string | null | undefined;
-  workflow: string | null | undefined;
+  workflowPath: string | null | undefined;
 }): boolean {
   return !(
     job.event === 'push' &&
     job.branch === 'main' &&
-    job.workflow === ALWAYS_RUNS_ON_MAIN_WORKFLOW
+    job.workflowPath === ALWAYS_RUNS_ON_MAIN_WORKFLOW_PATH
   );
 }
 

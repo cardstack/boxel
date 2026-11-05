@@ -78,6 +78,8 @@ interface Run {
   actor?: { login?: string } | null;
   triggering_actor?: { login?: string } | null;
   event?: string;
+  // The workflow file, such as `.github/workflows/ci.yaml`.
+  path?: string;
 }
 
 interface Options {
@@ -290,7 +292,7 @@ function poolJob(job: Job, run: Run | undefined, observedAt: number): PoolJob {
     divertible: isDivertible({
       event: run?.event,
       branch: job.head_branch ?? run?.head_branch,
-      workflow: job.workflow_name ?? run?.name,
+      workflowPath: run?.path,
     }),
   };
 }

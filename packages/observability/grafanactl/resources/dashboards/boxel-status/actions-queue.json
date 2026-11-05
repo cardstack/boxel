@@ -1327,7 +1327,7 @@
             "mode": "single"
           }
         },
-        "description": "1 while the collector holds the spill variable at `true`, so that pull request jobs that follow the spill start on RunsOn. A bucket that shows 1 had the spill on for at least one sample in it.",
+        "description": "1 while the collector holds the spill variable at `true`, so that jobs that follow the spill start on RunsOn. A bucket that shows 1 had the spill on for at least one sample in it.",
         "interval": "5m"
       },
       {

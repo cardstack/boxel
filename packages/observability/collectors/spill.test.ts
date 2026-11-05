@@ -161,20 +161,24 @@ test('jobs are counted by where they run', () => {
 });
 
 test('only CI Host pushes to main take RunsOn whatever the spill says', () => {
+  const ciHost = '.github/workflows/ci-host.yaml';
   const main = { event: 'push', branch: 'main' };
-  assert.equal(isDivertible({ ...main, workflow: 'CI Host' }), false);
+  assert.equal(isDivertible({ ...main, workflowPath: ciHost }), false);
   // CI's jobs on main take RunsOn only while the spill is on.
-  assert.equal(isDivertible({ ...main, workflow: 'CI' }), true);
+  assert.equal(
+    isDivertible({ ...main, workflowPath: '.github/workflows/ci.yaml' }),
+    true,
+  );
   assert.equal(
     isDivertible({
       event: 'pull_request',
       branch: 'main',
-      workflow: 'CI Host',
+      workflowPath: ciHost,
     }),
     true,
   );
   assert.equal(
-    isDivertible({ event: 'push', branch: 'ci-bisect', workflow: 'CI Host' }),
+    isDivertible({ event: 'push', branch: 'ci-bisect', workflowPath: ciHost }),
     true,
   );
 });
