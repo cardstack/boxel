@@ -52,6 +52,7 @@ import Users from '../../components/icons/users.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
   failureMessage,
@@ -114,7 +115,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Share a key'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -134,7 +135,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       </DonePage>
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
-        <EditPage @heading='Share a key' data-test-share-key>
+        <EditPage @heading={{this.title}} data-test-share-key>
           <:intro>
             {{#if this.forAnyone}}
               <span data-test-share-key-intro='anyone'>People who can access the
@@ -305,6 +306,8 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
   // Reached from the key page for one of its keys, rather than opened for a
   // realm by a page elsewhere.
   private fromKeyPage = Boolean(this.opened.key && !this.opened.realm);
+
+  private title = pageTitle('share-key');
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -515,7 +518,12 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     this.form.error = undefined;
   };
 
-  private goToKeys = () => navigation.back(pageURL('keys'));
+  // From the key page, back to it; opened for a realm, on to the key page,
+  // whose trail leads back here.
+  private goToKeys = () =>
+    this.fromKeyPage
+      ? navigation.back(keyPageURL())
+      : navigation.assign(withWayBack(pageURL('keys')));
 
   // Done, a share started from the key page goes back to it; one opened for a
   // realm closes the window.

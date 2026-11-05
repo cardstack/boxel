@@ -27,6 +27,7 @@ import Tag from '../../components/icons/tag.gts';
 import Users from '../../components/icons/users.gts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
+import { pageTitle, withWayBack } from './trail.ts';
 
 import {
   failureMessage,
@@ -70,7 +71,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Share your key in place of one that stopped working'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -93,10 +94,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       </DonePage>
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.save}} data-test-swap-key-form>
-        <EditPage
-          @heading='Share your key in place of one that stopped working'
-          data-test-swap-key
-        >
+        <EditPage @heading={{this.title}} data-test-swap-key>
           <:intro>This shared key stopped working. Share one of your own keys in
             its place: every request in the workspace that uses this shared key
             then sends your key instead, to wherever that request goes, and runs
@@ -233,6 +231,8 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     </style>
   </template>
 
+  private title = pageTitle('swap-key');
+
   private opened = openedFor();
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
@@ -365,7 +365,8 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private goToKeys = () => navigation.back(pageURL('keys'));
+  // On to the key page, whose trail leads back here.
+  private goToKeys = () => navigation.assign(withWayBack(pageURL('keys')));
 
   private save = async (event: Event) => {
     event.preventDefault();

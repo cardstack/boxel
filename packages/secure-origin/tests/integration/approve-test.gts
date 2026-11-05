@@ -752,7 +752,7 @@ module('Integration | approve pages', function (hooks) {
         .attributes.review,
       'review asks for the changed operations only',
     );
-    assert.dom('[data-test-keys-heading]').hasText('Review changed calls');
+    assert.dom('[data-test-keys-heading]').hasText('Review changes');
     assert.dom('[data-test-approve-changed]').hasText('Changed');
     assert
       .dom('[data-test-approve-diff-field]')
@@ -1445,8 +1445,9 @@ module('Integration | approve pages', function (hooks) {
         realm: REALM,
         key: 'key-gh',
         then: 'keys',
+        back: 'keys/key-gh/use',
       },
-      'the approve page is opened for the card type in that workspace, with this key',
+      'the approve page is opened for the card type in that workspace, with this key, and its trail leads back here',
     );
   });
 
@@ -2189,8 +2190,9 @@ module('Integration | approve pages', function (hooks) {
         realm: REALM,
         share: 'share-team',
         then: 'keys',
+        back: `keys/key-gh/use#${new URLSearchParams({ realm: REALM, share: 'share-team' })}`,
       },
-      'the approve page is opened for the card type, with the share',
+      'the approve page is opened for the card type, with the share, and its trail leads back here',
     );
   });
 

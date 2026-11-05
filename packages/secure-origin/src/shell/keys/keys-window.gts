@@ -1,6 +1,7 @@
 // The secure window's key pages, around whichever one is open: a bar with the
 // Boxel logo, what the window is for and a Close button, and the page under
-// it while the window has a session of its own.
+// it while the window has a session of its own, beneath the trail of key
+// pages the window came through to reach it (`breadcrumbs.gts`).
 //
 // The key pages never sign in, as they never sign out: the window's session
 // is the one signing in to Boxel on this origin leaves here. Without one, or
@@ -44,6 +45,7 @@ import { navigation } from '../navigation.js';
 import { pageAwaitsData } from '../telemetry.ts';
 import type { PageVisit } from '../../telemetry/instrument.ts';
 
+import Breadcrumbs from './breadcrumbs.gts';
 import EditPage from './edit-page.gts';
 
 export type Config = ReturnType<typeof readConfig>;
@@ -103,6 +105,9 @@ export default class KeysWindow extends Component<Signature> {
             class='close-label'
           >Close</span></Button>
       </header>
+      {{#if (this.is 'signed-in')}}
+        <Breadcrumbs />
+      {{/if}}
       <div class='body' data-test-keys-panel>
         {{#if (this.is 'checking')}}
           <BusyMessage

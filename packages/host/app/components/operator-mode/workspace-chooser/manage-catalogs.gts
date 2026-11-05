@@ -265,7 +265,8 @@ export default class ManageCatalogs extends Component {
   <template>
     <span class='manage-catalogs'>
       <IconButton
-        @label='Choose catalogs'
+        @label='Choose Catalogs'
+        @tooltip='Choose Catalogs'
         @icon={{Settings}}
         @iconWidth='16'
         @iconHeight='16'

@@ -25,6 +25,11 @@ export interface TooltipSignature {
      * button whose only label is its tip.
      */
     labels?: boolean;
+    /**
+     * Keeps the tip hidden, as while a menu or flyout the trigger opened
+     * covers where it would show. The association stays.
+     */
+    disabled?: boolean;
   };
   Blocks: { default: [] };
   Element: HTMLSpanElement;
@@ -74,7 +79,9 @@ export class Tooltip extends Component<TooltipSignature> {
     return this.args.side ?? 'top';
   }
   get shown() {
-    return (this.hovered || this.focused) && !this.dismissed;
+    return (
+      (this.hovered || this.focused) && !this.dismissed && !this.args.disabled
+    );
   }
   /** Wires the tip onto the yielded trigger and takes it off on teardown. */
   describeTrigger = modifier(

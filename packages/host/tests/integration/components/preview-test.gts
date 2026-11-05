@@ -46,7 +46,6 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { TestCard });
     let card = new TestCard({ firstName: 'Mango ' });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -230,9 +229,6 @@ module('Integration | preview', function (hooks) {
       static isolated = SharedTemplate;
       static edit = SharedTemplate;
     }
-    loader.shimModule(`${testRealmURL}shared-template-card`, {
-      SharedTemplateCard,
-    });
 
     let cardInstance = new SharedTemplateCard({ firstName: 'Mango' });
 
@@ -302,9 +298,6 @@ module('Integration | preview', function (hooks) {
       static isolated = IsolatedTemplate;
       static edit = EditTemplate;
     }
-    loader.shimModule(`${testRealmURL}distinct-template-card`, {
-      DistinctTemplateCard,
-    });
 
     let cardInstance = new DistinctTemplateCard({ firstName: 'Mango' });
 
@@ -379,10 +372,6 @@ module('Integration | preview', function (hooks) {
       static isolated = FieldHostTemplate;
       static edit = FieldHostTemplate;
     }
-    loader.shimModule(`${testRealmURL}field-host-card`, {
-      SharedFormatField,
-      FieldHostCard,
-    });
 
     let cardInstance = new FieldHostCard({
       detail: new SharedFormatField({ name: 'Mango' }),
@@ -447,7 +436,6 @@ module('Integration | preview', function (hooks) {
         </template>
       };
     }
-    loader.shimModule(`${testRealmURL}stable-card`, { StableCard });
 
     let card = new StableCard({ name: 'Mango' });
 
