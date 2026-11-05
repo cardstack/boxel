@@ -114,6 +114,11 @@ interface Args {
     // The realm a no-realm card search targets (the realm the `@context` was
     // provided with). Only meaningful with `cardInitiated`.
     getDefaultRealm?: () => string | undefined;
+    // The realm events that can change this query's results. When set, only
+    // those re-run it, and at once rather than after the refresh window.
+    // For a caller that can tell from the event alone, so the rare event that
+    // matters is not batched with the many that don't.
+    refreshOn?: (event: RealmEventContent) => boolean;
   };
 }
 
@@ -207,6 +212,7 @@ export class SearchEntriesResource extends Resource<Args> {
   #previousRealms: string[] | undefined;
   #cardInitiated = false;
   #getDefaultRealm: (() => string | undefined) | undefined;
+  #refreshOn: ((event: RealmEventContent) => boolean) | undefined;
   #idleClearScheduled = false;
   #log = runtimeLogger('search-entries-resource');
   // Kept private for tests/internal load bookkeeping.
@@ -269,7 +275,7 @@ export class SearchEntriesResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { query, cardInitiated, getDefaultRealm } = named;
+    let { query, cardInitiated, getDefaultRealm, refreshOn } = named;
 
     // Keep the previously provided values when optional args are omitted on
     // subsequent modify() calls (mirrors how the query is re-read each pass).
@@ -278,6 +284,9 @@ export class SearchEntriesResource extends Resource<Args> {
     }
     if (getDefaultRealm !== undefined) {
       this.#getDefaultRealm = getDefaultRealm;
+    }
+    if (refreshOn !== undefined) {
+      this.#refreshOn = refreshOn;
     }
 
     if (query === undefined) {
@@ -361,6 +370,18 @@ export class SearchEntriesResource extends Resource<Args> {
         realm,
         unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
           if (this.#previousQuery === undefined) {
+            return;
+          }
+          if (this.#refreshOn) {
+            if (!this.#refreshOn(event)) {
+              return;
+            }
+            this.#log.info(
+              `${event.eventName} event on ${realm} matched this query's refresh filter; refreshing now`,
+            );
+            this.realmsNeedingRefresh.add(realm);
+            this.#refreshScheduler.cancel();
+            this.#flushEventRefresh();
             return;
           }
           // Two triggers re-run a subscribed search: an incremental index
@@ -1161,6 +1182,7 @@ export function getSearchEntriesResource(
     // callers leave these unset and keep the all-realms default.
     cardInitiated?: boolean;
     getDefaultRealm?: () => string | undefined;
+    refreshOn?: (event: RealmEventContent) => boolean;
   },
 ) {
   return SearchEntriesResource.from(parent, () => ({
@@ -1168,6 +1190,7 @@ export function getSearchEntriesResource(
       query: getQuery(),
       cardInitiated: opts?.cardInitiated,
       getDefaultRealm: opts?.getDefaultRealm,
+      refreshOn: opts?.refreshOn,
     },
   })) as SearchEntriesResource;
 }

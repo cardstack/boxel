@@ -12,7 +12,10 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import { stripJsonSuffix } from '@cardstack/host/lib/live-search-type-gate';
 import { getSearchEntriesResource } from '@cardstack/host/resources/search-entries';
+
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const PIN_FIELD = 'entryPoints';
 
@@ -29,10 +32,21 @@ export class WorkspacePins {
     parent: object,
     getRealm: () => { realm: string; realmURL: string } | undefined,
   ) {
-    this.#resource = getSearchEntriesResource(parent, () => {
-      let target = getRealm();
-      return target ? indexCardQuery(target.realm, target.realmURL) : undefined;
-    });
+    this.#resource = getSearchEntriesResource(
+      parent,
+      () => {
+        let target = getRealm();
+        return target
+          ? indexCardQuery(target.realm, target.realmURL)
+          : undefined;
+      },
+      {
+        refreshOn: (event) => {
+          let target = getRealm();
+          return target ? indexCardChanged(event, target.realmURL) : false;
+        },
+      },
+    );
   }
 
   // The pinned cards' ids, in the order the workspace lists them, each once.
@@ -52,6 +66,24 @@ function indexCardQuery(realm: string, realmURL: string): SearchEntryWireQuery {
     scope: 'cards',
     fields: { entry: [`item.${PIN_FIELD}`] },
   };
+}
+
+// Pins only move when the index card is reindexed, or when the whole realm is.
+// Any other write to the realm leaves them as they are.
+function indexCardChanged(event: RealmEventContent, realmURL: string): boolean {
+  if (event.eventName !== 'index') {
+    return false;
+  }
+  if (event.indexType === 'full') {
+    return true;
+  }
+  if (event.indexType !== 'incremental') {
+    return false;
+  }
+  let indexCard = stripJsonSuffix(new URL('index.json', realmURL).href);
+  return (event.invalidations ?? []).some(
+    (url) => stripJsonSuffix(url) === indexCard,
+  );
 }
 
 function pinnedCardIds(
