@@ -626,6 +626,17 @@ module(basename(import.meta.filename), function (hooks) {
       },
       ticket: await ticket(OWNER, 'add'),
     });
+    await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'hostless robot',
+      value: 'hostless-secret',
+      oauth: {
+        clientId: 'hostless',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
     let signIn = await addOAuthClient(dbAdapter, keyring, {
       owner: OWNER,
       name: 'other app',
@@ -676,6 +687,11 @@ module(basename(import.meta.filename), function (hooks) {
       serves['pasted'],
       [...found.groups.map((g) => g.destination.href)].sort(),
       'a pasted key is taken wherever it is sent',
+    );
+    assert.deepEqual(
+      serves['hostless robot'],
+      serves['pasted'],
+      'a client that names no API hosts is not held to any',
     );
     assert.ok(serves['vendor robot']!.includes(vendor));
     assert.notOk(

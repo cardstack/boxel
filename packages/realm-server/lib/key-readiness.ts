@@ -12,6 +12,7 @@ import {
   type SlotCheck,
 } from './key-bindings.ts';
 import { limitReadiness } from './key-limits.ts';
+import { sendableKeySql } from './oauth.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
@@ -198,20 +199,21 @@ async function callerHasCoveringGrant(
   );
 }
 
-// Whether the caller has an active share in the realm: the shares the approve
-// page offers for an `{{apiKey}}` slot, whatever their keys' grants cover,
-// since approving one writes the grant it lacks.
+// Whether the caller has an active share in the realm of a key a request can
+// send (`sendableKeySql`): the shares the approve page can offer for an
+// `{{apiKey}}` slot, whatever their keys' grants cover, since approving one
+// writes the grant it lacks.
 async function callerHasActiveShare(
   dbAdapter: DBAdapter,
   realmURL: string,
   caller: string,
 ): Promise<boolean> {
   let rows = await query(dbAdapter, [
-    `SELECT 1 FROM key_shares WHERE realm_url = `,
+    `SELECT 1 FROM key_shares s WHERE s.realm_url = `,
     param(realmURL),
-    ` AND owner = `,
+    ` AND s.owner = `,
     param(caller),
-    ` AND state = 'active' LIMIT 1`,
+    ` AND s.state = 'active' AND ${sendableKeySql('s.key_id')} LIMIT 1`,
   ]);
   return rows.length > 0;
 }

@@ -983,18 +983,32 @@ const CLIENT_RESOLUTION_JOINS = `
 
 // A scalar SQL expression for the API hosts the key whose id `keyId` names
 // is good at: an OAuth client's own, or an OAuth connection's client's,
-// however the connection names it. Null for any other kind of key. Its
-// aliases are its own, so `keyId` may name a column of any outer query.
+// however the connection names it. Null where that is unrestricted: any
+// other kind of key, or a client that names no API hosts (they are optional,
+// and nothing holds a request to them). Empty for a connection whose client
+// is gone, which mints nothing. Its aliases are its own, so `keyId` may name
+// a column of any outer query.
 export function apiHostsOfKeySql(keyId: string): string {
   return `COALESCE(
-    (SELECT ah_c.api_hosts FROM oauth_clients ah_c WHERE ah_c.key_id = ${keyId}),
-    (SELECT COALESCE(ah_own.api_hosts, ah_shared.api_hosts, ah_p.api_hosts, '{}')
+    (SELECT NULLIF(ah_c.api_hosts, '{}') FROM oauth_clients ah_c WHERE ah_c.key_id = ${keyId}),
+    (SELECT CASE
+              WHEN ah_own.key_id IS NULL AND ah_shared.key_id IS NULL AND ah_p.id IS NULL THEN '{}'
+              ELSE NULLIF(COALESCE(ah_own.api_hosts, ah_shared.api_hosts, ah_p.api_hosts), '{}')
+            END
        FROM oauth_connections ah_n
        LEFT JOIN oauth_clients ah_own ON ah_own.key_id = ah_n.client_key_id
        LEFT JOIN key_shares ah_s ON ah_s.id = ah_n.client_share_id
        LEFT JOIN oauth_clients ah_shared ON ah_shared.key_id = ah_s.key_id
        LEFT JOIN platform_oauth_clients ah_p ON ah_p.id = ah_n.platform_client_id
       WHERE ah_n.key_id = ${keyId}))`;
+}
+
+// A SQL condition that the key whose id `keyId` names is a credential a
+// request can send. An OAuth client people sign in through (`authorization_code`)
+// never is: only the connections made through it are, and a share of one is
+// how a realm's people connect their own accounts.
+export function sendableKeySql(keyId: string): string {
+  return `NOT EXISTS (SELECT 1 FROM oauth_clients sk_c WHERE sk_c.key_id = ${keyId} AND sk_c.grant_type <> 'client_credentials')`;
 }
 
 interface ResolvedClient {

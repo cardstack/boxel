@@ -996,6 +996,68 @@ module('Integration | approve pages', function (hooks) {
       .doesNotExist('an account for another service is not offered');
   });
 
+  test('a key chosen for pipelines that interactive use no longer offers gives way to one it does', async function (assert) {
+    let mixed = batch({
+      keys: [
+        {
+          id: 'key-gh',
+          name: 'GitHub token',
+          kind: 'static',
+          state: 'active',
+          covers: [GRAPHQL],
+          serves: [GRAPHQL, UPLOADS],
+        },
+        {
+          id: 'key-api-only',
+          name: 'GitHub API account',
+          kind: 'oauth-connection',
+          state: 'active',
+          covers: [],
+          serves: [GRAPHQL],
+        },
+      ],
+    });
+    let [, uploads] = mixed.groups as { operations: any[] }[];
+    uploads!.operations = uploads!.operations.map((o) => ({
+      ...o,
+      status: 'pipelines-only',
+      slots: o.slots.map((slot: object) => ({
+        ...slot,
+        status: 'pipelines-only',
+        approved: {
+          snapshot: snapshot('null', UPLOADS),
+          keyId: 'key-gh',
+          shareId: null,
+          interactive: false,
+        },
+      })),
+    }));
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: mixed },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-approve-key="GitHub API account"]').doesNotExist();
+
+    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-approve-key="GitHub API account"] input');
+    assert
+      .dom('[data-test-approve-key="GitHub API account"] input')
+      .isChecked();
+
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-key="GitHub API account"]')
+      .doesNotExist('the upload it can’t reach is back in the batch');
+    assert
+      .dom('[data-test-approve-key="GitHub token"] input')
+      .isChecked('the key the slot starts on is chosen in its place');
+  });
+
   test('a share is offered only where its key’s client reaches the destination', async function (assert) {
     let shared = batch({
       groups: [

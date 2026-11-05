@@ -25,6 +25,7 @@ import {
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
 import { keyReadiness } from '../lib/key-readiness.ts';
+import { addOAuthClient } from '../lib/oauth.ts';
 
 // ============================================================================
 // Readiness through `_capabilities`: what a card learns about a `callApi`
@@ -495,6 +496,27 @@ module(basename(import.meta.filename), function (hooks) {
       await readiness(OWNER, 'shared'),
       'needs-admin',
       'a suspended share is not one its owner can approve',
+    );
+  });
+
+  test('a share of an OAuth client people only sign in through is no share to approve a share slot with', async function (assert) {
+    let signIn = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'vendor app',
+      value: 'app-secret',
+      oauth: {
+        clientId: 'app',
+        authorizeUrl: `${VENDOR}/authorize`,
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    await share(signIn.id, { owner: WRITER, label: 'Sign in here' });
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-admin',
+      'the approve page would offer it nothing, so an administrator needs to set it up',
     );
   });
 

@@ -1011,7 +1011,30 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private chooseUse = (value: string) => {
     this.form.use = value as ApprovalUse;
     this.form.error = undefined;
+    this.keepOfferedChoices();
   };
+
+  // A key stays chosen for a slot only while the slot offers it. The batch
+  // shown for one use holds different operations than for the other, and so
+  // can offer different keys; a key no longer offered gives way to the one
+  // the slot would start on.
+  private keepOfferedChoices() {
+    let batch = this.batch;
+    if (!batch) {
+      return;
+    }
+    let chosen = { ...this.form.chosen };
+    for (let choice of slotChoices(batch)) {
+      if (!choice.options.some((o) => o.id === chosen[choice.slot])) {
+        chosen[choice.slot] = initialChoice(
+          batch,
+          choice,
+          choice.kind === 'userKey' ? this.opened.key : this.opened.share,
+        );
+      }
+    }
+    this.form.chosen = chosen;
+  }
 
   private newGrantsAt = (destination: string) =>
     this.newGrants.filter((g) => g.destination === destination);

@@ -34,7 +34,7 @@ import {
   type SecureWindowTarget,
 } from './secure-window.ts';
 import { limitsOf } from './key-limit-settings.ts';
-import { apiHostsOfKeySql } from './oauth.ts';
+import { apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
 import { normalizeGrantDestination } from './user-key-grants.ts';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 
@@ -602,11 +602,10 @@ async function slotKeys(
     `SELECT k.id, k.name, k.kind, k.state, ${apiHostsOfKeySql('k.id')} AS api_hosts,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM user_keys k
-       LEFT JOIN oauth_clients c ON c.key_id = k.id
        LEFT JOIN user_key_grants g ON g.key_id = k.id
       WHERE k.owner = `,
     param(user),
-    ` AND (k.kind <> 'oauth-client' OR c.grant_type = 'client_credentials')
+    ` AND ${sendableKeySql('k.id')}
       GROUP BY k.id, k.name, k.kind, k.state
       ORDER BY k.name`,
   ]);
@@ -641,14 +640,13 @@ async function sharesIn(
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
        JOIN user_keys k ON k.id = s.key_id
-       LEFT JOIN oauth_clients c ON c.key_id = k.id
        LEFT JOIN user_key_grants g ON g.key_id = s.key_id
       WHERE s.realm_url = `,
     param(realmURL),
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
-        AND (k.kind <> 'oauth-client' OR c.grant_type = 'client_credentials')
+        AND ${sendableKeySql('s.key_id')}
       GROUP BY s.id, s.label, s.key_id, k.name, k.kind, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap
       ORDER BY s.label`,
   ]);
