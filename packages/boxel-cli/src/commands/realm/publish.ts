@@ -16,6 +16,7 @@ import {
 } from '../../lib/profile-manager.ts';
 import {
   deriveOwnerUserId,
+  resolveMatrixServerName,
   deriveRealmServerUrl,
 } from '../../lib/seed-auth.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
@@ -56,9 +57,15 @@ export interface PublishOptions {
   realmSecretSeed?: string;
   /**
    * Owner Matrix id for the seed-minted server token. Defaults to the owner
-   * derived from the source realm URL (`@<owner>:<domain>`).
+   * the source realm URL's path names, on the paired Matrix server
+   * (`@<owner>:<matrix server name>`).
    */
   asUser?: string;
+  /**
+   * The name of the Matrix server paired with the realm server, for seed
+   * mode. Read from `MATRIX_SERVER_NAME` when absent.
+   */
+  matrixServerName?: string;
 }
 
 export interface PublishRealmResult {
@@ -94,7 +101,12 @@ export async function publishRealm(
   let realmServerURL = deriveRealmServerUrl(normalizedSource);
   let asUser =
     options.asUser ??
-    (options.realmSecretSeed ? deriveOwnerUserId(normalizedSource) : undefined);
+    (options.realmSecretSeed
+      ? deriveOwnerUserId(
+          normalizedSource,
+          resolveMatrixServerName(options.matrixServerName),
+        )
+      : undefined);
   let pm = options.realmSecretSeed
     ? undefined
     : (options.profileManager ?? getProfileManager());
@@ -103,6 +115,7 @@ export async function publishRealm(
         realmSecretSeed: options.realmSecretSeed,
         realmServerURL,
         asUser: asUser!,
+        matrixServerName: options.matrixServerName,
       })
     : buildCliRealmClient(pm!);
 
@@ -143,6 +156,7 @@ export async function publishRealm(
         realmSecretSeed: options.realmSecretSeed,
         realmServerURL,
         asUser,
+        matrixServerName: options.matrixServerName,
       });
       if (!unpublishResult.unpublished && !unpublishResult.notFound) {
         throw new Error(
@@ -243,7 +257,7 @@ export function registerPublishCommand(realm: Command): void {
     )
     .option(
       '--realm-secret-seed',
-      'Administrative auth: prompt for a realm secret seed and mint an owner-scoped JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+      'Administrative auth: prompt for a realm secret seed and mint an owner-scoped JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)',
     )
     .option(
       '--as-user <matrix-id>',

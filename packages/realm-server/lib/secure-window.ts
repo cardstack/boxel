@@ -412,6 +412,7 @@ export async function secureWindowContext(
         deps.dbAdapter,
         new URL(realm.url),
         user,
+        deps.matrixServerName,
       ),
       // A policy that can't be read says nothing; the page reads as signed-in
       // only, and a share made then serves signed-in people only.
@@ -519,15 +520,19 @@ export interface WritableRealm {
 // the realms they may share a key into, as `isDirectWriter` decides it. None
 // of them is mounted to list it.
 export async function writableRealms(
-  { dbAdapter, findRealm }: Pick<Deps, 'dbAdapter' | 'findRealm'>,
+  {
+    dbAdapter,
+    findRealm,
+    matrixServerName,
+  }: Pick<Deps, 'dbAdapter' | 'findRealm' | 'matrixServerName'>,
   user: string,
 ): Promise<WritableRealm[]> {
-  if (isBotAccount(user)) {
+  if (isBotAccount(user, matrixServerName)) {
     return [];
   }
   return await servedByName(
     findRealm,
-    await fetchDirectWriterRealms(dbAdapter, user),
+    await fetchDirectWriterRealms(dbAdapter, user, matrixServerName),
   );
 }
 
@@ -553,10 +558,14 @@ async function servedByName(
 // realm readable by everyone isn't one of theirs, so it isn't listed. None of
 // them is mounted to list it.
 export async function readableRealms(
-  { dbAdapter, findRealm }: Pick<Deps, 'dbAdapter' | 'findRealm'>,
+  {
+    dbAdapter,
+    findRealm,
+    matrixServerName,
+  }: Pick<Deps, 'dbAdapter' | 'findRealm' | 'matrixServerName'>,
   user: string,
 ): Promise<WritableRealm[]> {
-  if (isBotAccount(user)) {
+  if (isBotAccount(user, matrixServerName)) {
     return [];
   }
   return await servedByName(
