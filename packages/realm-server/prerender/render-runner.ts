@@ -1374,6 +1374,7 @@ export class RenderRunner {
       (indexRoutesMs[rendering] ??= {})[route] = ms;
     };
 
+    let threw = false;
     try {
       // Page acquired but untouched — tag as 'queued'. The between-pass
       // checks below use 'rendering' since by then page.evaluate has run.
@@ -2574,7 +2575,18 @@ export class RenderRunner {
         waits,
         poolInfo,
       );
+    } catch (e) {
+      threw = true;
+      throw e;
     } finally {
+      // Before `release()`, so the slot this visit frees is handed out under
+      // the realm's new cap. A visit that threw was cancelled or failed
+      // before it rendered, which says nothing about how loaded the realm is.
+      if (poolInfo.timedOut) {
+        this.#pagePool.recordVisitOutcome(affinityKey, 'timed-out');
+      } else if (!threw) {
+        this.#pagePool.recordVisitOutcome(affinityKey, 'in-time');
+      }
       // An evicted tab never renders again, so its stash goes with it. Skip
       // the evaluate there: eviction is how a render timeout ends, and a tab
       // that timed out is exactly the one whose renderer may not answer it.

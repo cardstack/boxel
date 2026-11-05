@@ -175,7 +175,10 @@ module(basename(import.meta.filename), function (hooks) {
     savedEnv = {};
   });
 
-  function setup(wedgeOn: 'everything' | 'render') {
+  function setup(
+    wedgeOn: 'everything' | 'render',
+    opts: { fileAdmission?: boolean } = {},
+  ) {
     let { manager, tabs } = makeBrowserStub(wedgeOn);
     let pool = new PagePool({
       maxPages: 2,
@@ -183,7 +186,7 @@ module(basename(import.meta.filename), function (hooks) {
       browserManager: manager as any,
       boxelHostURL: 'http://localhost:4200',
       standbyTimeoutMs: 500,
-      disableFileAdmission: true,
+      disableFileAdmission: !opts.fileAdmission,
       tabHealthProbeMs: 50,
     });
     pools.push(pool);
@@ -323,6 +326,36 @@ module(basename(import.meta.filename), function (hooks) {
       'the diagnostics record that the tab was answering',
     );
     assert.deepEqual(reports, [], 'nothing was reported');
+  });
+
+  test("a visit that times out lowers its realm's file admission", async function (assert) {
+    // A fixed pool of 4 tabs with 3 per affinity, which admits 2 file renders
+    // of the affinity at a time and leaves tabs to spare once the timed-out
+    // tab is gone.
+    process.env.PRERENDER_PAGE_POOL_MIN = '4';
+    process.env.PRERENDER_PAGE_POOL_MAX = '4';
+    process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+    let { pool, runner } = setup('everything', { fileAdmission: true });
+    await pool.warmStandbys();
+
+    let { pool: poolInfo } = await renderVisitWithStash(runner);
+    assert.true(poolInfo.timedOut, 'the visit timed out');
+
+    let first = await pool.getPage('user:wedged-user', 'file');
+    let secondAdmitted = false;
+    let second = pool.getPage('user:wedged-user', 'file').then((lease) => {
+      secondAdmitted = true;
+      return lease;
+    });
+    // Long enough for a render with a free admission slot to get its tab.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.false(
+      secondAdmitted,
+      'a second render of the affinity waits while the first runs',
+    );
+    first.release();
+    (await second).release();
+    assert.true(secondAdmitted, 'the second render runs once the first ends');
   });
 
   module('UnresponsiveTabTracker', function () {
