@@ -129,6 +129,7 @@ export default class SectionRail extends Component<Signature> {
       class='section-rail'
       aria-label='Dashboard sections'
       data-theme='dark'
+      style={{cssVar _rail-count=@sections.sections.length}}
       {{this.captureRail}}
       {{on 'focusout' this.onFocusOut}}
       data-test-section-rail
@@ -214,6 +215,20 @@ export default class SectionRail extends Component<Signature> {
           var(--operator-mode-bottom-bar-item-height) + 2 *
             var(--operator-mode-spacing)
         );
+        /* A short window shrinks the entries until they fit between the bars,
+           down to a 24px target. */
+        --_rail-entry-size: max(
+          1.5rem,
+          min(
+            var(--container-button-size),
+            (
+                100dvh - var(--_rail-top) - var(--_rail-bottom) - 2 *
+                  var(--_rail-pad) - 2px - (var(--_rail-count) - 1) *
+                  var(--_rail-gap)
+              ) /
+              var(--_rail-count)
+          )
+        );
 
         /* Centered on the column the wordmark already stands in, below the
            top bar, as tall as its entries and never past the bottom bar. */
@@ -242,7 +257,7 @@ export default class SectionRail extends Component<Signature> {
         position: relative;
       }
       .rail-button {
-        --pretui-button-h: var(--container-button-size);
+        --pretui-button-h: var(--_rail-entry-size);
         --pretui-button-px: 0;
         --pretui-button-radius: var(--_rail-radius);
         --pretui-button-min-w: var(--container-button-size);
@@ -267,7 +282,7 @@ export default class SectionRail extends Component<Signature> {
           26rem,
           100dvh - var(--_rail-top) - var(--_rail-bottom) -
             var(--_rail-item-index) *
-            (var(--container-button-size) + var(--_rail-gap))
+            (var(--_rail-entry-size) + var(--_rail-gap))
         );
         position: absolute;
         top: calc(-1 * var(--_rail-pad));
