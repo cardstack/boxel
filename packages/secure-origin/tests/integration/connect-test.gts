@@ -1,4 +1,4 @@
-import { click, fillIn, render, waitFor } from '@ember/test-helpers';
+import { click, fillIn, render, waitFor, waitUntil } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -281,6 +281,7 @@ module('Integration | connecting an account', function (hooks) {
     Object.assign(navigation, originalNavigation);
     meta.remove();
     forgetSession();
+    sessionStorage.removeItem('boxel-connect-return');
   });
 
   // No beacon carries what a page sent or showed: a client secret, an app's
@@ -776,6 +777,156 @@ module('Integration | connecting an account', function (hooks) {
         .includesText('This link doesn’t say how a sign-in ended.');
       assert.dom('[data-test-keys-retry]').doesNotExist();
     });
+  });
+
+  module('back to the approval it was started for', function () {
+    const APPROVAL = `card=${encodeURIComponent(CARD)}&operation=listRepos`;
+    const COMPLETED = {
+      'POST _oauth/connections/complete': () =>
+        json(201, {
+          data: {
+            type: 'oauth-connection-result',
+            attributes: { connected: 'conn-1', reconnected: false },
+          },
+        }),
+      'GET _user-keys/conn-1': () => json(200, { data: connection('active') }),
+      'POST _secure-window/context': () => context(),
+    };
+
+    async function signInFrom(fragment: string) {
+      visitShell(`connect#${fragment}`);
+      await render(ConnectPage);
+      await waitFor('[data-test-connect-form]');
+      await click('[data-test-client-choice="GitHub"] input');
+      let before = navigations.length;
+      await click('[data-test-connect-submit]');
+      await waitUntil(() => navigations.length > before);
+    }
+
+    for (let then of ['approve', 'review-changes']) {
+      test(`connected, goes back to the ${then} page it was started for, with the new connection chosen`, async function (assert) {
+        serve(COMPLETED);
+        await signInFrom(`${APPROVAL}&then=${then}`);
+        assert.deepEqual(navigations, [{ how: 'assign', url: AUTHORIZE_URL }]);
+        navigations = [];
+
+        visitShell('connected#code=one-use-code&state=state-from-the-server');
+        await render(ConnectedPage);
+        await waitUntil(() => navigations.length > 0);
+        assert.deepEqual(navigations, [
+          {
+            how: 'replace',
+            url: `/secure/${then}#${APPROVAL}&key=conn-1`,
+          },
+        ]);
+        assert.strictEqual(window.location.hash, '', 'the code is gone');
+      });
+    }
+
+    test('an approval reached from the key page goes back there once approved', async function (assert) {
+      serve(COMPLETED);
+      await signInFrom(`${APPROVAL}&then=approve&after=keys`);
+      navigations = [];
+      visitShell('connected#code=one-use-code&state=state-from-the-server');
+      await render(ConnectedPage);
+      await waitUntil(() => navigations.length > 0);
+      assert.deepEqual(navigations, [
+        {
+          how: 'replace',
+          url: `/secure/approve#${APPROVAL}&then=keys&key=conn-1`,
+        },
+      ]);
+    });
+
+    test('declined at the service, says so and offers the way back to the approval, with nothing chosen', async function (assert) {
+      serve(COMPLETED);
+      await signInFrom(`${APPROVAL}&then=approve`);
+      navigations = [];
+      visitShell('connected#error=denied');
+      await render(ConnectedPage);
+      await waitFor('[data-test-connected="failed"]');
+      assert
+        .dom('[data-test-keys-heading]')
+        .hasText('The sign-in was declined');
+      assert.dom('[data-test-connected-keys]').doesNotExist();
+      await click('[data-test-connected-approval]');
+      assert.deepEqual(navigations, [
+        { how: 'assign', url: `/secure/approve#${APPROVAL}` },
+      ]);
+    });
+
+    test('a sign-in this window didn’t start for the approval chooses nothing there', async function (assert) {
+      serve(COMPLETED);
+      await signInFrom(`${APPROVAL}&then=approve`);
+      navigations = [];
+      visitShell('connected#code=one-use-code&state=another-sign-in');
+      await render(ConnectedPage);
+      await waitFor('[data-test-connected="connected"]');
+      assert.deepEqual(navigations, [], 'the window stays');
+      assert.dom('[data-test-connected-approval]').doesNotExist();
+      assert.dom('[data-test-connected-keys]').exists();
+    });
+
+    test('a sign-in started for no approval doesn’t go back to one left behind', async function (assert) {
+      serve(COMPLETED);
+      await signInFrom(`${APPROVAL}&then=approve`);
+      await signInFrom(APPROVAL);
+      navigations = [];
+      visitShell('connected#code=one-use-code&state=state-from-the-server');
+      await render(ConnectedPage);
+      await waitFor('[data-test-connected="connected"]');
+      assert.deepEqual(navigations, [], 'the window stays');
+      assert.dom('[data-test-connected-keys]').exists();
+    });
+
+    test('the approval is gone once the window has been back', async function (assert) {
+      serve(COMPLETED);
+      await signInFrom(`${APPROVAL}&then=approve`);
+      visitShell('connected#code=one-use-code&state=state-from-the-server');
+      await render(ConnectedPage);
+      await waitUntil(() => navigations.length > 1);
+      navigations = [];
+      visitShell('connected#code=one-use-code&state=state-from-the-server');
+      await render(ConnectedPage);
+      await waitFor('[data-test-connected="connected"]');
+      assert.deepEqual(navigations, [], 'nothing to go back to');
+    });
+
+    for (let page of ['connect', 'connected']) {
+      test(`for an approval the CLI opened, closing the ${page} page tells it the approval was cancelled`, async function (assert) {
+        let submitted: [string, string][][] = [];
+        let submit = HTMLFormElement.prototype.submit;
+        HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+          submitted.push([...new FormData(this).entries()] as [
+            string,
+            string,
+          ][]);
+        };
+        try {
+          serve(COMPLETED);
+          let cli = `cli_port=51234&cli_state=${'c'.repeat(32)}`;
+          if (page === 'connect') {
+            visitShell(`connect#${APPROVAL}&then=approve&${cli}`);
+            await render(ConnectPage);
+            await waitFor('[data-test-connect-form]');
+          } else {
+            await signInFrom(`${APPROVAL}&then=approve&${cli}`);
+            visitShell('connected#error=denied');
+            await render(ConnectedPage);
+            await waitFor('[data-test-connected="failed"]');
+          }
+          await click('[data-test-keys-close]');
+          assert.deepEqual(submitted, [
+            [
+              ['state', 'c'.repeat(32)],
+              ['window_outcome', 'cancelled'],
+            ],
+          ]);
+        } finally {
+          HTMLFormElement.prototype.submit = submit;
+        }
+      });
+    }
   });
 
   module('OAuth keys on the key page', function () {
