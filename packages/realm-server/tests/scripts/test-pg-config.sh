@@ -3,6 +3,11 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TESTS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# Postgres 16 with the pgvector extension, so the vector index tests run. The
+# seed is built and booted in this one image; changing it changes the seed
+# fingerprint (this file is part of it), so the seed is rebuilt.
+TEST_PG_IMAGE="pgvector/pgvector:0.8.0-pg16"
+
 TEST_PG_CONTAINER="boxel-realm-test-pg"
 TEST_PG_PORT="55436"
 

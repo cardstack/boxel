@@ -518,13 +518,17 @@ module(basename(import.meta.filename), function () {
     let momentKey: string;
     let vectorsAvailable: boolean;
 
-    // These need pgvector, which the CI Postgres image does not ship yet; on
-    // a database without it each one passes with a note instead of running.
-    // The 'without pgvector' module below covers that database.
+    // These need pgvector, which the test Postgres image ships
+    // (TEST_PG_IMAGE in tests/scripts/test-pg-config.sh). A database without
+    // it fails them, so a test run never passes without having run them. The
+    // 'without pgvector' module below covers such a database.
     function pgvectorTest(name: string, fn: (assert: Assert) => Promise<void>) {
       test(name, async (assert) => {
         if (!vectorsAvailable) {
-          assert.ok(true, 'skipped: this Postgres has no pgvector');
+          assert.ok(
+            false,
+            'this Postgres has no pgvector; run the tests on the test image',
+          );
           return;
         }
         await fn(assert);
@@ -1113,7 +1117,7 @@ module(basename(import.meta.filename), function () {
       await closeTestPgAdapter(adapter);
     });
 
-    test('indexing still works, and a near sort is refused with a clear message', async function (assert) {
+    test('indexing still works, and a near sort or filter is refused with a clear message', async function (assert) {
       assert.false(await hasVectorIndex(adapter));
       let virtualNetwork = new VirtualNetwork();
       let batch = await new IndexWriter(adapter).createBatch(
@@ -1155,6 +1159,18 @@ module(basename(import.meta.filename), function () {
           sort: [{ on: momentRef, by: 'embedding', near: [1, 0, 0] }],
         });
         assert.ok(false, 'expected an error');
+      } catch (e) {
+        assert.ok(e instanceof InvalidQueryError);
+        assert.ok(/needs the pgvector Postgres extension/.test(String(e)));
+      }
+      try {
+        await engine.searchCards(new URL(testRealm), {
+          filter: {
+            on: momentRef,
+            near: { embedding: { to: [1, 0, 0], minSimilarity: 0.5 } },
+          },
+        });
+        assert.ok(false, 'expected an error for a near filter');
       } catch (e) {
         assert.ok(e instanceof InvalidQueryError);
         assert.ok(/needs the pgvector Postgres extension/.test(String(e)));
