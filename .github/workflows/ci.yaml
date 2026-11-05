@@ -273,6 +273,9 @@ jobs:
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci
+      # The Realm Server and Matrix shards wait on this build, so it follows
+      # them onto RunsOn under the same rule; see realm-server-test.
+      runs_on_spec: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.RUNS_ON_SPEC || '' }}
     concurrency:
       group: ci-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -818,7 +821,9 @@ jobs:
     name: Matrix Client Tests
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
+    # Follows the spill onto RunsOn; see realm-server-test. The label carries
+    # the shard so that each matrix entry gets an instance of its own.
+    runs-on: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-matrix-client-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -986,7 +991,8 @@ jobs:
       - matrix-client-test
     # !cancelled() makes it run even if a matrix-client-test shard fails, but still respects cancellation
     if: ${{ !cancelled() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
-    runs-on: ubuntu-latest
+    # Follows the spill onto RunsOn; see realm-server-test.
+    runs-on: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-matrix-merge-reports/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 15
     concurrency:
       group: matrix-client-merge-reports-${{ github.head_ref || github.run_id }}
@@ -1163,7 +1169,21 @@ jobs:
     name: Realm Server Tests
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
+    # While GitHub's runner pool is near full, the Realm Server and Matrix
+    # jobs (shards, report merges and the web asset build they wait on)
+    # move to RunsOn with the host tests: the repo variable RUNS_ON_SPILL is
+    # `true`, and RUNS_ON_SPEC holds the instance spec. See host-test in
+    # ci-host.yaml for how the collector sets RUNS_ON_SPILL, and for why fork
+    # PRs never leave GitHub's runners.
+    #
+    # Unlike the host tests, pushes to main follow the spill too, and on spot.
+    # These suites upload no Percy build, so a spot reclaim only re-runs a
+    # shard. The shard timings measured on main then come from both kinds of
+    # runner; the host shards showed close times on the two.
+    #
+    # `runs-on` cannot read `env`, so this condition is repeated in each of
+    # those jobs.
+    runs-on: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-realm-server-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 40
     concurrency:
       group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
@@ -1316,7 +1336,8 @@ jobs:
       group: realm-server-merge-reports-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     needs: [change-check, realm-server-test]
-    runs-on: ubuntu-latest
+    # Follows the spill onto RunsOn; see realm-server-test.
+    runs-on: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-realm-server-merge-reports/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
