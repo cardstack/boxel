@@ -24,6 +24,7 @@ import CardStore, {
 } from '@cardstack/host/lib/gc-card-store';
 
 import { saveCard, testRealmURL } from '../helpers';
+import { tagTestModuleExports } from '../helpers/identity-tags';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -93,7 +94,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       @field bestFriend = linksTo(() => Person);
       @field friends = linksToMany(() => Person);
     }
-    loader.shimModule(`${testRealmURL}test-cards`, { Person });
+    tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
 
     let jade = new Person({ name: 'Jade' });
     let queenzy = new Person({ name: 'Queenzy' });

@@ -34,7 +34,7 @@ Where Pretui improves:
 
 `@display` (`label` default, `short`, `icon`) with `@icon`, `@label` and `@shortLabel` lets a row swap the face in place when it runs short of room: `short` shows `@shortLabel` (and `@label` as the title), `icon` shows `@icon` alone with `@label` as its `aria-label` and title; either falls back to the block when its arguments are missing. Under `icon` the button is a square, `--pretui-button-h` wide (floored at 1.5rem for `xs`), the shape **IconButton** draws; reach for **IconButton** when a button is only ever an icon.
 
-Deliberately absent versus the field: no `caret`, no icon slots outside `@display` — icons are just children, and no `as`/`asChild` polymorphism (`@href` is the one alternate element). Links inside running text belong to a separate text-link component, not to `@appearance='link'`, which is for standalone actions.
+Deliberately absent versus the field: no `caret`, no icon slots outside `@display` — icons are just children (an `<svg>` child is centred on the label line with the same gap as `@icon`), and no `as`/`asChild` polymorphism (`@href` is the one alternate element). Links inside running text belong to a separate text-link component, not to `@appearance='link'`, which is for standalone actions.
 
 ## Accessibility
 
