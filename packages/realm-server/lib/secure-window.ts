@@ -713,10 +713,18 @@ export async function realmCardsWithRequests(
     // An operation approved per instance is approved from its card, not from
     // the type the key page approves, so it doesn't count here.
     let type = bindingType(realm.operationCore, codeRef, new URL(realm.url));
-    // The operations sending each of the card's slots of this kind, by slot.
+    // The operations sending each of the card's slots of this kind, by slot,
+    // and whether any of them leaves the slot open: for the `apiKey` slot, one
+    // no share fills yet. Only an open slot puts the card in the list, but the
+    // key is checked against every operation sending it. The approve page
+    // shows an operation a share fills when its request changed or its grant
+    // is gone, and one choice then fills the slot for both.
     let sentBy = new Map<
       string,
-      { slot: CallApiSlot; callApi: OperationCallApi }[]
+      {
+        open: boolean;
+        sends: { slot: CallApiSlot; callApi: OperationCallApi }[];
+      }
     >();
     for (let [name, operation] of Object.entries(definition.operations ?? {})) {
       let callApi = operation.callApi;
@@ -729,26 +737,29 @@ export async function realmCardsWithRequests(
         continue;
       }
       for (let s of callApi.slots) {
-        let token = slotToken(s);
-        if (
-          s.key !== slot ||
-          (slot === 'apiKey' &&
-            (type === undefined ||
-              filled.has(`${type.module}#${type.name}|${name}|${token}`)))
-        ) {
+        if (s.key !== slot) {
           continue;
         }
-        sentBy.set(token, [...(sentBy.get(token) ?? []), { slot: s, callApi }]);
+        let token = slotToken(s);
+        let open =
+          slot === 'userKey' ||
+          (type !== undefined &&
+            !filled.has(`${type.module}#${type.name}|${name}|${token}`));
+        let entry = sentBy.get(token) ?? { open: false, sends: [] };
+        entry.open ||= open;
+        entry.sends.push({ slot: s, callApi });
+        sentBy.set(token, entry);
       }
     }
     let sendsKey = [...sentBy.values()].some(
-      (sends) =>
-        key === undefined ||
-        sends.every(
-          ({ slot: s, callApi }) =>
-            slotKeyKinds(s, callApi).includes(key.kind) &&
-            apiHostsServe(key.apiHosts, callApi.destination),
-        ),
+      ({ open, sends }) =>
+        open &&
+        (key === undefined ||
+          sends.every(
+            ({ slot: s, callApi }) =>
+              slotKeyKinds(s, callApi).includes(key.kind) &&
+              apiHostsServe(key.apiHosts, callApi.destination),
+          )),
     );
     if (sendsKey) {
       found.push({
