@@ -4,6 +4,11 @@ import { tracked } from '@glimmer/tracking';
 import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
 import { listen, listenDocumentCapture } from '../focus';
+import { positionPopup } from '../internal/overlay';
+
+// The trigger-to-bubble gap in px, for the measuring code; the bridge in CSS
+// spans the same distance as --_tip-gap.
+const TIP_GAP = 6;
 
 // The element a Tooltip describes. The trigger arrives as a caller block, so
 // the component finds it rather than receiving it — the first thing in the
@@ -55,8 +60,10 @@ export interface TooltipSignature {
  *   cannot put the attribute there itself. It appends its id to a caller's
  *   own value, keeps it there when the caller's value changes, and removes
  *   only its id on teardown.
- * - **Presence.** Hidden state is `visibility: hidden`, not opacity alone, so
- *   the bubble leaves the accessibility tree between reveals. A directly
+ * - **Presence.** The bubble is a manual popover: hidden, it is
+ *   `display: none`, so it is out of the accessibility tree and takes no
+ *   space in any scroll container; shown, it sits in the top layer, placed
+ *   against the wrapper, where no `overflow` ancestor clips it. A directly
  *   referenced `aria-describedby` target is still announced while hidden —
  *   that is the accname rule this pattern is built on.
  * - **Dismissible.** Escape hides it, in the capture phase, while it is open.
@@ -117,6 +124,40 @@ export class Tooltip extends Component<TooltipSignature> {
       };
     },
   );
+  /** Shows the bubble in the top layer and keeps it on the wrapper. */
+  showTip = modifier(
+    (
+      el: HTMLElement,
+      [shown, side]: [boolean, 'top' | 'bottom' | 'left' | 'right'],
+    ) => {
+      let open = el.matches(':popover-open');
+      let anchor = el.parentElement;
+      if (!shown || !anchor) {
+        if (open) el.hidePopover();
+        return;
+      }
+      if (!open) el.showPopover();
+      let place = () => {
+        let r = el.getBoundingClientRect();
+        let p = positionPopup(
+          anchor.getBoundingClientRect(),
+          r.width,
+          r.height,
+          side,
+          TIP_GAP,
+        );
+        el.style.top = `${p.top}px`;
+        el.style.left = `${p.left}px`;
+      };
+      place();
+      window.addEventListener('scroll', place, { capture: true, passive: true });
+      window.addEventListener('resize', place);
+      return () => {
+        window.removeEventListener('scroll', place, true);
+        window.removeEventListener('resize', place);
+      };
+    },
+  );
   onEnter = () => {
     this.hovered = true;
   };
@@ -166,8 +207,10 @@ export class Tooltip extends Component<TooltipSignature> {
         role='tooltip'
         id={{this.tipId}}
         class='pretui-tooltip'
+        popover='manual'
         data-side={{this.side}}
         data-open={{if this.shown 'true'}}
+        {{this.showTip this.shown this.side}}
       >{{@content}}</span>
       {{#if this.shown}}
         <span
@@ -179,7 +222,6 @@ export class Tooltip extends Component<TooltipSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-tipwrap {
-          position: relative;
           display: inline-flex;
         }
         .pretui-tip-key {
@@ -188,11 +230,13 @@ export class Tooltip extends Component<TooltipSignature> {
         .pretui-tooltip {
           /* the space between trigger and bubble, which the bridge spans */
           --_tip-gap: 0.375rem;
-          position: absolute;
-          /* kit stacking scale (pretui-css.gts): a tooltip describes whatever
-             is under the pointer, which may be an item inside a dropdown or a
-             popover, so it is the highest non-modal tier. */
-          z-index: var(--pretui-z-tooltip, 80);
+          /* a manual popover: the top layer is above every z-index, and the
+             show modifier writes top and left */
+          position: fixed;
+          inset: auto;
+          margin: 0;
+          border: 0;
+          overflow: visible;
           background-color: var(--tooltip);
           color: var(--tooltip-foreground);
           font-size: var(--boxel-font-size-xs);
@@ -203,17 +247,20 @@ export class Tooltip extends Component<TooltipSignature> {
           white-space: nowrap;
           width: max-content;
           opacity: 0;
-          /* `visibility`, not opacity alone: an opacity-0 bubble is still in
-             the accessibility tree and still hit-testable. Hidden here means
-             hidden to everyone — while a DIRECT aria-describedby reference
-             still resolves its text, which is the whole point. */
-          visibility: hidden;
-          transition: opacity 120ms ease, visibility 0s linear 120ms;
+          /* display and overlay hold the bubble in the top layer until the
+             fade-out ends */
+          transition:
+            opacity 120ms ease,
+            display 120ms allow-discrete,
+            overlay 120ms allow-discrete;
         }
-        .pretui-tooltip[data-open='true'] {
+        .pretui-tooltip:popover-open {
           opacity: 1;
-          visibility: visible;
-          transition: opacity 120ms ease, visibility 0s;
+        }
+        @starting-style {
+          .pretui-tooltip:popover-open {
+            opacity: 0;
+          }
         }
         /* WCAG 1.4.13 "Hoverable": the pointer must be able to travel onto the
            bubble without it vanishing. The gap between trigger and bubble is
@@ -222,26 +269,6 @@ export class Tooltip extends Component<TooltipSignature> {
           content: '';
           position: absolute;
           inset: calc(-1 * var(--_tip-gap));
-        }
-        .pretui-tooltip[data-side='top'] {
-          bottom: calc(100% + var(--_tip-gap));
-          left: 50%;
-          transform: translateX(-50%);
-        }
-        .pretui-tooltip[data-side='bottom'] {
-          top: calc(100% + var(--_tip-gap));
-          left: 50%;
-          transform: translateX(-50%);
-        }
-        .pretui-tooltip[data-side='left'] {
-          right: calc(100% + var(--_tip-gap));
-          top: 50%;
-          transform: translateY(-50%);
-        }
-        .pretui-tooltip[data-side='right'] {
-          left: calc(100% + var(--_tip-gap));
-          top: 50%;
-          transform: translateY(-50%);
         }
       }
     </style>

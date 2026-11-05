@@ -151,7 +151,7 @@ const OPPOSITE: Record<Side, Side> = {
   right: 'left',
 };
 
-function positionPopup(
+export function positionPopup(
   a: DOMRect,
   w: number,
   h: number,
