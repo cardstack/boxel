@@ -52,7 +52,7 @@ jobs:
 
       - name: Check env-vars.sh asks mkcert only when it has to
         if: ${{ !cancelled() }}
-        run: node scripts/check-env-vars-forks.mts
+        run: node scripts/check-env-vars-mkcert.mts
 
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
