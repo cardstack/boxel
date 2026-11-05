@@ -2,6 +2,13 @@ import { test, expect, type Page } from '@playwright/test';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+import {
+  isAbsoluteIdentifier,
+  ri,
+  rri,
+} from '@cardstack/runtime-common/realm-identifiers';
+
 import {
   allRoomEvents,
   loginWithPassword,
@@ -812,6 +819,7 @@ async function findRenderedCard(
 ) {
   let excluded = new Set(required ? [] : seeded);
   let counted = required ? new Set(required) : undefined;
+  let realm = new RealmPaths(ri(realmUrl));
   let cardIds: string[] = [];
   try {
     await expect
@@ -846,7 +854,7 @@ async function findRenderedCard(
                   counted
                     ? !!id && counted.has(id) && shown
                     : !!id &&
-                      id.startsWith(realmUrl) &&
+                      realm.inRealm(rri(id)) &&
                       !id.endsWith('index') &&
                       !excluded.has(id),
                 )
@@ -1012,7 +1020,7 @@ function skillsUsed(events: MatrixEvent[]): string[] {
     ...new Set(
       enabled
         .map((f) => f.sourceUrl ?? f.url ?? '')
-        .filter((url) => /^https?:\/\//.test(url)),
+        .filter((id) => isAbsoluteIdentifier(id)),
     ),
   ];
 }

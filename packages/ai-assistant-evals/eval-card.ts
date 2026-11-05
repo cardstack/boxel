@@ -5,6 +5,12 @@
 // lives in: only the writer that made the bundle does.
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import {
+  isAbsoluteIdentifier,
+  resolveRRIReference,
+  ri,
+  rri,
+} from '@cardstack/runtime-common/realm-identifiers';
 
 import {
   ensureTrailingSlash,
@@ -21,7 +27,7 @@ export interface Evaluation {
   name: string;
   prompts: string[];
   successCriteria: string;
-  // Absolute URLs, as the realm serializes them.
+  // Absolute ids: each link resolved against the evaluation's own id.
   initialCards: string[];
   initialFiles: string[];
   // Seeded cards the prompt asks the assistant to change, each one in
@@ -84,7 +90,7 @@ function linkedIds(
     }
     let self = value?.links?.self;
     if (typeof self === 'string' && self) {
-      ids.push(new URL(self, relativeTo).href);
+      ids.push(resolveRRIReference(self, rri(relativeTo)));
     }
   }
   return ids;
@@ -205,17 +211,24 @@ function cardIdOf(url: string): string {
   return url.replace(/\.json$/, '');
 }
 
-// `url`'s path inside the evaluation's realm. Paths are decoded, so a URL is
+// The paths of a realm. The evaluation's realm and the test workspace are both
+// named by the URL the realm server serves them at, so `fileURL` yields the
+// URLs the runner reads and writes.
+function realmPaths(realmUrl: string): RealmPaths {
+  return new RealmPaths(ri(ensureTrailingSlash(realmUrl)));
+}
+
+// `id`'s path inside the evaluation's realm. Paths are decoded, so a URL is
 // rebuilt from one with `RealmPaths.fileURL`, which encodes it again the way
 // the realm and the rendered `data-test-card` ids spell it.
-function localPath(url: string, realmUrl: string): string {
-  let paths = new RealmPaths(new URL(realmUrl));
-  if (!paths.inRealm(new URL(url))) {
+function localPath(id: string, realmUrl: string): string {
+  let paths = realmPaths(realmUrl);
+  if (!paths.inRealm(rri(id))) {
     throw new Error(
-      `${url} is outside the evaluation's realm ${realmUrl}; initial cards and files must live in the same workspace as the evaluation`,
+      `${id} is outside the evaluation's realm ${realmUrl}; initial cards and files must live in the same workspace as the evaluation`,
     );
   }
-  return paths.local(new URL(url));
+  return paths.local(rri(id));
 }
 
 // Fetches every initial file and card. A card's own module is bundled too
@@ -226,6 +239,7 @@ export async function loadEvaluationBundle(
   cardUrl: string,
 ): Promise<EvaluationBundle> {
   let evaluation = await loadEvaluation(client, cardUrl);
+  let evaluationRealm = realmPaths(evaluation.realmUrl);
   let files = new Map<string, BundledFile>();
 
   let addFile = async (sourceUrl: string, isCard: boolean) => {
@@ -254,10 +268,10 @@ export async function loadEvaluationBundle(
       // copied verbatim; the realm reports the problem at index time
     }
     let module = parsed?.data?.meta?.adoptsFrom?.module;
-    if (module && (module.startsWith('.') || module.startsWith('/'))) {
-      let moduleUrl = new URL(module, jsonUrl).href;
-      if (moduleUrl.startsWith(evaluation.realmUrl)) {
-        await addFile(moduleUrl, false);
+    if (module && !isAbsoluteIdentifier(module)) {
+      let moduleId = resolveRRIReference(module, rri(jsonUrl));
+      if (evaluationRealm.inRealm(rri(moduleId))) {
+        await addFile(moduleId, false);
       }
     }
   }
@@ -285,7 +299,7 @@ export async function prepopulate(
   log: (line: string) => void = () => {},
 ): Promise<Prepopulated> {
   testRealmUrl = ensureTrailingSlash(testRealmUrl);
-  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  let testRealm = realmPaths(testRealmUrl);
   let cards: string[] = [];
   let files: string[] = [];
   let seededCards: string[] = [];
@@ -340,7 +354,7 @@ export function promptCardIds(
   bundle: EvaluationBundle,
   testRealmUrl: string,
 ): string[] {
-  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  let testRealm = realmPaths(testRealmUrl);
   return (bundle.promptCards ?? []).map(
     (id) => testRealm.fileURL(localPath(id, bundle.realmUrl)).href,
   );
@@ -354,7 +368,7 @@ export function pipelineApprovalTargets(
   testRealmUrl: string,
 ): PipelineApprovalTarget[] {
   testRealmUrl = ensureTrailingSlash(testRealmUrl);
-  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  let testRealm = realmPaths(testRealmUrl);
   return (bundle.pipelineApprovals ?? []).map(
     ({ card, operation, keyFrom }) => {
       let path = `${localPath(card, bundle.realmUrl)}.json`;
@@ -371,12 +385,11 @@ export function pipelineApprovalTargets(
       // the copy. Any other reference (a URL, or a registered prefix such as
       // `@cardstack/catalog/…`) names a module outside the test workspace and
       // is passed on as it is, for the realm server to resolve.
-      let relative =
-        adoptsFrom.module.startsWith('.') || adoptsFrom.module.startsWith('/');
+      let relative = !isAbsoluteIdentifier(adoptsFrom.module);
       return {
         realm: testRealmUrl,
         module: relative
-          ? new URL(adoptsFrom.module, copy).href.replace(/\.gts$/, '')
+          ? resolveRRIReference(adoptsFrom.module, copy).replace(/\.gts$/, '')
           : adoptsFrom.module,
         name: adoptsFrom.name,
         operation,
@@ -394,7 +407,7 @@ export function seededCardSeeds(
   bundle: EvaluationBundle,
   testRealmUrl: string,
 ): { cardId: string; path: string; content: Buffer }[] {
-  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  let testRealm = realmPaths(testRealmUrl);
   return bundle.files.flatMap((file) => {
     let content = Buffer.from(file.content, 'base64');
     if (!file.isCard && !isCardInstance(file.path, content)) {
@@ -416,7 +429,7 @@ export function expectedChangedSeeds(
   bundle: EvaluationBundle,
   testRealmUrl: string,
 ): { cardId: string; path: string; content: Buffer }[] {
-  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  let testRealm = realmPaths(testRealmUrl);
   return (bundle.expectedChangedCards ?? []).map((id) => {
     let local = localPath(id, bundle.realmUrl);
     let path = `${local}.json`;
