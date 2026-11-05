@@ -256,25 +256,32 @@ export function staleInput(
   return undefined;
 }
 
+// Each environment of the build (`vite.config.ts`) writes its own record,
+// beside its own manifest.
 export function buildInputs(): Plugin {
-  let outDir: string;
-  let moduleIds: string[] = [];
+  let moduleIds = new Map<string, string[]>();
   return {
     name: 'secure-origin-build-inputs',
     apply: 'build',
-    configResolved(config) {
-      outDir = resolve(config.root, config.build.outDir);
-    },
     generateBundle() {
-      moduleIds = [...this.getModuleIds()];
+      moduleIds.set(this.environment.name, [...this.getModuleIds()]);
     },
     // Written to disk once the bundle is, rather than emitted into it: the
     // build record drops every file of the bundle no entry document loads.
     writeBundle(_options, bundle) {
+      let { config } = this.environment;
+      let outDir = resolve(config.root, config.build.outDir);
       let outputs = describeOutputs(outDir, Object.keys(bundle));
       writeFileSync(
         join(outDir, INPUTS_FILE),
-        `${JSON.stringify({ ...describeInputs(moduleIds), outputs }, null, 2)}\n`,
+        `${JSON.stringify(
+          {
+            ...describeInputs(moduleIds.get(this.environment.name) ?? []),
+            outputs,
+          },
+          null,
+          2,
+        )}\n`,
       );
     },
   };

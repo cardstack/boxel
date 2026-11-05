@@ -2,15 +2,28 @@ import { ember, extensions } from '@embroider/vite';
 import { buildMacros } from '@embroider/macros/babel';
 import { babel } from '@rollup/plugin-babel';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
-import { defineConfig } from 'vite';
+import { fileURLToPath } from 'node:url';
+
+import { defineConfig, type ViteBuilder } from 'vite';
 
 import { buildInputs } from './build/build-inputs.ts';
 import { buildRecord } from './build/build-record.ts';
 import { importAllowlist } from './build/import-allowlist.ts';
 import { layerOrderFirst } from './build/layer-order.ts';
+import { probeOutDir } from './build/probe.ts';
 import { relativeModuleNames } from './build/relative-module-names.ts';
 
 const macros = buildMacros();
+
+// The entry documents the origin serves. `session.js` is an entry of its own,
+// so it is served whole, with its exports under their own names: the secure
+// window's end-to-end tests import it from the origin and call it as the
+// window does.
+const PAGES = {
+  shell: 'index.html',
+  credentials: 'credentials.html',
+  session: 'src/security/session.js',
+};
 
 // The secure origin's pages are only ever served from this build, read by the
 // realm server at startup — never from a dev server, which injects styles
@@ -57,6 +70,10 @@ export default defineConfig(({ mode }) => ({
             allowDeclareFields: true,
           },
         ],
+        // boxel-ui's tasks are written as `task(async () => …)`, which this
+        // turns into what ember-concurrency runs, as boxel-ui's own build
+        // and the host's do.
+        'ember-concurrency/async-arrow-task-transform',
         [
           'babel-plugin-ember-template-compilation',
           {
@@ -69,8 +86,13 @@ export default defineConfig(({ mode }) => ({
         [
           'module:decorator-transforms',
           {
+            // A path, not a `file:` URL: Embroider's resolver reads a URL
+            // imported from a dependency's module, such as boxel-ui's, as a
+            // package named `file:`.
             runtime: {
-              import: import.meta.resolve('decorator-transforms/runtime-esm'),
+              import: fileURLToPath(
+                import.meta.resolve('decorator-transforms/runtime-esm'),
+              ),
             },
           },
         ],
@@ -101,20 +123,16 @@ export default defineConfig(({ mode }) => ({
                 : 'write',
           }),
           buildInputs(),
+          probeOutDir(),
         ]),
   ],
   build: {
     modulePreload: { polyfill: false },
     rollupOptions: {
-      // `session.js` is an entry of its own, so it is served whole, with its
-      // exports under their own names: the secure window's end-to-end tests
-      // import it from the origin and call it as the window does.
-      input: {
-        shell: 'index.html',
-        credentials: 'credentials.html',
-        session: 'src/security/session.js',
-        ...(mode === 'development' ? { tests: 'tests/index.html' } : {}),
-      },
+      input:
+        mode === 'development'
+          ? { ...PAGES, tests: 'tests/index.html' }
+          : PAGES,
       preserveEntrySignatures: 'exports-only',
       output: {
         entryFileNames: '[name].js',
@@ -161,4 +179,33 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
+  // The production build is two builds. `client` is the pages the origin
+  // serves. `probe` is the build probe (`probe.html`), a page no user is sent
+  // to and the realm server never serves, which draws on Pret UI, boxel-ui
+  // and boxel-icons so that the allowlist, the build record and the policy
+  // test cover what those packages ship. It is a build of its own, written to
+  // `probe/` in the output, so the modules it shares with a page never move
+  // that page's modules into another chunk: what it adds leaves every page's
+  // files as they are. The build record covers both.
+  ...(mode === 'development'
+    ? {}
+    : {
+        environments: {
+          client: {},
+          probe: {
+            consumer: 'client' as const,
+            build: {
+              // A single entry, named for its file. Given as a string, it
+              // replaces the pages' entries rather than joining them.
+              rollupOptions: { input: 'probe.html' },
+            },
+          },
+        },
+        builder: {
+          async buildApp(builder: ViteBuilder) {
+            await builder.build(builder.environments.client);
+            await builder.build(builder.environments.probe);
+          },
+        },
+      }),
 }));

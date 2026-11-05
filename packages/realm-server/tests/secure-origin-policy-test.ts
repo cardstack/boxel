@@ -1,11 +1,17 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
+import { basename, dirname, extname, join } from 'path';
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import puppeteer, { type Browser, type Frame, type Page } from 'puppeteer';
-import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
+import {
+  createSecureOrigin,
+  secureOriginGate,
+  secureOriginHeaders,
+} from '../lib/secure-origin.ts';
 import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 
 // Each page the secure origin serves, loaded from its build in a real browser
@@ -212,6 +218,45 @@ const LEGACY_ADDRESSES: { legacy: string; landed: string; marker: string }[] = [
 // Every form the credential fields present.
 const CREDENTIAL_FORMS = ['change-password', 'confirm-password'];
 
+// The build probe: a page the build makes, and the realm server never serves,
+// that renders a Pret UI component wrapping boxel-ui and a boxel-icons icon.
+// It is served here, from the build's `probe/`, under the origin's headers,
+// as the realm server serves a page, so it is checked under the real policy
+// too.
+const PROBE_PATH = '/probe';
+const requireFromTest = createRequire(import.meta.url);
+const PROBE_DIR = join(
+  dirname(requireFromTest.resolve('@cardstack/secure-origin/package.json')),
+  'dist',
+  'probe',
+);
+const PROBE_CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+};
+
+function probeFiles(): Map<string, { body: string; contentType: string }> {
+  let { base, entries } = JSON.parse(
+    readFileSync(join(PROBE_DIR, 'manifest.json'), 'utf8'),
+  ) as { base: string; entries: Record<string, string[]> };
+  let files = new Map<string, { body: string; contentType: string }>();
+  let serve = (name: string, file: string) =>
+    files.set(`${PROBE_PATH}/${name}`, {
+      body: readFileSync(file, 'utf8').replaceAll(base, `${PROBE_PATH}/`),
+      contentType: PROBE_CONTENT_TYPES[extname(name)],
+    });
+  for (let name of new Set(Object.values(entries).flat())) {
+    serve(name, join(PROBE_DIR, name));
+  }
+  // The tokens the probe links, as the realm server serves them beside a page.
+  serve(
+    'variables.css',
+    requireFromTest.resolve('@cardstack/boxel-ui/styles/variables.css'),
+  );
+  return files;
+}
+
 // Records every policy violation in a frame, from before any of its own
 // script runs.
 function recordViolations() {
@@ -284,6 +329,18 @@ module(basename(import.meta.filename), function (hooks) {
     let secure = await listen((req, res) => koa.callback()(req, res));
     secureServer = secure.server;
     secureOrigin = `http://127.0.0.1:${secure.port}`;
+    let probe = probeFiles();
+    koa.use(async (ctx, next) => {
+      let file = probe.get(
+        ctx.path === PROBE_PATH ? `${PROBE_PATH}/probe.html` : ctx.path,
+      );
+      if (!file) {
+        return next();
+      }
+      ctx.set(secureOriginHeaders());
+      ctx.type = file.contentType;
+      ctx.body = file.body;
+    });
     koa.use(
       secureOriginGate(
         createSecureOrigin(
@@ -364,6 +421,29 @@ module(basename(import.meta.filename), function (hooks) {
       assert.ok(true, `${path}: the page rendered`);
       assert.deepEqual(await violationsIn(page), [], `${path}: no violation`);
     }
+  });
+
+  test('the build probe renders Pret UI and boxel-icons under the policy', async function (assert) {
+    let response = await page.goto(`${secureOrigin}${PROBE_PATH}`, {
+      waitUntil: 'networkidle0',
+    });
+    assert.strictEqual(response?.status(), 200, 'status');
+    assert.ok(
+      response
+        ?.headers()
+        ['content-security-policy']?.includes(`default-src 'self'`),
+      'served with the policy',
+    );
+    await page.waitForSelector(
+      '[data-test-build-probe] [data-test-pretui-accordion] [data-test-build-probe-content]',
+      { visible: true, timeout: 10000 },
+    );
+    assert.ok(true, "Pret UI's Accordion rendered its open item");
+    assert.ok(
+      await page.$('[data-test-build-probe-icon].lucide-key-round'),
+      "boxel-icons' icon rendered",
+    );
+    assert.deepEqual(await violationsIn(page), [], 'no violation');
   });
 
   test('an address naming a page by its `mode` lands on that page', async function (assert) {
