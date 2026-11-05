@@ -21,8 +21,6 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     realmIdentifiers: RealmIdentifier[];
-    // The catalogs shown, as the heading counts them.
-    count: number;
     // Shown in place of the tiles when there are none.
     emptyMessage: string;
     showShelf: boolean;
@@ -54,7 +52,7 @@ export default class CatalogSection extends Component<Signature> {
         @icon={{Store}}
         @title='Catalogs'
         @titleId={{this.headingId}}
-        @count={{@count}}
+        @count={{@realmIdentifiers.length}}
       >
         <:actions><ManageCatalogs /></:actions>
         <:default>Apps, fields and themes to use in your workspaces.</:default>
