@@ -3,7 +3,9 @@ import { service } from '@ember/service';
 import {
   CATALOG_REALM_PREFIX,
   PREFIX_REALM_PREFIXES,
+  RealmPaths,
   isScopedCSSRequest,
+  ri,
   rri,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
@@ -24,9 +26,9 @@ const GLOBAL_URL_STEMS = [
 
 // The platform's own realms (base, Pret UI, skills and the rest). The catalog
 // is left in: a catalog card's listing is made from catalog modules.
-const PLATFORM_REALM_PREFIXES = PREFIX_REALM_PREFIXES.filter(
+const PLATFORM_REALM_PATHS = PREFIX_REALM_PREFIXES.filter(
   (prefix) => prefix !== CATALOG_REALM_PREFIX,
-);
+).map((prefix) => new RealmPaths(ri(prefix)));
 
 export default class SanitizeModuleListTool extends HostBaseTool<
   typeof BaseToolModule.SanitizeModuleListInput,
@@ -35,7 +37,7 @@ export default class SanitizeModuleListTool extends HostBaseTool<
   @service declare private network: NetworkService;
 
   description =
-    'Filter and deduplicate a list of module URLs, removing globals and unreadable realms';
+    'Filter and deduplicate a list of module URLs, removing globals, platform realm modules and unreadable realms';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -72,11 +74,7 @@ export default class SanitizeModuleListTool extends HostBaseTool<
         // Readable, but never a listing's own code, whether spelled by prefix
         // or by the URL the realm is served at.
         let unresolved = this.network.virtualNetwork.unresolveURL(dep);
-        if (
-          PLATFORM_REALM_PREFIXES.some((prefix) =>
-            unresolved.startsWith(prefix),
-          )
-        ) {
+        if (PLATFORM_REALM_PATHS.some((paths) => paths.inRealm(unresolved))) {
           return null;
         }
 
