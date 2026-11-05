@@ -67,7 +67,7 @@ without `erasableSyntaxOnly`. Node strips types; it does not compile. An
 enum, a parameter property or a namespace in a file it loads fails at run
 time, which for a service means at deploy time. The flag moves that failure
 to the type-check, where the lint step finds it on every PR. The secure
-origin's pages already follow this rule (ADR 008 §1.10), so the convention is
+origin's pages already follow this rule (ADR 019 §1.10), so the convention is
 established and the package can copy its configuration.
 
 No build step keeps the image and the local service the same artifact: the
@@ -115,7 +115,7 @@ whose transitive dependencies the package carries without loading them.
 
 ## 4. Sources
 
-- ADR 008 §1.10, the same rule for `packages/secure-origin`.
+- ADR 019 §1.10, the same rule for `packages/secure-origin`.
 - `packages/secure-origin/tsconfig.json`, the configuration to copy.
 - `packages/realm-server/package.json` (`start`), the realm server's unbuilt
   `node main.ts`.

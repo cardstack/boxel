@@ -258,14 +258,15 @@ else
     # `NODE_EXTRA_CA_CERTS` is tested first, and deliberately. It accepts a
     # single PEM path rather than a list, so a value the developer set already
     # is one to leave alone — they have mkcert's CA in it or know what they are
-    # doing. Testing that before running mkcert, rather than after, is what
-    # keeps the common case free: `mkcert -CAROOT` is a subprocess, and this
-    # file is re-sourced on every shell prompt, because mise reads the
-    # environment back through it and `.mise.toml` pre-exports it. A fork per
-    # prompt per shell is enough to exhaust the process table on a machine with
-    # many worktrees open. _boxel_mkcert_caroot, above, is what keeps the one
-    # lookup that does happen from looping back through this file via a mise
-    # shim.
+    # doing. Testing that before running mkcert, rather than after, keeps the
+    # common case from running mkcert at all. This file is re-sourced on every
+    # shell prompt, because mise reads the environment back through it and
+    # `.mise.toml` pre-exports it, and mkcert is a costly call from here: when
+    # it is a mise shim, it starts a whole mise process, which sources this
+    # file again. _boxel_mkcert_caroot, above, cuts that chain at its second
+    # level, so the one lookup that does happen cannot loop back through this
+    # file. The other short-lived commands this file runs exit at once and do
+    # not accumulate.
     if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
       _BOXEL_MKCERT_CAROOT="$(_boxel_mkcert_caroot)"
       if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
@@ -355,9 +356,10 @@ fi
 # realm-server's startup `getIndexHTML()` smoke-test fetch fails with
 # `TypeError: fetch failed` and `process.exit(-2)` — the visible
 # symptom is realm-server crash-looping and every public URL 502-ing.
-# Tested before the subprocess, for the reason given at the other call site
+# Tested before mkcert runs, for the reasons given at the other call site
 # above: a developer's own value is left alone, and this file is re-sourced per
-# prompt, so a fork here is a fork per prompt per shell.
+# prompt, so an unguarded mkcert, which through a mise shim is a whole mise
+# process, would run on every prompt in every shell.
 if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
   _BOXEL_MKCERT_CAROOT="$(_boxel_mkcert_caroot)"
   if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
