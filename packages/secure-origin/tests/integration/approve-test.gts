@@ -1395,6 +1395,51 @@ module('Integration | approve pages', function (hooks) {
     );
   });
 
+  test('a workspace with no card this key works for says so about this key', async function (assert) {
+    serve({
+      'GET _user-keys': () =>
+        json(200, {
+          data: [
+            {
+              type: 'user-key',
+              id: 'key-sa',
+              attributes: {
+                name: 'Service account',
+                kind: 'google-service-account',
+                state: 'active',
+                createdAt: '2026-10-01T12:00:00.000Z',
+                updatedAt: '2026-10-01T12:00:00.000Z',
+                grants: [],
+                usedWith: [],
+                sharedInto: [],
+              },
+            },
+          ],
+        }),
+      'GET _secure-window/realms': () =>
+        json(200, {
+          data: [
+            {
+              type: 'secure-window-realm',
+              id: REALM,
+              attributes: { name: 'Team Workspace' },
+            },
+          ],
+        }),
+      'POST _secure-window/cards': () => json(200, { data: [] }),
+    });
+    visitShell('keys/key-sa/use');
+    await render(<template><UseKeyPage @keyId='key-sa' /></template>);
+    await waitFor('[data-test-use-key-no-cards]');
+    assert
+      .dom('[data-test-use-key-no-cards]')
+      .hasText(
+        'No card in this workspace makes a request this key works for.',
+        'the empty list is about this key, not every key of the user’s',
+      );
+    assert.dom('[data-test-use-key-next]').isDisabled();
+  });
+
   test('opened from a key, the approve page starts on that key and goes back to the key page', async function (assert) {
     visitShell(
       `approve#${new URLSearchParams({ module: MODULE, name: 'Inbox', realm: REALM, key: 'key-other', then: 'keys' })}`,

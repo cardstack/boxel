@@ -162,10 +162,10 @@ class UseKey extends Component<{
                       <p class='empty' data-test-use-key-no-cards>
                         {{#if this.choosing.share}}
                           No card in this workspace sends the workspace’s key in
-                          a request.
+                          a request this key works for.
                         {{else}}
-                          No card in this workspace sends a key of yours in a
-                          request.
+                          No card in this workspace makes a request this key
+                          works for.
                         {{/if}}
                       </p>
                     {{/each}}
