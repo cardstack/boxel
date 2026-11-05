@@ -849,9 +849,12 @@ module('Integration | connecting an account', function (hooks) {
         .dom('[data-test-keys-heading]')
         .hasText('The sign-in was declined');
       assert.dom('[data-test-connected-keys]').doesNotExist();
+      assert
+        .dom('[data-test-connected-approval]')
+        .hasClass(/primary/, 'going back to the approval leads');
       await click('[data-test-connected-approval]');
       assert.deepEqual(navigations, [
-        { how: 'assign', url: `/secure/approve#${APPROVAL}` },
+        { how: 'replace', url: `/secure/approve#${APPROVAL}` },
       ]);
     });
 

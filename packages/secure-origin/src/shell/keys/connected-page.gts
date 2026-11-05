@@ -152,9 +152,16 @@ class Connected extends Component<{ Args: ConnectedArgs }> {
           </p>
         </:default>
         <:actions>
+          {{! Reached for an approval, going back to it is what unblocks the
+            card, so it leads; closing leaves the card blocked. }}
           {{#if @approval}}
             <Button
               @kind='secondary'
+              data-test-connected-close
+              {{on 'click' @api.close}}
+            >Close</Button>
+            <Button
+              @kind='primary'
               data-test-connected-approval
               {{on 'click' this.backToApproval}}
             >Back to the approval</Button>
@@ -164,12 +171,12 @@ class Connected extends Component<{ Args: ConnectedArgs }> {
               data-test-connected-keys
               {{on 'click' this.keys}}
             >Back to your keys</Button>
+            <Button
+              @kind='primary'
+              data-test-connected-close
+              {{on 'click' @api.close}}
+            >Close</Button>
           {{/if}}
-          <Button
-            @kind='primary'
-            data-test-connected-close
-            {{on 'click' @api.close}}
-          >Close</Button>
         </:actions>
       </EditPage>
     {{/if}}
@@ -280,11 +287,13 @@ class Connected extends Component<{ Args: ConnectedArgs }> {
 
   private keys = () => navigation.assign(pageURL('keys'));
 
+  // In place of this page, which has nothing to show once its outcome has
+  // been read, so the browser's back button doesn't return to it.
   private backToApproval = () => {
     let approval =
       this.args.approval && approvalPageAfter(undefined, this.args.approval);
     if (approval) {
-      navigation.assign(approval);
+      navigation.replace(approval);
     }
   };
 }
