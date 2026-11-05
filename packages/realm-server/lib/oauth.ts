@@ -802,8 +802,11 @@ export async function listConnectableClients(
     reconnect?: string;
   },
 ): Promise<ConnectableClient[]> {
+  // A client that names no API hosts isn't held to any, as a key's API hosts
+  // aren't when it is sent (`apiHostsOfKeySql`).
   let serves = (apiHosts: string[]) =>
     destination === undefined ||
+    apiHosts.length === 0 ||
     apiHosts.some((host) => destinationCovers(host, destination));
   let platform: ConnectableClient[] = [];
   let shared: ConnectableClient[] = [];
@@ -1001,6 +1004,42 @@ export function apiHostsOfKeySql(keyId: string): string {
        LEFT JOIN oauth_clients ah_shared ON ah_shared.key_id = ah_s.key_id
        LEFT JOIN platform_oauth_clients ah_p ON ah_p.id = ah_n.platform_client_id
       WHERE ah_n.key_id = ${keyId}))`;
+}
+
+// A key's API hosts, as `apiHostsOfKeySql` reads them: null for a key that
+// names none, else the hosts, in either form `arrayColumn` takes.
+export function apiHostList(value: unknown): string[] | null {
+  return value === null || value === undefined ? null : arrayColumn(value);
+}
+
+// Whether a key whose API hosts are `apiHosts` (`apiHostList`) has a
+// credential that is good at `destination`. An OAuth connection's tokens, or
+// an OAuth client's own, are good only at the API hosts its client names, as
+// the connect page offers clients for a destination. Any other key's
+// credential is taken wherever it is sent.
+export function apiHostsServe(
+  apiHosts: string[] | null,
+  destination: string,
+): boolean {
+  return (
+    apiHosts === null ||
+    apiHosts.some((host) => destinationCovers(host, destination))
+  );
+}
+
+// An aggregated array column, as the adapter returns it: an array, or
+// Postgres' text form of one.
+export function arrayColumn(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value as string[];
+  }
+  if (typeof value === 'string') {
+    let inner = value.replace(/^\{|\}$/g, '');
+    return inner === ''
+      ? []
+      : inner.split(',').map((item) => item.replace(/^"|"$/g, ''));
+  }
+  return [];
 }
 
 // A SQL condition that the key whose id `keyId` names is a credential a

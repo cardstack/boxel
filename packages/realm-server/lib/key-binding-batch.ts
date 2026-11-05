@@ -34,7 +34,13 @@ import {
   type SecureWindowTarget,
 } from './secure-window.ts';
 import { limitsOf } from './key-limit-settings.ts';
-import { apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
+import {
+  apiHostList,
+  apiHostsOfKeySql,
+  apiHostsServe,
+  arrayColumn,
+  sendableKeySql,
+} from './oauth.ts';
 import { normalizeGrantDestination } from './user-key-grants.ts';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 
@@ -359,15 +365,8 @@ export async function approvalBatch(
   let destinations = sorted.map((g) => g.destination.href);
   let coveredBy = (grants: string[]) =>
     destinations.filter((d) => grants.some((g) => destinationCovers(g, d)));
-  // An OAuth connection's tokens, or an OAuth client's own, are good only at
-  // the API hosts its client names, as the connect page offers clients for a
-  // destination. Any other key's credential is taken wherever it is sent.
   let servedBy = (apiHosts: string[] | null) =>
-    apiHosts === null
-      ? destinations
-      : destinations.filter((d) =>
-          apiHosts.some((host) => destinationCovers(host, d)),
-        );
+    destinations.filter((d) => apiHostsServe(apiHosts, d));
 
   let needsUserKey = sorted.some((g) =>
     g.operations.some((o) => o.slots.some((s) => s.key === 'userKey')),
@@ -614,7 +613,7 @@ async function slotKeys(
     name: row.name as string,
     kind: row.kind as UserKeyKind,
     state: row.state as string,
-    grants: grantList(row.grants),
+    grants: arrayColumn(row.grants),
     apiHosts: apiHostList(row.api_hosts),
   }));
 }
@@ -656,7 +655,7 @@ async function sharesIn(
     keyId: row.key_id as string,
     keyName: row.key_name as string,
     keyKind: row.key_kind as UserKeyKind,
-    grants: grantList(row.grants),
+    grants: arrayColumn(row.grants),
     apiHosts: apiHostList(row.api_hosts),
     interactive: Boolean(row.interactive),
     dailyBudget: limitsOf(row).dailyBudget,
@@ -668,25 +667,4 @@ async function sharesIn(
         ? null
         : Number(row.anonymous_monthly_cap),
   }));
-}
-
-// A key's API hosts, as `apiHostsOfKeySql` reads them: null for a key that
-// names none, else the hosts, in either form `grantList` takes.
-function apiHostList(value: unknown): string[] | null {
-  return value === null || value === undefined ? null : grantList(value);
-}
-
-// An aggregated array column, as the adapter returns it: an array, or
-// Postgres' text form of one.
-function grantList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value as string[];
-  }
-  if (typeof value === 'string') {
-    let inner = value.replace(/^\{|\}$/g, '');
-    return inner === ''
-      ? []
-      : inner.split(',').map((item) => item.replace(/^"|"$/g, ''));
-  }
-  return [];
 }
