@@ -32,3 +32,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [015](015-express-realm-url-routing-as-rules-the-server-interprets-never-as-realm-code.md)      | Express realm URL routing as rules the server interprets, never as realm code             | proposed |
 | [017](017-fit-toolbar-rows-with-layoutcontrol-not-per-app-css.md)                               | Fit toolbar rows with LayoutControl, not per-app CSS                                      | proposed |
 | [018](018-build-realm-historian-as-erasable-typescript-node-runs-unbuilt.md)                    | Build realm-historian as erasable TypeScript that Node runs unbuilt                       | proposed |
+| [020](020-do-the-assistants-workspace-work-in-one-sandboxed-script.md)                          | Do the assistant's workspace work in one sandboxed script                                 | proposed |
