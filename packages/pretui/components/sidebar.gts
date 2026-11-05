@@ -430,6 +430,11 @@ export class Sidebar extends Component<SidebarSignature> {
   }
 
   private setOpen = (next: boolean) => {
+    // A drag that folds the rail unmounts the seam before its click can
+    // clear the mark, so reopening clears it.
+    if (next) {
+      this.dragged = false;
+    }
     // Internal state moves only while UNcontrolled; the callback always fires.
     if (this.args.open === undefined && this.mobile) {
       this.drawerOpen = next;
@@ -481,8 +486,6 @@ export class Sidebar extends Component<SidebarSignature> {
    * the rail; a width between 0 and the minimum folds rather than renders. */
   resize = (size: number) => {
     if (size < this.minPx && this.collapsible !== 'none') {
-      // Folding unmounts the seam before the drag's click, so clear the mark here.
-      this.dragged = false;
       this.setOpen(false);
       return;
     }
