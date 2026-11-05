@@ -257,6 +257,20 @@ export interface MatchesFilter extends TypedFilter {
   // it would without the flag. A query that ends in whitespace has no
   // unfinished word, so it matches exactly as without the flag.
   prefix?: boolean;
+  // Search the passages of one of the card's PassageField lists instead of its
+  // rendered markdown: a card matches when any passage does, a relevance sort
+  // ranks it by its best passage, and the search reports the passages that
+  // matched (`meta.passages`). Names a top-level field, e.g. `segments`.
+  within?: string;
+}
+
+// One passage that matched a search's `matches … within` term (see PassageField).
+export interface PassageMatch {
+  field: string;
+  ordinal: number;
+  start: number | null;
+  end: number | null;
+  score: number;
 }
 
 // Type-ahead over a card's short names: its title and its
@@ -279,7 +293,7 @@ export function isTypeAheadFilter(filter: Filter): filter is TypeAheadFilter {
 }
 
 // One positive `matches` term, as a `_matchRelevance` sort scores it.
-export type MatchTerm = Pick<MatchesFilter, 'matches' | 'prefix'>;
+export type MatchTerm = Pick<MatchesFilter, 'matches' | 'prefix' | 'within'>;
 
 // The type-ahead split of a `prefix` query: the finished words, and the
 // unfinished last word as letters and digits only (so it can be spliced into
@@ -358,9 +372,11 @@ export function collectPositiveMatchTerms(
   if ('matches' in filter) {
     return polarity === 'positive' && filter.matches.trim() !== ''
       ? [
-          filter.prefix
-            ? { matches: filter.matches, prefix: true }
-            : { matches: filter.matches },
+          {
+            matches: filter.matches,
+            ...(filter.prefix ? { prefix: true } : {}),
+            ...(filter.within ? { within: filter.within } : {}),
+          },
         ]
       : [];
   }
@@ -778,6 +794,11 @@ function assertFilter(
   }
 
   let operator = operators[0];
+  if ('within' in filter && operator !== 'matches') {
+    throw new InvalidQueryError(
+      `${pointer.concat('within').join('/') || '/'}: within belongs beside matches`,
+    );
+  }
   if ('prefix' in filter && operator !== 'matches') {
     throw new InvalidQueryError(
       `${pointer.concat('prefix').join('/') || '/'}: prefix belongs beside matches`,
@@ -1030,6 +1051,15 @@ function assertMatchesFilter(
   if (typeof filter.matches !== 'string') {
     throw new InvalidQueryError(
       `${matchesPointer.join('/') || '/'}: matches must be a string`,
+    );
+  }
+  if (
+    'within' in filter &&
+    (typeof filter.within !== 'string' ||
+      !/^[A-Za-z_$][\w$]*$/.test(filter.within))
+  ) {
+    throw new InvalidQueryError(
+      `${pointer.concat('within').join('/') || '/'}: within must name a top-level passage list field, such as "segments"`,
     );
   }
   if ('prefix' in filter && typeof filter.prefix !== 'boolean') {

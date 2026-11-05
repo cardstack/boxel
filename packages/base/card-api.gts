@@ -4312,6 +4312,23 @@ export class CardMetricsField extends FieldDef {
   @field views = contains(NumberField);
 }
 
+// One passage of a longer text: a transcript segment, a chapter, a message.
+// A card holds its passages as a `containsMany` of a PassageField subclass
+// (add whatever else a passage carries, such as an embedding). The index
+// keeps each passage's text searchable on its own, so a search can find the
+// card by any passage and say which ones matched, without a card per passage:
+// `{ matches: '…', within: '<field>' }` returns the matching passages in
+// `meta.passages`.
+export class PassageField extends FieldDef {
+  static displayName = 'Passage';
+  static isPassageField = true;
+  // Where the passage begins and ends, in the units the card uses (seconds
+  // into a talk, a page, an offset).
+  @field start = contains(NumberField);
+  @field end = contains(NumberField);
+  @field text = contains(StringField);
+}
+
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
   @field name = contains(StringField);

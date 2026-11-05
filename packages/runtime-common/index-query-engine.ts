@@ -77,6 +77,7 @@ import {
   DEFAULT_FACET_SIZE,
   type Facet,
   type FacetCount,
+  type PassageMatch,
   typeAheadWords,
   type TypeAheadFilter,
   isNearFilter,
@@ -404,6 +405,9 @@ export interface QueryResultsMeta {
   // A query's `facets`, counted over every match: per facet's `by`, its
   // values with how many matched cards hold each, most common first.
   facets?: Record<string, FacetCount[]>;
+  // For a search with a `matches … within <field>` term: per card on the page
+  // (keyed by card URL), the passages of that field that matched, best first.
+  passages?: Record<string, PassageMatch[]>;
   // The result set omits rows nobody counted, so `page.total` covers less than
   // the query asked about and is a floor rather than the match count. Two
   // things leave a result set that way: a realm the query fanned out to did not
@@ -1388,10 +1392,22 @@ export class IndexQueryEngine {
         ...facetQueries.map((q) => this.#queryCards(q, opts.timings)),
       ]);
 
+      let passageTerms = collectPositiveMatchTerms(filter).filter(
+        (m) => m.within,
+      );
+      let passages = await this.#pagePassages(
+        realmURL,
+        passageTerms,
+        results
+          .map((row) => row.url)
+          .filter((url): url is string => typeof url === 'string'),
+      );
+
       return {
         results,
         meta: {
           page: { total: Number(totalResults[0].total) },
+          ...(passages ? { passages } : {}),
           ...(facets?.length
             ? {
                 facets: Object.fromEntries(
@@ -2295,7 +2311,23 @@ export class IndexQueryEngine {
 
   // The aggregated relevance value alone (no alias), shared by the
   // `_matchRelevance` column and a `_blend` signal.
-  private matchRelevanceScore(matches: MatchTerm[]): CardExpression {
+  private matchRelevanceScore(allMatches: MatchTerm[]): CardExpression {
+    // Terms scoped to a passage list score the card's best passage; the
+    // others score its markdown. A card's relevance is the better of the two.
+    let passageTerms = allMatches.filter((m) => m.within);
+    let matches = allMatches.filter((m) => !m.within);
+    if (matches.length === 0) {
+      return ['MAX(', ...this.#passageRelevance(passageTerms), ')'];
+    }
+    if (passageTerms.length > 0) {
+      return [
+        'GREATEST(',
+        ...this.matchRelevanceScore(matches),
+        ', MAX(',
+        ...this.#passageRelevance(passageTerms),
+        '))',
+      ];
+    }
     let pgTsQuery: Expression = [];
     matches.forEach((m, i) => {
       if (i > 0) {
@@ -2352,6 +2384,15 @@ export class IndexQueryEngine {
       }
       if (isMatchesFilter(branch)) {
         if (branch.matches.trim() === '') {
+          continue;
+        }
+        if (branch.within) {
+          selects.push([
+            `SELECT pp.url, pp.realm_url, pp.type FROM boxel_index_passages AS pp WHERE pp.field_path =`,
+            param(branch.within),
+            `AND pp.tsv @@`,
+            ...matchTsQuery(branch),
+          ]);
           continue;
         }
         selects.push([
@@ -2457,6 +2498,127 @@ export class IndexQueryEngine {
     ];
   }
 
+  // A `matches … within <field>` predicate: the card has a passage in that field
+  // whose text matches. Postgres asks the passages table's GIN index once
+  // (an uncorrelated IN, hashed per row); SQLite looks for the words in the
+  // field's search-doc JSON.
+  #passageMatchCondition(filter: MatchesFilter, field: string): CardExpression {
+    return [
+      dbExpression({
+        pg: [
+          `(i.url, i.realm_url, i.type) IN (SELECT pp.url, pp.realm_url, pp.type FROM boxel_index_passages AS pp WHERE pp.field_path =`,
+          param(field),
+          `AND pp.tsv @@`,
+          ...matchTsQuery(filter),
+          `)`,
+        ],
+        sqlite: [
+          `LOWER(coalesce(i.search_doc ->>`,
+          param(`$.${field}`),
+          `, '')) LIKE LOWER(`,
+          param(`%${escapeSqliteLikePattern(filter.matches)}%`),
+          `) ESCAPE '\\'`,
+        ],
+      }),
+    ];
+  }
+
+  // A card's best passage score for passage-scoped terms (per row, before
+  // aggregation), 0 when none matches. SQLite has no ranking: 1 or 0.
+  #passageRelevance(terms: MatchTerm[]): CardExpression {
+    let pg: Expression = ['GREATEST(0'];
+    let sqlite: Expression = ['(CASE WHEN ('];
+    terms.forEach((term, index) => {
+      pg.push(
+        `, (SELECT MAX(ts_rank_cd(pr.tsv,`,
+        ...matchTsQuery(term),
+        `, 32)) FROM boxel_index_passages AS pr WHERE pr.realm_url = i.realm_url AND pr.url = i.url AND pr.type = i.type AND pr.field_path =`,
+        param(term.within!),
+        `AND pr.tsv @@`,
+        ...matchTsQuery(term),
+        `)`,
+      );
+      sqlite.push(
+        ...(index > 0 ? ['OR'] : []),
+        `LOWER(coalesce(i.search_doc ->>`,
+        param(`$.${term.within!}`),
+        `, '')) LIKE LOWER(`,
+        param(`%${escapeSqliteLikePattern(term.matches)}%`),
+        `) ESCAPE '\\'`,
+      );
+    });
+    pg.push(')');
+    sqlite.push(') THEN 1 ELSE 0 END)');
+    return [dbExpression({ pg, sqlite })];
+  }
+
+  // The passages that matched a search's passage-scoped terms, for the cards
+  // on the returned page: up to `PASSAGES_PER_CARD` per card and field, best
+  // first, keyed by card URL. Postgres only.
+  async #pagePassages(
+    realmURL: URL,
+    terms: MatchTerm[],
+    urls: string[],
+  ): Promise<Record<string, PassageMatch[]> | undefined> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      terms.length === 0 ||
+      urls.length === 0
+    ) {
+      return undefined;
+    }
+    let byField = new Map<string, MatchTerm[]>();
+    for (let term of terms) {
+      byField.set(term.within!, [...(byField.get(term.within!) ?? []), term]);
+    }
+    let found: Record<string, PassageMatch[]> = {};
+    for (let [field, fieldTerms] of byField) {
+      let tsQuery: Expression = [];
+      fieldTerms.forEach((term, index) => {
+        if (index > 0) {
+          tsQuery.push('||');
+        }
+        tsQuery.push(...matchTsQuery(term));
+      });
+      let rows = (await this.#query([
+        `SELECT url, ordinal, start_at, end_at, score FROM (SELECT pp.url, pp.ordinal, pp.start_at, pp.end_at, ts_rank_cd(pp.tsv, (`,
+        ...tsQuery,
+        `), 32) AS score, ROW_NUMBER() OVER (PARTITION BY pp.url ORDER BY ts_rank_cd(pp.tsv, (`,
+        ...tsQuery,
+        `), 32) DESC, pp.ordinal) AS rank FROM boxel_index_passages AS pp WHERE pp.realm_url =`,
+        param(realmURL.href),
+        `AND pp.field_path =`,
+        param(field),
+        `AND pp.url IN`,
+        ...addExplicitParens(
+          separatedByCommas(urls.map((url) => [param(url)])),
+        ),
+        `AND pp.tsv @@ (`,
+        ...tsQuery,
+        `)) AS ranked WHERE rank <=`,
+        param(PASSAGES_PER_CARD),
+        `ORDER BY url, score DESC, ordinal`,
+      ] as Expression)) as {
+        url: string;
+        ordinal: number;
+        start_at: number | null;
+        end_at: number | null;
+        score: number;
+      }[];
+      for (let row of rows) {
+        let key = row.url.replace(/\.json$/, '');
+        (found[key] ??= []).push({
+          field,
+          ordinal: Number(row.ordinal),
+          start: row.start_at == null ? null : Number(row.start_at),
+          end: row.end_at == null ? null : Number(row.end_at),
+          score: Number(row.score),
+        });
+      }
+    }
+    return found;
+  }
+
   // Type-ahead: every typed word is a word prefix of the card's `_typeahead`
   // text. Postgres matches an unstemmed ('simple') tsvector of that text,
   // which the `add-type-ahead-index` migration indexes; like a prefix
@@ -2516,6 +2678,12 @@ export class IndexQueryEngine {
     context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     let typeRef = typeConditionRef;
+    if (filter.within && filter.matches.trim() !== '') {
+      return every([
+        ...(typeRef ? [this.typeCondition(typeRef)] : []),
+        this.#passageMatchCondition(filter, filter.within),
+      ]);
+    }
     let predicate: CardExpression =
       filter.matches.trim() === ''
         ? ['FALSE']
@@ -3490,6 +3658,9 @@ function typeAheadTsQuery(text: string): Expression | undefined {
 }
 
 const MIN_PREFIX_LETTERS = 3;
+
+// How many matching passages a search reports per card and field.
+const PASSAGES_PER_CARD = 5;
 
 function matchTsQuery(term: MatchTerm): Expression {
   let { words, partial } = term.prefix

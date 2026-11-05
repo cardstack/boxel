@@ -768,6 +768,120 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    let seedPassage = async (
+      url: string,
+      ordinal: number,
+      start: number,
+      text: string,
+    ) => {
+      await query(dbAdapter, [
+        `INSERT INTO boxel_index_passages (realm_url, url, type, field_path, ordinal, start_at, end_at, body, tsv) VALUES (`,
+        param(testRealmURL),
+        `,`,
+        param(url),
+        `, 'instance', 'segments',`,
+        param(ordinal),
+        `,`,
+        param(start),
+        `,`,
+        param(start + 60),
+        `,`,
+        param(text),
+        `, to_tsvector('english',`,
+        param(text),
+        `))`,
+      ]);
+    };
+    let seedTalks = async () => {
+      for (let [slug, segments] of [
+        [
+          'clocks-talk',
+          [
+            'welcome everyone to the conference',
+            'two machines never agree on what time it is',
+            'so we order events with logical clocks instead',
+          ],
+        ],
+        ['votes-talk', ['every ranked voting rule breaks a fairness rule']],
+      ] as [string, string[]][]) {
+        let url = `${testRealmURL}${slug}.json`;
+        await seedRow(dbAdapter, {
+          url,
+          markdown: `# ${slug}`,
+          searchDoc: { _passages: ['segments'] },
+        });
+        for (let [ordinal, text] of segments.entries()) {
+          await seedPassage(url, ordinal, ordinal * 60, text);
+        }
+      }
+    };
+
+    test('matches within a passage list finds the card by any passage', async function (assert) {
+      await seedTalks();
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: { matches: 'logical clocks', within: 'segments' },
+          })
+        ).sort(),
+        [`${testRealmURL}clocks-talk.json`],
+      );
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'clocks-talk', within: 'segments' },
+        }),
+        [],
+        'the markdown is not searched',
+      );
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'machin', prefix: true, within: 'segments' },
+        }),
+        [`${testRealmURL}clocks-talk.json`],
+        'prefix works within passages',
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: {
+              any: [
+                { matches: 'fairness', within: 'segments' },
+                { matches: 'puppy' },
+              ],
+            },
+          })
+        ).sort(),
+        [`${testRealmURL}mango.json`, `${testRealmURL}votes-talk.json`],
+        'a passage branch joins the indexed union',
+      );
+    });
+
+    test('a passage search reports which passages matched, and ranks by the best one', async function (assert) {
+      await seedTalks();
+      let { meta } = await engine.search(
+        new URL(testRealmURL),
+        {
+          filter: { matches: 'clocks or time', within: 'segments' },
+          sort: [{ by: '_matchRelevance' }],
+        },
+        {},
+        { kind: 'dataOnly' },
+      );
+      let passages = meta.passages?.[`${testRealmURL}clocks-talk`];
+      assert.deepEqual(
+        passages?.map((p) => [p.field, p.ordinal, p.start]).sort(),
+        [
+          ['segments', 1, 60],
+          ['segments', 2, 120],
+        ],
+        'both matching segments, with where they start',
+      );
+      assert.true(
+        (passages?.[0].score ?? 0) > 0,
+        'each carries a relevance score',
+      );
+    });
+
     test('a relevance sort carrying a type anchor ranks the same as one without', async function (assert) {
       await seedRow(dbAdapter, {
         url: `${testRealmURL}zebra-dense.json`,

@@ -293,6 +293,12 @@ export default class RenderMetaRoute extends Route<Model> {
     // matches on an index of its own. Every card has a title, so every card
     // can be suggested; a type extends what it is suggested by through the
     // card info's alternative names (or a CardInfoField subclass).
+    // `_passages` names the card's passage fields (containsMany of a
+    // PassageField subclass), whose items the index searches one by one.
+    let passageFields = passageFieldsOf(api, Klass);
+    if (passageFields.length > 0) {
+      searchDoc._passages = passageFields;
+    }
     let typeAheadText = typeAheadTextOf(searchDoc);
     if (typeAheadText) {
       searchDoc._typeahead = typeAheadText;
@@ -596,4 +602,19 @@ function typeAheadTextOf(searchDoc: Record<string, any>): string | undefined {
     .map((line) => line.trim())
     .filter((line) => line !== '');
   return lines.length > 0 ? [...new Set(lines)].join('\n') : undefined;
+}
+
+// The names of a card's top-level containsMany fields of a PassageField
+// subclass.
+function passageFieldsOf(
+  api: { getFields: (card: any, opts?: any) => Record<string, any> },
+  Klass: unknown,
+): string[] {
+  return Object.entries(api.getFields(Klass))
+    .filter(
+      ([, field]) =>
+        field?.fieldType === 'containsMany' &&
+        (field?.card as { isPassageField?: boolean })?.isPassageField,
+    )
+    .map(([name]) => name);
 }
