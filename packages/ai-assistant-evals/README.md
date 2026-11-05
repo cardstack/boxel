@@ -20,8 +20,8 @@ live in a workspace of the person running them, not in a shared realm:
 "AI Assistant Evaluations", for the writer user (the same create-realm call
 the app's "new workspace" dialog makes) and pushes everything under
 `eval-realm/` into it. Locally the writer is `user`, so the workspace is
-`https://localhost:4201/user/evals/` and shows up in that account's workspace
-chooser under that name. Setup can run again at any time; it writes every file
+`https://localhost:4201/user/evals/` and shows up on that account's dashboard
+under that name. Setup can run again at any time; it writes every file
 over, and it reapplies the display name, so `--name` renames a workspace that
 already exists. `--endpoint` only takes effect on a new one, since the
 endpoint is the URL.
@@ -144,8 +144,7 @@ where setup creates the workspace.
 ## Run
 
 Start the dev stack first (`mise run dev-all` with `OPENROUTER_API_KEY` set for
-the ai-bot), with a host built without `DASHBOARD_V2`: the runner drives the
-workspace chooser, which the dashboard replaces. Then, from `packages/ai-assistant-evals`:
+the ai-bot). Then, from `packages/ai-assistant-evals`:
 
 ```sh
 EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models

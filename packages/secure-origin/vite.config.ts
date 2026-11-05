@@ -4,6 +4,7 @@ import { babel } from '@rollup/plugin-babel';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import { defineConfig } from 'vite';
 
+import { buildInputs } from './build/build-inputs.ts';
 import { buildRecord } from './build/build-record.ts';
 import { importAllowlist } from './build/import-allowlist.ts';
 import { layerOrderFirst } from './build/layer-order.ts';
@@ -99,6 +100,7 @@ export default defineConfig(({ mode }) => ({
                 ? 'check'
                 : 'write',
           }),
+          buildInputs(),
         ]),
   ],
   build: {

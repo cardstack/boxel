@@ -8,13 +8,11 @@ import { module, test } from 'qunit';
 import AddWorkspace from '@cardstack/host/components/operator-mode/dashboard/add-workspace';
 import { cleanseString } from '@cardstack/host/lib/utils';
 
-import { setupFeatureFlag } from '../../helpers/feature-flags';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | dashboard | add-workspace', function (hooks) {
   setupRenderingTest(hooks);
-  setupFeatureFlag(hooks, 'DASHBOARD_V2');
 
   hooks.beforeEach(async function () {
     await renderComponent(
