@@ -673,8 +673,11 @@ export function jwtMiddleware(
   };
 }
 
-export function grafanaAuthorization(
-  grafanaSecret: string,
+// Admits a request whose `Authorization: Bearer <token>` carries `secret`,
+// for the endpoints another service calls with a secret both sides are
+// configured with.
+export function sharedSecretAuthorization(
+  secret: string,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
@@ -690,7 +693,7 @@ export function grafanaAuthorization(
     // secret that itself contains whitespace stays intact in the
     // captured token (a greedy /\s+/ split would false-reject those).
     let bearerMatch = authorization.trim().match(/^bearer\s+(.+)$/i);
-    if (!bearerMatch || bearerMatch[1] !== grafanaSecret) {
+    if (!bearerMatch || bearerMatch[1] !== secret) {
       await sendResponseForUnauthorizedRequest(
         ctxt,
         AuthenticationErrorMessages.TokenInvalid,
@@ -700,6 +703,9 @@ export function grafanaAuthorization(
     await next();
   };
 }
+
+// The Grafana operator-action endpoints share one secret with Grafana.
+export const grafanaAuthorization = sharedSecretAuthorization;
 
 export async function sendResponseForBadRequest(
   ctxt: Koa.Context,
