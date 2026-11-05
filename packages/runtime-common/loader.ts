@@ -1278,8 +1278,27 @@ export class Loader {
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
 
-  private readOnlyProxy(module: any) {
-    return new Proxy(module, {
+  // The URL a specifier names when imported from `referrer`: the specifier is
+  // mapped by `resolveImport`, then parsed against the referrer. Static imports
+  // and `import.meta.resolve` both go through here, so a module's answer to
+  // "what would `import x` fetch?" is the URL its static `import x` fetches.
+  private resolveDependency(specifier: string, referrer: string): URL {
+    return new URL(this.resolveImport(specifier), new URL(referrer));
+  }
+
+  // The namespace object a module's importers receive (ADR 010 §1.1). Its
+  // target is the private instance the module body installs its exports on,
+  // so reads go to the live bindings; the traps refuse every write the way a
+  // native module namespace does: `[[Set]]` and `[[DefineOwnProperty]]` fail,
+  // `[[Delete]]` fails for a property the namespace has, and the prototype is
+  // null and cannot be changed. A proxy may only report what its target can
+  // back, so the `Symbol.toStringTag` of 'Module' is a real property of the
+  // target, and `[[IsExtensible]]` reports the target's own extensibility:
+  // `evaluate` makes it non-extensible once the module body has installed its
+  // exports. An importer in a cycle with the module reads the namespace before
+  // that, while it is still extensible.
+  private moduleNamespace(privateModuleInstance: object): object {
+    return new Proxy(privateModuleInstance, {
       set(_target, prop) {
         throw new TypeError(
           `Failed to set the '${String(
@@ -1288,6 +1307,21 @@ export class Loader {
             prop,
           )}'`,
         );
+      },
+      defineProperty() {
+        return false;
+      },
+      deleteProperty(target, prop) {
+        return !Object.prototype.hasOwnProperty.call(target, prop);
+      },
+      preventExtensions(target) {
+        return !Object.isExtensible(target);
+      },
+      getPrototypeOf() {
+        return null;
+      },
+      setPrototypeOf(_target, proto) {
+        return proto === null;
       },
     });
   }
@@ -1420,10 +1454,7 @@ export class Loader {
           }
           return {
             type: 'dep',
-            moduleURL: new URL(
-              this.resolveImport(depId),
-              new URL(moduleIdentifier),
-            ),
+            moduleURL: this.resolveDependency(depId, moduleIdentifier),
           };
         },
       );
@@ -1457,7 +1488,14 @@ export class Loader {
     }
 
     let privateModuleInstance = Object.create(null);
-    let moduleProxy = this.readOnlyProxy(privateModuleInstance);
+    // Non-writable, non-enumerable and non-configurable, as on a native
+    // module namespace. It lives on the private instance rather than in a
+    // proxy trap so that every reflection path (`in`, `Reflect.ownKeys`,
+    // `getOwnPropertyDescriptor`) reports it consistently.
+    Object.defineProperty(privateModuleInstance, Symbol.toStringTag, {
+      value: 'Module',
+    });
+    let moduleProxy = this.moduleNamespace(privateModuleInstance);
     // Both edge types are imports. A `completing-dep` only records that the
     // dep had not finished completing when this module's dependency list was
     // frozen — a module reached while a concurrent import root is suspended
@@ -1495,6 +1533,8 @@ export class Loader {
                 this.getCanonicalModuleURL(moduleIdentifier) ??
                 moduleIdentifier,
               loader: this,
+              resolve: (specifier: string) =>
+                this.resolveDependency(specifier, moduleIdentifier).href,
             };
           case 'completing-dep':
           case 'dep': {
@@ -1537,12 +1577,15 @@ export class Loader {
         );
         this.#currentlyEvaluatingModule = previouslyEvaluating;
       }
+      // The module body has installed every export it has, so the namespace
+      // is complete and, like a native one, gains no properties after this.
+      Object.preventExtensions(privateModuleInstance);
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: moduleProxy,
         consumedModules,
       });
-      return moduleProxy;
+      return moduleProxy as T;
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',

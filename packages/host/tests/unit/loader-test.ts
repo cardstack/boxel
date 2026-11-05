@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import { identify, Loader, VirtualNetwork } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
 import {
   beginTimerBlock,
   enableRenderTimerStub,
@@ -22,6 +23,8 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+let { resolvedBaseRealmURL } = ENV;
 
 // Bounds a promise a regression could leave pending forever. QUnit's own
 // timeout would fail the test too, but as a timeout on the whole test rather
@@ -153,6 +156,8 @@ module('Unit | loader', function (hooks) {
           'foo.js': `
           export function checkImportMeta() { return import.meta.url; }
           export function myLoader() { return import.meta.loader; }
+          export function resolveSibling() { return import.meta.resolve('./g'); }
+          export function resolveBare() { return import.meta.resolve('@cardstack/base/card-api'); }
         `,
           'reexporter.js': `
           export { g } from './g';
@@ -263,6 +268,71 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(module.counter, 1);
   });
 
+  test('a namespace is non-extensible, prototype-less and tagged as a Module', async function (assert) {
+    let module = await loader.import<Record<string, unknown>>(
+      `${testRealmURL}person`,
+    );
+    assert.false(
+      Object.isExtensible(module),
+      'the namespace is not extensible',
+    );
+    assert.strictEqual(Object.getPrototypeOf(module), null);
+    assert.strictEqual(Reflect.get(module, Symbol.toStringTag), 'Module');
+    assert.strictEqual(
+      Object.prototype.toString.call(module),
+      '[object Module]',
+    );
+    assert.deepEqual(Object.keys(module), ['Person', 'counter', 'increment']);
+    assert.strictEqual(
+      Object.preventExtensions(module),
+      module,
+      'preventExtensions is accepted on a complete namespace',
+    );
+  });
+
+  test('a namespace refuses defineProperty, delete and a new prototype', async function (assert) {
+    let module = await loader.import<Record<string, unknown>>(
+      `${testRealmURL}person`,
+    );
+    assert.throws(() => {
+      Object.defineProperty(module, 'extra', { value: 1 });
+    }, TypeError);
+    assert.throws(() => {
+      Object.defineProperty(module, 'Person', { value: 1 });
+    }, TypeError);
+    assert.false('extra' in module);
+    assert.throws(() => {
+      delete module.Person;
+    }, TypeError);
+    assert.ok(module.Person, 'the export is still there');
+    assert.true(delete module.notAnExport, 'deleting an absent key is a no-op');
+    assert.throws(() => {
+      Object.setPrototypeOf(module, {});
+    }, TypeError);
+    assert.strictEqual(
+      Object.setPrototypeOf(module, null),
+      module,
+      'setting the prototype to null is accepted',
+    );
+    assert.strictEqual(Object.getPrototypeOf(module), null);
+  });
+
+  test('live bindings read through a complete namespace', async function (assert) {
+    let module = await loader.import<{
+      counter: number;
+      increment: () => void;
+    }>(`${testRealmURL}person`);
+    assert.false(Object.isExtensible(module));
+    let before = module.counter;
+    module.increment();
+    assert.strictEqual(module.counter, before + 1);
+    assert.strictEqual(
+      Object.getOwnPropertyDescriptor(module, 'counter')?.get?.(),
+      before + 1,
+      'the descriptor reads the live binding',
+    );
+  });
+
   test('supports import.meta', async function (assert) {
     let { checkImportMeta, myLoader } = await loader.import<{
       checkImportMeta: () => string;
@@ -270,6 +340,15 @@ module('Unit | loader', function (hooks) {
     }>(`${testRealmURL}foo`);
     assert.strictEqual(checkImportMeta(), `${testRealmURL}foo.js`);
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
+  });
+
+  test('import.meta.resolve resolves a specifier the way a static import does', async function (assert) {
+    let { resolveSibling, resolveBare } = await loader.import<{
+      resolveSibling: () => string;
+      resolveBare: () => string;
+    }>(`${testRealmURL}foo`);
+    assert.strictEqual(resolveSibling(), `${testRealmURL}g`);
+    assert.strictEqual(resolveBare(), `${resolvedBaseRealmURL}card-api`);
   });
 
   // A runtime `import()` of a shim-registered bare specifier resolves
