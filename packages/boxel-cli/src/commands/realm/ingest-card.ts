@@ -1,8 +1,15 @@
 import type { Command } from 'commander';
 import * as path from 'path';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import {
+  ensureTrailingSlash,
+  RealmPaths,
+} from '@cardstack/runtime-common/paths';
 import type { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
-import { isAbsoluteIdentifier } from '@cardstack/runtime-common/realm-identifiers';
+import {
+  isAbsoluteIdentifier,
+  resolveRRIReference,
+  rri,
+} from '@cardstack/runtime-common/realm-identifiers';
 import { baseRealmRRI } from '@cardstack/runtime-common/realm-prefixes';
 import {
   RealmSyncBase,
@@ -98,37 +105,40 @@ export function extractExportedClassNames(source: string): string[] {
 }
 
 /**
- * The realm-relative path of an absolute identifier, in URL or prefix form,
- * in the realm served at `realmRoot`. The identifier resolves on `network`, so
- * a prefix maps to wherever the realm server says that realm is served (ADR
- * 002 §1.2), never to a guess from the prefix's spelling. Null when the
- * identifier resolves outside the realm, or does not resolve at all: an npm
- * scope such as `@glimmer/component` is not a registered prefix.
+ * The realm-relative path of an identifier, in URL or prefix form, in the
+ * realm served at `realmRoot`. A relative reference first joins against
+ * `relativeTo`. The identifier resolves on `network`, so a prefix maps to
+ * wherever the realm server says that realm is served (ADR 002 §1.2), never to
+ * a guess from the prefix's spelling. Null when the identifier resolves
+ * outside the realm, or does not resolve at all: an npm scope such as
+ * `@glimmer/component` is not a registered prefix.
  */
 export function realmRelativePath(
-  identifier: string,
+  reference: string,
   realmRoot: string,
   network: PrefixRealmNetwork,
+  relativeTo?: string,
 ): string | null {
-  let url: string;
+  let identifier = resolveRRIReference(
+    reference,
+    relativeTo === undefined ? undefined : rri(relativeTo),
+  );
+  let url: URL;
   try {
-    url = network.toURLHref(identifier);
+    url = network.toURL(identifier);
   } catch {
     return null;
   }
-  if (!url.startsWith(realmRoot)) {
-    return null;
-  }
-  return url.slice(realmRoot.length).replace(/^\/+/, '');
+  let paths = new RealmPaths(new URL(realmRoot));
+  return paths.inRealm(url) ? paths.local(url) : null;
 }
 
 /**
  * Resolve a same-realm import specifier to a realm-relative file path that
  * exists in `fileSet`. Handles relative (`./`, `../`, `/`) specifiers against
- * the importing module's served URL, and absolute identifiers in URL or prefix
- * form on `network`. Returns null for anything outside this realm (base realm,
- * other realms, bare npm packages) — those resolve at runtime and aren't
- * copied.
+ * the importing module's id, and absolute identifiers in URL or prefix form on
+ * `network`. Returns null for anything outside this realm (base realm, other
+ * realms, bare npm packages) — those resolve at runtime and aren't copied.
  */
 export function resolveSameRealmFile(
   spec: string,
@@ -137,14 +147,14 @@ export function resolveSameRealmFile(
   fileSet: Set<string>,
   network: PrefixRealmNetwork,
 ): string | null {
-  let rel: string | null;
-  if (spec.startsWith('.') || spec.startsWith('/')) {
-    rel = realmRelativePath(new URL(spec, fromAbsUrl).href, realmRoot, network);
-  } else if (isAbsoluteIdentifier(spec)) {
-    rel = realmRelativePath(spec, realmRoot, network);
-  } else {
+  if (
+    !spec.startsWith('.') &&
+    !spec.startsWith('/') &&
+    !isAbsoluteIdentifier(spec)
+  ) {
     return null; // bare npm module — external
   }
+  let rel = realmRelativePath(spec, realmRoot, network, fromAbsUrl);
   if (rel === null) {
     return null;
   }
@@ -178,13 +188,11 @@ class RealmCardIngester extends RealmSyncBase {
   }
 
   private relToAbs(rel: string): string {
-    return this.realmRoot + rel.replace(/^\/+/, '');
+    return new RealmPaths(new URL(this.realmRoot)).fileURL(rel).href;
   }
 
   private toRel(absUrl: string): string {
-    return absUrl.startsWith(this.realmRoot)
-      ? absUrl.slice(this.realmRoot.length).replace(/^\/+/, '')
-      : absUrl;
+    return this.relativize(absUrl) ?? absUrl;
   }
 
   /**
@@ -193,25 +201,13 @@ class RealmCardIngester extends RealmSyncBase {
    * `id`s and `ref.module` may be in prefix form (`@cardstack/catalog/…`);
    * both resolve on the network to the served URL.
    */
-  private relativize(identifier: string): string | null {
-    return realmRelativePath(identifier, this.realmRoot, this.network);
-  }
-
-  /**
-   * Resolve a module ref, absolute or relative to the card `cardId`, to a
-   * realm-relative path. A relative ref joins against the card's served URL.
-   */
-  private refToRel(refModule: string, cardId: string): string | null {
-    if (isAbsoluteIdentifier(refModule)) {
-      return this.relativize(refModule);
-    }
-    let cardUrl: string;
-    try {
-      cardUrl = this.network.toURLHref(cardId);
-    } catch {
-      return null;
-    }
-    return this.relativize(new URL(refModule, cardUrl).href);
+  private relativize(identifier: string, relativeTo?: string): string | null {
+    return realmRelativePath(
+      identifier,
+      this.realmRoot,
+      this.network,
+      relativeTo,
+    );
   }
 
   /** Fetch a realm file's source text (cached). Null on non-OK. */
@@ -415,11 +411,7 @@ class RealmCardIngester extends RealmSyncBase {
     fromRel: string,
     fileSet: Set<string>,
   ): string | null {
-    let rel = this.relativize(
-      isAbsoluteIdentifier(self)
-        ? self
-        : new URL(self, this.relToAbs(fromRel)).href,
-    );
+    let rel = this.relativize(self, this.relToAbs(fromRel));
     if (rel === null) {
       return null;
     }
@@ -443,7 +435,8 @@ class RealmCardIngester extends RealmSyncBase {
       if (specType !== 'card' && specType !== 'app') continue;
       let ref = attrs.ref as { module?: string } | undefined;
       if (!ref?.module || !spec.id) continue;
-      let refRel = this.refToRel(ref.module, spec.id);
+      // A relative module joins against the Spec's own id.
+      let refRel = this.relativize(ref.module, spec.id);
       if (refRel === null || !moduleRelsNoExt.has(stripModuleExt(refRel))) {
         continue;
       }

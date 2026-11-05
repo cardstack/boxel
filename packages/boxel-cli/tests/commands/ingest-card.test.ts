@@ -164,6 +164,18 @@ describe('ingest-card helpers', () => {
       ).toBeNull();
     });
 
+    it('matches a file whose name the import percent-encodes', () => {
+      expect(
+        resolveSameRealmFile(
+          './my%20utils',
+          fromAbs,
+          realmRoot,
+          new Set(['04868f-mortgage-calculator/components/my utils.gts']),
+          network,
+        ),
+      ).toBe('04868f-mortgage-calculator/components/my utils.gts');
+    });
+
     it('returns null when the same-realm file is not present', () => {
       expect(
         resolveSameRealmFile('./missing', fromAbs, realmRoot, fileSet, network),
