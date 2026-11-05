@@ -954,6 +954,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    grafanaURL: process.env.GRAFANA_URL || undefined,
     aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
     dbAdapter,
     queue,

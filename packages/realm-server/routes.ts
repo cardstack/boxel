@@ -199,6 +199,7 @@ import {
   handleShowPlatformClient,
   handleStartConnect,
 } from './handlers/handle-oauth.ts';
+import type { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -214,6 +215,10 @@ export type CreateRoutesArgs = {
   matrixClient: MatrixClient;
   realmServerSecretSeed: string;
   grafanaSecret: string;
+  // Verifies the Grafana ID token on operator actions that come through the
+  // Grafana datasource proxy. Absent when GRAFANA_URL isn't configured, and
+  // then those requests are refused.
+  grafanaIdentity?: GrafanaIdentityVerifier;
   realmSecretSeed: string;
   // Shared secret authenticating ai-bot's delegation requests (CS-11552).
   // Optional: when unset, the /_delegate-session endpoint responds 503 rather
@@ -821,11 +826,16 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
 
   // Grafana operator-action endpoints. All POST-only with
-  // `Authorization: Bearer <token>` against the shared `grafanaSecret`.
+  // `Authorization: Bearer <token>` against the shared `grafanaSecret`, which
+  // the Grafana datasource proxy attaches (see `grafanaAuthorization`).
   // Handlers read params from `ctxt.URL.searchParams` (Grafana button
   // panels POST with the params on the querystring, not in a JSON body).
   let registerGrafanaEndpoint = (path: string, handler: Koa.Middleware) => {
-    router.post(path, grafanaAuthorization(args.grafanaSecret), handler);
+    router.post(
+      path,
+      grafanaAuthorization(args.grafanaSecret, args.grafanaIdentity),
+      handler,
+    );
   };
   registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
