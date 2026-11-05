@@ -31,13 +31,14 @@ import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import { WorkspaceActions } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 
-import ItemContainer from './item-container';
-import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 import {
   ArchiveWorkspaceModal,
   DeleteWorkspaceModal,
   DuplicateWorkspaceModal,
-} from './workspace-modals';
+} from '../dashboard-modals/workspace-modals';
+
+import ItemContainer from './item-container';
+import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface Signature {
   Element: HTMLDivElement;

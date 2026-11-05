@@ -11,10 +11,10 @@ interface State<E extends Element, P extends unknown[]> {
 }
 
 // A modifier made from a function of the element and the modifier's
-// positional arguments, as `ember-modifier`'s `modifier` makes one, which
-// can't ship on the secure origin (ADR 008 §1.3). The function may return a
-// teardown, which runs before the function runs again for new arguments, and
-// when the element goes.
+// positional arguments, as `ember-modifier`'s `modifier` makes one, while
+// `ember-modifier` isn't in the import allowlist (ADR 019 §1.3). The function
+// may return a teardown, which runs before the function runs again for new
+// arguments, and when the element goes.
 export function modifier<E extends Element, P extends unknown[] = []>(
   fn: (element: E, ...positional: P) => Teardown,
 ): ModifierLike<{ Element: E; Args: { Positional: P } }> {

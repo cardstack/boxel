@@ -12,7 +12,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
 import { forgetSession, storeSession } from '../../src/security/session.js';
-import { navigation } from '../../src/shell/navigation.js';
+import { navigation, noteDocumentAddress } from '../../src/shell/navigation.js';
 import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
 import KeyPage from '../../src/shell/keys/key-page.gts';
 import { openedFor } from '../../src/shell/keys/opened-for.ts';
@@ -1508,6 +1508,7 @@ module('Integration | key pages', function (hooks) {
           url: `/secure/keys/key-1/use#${new URLSearchParams({
             realm: REALM,
             share: 'share-team-1',
+            back: 'keys',
           })}`,
         },
       ]);
@@ -1879,7 +1880,7 @@ module('Integration | key pages', function (hooks) {
       visitShell(`enter-key#realm=${encodeURIComponent(REALM)}`);
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
-      assert.dom('[data-test-keys-heading]').hasText('Enter a key');
+      assert.dom('[data-test-keys-heading]').hasText('Add key');
       await click('[data-test-toggle-details]');
       assert.dom('[data-test-error-detail="Status"]').hasText('503');
       await click('[data-test-keys-retry]');
@@ -2793,7 +2794,14 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-key-picker-empty]');
       await click('[data-test-key-picker-go-to-keys]');
-      assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
+      assert.deepEqual(navigations, [
+        {
+          how: 'assign',
+          url: `/secure/keys#${new URLSearchParams({
+            back: `share-key#realm=${encodeURIComponent(REALM)}`,
+          })}`,
+        },
+      ]);
     });
 
     test('a link naming a key that isn’t the user’s says so and doesn’t offer to try again', async function (assert) {
@@ -3526,7 +3534,13 @@ module('Integration | key pages', function (hooks) {
         .doesNotExist('a connection takes no value');
       await click('[data-test-replace-key-reconnect]');
       assert.deepEqual(navigations, [
-        { how: 'assign', url: '/secure/connect#reconnect=key-1' },
+        {
+          how: 'assign',
+          url: `/secure/connect#${new URLSearchParams({
+            reconnect: 'key-1',
+            back: OPENED,
+          })}`,
+        },
       ]);
       assert.deepEqual(ticketRequests(), [], 'nothing is changed here');
     });
@@ -3842,6 +3856,190 @@ module('Integration | key pages', function (hooks) {
         requests.some((r) => r.path === '_secure-window/context'),
         'asks the server nothing',
       );
+    });
+  });
+
+  module('the trail of pages', function () {
+    const OPENED_FOR_CARD = `card=${encodeURIComponent(CARD)}&operation=forecast`;
+
+    function serveForecast() {
+      serve({
+        'POST _secure-window/context': () =>
+          context({
+            realm: WORKSPACE,
+            card: {
+              name: 'Weather',
+              module: `${REALM}weather`,
+              exportName: 'Weather',
+            },
+            operation: {
+              name: 'forecast',
+              label: 'Get the forecast',
+              base: 'callApi',
+              method: 'GET',
+              destination: {
+                href: 'https://api.weather.co.uk/v2/',
+                host: 'api.weather.co.uk',
+                path: '/v2/',
+                registrableDomain: 'weather.co.uk',
+              },
+              slots: [{ name: 'userKey', key: 'userKey' }],
+            },
+          }),
+      });
+    }
+
+    function crumbs() {
+      return [...document.querySelectorAll('[data-test-breadcrumbs] li')].map(
+        (li) => li.textContent!.replace('›', '').trim(),
+      );
+    }
+
+    test('the page the window was opened on shows no trail, and is titled by its name', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+      });
+      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert.dom('[data-test-breadcrumbs]').doesNotExist();
+      assert.dom('[data-test-keys-heading]').hasText('Share key');
+    });
+
+    test('the key page reached from a share opened for a workspace leads back to it', async function (assert) {
+      let share = `share-key#realm=${encodeURIComponent(REALM)}`;
+      visitShell(`keys#${new URLSearchParams({ back: share })}`);
+      await render(KeyPage);
+      await waitFor('[data-test-key-list]');
+      assert.deepEqual(crumbs(), ['Share key', 'Your keys']);
+      assert
+        .dom('[data-test-breadcrumb-current]')
+        .hasAttribute('aria-current', 'page');
+      assert.dom('[data-test-keys-heading]').hasText('Your keys');
+      assert
+        .dom('[data-test-breadcrumb="0"]')
+        .hasAttribute('href', `/secure/${share}`);
+      await click('[data-test-breadcrumb="0"]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${share}` },
+      ]);
+    });
+
+    test('Add key reached from Approve leads back to the batch as it was opened', async function (assert) {
+      serveForecast();
+      navigation.back = (url: string) => navigations.push({ how: 'back', url });
+      let approve = `approve#${OPENED_FOR_CARD}`;
+      visitShell(
+        `enter-key#${OPENED_FOR_CARD}&then=approve&${new URLSearchParams({ back: approve })}`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert.deepEqual(crumbs(), ['Approve', 'Add key']);
+      assert.dom('[data-test-keys-heading]').hasText('Add key');
+      await click('[data-test-breadcrumb="0"]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${approve}` },
+      ]);
+      assert.deepEqual(ticketRequests(), [], 'nothing is changed on the way');
+    });
+
+    test('a key added from Approve goes back to the batch as it was opened, with the new key chosen', async function (assert) {
+      serveForecast();
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: { ...attributesOf(KEYS[0]), name: 'Forecasts' },
+            },
+          }),
+      });
+      let approve = `approve#${OPENED_FOR_CARD}&key=key-1`;
+      visitShell(
+        `enter-key#${OPENED_FOR_CARD}&key=key-1&then=approve&${new URLSearchParams({ back: approve })}`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-enter-key-save]');
+      await settled();
+      assert.deepEqual(navigations, [
+        {
+          how: 'replace',
+          url: `/secure/approve#${OPENED_FOR_CARD}&key=key-3`,
+        },
+      ]);
+    });
+
+    test('a trail several pages long names each page, and goes back to any of them', async function (assert) {
+      serveForecast();
+      let use = 'keys/key-1/use';
+      let approve = `approve#${OPENED_FOR_CARD}&${new URLSearchParams({ back: use })}`;
+      visitShell(
+        `enter-key#${OPENED_FOR_CARD}&then=approve&${new URLSearchParams({ back: approve })}`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert.deepEqual(crumbs(), [
+        'Your keys',
+        'Use with card',
+        'Approve',
+        'Add key',
+      ]);
+      await click('[data-test-breadcrumb="0"]');
+      await click('[data-test-breadcrumb="1"]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: '/secure/keys' },
+        { how: 'replace', url: `/secure/${use}` },
+      ]);
+    });
+
+    test('a page beneath the key page has the key page above it', async function (assert) {
+      visitShell('keys/add');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert.deepEqual(crumbs(), ['Your keys', 'Add key']);
+      await click('[data-test-breadcrumb="0"]');
+      assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
+    });
+
+    test('a page beneath the key page, reached by a route transition from a key page with a trail, keeps that trail and goes back through the history', async function (assert) {
+      let share = `share-key#realm=${encodeURIComponent(REALM)}`;
+      let keys = `keys#${new URLSearchParams({ back: share })}`;
+      navigation.back = (url: string) => navigations.push({ how: 'back', url });
+      visitShell('keys/add');
+      noteDocumentAddress(keys);
+      try {
+        await render(EnterKeyPage);
+        await waitFor('[data-test-enter-key-form]');
+        assert.deepEqual(crumbs(), ['Share key', 'Your keys', 'Add key']);
+        await click('[data-test-breadcrumb="1"]');
+        await click('[data-test-breadcrumb="0"]');
+        assert.deepEqual(navigations, [
+          { how: 'back', url: `/secure/${keys}` },
+          { how: 'replace', url: `/secure/${share}` },
+        ]);
+      } finally {
+        noteDocumentAddress(undefined);
+      }
+    });
+
+    test('a way back that names a page that isn’t a key page ends the trail', async function (assert) {
+      visitShell(`keys#${new URLSearchParams({ back: 'sign-out' })}`);
+      await render(KeyPage);
+      await waitFor('[data-test-key-list]');
+      assert.dom('[data-test-breadcrumbs]').doesNotExist();
+    });
+
+    test('a way back that names no page of the shell ends the trail', async function (assert) {
+      visitShell(
+        `keys#${new URLSearchParams({ back: 'https://elsewhere.test/secure/keys' })}`,
+      );
+      await render(KeyPage);
+      await waitFor('[data-test-key-list]');
+      assert.dom('[data-test-breadcrumbs]').doesNotExist();
     });
   });
 });
