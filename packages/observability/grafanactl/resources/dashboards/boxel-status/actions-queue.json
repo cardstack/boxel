@@ -764,7 +764,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 44,
+          "y": 59,
           "w": 24,
           "h": 1
         },
@@ -780,7 +780,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 45,
+          "y": 60,
           "w": 24,
           "h": 10
         },
@@ -884,7 +884,7 @@
         "collapsed": false,
         "gridPos": {
           "x": 0,
-          "y": 55,
+          "y": 70,
           "w": 24,
           "h": 1
         },
@@ -900,7 +900,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 56,
+          "y": 71,
           "w": 12,
           "h": 6
         },
@@ -955,7 +955,7 @@
         },
         "gridPos": {
           "x": 12,
-          "y": 56,
+          "y": 71,
           "w": 12,
           "h": 6
         },
@@ -990,7 +990,7 @@
         },
         "gridPos": {
           "x": 0,
-          "y": 62,
+          "y": 77,
           "w": 24,
           "h": 4
         },
@@ -1264,6 +1264,269 @@
           ]
         },
         "options": {}
+      },
+      {
+        "id": 50,
+        "type": "row",
+        "title": "RunsOn spill",
+        "gridPos": {
+          "x": 0,
+          "y": 44,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false,
+        "panels": []
+      },
+      {
+        "id": 51,
+        "type": "timeseries",
+        "title": "Spill on",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 45,
+          "w": 6,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"spill\" | label_format spill_on=`{{ if eq .spill \"true\" }}1{{ else }}0{{ end }}` | unwrap spill_on [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "spill on"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "decimals": 0,
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "stepAfter",
+              "fillOpacity": 30,
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "showLegend": false
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "description": "1 while the collector holds the spill variable at `true`, so that pull request jobs that follow the spill start on RunsOn. A bucket that shows 1 had the spill on for at least one sample in it.",
+        "interval": "5m"
+      },
+      {
+        "id": 52,
+        "type": "timeseries",
+        "title": "GitHub pool and the load moved to RunsOn",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 6,
+          "y": 45,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"spill\" | label_format demand=`{{ add .github_hosted_running_jobs .diverted_jobs }}` | unwrap demand [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "demand (running + moved)"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"spill\" | unwrap github_hosted_running_jobs [$__interval]) by ()",
+            "refId": "B",
+            "queryType": "range",
+            "legendFormat": "GitHub-hosted running"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"spill\" | unwrap github_hosted_queued_jobs [$__interval]) by ()",
+            "refId": "C",
+            "queryType": "range",
+            "legendFormat": "GitHub-hosted queued"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"spill\" | unwrap diverted_jobs [$__interval]) by ()",
+            "refId": "D",
+            "queryType": "range",
+            "legendFormat": "moved to RunsOn"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 35
+                },
+                {
+                  "color": "red",
+                  "value": 48
+                }
+              ]
+            },
+            "custom": {
+              "spanNulls": true,
+              "thresholdsStyle": {
+                "mode": "line+area"
+              }
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "The counts the spill decision reads, over every repository in the pool, not only this one. Demand is the GitHub-hosted running jobs plus the RunsOn jobs that would be on GitHub's runners if the spill were off.\n\nThe red line is the default demand that turns the spill on (48), and the green line is the demand it must stay under to turn off (35). The collector can be configured with other values; see its README. A queued job that waits over 60 s also turns it on.",
+        "interval": "5m"
+      },
+      {
+        "id": 53,
+        "type": "stat",
+        "title": "Spill changes in range",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 18,
+          "y": 45,
+          "w": 6,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"spill\" | changed=\"true\" [$__interval]))",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "changes"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 0,
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "sum"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "description": "How many times the spill turned on or off in the selected range. Many changes in a short time mean the spill moves so much load that the pool drains, the spill turns off, and the load comes back.",
+        "interval": "5m"
+      },
+      {
+        "id": 54,
+        "type": "logs",
+        "title": "Spill decisions that changed the variable",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 53,
+          "w": 24,
+          "h": 6
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "{service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"spill\" | changed=\"true\" | line_format \"spill {{ .spill_before }} -> {{ .spill }} ({{ .reason }}): GitHub-hosted running {{ .github_hosted_running_jobs }}, queued {{ .github_hosted_queued_jobs }}, moved {{ .diverted_jobs }}, written {{ .written }}\"",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "description": "One line each time a decision changed the spill. `written false` means the write to the repository variable failed; the collector logs the error under Collector health."
       }
     ],
     "refresh": "1m",

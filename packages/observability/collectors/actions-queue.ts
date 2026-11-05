@@ -12,13 +12,14 @@
 // behind the very backlog it measures and go blind during the incident it
 // exists for.
 //
-// Each sample also decides whether host CI spills onto RunsOn (see spill.ts),
-// and sets the repo variable that the host workflow reads when the App
+// Each sample also decides whether CI spills onto RunsOn (see spill.ts), and
+// sets the repo variable that the workflows read when the App
 // credentials for it are configured (see github-app.ts).
 
 import {
   countJob,
   decideSpill,
+  isDivertible,
   stateAfterFailedWrite,
   thresholdsFromEnv,
   type PoolJob,
@@ -170,7 +171,7 @@ function parseArgs(argv: string[]): Options {
       process.exit(2);
     }
   }
-  const spillVariable = process.env.SPILL_VARIABLE || 'HOST_TEST_SPILL';
+  const spillVariable = process.env.SPILL_VARIABLE || 'RUNS_ON_SPILL';
 
   return {
     repo,
@@ -286,11 +287,11 @@ function poolJob(job: Job, run: Run | undefined, observedAt: number): PoolJob {
     status: job.status,
     labels: job.labels ?? [],
     waitedSeconds: seconds(job.created_at, observedAt),
-    // ci-host.yaml sends the jobs of a push to `main` to RunsOn whatever the
-    // spill says, so the spill did not move them.
-    divertible: !(
-      run?.event === 'push' && (job.head_branch ?? run?.head_branch) === 'main'
-    ),
+    divertible: isDivertible({
+      event: run?.event,
+      branch: job.head_branch ?? run?.head_branch,
+      workflow: job.workflow_name ?? run?.name,
+    }),
   };
 }
 
