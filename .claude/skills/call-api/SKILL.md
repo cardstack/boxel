@@ -60,9 +60,9 @@ on its own (one webhook per channel card): it lowers to
 `keyKind` says what kind of key fills a slot: `static`, `google-service-account`
 or `oauth` (an OAuth connection, or a `client_credentials` client), one kind for
 every slot or one per slot by name (an unnamed slot's name is `userKey` or
-`apiKey`). Lowering (`lowerKeyKind`) refuses an unknown kind or a name the
-request has no slot for (`invalid-request`), and keeps the kind on the slot as
-`CallApiSlot.keyKind`. The kinds live in `runtime-common/call-api-key-kind.ts`,
+`apiKey`). Lowering (`lowerKeyKind`) refuses an unknown kind, a name the
+request has no slot for, and any kind but `static` on a `|basic` slot
+(`invalid-request`), and keeps the kind on the slot as `CallApiSlot.keyKind`. The kinds live in `runtime-common/call-api-key-kind.ts`,
 which base re-exports; runtime-common takes only types from base, since a value
 import closes a cycle through `card-api`. A declared kind is binding: approval
 refuses a key of another kind (`assertKeyFitsSlot` in `lib/key-bindings.ts`),

@@ -366,12 +366,6 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       .busy {
         margin-top: var(--boxel-sp-xl);
       }
-      .note {
-        margin: 0;
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        color: var(--muted-foreground);
-      }
       .kind-hint {
         display: grid;
         gap: var(--boxel-sp-xs);
@@ -401,7 +395,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
