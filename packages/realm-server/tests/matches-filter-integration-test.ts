@@ -727,6 +727,47 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('facets count a field over every match, list fields per element', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}talk-1.json`,
+        markdown: 'a talk about clocks',
+        searchDoc: { category: 'Systems', concepts: ['clocks', 'consensus'] },
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}talk-2.json`,
+        markdown: 'a talk about clocks and queues',
+        searchDoc: { category: 'Systems', concepts: ['clocks', 'queues'] },
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}talk-3.json`,
+        markdown: 'a talk about voting',
+        searchDoc: { category: 'Society', concepts: ['voting'] },
+      });
+      let { meta } = await engine.search(
+        new URL(testRealmURL),
+        {
+          filter: { matches: 'talk' },
+          facets: [{ by: 'category' }, { by: 'concepts', size: 2 }],
+          page: { size: 1 },
+        },
+        {},
+        { kind: 'dataOnly' },
+      );
+      assert.strictEqual(meta.page.total, 3, 'the page is one row of three');
+      assert.deepEqual(meta.facets?.category, [
+        { value: 'Systems', count: 2 },
+        { value: 'Society', count: 1 },
+      ]);
+      assert.deepEqual(
+        meta.facets?.concepts,
+        [
+          { value: 'clocks', count: 2 },
+          { value: 'consensus', count: 1 },
+        ],
+        'each element of a list counts, capped at size, ties by value',
+      );
+    });
+
     test('a relevance sort carrying a type anchor ranks the same as one without', async function (assert) {
       await seedRow(dbAdapter, {
         url: `${testRealmURL}zebra-dense.json`,

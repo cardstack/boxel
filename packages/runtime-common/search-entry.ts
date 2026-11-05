@@ -107,6 +107,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'filter',
   'sort',
   'page',
+  'facets',
   'realms',
   'fields',
   'cardUrls',
@@ -599,6 +600,31 @@ function parseFieldset(fields: unknown): SearchEntryFieldset {
   return { html, item, itemAsFallback: false };
 }
 
+// Facets in the wire grammar name their field through `item.`, like every
+// other field path; the engine's grammar names it bare. Anything that isn't a
+// facet object is passed through for `assertQuery` to reject.
+function translateFacets(facets: unknown): unknown {
+  if (!Array.isArray(facets)) {
+    return facets;
+  }
+  return facets.map((facet) => {
+    if (
+      typeof facet !== 'object' ||
+      facet == null ||
+      typeof (facet as { by?: unknown }).by !== 'string'
+    ) {
+      return facet;
+    }
+    let by = (facet as { by: string }).by;
+    if (!by.startsWith(ITEM_PREFIX)) {
+      throw invalidQuery(
+        `facets: by is a field path addressed through item., such as "item.category"`,
+      );
+    }
+    return { ...facet, by: by.slice(ITEM_PREFIX.length) };
+  });
+}
+
 export function parseSearchEntryQueryFromPayload(
   payload: unknown,
 ): SearchEntryQuery {
@@ -692,6 +718,9 @@ export function parseSearchEntryQueryFromPayload(
   }
   if (record.page !== undefined) {
     itemQuery.page = record.page;
+  }
+  if (record.facets !== undefined) {
+    itemQuery.facets = translateFacets(record.facets);
   }
   try {
     assertQuery(itemQuery);
@@ -1234,6 +1263,8 @@ export interface SearchEntryWireQuery {
   filter?: SearchEntryWireFilter;
   sort?: SearchEntryWireSortExpression[];
   page?: { number?: number; size: number; generation?: number };
+  // field paths through `item.`, as in a sort
+  facets?: { by: string; size?: number }[];
   fields?: { entry: string[] };
   cardUrls?: string[];
   realms?: string[];
@@ -1311,6 +1342,12 @@ export function searchEntryWireQueryFromQuery(
   if (query.page) {
     wire.page = query.page;
   }
+  if (query.facets) {
+    wire.facets = query.facets.map((facet) => ({
+      ...facet,
+      by: `${ITEM_PREFIX}${facet.by}`,
+    }));
+  }
   if (opts?.fields) {
     wire.fields = { entry: [...opts.fields] };
   }
@@ -1359,6 +1396,23 @@ export function combineSearchEntryResults(
   for (let doc of docs) {
     combined.data.push(...doc.data);
     combined.meta.page.total += doc.meta?.page?.total ?? 0;
+    // Facet counts add up across realms. Each realm returns only its own top
+    // values, so a value common overall but outside one realm's top `size`
+    // is undercounted there.
+    if (doc.meta?.facets) {
+      let facets = (combined.meta.facets ??= {});
+      for (let [by, counts] of Object.entries(doc.meta.facets)) {
+        let merged = new Map(
+          (facets[by] ?? []).map((c) => [c.value, c.count] as const),
+        );
+        for (let { value, count } of counts) {
+          merged.set(value, (merged.get(value) ?? 0) + count);
+        }
+        facets[by] = [...merged]
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+      }
+    }
     if (doc.meta?.realmTotals) {
       combined.meta.realmTotals = {
         ...combined.meta.realmTotals,

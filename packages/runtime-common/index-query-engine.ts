@@ -74,6 +74,9 @@ import {
   isCardTypeFilter,
   isMatchesFilter,
   isTypeAheadFilter,
+  DEFAULT_FACET_SIZE,
+  type Facet,
+  type FacetCount,
   typeAheadWords,
   type TypeAheadFilter,
   isNearFilter,
@@ -398,6 +401,9 @@ export interface QueryResultsMeta {
   page: {
     total: number;
   };
+  // A query's `facets`, counted over every match: per facet's `by`, its
+  // values with how many matched cards hold each, most common first.
+  facets?: Record<string, FacetCount[]>;
   // The result set omits rows nobody counted, so `page.total` covers less than
   // the query asked about and is a floor rather than the match count. Two
   // things leave a result set that way: a realm the query fanned out to did not
@@ -1205,7 +1211,7 @@ export class IndexQueryEngine {
   // loader that we should be using.
   private async _search(
     realmURL: URL,
-    { filter, sort, page }: Query,
+    { filter, sort, page, facets }: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' | 'all' = 'instance',
@@ -1373,15 +1379,36 @@ export class IndexQueryEngine {
         ') AS distinct_entries',
       ];
 
-      let [results, totalResults] = await Promise.all([
+      let facetQueries = (facets ?? []).map((facet) =>
+        this.#facetQuery(facet, opts, everyCondition),
+      );
+      let [results, totalResults, ...facetResults] = await Promise.all([
         this.#queryCards(query, opts.timings),
         this.#queryCards(queryCount, opts.timings),
+        ...facetQueries.map((q) => this.#queryCards(q, opts.timings)),
       ]);
 
       return {
         results,
         meta: {
           page: { total: Number(totalResults[0].total) },
+          ...(facets?.length
+            ? {
+                facets: Object.fromEntries(
+                  facets.map((facet, i) => [
+                    facet.by,
+                    (facetResults[i] as { value: unknown; count: unknown }[])
+                      .filter((row) => row.value != null)
+                      .map(
+                        (row): FacetCount => ({
+                          value: String(row.value),
+                          count: Number(row.count),
+                        }),
+                      ),
+                  ]),
+                ),
+              }
+            : {}),
         },
       };
     } catch (error) {
@@ -1403,7 +1430,7 @@ export class IndexQueryEngine {
   // wrappers, each fixing one projection.
   async search(
     realmURL: URL,
-    { filter, sort, page }: Query,
+    { filter, sort, page, facets }: Query,
     opts: QueryOptions,
     projection: SearchProjection,
     // 'all' searches both `instance` and `file` rows in one query (kind is
@@ -1480,7 +1507,7 @@ export class IndexQueryEngine {
 
     return (await this._search(
       realmURL,
-      { filter, sort, page },
+      { filter, sort, page, facets },
       opts,
       selectClauseExpression,
       entryType,
@@ -1495,14 +1522,14 @@ export class IndexQueryEngine {
 
   async searchCards(
     realmURL: URL,
-    { filter, sort, page }: Query,
+    { filter, sort, page, facets }: Query,
     opts: QueryOptions = {},
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this.search(
       realmURL,
-      { filter, sort, page },
+      { filter, sort, page, facets },
       opts,
       { kind: 'dataOnly' },
     );
@@ -1516,12 +1543,12 @@ export class IndexQueryEngine {
 
   async searchFiles(
     realmURL: URL,
-    { filter, sort, page }: Query,
+    { filter, sort, page, facets }: Query,
     opts: QueryOptions = {},
   ): Promise<{ files: IndexedFile[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this._search(
       realmURL,
-      { filter, sort, page },
+      { filter, sort, page, facets },
       opts,
       [
         `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(ph.deps) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(ph.isolated_html) AS isolated_html, ANY_VALUE(ph.head_html) AS head_html, ANY_VALUE(ph.embedded_html) AS embedded_html, ANY_VALUE(ph.fitted_html) AS fitted_html, ANY_VALUE(ph.atom_html) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(ph.markdown) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(ph.generation) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
@@ -2380,6 +2407,54 @@ export class IndexQueryEngine {
       union.push(...select);
     });
     return ['(i.url, i.realm_url, i.type) IN (', ...union, ')'];
+  }
+
+  // One facet's counts over the rows the filter matches (the same FROM and
+  // WHERE as the page's count, so counts agree with `page.total`). Each
+  // matched (url, type) pair counts once per distinct value it holds; a list
+  // field (a JSON array in the search doc) contributes each element.
+  #facetQuery(
+    facet: Facet,
+    opts: QueryOptions,
+    everyCondition: CardExpression,
+  ): CardExpression {
+    let size = facet.size ?? DEFAULT_FACET_SIZE;
+    let path = facet.by.split('.');
+    return [
+      dbExpression({
+        pg: [
+          'SELECT fv.value AS value, COUNT(*) AS count FROM (',
+          'SELECT DISTINCT f.url, f.type, fv0.value FROM (',
+          'SELECT DISTINCT i.url, i.type, i.search_doc #>',
+          param(`{${path.map((p) => `"${p}"`).join(',')}}`),
+          '::text[] AS v',
+        ],
+        sqlite: [
+          'SELECT fv.value AS value, COUNT(*) AS count FROM (',
+          'SELECT DISTINCT f.url, f.type, fv0.value FROM (',
+          'SELECT DISTINCT i.url, i.type, i.search_doc ->',
+          param(`$.${facet.by}`),
+          'AS v',
+        ],
+      }),
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)} ${tableValuedFunctionsPlaceholder}`,
+      'WHERE',
+      ...everyCondition,
+      ') AS f',
+      dbExpression({
+        pg: [
+          `CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(f.v) = 'array' THEN f.v ELSE jsonb_build_array(f.v) END) AS fv0(value)`,
+        ],
+        sqlite: [
+          `CROSS JOIN json_each(CASE WHEN json_type(f.v) = 'array' THEN f.v ELSE json_array(json(f.v)) END) AS fv0`,
+        ],
+      }),
+      'WHERE fv0.value IS NOT NULL',
+      ') AS fv',
+      'GROUP BY fv.value',
+      'ORDER BY count DESC, fv.value',
+      `LIMIT ${Number(size)}`,
+    ];
   }
 
   // Type-ahead: every typed word is a word prefix of the card's `_typeahead`

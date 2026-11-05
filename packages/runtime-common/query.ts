@@ -33,9 +33,29 @@ type JSONValue = JsonValue;
 
 export type SparseFieldsets = Record<string, string[]>;
 
+// Count what the matched cards hold in one search-doc field: the field's
+// values, each with how many matched cards hold it, most common first. A list
+// field (containsMany) counts each of its values. Counted by the database over
+// every match, not only the page returned. `by` is a field path, dotted for a
+// compound field; `size` caps how many values come back (default 50, at most
+// 1000). The counts ride `meta.facets[by]`.
+export interface Facet {
+  by: string;
+  size?: number;
+}
+export const MAX_FACETS = 8;
+export const DEFAULT_FACET_SIZE = 50;
+export const MAX_FACET_SIZE = 1000;
+
+export interface FacetCount {
+  value: string;
+  count: number;
+}
+
 interface QueryCommon {
   filter?: Filter;
   sort?: Sort;
+  facets?: Facet[];
   page?: {
     number?: number; // page.number is 0-based
     size: number;
@@ -425,6 +445,9 @@ export function assertQuery(
         break;
       case 'fields':
         assertFields(value, pointer.concat('fields'));
+        break;
+      case 'facets':
+        assertFacets(value, pointer.concat('facets'));
         break;
       case 'asData':
         if (typeof value !== 'boolean') {
@@ -1014,6 +1037,49 @@ function assertMatchesFilter(
       `${pointer.concat('prefix').join('/') || '/'}: prefix must be a boolean`,
     );
   }
+}
+
+const FACET_PATH = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
+
+function assertFacets(
+  facets: any,
+  pointer: string[],
+): asserts facets is Facet[] {
+  let where = pointer.join('/') || '/';
+  if (!Array.isArray(facets)) {
+    throw new InvalidQueryError(`${where}: facets must be an array`);
+  }
+  if (facets.length > MAX_FACETS) {
+    throw new InvalidQueryError(
+      `${where}: a query takes at most ${MAX_FACETS} facets`,
+    );
+  }
+  facets.forEach((facet, i) => {
+    let at = `${where}[${i}]`;
+    if (typeof facet !== 'object' || facet == null || Array.isArray(facet)) {
+      throw new InvalidQueryError(`${at}: a facet must be an object`);
+    }
+    for (let key of Object.keys(facet)) {
+      if (key !== 'by' && key !== 'size') {
+        throw new InvalidQueryError(`${at}: unknown facet member "${key}"`);
+      }
+    }
+    if (typeof facet.by !== 'string' || !FACET_PATH.test(facet.by)) {
+      throw new InvalidQueryError(
+        `${at}/by: by must be a field path such as "category" or "speaker.name"`,
+      );
+    }
+    if (
+      facet.size !== undefined &&
+      (!Number.isInteger(facet.size) ||
+        facet.size < 1 ||
+        facet.size > MAX_FACET_SIZE)
+    ) {
+      throw new InvalidQueryError(
+        `${at}/size: size must be an integer from 1 to ${MAX_FACET_SIZE}`,
+      );
+    }
+  });
 }
 
 function assertTypeAheadFilter(
