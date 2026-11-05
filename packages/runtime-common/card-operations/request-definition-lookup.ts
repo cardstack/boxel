@@ -2,6 +2,7 @@ import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { DefinitionLookupOptions } from '../definition-lookup.ts';
 import type { Definition, ModuleDefinitionResult } from '../index.ts';
 import { userInitiatedPriority } from '../queue.ts';
+import type { OperationDefinitionLookup } from './dispatch.ts';
 import { definitionNotReady } from './types.ts';
 
 // How long a request waits for a definition before it is turned away. A cache
@@ -24,6 +25,15 @@ export interface RequestPathLookup {
   definitionGeneration?(): number;
 }
 
+// The lookup an operation reads through, as the realm's lookup answers it: a
+// type that cannot be resolved is a refusal, never an undefined answer.
+export interface RequestDefinitionLookup extends OperationDefinitionLookup {
+  lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
+  lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+  ): Promise<ModuleDefinitionResult>;
+}
+
 // The realm's definition lookup as a request reaches it.
 //
 // Two things separate it from the lookup the indexer uses. A cache miss renders
@@ -39,13 +49,7 @@ export interface RequestPathLookup {
 export function requestDefinitionLookup(
   lookup: RequestPathLookup,
   opts: { deadlineMs?: number } = {},
-): {
-  lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
-  lookupDefinitionEntry(
-    codeRef: ResolvedCodeRef,
-  ): Promise<ModuleDefinitionResult>;
-  definitionGeneration?(): number;
-} {
+): RequestDefinitionLookup {
   let deadlineMs = opts.deadlineMs ?? REQUEST_DEFINITION_DEADLINE_MS;
   let options = { priority: userInitiatedPriority };
   return {
@@ -61,9 +65,7 @@ export function requestDefinitionLookup(
         codeRef,
         deadlineMs,
       ),
-    ...(lookup.definitionGeneration
-      ? { definitionGeneration: () => lookup.definitionGeneration!() }
-      : {}),
+    definitionGeneration: lookup.definitionGeneration?.bind(lookup),
   };
 }
 
@@ -86,9 +88,8 @@ async function withinDeadline<T>(
       deadlineMs,
     );
   });
-  // The abandoned lookup still settles, and a rejection nobody awaits any more
-  // must not surface as an unhandled one.
-  pending.catch(() => {});
+  // The race holds a handler on the lookup, so one abandoned at the deadline
+  // settles later without surfacing as an unhandled rejection.
   try {
     return await Promise.race([pending, expired]);
   } finally {

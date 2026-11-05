@@ -298,7 +298,10 @@ import type {
   ReadPlan,
   RunOperationOptions,
 } from './card-operations/dispatch.ts';
-import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   actingUserResolver,
@@ -2855,7 +2858,6 @@ export class Realm {
   #policyTypeKey: string | undefined;
   #operationCore: OperationCore | undefined;
   #batchCore: BatchCore | undefined;
-  #requestDefinitions: ReturnType<typeof requestDefinitionLookup> | undefined;
   #adapter: RealmAdapter;
   #router: Router;
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
@@ -2890,6 +2892,12 @@ export class Realm {
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
+  // The definition lookup an operation reads through: a cache miss renders at
+  // user priority, ahead of background re-index work, and a render that does
+  // not finish in time refuses with a retryable 503 rather than holding the
+  // request open. See `requestDefinitionLookup`. One instance for the realm's
+  // lifetime, since the gate and the named queries key maps on it.
+  #requestDefinitionLookup: ReturnType<typeof requestDefinitionLookup>;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #directoryViewRefresher = new DirectoryViewRefresher(
     async (directory) => {
@@ -3329,6 +3337,9 @@ export class Realm {
 
     // Wrap to retain realm context for definition lookups
     this.#definitionLookup = definitionLookup.forRealm(this);
+    this.#requestDefinitionLookup = requestDefinitionLookup(
+      this.#definitionLookup,
+    );
 
     this.__fetchForTesting = _fetch;
 
@@ -8125,19 +8136,6 @@ export class Realm {
 
   get realmIndexQueryEngine() {
     return this.#realmIndexQueryEngine;
-  }
-
-  // The definition lookup an operation reads through: a cache miss renders at
-  // user priority, ahead of background re-index work, and a render that does
-  // not finish in time refuses with a retryable 503 rather than holding the
-  // request open. See `requestDefinitionLookup`.
-  get #requestDefinitionLookup(): ReturnType<typeof requestDefinitionLookup> {
-    if (!this.#requestDefinitions) {
-      this.#requestDefinitions = requestDefinitionLookup(
-        this.#definitionLookup,
-      );
-    }
-    return this.#requestDefinitions;
   }
 
   // The operation core, built from the realm's own collaborators. What it is
@@ -16233,10 +16231,16 @@ export class Realm {
           if (!isOperationFailure(err)) {
             throw err;
           }
+          // A definition the policy names that is not indexed yet is told to
+          // this caller, who may not read the realm, without naming it.
+          let error =
+            err.error.code === 'target-not-indexed'
+              ? refusalForNonReader(err.error)
+              : err.error;
           return createResponse({
-            body: JSON.stringify(errorsDocument(err.error), null, 2),
+            body: JSON.stringify(errorsDocument(error), null, 2),
             init: {
-              status: err.error.status,
+              status: error.status,
               headers: { 'content-type': SupportedMimeType.CardJson },
             },
             requestContext,
@@ -17569,13 +17573,24 @@ export class Realm {
   // card here does. `cardURL` is taken in this realm's own spelling of its
   // URL, which is the one the declaration is resolved against.
   async unshareableFormatsFor(cardURL: URL): Promise<PrerenderedHtmlFormat[]> {
-    let { unshareableFormats } = await readPlan(
-      this.operationCore,
-      cardURL,
-      undefined,
-      this.#readPlanByURL,
-    );
-    return unshareableFormats;
+    try {
+      let { unshareableFormats } = await readPlan(
+        this.operationCore,
+        cardURL,
+        undefined,
+        this.#readPlanByURL,
+      );
+      return unshareableFormats;
+    } catch (err: unknown) {
+      // A type whose definition is not indexed yet withholds every format, as
+      // a type that cannot be resolved does: nothing can say which of its
+      // formats it withholds, and the page is served without markup rather
+      // than refused.
+      if (isOperationFailure(err) && err.error.code === 'target-not-indexed') {
+        return [...PRERENDERED_HTML_FORMATS];
+      }
+      throw err;
+    }
   }
 
   // CS-10054: read host routing rules from the indexed RealmConfig card.
@@ -17779,8 +17794,9 @@ export class Realm {
     }
     let chain: string[];
     try {
-      chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-        .types;
+      chain = (
+        await this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef)
+      ).types;
     } catch {
       return [];
     }
@@ -17853,8 +17869,9 @@ export class Realm {
       let chain = chains.get(key);
       if (!chain) {
         try {
-          chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-            .types;
+          chain = (
+            await this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef)
+          ).types;
         } catch {
           chain = [];
         }
@@ -17944,7 +17961,7 @@ export class Realm {
           : undefined;
       },
       lookupDefinitionEntry: (codeRef) =>
-        this.#definitionLookup.lookupDefinitionEntry(codeRef),
+        this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef),
       toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
       isPolicyCard: (types) => this.#isPolicyCard(types),
       // The index and the definition cache record an adoption chain in this

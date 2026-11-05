@@ -19,11 +19,11 @@ import {
 //
 // A definition-cache miss renders the module on the prerenderer, and the page
 // pool serves renders by priority. A realm re-indexing after a module push
-// queues every card render at `systemInitiatedPriority`; a lookup that passed
-// no priority went in at the pool's default of 0, below all of them, and the
-// operation waited for the whole re-index. These pin that a request's lookup
-// outranks that work, and that one which still cannot answer in time refuses
-// with a retryable 503 rather than holding the request open.
+// queues every card render at `systemInitiatedPriority`, and a lookup with no
+// priority of its own enters at the pool's default of 0, below all of them.
+// These pin that a request's lookup outranks that work, and that one which
+// still cannot answer in time refuses with a retryable 503 rather than holding
+// the request open.
 // ============================================================================
 
 const CODE_REF = {
