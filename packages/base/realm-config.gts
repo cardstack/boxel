@@ -36,8 +36,10 @@ import {
   findRedirectCycles,
   getField,
   getFieldIcon,
+  isAbsoluteIdentifier,
   isCardInstance,
   isLocalId,
+  isPrefixForm,
   RealmPaths,
   REDIRECT_STATUS_CODES,
   realmPolicyRef,
@@ -907,16 +909,14 @@ export class RealmSettingsField extends JsonField {
   static edit = RealmSettingsEdit;
 }
 
-// A pointer written as an absolute http(s) URL, as the realm resolves one.
-function httpURL(pointer: string): string | undefined {
-  try {
-    let url = new URL(pointer);
-    return url.protocol === 'http:' || url.protocol === 'https:'
-      ? url.href
-      : undefined;
-  } catch {
-    return undefined;
-  }
+// A pointer written as a URL-form id. The realm names the card such a pointer
+// resolves to by that same id, and a link can navigate to it. A prefix-form
+// pointer is absolute too, but which URL it stands for is known only to the
+// realm's mappings, so it is neither.
+function urlFormPointer(pointer: string): string | undefined {
+  return isAbsoluteIdentifier(pointer) && !isPrefixForm(pointer)
+    ? pointer
+    : undefined;
 }
 
 // The realm a config card configures: its own realm, when the card is that
@@ -1005,7 +1005,7 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     }
     let shown = this.pointer;
     let card = answer.validation?.card;
-    let shownURL = httpURL(shown);
+    let shownURL = urlFormPointer(shown);
     let about: boolean;
     if (answer.validation && !card && !shown) {
       about = true;
@@ -1358,7 +1358,7 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
   }
 
   private get href(): string | undefined {
-    return httpURL(this.pointer);
+    return urlFormPointer(this.pointer);
   }
 
   <template>

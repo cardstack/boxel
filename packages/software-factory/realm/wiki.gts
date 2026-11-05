@@ -9,6 +9,11 @@ import {
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import MarkdownField from '@cardstack/base/markdown';
+import {
+  pathSegmentsOfIdentifier,
+  resolveRRIReference,
+  rri,
+} from '@cardstack/runtime-common';
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -666,21 +671,23 @@ export class Wiki extends CardDef {
         }
       }
 
-      // Fallback: construct URL from slug convention
+      // Fallback: by convention the page is in the nearest `Wiki` directory
+      // above this card's id, or in a `Wiki` directory beside this card's own
+      // directory when the id has none. Joined as a relative reference, so
+      // the id keeps its form.
       try {
         const cardId = this.args.model?.id;
         if (cardId) {
-          const cardUrl = new URL(cardId);
-          const pathParts = cardUrl.pathname.split('/');
-          const wikiIndex = pathParts.indexOf('Wiki');
-          const basePath =
-            wikiIndex > 0
-              ? pathParts.slice(0, wikiIndex).join('/')
-              : pathParts.slice(0, -2).join('/');
-          const targetUrl = new URL(
-            `${cardUrl.origin}${basePath}/Wiki/${wikiSlug}`,
+          const segments = pathSegmentsOfIdentifier(cardId);
+          const wikiIndex = segments.indexOf('Wiki');
+          const reference =
+            wikiIndex >= 0
+              ? `${'../'.repeat(Math.max(segments.length - wikiIndex - 2, 0))}${wikiSlug}`
+              : `../Wiki/${wikiSlug}`;
+          this.args.viewCard?.(
+            rri(resolveRRIReference(reference, rri(cardId))),
+            'isolated',
           );
-          this.args.viewCard?.(targetUrl, 'isolated');
         }
       } catch (e) {
         // ignore navigation errors

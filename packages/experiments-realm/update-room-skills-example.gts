@@ -11,6 +11,12 @@ import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 
 import UpdateRoomSkillsTool from '@cardstack/boxel-host/commands/update-room-skills';
+import {
+  isAbsoluteIdentifier,
+  resolveRRIReference,
+  rri,
+  SKILLS_REALM_PREFIX,
+} from '@cardstack/runtime-common';
 
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
 
@@ -28,31 +34,6 @@ function ensureTrailingSlash(url: string) {
   return url.endsWith('/') ? url : `${url}/`;
 }
 
-function defaultSkillsRealmURL() {
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
-  let candidates = [
-    (window as any).ENV,
-    (window as any).__BOXEL_HOST_CONFIG__,
-    (window as any).__BOXEL_ENV__,
-  ];
-
-  for (let candidate of candidates) {
-    let resolved = candidate?.resolvedSkillsRealmURL;
-    if (typeof resolved === 'string' && resolved.length > 0) {
-      return ensureTrailingSlash(resolved);
-    }
-  }
-
-  try {
-    return ensureTrailingSlash(`${window.location.origin}/skills/`);
-  } catch {
-    return '';
-  }
-}
-
 function parseSkillInput(input?: string | null) {
   if (!input) {
     return [];
@@ -63,7 +44,9 @@ function parseSkillInput(input?: string | null) {
     .filter(Boolean);
 }
 
-function normalizeSkillId(raw: string, skillsRealmURL: string) {
+// A skill id as typed: an absolute id, in either RRI form, stands as it is;
+// a relative one is joined to the skills realm, keeping the realm's form.
+function normalizeSkillId(raw: string, skillsRealm: string) {
   if (!raw) {
     return null;
   }
@@ -73,16 +56,12 @@ function normalizeSkillId(raw: string, skillsRealmURL: string) {
     return null;
   }
 
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  if (!skillsRealmURL) {
+  if (isAbsoluteIdentifier(trimmed) || !skillsRealm) {
     return trimmed;
   }
 
   try {
-    return new URL(trimmed, skillsRealmURL).href;
+    return resolveRRIReference(trimmed, rri(skillsRealm));
   } catch {
     return trimmed;
   }
@@ -91,7 +70,7 @@ function normalizeSkillId(raw: string, skillsRealmURL: string) {
 class Isolated extends Component<typeof UpdateRoomSkillsExample> {
   skillOptions = SKILL_OPTIONS;
 
-  @tracked skillsRealmURL = defaultSkillsRealmURL();
+  @tracked skillsRealm: string = SKILLS_REALM_PREFIX;
   @tracked activationPresets = [] as string[];
   @tracked deactivationPresets = [] as string[];
   @tracked statusMessage = null as string | null;
@@ -102,8 +81,8 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
     return Boolean(this.args.context?.toolContext);
   }
 
-  get finalSkillsRealmURL() {
-    return ensureTrailingSlash(this.skillsRealmURL);
+  get finalSkillsRealm() {
+    return ensureTrailingSlash(this.skillsRealm);
   }
 
   get activationPreview() {
@@ -139,11 +118,11 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
     let presetIds =
       kind === 'activate' ? this.activationPresets : this.deactivationPresets;
 
-    let skillsRealmURL = this.finalSkillsRealmURL;
+    let skillsRealm = this.finalSkillsRealm;
     let combined = [...presetIds, ...manualIds];
     let normalized = new Set<string>();
     for (let raw of combined) {
-      let skillId = normalizeSkillId(raw, skillsRealmURL);
+      let skillId = normalizeSkillId(raw, skillsRealm);
       if (skillId) {
         normalized.add(skillId);
       }
@@ -175,9 +154,9 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
   }
 
   @action
-  updateSkillsRealmURL(event: Event) {
+  updateSkillsRealm(event: Event) {
     let input = event.target as HTMLInputElement | null;
-    this.skillsRealmURL = ensureTrailingSlash(input?.value ?? '');
+    this.skillsRealm = ensureTrailingSlash(input?.value ?? '');
     this.clearMessages();
   }
 
@@ -312,12 +291,12 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
       {{/unless}}
 
       <div class='form-grid'>
-        <FieldContainer @label='Skills realm base URL (optional)'>
+        <FieldContainer @label='Skills realm (optional)'>
           <input
             type='text'
-            value={{this.skillsRealmURL}}
-            placeholder='https://example.com/skills/'
-            {{on 'input' this.updateSkillsRealmURL}}
+            value={{this.skillsRealm}}
+            placeholder='@cardstack/skills/'
+            {{on 'input' this.updateSkillsRealm}}
           />
           <p class='hint'>Used to expand relative skill identifiers such as
             "boxel-environment".</p>
