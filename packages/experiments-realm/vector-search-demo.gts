@@ -8,6 +8,7 @@ import {
   identifyCard,
   VectorSerializer,
   type getCards,
+  type Query,
 } from '@cardstack/runtime-common';
 
 import {
@@ -42,11 +43,9 @@ export class MomentEmbedding extends VectorField {
   static embeddingModel = 'qwen/qwen3-embedding-8b';
 }
 
-const talkMomentRef = codeRef(
-  import.meta.url,
-  './vector-search-demo',
-  'TalkMoment',
-);
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
+const here: string = import.meta.url;
+const talkMomentRef = codeRef(here, './vector-search-demo', 'TalkMoment');
 
 // A quotable moment in a talk. Its embedding is of `${title}. ${quote}`.
 export class TalkMoment extends CardDef {
@@ -257,7 +256,7 @@ class Isolated extends Component<typeof VectorSearchDemo> {
 
   // The whole search is one query: filters for what may match, then one
   // `_blend` sort fusing the lens's signals by reciprocal rank.
-  get query() {
+  get query(): Query | undefined {
     let ref = identifyCard(TalkMoment);
     if (!ref) {
       return undefined;
@@ -267,8 +266,8 @@ class Isolated extends Component<typeof VectorSearchDemo> {
     let weights = LENSES[this.lens];
     if (!question) {
       return {
-        filter: { on: ref },
-        sort: [{ on: ref, by: 'recommenders', direction: 'desc' as const }],
+        filter: { type: ref },
+        sort: [{ on: ref, by: 'recommenders', direction: 'desc' }],
       };
     }
     let words = question.split(/\s+/).filter(Boolean);
