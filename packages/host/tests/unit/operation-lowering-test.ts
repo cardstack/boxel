@@ -2437,6 +2437,36 @@ module('Unit | operation lowering', function (hooks) {
     });
     assert.deepEqual(codes(badSlotKind), ['invalid-request']);
     assert.strictEqual(badSlotKind.issues[0]?.path, 'keyKind.userKey');
+
+    let basicEverySlot = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: { authorization: 'Basic {{userKey|basic}}' },
+      keyKind: 'oauth',
+    });
+    assert.deepEqual(
+      codes(basicEverySlot),
+      ['invalid-request'],
+      'a minted token is never sent as Basic credentials',
+    );
+    assert.strictEqual(basicEverySlot.issues[0]?.path, 'keyKind');
+
+    let basicBySlot = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: {
+        authorization: 'Basic {{userKey:login|basic}}',
+        'x-token': '{{userKey:token}}',
+      },
+      keyKind: { login: 'google-service-account', token: 'oauth' },
+    });
+    assert.deepEqual(codes(basicBySlot), ['invalid-request']);
+    assert.strictEqual(basicBySlot.issues[0]?.path, 'keyKind.login');
+
+    let basicStatic = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: { authorization: 'Basic {{userKey|basic}}' },
+      keyKind: 'static',
+    });
+    assert.deepEqual(codes(basicStatic), [], 'a pasted key is');
   });
 
   test('the kinds of key a slot takes are its declared one, or every kind that can work where it stands', async function (assert) {

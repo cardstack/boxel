@@ -20,7 +20,10 @@ export function isCallApiKeyKind(value: unknown): value is CallApiKeyKind {
 
 // The kind of slot a stored key fills, by the key's own kind: an OAuth
 // connection, or an OAuth client that gets its own tokens, fills an `oauth`
-// slot. Undefined for a kind no slot takes.
+// slot. Undefined for a kind no slot takes. The secure origin's approve page
+// keeps a copy (`slotKindOfKey` in `approval-batch.ts`), since it can't import
+// runtime-common; the two must agree, or the page offers keys approval
+// refuses.
 export function slotKindOfKey(keyKind: string): CallApiKeyKind | undefined {
   switch (keyKind) {
     case 'static':
