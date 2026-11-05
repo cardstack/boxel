@@ -981,6 +981,22 @@ const CLIENT_RESOLUTION_JOINS = `
   LEFT JOIN user_keys sk ON sk.id = shared.key_id
   LEFT JOIN platform_oauth_clients p ON p.id = n.platform_client_id`;
 
+// A scalar SQL expression for the API hosts the key whose id `keyId` names
+// is good at: an OAuth client's own, or an OAuth connection's client's,
+// however the connection names it. Null for any other kind of key. Its
+// aliases are its own, so `keyId` may name a column of any outer query.
+export function apiHostsOfKeySql(keyId: string): string {
+  return `COALESCE(
+    (SELECT ah_c.api_hosts FROM oauth_clients ah_c WHERE ah_c.key_id = ${keyId}),
+    (SELECT COALESCE(ah_own.api_hosts, ah_shared.api_hosts, ah_p.api_hosts, '{}')
+       FROM oauth_connections ah_n
+       LEFT JOIN oauth_clients ah_own ON ah_own.key_id = ah_n.client_key_id
+       LEFT JOIN key_shares ah_s ON ah_s.id = ah_n.client_share_id
+       LEFT JOIN oauth_clients ah_shared ON ah_shared.key_id = ah_s.key_id
+       LEFT JOIN platform_oauth_clients ah_p ON ah_p.id = ah_n.platform_client_id
+      WHERE ah_n.key_id = ${keyId}))`;
+}
+
 interface ResolvedClient {
   usable: boolean;
   label: string | null;
