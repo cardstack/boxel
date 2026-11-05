@@ -163,7 +163,10 @@ let { data: nearest } = await indexer.search({
   filter: {
     every: [
       { on: momentRef, eq: { topic: 'ml' } },
-      { on: momentRef, near: { embedding: { to: target, minSimilarity: 0.5 } } },
+      {
+        on: momentRef,
+        near: { embedding: { to: target, minSimilarity: 0.5 } },
+      },
     ],
   },
   sort: [{ on: momentRef, by: 'embedding', near: target }],
@@ -171,17 +174,21 @@ let { data: nearest } = await indexer.search({
 });
 ```
 
-In a query-backed field, `near` interpolates like any value, so "related moments" is a declared query. A source card with no embedding resolves to no cards:
+In a query-backed field, `near` interpolates like any value, so "related moments" is a declared query. A source card with no embedding resolves to no cards. The query isn't scoped to the field's card type, so anchor it with a `type` filter, or it also returns other cards that have an `embedding` field:
 
 ```js
 @field related = linksToMany(() => Moment, {
   query: {
-    filter: { not: { eq: { id: '$this.id' } } },
-    sort: [{ by: 'embedding', near: '$this.embedding' }],
+    filter: {
+      every: [{ type: momentRef }, { not: { eq: { id: '$this.id' } } }],
+    },
+    sort: [{ on: momentRef, by: 'embedding', near: '$this.embedding' }],
     page: { size: 10 },
   },
 });
 ```
+
+`packages/experiments-realm/vector-search-demo.gts` puts these pieces together: cards with 256-dimension embeddings, a related-by-meaning field, and a search that ranks by words as you type, adds meaning once the question is embedded, and fuses words, meaning, popularity and recency with `_blend`.
 
 ### Blended ranking (`_blend`)
 
@@ -192,7 +199,10 @@ let { data: ranked } = await indexer.search({
   filter: {
     any: [
       { on: momentRef, matches: 'pasta recipe' },
-      { on: momentRef, near: { embedding: { to: target, minSimilarity: 0.5 } } },
+      {
+        on: momentRef,
+        near: { embedding: { to: target, minSimilarity: 0.5 } },
+      },
     ],
   },
   sort: [

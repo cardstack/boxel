@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "No Perfect Election",
+      "speaker": "Celeste Mbeki",
+      "quote": "With three or more candidates, every ranked voting rule breaks at least one fairness property that sounds obviously necessary.",
+      "startsAt": 845,
+      "recommenders": 31,
+      "lastDiscussed": "2023-10-04",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001588874,
+        "data": "ZTro20U32z3JA4obTQHrQ+pD9VYKIzLfmOXLwfUi4uD+TrsqC/0T/Qwc0Af2Cgvp9xEI1uvTAwcZHMv2tRcv6O8X+s4tG/sIDwYaDbkDJDAZKOT4Qbvc39zrICT2SCIc+dLYTiQcxgMm/v8QIC8LGkUUwtceABVNDOzwOizt6+r1++TGAebQ8TPmkgERVRD75ArwO8n0LQLJ9/zh1CAi/zoX9wfh+wrvRR7n7isp0gHwverxByEEIigM8AbjNOL82T0f+AW/LkhpgRgK6ercFP68NyMFFg4MAM/79/zO//jE/xL7DOwZsP/r9K7xF9TZIAP7AD337/weDRD9O+8J9g=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

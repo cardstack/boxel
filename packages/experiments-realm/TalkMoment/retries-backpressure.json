@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Queues Are Not a Free Lunch",
+      "speaker": "Hana Lindqvist",
+      "quote": "When the database slows down, every client retries at once and the queue grows without bound. Push back on callers before the backlog buries you.",
+      "startsAt": 402,
+      "recommenders": 19,
+      "lastDiscussed": "2026-06-20",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001591647,
+        "data": "J/Tp6kvfCkpiNLotMRsN90/nA2tY3zrX2z5K6JdHkw3SHdAXB+UPGtMIIPL68vU/9M3i2hA2Ds8T9dv+pRAbGv4CFK4xHRESEfseEsLzKAwFHOAiCfHk4MbjEC0QPQ7BBe/rH/863iZB+QMeKQXlFBrdBOYVIwtHM99IBDXg7xu119z4A9fy0Qj5gSnFHSLe9TknFy0cIwTr873r2xAdMeAm/xP2+REOH+ITAj75F/HuIB/+9BLj+uoZ0RngHhki5dYNMQgJ9CNr2uk9AQS3GvP7/90BQP4LJ9X0BTo4CfHox88GJdkxC//zhET+9Rr35v314hLUNiMv+ukEFBzo4A=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

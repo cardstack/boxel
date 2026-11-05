@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "question": null,
+      "lens": "best",
+      "cardInfo": {
+        "name": "Vector search demo",
+        "summary": "Search talk moments by meaning: words, embeddings, popularity and recency fused by _blend."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "VectorSearchDemo"
+      }
+    }
+  }
+}

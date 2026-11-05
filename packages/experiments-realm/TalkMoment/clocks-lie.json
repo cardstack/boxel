@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Time Is an Illusion in Distributed Systems",
+      "speaker": "Rosa Imari",
+      "quote": "Two machines never agree on what time it is, so stop asking them. Order events by what each one has seen, not by the wall clock.",
+      "startsAt": 754,
+      "recommenders": 41,
+      "lastDiscussed": "2026-09-14",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001656016,
+        "data": "ZuvB2ScjrBgs5NgVPbsy8yvy7DEQA/XL6FHrwOMay/4FT78T8hUwzRruBxjzBScKBQAGvQn1BvjjEurzmQrjCfEDEupJMPEsCgY1E826QAISCOLqLbsP5NkWB/cNJSq/DcbaJwY10xvv4fUsJB3uEjAK78/hJihXEOsdJxEIORT4+vfQ9THm+RLDxwYGWSQe2Oz4MwQuJQyuzMr77hUb9OcTDuH0AAD8LcwZ/xEiFt7r2vL8BDDe8uQ1CAvx8C7x8/FRBPwNEwtbnCMVFDHmD/DOOBIUPOosB/4NGxYpCP3pICa+Gtoo3/boriECMM8dJQQOpy3iGwJ/AhAM8x0AEA=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Types That Prove Things",
+      "speaker": "Teo Marchetti",
+      "quote": "If the type of a function says the list is sorted, the compiler has checked a proof. Whole classes of bugs simply cannot be written down.",
+      "startsAt": 1888,
+      "recommenders": 33,
+      "lastDiscussed": "2024-03-09",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.002116026,
+        "data": "ESIA8EUR2jwLBcQAJOP4UhAf5BsMTQjw5voW+Mve6A0MP/kK9BAt6PIcGCT+AOgbFwTx2gQWyRQYw6DczwAQ2uYcAfcbLSwA7+8UO8vgCwkGtd76A9sT9AX02w8FFPgv9/P3FQ4dLBEH3g7vNxoYJh786f4I/x8eB+T39Rf+/igXGufiDtrkCPsf6BHqCQsE6fr2JwvM8A8D5tv19wUt7wPe+PzD7wwKLuAY/tEw4ib54PMXBQfA7DIqDgcOABP3+wseC/ob+xNAgf4NBOcFKPf1LQ8QFhIbKhXe6Sj5BCb65Pvs/u9B4wnzBADa6hnLAP7r/xL0H9sV//32DdnYEA=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Designing the Rules of the Game",
+      "speaker": "Ravi Sundaram",
+      "quote": "If you want honest bids, make honesty the best strategy. A second-price auction does that: lying about your value can only hurt you.",
+      "startsAt": 366,
+      "recommenders": 26,
+      "lastDiscussed": "2026-04-28",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001614409,
+        "data": "Uzcn99sPvyfALLdVM/0TRRYfwTQNDOoAgSJB7Oo52wbdLA4CCyf6A/8uEfby+/cPAhDTx8r28wABNuralhk+CvwPAdYEJe8yQO8Y1rg56RsfGQj1790O/c/9+xz2NzLq4sTZCRIhAEA4D/0EGAr//PgQ2d0gLe84IvkPJSTE+u4S173yVPbBAOn1gw2/Xx8SueLjD9LFKBTn18jT1fkTDiT2/Dn37QjoPg77BysaMefwwPImAzLG/fw+/gXrAfMSyBog8vX5+htZkxf/9RDBKfHwLtMDCC5J2wsiBR7+DPjQCwDoBeL+3/f558X49DgRAuTTWy0DNNIy+Rux/BffBQ=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}
