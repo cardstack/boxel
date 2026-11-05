@@ -455,12 +455,17 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('an unfinished word shorter than three letters matches whole', async function (assert) {
+    test('an unfinished word shorter than three letters on its own matches whole', async function (assert) {
       assert.deepEqual(await prefixUrls('pu'), [], '"pu" is not a prefix yet');
       assert.deepEqual(
         await prefixUrls('pup'),
         [`${testRealmURL}mango.json`],
         '"pup" is',
+      );
+      assert.deepEqual(
+        await prefixUrls('friendly pu'),
+        [`${testRealmURL}mango.json`],
+        'after a finished word, a short partial word is a prefix',
       );
     });
 

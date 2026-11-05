@@ -3344,9 +3344,14 @@ function matchTsQuery(term: MatchTerm): Expression {
     ? splitTypeAheadQuery(term.matches)
     : { words: term.matches, partial: undefined };
   // A one- or two-letter prefix is a prefix of a large share of the index's
-  // lexemes, so it reads most of the index for a result that says little;
-  // such a word matches whole until a third letter is typed.
-  if (partial === undefined || [...partial].length < MIN_PREFIX_LETTERS) {
+  // lexemes, so on its own it reads most of the index for a result that says
+  // little; such a word matches whole until a third letter is typed. After a
+  // finished word ("steve jo") the finished word narrows the match first, so
+  // a short prefix is cheap there and stays a prefix.
+  if (
+    partial === undefined ||
+    ([...partial].length < MIN_PREFIX_LETTERS && words.trim() === '')
+  ) {
     return [`websearch_to_tsquery('english',`, param(term.matches), `)`];
   }
   let negated = /(^|\s)-$/.test(words);
