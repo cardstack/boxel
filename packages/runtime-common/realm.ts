@@ -298,7 +298,10 @@ import type {
   ReadPlan,
   RunOperationOptions,
 } from './card-operations/dispatch.ts';
-import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   actingUserResolver,
@@ -17570,13 +17573,24 @@ export class Realm {
   // card here does. `cardURL` is taken in this realm's own spelling of its
   // URL, which is the one the declaration is resolved against.
   async unshareableFormatsFor(cardURL: URL): Promise<PrerenderedHtmlFormat[]> {
-    let { unshareableFormats } = await readPlan(
-      this.operationCore,
-      cardURL,
-      undefined,
-      this.#readPlanByURL,
-    );
-    return unshareableFormats;
+    try {
+      let { unshareableFormats } = await readPlan(
+        this.operationCore,
+        cardURL,
+        undefined,
+        this.#readPlanByURL,
+      );
+      return unshareableFormats;
+    } catch (err: unknown) {
+      // A type whose definition is not indexed yet withholds every format, as
+      // a type that cannot be resolved does: nothing can say which of its
+      // formats it withholds, and the page is served without markup rather
+      // than refused.
+      if (isOperationFailure(err) && err.error.code === 'target-not-indexed') {
+        return [...PRERENDERED_HTML_FORMATS];
+      }
+      throw err;
+    }
   }
 
   // CS-10054: read host routing rules from the indexed RealmConfig card.
