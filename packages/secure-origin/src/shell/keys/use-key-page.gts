@@ -353,11 +353,12 @@ class UseKey extends Component<{
     this.form.error = undefined;
     this.form.loadingCards = true;
     try {
-      let cards = await realmCardsWithRequests(
-        this.args.api.config,
-        url,
-        this.choosing?.share ? 'apiKey' : 'userKey',
-      );
+      // A share sends the key it holds, so the cards are those this key can
+      // fill either way.
+      let cards = await realmCardsWithRequests(this.args.api.config, url, {
+        slot: this.choosing?.share ? 'apiKey' : 'userKey',
+        key: this.args.keyId,
+      });
       if (this.form.realm === url) {
         this.form.cards = cards;
         if (cards.length === 1) {

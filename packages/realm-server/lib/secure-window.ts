@@ -10,6 +10,7 @@ import {
   isPrefixForm,
   isResolvedCodeRef,
   param,
+  slotKindOfKey,
   query,
   type CodeRef,
   type DBAdapter,
@@ -24,10 +25,19 @@ import {
 import {
   slotKeyKinds,
   type CallApiKeyKind,
+  type CallApiSlot,
+  type OperationCallApi,
 } from '@cardstack/runtime-common/card-operations';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
 import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
+import { isUUID } from './named-users.ts';
+import {
+  apiHostList,
+  apiHostsOfKeySql,
+  apiHostsServe,
+  sendableKeySql,
+} from './oauth.ts';
 import {
   bindingType,
   canonicalInstance,
@@ -595,14 +605,31 @@ const MAX_LISTED_TYPES = 200;
 // share, which its own owner keeps up, so a card whose every such slot is
 // filled has nothing for another share. Each definition is read from the
 // definition cache, and only from a realm the user may read.
+//
+// Asked for one of the user's keys (`keyId`), only the cards that key can be
+// approved for are listed, by the rule the approve page offers keys by
+// (`slotChoices` in the secure origin). One choice fills a slot in every
+// operation that sends it, so a slot counts only when the key fills it in
+// each of them: the key is of a kind the slot takes (`slotKeyKinds`), and its
+// credential is good at the operation's destination (`apiHostsServe`). A key
+// that no request can send, such as an OAuth client people only sign in
+// through, fills nothing.
 export async function realmCardsWithRequests(
   deps: Deps,
   user: string,
   realmId: RealmResourceIdentifier,
-  slot: 'userKey' | 'apiKey' = 'userKey',
+  {
+    slot = 'userKey',
+    keyId,
+  }: { slot?: 'userKey' | 'apiKey'; keyId?: string } = {},
 ): Promise<CardWithRequests[]> {
   let { dbAdapter, findRealm, definitionLookup, virtualNetwork } = deps;
   let { realm } = await resolveWindowRequest(deps, user, { realm: realmId });
+  let key =
+    keyId === undefined ? undefined : await keyToFill(dbAdapter, user, keyId);
+  if (key === null) {
+    return [];
+  }
   // One instance per type its cards adopt from, the first in URL order, so the
   // type's module is resolved from a real card's address and the cap keeps
   // the same types every time.
@@ -686,19 +713,41 @@ export async function realmCardsWithRequests(
     // An operation approved per instance is approved from its card, not from
     // the type the key page approves, so it doesn't count here.
     let type = bindingType(realm.operationCore, codeRef, new URL(realm.url));
-    let sendsKey = Object.entries(definition.operations ?? {}).some(
-      ([name, operation]) =>
-        operation.base === 'callApi' &&
-        !operation.invalid &&
-        !operation.callApi?.perInstance &&
-        operation.callApi?.slots.some(
-          (s) =>
-            s.key === slot &&
-            (slot === 'userKey' ||
-              (type !== undefined &&
-                !filled.has(
-                  `${type.module}#${type.name}|${name}|${slotToken(s)}`,
-                ))),
+    // The operations sending each of the card's slots of this kind, by slot.
+    let sentBy = new Map<
+      string,
+      { slot: CallApiSlot; callApi: OperationCallApi }[]
+    >();
+    for (let [name, operation] of Object.entries(definition.operations ?? {})) {
+      let callApi = operation.callApi;
+      if (
+        operation.base !== 'callApi' ||
+        operation.invalid ||
+        !callApi ||
+        callApi.perInstance
+      ) {
+        continue;
+      }
+      for (let s of callApi.slots) {
+        let token = slotToken(s);
+        if (
+          s.key !== slot ||
+          (slot === 'apiKey' &&
+            (type === undefined ||
+              filled.has(`${type.module}#${type.name}|${name}|${token}`)))
+        ) {
+          continue;
+        }
+        sentBy.set(token, [...(sentBy.get(token) ?? []), { slot: s, callApi }]);
+      }
+    }
+    let sendsKey = [...sentBy.values()].some(
+      (sends) =>
+        key === undefined ||
+        sends.every(
+          ({ slot: s, callApi }) =>
+            slotKeyKinds(s, callApi).includes(key.kind) &&
+            apiHostsServe(key.apiHosts, callApi.destination),
         ),
     );
     if (sendsKey) {
@@ -715,4 +764,32 @@ export async function realmCardsWithRequests(
       a.module.localeCompare(b.module) ||
       a.name.localeCompare(b.name),
   );
+}
+
+// The kind of slot the user's key `keyId` fills and the API hosts its
+// credential is good at (`apiHostsOfKeySql`), or null when no request can send
+// it. A key that isn't the user's is answered as one that doesn't exist.
+async function keyToFill(
+  dbAdapter: DBAdapter,
+  user: string,
+  keyId: string,
+): Promise<{ kind: CallApiKeyKind; apiHosts: string[] | null } | null> {
+  let [row] = isUUID(keyId)
+    ? await query(dbAdapter, [
+        `SELECT k.kind, ${apiHostsOfKeySql('k.id')} AS api_hosts,
+                ${sendableKeySql('k.id')} AS sendable
+           FROM user_keys k
+          WHERE k.id = `,
+        param(keyId),
+        ` AND k.owner = `,
+        param(user),
+      ])
+    : [];
+  if (!row) {
+    throw new UserKeyError(404, 'no such key');
+  }
+  let kind = slotKindOfKey(row.kind as string);
+  return kind && row.sendable
+    ? { kind, apiHosts: apiHostList(row.api_hosts) }
+    : null;
 }

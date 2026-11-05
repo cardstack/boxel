@@ -1158,4 +1158,163 @@ module(basename(import.meta.filename), function (hooks) {
       'a realm they cannot read is none',
     );
   });
+
+  test("a key's page lists only the cards that key can fill", async function (assert) {
+    let auth = await secureSessionAuth(dbAdapter, OWNER);
+    let cardsFor = async (key: string, slot?: string) =>
+      await request
+        .post('/_secure-window/cards')
+        .set('Authorization', auth)
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'secure-window-cards',
+            attributes: {
+              realm: realmURL.href,
+              key,
+              ...(slot ? { slot } : {}),
+            },
+          },
+        });
+    let namesFor = async (key: string, slot?: string) => {
+      let response = await cardsFor(key, slot);
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+      return response.body.data
+        .map((c: { attributes: { name: string } }) => c.attributes.name)
+        .sort();
+    };
+
+    let pasted = await addKey(OWNER, 'pasted');
+    let vendorRobot = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'vendor robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'robot',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    let hostless = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'hostless robot',
+      value: 'hostless-secret',
+      oauth: {
+        clientId: 'hostless',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    let signIn = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'vendor app',
+      value: 'app-secret',
+      oauth: {
+        clientId: 'app',
+        authorizeUrl: `${VENDOR}/authorize`,
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    // A connection made through the sign-in app and a service account,
+    // stored as signing in and adding a key file store them.
+    let connection = '3f9a1c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b';
+    let serviceAccount = '7d2e4f6a-8b0c-4d1e-9f2a-3b4c5d6e7f80';
+    for (let [id, name, kind] of [
+      [connection, 'vendor account', 'oauth-connection'],
+      [serviceAccount, 'service account', 'google-service-account'],
+    ]) {
+      await dbAdapter.execute(
+        `INSERT INTO user_keys
+           SELECT (jsonb_populate_record(k, jsonb_build_object('id', $1::text, 'name', $2::text, 'kind', $3::text))).*
+             FROM user_keys k WHERE k.id = $4`,
+        { bind: [id, name, kind, pasted.id] },
+      );
+    }
+    await dbAdapter.execute(
+      `INSERT INTO oauth_connections (key_id, client_kind, client_key_id, token_kind, client_id, token_url)
+         VALUES ($1, 'own', $2, 'refresh', 'app', $3)`,
+      { bind: [connection, signIn.id, `${VENDOR}/token`] },
+    );
+
+    assert.deepEqual(
+      await namesFor(pasted.id),
+      ['Digest', 'Inbox'],
+      'a pasted key fills every slot that sends the user’s key',
+    );
+    assert.deepEqual(
+      await namesFor(hostless.id),
+      ['Digest', 'Inbox'],
+      'so does a client that names no API hosts',
+    );
+    assert.deepEqual(
+      await namesFor(vendorRobot.id),
+      ['Digest'],
+      "an OAuth client's tokens fill a slot only when every request sending it goes to its API hosts: the Inbox sends the same slot to another host too",
+    );
+    assert.deepEqual(
+      await namesFor(connection),
+      ['Digest'],
+      "a connection's tokens are held to its client's API hosts",
+    );
+    assert.deepEqual(
+      await namesFor(serviceAccount),
+      [],
+      "a service account fills no slot outside Google's services",
+    );
+    assert.deepEqual(
+      await namesFor(signIn.id),
+      [],
+      'a client people only sign in through is never sent',
+    );
+    assert.deepEqual(
+      await namesFor(pasted.id, 'apiKey'),
+      ['Inbox'],
+      "with the `apiKey` slot, the cards whose realm's-key slot the shared key fills",
+    );
+    let otherRobot = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'other robot',
+      value: 'other-secret',
+      oauth: {
+        clientId: 'other',
+        grantType: 'client_credentials',
+        tokenUrl: `${OTHER_HOST}/token`,
+        apiHosts: [`${OTHER_HOST}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    assert.deepEqual(
+      await namesFor(otherRobot.id, 'apiKey'),
+      [],
+      "a shared key whose credential isn't good where the realm's key is sent fills none",
+    );
+
+    let theirs = await addKey(WRITER, 'theirs');
+    for (let [key, what] of [
+      [theirs.id, "another user's key"],
+      ['not-a-key', 'a malformed id'],
+      ['9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b', 'a key that does not exist'],
+    ]) {
+      let response = await cardsFor(key!);
+      assert.strictEqual(response.status, 404, `${what} is no key`);
+    }
+    let wrongType = await request
+      .post('/_secure-window/cards')
+      .set('Authorization', auth)
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'secure-window-cards',
+          attributes: { realm: realmURL.href, key: 7 },
+        },
+      });
+    assert.strictEqual(wrongType.status, 400, 'a key is named by its id');
+  });
 });

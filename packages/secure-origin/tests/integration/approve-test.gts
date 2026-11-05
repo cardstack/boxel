@@ -1369,6 +1369,12 @@ module('Integration | approve pages', function (hooks) {
       '?access=read',
       'the workspaces the user may approve in',
     );
+    assert.deepEqual(
+      requests.find((r) => r.path === '_secure-window/cards')?.body.data
+        .attributes,
+      { realm: REALM, key: 'key-gh' },
+      'the cards there that this key can fill',
+    );
     assert
       .dom('[data-test-use-key-card="Inbox"] input')
       .isChecked('the one card there is chosen');
@@ -2114,8 +2120,8 @@ module('Integration | approve pages', function (hooks) {
     assert.deepEqual(
       requests.find((r) => r.path === '_secure-window/cards')?.body.data
         .attributes,
-      { realm: REALM, slot: 'apiKey' },
-      'the cards that send the workspace’s key',
+      { realm: REALM, slot: 'apiKey', key: 'key-gh' },
+      'the cards that send the workspace’s key, which the shared key can fill',
     );
     await click('[data-test-use-key-next]');
     let url = new URL(navigations[0]!.url!, window.location.href);
