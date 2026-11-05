@@ -26,16 +26,17 @@ function probeColor(): string {
   return getComputedStyle(probe).backgroundColor;
 }
 
-// The mode control is the dark mode switch: a checkbox with role='switch'.
+// The mode control is the dark mode switch: a button with role='switch'
+// whose aria-checked carries the state.
 async function setDarkMode(on: boolean) {
-  let input = document.querySelector(
-    '[data-test-pretui-theme-mode] input',
-  ) as HTMLInputElement | null;
-  if (!input) {
+  let control = document.querySelector(
+    '[data-test-pretui-theme-mode][role="switch"]',
+  ) as HTMLButtonElement | null;
+  if (!control) {
     throw new Error('no dark mode switch rendered');
   }
-  if (input.checked !== on) {
-    await click(input);
+  if ((control.getAttribute('aria-checked') === 'true') !== on) {
+    await click(control);
   }
 }
 
@@ -60,6 +61,9 @@ module('Pretui | ThemeFrame', function (hooks) {
     assert
       .dom('[data-test-pretui-theme-frame]')
       .hasAttribute('data-theme', 'light', 'the frame stamps light, not an auto scheme');
+    assert
+      .dom('[data-test-pretui-theme-mode]')
+      .hasAttribute('aria-label', 'Dark mode', 'the switch names itself');
 
     await setDarkMode(true);
     assert.strictEqual(
