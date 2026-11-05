@@ -130,10 +130,10 @@ export default class Agents extends Component<Signature> {
 
   // The button that opened the coding agents goes away, so focus moves to
   // what it opened.
-  private focusIfOpened = modifier((element: HTMLElement) => {
+  private focusIfOpened = modifier((picker: HTMLElement) => {
     if (this.focusPicker) {
       this.focusPicker = false;
-      element.focus();
+      picker.querySelector<HTMLInputElement>('input:checked')?.focus();
     }
   });
 
@@ -326,25 +326,13 @@ export default class Agents extends Component<Signature> {
   <template>
     <div class='agents' data-test-agents ...attributes>
       {{#unless this.isMinimized}}
-        <header class='pitch'>
-          <h3
-            class='pitch-title'
-            tabindex='-1'
-            {{this.focusIfOpened}}
-            data-test-agents-pitch
-          >Build with the agent you already pay for</h3>
-          <p class='pitch-body'>
-            Add the Boxel plugin to your coding agent and it builds right in
-            your workspaces, or ask Boxel AI Assistant here.
-          </p>
-        </header>
-
         <RadioCard
           @options={{this.agentOptions}}
           @value={{this.kind.id}}
           @onValueChange={{this.pickAgent}}
           @orientation='horizontal'
           @label='Your agent'
+          {{this.focusIfOpened}}
           data-test-agent-picker
         >
           <:media as |option|>
@@ -548,25 +536,6 @@ export default class Agents extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
-      }
-
-      .pitch {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-2xs);
-        max-width: var(--_agents-panel-max-width);
-      }
-      /* Below the section heading in rank: the pitch never outshouts it. */
-      .pitch-title {
-        margin: 0;
-        font-size: var(--boxel-font-size-md);
-        font-weight: 700;
-        letter-spacing: calc(-1 * var(--boxel-lsp-sm));
-      }
-      .pitch-body {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        color: var(--muted-foreground);
       }
 
       .agent-panel-row {

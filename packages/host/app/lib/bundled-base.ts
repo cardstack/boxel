@@ -153,6 +153,7 @@ export const BUNDLED_BASE_MODULES: Record<
   // `FETCHED_RE_EXPORTS` lists the ones a bundled module still imports, which
   // are the ones the closure check has to allow.
   'card-api': () => import('@cardstack/base/card-api'),
+  'mark-definition': () => import('@cardstack/base/mark-definition'),
   '-private': () => import('@cardstack/base/-private'),
   'card-serialization': () => import('@cardstack/base/card-serialization'),
   'contains-many-component': () =>

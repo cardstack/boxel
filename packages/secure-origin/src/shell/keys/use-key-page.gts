@@ -30,7 +30,9 @@ import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 import RadioTile from '../../components/radio-tile.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
+import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
   failureMessage,
@@ -74,20 +76,13 @@ class UseKey extends Component<{
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Use a key with a card'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.next}} data-test-use-key-form>
-        <EditPage
-          @heading={{if
-            this.choosing.share
-            'Use a shared key with a card'
-            'Use a key with a card'
-          }}
-          data-test-use-key
-        >
+        <EditPage @heading={{this.title}} data-test-use-key>
           <:intro>
             {{#if this.choosing.share}}
               Choose a card in this workspace. Next you’ll see every call the
@@ -255,6 +250,8 @@ class UseKey extends Component<{
     </style>
   </template>
 
+  private title = pageTitle(keyUsePath(this.args.keyId));
+
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -384,7 +381,7 @@ class UseKey extends Component<{
     this.form.card = card;
   };
 
-  private goToKeys = () => navigation.back(pageURL('keys'));
+  private goToKeys = () => navigation.back(keyPageURL());
 
   // The approve page reads what it is for from its fragment, so it loads as a
   // document of its own.
@@ -402,7 +399,7 @@ class UseKey extends Component<{
       ...(share ? { share: share.id } : { key: this.args.keyId }),
       then: 'keys',
     });
-    navigation.assign(`${pageURL('approve')}#${fragment}`);
+    navigation.assign(withWayBack(`${pageURL('approve')}#${fragment}`));
   };
 }
 

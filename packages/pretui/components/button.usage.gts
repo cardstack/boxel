@@ -170,7 +170,7 @@ export class ButtonUsage extends GlimmerComponent {
         <Args.Base
           @name='icon'
           @typeLabel='Component'
-          @description='Icon component drawn before the label; @display icon shows it alone.'
+          @description='Icon component drawn before the label; @display icon shows it alone. An svg passed as a child is centred on the label line the same way.'
           @hideControls={{true}}
         />
         <Args.Base

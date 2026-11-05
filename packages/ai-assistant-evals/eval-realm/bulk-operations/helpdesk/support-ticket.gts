@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base/mark-definition';
 import { CardDef, contains, field, linksTo } from '@cardstack/base/card-api';
 import DateField from '@cardstack/base/date';
 import EmailField from '@cardstack/base/email';
@@ -16,12 +17,14 @@ export class Agent extends CardDef {
   });
 }
 
-export const TicketStatusField = enumField(StringField, {
-  options: [
-    { value: 'open', label: 'Open' },
-    { value: 'closed', label: 'Closed' },
-  ],
-});
+export const TicketStatusField = markDefinition(
+  enumField(StringField, {
+    options: [
+      { value: 'open', label: 'Open' },
+      { value: 'closed', label: 'Closed' },
+    ],
+  }),
+);
 
 export class SupportTicket extends CardDef {
   static displayName = 'Support Ticket';
