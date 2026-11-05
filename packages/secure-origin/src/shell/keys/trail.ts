@@ -13,9 +13,10 @@
 //
 // Pages beneath the key page's path (`keys/add`, `keys/<key id>/share`,
 // `keys/<key id>/use`) are reached from the key page, so the key page is
-// above each of them. Those moves are route transitions, which keep neither
-// the document's path nor its fragment, so the key page above them is the
-// address the document was loaded at when that is the key page.
+// above each of them. Those moves, and the key page's Connect an account,
+// are route transitions, which keep neither the document's path nor its
+// fragment, so the key page above them is the address the document was
+// loaded at when that is the key page.
 //
 // Going back to a page loads its address again, so the page starts afresh
 // for what it was opened for, and nothing is saved or changed on the way.
@@ -63,9 +64,11 @@ function parentOf(address: string): string | undefined {
   return page.startsWith('keys/') ? 'keys' : undefined;
 }
 
-// This page's address. A page beneath the key page's path reached by a route
-// transition has no fragment of its own, so the key page above it is the one
-// the document was loaded at, as it was, with its own trail.
+// This page's address. A page beneath the key page's path, or the connect
+// page, reached by a route transition has no fragment of its own, so the key
+// page above it is the one the document was loaded at, as it was, with its
+// own trail. A connect page loaded as its own document has a fragment, or was
+// itself the address loaded, so it has no key page above it.
 export function currentAddress(): string {
   let page = currentPage();
   let hash = window.location.hash.replace(/^#/, '');
@@ -73,8 +76,9 @@ export function currentAddress(): string {
     return `${page}#${hash}`;
   }
   let loaded = documentAddress();
+  let reachedFromKeyPage = page.startsWith('keys/') || page === 'connect';
   if (
-    page.startsWith('keys/') &&
+    reachedFromKeyPage &&
     loaded !== undefined &&
     isKeyPage(split(loaded).page)
   ) {

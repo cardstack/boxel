@@ -947,7 +947,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 369983,
+      "bytes": 369999,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1362,7 +1362,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/trail.ts",
-          "size": 3052
+          "size": 3076
         },
         {
           "package": "@cardstack/secure-origin",
