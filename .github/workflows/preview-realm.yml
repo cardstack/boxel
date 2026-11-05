@@ -181,6 +181,19 @@ jobs:
               fi
               mkdir -p "${SOURCE_DIR}/$(dirname "$path")"
               cp -R "$path" "${SOURCE_DIR}/$(dirname "$path")/"
+              # The CLI reads ignore files only inside the folder it pushes,
+              # so carry the ones above each path along with it.
+              dir=$(dirname "$path")
+              while :; do
+                for ignore in .gitignore .boxelignore; do
+                  if [ -f "${dir}/${ignore}" ] && [ ! -e "${SOURCE_DIR}/${dir}/${ignore}" ]; then
+                    mkdir -p "${SOURCE_DIR}/${dir}"
+                    cp "${dir}/${ignore}" "${SOURCE_DIR}/${dir}/${ignore}"
+                  fi
+                done
+                [ "$dir" = . ] && break
+                dir=$(dirname "$dir")
+              done
             done <<< "$PUSH_PATHS"
             echo "Staged $(find "$SOURCE_DIR" -type f | wc -l | tr -d ' ') file(s) from the listed paths"
           fi
