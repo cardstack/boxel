@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
-import { rri } from '@cardstack/runtime-common';
+import { rri, slotKindOfKey } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import {
   realmSecretSeed,
@@ -1272,6 +1272,58 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'a client people only sign in through is never sent',
     );
+    // The list agrees with the approve page: a card is listed for a key
+    // exactly when the card's batch offers that key for one of its slots,
+    // as the approve page reads the batch (`slotChoices`): of a kind every
+    // operation sending the slot takes, serving every destination it is
+    // sent to.
+    let offeredIn = async (type: typeof INBOX) => {
+      let found = await batchOf(OWNER, onType(type));
+      let tokens = new Set(
+        operationsIn(found).flatMap((o) =>
+          o.slots.filter((s) => s.key === 'userKey').map((s) => s.slot),
+        ),
+      );
+      return new Set(
+        (found.keys as (Batch['keys'][number] & { kind: string })[])
+          .filter((key) => {
+            let kind = slotKindOfKey(key.kind);
+            return [...tokens].some((token) =>
+              found.groups.every((g) =>
+                g.operations.every((o) =>
+                  o.slots.every(
+                    (s) =>
+                      s.slot !== token ||
+                      (kind !== undefined &&
+                        s.kinds.includes(kind) &&
+                        key.serves.includes(g.destination.href)),
+                  ),
+                ),
+              ),
+            );
+          })
+          .map((key) => key.id),
+      );
+    };
+    let offered = {
+      Inbox: await offeredIn(INBOX),
+      Digest: await offeredIn(DIGEST),
+    };
+    for (let key of [
+      pasted.id,
+      hostless.id,
+      vendorRobot.id,
+      connection,
+      serviceAccount,
+      signIn.id,
+    ]) {
+      assert.deepEqual(
+        await namesFor(key),
+        (['Digest', 'Inbox'] as const).filter((name) => offered[name].has(key)),
+        `the list for ${key} is the cards whose approve page offers it`,
+      );
+    }
+
     assert.deepEqual(
       await namesFor(pasted.id, 'apiKey'),
       ['Inbox'],
