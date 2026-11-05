@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
 import { ingestCard } from '../../src/commands/realm/ingest-card.js';
 import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.js';
 import type { ProfileManager } from '../../src/lib/profile-manager.js';
@@ -71,7 +72,7 @@ export interface GadgetTuning { level: number; }
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/spec',
+          module: '@cardstack/base/spec',
           name: 'Spec',
         },
       },
@@ -170,10 +171,10 @@ function fakeSearchData(
     filter?: { 'item.on'?: { module?: string; name?: string } };
   };
   let on = body.filter?.['item.on'];
-  if (on?.module === 'https://cardstack.com/base/spec') {
+  if (on?.module === '@cardstack/base/spec') {
     return [
       {
-        id: `${ROOT}Spec/gadget`,
+        id: '@cardstack/workshop/Spec/gadget',
         attributes: {
           specType: 'card',
           ref: { module: '../widgets/gadget/gadget', name: 'Gadget' },
@@ -243,6 +244,10 @@ describe('ingest-card graph (fake realm end-to-end)', () => {
       realm: ROOT,
       authenticator: makeFakeAuthenticator(fetchedUrls),
       profileManager: makeFakeProfileManager(),
+      network: new PrefixRealmNetwork({
+        '@cardstack/base/': 'https://realms.example.test/base/',
+        '@cardstack/workshop/': ROOT,
+      }),
     });
   });
 
