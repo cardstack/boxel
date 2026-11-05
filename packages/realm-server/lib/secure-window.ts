@@ -21,6 +21,10 @@ import {
   type ServedRealm,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
+import {
+  slotKeyKinds,
+  type CallApiKeyKind,
+} from '@cardstack/runtime-common/card-operations';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
 import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
@@ -68,9 +72,15 @@ export interface SecureWindowOperation {
   method?: string;
   destination?: DestinationDisplay;
   // The credentials the request takes: `userKey` for the caller's own,
-  // `apiKey` for one a realm share holds. Asked with `bindings`, each says
-  // what is bound to it (`bound`).
-  slots: { name: string; key: string; bound?: SlotBound | null }[];
+  // `apiKey` for one a realm share holds, each with the kinds of key that
+  // can fill it (`slotKeyKinds`). Asked with `bindings`, each says what is
+  // bound to it (`bound`).
+  slots: {
+    name: string;
+    key: string;
+    kinds: CallApiKeyKind[];
+    bound?: SlotBound | null;
+  }[];
 }
 
 // What fills a slot for the user asking, from the binding a call fills it
@@ -442,9 +452,10 @@ export async function secureWindowContext(
     name: request.operation,
     label: operationDisplayLabel(request.operation, operation),
     base: operation.base,
-    slots: (operation.callApi?.slots ?? []).map(({ name, key }) => ({
-      name,
-      key,
+    slots: (operation.callApi?.slots ?? []).map((slot) => ({
+      name: slot.name,
+      key: slot.key,
+      kinds: slotKeyKinds(slot, operation.callApi!),
     })),
     ...(operation.callApi
       ? {

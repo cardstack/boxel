@@ -851,6 +851,52 @@ module('Integration | approve pages', function (hooks) {
     );
   });
 
+  test('a slot that declares its kind of key offers only keys of that kind', async function (assert) {
+    let declared = batch();
+    let [graphql] = declared.groups as { operations: any[] }[];
+    graphql!.operations[1] = {
+      ...graphql!.operations[1],
+      slots: graphql!.operations[1].slots.map((slot: object) => ({
+        ...slot,
+        keyKind: 'oauth',
+      })),
+    };
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: {
+              ...declared,
+              keys: [
+                ...declared.keys,
+                {
+                  id: 'key-conn',
+                  name: 'GitHub account',
+                  kind: 'oauth-connection',
+                  state: 'active',
+                  covers: [],
+                },
+              ],
+            },
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-key]')
+      .exists(
+        { count: 1 },
+        'one operation declaring it binds the whole choice',
+      );
+    assert
+      .dom('[data-test-approve-key="GitHub account"] input')
+      .isChecked('the only key that fits starts chosen');
+    assert.dom('[data-test-approve-key="GitHub token"]').doesNotExist();
+  });
+
   test('a key the service rejected is offered, marked, and never chosen for the user', async function (assert) {
     serve({
       'POST _key-bindings/batch': () =>

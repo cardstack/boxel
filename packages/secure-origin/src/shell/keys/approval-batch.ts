@@ -45,20 +45,33 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
       continue;
     }
     let kind = slot.key;
+    // One choice fills the slot in every operation of the batch, so it offers
+    // only the keys of the kind each of them declares.
+    let declared = new Set(
+      allSlots(batch)
+        .filter((s) => s.slot === slot.slot && s.keyKind)
+        .map((s) => s.keyKind!),
+    );
+    let fits = (keyKind: string) =>
+      [...declared].every((d) => slotKindOfKey(keyKind) === d);
     let options: SlotOption[] =
       kind === 'userKey'
-        ? batch.keys.map(({ id, name, covers, state }) => ({
-            id,
-            name,
-            covers,
-            ...(state === 'rejected' ? { rejected: true } : {}),
-          }))
-        : batch.shares.map(({ id, label, keyName, covers }) => ({
-            id,
-            name: label,
-            detail: keyName,
-            covers,
-          }));
+        ? batch.keys
+            .filter((key) => fits(key.kind))
+            .map(({ id, name, covers, state }) => ({
+              id,
+              name,
+              covers,
+              ...(state === 'rejected' ? { rejected: true } : {}),
+            }))
+        : batch.shares
+            .filter((share) => fits(share.keyKind))
+            .map(({ id, label, keyName, covers }) => ({
+              id,
+              name: label,
+              detail: keyName,
+              covers,
+            }));
     // Those already allowed where the batch sends come first.
     options = [...options].sort(
       (a, b) =>
@@ -67,6 +80,16 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
     choices.push({ slot: slot.slot, kind, options });
   }
   return choices;
+}
+
+// The kind of slot a stored key fills: an OAuth connection, or an OAuth
+// client that gets its own tokens, fills an `oauth` slot. A copy of
+// `slotKindOfKey` in runtime-common's `call-api-key-kind.ts`, which approval
+// enforces with; the two must agree.
+function slotKindOfKey(keyKind: string): string {
+  return keyKind === 'oauth-connection' || keyKind === 'oauth-client'
+    ? 'oauth'
+    : keyKind;
 }
 
 function allSlots(batch: ApprovalBatch): BatchSlot[] {

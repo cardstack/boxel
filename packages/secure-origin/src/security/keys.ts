@@ -35,7 +35,14 @@ export interface WindowContext {
     base: string;
     method?: string;
     destination?: DestinationDisplay;
-    slots: { name: string; key: string; bound?: SlotBound | null }[];
+    // `kinds`: the kinds of key that can fill the slot (`static`,
+    // `google-service-account`, `oauth`).
+    slots: {
+      name: string;
+      key: string;
+      kinds?: string[];
+      bound?: SlotBound | null;
+    }[];
   };
 }
 
@@ -768,6 +775,10 @@ export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
 export interface BatchSlot {
   slot: string;
   key: 'userKey' | 'apiKey';
+  // The kind of key the slot's declaration says fills it (`static`,
+  // `google-service-account`, `oauth`); only a key of that kind is approved
+  // for it.
+  keyKind?: string;
   status: BatchSlotStatus;
   snapshot: RequestSnapshot;
   fingerprint: string;
@@ -809,6 +820,7 @@ export interface BatchShare {
   label: string;
   keyId: string;
   keyName: string;
+  keyKind: string;
   covers: string[];
   interactive: boolean;
   dailyBudget: number;

@@ -10,7 +10,14 @@
 // settings go beside it. Accounts are then connected through the app on the
 // `connect` page.
 //
-// What tells a secret and a service account apart is what the user has in
+// Opened for an operation, the page asks only for the kinds of key the
+// operation's `userKey` slots take, as the realm server says (the card's
+// declared `keyKind`, or what fits where the slot stands). One kind is asked
+// for without a choice. A connected account is made on the `connect` page,
+// so an operation that takes only that goes there, and one that takes it
+// among others offers it as a choice that goes there. Opened for nothing, or
+// for an operation that leaves several kinds open, the user chooses. What
+// tells a secret and a service account apart is then what the user has in
 // hand, not the service: Google's own APIs take plain API keys too. So each
 // kind says what it is for; a service account's key file pasted as a secret
 // is caught and offered as a service account; and a window opened for an
@@ -80,7 +87,7 @@ import {
   openedFor,
   returnsToKeyPage,
 } from './opened-for.ts';
-import RadioChoices from './radio-choices.gts';
+import RadioChoices, { type RadioChoice } from './radio-choices.gts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
 import ServiceAccountFields from './service-account-fields.gts';
 import {
@@ -90,23 +97,45 @@ import {
 
 type Kind = 'static' | 'google-service-account' | 'oauth-client';
 
-const KINDS = [
+// Each kind the page adds, with the kind of key the realm server says a slot
+// takes (`slotKind`) and the article its label reads with in a sentence.
+const KINDS: (RadioChoice & {
+  value: Kind;
+  slotKind: string;
+  article: string;
+})[] = [
   {
     value: 'static',
+    slotKind: 'static',
+    article: 'an',
     label: 'API key or token',
-    hint: 'A key or token you copy from the service and paste here, such as a GitHub token or a Google Maps API key.',
+    hint: 'A key or token you copy from the service and paste here, such as a GitHub token or an OpenAI API key.',
   },
   {
     value: 'google-service-account',
+    slotKind: 'google-service-account',
+    article: 'a',
     label: 'Google service account',
     hint: 'For Google APIs such as Sheets and Drive, when you have a service account’s key file (a .json file from Google Cloud). Boxel sends Google a short-lived token made from it, never the file itself.',
   },
   {
     value: 'oauth-client',
+    slotKind: 'oauth',
+    article: 'a',
     label: 'Sign-in app (OAuth)',
     hint: 'Lets people sign in with their own account on a site such as GitHub, instead of pasting a key. You create the app in that site’s developer settings, and it gives you a client ID and secret to enter here.',
   },
 ];
+
+// What an operation that takes a connected account offers in place of a
+// sign-in app.
+const CONNECTED_ACCOUNT: (typeof KINDS)[number] = {
+  value: 'oauth-client',
+  slotKind: 'oauth',
+  article: 'a',
+  label: 'Connected account (OAuth)',
+  hint: 'Sign in with your own account at the service, such as GitHub, instead of pasting a key.',
+};
 
 type State =
   | { name: 'loading' }
@@ -164,97 +193,128 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 @reason={{this.opened.reason}}
               />
             {{/if}}
-            <RadioChoices
-              @label='Kind'
-              @icon={{Tag}}
-              @name='kind'
-              @choices={{KINDS}}
-              @selected={{this.form.kind}}
-              @onSelect={{this.setKind}}
-            />
-            {{#if this.suggestsServiceAccount}}
-              <p class='kind-hint' data-test-google-destination-hint>
-                This request goes to a Google API. If you were given a JSON key
-                file for a Google Cloud service account, choose
-                <strong>Google service account</strong>; if you have an API key,
-                paste it as a key.
-              </p>
-            {{/if}}
-            {{#if this.isOAuthClient}}
-              <OAuthProviderChoice
-                @form={{this.form.oauth}}
-                @onProvider={{this.setProvider}}
-              />
-            {{/if}}
-            {{#if this.isServiceAccount}}
-              <KeyFields @name={{this.form.name}} @onName={{this.setName}} />
-              <ServiceAccountFields
-                @entry={{this.serviceAccount}}
-                @onChange={{this.clearError}}
-              />
-            {{else}}
-              <KeyFields
-                @name={{this.form.name}}
-                @value={{this.form.value}}
-                @onName={{this.setName}}
-                @onValue={{this.setValue}}
-                @valueLabel={{if this.isOAuthClient 'Client secret'}}
+            {{#if this.onlyKind}}
+              <FieldContainer
+                @tag='div'
+                @label='Kind'
+                @icon={{Tag}}
+                data-test-only-kind={{this.onlyKind.value}}
               >
-                <:beforeValue>
-                  {{#if this.isOAuthClient}}
-                    <FieldContainer
-                      @tag='label'
-                      @label='Client ID'
-                      @icon={{RectangleEllipsis}}
-                      data-test-key-field='client-id'
-                    >
-                      <BoxelInput
-                        @type='text'
-                        @autocomplete='off'
-                        @placeholder='The app’s Client ID, shown on the site'
-                        @value={{this.form.clientId}}
-                        @onInput={{this.setClientId}}
-                        name='client-id'
-                        spellcheck='false'
-                        data-test-oauth-client-id-input
-                      />
-                    </FieldContainer>
-                  {{/if}}
-                </:beforeValue>
-              </KeyFields>
-              {{#if this.pastedKeyFile}}
-                <div class='kind-hint' role='alert' data-test-pasted-key-file>
-                  <p>This is a Google service account’s JSON key file. It can’t
-                    be sent as it is: Boxel makes short-lived tokens from it for
-                    Google instead.</p>
-                  <Button
-                    type='button'
-                    @kind='secondary'
-                    @size='small'
-                    data-test-use-service-account
-                    {{on 'click' this.usePastedKeyFile}}
-                  >Use it as a Google service account</Button>
+                <div class='only-kind'>
+                  <p class='only-kind-label'>{{this.cardName}}
+                    needs
+                    {{this.onlyKind.article}}
+                    <strong>{{this.onlyKind.label}}</strong>.</p>
+                  <p class='only-kind-hint'>{{this.onlyKind.hint}}</p>
+                </div>
+              </FieldContainer>
+            {{else}}
+              <RadioChoices
+                @label='Kind'
+                @icon={{Tag}}
+                @name='kind'
+                @choices={{this.kindChoices}}
+                @selected={{this.form.kind}}
+                @onSelect={{this.setKind}}
+              />
+            {{/if}}
+            {{#if this.connecting}}
+              <div class='kind-hint' data-test-connect-instead>
+                <p>You sign in at the service with your own account, through a
+                  sign-in app set up for it, and choose what the app may do
+                  there. Boxel never sees your password.</p>
+              </div>
+            {{else}}
+              {{#if this.suggestsServiceAccount}}
+                <div class='kind-hint' data-test-google-destination-hint>
+                  <p>This request goes to a Google API. If you were given a JSON
+                    key file for a Google Cloud service account, choose
+                    <strong>Google service account</strong>; if you have an API
+                    key, paste it as a key.</p>
                 </div>
               {{/if}}
+              {{#if this.isOAuthClient}}
+                <OAuthProviderChoice
+                  @form={{this.form.oauth}}
+                  @onProvider={{this.setProvider}}
+                />
+              {{/if}}
+              {{#if this.isServiceAccount}}
+                <KeyFields @name={{this.form.name}} @onName={{this.setName}} />
+                <ServiceAccountFields
+                  @entry={{this.serviceAccount}}
+                  @onChange={{this.clearError}}
+                />
+              {{else}}
+                <KeyFields
+                  @name={{this.form.name}}
+                  @value={{this.form.value}}
+                  @onName={{this.setName}}
+                  @onValue={{this.setValue}}
+                  @valueLabel={{if this.isOAuthClient 'Client secret'}}
+                >
+                  <:beforeValue>
+                    {{#if this.isOAuthClient}}
+                      <FieldContainer
+                        @tag='label'
+                        @label='Client ID'
+                        @icon={{RectangleEllipsis}}
+                        data-test-key-field='client-id'
+                      >
+                        <BoxelInput
+                          @type='text'
+                          @autocomplete='off'
+                          @placeholder='The app’s Client ID, shown on the site'
+                          @value={{this.form.clientId}}
+                          @onInput={{this.setClientId}}
+                          name='client-id'
+                          spellcheck='false'
+                          data-test-oauth-client-id-input
+                        />
+                      </FieldContainer>
+                    {{/if}}
+                  </:beforeValue>
+                </KeyFields>
+                {{#if this.pastedKeyFile}}
+                  <div class='kind-hint' role='alert' data-test-pasted-key-file>
+                    <p>This is a Google service account’s JSON key file. It
+                      can’t be sent as it is: Boxel makes short-lived tokens
+                      from it for Google instead.</p>
+                    {{#if this.takesServiceAccount}}
+                      <Button
+                        type='button'
+                        @kind='secondary'
+                        @size='small'
+                        data-test-use-service-account
+                        {{on 'click' this.usePastedKeyFile}}
+                      >Use it as a Google service account</Button>
+                    {{else}}
+                      <p>{{this.cardName}}
+                        needs a key or token sent as it is, not a service
+                        account.</p>
+                    {{/if}}
+                  </div>
+                {{/if}}
+              {{/if}}
+              {{#if this.otherProvider}}
+                <OAuthClientFields
+                  @form={{this.form.oauth}}
+                  @onChange={{this.setOAuth}}
+                />
+              {{/if}}
+              {{#unless this.isOAuthClient}}
+                <AnonymousUseFields
+                  @anonymous={{this.form.anonymous}}
+                  @cap={{this.form.cap}}
+                  @monthlyCap={{this.form.monthlyCap}}
+                  @agreement='Allow people who aren’t signed in to use this key'
+                  @note='Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.'
+                  @onToggle={{this.toggleAnonymous}}
+                  @onCap={{this.setCap}}
+                  @onMonthlyCap={{this.setMonthlyCap}}
+                />
+              {{/unless}}
             {{/if}}
-            {{#if this.otherProvider}}
-              <OAuthClientFields
-                @form={{this.form.oauth}}
-                @onChange={{this.setOAuth}}
-              />
-            {{/if}}
-            {{#unless this.isOAuthClient}}
-              <AnonymousUseFields
-                @anonymous={{this.form.anonymous}}
-                @cap={{this.form.cap}}
-                @monthlyCap={{this.form.monthlyCap}}
-                @agreement='Allow people who aren’t signed in to use this key'
-                @note='Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.'
-                @onToggle={{this.toggleAnonymous}}
-                @onCap={{this.setCap}}
-                @onMonthlyCap={{this.setMonthlyCap}}
-              />
-            {{/unless}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -270,13 +330,22 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 {{on 'click' this.back}}
               >Cancel</Button>
             {{/if}}
-            <Button
-              type='submit'
-              @kind='primary'
-              @disabled={{this.submitDisabled}}
-              @loading={{this.form.saving}}
-              data-test-enter-key-save
-            >Save key</Button>
+            {{#if this.connecting}}
+              <Button
+                type='button'
+                @kind='primary'
+                data-test-go-to-connect
+                {{on 'click' this.goToConnect}}
+              >Connect an account</Button>
+            {{else}}
+              <Button
+                type='submit'
+                @kind='primary'
+                @disabled={{this.submitDisabled}}
+                @loading={{this.form.saving}}
+                data-test-enter-key-save
+              >Save key</Button>
+            {{/if}}
           </:actions>
         </EditPage>
       </form>
@@ -295,12 +364,6 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       .busy {
         margin-top: var(--boxel-sp-xl);
       }
-      .note {
-        margin: 0;
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        color: var(--muted-foreground);
-      }
       .kind-hint {
         display: grid;
         gap: var(--boxel-sp-xs);
@@ -314,6 +377,23 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       }
       .kind-hint p {
         margin: 0;
+      }
+      .only-kind {
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+      }
+      .only-kind p {
+        margin: 0;
+      }
+      .only-kind-label {
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+      .only-kind-hint {
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--muted-foreground);
+        overflow-wrap: break-word;
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
@@ -386,6 +466,17 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         request,
       )) as WindowContext;
       this.page.state = { name: 'entering', context };
+      // An operation that takes only a connected account is the `connect`
+      // page's.
+      if (this.onlyKind?.value === 'oauth-client') {
+        navigation.replace(this.connectURL);
+        return;
+      }
+      // The page starts on the first kind the operation takes.
+      let [first] = this.kindChoices;
+      if (first && first.value !== this.form.kind) {
+        this.setKind(first.value);
+      }
       this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -401,6 +492,24 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   };
 
   private back = () => navigation.back(keyPageURL());
+
+  // The `connect` page, opened for the same card and operation: a connected
+  // account is made by signing in there, not entered here.
+  private get connectURL() {
+    let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    fragment.delete('then');
+    fragment.delete('after');
+    return `${pageURL('connect')}#${fragment}`;
+  }
+
+  private goToConnect = () => navigation.assign(this.connectURL);
+
+  // Opened for an operation that takes a connected account, choosing one
+  // goes on to sign in rather than entering an app here: a sign-in app is
+  // never sent with a request, only the accounts connected through it.
+  private get connecting() {
+    return this.isOAuthClient && this.operationKinds !== undefined;
+  }
 
   private get isOAuthClient() {
     return this.form.kind === 'oauth-client';
@@ -420,12 +529,55 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     );
   }
 
+  // The kinds of key the operation's `userKey` slots take, as the realm
+  // server says; undefined when the page wasn't opened for an operation, or
+  // the server says nothing of them.
+  private get operationKinds(): Set<string> | undefined {
+    let slots = (this.entering?.context?.operation?.slots ?? []).filter(
+      (slot) => slot.key === 'userKey' && slot.kinds,
+    );
+    if (slots.length === 0) {
+      return undefined;
+    }
+    let taken = new Set(slots.flatMap((slot) => slot.kinds!));
+    return KINDS.some((kind) => taken.has(kind.slotKind)) ? taken : undefined;
+  }
+
+  // The kinds the page offers: those the operation takes, with an account to
+  // connect in place of a sign-in app to enter, or every kind.
+  private get kindChoices() {
+    let taken = this.operationKinds;
+    if (!taken) {
+      return KINDS;
+    }
+    return KINDS.filter((kind) => taken.has(kind.slotKind)).map((kind) =>
+      kind.value === 'oauth-client' ? CONNECTED_ACCOUNT : kind,
+    );
+  }
+
+  // The one kind the operation takes, asked for without a choice.
+  private get onlyKind() {
+    let choices = this.kindChoices;
+    return choices.length === 1 ? choices[0] : undefined;
+  }
+
+  private get takesServiceAccount() {
+    return this.kindChoices.some(
+      (kind) => kind.value === 'google-service-account',
+    );
+  }
+
+  private get cardName() {
+    return this.entering?.context?.card?.name ?? 'This card';
+  }
+
   // Opened for an operation that sends to a Google API, the page says when a
   // service account fits. It doesn't choose one: Google's APIs take plain API
   // keys too.
   private get suggestsServiceAccount() {
     return (
       this.form.kind === 'static' &&
+      this.takesServiceAccount &&
       isGoogleAPIHost(this.entering?.context?.operation?.destination?.host)
     );
   }

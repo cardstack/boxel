@@ -17,6 +17,7 @@ import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from '../prerendered-html-format.ts';
+import type { CallApiKeyKind } from '../call-api-key-kind.ts';
 import type {
   BaseOperationName,
   CallApiMethod,
@@ -1490,6 +1491,9 @@ export interface CallApiSlot {
   // The dotted path to the string that carries it — `headers.authorization`,
   // `json.auth.token`.
   at: string;
+  // The kind of key the declaration says fills it. Absent, the kinds that fit
+  // follow from where it stands (`slotKeyKinds`).
+  keyKind?: CallApiKeyKind;
 }
 
 export type CallApiBodyTemplate =

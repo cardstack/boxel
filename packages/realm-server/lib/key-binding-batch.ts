@@ -1,4 +1,5 @@
 import {
+  keyFitsSlot,
   logger,
   param,
   query,
@@ -76,6 +77,9 @@ export interface BatchSlot {
   // The token the slot is written as: `userKey`, `apiKey`, `apiKey:<name>`.
   slot: string;
   key: CallApiSlot['key'];
+  // The kind of key its declaration says fills it; only a key of that kind
+  // may be approved for it.
+  keyKind?: CallApiSlot['keyKind'];
   status: BatchSlotStatus;
   snapshot: BindingSnapshot;
   fingerprint: string;
@@ -131,6 +135,7 @@ export interface BatchShare {
   label: string;
   keyId: string;
   keyName: string;
+  keyKind: UserKeyKind;
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
@@ -176,6 +181,8 @@ interface BindingRow {
   has_grant: boolean;
   share_owner: string | null;
   share_state: string | null;
+  // The kind of the key that fills it, its own or its share's.
+  key_kind: string | null;
   destination: string;
   method: string;
   path_template: string;
@@ -284,6 +291,7 @@ export async function approvalBatch(
       slots.push({
         slot: token,
         key: slot.key,
+        ...(slot.keyKind ? { keyKind: slot.keyKind } : {}),
         status,
         snapshot,
         fingerprint,
@@ -508,7 +516,11 @@ function slotStatus(
   if (!row || !row.has_grant) {
     return 'new';
   }
-  if (row.state === 'needs-reapproval' || row.fingerprint !== fingerprint) {
+  if (
+    row.state === 'needs-reapproval' ||
+    row.fingerprint !== fingerprint ||
+    (row.key_kind !== null && !keyFitsSlot(row.key_kind, slot.keyKind))
+  ) {
     return 'changed';
   }
   if (interactive && !row.interactive) {
@@ -528,6 +540,7 @@ async function bindingRows(
   return (await query(dbAdapter, [
     `SELECT b.operation_name, b.instance_url, b.slot, b.key_id, b.share_id, b.approved_by, b.fingerprint, b.state, b.interactive,
             (g.id IS NOT NULL) AS has_grant, s.owner AS share_owner, s.state AS share_state,
+            (SELECT k.kind FROM user_keys k WHERE k.id = COALESCE(b.key_id, s.key_id)) AS key_kind,
             a.destination, a.method, a.path_template, a.headers_template, a.placement, a.placement_name, a.transform, a.body_template
        FROM key_bindings b
        JOIN key_binding_approvals a ON a.id = b.approval_id
@@ -584,7 +597,7 @@ async function sharesIn(
   user: string,
 ): Promise<(Omit<BatchShare, 'covers'> & { grants: string[] })[]> {
   let rows = await query(dbAdapter, [
-    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap,
+    `SELECT s.id, s.label, s.key_id, k.name AS key_name, k.kind AS key_kind, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap,
             EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive) AS interactive,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
@@ -595,7 +608,7 @@ async function sharesIn(
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
-      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap
+      GROUP BY s.id, s.label, s.key_id, k.name, k.kind, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap
       ORDER BY s.label`,
   ]);
   return rows.map((row) => ({
@@ -603,6 +616,7 @@ async function sharesIn(
     label: row.label as string,
     keyId: row.key_id as string,
     keyName: row.key_name as string,
+    keyKind: row.key_kind as UserKeyKind,
     grants: grantList(row.grants),
     interactive: Boolean(row.interactive),
     dailyBudget: limitsOf(row).dailyBudget,
