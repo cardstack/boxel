@@ -44,11 +44,10 @@ import Agents from './agents';
 import AgentsFlyout from './agents-flyout';
 import ArchivedWorkspace from './archived-workspace';
 import CatalogSection from './catalog-section';
-import CatalogsFlyout from './catalogs-flyout';
-import FavoritesFlyout from './favorites-flyout';
 import GetStarted from './get-started';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
+import { realmListFlyout } from './realm-list-flyout';
 import SectionHead from './section-head';
 import Workspace from './workspace';
 import {
@@ -57,7 +56,6 @@ import {
   recentWorkspaceCount,
   sortByUpdatedAtDesc,
 } from './workspace-layout';
-import WorkspacesFlyout from './workspaces-flyout';
 
 import type DashboardSections from './sections';
 import type { DashboardSection } from './sections';
@@ -482,14 +480,24 @@ export default class Dashboard extends Component<Signature> {
     id: 'favorites',
     label: 'Favorites',
     icon: Star,
-    flyout: FavoritesFlyout,
+    flyout: realmListFlyout(
+      'Favorites',
+      () => this.favoriteRealmIdentifiers,
+      () => 'No matching results',
+    ),
   };
 
   private workspacesSection: DashboardSection = {
     id: 'workspaces',
     label: 'Workspaces',
     icon: LayoutGrid,
-    flyout: WorkspacesFlyout,
+    flyout: realmListFlyout(
+      'Workspaces',
+      () => sortByUpdatedAtDesc(this.userRealmIdentifiers, this.realm.info),
+      () =>
+        this.userWorkspacesEmptyMessage ??
+        'No workspaces yet. Create one from the Workspaces section.',
+    ),
   };
 
   private agentsSection: DashboardSection = {
@@ -507,7 +515,11 @@ export default class Dashboard extends Component<Signature> {
     id: 'catalogs',
     label: 'Catalogs',
     icon: Store,
-    flyout: CatalogsFlyout,
+    flyout: realmListFlyout(
+      'Catalogs',
+      () => this.filteredCatalogRealmIdentifiers,
+      () => this.catalogEmptyMessage,
+    ),
   };
 
   private cursor = new KeyboardCursor({
@@ -799,7 +811,6 @@ export default class Dashboard extends Component<Signature> {
 
           <CatalogSection
             @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
-            @count={{this.renderedCatalogCount}}
             @emptyMessage={{this.catalogEmptyMessage}}
             @showShelf={{this.isCatalogShelfShown}}
             @navBase={{this.catalogNavBase}}

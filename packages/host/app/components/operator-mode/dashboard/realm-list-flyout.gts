@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -26,8 +27,7 @@ interface Signature {
   Args: Omit<SectionFlyoutSignature['Args'], 'showSection'> & {
     title: string;
     realmURLs: string[];
-    // Omitted when the list is never empty while its rail entry exists.
-    emptyMessage?: string;
+    emptyMessage: string;
   };
 }
 
@@ -88,7 +88,7 @@ export default class RealmListFlyout extends Component<Signature> {
           {{/if}}
         </span>
       </Button>
-    {{else if @emptyMessage}}
+    {{else}}
       <p class='flyout-empty' data-test-section-rail-flyout-empty>
         {{@emptyMessage}}
       </p>
@@ -161,4 +161,22 @@ export default class RealmListFlyout extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+// A section's rail flyout listing the realms the page lists, so it follows
+// the page's filter.
+export function realmListFlyout(
+  title: string,
+  realmURLs: () => string[],
+  emptyMessage: () => string,
+): TemplateOnlyComponent<SectionFlyoutSignature> {
+  return <template>
+    <RealmListFlyout
+      @title={{title}}
+      @titleId={{@titleId}}
+      @close={{@close}}
+      @realmURLs={{(realmURLs)}}
+      @emptyMessage={{(emptyMessage)}}
+    />
+  </template>;
 }

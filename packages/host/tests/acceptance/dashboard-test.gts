@@ -145,10 +145,10 @@ function isInView(el: Element) {
   let scroller = find(
     '[data-test-dashboard-scroller]',
   )!.getBoundingClientRect();
-  // A pixel of slack, since layout can leave an edge a fraction past.
+  // Half a pixel of slack, since layout can leave an edge a fraction past.
   return (
-    top >= Math.max(scroller.top, 0) - 1 &&
-    bottom <= Math.min(scroller.bottom, window.innerHeight) + 1
+    top >= Math.max(scroller.top, 0) - 0.5 &&
+    bottom <= Math.min(scroller.bottom, window.innerHeight) + 0.5
   );
 }
 
@@ -2401,6 +2401,53 @@ module('Acceptance | dashboard', function (hooks) {
           ).realmURL,
           realmURL,
           'Workspace A is the open workspace',
+        );
+      });
+
+      test('under Hosted, each flyout lists only what the page lists', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        favoriteWorkspaceA();
+        await settled();
+        await clickScopeOption('hosted');
+
+        function flyoutNames(flyout: string) {
+          return findAll(`${flyout} [data-test-section-rail-realm]`).map((el) =>
+            el.getAttribute('data-test-section-rail-realm'),
+          );
+        }
+
+        for (let [entry, flyout] of [
+          [FAVORITES_ENTRY, FAVORITES_FLYOUT],
+          [ENTRY, FLYOUT],
+          [CATALOGS_ENTRY, CATALOGS_FLYOUT],
+        ]) {
+          await click(entry);
+          assert.deepEqual(flyoutNames(flyout), [], `${entry} lists nothing`);
+          assert
+            .dom(`${flyout} [data-test-section-rail-flyout-empty]`)
+            .hasText('No matching results');
+          await click(entry);
+        }
+
+        markHosted(realmURL);
+        await settled();
+
+        await click(FAVORITES_ENTRY);
+        assert.deepEqual(
+          flyoutNames(FAVORITES_FLYOUT),
+          ['Workspace A'],
+          'a hosted favorite is listed',
+        );
+        assert
+          .dom(`${FAVORITES_FLYOUT} [data-test-section-rail-flyout-empty]`)
+          .doesNotExist();
+        await click(FAVORITES_ENTRY);
+
+        await click(ENTRY);
+        assert.deepEqual(
+          flyoutNames(FLYOUT),
+          ['Workspace A'],
+          'a hosted workspace is listed',
         );
       });
 
