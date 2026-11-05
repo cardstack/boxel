@@ -65,28 +65,26 @@ import type { SearchEntryWireQuery } from '@cardstack/runtime-common';
 import { prerenderedCardSearchComponent } from '@cardstack/runtime-common/prerendered-card-search';
 ```
 
-### `@cardstack/boxel-ui` — UI components, helpers, icons
+### `@cardstack/pretui` — UI components and helpers
+
+One module per component, imported per file; there are no barrels.
 
 ```ts
 // Components
-import {
-  Button,
-  Pill,
-  Avatar,
-  BoxelSelect,
-  ColorPalette,
-  ColorPicker,
-  Header,
-  FieldContainer,
-  CardContainer,
-  Modal,
-  Drawer,
-  Toast,
-  KanbanPlane,
-  autoPlaceKanban,
-  type KanbanColumnConfig,
-  type KanbanPlacement,
-} from '@cardstack/boxel-ui/components';
+import { Button } from '@cardstack/pretui/components/button';
+import { Chip } from '@cardstack/pretui/components/chip';
+import { Avatar } from '@cardstack/pretui/components/avatar';
+import { Input } from '@cardstack/pretui/components/input';
+import { Select } from '@cardstack/pretui/components/select';
+import { Field } from '@cardstack/pretui/components/field';
+import { Dialog } from '@cardstack/pretui/components/dialog';
+import { Drawer } from '@cardstack/pretui/components/drawer';
+import { Toast } from '@cardstack/pretui/components/toast';
+import { ColorPalette } from '@cardstack/pretui/components/color-palette';
+import { ColorPicker } from '@cardstack/pretui/components/color-picker';
+import { Grid } from '@cardstack/pretui/components/grid';
+import { CopyFit } from '@cardstack/pretui/components/copy-fit';
+import { Board } from '@cardstack/pretui/components/board';
 
 // Template helpers — used as {{eq ...}}, {{and ...}}, etc.
 import {
@@ -100,7 +98,28 @@ import {
   or,
   multiply,
   add,
+  element,
 } from '@cardstack/pretui/helpers';
+```
+
+Every component has a write-up at `packages/pretui/components/<name>.md`
+and a usage page at `<name>.usage.gts`; read them for the component's
+arguments, named blocks and `--pretui-*` knobs.
+
+### `@cardstack/boxel-icons` — icons
+
+```ts
+// Icons (drop into templates as <IconName />)
+import CheckIcon from '@cardstack/boxel-icons/check';
+import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
+```
+
+### `@cardstack/boxel-ui` — only what Pret UI has no counterpart for yet
+
+boxel-ui is deprecated: new code takes a boxel-ui export only when Pret UI
+has no counterpart for it, and each of these moves when one lands.
+
+```ts
 import {
   cn,
   formatDateTime,
@@ -109,10 +128,13 @@ import {
   formatDuration,
   formatRelativeTime,
 } from '@cardstack/boxel-ui/helpers';
-
-// Icons (drop into templates as <IconName />)
-import IconCheck from '@cardstack/boxel-ui/icons/check';
-import IconArrowUp from '@cardstack/boxel-ui/icons/arrow-up';
+import {
+  CardContainer,
+  FilterList,
+  autoPlaceKanban,
+  type KanbanColumnConfig,
+  type KanbanPlacement,
+} from '@cardstack/boxel-ui/components';
 ```
 
 Formatter helpers in `@cardstack/boxel-ui/helpers`: `formatDateTime`,
@@ -123,11 +145,11 @@ Formatter helpers in `@cardstack/boxel-ui/helpers`: `formatDateTime`,
 older formatter libraries in catalog realms should not be treated as the
 source of truth.
 
-Kanban helpers in `@cardstack/boxel-ui/components`: `KanbanPlane`,
-`KanbanDragManager`, `KanbanColumnConfig`, `KanbanPlacement`,
-`autoPlaceKanban`, `cardsInColumn`, `kanbanColumnCount`, `resolveInsertion`.
-Use these for lane-based drag/drop boards instead of hand-rolled DOM drag
-code.
+Kanban boards: `Board` from `@cardstack/pretui/components/board` is the
+lane-based drag/drop board; use it instead of hand-rolled DOM drag code. The
+placement types and helpers it takes (`KanbanColumnConfig`,
+`KanbanPlacement`, `autoPlaceKanban`, `cardsInColumn`, `kanbanColumnCount`,
+`resolveInsertion`) still come from `@cardstack/boxel-ui/components`.
 
 ### `@cardstack/boxel-host` — host-side tools (only available inside the running app)
 
@@ -224,19 +246,22 @@ directly — no library load required (drums, tones, UI sound feedback via
 
 ## Lookup index
 
-| I want to use…                                            | Tier | Import                                             |
-| --------------------------------------------------------- | ---- | -------------------------------------------------- |
-| `CardDef`, `FieldDef`, `Component`                        | 1    | `@cardstack/base/card-api`                         |
-| `StringField`, `NumberField`, etc.                        | 1    | `@cardstack/base/<type>`                           |
-| `getCards`, `Command`                                     | 2    | `@cardstack/runtime-common`                        |
-| `Button`, `Pill`, `cn`, formatters, icons                 | 2    | `@cardstack/boxel-ui/{components,helpers,icons/*}` |
-| `eq`, `and`, `add` and the other logic helpers, `element` | 2    | `@cardstack/pretui/helpers`                        |
-| `KanbanPlane`, `KanbanPlacement`, drag/drop board helpers | 2    | `@cardstack/boxel-ui/components`                   |
-| Any host tool (`ai-assistant`, `switch-submode`, etc.)    | 2    | `@cardstack/boxel-host/tools/<name>`               |
-| `restartableTask`                                         | 2    | `ember-concurrency`                                |
-| `Resource`, `resource()`                                  | 2    | `ember-resources`                                  |
-| `modifier()`                                              | 2    | `ember-modifier`                                   |
-| `tracked`, `GlimmerComponent`                             | 2    | `@glimmer/*`                                       |
-| Three.js, chess.js, etc.                                  | 3    | `https://esm.run/<pkg>`                            |
-| Tone.js (music toolkit)                                   | 3    | `https://esm.run/tone@14` (pin major)              |
-| Raw `AudioContext` (no library)                           | n/a  | Built-in browser API                               |
+| I want to use…                                                                                   | Tier | Import                                               |
+| ------------------------------------------------------------------------------------------------ | ---- | ---------------------------------------------------- |
+| `CardDef`, `FieldDef`, `Component`                                                               | 1    | `@cardstack/base/card-api`                           |
+| `StringField`, `NumberField`, etc.                                                               | 1    | `@cardstack/base/<type>`                             |
+| `getCards`, `Command`                                                                            | 2    | `@cardstack/runtime-common`                          |
+| `Button`, `Chip`, `Input`, `Select` and the other components                                     | 2    | `@cardstack/pretui/components/<name>`                |
+| `Board` (drag/drop kanban), `Grid`, `CopyFit`                                                    | 2    | `@cardstack/pretui/components/{board,grid,copy-fit}` |
+| `eq`, `and`, `add` and the other logic helpers, `element`                                        | 2    | `@cardstack/pretui/helpers`                          |
+| Icons                                                                                            | 2    | `@cardstack/boxel-icons/<name>`                      |
+| `cn`, formatters, `markdownEscape` (no Pret UI counterpart yet)                                  | 2    | `@cardstack/boxel-ui/helpers`                        |
+| `CardContainer`, `FilterList`, `KanbanPlacement`, `autoPlaceKanban` (no Pret UI counterpart yet) | 2    | `@cardstack/boxel-ui/components`                     |
+| Any host tool (`ai-assistant`, `switch-submode`, etc.)                                           | 2    | `@cardstack/boxel-host/tools/<name>`                 |
+| `restartableTask`                                                                                | 2    | `ember-concurrency`                                  |
+| `Resource`, `resource()`                                                                         | 2    | `ember-resources`                                    |
+| `modifier()`                                                                                     | 2    | `ember-modifier`                                     |
+| `tracked`, `GlimmerComponent`                                                                    | 2    | `@glimmer/*`                                         |
+| Three.js, chess.js, etc.                                                                         | 3    | `https://esm.run/<pkg>`                              |
+| Tone.js (music toolkit)                                                                          | 3    | `https://esm.run/tone@14` (pin major)                |
+| Raw `AudioContext` (no library)                                                                  | n/a  | Built-in browser API                                 |

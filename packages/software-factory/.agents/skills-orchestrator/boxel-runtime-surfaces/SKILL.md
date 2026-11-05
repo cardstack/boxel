@@ -1,6 +1,6 @@
 ---
 name: boxel-runtime-surfaces
-description: Map of everything Boxel card code can reach — base card-api, host tools, boxel-ui components/helpers, runtime-common, CardContext, AI services, BFM. Use when writing card code that needs an import you don't know the path for, or before reaching for raw fetch / a CDN / a hand-rolled capability.
+description: Map of everything Boxel card code can reach — base card-api, host tools, Pret UI components/helpers, runtime-common, CardContext, AI services, BFM. Use when writing card code that needs an import you don't know the path for, or before reaching for raw fetch / a CDN / a hand-rolled capability.
 ---
 
 # Boxel Runtime Surfaces
@@ -48,15 +48,24 @@ reindexing controls, catalog/listing operations, and more.
 > only when a user triggers the code path in the browser. LLMs trained
 > before the rename write `commands/` — correct it on sight.
 
-### 4. UI kit — `@cardstack/boxel-ui`
+### 4. UI kit — `@cardstack/pretui`
 
-- `/components` — `Button`, `Pill`, `Avatar`, `BoxelInput`, `BoxelSelect`,
-  `CardContainer`, `Modal`, `Drawer`, `Toast`, `FieldContainer`,
-  `KanbanPlane` (+ drag/drop helpers), and more.
-- `/helpers` — `cn`, formatters (`formatDateTime`, `formatNumber`,
-  `formatCurrency`, `formatRelativeTime`, …), `markdownEscape`. Logic
-  helpers (`eq`, `gt`, `and`, `or`, …) come from `@cardstack/pretui/helpers`.
-- `/icons/<name>` — curated icon set; broader set at `@cardstack/boxel-icons/<name>`.
+- `/components/<name>` — one module per component, imported per file
+  (`import { Button } from '@cardstack/pretui/components/button'`):
+  `Button`, `Chip`, `Avatar`, `Input`, `Select`, `Field`, `Dialog`, `Drawer`,
+  `Toast`, `Tabs`, `Grid`, `CopyFit` (the fitted render of a card), `Board`
+  (drag/drop kanban), and more. Each has a write-up at
+  `packages/pretui/components/<name>.md`.
+- `/helpers` — logic helpers (`eq`, `gt`, `and`, `or`, `add`, …) and
+  `element` (dynamic tag).
+- Icons come from `@cardstack/boxel-icons/<name>`
+  (`import CheckIcon from '@cardstack/boxel-icons/check'`).
+- Still from `@cardstack/boxel-ui`, because Pret UI has no counterpart yet
+  (each moves when one lands): `/components` `CardContainer`, `FilterList`,
+  and the kanban placement types and helpers `Board` takes
+  (`KanbanColumnConfig`, `KanbanPlacement`, `autoPlaceKanban`, …);
+  `/helpers` `cn`, the formatters (`formatDateTime`, `formatNumber`,
+  `formatCurrency`, `formatRelativeTime`, …) and `markdownEscape`.
 
 ### 5. CardContext — `@context` in templates
 
@@ -105,7 +114,7 @@ in a comment — there is no reproducible build.
 | Define schema / fields                                | Base card API (§1)                                                       |
 | Query or load cards from card code                    | CardContext store APIs / `getCards` (§2, §5) — never raw fetch           |
 | Run an app-level action (save, show, search, reindex) | Host tools (§3)                                                          |
-| Build UI                                              | boxel-ui (§4) + Glimmer/Ember primitives (see references/libraries.md)   |
+| Build UI                                              | Pret UI (§4) + Glimmer/Ember primitives (see references/libraries.md)    |
 | Live, self-updating card lists                        | `@context.searchResultsComponent` — load the `boxel-live-surfaces` skill |
 | Call an LLM / generate an image / hit an external API | AI services (§6)                                                         |
 | Rich text content                                     | BFM (§7)                                                                 |
