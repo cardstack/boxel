@@ -1,6 +1,6 @@
 /**
  * Populate `packages/boxel-cli/bundled-realms/` from `packages/base/`,
-^ * `packages/skills-realm/contents/skills/` and `packages/pretui/` so a published
+ * `packages/skills-realm/contents/skills/` and `packages/pretui/` so a published
  * `@cardstack/boxel-cli` install can run `boxel test` without a realm-server
  * on PATH.
  *
