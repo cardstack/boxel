@@ -60,9 +60,9 @@ on:
         default: ""
       fail-on-deploy-error:
         description: |
-          Whether a failed create, push or publish fails this job. When
-          false the failure is still reported in the sticky comment, and
-          the check stays green.
+          Whether a failed install, sign-in, create, push or publish fails
+          this job. When false the failure is still reported in the sticky
+          comment, and the check stays green.
         type: boolean
         default: true
       publish-timeout-ms:
@@ -99,9 +99,14 @@ jobs:
           node-version: "24"
 
       - name: Install Boxel CLI
+        id: install
+        continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         run: npm install -g @cardstack/boxel-cli@${{ inputs.boxel-cli-version }}
 
       - name: Configure boxel profile
+        id: profile
+        if: steps.install.outcome == 'success'
+        continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           MATRIX_URL: ${{ inputs.matrix-url }}
           MATRIX_USERNAME: ${{ secrets.matrix-username }}
@@ -128,6 +133,7 @@ jobs:
 
       - name: Create preview realm
         id: create
+        if: steps.profile.outcome == 'success'
         continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
