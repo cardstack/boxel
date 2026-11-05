@@ -66,11 +66,22 @@ export async function start(examOptions) {
         shardCount,
         testModuleTimings,
       );
+      // STRESS (do not merge): every shard also runs search-test.ts, after
+      // its own files, so the stressed copies run in a browser that has
+      // already run a full shard. QUnit runs modules in the order they
+      // register, so its loader waits for every other loader first.
+      const stressId = './integration/resources/search-test.ts';
+      const others = selected.filter((id) => id !== stressId);
+      const loadStress = async () => {
+        await Promise.all(others.map((id) => availableModules[id]()));
+        await availableModules[stressId]();
+      };
       options = {
         ...examOptions,
-        availableModules: Object.fromEntries(
-          selected.map((id) => [id, availableModules[id]]),
-        ),
+        availableModules: {
+          ...Object.fromEntries(others.map((id) => [id, availableModules[id]])),
+          [stressId]: loadStress,
+        },
       };
     }
 
