@@ -667,8 +667,15 @@ async function main(): Promise<void> {
     const startedAt = Date.now();
     try {
       const pool = await sample(opts, spill.thresholds, startedAt);
-      if (pool && !(await steerSpill(opts, spill, pool, startedAt))) {
-        if (opts.once) process.exitCode = 1;
+      if (pool) {
+        if (!(await steerSpill(opts, spill, pool, startedAt)) && opts.once) {
+          process.exitCode = 1;
+        }
+        // Only a sample that read every job list may forget the lists it did
+        // not ask for. After an abandoned sample, those are the lists of runs
+        // that are still active, and the next sample would read them again
+        // without an ETag.
+        gets.sweep();
       }
     } catch (e) {
       // One failed sample should not end a long-running collector; the next tick
@@ -681,7 +688,6 @@ async function main(): Promise<void> {
       });
       if (opts.once) process.exitCode = 1;
     }
-    gets.sweep();
     if (opts.once || stopping) return;
     const elapsed = Date.now() - startedAt;
     await new Promise((r) =>
