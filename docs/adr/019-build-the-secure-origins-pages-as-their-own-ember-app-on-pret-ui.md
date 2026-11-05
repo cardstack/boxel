@@ -85,9 +85,11 @@ or boxel-ui included, starts depending on it.
 This ADR is that review for the following packages, at the versions the
 lockfile pins, and the allowlist MAY name any of them:
 
-- Pret UI (`@cardstack/pretui`), and the packages it reaches at run time:
-  `@cardstack/boxel-ui`, `@cardstack/boxel-icons`, `ember-modifier`,
-  `ember-provide-consume-context`, `glimmer-motion` and `framer-motion`.
+- Pret UI (`@cardstack/pretui`), including the PhotoSwipe copy it keeps in
+  its own source, and the packages Pret UI and `glimmer-motion` import at run
+  time: `@cardstack/boxel-ui`, `@cardstack/boxel-icons`, `ember-modifier`,
+  `ember-provide-consume-context`, `glimmer-motion`, `framer-motion`,
+  `motion-dom` and `motion-utils`.
 - boxel-ui's run-time dependencies: `@ember/string`, `@ember/test-waiters`,
   `@embroider/addon-shim`, `@floating-ui/dom`, `awesome-phonenumber`,
   `classnames`, `countries-list`, `dayjs`, `dompurify`, `ember-animated`,
