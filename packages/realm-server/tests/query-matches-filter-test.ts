@@ -65,5 +65,13 @@ module(basename(import.meta.filename), function () {
     test('splitTypeAheadQuery separates the unfinished last word', async function (assert) {
       await runSharedTest(queryMatchesFilterTests, assert, {});
     });
+
+    test('assertQuery accepts a typeahead filter and rejects a non-string one', async function (assert) {
+      await runSharedTest(queryMatchesFilterTests, assert, {});
+    });
+
+    test('typeAheadWords splits on anything but letters and digits', async function (assert) {
+      await runSharedTest(queryMatchesFilterTests, assert, {});
+    });
   });
 });

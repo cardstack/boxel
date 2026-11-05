@@ -12,6 +12,7 @@ import {
   isNotFilter,
   isRangeFilter,
   splitTypeAheadQuery,
+  typeAheadWords,
 } from '../query.ts';
 
 const sampleRef = {
@@ -189,6 +190,32 @@ const tests = Object.freeze({
       words: 'café ',
       partial: 'crè',
     });
+  },
+  'assertQuery accepts a typeahead filter and rejects a non-string one': async (
+    assert,
+  ) => {
+    assertQuery({ filter: { on: sampleRef, typeahead: 'steve jo' } });
+    assert.throws(
+      () => assertQuery({ filter: { typeahead: 3 } }),
+      /typeahead must be a string/,
+    );
+    assert.throws(
+      () => assertQuery({ filter: { typeahead: 'x', matches: 'y' } }),
+      /only one operator/,
+    );
+  },
+
+  'typeAheadWords splits on anything but letters and digits': async (
+    assert,
+  ) => {
+    assert.deepEqual(typeAheadWords("Steve Jobs's iPod-2"), [
+      'steve',
+      'jobs',
+      's',
+      'ipod',
+      '2',
+    ]);
+    assert.deepEqual(typeAheadWords('  —  '), []);
   },
 } as SharedTests<{}>);
 

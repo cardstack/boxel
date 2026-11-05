@@ -3817,6 +3817,17 @@ export class MaybeBase64Field extends StringField {
   };
 }
 
+// Short text a card offers to type-ahead search: a name, a title, a synonym.
+// The index joins a card's TypeAheadField values (a containsMany gives one per
+// item) into its `_typeahead` search-doc key, and the `typeahead` filter
+// matches each typed word as a word prefix against that text alone, on its
+// own index, so a long body never matches or slows a suggestion. Keep it to
+// what a person would type to find the card.
+export class TypeAheadField extends StringField {
+  static displayName = 'Type-ahead';
+  static isTypeAheadField = true;
+}
+
 export class TextAreaField extends StringField {
   static displayName = 'TextArea';
   static icon = TextAreaIcon;

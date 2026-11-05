@@ -439,6 +439,9 @@ function translateFilterNode(
     } else if (key === 'prefix') {
       // matches' type-ahead flag; assertQuery checks it sits beside matches.
       out.prefix = value;
+    } else if (key === 'typeahead') {
+      // Type-ahead over the `_typeahead` text — no field path to address.
+      out.typeahead = value;
     } else if (key === HTML_QUERY) {
       throw invalidHtmlQuery(
         `${pointer}/${HTML_QUERY}: ${HTML_QUERY} is a field — bind it with eq: { "${HTML_QUERY}": … }`,
@@ -1152,6 +1155,7 @@ const SHAPE_MEMBERS = [
   'contains',
   'range',
   'matches',
+  'typeahead',
   'near',
 ] as const;
 
@@ -1222,6 +1226,7 @@ export type SearchEntryWireFilter = {
   range?: Record<string, unknown>;
   matches?: string;
   prefix?: boolean;
+  typeahead?: string;
   near?: Record<string, unknown>;
 };
 
@@ -1262,6 +1267,8 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
       out.matches = value as string;
     } else if (key === 'prefix') {
       out.prefix = value as boolean;
+    } else if (key === 'typeahead') {
+      out.typeahead = value as string;
     } else {
       throw new Error(
         `cannot translate filter member "${key}" to the entry wire grammar`,

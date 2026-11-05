@@ -73,6 +73,9 @@ import {
   filterOperators,
   isCardTypeFilter,
   isMatchesFilter,
+  isTypeAheadFilter,
+  typeAheadWords,
+  type TypeAheadFilter,
   isNearFilter,
   isReferenceFilterField,
 } from './query.ts';
@@ -99,6 +102,7 @@ import { matchSearchableRoutes, routesForField } from './searchable-routes.ts';
 import {
   CARD_INSTANCE_FILE_KEY,
   CARD_TITLE_KEY,
+  TYPE_AHEAD_KEY,
   isSyntheticSearchDocKey,
 } from './search-doc-keys.ts';
 import {
@@ -1729,6 +1733,8 @@ export class IndexQueryEngine {
       return this.rangeCondition(filter, on, typeConditionRef);
     } else if ('matches' in filter) {
       return this.matchesCondition(filter, on, typeConditionRef, context);
+    } else if (isTypeAheadFilter(filter)) {
+      return this.typeAheadCondition(filter, typeConditionRef, context);
     } else if (isNearFilter(filter)) {
       return this.nearCondition(filter, typeConditionRef);
     } else if ('every' in filter) {
@@ -2327,6 +2333,16 @@ export class IndexQueryEngine {
         ]);
         continue;
       }
+      if (isTypeAheadFilter(branch)) {
+        let query = typeAheadTsQuery(branch.typeahead);
+        if (query) {
+          selects.push([
+            `SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ${TYPE_AHEAD_TSVECTOR('ti')} @@`,
+            ...query,
+          ]);
+        }
+        continue;
+      }
       if (!('contains' in branch) || Object.keys(branch).length !== 1) {
         return undefined;
       }
@@ -2364,6 +2380,42 @@ export class IndexQueryEngine {
       union.push(...select);
     });
     return ['(i.url, i.realm_url, i.type) IN (', ...union, ')'];
+  }
+
+  // Type-ahead: every typed word is a word prefix of the card's `_typeahead`
+  // text. Postgres matches an unstemmed ('simple') tsvector of that text,
+  // which the `add-type-ahead-index` migration indexes; like a prefix
+  // `matches`, it asks the index once through an uncorrelated IN, because the
+  // planner can't estimate a prefix query and beside a type anchor would
+  // otherwise test every typed row. SQLite requires each word as a substring.
+  private typeAheadCondition(
+    filter: TypeAheadFilter,
+    typeConditionRef: CodeRef | undefined,
+    context: FilterContext,
+  ): CardExpression {
+    let words = typeAheadWords(filter.typeahead);
+    let query = typeAheadTsQuery(filter.typeahead);
+    let predicate: CardExpression = !query
+      ? ['FALSE']
+      : [
+          dbExpression({
+            pg: [
+              `(i.url, i.realm_url, i.type) IN (SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ${TYPE_AHEAD_TSVECTOR('ti')} @@`,
+              ...query,
+              `)`,
+            ],
+            sqlite: words.flatMap((word, index) => [
+              ...(index > 0 ? ['AND'] : []),
+              `LOWER(coalesce(i.search_doc ->> '${TYPE_AHEAD_KEY}', '')) LIKE`,
+              param(`%${escapeSqliteLikePattern(word)}%`),
+              `ESCAPE '\\'`,
+            ]),
+          }),
+        ];
+    return every([
+      ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+      predicate,
+    ]);
   }
 
   // Full-text matches predicate. Postgres uses tsvector/tsquery on the
@@ -3342,6 +3394,26 @@ const PRERENDERED_HTML_SELECTS = [
 // at the cost of the odd extra match on a short word ("lear"). The partial
 // word is letters and digits only, so it carries no tsquery syntax. A partial
 // word right after a websearch `-` is negated, as a finished one would be.
+// The type-ahead tsvector, exactly as the `add-type-ahead-index` migration
+// indexes it (the planner uses the index only for an identical expression).
+const TYPE_AHEAD_TSVECTOR = (alias: string) =>
+  `to_tsvector('simple', coalesce(${alias}.search_doc ->> '${TYPE_AHEAD_KEY}', ''))`;
+
+// Every word of a type-ahead query as a prefix (`word:*`), ANDed. The words
+// are letters and digits only, so they carry no tsquery syntax. Undefined when
+// the query has no words.
+function typeAheadTsQuery(text: string): Expression | undefined {
+  let words = typeAheadWords(text);
+  if (words.length === 0) {
+    return undefined;
+  }
+  return [
+    `to_tsquery('simple',`,
+    param(words.map((word) => `${word}:*`).join(' & ')),
+    `)`,
+  ];
+}
+
 const MIN_PREFIX_LETTERS = 3;
 
 function matchTsQuery(term: MatchTerm): Expression {

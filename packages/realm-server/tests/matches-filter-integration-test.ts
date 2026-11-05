@@ -652,6 +652,81 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    let seedTypeAheadRows = async () => {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}crdt.json`,
+        markdown:
+          'Conflict-free replicated data types, as Martin Kleppmann explains them.',
+        searchDoc: {
+          _typeahead: 'Conflict-free Replicated Data Types\nCRDT',
+        },
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}kleppmann.json`,
+        markdown: 'Martin Kleppmann',
+        searchDoc: { _typeahead: 'Martin Kleppmann' },
+      });
+    };
+    let typeAheadUrls = async (typeahead: string) =>
+      (await relevanceUrls({ filter: { typeahead } })).sort();
+
+    test('typeahead matches every word as a prefix of the type-ahead text', async function (assert) {
+      await seedTypeAheadRows();
+      assert.deepEqual(
+        await typeAheadUrls('kleppm'),
+        [`${testRealmURL}kleppmann.json`],
+        'only the card whose type-ahead text has the word; never the markdown that mentions it',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('data repl'),
+        [`${testRealmURL}crdt.json`],
+        'words match in any order',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('crdt'),
+        [`${testRealmURL}crdt.json`],
+        'each line of the text counts (a synonym)',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('M'),
+        [`${testRealmURL}kleppmann.json`],
+        'one letter is a prefix too, and case is ignored',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('martin crdt'),
+        [],
+        'every word must match the same card',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('  -- '),
+        [],
+        'no words matches nothing',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('mango'),
+        [],
+        'a card with no type-ahead text never matches',
+      );
+    });
+
+    test('typeahead composes in an indexed union', async function (assert) {
+      await seedTypeAheadRows();
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: { any: [{ typeahead: 'kleppm' }, { matches: 'puppy' }] },
+          })
+        ).sort(),
+        [`${testRealmURL}kleppmann.json`, `${testRealmURL}mango.json`],
+      );
+      assert.deepEqual(
+        (await relevanceUrls({ filter: { not: { typeahead: 'kleppm' } } }))
+          .length,
+        5,
+        'negated, it keeps every other row',
+      );
+    });
+
     test('a relevance sort carrying a type anchor ranks the same as one without', async function (assert) {
       await seedRow(dbAdapter, {
         url: `${testRealmURL}zebra-dense.json`,

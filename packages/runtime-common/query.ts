@@ -86,6 +86,7 @@ export type Filter =
   | ContainsFilter
   | RangeFilter
   | MatchesFilter
+  | TypeAheadFilter
   | NearFilter
   | CardTypeFilter;
 
@@ -236,6 +237,25 @@ export interface MatchesFilter extends TypedFilter {
   // it would without the flag. A query that ends in whitespace has no
   // unfinished word, so it matches exactly as without the flag.
   prefix?: boolean;
+}
+
+// Type-ahead over the short text a card declares for it (its `TypeAheadField`
+// fields, stamped into the search doc's `_typeahead` key): every word of the
+// query is a prefix of some word of that text, in any order, ignoring case
+// and never stemmed. Unlike `matches` it never
+// reads a card's rendered markdown, so a long definition or transcript can't
+// match or slow it. A query with no letters or digits matches nothing.
+export interface TypeAheadFilter extends TypedFilter {
+  typeahead: string;
+}
+
+// The words of a type-ahead query: runs of letters and digits, lowercased.
+export function typeAheadWords(text: string): string[] {
+  return [...text.matchAll(/[\p{L}\p{N}]+/gu)].map((m) => m[0].toLowerCase());
+}
+
+export function isTypeAheadFilter(filter: Filter): filter is TypeAheadFilter {
+  return (filter as TypeAheadFilter).typeahead !== undefined;
 }
 
 // One positive `matches` term, as a `_matchRelevance` sort scores it.
@@ -681,6 +701,7 @@ const FILTER_OPERATOR_ASSERTS: Record<
   contains: assertContainsFilter,
   range: assertRangeFilter,
   matches: assertMatchesFilter,
+  typeahead: assertTypeAheadFilter,
   near: assertNearFilter,
 };
 
@@ -991,6 +1012,17 @@ function assertMatchesFilter(
   if ('prefix' in filter && typeof filter.prefix !== 'boolean') {
     throw new InvalidQueryError(
       `${pointer.concat('prefix').join('/') || '/'}: prefix must be a boolean`,
+    );
+  }
+}
+
+function assertTypeAheadFilter(
+  filter: any,
+  pointer: string[],
+): asserts filter is TypeAheadFilter {
+  if (typeof filter?.typeahead !== 'string') {
+    throw new InvalidQueryError(
+      `${pointer.concat('typeahead').join('/') || '/'}: typeahead must be a string`,
     );
   }
 }

@@ -708,6 +708,13 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(parseSearchEntryQueryFromPayload(wire).itemQuery, query);
     });
 
+    test('round-trips a typeahead filter', function (assert) {
+      let query = { filter: { typeahead: 'steve jo' } } as any;
+      let wire = searchEntryWireQueryFromQuery(query);
+      assert.deepEqual(wire, { filter: { typeahead: 'steve jo' } });
+      assert.deepEqual(parseSearchEntryQueryFromPayload(wire).itemQuery, query);
+    });
+
     test('pins the requested sparse fieldset', function (assert) {
       let parsed = parseSearchEntryQueryFromPayload(
         searchEntryWireQueryFromQuery(
