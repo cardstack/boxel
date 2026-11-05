@@ -83,7 +83,9 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
 }
 
 // The kind of slot a stored key fills: an OAuth connection, or an OAuth
-// client that gets its own tokens, fills an `oauth` slot.
+// client that gets its own tokens, fills an `oauth` slot. A copy of
+// `slotKindOfKey` in runtime-common's `call-api-key-kind.ts`, which approval
+// enforces with; the two must agree.
 function slotKindOfKey(keyKind: string): string {
   return keyKind === 'oauth-connection' || keyKind === 'oauth-client'
     ? 'oauth'
