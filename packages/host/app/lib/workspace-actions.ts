@@ -468,7 +468,7 @@ export class WorkspaceActions {
   }
 
   // Whether the workspace, or anything open from it, is on screen behind the
-  // dashboard or the chooser; removing it then clears the stacks. A stack's
+  // dashboard; removing it then clears the stacks. A stack's
   // base card counts as well as its top one: a stack based on the
   // workspace's index card makes it the current realm, and once it has left
   // the available realms the current realm no longer says so.
