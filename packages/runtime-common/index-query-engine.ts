@@ -2394,35 +2394,40 @@ export class IndexQueryEngine {
         ? ['FALSE']
         : [
             dbExpression({
-              pg: context.inAny
-                ? [
-                    // Under an `any`, the LEFT JOIN to prerendered_html can't
-                    // be reduced (a row may qualify through another branch),
-                    // so the inline form below recomputes every row's
-                    // tsvector. An uncorrelated IN instead becomes a hashed
-                    // SubPlan: the markdown GIN index answers it once, and
-                    // each row is a hash probe. Keyed on the join's own
-                    // primary key, so it selects exactly the rows the inline
-                    // form would.
-                    `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
-                    ...matchTsQuery(filter),
-                    `)`,
-                  ]
-                : [
-                    // The leading `ph.markdown IS NOT NULL` is a null-rejecting
-                    // guard, not a behavior change: `markdown_search_text` coalesces
-                    // null markdown to '' and a non-empty query never matches an
-                    // empty tsvector, so absent-markdown rows are already excluded.
-                    // But because that coalesce hides the null-rejection from the
-                    // planner, without this guard it cannot reduce the LEFT JOIN to
-                    // prerendered_html, drives the query from boxel_index, and
-                    // recomputes every row's tsvector at query time instead of using
-                    // the markdown GIN index. The explicit guard restores the
-                    // reduction so the index is used, and stays correct under `not`
-                    // and `any` (an absent row still can't match a positive term).
-                    `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@`,
-                    ...matchTsQuery(filter),
-                  ],
+              // A prefix query compiles the same way: Postgres can't estimate how
+              // many rows a prefix matches, and beside a type anchor it guesses
+              // high and recomputes every typed row's tsvector instead of
+              // asking the index once.
+              pg:
+                context.inAny || filter.prefix
+                  ? [
+                      // Under an `any`, the LEFT JOIN to prerendered_html can't
+                      // be reduced (a row may qualify through another branch),
+                      // so the inline form below recomputes every row's
+                      // tsvector. An uncorrelated IN instead becomes a hashed
+                      // SubPlan: the markdown GIN index answers it once, and
+                      // each row is a hash probe. Keyed on the join's own
+                      // primary key, so it selects exactly the rows the inline
+                      // form would.
+                      `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
+                      ...matchTsQuery(filter),
+                      `)`,
+                    ]
+                  : [
+                      // The leading `ph.markdown IS NOT NULL` is a null-rejecting
+                      // guard, not a behavior change: `markdown_search_text` coalesces
+                      // null markdown to '' and a non-empty query never matches an
+                      // empty tsvector, so absent-markdown rows are already excluded.
+                      // But because that coalesce hides the null-rejection from the
+                      // planner, without this guard it cannot reduce the LEFT JOIN to
+                      // prerendered_html, drives the query from boxel_index, and
+                      // recomputes every row's tsvector at query time instead of using
+                      // the markdown GIN index. The explicit guard restores the
+                      // reduction so the index is used, and stays correct under `not`
+                      // and `any` (an absent row still can't match a positive term).
+                      `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@`,
+                      ...matchTsQuery(filter),
+                    ],
               sqlite: [
                 `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
                 param(`%${escapeSqliteLikePattern(filter.matches)}%`),
