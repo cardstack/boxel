@@ -50,7 +50,15 @@ const stubDefinitionLookup: DefinitionLookup = {
 
 async function seedRow(
   dbAdapter: PgAdapter,
-  { url, markdown }: { url: string; markdown: string | null },
+  {
+    url,
+    markdown,
+    searchDoc = {},
+  }: {
+    url: string;
+    markdown: string | null;
+    searchDoc?: Record<string, unknown>;
+  },
 ) {
   await query(dbAdapter, [
     `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at)`,
@@ -67,7 +75,8 @@ async function seedRow(
     `,`,
     `'{}'::jsonb`,
     `,`,
-    `'{}'::jsonb`,
+    param(JSON.stringify(searchDoc)),
+    `::jsonb`,
     `,`,
     `'[]'::jsonb`,
     `,`,
@@ -422,6 +431,210 @@ module(basename(import.meta.filename), function () {
         }),
         [`${testRealmURL}zebra-sparse.json`, `${testRealmURL}zebra-dense.json`],
         'asc reverses the ranking',
+      );
+    });
+
+    let prefixUrls = async (matches: string, prefix = true) =>
+      (await relevanceUrls({ filter: { matches, prefix } })).sort();
+
+    test('prefix matches the unfinished last word as a word prefix', async function (assert) {
+      assert.deepEqual(
+        await prefixUrls('pupp'),
+        [`${testRealmURL}mango.json`],
+        '"pupp" finds "puppy"',
+      );
+      assert.deepEqual(
+        await prefixUrls('pupp', false),
+        [],
+        'without prefix, "pupp" is a whole word and finds nothing',
+      );
+      assert.deepEqual(
+        await prefixUrls('PUPP'),
+        [`${testRealmURL}mango.json`],
+        'the prefix is case-insensitive',
+      );
+    });
+
+    test('prefix finds a word whose stem is shorter than what was typed', async function (assert) {
+      // "plays" and "play" index as the lexeme "play", which "playi" (on the
+      // way to "playing") is not a prefix of.
+      assert.deepEqual(
+        await prefixUrls('playi'),
+        [`${testRealmURL}mango.json`, `${testRealmURL}ringo.json`],
+        '"playi" finds the "play" rows',
+      );
+      assert.deepEqual(
+        await prefixUrls('painterl'),
+        [`${testRealmURL}vangogh.json`],
+        '"painterl" finds "painterly", indexed as "painter"',
+      );
+    });
+
+    test('prefix matches the finished words as whole words, all of them', async function (assert) {
+      assert.deepEqual(
+        await prefixUrls('friendly pu'),
+        [`${testRealmURL}mango.json`],
+        'a finished word and a partial one, both present',
+      );
+      assert.deepEqual(
+        await prefixUrls('calm pu'),
+        [],
+        'the finished word "calm" and the partial "pu" are never in one row',
+      );
+      assert.deepEqual(
+        await prefixUrls('dog -painterl'),
+        [],
+        'a partial word under websearch negation stays negated',
+      );
+    });
+
+    test('a prefix query that ends in whitespace has no unfinished word', async function (assert) {
+      assert.deepEqual(await prefixUrls('pupp '), [], '"pupp " is a word');
+      assert.deepEqual(
+        await prefixUrls('puppy '),
+        [`${testRealmURL}mango.json`],
+        '"puppy " matches as without prefix',
+      );
+      assert.deepEqual(
+        await prefixUrls('   '),
+        [],
+        'a blank query matches nothing',
+      );
+    });
+
+    test('prefix matches rank by relevance', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-dense.json`,
+        markdown: 'zebra zebra zebra — a whole herd of zebra on the plain.',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-sparse.json`,
+        markdown: 'a single zebra grazing quietly.',
+      });
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'zeb', prefix: true },
+          sort: [{ by: '_matchRelevance' }],
+        }),
+        [`${testRealmURL}zebra-dense.json`, `${testRealmURL}zebra-sparse.json`],
+        'the denser row ranks first',
+      );
+    });
+
+    // The search sheet's term filter: full text OR either title key.
+    let sheetTermFilter = (term: string) => ({
+      any: [
+        { matches: term },
+        { contains: { _title: term } },
+        { contains: { cardTitle: term } },
+      ],
+    });
+
+    let seedTitledRows = async () => {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}title-only.json`,
+        markdown: 'A talk about logs and replicas.',
+        searchDoc: {
+          _title: 'Designing Data-Intensive Apps',
+          cardTitle: 'Designing Data-Intensive Apps',
+        },
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}file-title.json`,
+        markdown: null,
+        searchDoc: { _title: 'intensive-notes.md' },
+      });
+    };
+
+    test('a matches-or-title any returns the union of its branches', async function (assert) {
+      await seedTitledRows();
+      assert.deepEqual(
+        (await relevanceUrls({ filter: sheetTermFilter('intensive') })).sort(),
+        [`${testRealmURL}file-title.json`, `${testRealmURL}title-only.json`],
+        'a substring of either title key matches (markdown has no "intensive")',
+      );
+      assert.deepEqual(
+        (await relevanceUrls({ filter: sheetTermFilter('replicas') })).sort(),
+        [`${testRealmURL}title-only.json`],
+        'a markdown-only hit still matches',
+      );
+      assert.deepEqual(
+        (await relevanceUrls({ filter: sheetTermFilter('DATA-INT') })).sort(),
+        [`${testRealmURL}title-only.json`],
+        'the title match is case-insensitive and spans punctuation',
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({ filter: { not: sheetTermFilter('intensive') } })
+        ).sort(),
+        [
+          `${testRealmURL}empty.json`,
+          `${testRealmURL}mango.json`,
+          `${testRealmURL}ringo.json`,
+          `${testRealmURL}vangogh.json`,
+        ],
+        'negated, it keeps exactly the other rows',
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: {
+              any: [
+                { matches: 'kleppm', prefix: true },
+                { contains: { _title: 'zzz' } },
+              ],
+            },
+          })
+        ).sort(),
+        [],
+        'a prefix matches branch compiles in the union too',
+      );
+    });
+
+    test('a matches-or-title any compiles to one indexed union', async function (assert) {
+      let captured: string[] = [];
+      let originalExecute = dbAdapter.execute.bind(dbAdapter);
+      (dbAdapter as any).execute = async (sql: string, opts?: any) => {
+        captured.push(sql);
+        return originalExecute(sql, opts);
+      };
+      try {
+        await relevanceUrls({ filter: sheetTermFilter('intensive') });
+      } finally {
+        (dbAdapter as any).execute = originalExecute;
+      }
+      let dataQuery = captured.find((sql) => sql.includes('UNION'));
+      assert.ok(dataQuery, 'the filter compiles to a UNION');
+      assert.true(
+        dataQuery!.includes(`ti.search_doc ->> '_title' ILIKE`),
+        'the _title key is a literal, so its trigram index can match',
+      );
+      assert.true(
+        dataQuery!.includes(`ti.search_doc ->> 'cardTitle' ILIKE`),
+        'the cardTitle key is a literal, so its trigram index can match',
+      );
+
+      // A tiny table is cheapest to scan, so take scans off the table to see
+      // that the trigram index can answer the title predicate at all.
+      let planText = await dbAdapter.withConnection(async (run) => {
+        await run([`SET enable_seqscan = off`]);
+        let rows = (await run([
+          `EXPLAIN SELECT url FROM boxel_index WHERE search_doc ->> '_title' ILIKE '%intensive%'`,
+        ])) as { 'QUERY PLAN': string }[];
+        await run([`RESET enable_seqscan`]);
+        return rows.map((row) => row['QUERY PLAN']).join('\n');
+      });
+      assert.true(
+        planText.includes('boxel_index_title_trgm_idx'),
+        `the planner can use the title trigram index; got ${planText}`,
+      );
+      let indexes = (await dbAdapter.execute(
+        `SELECT indexname FROM pg_indexes WHERE tablename = 'boxel_index' AND indexname LIKE '%trgm%' ORDER BY indexname`,
+      )) as { indexname: string }[];
+      assert.deepEqual(
+        indexes.map((row) => row.indexname),
+        ['boxel_index_card_title_trgm_idx', 'boxel_index_title_trgm_idx'],
+        'both title trigram indexes are migrated',
       );
     });
 

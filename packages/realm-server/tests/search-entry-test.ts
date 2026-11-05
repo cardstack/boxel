@@ -701,6 +701,13 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(parseSearchEntryQueryFromPayload(wire).itemQuery, query);
     });
 
+    test('round-trips a prefix matches filter', function (assert) {
+      let query = { filter: { matches: 'kleppm', prefix: true } } as any;
+      let wire = searchEntryWireQueryFromQuery(query);
+      assert.deepEqual(wire, { filter: { matches: 'kleppm', prefix: true } });
+      assert.deepEqual(parseSearchEntryQueryFromPayload(wire).itemQuery, query);
+    });
+
     test('pins the requested sparse fieldset', function (assert) {
       let parsed = parseSearchEntryQueryFromPayload(
         searchEntryWireQueryFromQuery(

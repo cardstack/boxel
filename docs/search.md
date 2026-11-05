@@ -19,6 +19,7 @@ The Query object may have a `filter` property, which controls which cards are in
 - `every`: allows an "AND" union of other filters
 - `not`: allow negating another filter
 - `contains`: allows you to specify a card that has a field value containing a specific value.
+- `matches`: full-text search over each card's rendered markdown, in Postgres `websearch_to_tsquery` syntax (`"exact phrase"`, `or`, `-excluded`). Add `prefix: true` for type-ahead (see [Type-ahead](#type-ahead-prefix)).
 - `near`: keeps cards whose `VectorField` is at least `minSimilarity` similar to a target vector (see [Vector search](#vector-search-near)).
 
 - `on`: may be used with `eq`,`range` and `every` to limit results to a particular card type. `on` provides the card type context for a field. This is how we can disambiguate, for example, between a `Company.name` field and a `Country.name` field. Simply providing a predicate to filter by the `name` field isnt enough. You need to say which card's name field you want to filter by -- this is the function of `on`.
@@ -148,6 +149,28 @@ let { data: matching } = await indexer.search({
   filter: { type: { module: `https://my.realm/book`, name: 'Book' } },
 });
 ```
+
+### Type-ahead (`prefix`)
+
+A `matches` filter with `prefix: true` treats the query's last word as unfinished: it matches any word that starts with it, so each keystroke can run one query. Every earlier word still has to match whole, and a query that ends in a space has no unfinished word.
+
+```js
+let { data: suggestions } = await indexer.search({
+  filter: { on: talkRef, matches: 'martin kleppm', prefix: true },
+  sort: [
+    {
+      by: '_blend',
+      of: [
+        { by: '_matchRelevance' },
+        { on: talkRef, by: 'views', weight: 0.5 },
+      ],
+    },
+  ],
+  page: { size: 8 },
+});
+```
+
+Words are indexed by their English stems, so a word whose stem is shorter than what has been typed (`learni` on the way to `learning`, indexed as `learn`) is matched by dropping up to two letters from the end of the unfinished word. A query on a type whose rendered markdown is short (a title, a name, a byline) stays fast and ranks by relevance well. Matching across long documents such as transcripts finds every mention, so anchor type-ahead on the types users pick from. A one-letter prefix scans a large part of the index, so wait for two or three letters before querying.
 
 ### Vector search (`near`)
 

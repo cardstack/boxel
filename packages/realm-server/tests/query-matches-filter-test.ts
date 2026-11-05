@@ -49,5 +49,21 @@ module(basename(import.meta.filename), function () {
     test('assertQuery rejects non-string matches value', async function (assert) {
       await runSharedTest(queryMatchesFilterTests, assert, {});
     });
+
+    test('assertQuery accepts a boolean prefix beside matches', async function (assert) {
+      await runSharedTest(queryMatchesFilterTests, assert, {});
+    });
+
+    test('assertQuery rejects a non-boolean prefix', async function (assert) {
+      await runSharedTest(queryMatchesFilterTests, assert, {});
+    });
+
+    test('assertQuery rejects prefix away from matches', async function (assert) {
+      await runSharedTest(queryMatchesFilterTests, assert, {});
+    });
+
+    test('splitTypeAheadQuery separates the unfinished last word', async function (assert) {
+      await runSharedTest(queryMatchesFilterTests, assert, {});
+    });
   });
 });

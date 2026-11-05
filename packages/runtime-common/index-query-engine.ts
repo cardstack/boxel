@@ -68,8 +68,11 @@ import {
   RANGE_OPERATORS,
   InvalidQueryError,
   collectPositiveMatchTerms,
+  splitTypeAheadQuery,
+  type MatchTerm,
   filterOperators,
   isCardTypeFilter,
+  isMatchesFilter,
   isNearFilter,
   isReferenceFilterField,
 } from './query.ts';
@@ -95,6 +98,7 @@ import {
 import { matchSearchableRoutes, routesForField } from './searchable-routes.ts';
 import {
   CARD_INSTANCE_FILE_KEY,
+  CARD_TITLE_KEY,
   isSyntheticSearchDocKey,
 } from './search-doc-keys.ts';
 import {
@@ -424,11 +428,18 @@ export interface QueryResultsMeta {
 interface FilterContext {
   inAny: boolean;
   prerenderedTable: string;
+  indexTable: string;
 }
 const DEFAULT_FILTER_CONTEXT: FilterContext = {
   inAny: false,
   prerenderedTable: 'prerendered_html',
+  indexTable: 'boxel_index',
 };
+
+// Search-doc keys whose substring (`contains`) match has a trigram index of
+// its own (see the `add-search-doc-title-trigram-indexes` migration): a row's
+// display title, as the search sheet matches it.
+const TRIGRAM_INDEXED_TITLE_KEYS = [CARD_TITLE_KEY, 'cardTitle'] as const;
 
 export const generalSortFields: Record<string, string> = {
   lastModified: 'i.last_modified',
@@ -1257,6 +1268,7 @@ export class IndexQueryEngine {
           this.filterCondition(filter, baseCardRef, 'positive', {
             inAny: false,
             prerenderedTable: prerenderedTableFromOpts(opts),
+            indexTable: tableFromOpts(opts),
           }),
         );
       }
@@ -1727,6 +1739,13 @@ export class IndexQueryEngine {
         ),
       ]);
     } else if ('any' in filter) {
+      let union = this.#anyAsIndexedUnion(filter.any, context);
+      if (union) {
+        return every([
+          ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+          union,
+        ]);
+      }
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
         any([
@@ -2062,7 +2081,7 @@ export class IndexQueryEngine {
   // a last place. Ties share a rank (RANK()).
   async #blendSortExpressions(
     sort: Sort | undefined,
-    matches: string[],
+    matches: MatchTerm[],
   ): Promise<{ blendColumns: CardExpression; blendJoins: CardExpression }> {
     let blendColumns: CardExpression = [];
     let blendJoins: CardExpression = [];
@@ -2116,7 +2135,7 @@ export class IndexQueryEngine {
   // One blend signal's aggregated value for a card, NULL when it has none.
   async #blendSignalScore(
     component: BlendComponent,
-    matches: string[],
+    matches: MatchTerm[],
     joinAlias: string,
     joins: CardExpression,
   ): Promise<CardExpression> {
@@ -2234,7 +2253,7 @@ export class IndexQueryEngine {
   //
   // `MAX(...)` lets the value survive `GROUP BY i.url, i.type` (and any
   // table-valued fan-out, where every fanned row shares the same markdown).
-  private matchRelevanceExpression(matches: string[]): CardExpression {
+  private matchRelevanceExpression(matches: MatchTerm[]): CardExpression {
     return [
       ...this.matchRelevanceScore(matches),
       `AS "${MATCH_RELEVANCE_SORT_KEY}"`,
@@ -2243,13 +2262,13 @@ export class IndexQueryEngine {
 
   // The aggregated relevance value alone (no alias), shared by the
   // `_matchRelevance` column and a `_blend` signal.
-  private matchRelevanceScore(matches: string[]): CardExpression {
+  private matchRelevanceScore(matches: MatchTerm[]): CardExpression {
     let pgTsQuery: Expression = [];
     matches.forEach((m, i) => {
       if (i > 0) {
         pgTsQuery.push('||');
       }
-      pgTsQuery.push(`websearch_to_tsquery('english',`, param(m), `)`);
+      pgTsQuery.push(...matchTsQuery(m));
     });
     let sqliteLike: Expression = [];
     matches.forEach((m, i) => {
@@ -2258,7 +2277,7 @@ export class IndexQueryEngine {
       }
       sqliteLike.push(
         `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
-        param(`%${escapeSqliteLikePattern(m)}%`),
+        param(`%${escapeSqliteLikePattern(m.matches)}%`),
         `) ESCAPE '\\'`,
       );
     });
@@ -2274,6 +2293,73 @@ export class IndexQueryEngine {
       }),
       `)`,
     ];
+  }
+
+  // An `any` whose every branch an index answers on its own — a full-text
+  // `matches` (the markdown GIN index) or a `contains` on a row's title (the
+  // title trigram indexes) — compiled as one membership test against the
+  // UNION of each branch's matching keys. Written as an OR of per-row
+  // conditions instead, Postgres can't combine indexes across the two tables
+  // and scans every row of the realm, reading each row's whole search doc to
+  // test its title; the union lets each index find its few rows first. This
+  // is the search sheet's term filter (`matches` OR `_title` OR `cardTitle`).
+  // A branch carrying a type anchor, or any other operator, keeps the general
+  // compilation. Postgres only; SQLite has neither index.
+  #anyAsIndexedUnion(
+    branches: Filter[],
+    context: FilterContext,
+  ): CardExpression | undefined {
+    if (this.#dbAdapter.kind !== 'pg' || branches.length < 2) {
+      return undefined;
+    }
+    let selects: CardExpression[] = [];
+    for (let branch of branches) {
+      if ('on' in branch || 'type' in branch) {
+        return undefined;
+      }
+      if (isMatchesFilter(branch)) {
+        if (branch.matches.trim() === '') {
+          continue;
+        }
+        selects.push([
+          `SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
+          ...matchTsQuery(branch),
+        ]);
+        continue;
+      }
+      if (!('contains' in branch) || Object.keys(branch).length !== 1) {
+        return undefined;
+      }
+      let entries = Object.entries(branch.contains);
+      if (entries.length !== 1) {
+        return undefined;
+      }
+      let [key, value] = entries[0];
+      if (
+        typeof value !== 'string' ||
+        !(TRIGRAM_INDEXED_TITLE_KEYS as readonly string[]).includes(key)
+      ) {
+        return undefined;
+      }
+      // The key is spliced in as a literal from the fixed list above: the
+      // trigram index is on `search_doc ->> '<key>'`, and the planner matches
+      // a predicate to an expression index only when the key is a constant.
+      selects.push([
+        `SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ti.search_doc ->> '${key}' ILIKE`,
+        param(`%${value}%`),
+      ]);
+    }
+    if (selects.length === 0) {
+      return ['FALSE'];
+    }
+    let union: CardExpression = [];
+    selects.forEach((select, i) => {
+      if (i > 0) {
+        union.push('UNION');
+      }
+      union.push(...select);
+    });
+    return ['(i.url, i.realm_url, i.type) IN (', ...union, ')'];
   }
 
   // Full-text matches predicate. Postgres uses tsvector/tsquery on the
@@ -2314,9 +2400,9 @@ export class IndexQueryEngine {
                     // each row is a hash probe. Keyed on the join's own
                     // primary key, so it selects exactly the rows the inline
                     // form would.
-                    `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@ websearch_to_tsquery('english',`,
-                    param(filter.matches),
-                    `))`,
+                    `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
+                    ...matchTsQuery(filter),
+                    `)`,
                   ]
                 : [
                     // The leading `ph.markdown IS NOT NULL` is a null-rejecting
@@ -2330,9 +2416,8 @@ export class IndexQueryEngine {
                     // the markdown GIN index. The explicit guard restores the
                     // reduction so the index is used, and stays correct under `not`
                     // and `any` (an absent row still can't match a positive term).
-                    `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
-                    param(filter.matches),
-                    `)`,
+                    `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@`,
+                    ...matchTsQuery(filter),
                   ],
               sqlite: [
                 `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
@@ -3232,6 +3317,60 @@ const PRERENDERED_HTML_SELECTS = [
 ]
   .map((col) => `ph.${col} AS ${col}`)
   .join(', ');
+
+// The Postgres tsquery one `matches` term compiles to. Without `prefix` it is
+// `websearch_to_tsquery('english', …)` over the whole string. With it, the
+// finished words keep that form, ANDed with an OR over the unfinished last
+// word:
+//   - the word as a prefix of any lexeme (`kleppm:*`, under 'simple' so it is
+//     not stemmed first);
+//   - the word's own english stem, exact (`jobs` → `job`);
+//   - the word less its last one or two letters, exact, while at least three
+//     remain.
+// The document's tsvector is stemmed, so a prefix alone misses a word whose
+// stem is shorter than what has been typed: "learni" is a prefix of
+// "learning", but the indexed lexeme is "learn". The shortened forms catch it,
+// at the cost of the odd extra match on a short word ("lear"). The partial
+// word is letters and digits only, so it carries no tsquery syntax. A partial
+// word right after a websearch `-` is negated, as a finished one would be.
+function matchTsQuery(term: MatchTerm): Expression {
+  let { words, partial } = term.prefix
+    ? splitTypeAheadQuery(term.matches)
+    : { words: term.matches, partial: undefined };
+  if (partial === undefined) {
+    return [`websearch_to_tsquery('english',`, param(term.matches), `)`];
+  }
+  let negated = /(^|\s)-$/.test(words);
+  if (negated) {
+    words = words.slice(0, -1);
+  }
+  let alternatives: Expression = [
+    `to_tsquery('simple',`,
+    param(`${partial}:*`),
+    `) || to_tsquery('english',`,
+    param(partial),
+    `)`,
+  ];
+  let letters = [...partial];
+  for (let drop = 1; drop <= 2 && letters.length - drop >= 3; drop++) {
+    alternatives.push(
+      `|| to_tsquery('simple',`,
+      param(letters.slice(0, -drop).join('')),
+      `)`,
+    );
+  }
+  let partialQuery: Expression = [negated ? '!!(' : '(', ...alternatives, ')'];
+  if (words.trim() === '') {
+    return partialQuery;
+  }
+  return [
+    `(websearch_to_tsquery('english',`,
+    param(words),
+    `) &&`,
+    ...partialQuery,
+    `)`,
+  ];
+}
 
 // SQLite LIKE treats `%` and `_` as wildcards. With `ESCAPE '\'` we can
 // neutralize user-supplied wildcards by prefixing them (and the escape

@@ -231,6 +231,31 @@ export interface ContainsFilter extends TypedFilter {
  */
 export interface MatchesFilter extends TypedFilter {
   matches: string;
+  // Type-ahead: the query's last word matches as a prefix of a word in the
+  // document (`kleppm` finds "Kleppmann"), and every earlier word matches as
+  // it would without the flag. A query that ends in whitespace has no
+  // unfinished word, so it matches exactly as without the flag.
+  prefix?: boolean;
+}
+
+// One positive `matches` term, as a `_matchRelevance` sort scores it.
+export type MatchTerm = Pick<MatchesFilter, 'matches' | 'prefix'>;
+
+// The type-ahead split of a `prefix` query: the finished words, and the
+// unfinished last word as letters and digits only (so it can be spliced into
+// tsquery syntax), or `undefined` when the query ends in a finished word.
+export function splitTypeAheadQuery(text: string): {
+  words: string;
+  partial: string | undefined;
+} {
+  let match = /([\p{L}\p{N}]+)$/u.exec(text);
+  if (!match) {
+    return { words: text, partial: undefined };
+  }
+  return {
+    words: text.slice(0, match.index),
+    partial: match[1].toLowerCase(),
+  };
 }
 
 // Vector similarity, field-keyed like `range`: a card matches when its
@@ -286,13 +311,17 @@ export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
 export function collectPositiveMatchTerms(
   filter: Filter | undefined,
   polarity: 'positive' | 'negated' = 'positive',
-): string[] {
+): MatchTerm[] {
   if (!filter) {
     return [];
   }
   if ('matches' in filter) {
     return polarity === 'positive' && filter.matches.trim() !== ''
-      ? [filter.matches]
+      ? [
+          filter.prefix
+            ? { matches: filter.matches, prefix: true }
+            : { matches: filter.matches },
+        ]
       : [];
   }
   if ('not' in filter) {
@@ -705,6 +734,11 @@ function assertFilter(
   }
 
   let operator = operators[0];
+  if ('prefix' in filter && operator !== 'matches') {
+    throw new InvalidQueryError(
+      `${pointer.concat('prefix').join('/') || '/'}: prefix belongs beside matches`,
+    );
+  }
   if (!operator) {
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: cannot determine the type of filter`,
@@ -952,6 +986,11 @@ function assertMatchesFilter(
   if (typeof filter.matches !== 'string') {
     throw new InvalidQueryError(
       `${matchesPointer.join('/') || '/'}: matches must be a string`,
+    );
+  }
+  if ('prefix' in filter && typeof filter.prefix !== 'boolean') {
+    throw new InvalidQueryError(
+      `${pointer.concat('prefix').join('/') || '/'}: prefix must be a boolean`,
     );
   }
 }

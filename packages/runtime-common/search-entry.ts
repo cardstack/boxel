@@ -436,6 +436,9 @@ function translateFilterNode(
     } else if (key === 'matches') {
       // Full-text match over the whole document — no field path to address.
       out.matches = value;
+    } else if (key === 'prefix') {
+      // matches' type-ahead flag; assertQuery checks it sits beside matches.
+      out.prefix = value;
     } else if (key === HTML_QUERY) {
       throw invalidHtmlQuery(
         `${pointer}/${HTML_QUERY}: ${HTML_QUERY} is a field — bind it with eq: { "${HTML_QUERY}": … }`,
@@ -1218,6 +1221,7 @@ export type SearchEntryWireFilter = {
   in?: Record<string, unknown>;
   range?: Record<string, unknown>;
   matches?: string;
+  prefix?: boolean;
   near?: Record<string, unknown>;
 };
 
@@ -1256,6 +1260,8 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
         );
     } else if (key === 'matches') {
       out.matches = value as string;
+    } else if (key === 'prefix') {
+      out.prefix = value as boolean;
     } else {
       throw new Error(
         `cannot translate filter member "${key}" to the entry wire grammar`,
