@@ -172,7 +172,8 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
             var(--pretui-seg-h, calc(1.5rem + 2 * var(--pretui-seg-inset))) -
               2 * var(--pretui-seg-inset)
           );
-          padding: 0 var(--boxel-sp-sm);
+          /* --pretui-seg-px: opt-in knob for a segment's side padding */
+          padding: 0 var(--pretui-seg-px, var(--boxel-sp-sm));
           border-radius: var(--pretui-seg-radius);
           font-size: var(--boxel-ui-label-font-size);
           font-weight: var(--boxel-ui-label-font-weight);
@@ -236,6 +237,17 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           overflow: hidden;
           visibility: hidden;
           font-weight: var(--pretui-seg-active-weight);
+        }
+        /* coarse pointers get a real hit target without moving the fine one;
+           a control sized by its knobs keeps that size */
+        @media (any-pointer: coarse) {
+          .pretui-seg-item {
+            height: calc(
+              var(--pretui-seg-h, calc(2.125rem + 2 * var(--pretui-seg-inset))) -
+                2 * var(--pretui-seg-inset)
+            );
+            padding: 0 var(--pretui-seg-px, var(--boxel-sp));
+          }
         }
         @media (prefers-reduced-motion: reduce) {
           .pretui-seg-item {

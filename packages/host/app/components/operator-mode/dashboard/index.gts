@@ -1023,7 +1023,9 @@ export default class Dashboard extends Component<Signature> {
       /* The rail matches the page, and the selected pill is white on black.
          SegmentedControl has no tone arg, so this sets the tokens it reads. */
       .scope-filter {
+        /* Both knobs set, so a touch screen keeps this size too. */
         --pretui-seg-h: var(--dashboard-head-control-height);
+        --pretui-seg-px: var(--boxel-sp-sm);
         --inset: var(--boxel-800);
         --border: var(--boxel-light-10);
         --border-strong: var(--boxel-light-25);

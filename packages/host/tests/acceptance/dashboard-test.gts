@@ -3316,6 +3316,40 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.dom('[data-test-get-started-dismissed]').doesNotExist();
         assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          onboardingDismissed: true,
+        });
+        await settled();
+
+        assert
+          .dom('[data-test-get-started-dismissed]')
+          .doesNotExist('a dismissal made elsewhere brings no note here');
+      });
+
+      test('a dismissal from another device hides the open steps and the button', async function (assert) {
+        await visitAsNewUser();
+        await openSteps();
+        assert.dom(GET_STARTED).exists();
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          onboardingDismissed: true,
+        });
+        await settled();
+
+        assert.dom(GET_STARTED).doesNotExist();
+        assert.dom(BUTTON).doesNotExist();
+        assert.dom('[data-test-get-started-dismissed]').doesNotExist();
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          onboardingDismissed: false,
+        });
+        await settled();
+
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+        assert
+          .dom(GET_STARTED)
+          .doesNotExist('an undo made elsewhere leaves the steps closed');
       });
 
       test('once dismissed, neither the steps nor the button show on open', async function (assert) {

@@ -44,6 +44,21 @@ interface Step {
   done: boolean;
 }
 
+// How many times the value it's given has changed. Untracked, so reading it
+// from a getter is safe: the getter tracks the value itself.
+class ChangeCounter<T> {
+  private seen: { value: T } | undefined;
+  private changes = 0;
+
+  count(value: T) {
+    if (!this.seen || this.seen.value !== value) {
+      this.seen = { value };
+      this.changes++;
+    }
+    return this.changes;
+  }
+}
+
 // What the page's own Get started button needs, yielded to the block that
 // renders the page's header.
 export interface GetStartedToggle {
@@ -80,11 +95,15 @@ export default class GetStarted extends Component<Signature> {
   @service declare private realmServer: RealmServerService;
   @service declare private recentCardsService: RecentCardsService;
 
-  @tracked private isOpen = false;
+  // The open list and the dismissed note each hold only for the dismissal
+  // they were shown under, so a dismissal or an undo from another tab or
+  // device closes them rather than leaving them to come back later.
+  @tracked private openedIn: number | undefined;
   // The icon button folds the open list to its progress line.
   @tracked private isExpanded = true;
   // Just dismissed: a note stands in for the list, with Undo.
-  @tracked private isJustDismissed = false;
+  @tracked private dismissedIn: number | undefined;
+  private dismissalChanges = new ChangeCounter<boolean>();
   // Dismiss or Undo held focus and is gone, so the control that
   // replaces it takes it.
   private focusNext: 'undo' | 'dismiss' | undefined;
@@ -178,9 +197,18 @@ export default class GetStarted extends Component<Signature> {
     return Boolean(this.matrixService.dashboardState.onboardingDismissed);
   }
 
+  // Counts the changes to the stored dismissal, from this tab or any other.
+  private get dismissalEpoch() {
+    return this.dismissalChanges.count(this.isDismissed);
+  }
+
+  private get isOpen() {
+    return this.openedIn === this.dismissalEpoch;
+  }
+
   // Opening from the header always shows the steps.
   @action private toggle() {
-    this.isOpen = !this.isOpen;
+    this.openedIn = this.isOpen ? undefined : this.dismissalEpoch;
     this.isExpanded = true;
   }
 
@@ -204,10 +232,8 @@ export default class GetStarted extends Component<Signature> {
     return this.isLoaded && !this.isDismissed && this.nextStep === undefined;
   }
 
-  // Only while the dismissal stands, so an undo from another tab or device
-  // doesn't leave the note beside the restored button.
   private get showsDismissedNote() {
-    return this.isJustDismissed && this.isDismissed;
+    return this.dismissedIn === this.dismissalEpoch;
   }
 
   private get toggleState(): GetStartedToggle {
@@ -249,8 +275,14 @@ export default class GetStarted extends Component<Signature> {
 
   private focusIfNext = modifier(
     (element: HTMLElement, [control]: ['undo' | 'dismiss']) => {
-      if (this.focusNext === control) {
-        this.focusNext = undefined;
+      if (this.focusNext !== control) {
+        return;
+      }
+      this.focusNext = undefined;
+      // Only when the focus went with the control this replaces, not
+      // after the user moved it elsewhere while the write was out.
+      let { activeElement, body } = element.ownerDocument;
+      if (!activeElement || activeElement === body) {
         element.focus();
       }
     },
@@ -262,16 +294,17 @@ export default class GetStarted extends Component<Signature> {
       return;
     }
     this.focusNext = 'undo';
-    this.isOpen = false;
-    this.isJustDismissed = true;
+    this.openedIn = undefined;
+    this.dismissedIn = this.dismissalEpoch;
   });
 
-  // Opened before the write, so the button comes back already open rather
-  // than in its closed look for the moment the write takes.
+  // Opened, for the change the write makes, before the write, so the
+  // button comes back already open rather than in its closed look for the
+  // moment the write takes.
   private undoDismissTask = dropTask(async () => {
     this.focusNext = 'dismiss';
     this.isExpanded = true;
-    this.isOpen = true;
+    this.openedIn = this.dismissalEpoch + 1;
     try {
       await this.matrixService.updateDashboardState({
         onboardingDismissed: false,
@@ -279,10 +312,16 @@ export default class GetStarted extends Component<Signature> {
     } catch (error) {
       log.warn(`undoing the dismissal of Get started failed: ${error}`);
       this.focusNext = undefined;
-      this.isOpen = false;
+      this.openedIn = undefined;
       return;
     }
-    this.isJustDismissed = false;
+    // The list won't render if the write was dropped with its session or
+    // every step got done meanwhile, so nothing later opens it or takes the
+    // focus.
+    if (!this.isAvailable) {
+      this.focusNext = undefined;
+      this.openedIn = undefined;
+    }
   });
 
   @action private async openFirstWorkspace() {
