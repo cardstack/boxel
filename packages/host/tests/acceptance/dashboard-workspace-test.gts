@@ -303,12 +303,17 @@ module('Acceptance | dashboard workspace', function (hooks) {
       // Holds the fetch open, so the counts in the meantime can be seen.
       let realmServerService = getService('realm-server') as any;
       let originalFetch = realmServerService.fetchRealmIndexCounts;
-      realmServerService.fetchRealmIndexCounts = () => new Promise(() => {});
+      let fetches = 0;
+      realmServerService.fetchRealmIndexCounts = () => {
+        fetches++;
+        return new Promise(() => {});
+      };
 
       try {
         (getService('realm') as any).markIndexCountsStale(realmAURL);
         await settled();
 
+        assert.strictEqual(fetches, 1, 'the counts are being fetched again');
         assert
           .dom(deskStat('Cards'))
           .hasText('Cards 12', 'the previous counts stay while fetching');
