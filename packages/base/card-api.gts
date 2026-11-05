@@ -3817,17 +3817,6 @@ export class MaybeBase64Field extends StringField {
   };
 }
 
-// Short text a card offers to type-ahead search: a name, a title, a synonym.
-// The index joins a card's TypeAheadField values (a containsMany gives one per
-// item) into its `_typeahead` search-doc key, and the `typeahead` filter
-// matches each typed word as a word prefix against that text alone, on its
-// own index, so a long body never matches or slows a suggestion. Keep it to
-// what a person would type to find the card.
-export class TypeAheadField extends StringField {
-  static displayName = 'Type-ahead';
-  static isTypeAheadField = true;
-}
-
 export class TextAreaField extends StringField {
   static displayName = 'TextArea';
   static icon = TextAreaIcon;
@@ -4308,10 +4297,36 @@ export class ImageDef extends FileDef {
   };
 }
 
+// Numbers that say how much a card matters, on paths every card shares, so a
+// search across types can rank by them: suggestions by `cardInfo.metrics.score`,
+// say, whatever kind of card each one is. Each type fills in what it knows.
+export class CardMetricsField extends FieldDef {
+  static displayName = 'Card Metrics';
+  // The card's overall weight for ranking against other cards (higher is
+  // more prominent); a type decides how to derive it.
+  @field score = contains(NumberField);
+  // How many things the card gathers: talks a person appears in, cards in a
+  // collection, members of a group.
+  @field count = contains(NumberField);
+  // How many times it has been viewed or played.
+  @field views = contains(NumberField);
+}
+
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
   @field name = contains(StringField);
   @field summary = contains(StringField);
+  // Other names the card goes by: synonyms, abbreviations, former or
+  // translated names (Dublin Core's `alternative`, SKOS's `altLabel`). Type-
+  // ahead suggests the card for any of them as well as for its title: the
+  // index joins them into the search doc's `_typeahead` key.
+  @field alternativeNames = containsMany(StringField);
+  // Subject terms the card is about (Dublin Core's `subject`), for grouping
+  // and facet counts (`facets: [{ by: 'cardInfo.keywords' }]`).
+  @field keywords = containsMany(StringField);
+  // How much the card matters, for ranking across types (see
+  // CardMetricsField).
+  @field metrics = contains(CardMetricsField);
   @field cardThumbnail = linksTo(() => ImageDef);
   @field cardThumbnailURL = contains(MaybeBase64Field);
   @field theme = linksTo(() => Theme);

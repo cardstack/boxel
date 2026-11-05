@@ -288,10 +288,12 @@ export default class RenderMetaRoute extends Route<Model> {
     // and A-Z sort both row types on a single key. For a card it mirrors the
     // `cardTitle` computed already present in the search doc.
     searchDoc._title = searchDoc.cardTitle;
-    // `_typeahead` is the card's type-ahead text: its TypeAheadField values,
-    // one per line, which the `typeahead` filter matches on an index of its
-    // own (see TypeAheadField in card-api). Absent when the card has none.
-    let typeAheadText = typeAheadTextOf(api, Klass, searchDoc);
+    // `_typeahead` is the card's type-ahead text: its title and its
+    // `cardInfo.alternativeNames`, one per line, which the `typeahead` filter
+    // matches on an index of its own. Every card has a title, so every card
+    // can be suggested; a type extends what it is suggested by through the
+    // card info's alternative names (or a CardInfoField subclass).
+    let typeAheadText = typeAheadTextOf(searchDoc);
     if (typeAheadText) {
       searchDoc._typeahead = typeAheadText;
     }
@@ -582,26 +584,16 @@ function normalizeDisplayName(current: typeof BaseDef): string {
   return name;
 }
 
-// The values of a card's top-level TypeAheadField fields, as its search doc
-// holds them (a string, or a list for a containsMany), one per line.
-function typeAheadTextOf(
-  api: { getFields: (card: any, opts?: any) => Record<string, any> },
-  Klass: unknown,
-  searchDoc: Record<string, any>,
-): string | undefined {
-  let lines: string[] = [];
-  for (let [name, field] of Object.entries(
-    api.getFields(Klass, { includeComputeds: true }),
-  )) {
-    if (!(field?.card as { isTypeAheadField?: boolean })?.isTypeAheadField) {
-      continue;
-    }
-    let value = searchDoc[name];
-    for (let item of Array.isArray(value) ? value : [value]) {
-      if (typeof item === 'string' && item.trim() !== '') {
-        lines.push(item.trim());
-      }
-    }
-  }
-  return lines.length > 0 ? lines.join('\n') : undefined;
+// A card's title and its card info's alternative names, as its search doc
+// holds them, one per line; undefined when there are none.
+function typeAheadTextOf(searchDoc: Record<string, any>): string | undefined {
+  let alternatives = searchDoc.cardInfo?.alternativeNames;
+  let lines = [
+    searchDoc.cardTitle,
+    ...(Array.isArray(alternatives) ? alternatives : []),
+  ]
+    .filter((line): line is string => typeof line === 'string')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  return lines.length > 0 ? [...new Set(lines)].join('\n') : undefined;
 }

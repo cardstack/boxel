@@ -1286,6 +1286,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                 summary: null,
                 cardThumbnailURL: null,
                 notes: null,
+                alternativeNames: [],
+                keywords: [],
+                metrics: { score: null, count: null, views: null },
               },
             },
             relationships: {
@@ -1389,6 +1392,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                 summary: null,
                 cardThumbnailURL: null,
                 notes: null,
+                alternativeNames: [],
+                keywords: [],
+                metrics: { score: null, count: null, views: null },
               },
             },
             relationships: {

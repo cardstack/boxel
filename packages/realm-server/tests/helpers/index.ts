@@ -3840,6 +3840,9 @@ export function createJWTForRealmURL({
 
 export const cardInfo = {
   notes: null,
+  alternativeNames: [],
+  keywords: [],
+  metrics: { score: null, count: null, views: null },
   name: null,
   summary: null,
   cardThumbnailURL: null,

@@ -65,6 +65,16 @@ module('Unit | ai-function-generation-test', function (hooks) {
           notes: { type: 'string' },
           cardThumbnailURL: { type: 'string' },
           name: { type: 'string' },
+          alternativeNames: { type: 'array', items: { type: 'string' } },
+          keywords: { type: 'array', items: { type: 'string' } },
+          metrics: {
+            type: 'object',
+            properties: {
+              score: { type: 'number' },
+              count: { type: 'number' },
+              views: { type: 'number' },
+            },
+          },
         },
         type: 'object',
       },

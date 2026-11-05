@@ -1,7 +1,7 @@
 // An index for the `typeahead` filter.
 //
-// A card's TypeAheadField values are stamped into its search doc's
-// `_typeahead` key, a few words such as a name, a title or a synonym. The
+// A card's title and its `cardInfo.alternativeNames` are stamped into its
+// search doc's `_typeahead` key: a few words such as a name or a synonym. The
 // `typeahead` filter matches every typed word as a word prefix of that text,
 // using an unstemmed ('simple') tsvector so a partial word is never stemmed
 // out of reach. The query engine's predicate is this exact expression,

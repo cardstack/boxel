@@ -2904,6 +2904,9 @@ module('Integration | card-basics', function (hooks) {
         origin: 'JFK',
         cardInfo: new CardInfoField({
           notes: null,
+          alternativeNames: [],
+          keywords: [],
+          metrics: { score: null, count: null, views: null },
           name: 'Smith Wedding Flight',
           summary: 'John, Jane + kids to LA for holiday wedding',
           cardThumbnailURL: null,

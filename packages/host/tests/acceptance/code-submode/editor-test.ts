@@ -764,6 +764,9 @@ module('Acceptance | code submode | editor tests', function (hooks) {
             summary: null,
             cardThumbnailURL: null,
             notes: null,
+            alternativeNames: [],
+            keywords: [],
+            metrics: { score: null, count: null, views: null },
           },
         },
         meta: {

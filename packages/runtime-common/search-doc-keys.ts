@@ -30,7 +30,7 @@ export const CARD_TYPE_KEY = '_cardType';
 // key too), not `eq: true`.
 export const CARD_INSTANCE_FILE_KEY = '_isCardInstanceFile';
 
-// The card's type-ahead text: the values of its `TypeAheadField` fields,
+// The card's type-ahead text: its title and `cardInfo.alternativeNames`,
 // one per line, matched by the `typeahead` filter against its own index.
 export const TYPE_AHEAD_KEY = '_typeahead';
 

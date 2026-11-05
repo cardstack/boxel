@@ -259,12 +259,12 @@ export interface MatchesFilter extends TypedFilter {
   prefix?: boolean;
 }
 
-// Type-ahead over the short text a card declares for it (its `TypeAheadField`
-// fields, stamped into the search doc's `_typeahead` key): every word of the
-// query is a prefix of some word of that text, in any order, ignoring case
-// and never stemmed. Unlike `matches` it never
-// reads a card's rendered markdown, so a long definition or transcript can't
-// match or slow it. A query with no letters or digits matches nothing.
+// Type-ahead over a card's short names: its title and its
+// `cardInfo.alternativeNames`, stamped into the search doc's `_typeahead` key.
+// Every word of the query is a prefix of some word of that text, in any order,
+// ignoring case and never stemmed. Unlike `matches` it never reads a card's
+// rendered markdown, so a long definition or transcript can't match or slow
+// it. A query with no letters or digits matches nothing.
 export interface TypeAheadFilter extends TypedFilter {
   typeahead: string;
 }

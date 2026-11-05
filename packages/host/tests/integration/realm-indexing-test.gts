@@ -1807,6 +1807,9 @@ module(`Integration | realm indexing`, function (hooks) {
           cardInfo: {
             summary: null,
             notes: null,
+            alternativeNames: [],
+            keywords: [],
+            metrics: { score: null, count: null, views: null },
             cardThumbnailURL: null,
             name: null,
           },

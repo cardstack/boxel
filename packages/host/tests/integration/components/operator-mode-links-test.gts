@@ -531,6 +531,9 @@ module('Integration | operator-mode | links', function (hooks) {
               summary: null,
               cardThumbnailURL: null,
               notes: null,
+              alternativeNames: [],
+              keywords: [],
+              metrics: { score: null, count: null, views: null },
             },
           },
           meta: {
