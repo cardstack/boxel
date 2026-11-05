@@ -1869,11 +1869,30 @@ export function definitionNotReady(
 // the predicate throws. A caller who may read the realm is told it as the 500
 // it is.
 //
+// A refusal over something not indexed yet keeps its status and its retry
+// hint and loses the rest: the detail of a definition's names its type, which
+// is the realm's module path and export name, and the id names a card. Such a
+// caller may be told to wait, not what they are waiting for.
+//
 // A refusal of any other kind passes through. Such a caller is refused, as
 // the target is resolved, every invocation the gate did not admit outright, a
 // write whose predicate is still to run included. So nothing past that point
 // is about a target they were not admitted to.
 export function refusalForNonReader(error: OperationError): OperationError {
+  if (error.code === 'target-not-indexed') {
+    let { entry, awaitingIndex, retryAfterSeconds } = error.meta ?? {};
+    return {
+      status: error.status,
+      code: error.code,
+      title: error.title,
+      detail: 'what this request needs is not indexed yet; retry shortly',
+      meta: {
+        ...(entry !== undefined ? { entry } : {}),
+        ...(awaitingIndex !== undefined ? { awaitingIndex } : {}),
+        ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+      },
+    };
+  }
   if (
     error.code !== 'target-not-found' &&
     error.code !== 'operation-not-permitted' &&

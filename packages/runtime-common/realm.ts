@@ -16228,10 +16228,16 @@ export class Realm {
           if (!isOperationFailure(err)) {
             throw err;
           }
+          // A definition the policy names that is not indexed yet is told to
+          // this caller, who may not read the realm, without naming it.
+          let error =
+            err.error.code === 'target-not-indexed'
+              ? refusalForNonReader(err.error)
+              : err.error;
           return createResponse({
-            body: JSON.stringify(errorsDocument(err.error), null, 2),
+            body: JSON.stringify(errorsDocument(error), null, 2),
             init: {
-              status: err.error.status,
+              status: error.status,
               headers: { 'content-type': SupportedMimeType.CardJson },
             },
             requestContext,

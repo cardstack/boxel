@@ -5,6 +5,7 @@ import { basename } from 'path';
 import {
   DEFINITION_RETRY_AFTER_SECONDS,
   definitionNotReady,
+  refusalForNonReader,
   dischargePendingDecision,
   erroredTargetRow,
   isDocumentResult,
@@ -1246,6 +1247,22 @@ module(basename(import.meta.filename), function () {
         await refusalFrom(() => runOperation(core, invoke(CARD, 'read'))),
         'a card target',
       );
+    });
+    test('a caller declined reads is told a definition that is not ready without the type it names', function (assert) {
+      let seen = refusalForNonReader(
+        definitionNotReady(`${REALM}person-1`, PERSON).error,
+      );
+      assert.strictEqual(seen.status, 503);
+      assert.strictEqual(seen.code, 'target-not-indexed');
+      assert.strictEqual(seen.id, undefined, 'the card is not named');
+      assert.false(
+        JSON.stringify(seen).includes(JSON.stringify(PERSON)),
+        'the type is not named',
+      );
+      assert.deepEqual(seen.meta, {
+        awaitingIndex: true,
+        retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+      });
     });
     // The card+json routes read through this dispatch. A read that resolves
     // no definition is the built-in one and serves the document whole, so a
