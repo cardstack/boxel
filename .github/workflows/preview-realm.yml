@@ -50,6 +50,21 @@ on:
       boxel-cli-version:
         type: string
         default: latest
+      paths:
+        description: |
+          Newline-separated files and directories, relative to the
+          repository root, to push in place of the whole repository. The
+          realm mirrors exactly these, so a path dropped from the list is
+          deleted from the realm. Empty pushes the whole repository.
+        type: string
+        default: ""
+      fail-on-deploy-error:
+        description: |
+          Whether a failed create, push or publish fails this job. When
+          false the failure is still reported in the sticky comment, and
+          the check stays green.
+        type: boolean
+        default: true
       publish-timeout-ms:
         description: |
           Total readiness-poll budget for `boxel realm publish`. Covers
@@ -112,6 +127,8 @@ jobs:
             --realm-server-url "${REALM_SERVER}"
 
       - name: Create preview realm
+        id: create
+        continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
           DISPLAY_NAME: "${{ inputs.display-name-prefix }} #${{ github.event.pull_request.number }} Preview"
@@ -136,16 +153,44 @@ jobs:
           fi
 
       - name: Push content to preview realm
+        id: push
+        if: steps.create.outcome == 'success'
+        continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           REALM_SERVER: ${{ inputs.realm-server-url }}
           MATRIX_USERNAME: ${{ secrets.matrix-username }}
           REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
+          PUSH_PATHS: ${{ inputs.paths }}
         run: |
           SOURCE_REALM_URL="${REALM_SERVER%/}/${MATRIX_USERNAME}/${REALM_ENDPOINT}/"
+          SOURCE_DIR=.
+          if [ -n "${PUSH_PATHS//[[:space:]]/}" ]; then
+            SOURCE_DIR="${RUNNER_TEMP}/preview-content"
+            mkdir -p "$SOURCE_DIR"
+            while IFS= read -r path; do
+              [ -z "$path" ] && continue
+              case "$path" in
+                /* | .. | ../* | */../* | */..)
+                  echo "::error title=Preview realm::Path '${path}' is not inside the repository."
+                  exit 1
+                  ;;
+              esac
+              if [ ! -e "$path" ]; then
+                echo "::warning title=Preview realm::Path '${path}' does not exist, skipping it."
+                continue
+              fi
+              mkdir -p "${SOURCE_DIR}/$(dirname "$path")"
+              cp -R "$path" "${SOURCE_DIR}/$(dirname "$path")/"
+            done <<< "$PUSH_PATHS"
+            echo "Staged $(find "$SOURCE_DIR" -type f | wc -l | tr -d ' ') file(s) from the listed paths"
+          fi
           echo "Pushing content to ${SOURCE_REALM_URL}"
-          boxel realm push . "${SOURCE_REALM_URL}" --delete
+          boxel realm push "$SOURCE_DIR" "${SOURCE_REALM_URL}" --delete
 
       - name: Publish preview realm
+        id: publish
+        if: steps.push.outcome == 'success'
+        continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           REALM_SERVER: ${{ inputs.realm-server-url }}
           MATRIX_USERNAME: ${{ secrets.matrix-username }}
@@ -178,7 +223,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Comment on PR with preview URL
-        if: success()
+        if: steps.publish.outcome == 'success'
         uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
         with:
           header: ${{ inputs.sticky-header }}
@@ -190,7 +235,7 @@ jobs:
             _Updated at ${{ steps.stamp.outputs.now }} UTC for commit `${{ steps.stamp.outputs.short_sha }}`_
 
       - name: Report failure on PR
-        if: failure()
+        if: ${{ !cancelled() && steps.publish.outcome != 'success' }}
         uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
         with:
           header: ${{ inputs.sticky-header }}
