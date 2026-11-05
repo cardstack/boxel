@@ -170,7 +170,7 @@ let { data: suggestions } = await indexer.search({
 });
 ```
 
-Words are indexed by their English stems, so a word whose stem is shorter than what has been typed (`learni` on the way to `learning`, indexed as `learn`) is matched by dropping up to two letters from the end of the unfinished word. A query on a type whose rendered markdown is short (a title, a name, a byline) stays fast and ranks by relevance well. Matching across long documents such as transcripts finds every mention, so anchor type-ahead on the types users pick from. A one-letter prefix scans a large part of the index, so wait for two or three letters before querying.
+Words are indexed by their English stems, so a word whose stem is shorter than what has been typed (`learni` on the way to `learning`, indexed as `learn`) is matched by dropping up to two letters from the end of the unfinished word. A query on a type whose rendered markdown is short (a title, a name, a byline) stays fast and ranks by relevance well. Matching across long documents such as transcripts finds every mention, so anchor type-ahead on the types users pick from. An unfinished word shorter than three letters matches as a whole word, because a one- or two-letter prefix matches a large share of the index.
 
 ### Vector search (`near`)
 

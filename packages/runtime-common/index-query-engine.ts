@@ -2335,8 +2335,12 @@ export class IndexQueryEngine {
         return undefined;
       }
       let [key, value] = entries[0];
+      // A trigram index needs three characters to narrow anything; a shorter
+      // term matches most titles, and the general compilation serves it
+      // better than a union of nearly every row.
       if (
         typeof value !== 'string' ||
+        [...value].length < 3 ||
         !(TRIGRAM_INDEXED_TITLE_KEYS as readonly string[]).includes(key)
       ) {
         return undefined;
@@ -3333,11 +3337,16 @@ const PRERENDERED_HTML_SELECTS = [
 // at the cost of the odd extra match on a short word ("lear"). The partial
 // word is letters and digits only, so it carries no tsquery syntax. A partial
 // word right after a websearch `-` is negated, as a finished one would be.
+const MIN_PREFIX_LETTERS = 3;
+
 function matchTsQuery(term: MatchTerm): Expression {
   let { words, partial } = term.prefix
     ? splitTypeAheadQuery(term.matches)
     : { words: term.matches, partial: undefined };
-  if (partial === undefined) {
+  // A one- or two-letter prefix is a prefix of a large share of the index's
+  // lexemes, so it reads most of the index for a result that says little;
+  // such a word matches whole until a third letter is typed.
+  if (partial === undefined || [...partial].length < MIN_PREFIX_LETTERS) {
     return [`websearch_to_tsquery('english',`, param(term.matches), `)`];
   }
   let negated = /(^|\s)-$/.test(words);

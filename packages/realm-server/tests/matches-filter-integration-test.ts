@@ -455,6 +455,15 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('an unfinished word shorter than three letters matches whole', async function (assert) {
+      assert.deepEqual(await prefixUrls('pu'), [], '"pu" is not a prefix yet');
+      assert.deepEqual(
+        await prefixUrls('pup'),
+        [`${testRealmURL}mango.json`],
+        '"pup" is',
+      );
+    });
+
     test('prefix finds a word whose stem is shorter than what was typed', async function (assert) {
       // "plays" and "play" index as the lexeme "play", which "playi" (on the
       // way to "playing") is not a prefix of.
@@ -472,14 +481,14 @@ module(basename(import.meta.filename), function () {
 
     test('prefix matches the finished words as whole words, all of them', async function (assert) {
       assert.deepEqual(
-        await prefixUrls('friendly pu'),
+        await prefixUrls('friendly pup'),
         [`${testRealmURL}mango.json`],
         'a finished word and a partial one, both present',
       );
       assert.deepEqual(
-        await prefixUrls('calm pu'),
+        await prefixUrls('calm pup'),
         [],
-        'the finished word "calm" and the partial "pu" are never in one row',
+        'the finished word "calm" and the partial "pup" are never in one row',
       );
       assert.deepEqual(
         await prefixUrls('dog -painterl'),
