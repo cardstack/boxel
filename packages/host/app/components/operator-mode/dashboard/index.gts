@@ -480,7 +480,6 @@ export default class Dashboard extends Component<Signature> {
     id: 'favorites',
     label: 'Favorites',
     icon: Star,
-    count: () => this.favoritesCount,
     flyout: realmListFlyout(
       'Favorites',
       () => this.favoriteRealmIdentifiers,
@@ -488,8 +487,6 @@ export default class Dashboard extends Component<Signature> {
     ),
   };
 
-  // No count: the rail counts a section only as its heading does, and this
-  // one's counts belong to its groups.
   private workspacesSection: DashboardSection = {
     id: 'workspaces',
     label: 'Workspaces',
@@ -518,7 +515,6 @@ export default class Dashboard extends Component<Signature> {
     id: 'catalogs',
     label: 'Catalogs',
     icon: Store,
-    count: () => this.renderedCatalogCount,
     flyout: realmListFlyout(
       'Catalogs',
       () => this.filteredCatalogRealmIdentifiers,
