@@ -120,6 +120,57 @@ module('Pretui | components/diff-block', function (hooks) {
     );
   });
 
+  // `count` rows, the `changed` ones upper-cased: one removal and one
+  // addition each
+  function rewrite(count: number, changed: (i: number) => boolean) {
+    const rows = Array.from({ length: count }, (_u, i) => `row ${i}`);
+    return [rows.join('\n') + '\n', rows.map((row, i) => (changed(i) ? row.toUpperCase() : row)).join('\n') + '\n'] as const;
+  }
+  function tally(diff: DiffLine[]) {
+    return {
+      removed: diff.filter((l) => l.op === 'del').length,
+      added: diff.filter((l) => l.op === 'add').length,
+      kept: diff.filter((l) => !l.op && !l.skip).length,
+    };
+  }
+
+  test('lineDiff still shows only the changed lines at 2,000 changes in a large file', function (assert) {
+    // 1,000 rows changed of 2,998: 2,000 changes, too many cells for a table
+    const [before, after] = rewrite(2998, (i) => i % 3 === 0);
+    assert.deepEqual(tally(lineDiff(before, after, { context: 1e9 })), { removed: 1000, added: 1000, kept: 1998 });
+  });
+
+  test('lineDiff shows a large file with more than 2,000 changes as removed, then added', function (assert) {
+    // 1,001 rows changed of 3,001: 2,002 changes, too many cells for a table
+    const [before, after] = rewrite(3001, (i) => i % 3 === 0);
+    const ops = lineDiff(before, after, { context: 0 }).map((l) => l.op);
+    assert.strictEqual(ops.length, 6002, 'every line is removed and added');
+    assert.strictEqual(ops.lastIndexOf('del'), 3000, 'all the removals come first');
+  });
+
+  test('lineDiff shows only the changed lines of a medium file with more than 2,000 changes', function (assert) {
+    // 1,333 rows changed of 1,999: 2,666 changes, in a table of under 4M cells
+    const [before, after] = rewrite(1999, (i) => i % 3 !== 1);
+    assert.deepEqual(tally(lineDiff(before, after, { context: 1e9 })), { removed: 1333, added: 1333, kept: 666 });
+  });
+
+  test('lineDiff shows the removals of a run before the lines that replace them', function (assert) {
+    assert.deepEqual(
+      lineDiff('one\ntwo\nkeep\nthree\n', 'ONE\nTWO\nNEW\nkeep\nTHREE\nFOUR\n').map((l) => [l.op ?? ' ', l.text]),
+      [
+        ['del', 'one'],
+        ['del', 'two'],
+        ['add', 'ONE'],
+        ['add', 'TWO'],
+        ['add', 'NEW'],
+        [' ', 'keep'],
+        ['del', 'three'],
+        ['add', 'THREE'],
+        ['add', 'FOUR'],
+      ],
+    );
+  });
+
   test('the number gutter is as wide as the widest line number', async function (assert) {
     const numbered: DiffLine[] = [
       { text: 'kept', n: 999 },
