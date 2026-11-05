@@ -12,7 +12,7 @@ You do not need to know React. Where a React name survives it is because it is t
 3. [One thing in two places](#3-one-thing-in-two-places)
 4. [A whole scene](#4-a-whole-scene)
 5. [A point on the page](#5-a-point-on-the-page)
-6. [Three rules Glimmer adds](#6-three-rules-glimmer-adds)
+6. [Four rules Glimmer adds](#6-four-rules-glimmer-adds)
 7. [Testing it](#7-testing-it)
 8. [Reduced motion](#8-reduced-motion)
 
@@ -202,7 +202,7 @@ in an outlet, and they are separate regions precisely so their changesets stay a
 
 ---
 
-## 6. Three rules Glimmer adds
+## 6. Four rules Glimmer adds
 
 **Motion owns a motion element's inline style.** In React the `style` prop belongs to Motion, which
 merges your CSS with the transforms it writes. In Glimmer a bound `style="…"` attribute is yours,
@@ -258,6 +258,29 @@ parent's scale.
       instead of being rubber-sheeted by the box around it }}
   <span {{motion layout=true}}>{{@title}}</span>
 </article>
+```
+
+**A layout animation needs something above it that snapshots.** React measures each motion component
+as it re-renders, before the DOM changes. Glimmer has no such hook, so the box a layout animation
+starts from is measured by a render detector at the start of each render pass, and only
+`<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` and `<Choreo>` carry one. A sorted or filtered list of
+`layout=true` rows with none of them above it jumps, and so does a `layoutId` hand-off; in development
+the first such element logs a warning with the element attached. `<Presence>` measures only on a pass
+where its `@items` change, so a row inside one that grows for any other reason still needs a
+`<LayoutGroup>`. Wrap the `{{#each}}`, not each row: Glimmer moves a keyed row's DOM before it
+re-renders anything inside the row, so a group inside the row measures too late. Key its rows by a
+stable id. With `key='@index'` Glimmer keeps every element where it is and swaps its content, so
+nothing moves at all; a key built from a position, such as `${index}-${id}`, changes when the rows
+before it shift, and a row whose key changed is a new element with no earlier box to animate from.
+
+```gts
+<LayoutGroup>
+  <ul>
+    {{#each this.sorted key='id' as |row|}}
+      <li {{motion layout=true}}>{{row.name}}</li>
+    {{/each}}
+  </ul>
+</LayoutGroup>
 ```
 
 ---

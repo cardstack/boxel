@@ -7,6 +7,7 @@ A horizontal row of status chips that filter a list, each optionally carrying a 
 ```
 @options: { value, label, count?, hue? }[]
 @value?, @defaultValue?, @onValueChange?(value: string)
+@display? 'all' (default) | 'few', @visibleCount? (3), @moreLabel? ('more filters')
 ```
 
 Hybrid controlled/uncontrolled, seeded from `@defaultValue ?? options[0].value` — so a FilterChips row always has exactly one selection and can never be in a "nothing selected" state.
@@ -14,6 +15,8 @@ Hybrid controlled/uncontrolled, seeded from `@defaultValue ?? options[0].value` 
 **It is single-select despite looking like a multi-select.** Filter chips in most products toggle independently; these behave like a **SegmentedControl** that happens to be chip-shaped. That is a real constraint to know before you reach for it: if a user needs "Open _and_ Blocked", this component cannot express it, and `aria-pressed` on the chips (see below) actively suggests it can.
 
 **`count` and `hue` are per-option data.** The count rides a tabular-numeral dress shared with **FilterList**; the hue feeds the same Law-2 derivation **Chip** uses, so a filter chip and a status chip for the same value can be given the same colour.
+
+**`@display='few'`** keeps the first `@visibleCount` chips plus any selected one on a single line and puts the rest behind a `+N` trigger that opens a **Menu** (radio rows, or checkbox rows with `@multiple`). The trigger's name is `+N` followed by `@moreLabel`, so it starts with its visible text. The menu rows carry labels only: **Menu** has no slot for a chip's hue dot or count.
 
 Adopted from Beautiful UI: status chips that filter live data.
 
@@ -54,5 +57,7 @@ Remaining gaps:
 Per-option `hue` feeding **Chip**'s Law-2 derivation (`--pretui-chip-mix`, `--pretui-ink-mix`, mixed against `--card`, hairline against `--border`), plus `--foreground`, `--muted-foreground`, `--hover` for resting and hover states, the count's tabular-numeral dress, and `--text-ui-xs`/`--text-ui-md`.
 
 Because the selected chip and the unselected ones differ by fill strength within the same hue, a theme that raises `--pretui-chip-mix` narrows that gap — the selected state can become hard to pick out in a row of tinted chips. Check the selected chip against its unselected neighbors, not against the page.
+
+Per-instance knob: `--pretui-filterchip-h` (chip height, `1.625rem` by default); the corner is half of it, so a taller chip stays a pill.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

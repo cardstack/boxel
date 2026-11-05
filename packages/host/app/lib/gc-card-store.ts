@@ -489,6 +489,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return this.#virtualNetwork.realmForReference(id);
   }
 
+  openableURL(id: string): string {
+    return this.#virtualNetwork.keyForIdentifier(id);
+  }
+
   // Normalize an id to the store's bucket-key form. Mirrors `store.ts`'s
   // `asURL` exactly (locals as-is; remotes folded via `toRealURLHref`) so the
   // buckets key the same way the StoreService does — an RRI card id, its

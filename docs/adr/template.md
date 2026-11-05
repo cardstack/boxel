@@ -15,11 +15,6 @@ tell whether the rest is relevant.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. First rule
 
 Each requirement in its own sentence, with a BCP 14 key word.
@@ -48,8 +43,8 @@ Required for retroactive ADRs.
 
 ## 7. Remediation
 
-Required while proposed. Each known gap: the file (and symbol, when the gap is
-narrower) where the code does not yet meet the Decision, and the requirement it
-breaks. Write "No known gaps." when there are none. Delete on acceptance.
+Required while proposed. Start the remediation file from
+[`remediation/template.md`](remediation/template.md). Delete this section and
+the file on acceptance.
 
-- `packages/example/old-path.ts` (`legacyLoad`) breaks §1.1.
+Known gaps are listed in [remediation/NNN.md](remediation/NNN.md).

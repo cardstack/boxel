@@ -17,8 +17,46 @@
 // each key is sent to for the first time. An operation's label never stands
 // in for a host. Unticking an operation leaves it unapproved.
 //
+// The user chooses, once for the batch, where the approved requests may run:
+// in the card's scheduled pipelines and also when a card is opened, in the
+// browser, the AI assistant or the CLI (offered first), or only in the
+// pipelines. Interactive use shows what it allows, once, for the user's own
+// keys and for a workspace's share, and asks for the daily budget of a share approved
+// for interactive use for the first time, linking to the share's
+// `share-limits` page, in a new tab, for its other limits: each person's rate
+// and the share's monthly budget. That page changes the daily budget too, so
+// coming back to this window re-reads the budget in force for a field the
+// user hasn't typed in. An operation approved for pipelines
+// only is in the batch only for interactive use. Where the choice starts is
+// `initialUse`'s: on interactive use, unless the batch was last approved for
+// pipelines only, or the CLI opened the page without `--interactive`. An
+// operation last approved for interactive use is marked, and
+// approving it for pipelines only says that it then stops running when a card
+// is opened.
+//
+// Who may make the calls is not chosen here. Where the realm's policy opens an
+// operation to people who aren't signed in (`openToAnonymous`), interactive
+// use of a share whose key allows them serves them too: each group it sends
+// to says "including people who aren't signed in", and the confirmation adds
+// a line for it, with the key's anonymous cap. A share whose key doesn't allow
+// them is said to serve signed-in people only. The anonymous cap is the
+// key's, counted across every realm it is shared into, and the share's daily
+// budget bounds their calls here too.
+//
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
-// starts chosen, and the page goes back to the key page when done.
+// starts chosen, and the page goes back to the key page when done. Opened for
+// one of the user's shares (`#share=<id>&then=keys`), that share starts
+// chosen for each slot the realm's key fills, and only the operations that
+// send the realm's key start ticked.
+//
+// Opened by `boxel keys approve` (`#cli_port=…&cli_state=…`), for an approval
+// that grants a key a destination it has none for, the operations the CLI
+// listed (`#operations=<name>,…`) start ticked and the others unticked, the
+// choice starts on interactive use for `--interactive` (`#interactive=1`), and
+// the page tells the CLI's listener when the approval is made, or that it was
+// cancelled when the user cancels or closes the window first (`KeysWindow`).
+// It hands over nothing but that: the CLI reads the approval from the realm
+// server.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -28,6 +66,7 @@ import { trackedObject } from '@ember/reactive/collections';
 import {
   approvalBatch,
   approveOperations,
+  shareUsage,
   windowContext,
   type ApprovalBatch,
   type BatchOperation,
@@ -38,20 +77,36 @@ import Button from '../../components/button.gts';
 import Checkbox from '../../components/checkbox.gts';
 import Warning from '../../components/icons/warning.gts';
 import FieldContainer from '../../components/field-container.gts';
+import Globe from '../../components/icons/globe.gts';
+import BoxelInput from '../../components/input.gts';
 import KeyRound from '../../components/icons/key-round.gts';
+import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
+  anonymousConfirmation,
   approvalOf,
+  approvalScope,
+  approvedForOpenCards,
+  batchFor,
+  confirmationsFor,
+  firstInteractiveShares,
   initialChoice,
+  initialUse,
+  INTERACTIVE_CONFIRMATION,
   newGrants,
   operationKey,
+  parseDailyBudget,
   placementPhrase,
+  remainingFor,
   requestChanges,
   requestFields,
+  sharesForVisitors,
   slotChoices,
+  type ApprovalUse,
   type NewGrant,
   type SlotChoice,
 } from './approval-batch.ts';
@@ -68,13 +123,23 @@ import EditPage from './edit-page.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { contextRequest, openedFor } from './opened-for.ts';
+import RadioChoices, { type RadioChoice } from './radio-choices.gts';
+import { cliOpenedFor, contextRequest, openedFor } from './opened-for.ts';
 
 type State =
   | { name: 'loading' }
   | { name: 'load-failed'; failure: LoadFailure }
   | { name: 'choosing'; batch: ApprovalBatch; context: WindowContext }
-  | { name: 'done'; count: number; card: string; realm: string };
+  | {
+      name: 'done';
+      count: number;
+      card: string;
+      realm: string;
+      interactive: boolean;
+      // Whether the approval serves people who aren't signed in too.
+      anonymous?: boolean;
+    };
+type ChoosingState = Extract<State, { name: 'choosing' }>;
 
 interface ApproveArgs {
   api: KeysWindowAPI;
@@ -108,13 +173,22 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           <strong>{{this.done.realm}}</strong>
           needs your approval.
         {{else}}
-          <strong data-test-approve-done-count>{{this.done.count}}</strong>
-          {{if (eq this.done.count 1) 'request' 'requests'}}
-          on
           <strong>{{this.done.card}}</strong>
           in
           <strong>{{this.done.realm}}</strong>
-          can use your key in scheduled pipelines.
+          can make
+          <strong data-test-approve-done-count>{{this.done.count}}</strong>
+          {{if (eq this.done.count 1) 'call' 'calls'}}
+          with your key
+          {{#if this.done.anonymous}}
+            on its schedule and whenever anyone opens it,
+            <strong data-test-approve-done-anonymous>including people who aren’t
+              signed in</strong>, without asking you again.
+          {{else if this.done.interactive}}
+            on its schedule and whenever it’s opened, without asking you again.
+          {{else}}
+            on its schedule, without asking you again.
+          {{/if}}
         {{/if}}
       </DonePage>
     {{else if this.choosing}}
@@ -122,14 +196,23 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         <EditPage @heading={{this.heading}} data-test-approve>
           <:intro>
             {{#if @review}}
-              The card changed what it sends in these requests since you
-              approved them. Nothing is sent until you approve them again.
+              This card changed these calls since you approved them. Boxel won’t
+              make them until you approve them again.
             {{else}}
-              Approve once for every request this card makes with your key here.
-              Each is used only as you see it below: if the card changes one, it
-              asks you again.
+              This card calls another service with your key.
+              {{#if (eq this.scope 'card')}}
+                You approve these calls once, for this card.
+              {{else if (eq this.scope 'mixed')}}
+                You approve these calls once. Some cover only this card, and the
+                rest cover every card of this kind in the workspace.
+              {{else}}
+                You approve these calls once, and the approval covers every card
+                of this kind in the workspace.
+              {{/if}}
+              After that, Boxel makes them exactly as shown below without asking
+              you again. If the card changes a call, Boxel asks you to approve
+              it again before making it.
             {{/if}}
-            Approved requests run only in scheduled pipelines.
           </:intro>
           <:default>
             {{#if this.summaryContext}}
@@ -138,6 +221,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 @reason={{this.opened.reason}}
               />
             {{/if}}
+            <RadioChoices
+              @label='When calls run'
+              @icon={{Globe}}
+              @name='approve-use'
+              @choices={{this.useChoices}}
+              @selected={{this.form.use}}
+              @onSelect={{this.chooseUse}}
+            />
             {{#each this.choices as |choice|}}
               <FieldContainer
                 @tag='div'
@@ -148,14 +239,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 <fieldset class='picker'>
                   <legend class='visually-hidden'>{{slotLabel choice}}</legend>
                   {{#each choice.options as |option|}}
-                    <label class='choice' data-test-approve-key={{option.name}}>
-                      <input
-                        type='radio'
-                        name='slot-{{choice.slot}}'
-                        value={{option.id}}
-                        checked={{this.isChosen choice.slot option.id}}
-                        {{on 'change' (fn this.choose choice.slot option.id)}}
-                      />
+                    <RadioTile
+                      @name='slot-{{choice.slot}}'
+                      @value={{option.id}}
+                      @checked={{this.isChosen choice.slot option.id}}
+                      @onChange={{fn this.choose choice.slot option.id}}
+                      data-test-approve-key={{option.name}}
+                    >
                       <span class='option'>
                         <span class='option-name'>{{option.name}}</span>
                         {{#if option.rejected}}
@@ -177,7 +267,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             {{this.hostsOf option.covers}}</span>
                         {{/if}}
                       </span>
-                    </label>
+                    </RadioTile>
                   {{else}}
                     <p class='empty' data-test-approve-no-keys>
                       {{#if (eq choice.kind 'userKey')}}
@@ -201,7 +291,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               </FieldContainer>
             {{/each}}
 
-            {{#each this.choosing.batch.groups as |group|}}
+            {{#each this.batch.groups as |group|}}
               <section
                 class='group'
                 aria-labelledby='group-{{group.destination.href}}'
@@ -218,9 +308,27 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   {{group.destination.host}}{{group.destination.path}}
                 </div>
                 {{#if (eq group.destination.path '/')}}
-                  <p class='note' data-test-approve-whole-host>Any request to
-                    this host can be sent with the key.</p>
+                  <p class='note' data-test-approve-whole-host>Boxel can send
+                    the key with any call to this host.</p>
                 {{/if}}
+                {{#let (this.visitorsAt group) as |visitors|}}
+                  {{#if visitors.anyone.length}}
+                    <p class='note' data-test-approve-anonymous-note>
+                      Anyone can use it for requests to
+                      {{group.destination.registrableDomain}}
+                      ({{group.destination.host}}{{group.destination.path}}),
+                      <strong>including people who aren’t signed in</strong>.
+                    </p>
+                  {{/if}}
+                  {{#each visitors.signedInOnly as |share|}}
+                    <p class='note' data-test-approve-signed-in-only-note>
+                      This workspace lets people who aren’t signed in make these
+                      calls, but the key shared as
+                      <strong>{{share.label}}</strong>
+                      allows signed-in people only, so they’re asked to sign in.
+                    </p>
+                  {{/each}}
+                {{/let}}
                 {{#each (this.newGrantsAt group.destination.href) as |grant|}}
                   <p
                     class='new-grant'
@@ -256,6 +364,17 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             class='changed'
                             data-test-approve-changed
                           >Changed</span>
+                        {{else if (eq operation.status 'pipelines-only')}}
+                          <span
+                            class='pipelines-only'
+                            data-test-approve-pipelines-only
+                          >Approved for the schedule</span>
+                        {{/if}}
+                        {{#if (approvedForOpenCards operation)}}
+                          <span
+                            class='pipelines-only'
+                            data-test-approve-open-cards
+                          >Approved for open cards</span>
                         {{/if}}
                       </label>
                       <details class='request'>
@@ -302,14 +421,74 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               </section>
             {{/each}}
 
-            {{#if this.choosing.batch.remaining}}
+            {{#if this.remaining}}
               <p class='more' data-test-approve-remaining>
-                {{this.choosing.batch.remaining}}
+                This card has
+                {{this.remaining}}
                 more
-                {{if (eq this.choosing.batch.remaining 1) 'request' 'requests'}}
-                on this card need approving. They’re shown once these are
-                approved: open this window from the card again.
+                {{if (eq this.remaining 1) 'call' 'calls'}}
+                to approve. Approve these, then open this window from the card
+                again to see the rest.
               </p>
+            {{/if}}
+            {{#if this.demoted}}
+              <p class='more' data-test-approve-demoted>
+                Approving with “On a schedule only” stops the calls marked
+                “Approved for open cards” from running when the card is opened.
+              </p>
+            {{/if}}
+            {{#if this.interactive}}
+              <div class='interactive' data-test-approve-interactive>
+                <Warning class='new-grant-icon' aria-hidden='true' />
+                <div class='interactive-text'>
+                  {{#each this.confirmations as |line|}}
+                    <p data-test-approve-confirmation>{{line}}</p>
+                  {{/each}}
+                </div>
+              </div>
+              {{#each this.budgetShares as |share|}}
+                <FieldContainer
+                  @tag='div'
+                  @label='Daily budget for {{share.label}}'
+                  @icon={{KeyRound}}
+                  data-test-approve-budget={{share.label}}
+                  as |labelId|
+                >
+                  <BoxelInput
+                    @type='text'
+                    @autocomplete='off'
+                    @value={{this.budgetText share}}
+                    @onInput={{fn this.setBudget share.id}}
+                    @state={{if (this.budgetValid share) 'none' 'invalid'}}
+                    @errorMessage={{this.budgetError share}}
+                    @describedBy='budget-note-{{share.id}}'
+                    inputmode='numeric'
+                    aria-labelledby={{labelId}}
+                    data-test-approve-budget-input
+                  />
+                  <span
+                    id='budget-note-{{share.id}}'
+                    class='note budget-note'
+                  >The most calls this share makes in a day, in total across
+                    everyone who opens a card that uses it. This is the first
+                    time opened cards can use this share, so set it to what your
+                    plan with the service allows.</span>
+                  <span
+                    class='note budget-note budget-more'
+                    data-test-approve-budget-more
+                  >
+                    <a
+                      class='limits-link'
+                      href={{this.shareLimitsURL share}}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      data-test-approve-budget-limits-link
+                    >Open the limits for {{share.label}} in a new tab</a>
+                    to change its other limits: how fast each person can make
+                    calls, and how many calls this share makes in a month, in
+                    total across everyone.</span>
+                </FieldContainer>
+              {{/each}}
             {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
@@ -321,7 +500,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             <div class='confirm'>
               {{#if this.newGrants.length}}
                 <p class='confirm-note' data-test-approve-also-sends>
-                  This approves the requests shown above, including sending
+                  Approving lets Boxel make the calls above, and send
                   {{#each this.newGrantNotes as |note index|}}{{#if index}}
                       and
                     {{/if}}<strong>{{note.keyName}}</strong>
@@ -330,13 +509,23 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   for the first time.
                 </p>
               {{/if}}
-              <Button
-                type='submit'
-                @kind='primary'
-                @disabled={{this.submitDisabled}}
-                @loading={{this.form.saving}}
-                data-test-approve-save
-              >{{this.saveLabel}}</Button>
+              <div class='confirm-buttons'>
+                {{#if @api.forCli}}
+                  <Button
+                    @kind='secondary'
+                    @disabled={{this.form.saving}}
+                    data-test-keys-cancel
+                    {{on 'click' @api.close}}
+                  >Cancel</Button>
+                {{/if}}
+                <Button
+                  type='submit'
+                  @kind='primary'
+                  @disabled={{this.submitDisabled}}
+                  @loading={{this.form.saving}}
+                  data-test-approve-save
+                >{{this.saveLabel}}</Button>
+              </div>
             </div>
           </:actions>
         </EditPage>
@@ -368,33 +557,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         clip-path: inset(50%);
         white-space: nowrap;
       }
-      .choice {
-        position: relative;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        align-items: baseline;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius);
-        box-shadow: 0 0 0 1px var(--border);
-        cursor: pointer;
-      }
-      .choice input {
-        position: absolute;
-        opacity: 0;
-        width: 1px;
-        height: 1px;
-        margin: 0;
-      }
-      .choice:has(input:focus-visible) {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-        outline-offset: 2px;
-      }
-      .choice:has(input:checked) {
-        box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
-      }
       .option {
         display: flex;
         flex-direction: column;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         min-width: 0;
         overflow-wrap: anywhere;
       }
@@ -408,6 +574,19 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
+      }
+      .budget-note {
+        display: block;
+      }
+      .budget-more {
+        margin-top: var(--boxel-sp-xxs);
+      }
+      .limits-link {
+        display: inline;
+        text-decoration: underline;
+      }
+      .limits-link:hover {
+        color: var(--foreground);
       }
       .add-key {
         width: fit-content;
@@ -447,13 +626,29 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         cursor: pointer;
       }
       .label {
+        flex: 1;
+        min-width: 0;
         font-weight: 600;
+      }
+      /* A badge keeps its words on one line; the label beside it wraps. */
+      .changed,
+      .pipelines-only {
+        flex-shrink: 0;
+        white-space: nowrap;
       }
       .changed {
         padding: 0 var(--boxel-sp-4xs);
         border-radius: var(--boxel-border-radius-xs);
         background-color: var(--warning);
         color: var(--warning-foreground);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+      }
+      .pipelines-only {
+        padding: 0 var(--boxel-sp-4xs);
+        border-radius: var(--boxel-border-radius-xs);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
@@ -537,6 +732,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         padding-top: var(--boxel-sp);
         border-top: 1px solid var(--border);
       }
+      .confirm-buttons {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        flex-shrink: 0;
+      }
       .confirm-note {
         flex: 1;
         margin: 0;
@@ -557,6 +757,23 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         line-height: var(--boxel-line-height-sm);
         color: var(--muted-foreground);
       }
+      .interactive {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        align-items: flex-start;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--muted);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        overflow-wrap: anywhere;
+      }
+      .interactive-text p {
+        margin: 0;
+      }
+      .interactive-text p + p {
+        margin-top: var(--boxel-sp-xs);
+      }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
         font-size: var(--boxel-font-size-xs);
@@ -567,6 +784,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   </template>
 
   private opened = openedFor();
+  private fromCli = cliOpenedFor();
   // Reached from a key's "Use with a card" on the key page.
   private fromKeyPage =
     new URLSearchParams(window.location.hash.replace(/^#/, '')).get('then') ===
@@ -577,17 +795,41 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private form = trackedObject({
     chosen: {} as Record<string, string | undefined>,
     ticked: new Set<string>(),
+    use: 'interactive' as ApprovalUse,
+    // A share's daily budget as typed, by share id.
+    budgets: {} as Record<string, string>,
     saving: false,
     error: undefined as string | undefined,
   });
 
+  private useChoices: RadioChoice[] = [
+    {
+      value: 'interactive',
+      label: 'On a schedule and when the card is opened',
+      hint: 'The card’s pipelines make these calls, and so does the card itself whenever it’s opened: in your browser, from the AI assistant, or from the CLI.',
+    },
+    {
+      value: 'pipelines',
+      label: 'On a schedule only',
+      hint: 'The card’s scheduled pipelines make these calls and save the results to the card. Opening the card makes no calls.',
+    },
+  ];
+
   constructor(owner: Owner, args: ApproveArgs) {
     super(owner, args);
     this.load();
+    document.addEventListener('visibilitychange', this.refreshBudgets);
+    window.addEventListener('focus', this.refreshBudgets);
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    document.removeEventListener('visibilitychange', this.refreshBudgets);
+    window.removeEventListener('focus', this.refreshBudgets);
   }
 
   private get heading() {
-    return this.args.review ? 'Review changed requests' : 'Approve requests';
+    return pageTitle(this.args.review ? 'review-changes' : 'approve');
   }
   private get loading() {
     return this.page.state.name === 'loading';
@@ -613,20 +855,164 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return { ...context, operation };
   }
 
+  // The batch as shown for the choice of where requests run.
+  private get batch(): ApprovalBatch | undefined {
+    return this.choosing
+      ? batchFor(this.choosing.batch, this.form.use)
+      : undefined;
+  }
+
+  private get interactive() {
+    return this.form.use === 'interactive';
+  }
+
+  private get scope() {
+    return approvalScope(this.batch);
+  }
+
+  // Whether approving for pipelines only takes ticked calls last approved for
+  // interactive use back to the schedule.
+  private get demoted() {
+    return (
+      !this.interactive && this.tickedOperations.some(approvedForOpenCards)
+    );
+  }
+
+  private get remaining() {
+    return this.choosing ? remainingFor(this.choosing.batch, this.form.use) : 0;
+  }
+
   private get choices(): SlotChoice[] {
-    return this.choosing ? slotChoices(this.choosing.batch) : [];
+    return this.batch ? slotChoices(this.batch) : [];
   }
 
   private get newGrants(): NewGrant[] {
-    return this.choosing
-      ? newGrants(
-          this.choosing.batch,
-          this.choices,
+    return this.batch
+      ? newGrants(this.batch, this.choices, this.form.chosen, this.form.ticked)
+      : [];
+  }
+
+  private get confirmations(): string[] {
+    let anyone = this.visitors.anyone;
+    return [
+      ...confirmationsFor(this.tickedOperations).map(
+        (kind) => INTERACTIVE_CONFIRMATION[kind],
+      ),
+      ...(anyone.length > 0 ? [anonymousConfirmation(anyone)] : []),
+    ];
+  }
+
+  // Who besides signed-in people the ticked operations serve once approved
+  // for opened cards: the realm's policy and each share's owner decide that,
+  // and the page only says so.
+  private get visitors() {
+    return this.batch && this.interactive
+      ? sharesForVisitors(this.batch, this.tickedOperations, this.form.chosen)
+      : { anyone: [], signedInOnly: [] };
+  }
+
+  private visitorsAt = (group: { operations: BatchOperation[] }) =>
+    this.batch && this.interactive
+      ? sharesForVisitors(
+          this.batch,
+          group.operations.filter((o) => this.form.ticked.has(operationKey(o))),
           this.form.chosen,
-          this.form.ticked,
+        )
+      : { anyone: [], signedInOnly: [] };
+
+  // The shares this approval allows in open cards for the first time.
+  private get budgetShares() {
+    return this.batch && this.interactive
+      ? firstInteractiveShares(
+          this.batch,
+          this.tickedOperations,
+          this.form.chosen,
         )
       : [];
   }
+
+  private budgetText = (share: { id: string; dailyBudget: number }) =>
+    this.form.budgets[share.id] ?? String(share.dailyBudget);
+
+  private budgetValid = (share: { id: string; dailyBudget: number }) =>
+    parseDailyBudget(this.budgetText(share)) !== undefined;
+
+  private budgetError = (share: { id: string; dailyBudget: number }) =>
+    this.budgetValid(share)
+      ? undefined
+      : 'A whole number of calls, at least one';
+
+  // A share's usage and limits page, where its owner changes the limits this
+  // page doesn't ask for. It opens in a tab of its own, so the batch being
+  // approved here stays as it is.
+  private shareLimitsURL = (share: { id: string }) => {
+    let realm = this.choosing?.batch.realm.url;
+    return realm
+      ? `${pageURL('share-limits')}#${new URLSearchParams({ realm, share: share.id })}`
+      : undefined;
+  };
+
+  // The share-limits page this page links to changes a share's daily budget
+  // too, and approving writes the budget the field holds. So when the window
+  // comes back into view, each budget field the user hasn't typed in takes the
+  // budget in force, and approving never puts back one changed meanwhile. A
+  // budget the user typed is what they see, and stays. Approving waits for a
+  // re-read under way: coming back to the window by clicking Approve starts
+  // one on that same click.
+  private budgetRefresh: Promise<void> | undefined;
+
+  private refreshBudgets = () => {
+    let refresh = this.readBudgetsInForce();
+    this.budgetRefresh = refresh;
+    return refresh;
+  };
+
+  private readBudgetsInForce = async () => {
+    let state = this.choosing;
+    if (document.visibilityState !== 'visible' || !state || this.form.saving) {
+      return;
+    }
+    let untyped = this.budgetShares.filter(
+      (share) => this.form.budgets[share.id] === undefined,
+    );
+    let { config } = this.args.api;
+    let inForce = new Map<string, number>();
+    await Promise.all(
+      untyped.map(async (share) => {
+        try {
+          let { limits } = await shareUsage(config, share.id);
+          inForce.set(share.id, limits.dailyBudget);
+        } catch {
+          // The field keeps the budget it has; a session that ended is the
+          // window's to notice.
+        }
+      }),
+    );
+    if (inForce.size === 0 || this.page.state !== state) {
+      return;
+    }
+    this.page.state = {
+      ...state,
+      batch: {
+        ...state.batch,
+        shares: state.batch.shares.map((share) =>
+          inForce.has(share.id)
+            ? { ...share, dailyBudget: inForce.get(share.id)! }
+            : share,
+        ),
+      },
+    };
+  };
+
+  private setBudget = (shareId: string, value: string) => {
+    this.form.budgets = { ...this.form.budgets, [shareId]: value };
+    this.form.error = undefined;
+  };
+
+  private chooseUse = (value: string) => {
+    this.form.use = value as ApprovalUse;
+    this.form.error = undefined;
+  };
 
   private newGrantsAt = (destination: string) =>
     this.newGrants.filter((g) => g.destination === destination);
@@ -648,14 +1034,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   }
 
   private get tickedOperations(): BatchOperation[] {
-    return (this.choosing?.batch.groups ?? []).flatMap((g) =>
+    return (this.batch?.groups ?? []).flatMap((g) =>
       g.operations.filter((o) => this.form.ticked.has(operationKey(o))),
     );
   }
 
   private get saveLabel() {
     let count = this.tickedOperations.length;
-    return `Approve ${count} ${count === 1 ? 'request' : 'requests'}`;
+    return `Approve ${count} ${count === 1 ? 'call' : 'calls'}`;
   }
 
   private get submitDisabled() {
@@ -663,7 +1049,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return (
       this.form.saving ||
       ticked.length === 0 ||
-      ticked.some((o) => o.slots.some((s) => !this.form.chosen[s.slot]))
+      ticked.some((o) => o.slots.some((s) => !this.form.chosen[s.slot])) ||
+      this.budgetShares.some((share) => !this.budgetValid(share))
     );
   }
 
@@ -710,7 +1097,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       if (!this.opened.target || !request) {
         throw new LinkError(
           'this page names no card',
-          'This link doesn’t name a card whose requests to approve.',
+          'This link doesn’t name a card whose calls to approve.',
         );
       }
       let [context, batch] = await Promise.all([
@@ -718,6 +1105,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         approvalBatch(config, {
           target: this.opened.target,
           review: this.args.review,
+          interactive: true,
         }),
       ]);
       let operations = batch.groups.flatMap((g) => g.operations);
@@ -727,8 +1115,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           count: 0,
           card: batch.card.name,
           realm: batch.realm.name,
+          interactive: false,
         };
         this.args.api.visit.loaded();
+        this.args.api.tellCliDone();
         return;
       }
       let choices = slotChoices(batch);
@@ -739,14 +1129,36 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             c.slot,
             kept && c.options.some((o) => o.id === kept)
               ? kept
-              : initialChoice(batch, c, this.opened.key),
+              : initialChoice(
+                  batch,
+                  c,
+                  c.kind === 'userKey' ? this.opened.key : this.opened.share,
+                ),
           ];
         }),
       );
+      if (!keep) {
+        this.form.use = initialUse(batch, {
+          cli: this.fromCli.cli !== undefined,
+          cliInteractive: this.fromCli.interactive,
+        });
+      }
       let keys = operations.map(operationKey);
+      let named = this.fromCli.operations;
+      // Opened for a share, only the operations that send the realm's key
+      // start ticked: the user came to approve that share, not their own key.
+      let forShare = this.opened.share
+        ? (o: BatchOperation) => o.slots.every((s) => s.key !== 'userKey')
+        : undefined;
       this.form.ticked = keep
         ? new Set(keys.filter((k) => keep.ticked.has(k)))
-        : new Set(keys);
+        : named
+          ? new Set(
+              operations.filter((o) => named.has(o.name)).map(operationKey),
+            )
+          : forShare
+            ? new Set(operations.filter(forShare).map(operationKey))
+            : new Set(keys);
       this.page.state = { name: 'choosing', batch, context };
       this.args.api.visit.loaded();
     } catch (e) {
@@ -760,19 +1172,22 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   };
 
   // Adding a key is the key entry page's; it comes back here, to the same
-  // batch, with the new key chosen.
+  // batch, with the new key chosen, or through its trail without one.
   private addKey = () => {
     let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     if (this.fromKeyPage) {
       fragment.set('after', 'keys');
     }
     fragment.set('then', this.args.review ? 'review-changes' : 'approve');
-    navigation.assign(`${pageURL('enter-key')}#${fragment}`);
+    navigation.assign(withWayBack(`${pageURL('enter-key')}#${fragment}`));
   };
 
   private finish = () => {
+    if (this.args.api.tellCliDone()) {
+      return;
+    }
     if (this.fromKeyPage) {
-      navigation.back(pageURL('keys'));
+      navigation.back(keyPageURL());
     } else {
       this.args.api.close();
     }
@@ -786,24 +1201,43 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
+    await this.args.api.saving(async () => {
+      await this.budgetRefresh;
+      await this.approve(this.choosing ?? state);
+    });
+  };
+
+  private approve = async (state: ChoosingState) => {
     try {
+      let interactive = this.interactive;
+      let anonymous = this.visitors.anyone.length > 0;
       let operations = approvalOf(
-        state.batch,
+        this.batch!,
         this.choices,
         this.form.chosen,
         this.form.ticked,
       );
+      let dailyBudgets = Object.fromEntries(
+        this.budgetShares.map((share) => [
+          share.id,
+          parseDailyBudget(this.budgetText(share))!,
+        ]),
+      );
       await approveOperations(this.args.api.config, {
         realm: state.batch.realm.url,
         operations,
+        interactive,
+        dailyBudgets,
       });
       this.page.state = {
         name: 'done',
         count: operations.length,
         card: state.batch.card.name,
         realm: state.batch.realm.name,
+        interactive,
+        anonymous,
       };
-      if (!this.fromKeyPage) {
+      if (!this.args.api.tellCliDone() && !this.fromKeyPage) {
         this.args.api.close();
       }
     } catch (e) {
@@ -817,7 +1251,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           chosen: { ...this.form.chosen },
           ticked: new Set(this.form.ticked),
         });
-        this.form.error = `${failureMessage(e)} The requests below are as the card sends them now.`;
+        this.form.error = `${failureMessage(e)} The calls below are as the card makes them now.`;
         return;
       }
       this.form.error = failureMessage(e);
@@ -829,20 +1263,30 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
 export class ApprovePage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Approve requests' @page='approve' as |api|>
+    <KeysWindow
+      @title='Boxel · Approve calls'
+      @page='approve'
+      @cli={{this.cli}}
+      as |api|
+    >
       <Approve @api={{api}} @review={{false}} />
     </KeysWindow>
   </template>
+
+  private cli = cliOpenedFor().cli;
 }
 
 export class ReviewChangesPage extends Component {
   <template>
     <KeysWindow
-      @title='Boxel · Review changed requests'
+      @title='Boxel · Review changed calls'
       @page='review-changes'
+      @cli={{this.cli}}
       as |api|
     >
       <Approve @api={{api}} @review={{true}} />
     </KeysWindow>
   </template>
+
+  private cli = cliOpenedFor().cli;
 }

@@ -1,6 +1,6 @@
 // boxel-ui's checkbox: its BoxelInput drawn with `@type='checkbox'`, a square
 // box filled with the theme's primary colour and a check mark when ticked.
-// boxel-ui can't ship on the secure origin (ADR 008 §1.3), so its template
+// The package doesn't import boxel-ui (ADR 019 §1.3), so its template
 // and styles are brought here, kept as they are there, for the checkbox
 // alone. Attributes go on the input, so a label wrapping it names it.
 import { on } from '@ember/modifier';

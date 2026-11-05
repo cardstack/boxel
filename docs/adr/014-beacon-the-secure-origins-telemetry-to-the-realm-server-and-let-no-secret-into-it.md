@@ -27,16 +27,11 @@ merely not doing so.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. Where beacons go
 
 The secure origin's pages MUST beacon to the realm server's
 `/_client-telemetry`, the origin its policy already names in `connect-src`.
-The secure origin MUST NOT gain a telemetry route of its own (ADR 008 §1.7:
+The secure origin MUST NOT gain a telemetry route of its own (ADR 019 §1.7:
 it serves its pages and nothing else). Each batch MUST name
 `client_app: 'secure-origin'`, and the realm server MUST write a batch's
 `client_app` on every line it emits, `host` when the batch names none or one
@@ -85,7 +80,7 @@ One sink keeps one dashboard and one diagnosis path for both apps. The realm
 server's `/_client-telemetry` already caps body size and event count, already
 stamps the authenticated user over a self-reported one, and is reachable from
 the secure origin without widening its policy. A route on the secure origin
-would add a server endpoint to the origin ADR 008 keeps to its pages alone.
+would add a server endpoint to the origin ADR 019 keeps to its pages alone.
 
 The realm server's route required a session before the secure origin existed,
 because the host only beacons once it has one. The secure origin's blind spot
@@ -108,7 +103,7 @@ does.
 - **Hold beacons until the window signs in.** Sign-in failures, the cases the
   origin most needs to see, would never be sent.
 - **A same-origin route on the secure origin.** It still has to accept
-  unsigned beacons, and it adds an endpoint to the origin ADR 008 keeps to its
+  unsigned beacons, and it adds an endpoint to the origin ADR 019 keeps to its
   pages.
 - **Send only `message_key` for errors.** The key is derived from the message,
   so it would carry the same quoted text unless scrubbed first.
@@ -118,11 +113,11 @@ does.
 
 ## 4. Sources
 
-1. [ADR 008](008-build-the-secure-origins-pages-as-their-own-ember-app.md)
+1. [ADR 019](019-build-the-secure-origins-pages-as-their-own-ember-app-on-pret-ui.md)
    §1.6 and §1.7.
 2. `.claude/skills/client-perf-diagnosis/SKILL.md`, the host's telemetry.
 3. `.claude/skills/rate-limit-store/SKILL.md`, the store the limit uses.
 
 ## 5. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/014.md](remediation/014.md).

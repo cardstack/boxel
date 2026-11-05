@@ -323,7 +323,11 @@ export default function handleRequestForward({
               finalBody,
               matrixUserId,
               clientGone,
-              { credential, scrubber },
+              {
+                credential,
+                scrubber,
+                responseSizeCap: destinationConfig.responseSizeCap,
+              },
             );
           }
 
@@ -344,6 +348,8 @@ export default function handleRequestForward({
             body: json.method !== 'GET' ? finalBody : undefined,
             signal: upstreamCall.signal,
             sizePath: 'system-key',
+            responseSizeCap: destinationConfig.responseSizeCap,
+            destinationSetBy: 'platform',
             credential,
             scrubber,
           });

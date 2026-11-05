@@ -193,19 +193,15 @@ describe('federated search (integration)', () => {
     expect(Array.isArray(result.data)).toBe(true);
   });
 
-  it('accepts a non-URL @cardstack/ realm identifier in the realm list', async () => {
-    // `@cardstack/<realm>/` resolves against the profile's realm-server
-    // URL, so `@cardstack/test/` names the same realm as realmHref.
+  it('refuses a prefix-form realm identifier the realm server does not serve', async () => {
+    // A prefix in the realm list resolves through the map the profile's realm
+    // server serves; this fixture registers no prefix for its realm, so the
+    // spelling `@cardstack/test/` is refused rather than guessed at. The
+    // error names the prefixes the server does serve.
     let result = await search(['@cardstack/test/'], {}, { profileManager });
-    expect(result.ok, `search failed: ${result.error}`).toBe(true);
-    let titles = (result.data ?? []).map(
-      (entry) =>
-        (entry as { attributes?: { cardTitle?: string } }).attributes
-          ?.cardTitle,
-    );
-    expect(titles).toEqual(
-      expect.arrayContaining(['Shared Card', 'Other Card']),
-    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('no registered realm prefix matches');
+    expect(result.error).toContain('@cardstack/base/');
   });
 
   it('returns ok: false for search on unknown realm URL', async () => {

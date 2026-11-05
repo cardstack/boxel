@@ -18,7 +18,10 @@ import {
 import {
   requiredModality,
   modalityLabel,
+  formatKilobytes,
+  isSvgTooLargeForText,
   isTextBasedContentType,
+  MAX_SVG_TEXT_BYTES,
 } from '@cardstack/runtime-common/ai/modality';
 
 import CardPill from '@cardstack/host/components/card-pill';
@@ -133,6 +136,9 @@ export default class AttachedItems extends Component<Signature> {
         return `Model does not support ${modalityLabel(modality)}. Only metadata will be sent.`;
       }
       return undefined;
+    }
+    if (isSvgTooLargeForText(file)) {
+      return `SVG is larger than ${formatKilobytes(MAX_SVG_TEXT_BYTES)}. Will send file metadata only.`;
     }
     // Non-multimodal, non-text files only get metadata sent
     if (!isTextBasedContentType(file.contentType)) {

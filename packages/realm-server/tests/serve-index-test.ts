@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 
+import { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
 import { createServeIndex } from '../handlers/serve-index.ts';
 
 function buildDeps(getIndexHTML: () => Promise<string>) {
@@ -14,8 +15,10 @@ function buildDeps(getIndexHTML: () => Promise<string>) {
     dbAdapter: {} as any,
     matrixClient: {
       matrixURL: new URL('http://localhost:8008/'),
+      serverName: 'localhost',
     } as any,
     getIndexHTML,
+    virtualNetwork: new PrefixRealmNetwork(),
     cardSizeLimitBytes: 0,
     fileSizeLimitBytes: 0,
     audioSizeLimitBytes: 0,

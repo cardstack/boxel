@@ -24,6 +24,7 @@ export const PAGE_PATHS = Object.freeze([
   'enter-key',
   'share-key',
   'swap-key',
+  'share-limits',
   'replace-key',
   'connect',
   'connected',

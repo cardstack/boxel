@@ -1,5 +1,5 @@
 import { executableExtensions } from './index.ts';
-import { isPrefixForm } from './realm-identifiers.ts';
+import { isAbsoluteIdentifier } from './realm-identifiers.ts';
 
 export type RuntimeDependencyNodeKind = 'module' | 'instance' | 'file';
 export type RuntimeDependencyContextMode = 'query' | 'non-query';
@@ -51,12 +51,7 @@ interface ContextStackEntry {
 // on. Everything else (bare specifiers, relative references, `data:`/`blob:`
 // URLs) has no stable identity for a dependency edge and is dropped.
 function canonicalURL(url: string): string | undefined {
-  if (
-    !url ||
-    (!url.startsWith('http://') &&
-      !url.startsWith('https://') &&
-      !isPrefixForm(url))
-  ) {
+  if (!url || !isAbsoluteIdentifier(url)) {
     return undefined;
   }
   // Strip query string and hash using string ops instead of new URL()

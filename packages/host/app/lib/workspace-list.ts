@@ -1,6 +1,7 @@
 import { ri, type RealmIdentifier } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
+import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
 
 // Shared by the workspace chooser and the dashboard, which list the same
 // workspaces and catalogs and navigate their tiles the same way.
@@ -61,6 +62,18 @@ export function listedCatalogRealmURLs<T extends string>(urls: T[]): T[] {
     return urls;
   }
   return urls.filter((url) => !url.includes('/boxel-homepage/'));
+}
+
+// The listed catalogs as the dashboard orders them: newest first, except the
+// Boxel catalog, which always leads.
+export function orderedCatalogRealmURLs<T extends string>(
+  urls: T[],
+  infoFor: (url: T) => RealmDates,
+): T[] {
+  return leadWith(
+    sortByCreatedAtDesc(listedCatalogRealmURLs(urls), infoFor),
+    catalogRealmURL,
+  );
 }
 
 // The favorites among the listed workspaces and catalogs, so a favorite
@@ -152,4 +165,20 @@ export function nearestNavIndexInRow(
   return rowTiles.reduce((closest, tile) =>
     distance(tile) < distance(closest) ? tile : closest,
   ).index;
+}
+
+// Less than half of it shows within the window and every scroller around it,
+// so a sliver at an edge still counts as off screen.
+export function isOffScreen(element: HTMLElement): boolean {
+  let { top, bottom, height } = element.getBoundingClientRect();
+  let shownTop = Math.max(top, 0);
+  let shownBottom = Math.min(bottom, window.innerHeight);
+  for (let el = element.parentElement; el; el = el.parentElement) {
+    if (getComputedStyle(el).overflowY !== 'visible') {
+      let clip = el.getBoundingClientRect();
+      shownTop = Math.max(shownTop, clip.top);
+      shownBottom = Math.min(shownBottom, clip.bottom);
+    }
+  }
+  return shownBottom - shownTop < height / 2;
 }

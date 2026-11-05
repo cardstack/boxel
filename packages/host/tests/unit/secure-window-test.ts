@@ -52,6 +52,21 @@ module('Unit | secure-window', function () {
     });
   });
 
+  test("a share's limits page names the realm and the share", function (assert) {
+    let url = secureWindowURL({
+      mode: 'share-limits',
+      realm: REALM,
+      share: '00000000-0000-4000-8000-000000000001',
+      reason: 'Change the limits',
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('share-limits'));
+    assert.deepEqual(fragmentOf(url), {
+      realm: REALM,
+      share: '00000000-0000-4000-8000-000000000001',
+      reason: 'Change the limits',
+    });
+  });
+
   test('replacing the key an operation sends names the operation and what it is on', function (assert) {
     let onCard = secureWindowURL({
       mode: 'replace-key',

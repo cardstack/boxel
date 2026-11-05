@@ -4,6 +4,7 @@ import type {
 } from 'openai/resources';
 import { readRealmFileBotTool } from './read-realm-file/index.ts';
 import { readUrlBotTool } from './read-url/index.ts';
+import { viewAttachmentBotTool } from './view-attachment/index.ts';
 import { publishCanceledResult } from './results.ts';
 import type {
   BotTool,
@@ -21,6 +22,7 @@ export type * from './types.ts';
 export const BOT_TOOLS: readonly BotTool[] = [
   readRealmFileBotTool,
   readUrlBotTool,
+  viewAttachmentBotTool,
 ];
 
 export function botToolNamed(name: string | undefined): BotTool | undefined {

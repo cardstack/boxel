@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:card-json": "node ../../scripts/check-card-json-base-alias.mjs .",
     "lint:hbs": "ember-template-lint .",
     "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --report-unused-disable-directives --cache",

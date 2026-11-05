@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base/mark-definition';
 import {
   CardDef,
   Component,
@@ -259,17 +260,17 @@ export function savingsRate(income: number, spending: number): number {
 // Field definitions
 // ---------------------------------------------------------------------------
 
-export const CategoryField = enumField(StringField, {
+export const CategoryField = markDefinition(enumField(StringField, {
   options: CATEGORY_OPTIONS,
-});
+}));
 
-export const AccountKindField = enumField(StringField, {
+export const AccountKindField = markDefinition(enumField(StringField, {
   options: ACCOUNT_KIND_OPTIONS,
-});
+}));
 
-export const RecurrenceField = enumField(StringField, {
+export const RecurrenceField = markDefinition(enumField(StringField, {
   options: RECURRENCE_OPTIONS,
-});
+}));
 
 // ---------------------------------------------------------------------------
 // Account

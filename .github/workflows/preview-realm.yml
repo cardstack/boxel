@@ -52,12 +52,12 @@ on:
         default: latest
       publish-timeout-ms:
         description: |
-          Readiness-poll budget for `boxel realm publish`. Covers indexing
-          *and* prerendering every instance in every format, so it scales
-          with realm render cost rather than file count. The CLI's own
-          default is 300000, which a render-heavy realm outgrows.
+          Total readiness-poll budget for `boxel realm publish`. Covers
+          indexing *and* prerendering every instance in every format, so it
+          scales with realm render cost rather than file count. 0 leaves the
+          CLI's own limits: an hour in total, or 300000 without progress.
         type: number
-        default: 900000
+        default: 0
     secrets:
       matrix-username:
         description: |
@@ -160,8 +160,12 @@ jobs:
           SOURCE_REALM_URL="${REALM_SERVER%/}/${MATRIX_USERNAME}/${REALM_ENDPOINT}/"
           PUBLISHED_REALM_URL="${PUBLISHED_BASE%/}/${REALM_ENDPOINT}/"
           echo "Publishing ${SOURCE_REALM_URL} to ${PUBLISHED_REALM_URL}"
+          TIMEOUT_ARGS=()
+          if [ "${PUBLISH_TIMEOUT_MS}" -gt 0 ]; then
+            TIMEOUT_ARGS=(--timeout "${PUBLISH_TIMEOUT_MS}")
+          fi
           boxel realm publish "${SOURCE_REALM_URL}" "${PUBLISHED_REALM_URL}" \
-            --timeout "${PUBLISH_TIMEOUT_MS}"
+            "${TIMEOUT_ARGS[@]}"
 
       - name: Compute comment fields
         if: ${{ !cancelled() }}

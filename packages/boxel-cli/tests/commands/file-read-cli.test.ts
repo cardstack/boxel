@@ -1,17 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
+import { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
 import {
   registerReadCommand,
   resolveReadTarget,
 } from '../../src/commands/file/read.ts';
 
+// The realm server's network, as `file read` builds it from the served prefix
+// map. The catalog is served away from `<server>/catalog/` so a target that
+// guessed from the prefix's spelling would come out wrong.
+const network = new PrefixRealmNetwork({
+  '@cardstack/catalog/': 'https://catalog.example.test/',
+});
+
 describe('resolveReadTarget', () => {
-  it('derives realm and path from a full @cardstack/ identifier', () => {
+  it('derives realm and path from a full @cardstack/ identifier through the network', () => {
     expect(
-      resolveReadTarget('@cardstack/catalog/nested/card.gts', undefined),
+      resolveReadTarget(
+        '@cardstack/catalog/nested/card.gts',
+        undefined,
+        network,
+      ),
     ).toEqual({
       ok: true,
-      realm: '@cardstack/catalog/',
+      realm: 'https://catalog.example.test/',
       path: 'nested/card.gts',
     });
   });
@@ -38,6 +50,7 @@ describe('resolveReadTarget', () => {
     let target = resolveReadTarget(
       '@cardstack/catalog/hello.json',
       'http://localhost:4201/catalog/',
+      network,
     );
     expect(target.ok).toBe(false);
     if (!target.ok) {
@@ -46,7 +59,7 @@ describe('resolveReadTarget', () => {
   });
 
   it('rejects a relative path without --realm', () => {
-    let target = resolveReadTarget('hello.json', undefined);
+    let target = resolveReadTarget('hello.json', undefined, network);
     expect(target.ok).toBe(false);
     if (!target.ok) {
       expect(target.error).toContain('--realm is required');
@@ -54,12 +67,35 @@ describe('resolveReadTarget', () => {
   });
 
   it('rejects a bare realm identifier with no file path', () => {
-    // No path component after the realm, so it isn't a full file
-    // identifier — and there's no --realm to pair it with.
-    let target = resolveReadTarget('@cardstack/catalog/', undefined);
+    let target = resolveReadTarget('@cardstack/catalog/', undefined, network);
     expect(target.ok).toBe(false);
     if (!target.ok) {
-      expect(target.error).toContain('--realm is required');
+      expect(target.error).toContain('names a realm, not a file');
+    }
+  });
+
+  it('refuses a prefix the network does not serve, naming the served prefixes', () => {
+    let target = resolveReadTarget(
+      '@cardstack/openrouter/hello.json',
+      undefined,
+      network,
+    );
+    expect(target).toEqual({
+      ok: false,
+      error:
+        'cannot resolve "@cardstack/openrouter/hello.json": no registered realm prefix matches it (registered: @cardstack/catalog/)',
+    });
+  });
+
+  it('refuses a prefix the network does not serve even with --realm, rather than reading it as a relative path', () => {
+    let target = resolveReadTarget(
+      '@cardstack/openrouter/hello.json',
+      'http://localhost:4201/user/realm/',
+      network,
+    );
+    expect(target.ok).toBe(false);
+    if (!target.ok) {
+      expect(target.error).toContain('no registered realm prefix matches it');
     }
   });
 });

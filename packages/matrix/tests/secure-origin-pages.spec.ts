@@ -218,15 +218,17 @@ test.describe('The secure origin’s pages', () => {
     expect(record?.matrix_registration_token).toBe(REGISTRATION_TOKEN);
     expect(record?.session_room_id).toBeTruthy();
 
-    // The new account signs in to the app with its password.
+    // The secure origin is signed in as the new account, so the app's sign-in
+    // goes there and comes straight back with the account's login token.
     await page.goto(appURL);
-    let fields = page.frameLocator('[data-test-credential-fields-frame]');
-    await fields.locator('[data-test-username-field]').fill(username);
-    await fields.locator('[data-test-password-field]').fill('mypassword1!');
-    await page.locator('[data-test-login-btn]').click();
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
-    ).toHaveCount(1);
+    ).toHaveCount(1, { timeout: 60_000 });
+    await expect(page.locator('[data-test-profile-icon-button]')).toBeVisible();
+    await page.locator('[data-test-profile-icon-button]').click();
+    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
+      user,
+    );
   });
 
   test('creating an account checks each field as the app’s form does', async ({

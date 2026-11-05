@@ -334,6 +334,22 @@ module('Integration | telemetry', function (hooks) {
         ],
       });
     routes['POST _key-shares'] = () => json(201, { data: SHARE });
+    // The workspace chosen is asked whether people who aren't signed in may
+    // use its shared keys.
+    routes['POST _secure-window/context'] = () =>
+      json(200, {
+        data: {
+          type: 'secure-window-context',
+          attributes: {
+            realm: {
+              url: REALM,
+              name: SECRETS.realmName,
+              directWriter: true,
+              opensToAnonymous: false,
+            },
+          },
+        },
+      });
 
     pageOpened('keys.index');
     await render(KeyPage);

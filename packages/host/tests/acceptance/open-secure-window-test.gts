@@ -52,13 +52,9 @@ module('Acceptance | open the secure window', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  let originalFlag: boolean;
   let secureOrigin = new URL(ENV.secureOriginURL);
 
   hooks.beforeEach(async function () {
-    originalFlag = ENV.signInOnSecureOrigin;
-    ENV.signInOnSecureOrigin = true;
-
     // A card that asks for a key the way any card does: through the tool
     // its context hands it, naming itself, the operation and a reason.
     class WeatherStation extends CardDef {
@@ -117,10 +113,6 @@ module('Acceptance | open the secure window', function (hooks) {
     });
   });
 
-  hooks.afterEach(function () {
-    ENV.signInOnSecureOrigin = originalFlag;
-  });
-
   async function visitWeatherStation() {
     await visitOperatorMode({
       stacks: [
@@ -167,7 +159,7 @@ module('Acceptance | open the secure window', function (hooks) {
       'the address carries no ticket, session or token',
     );
     assert.strictEqual(target, '_blank');
-    assert.strictEqual(features, 'popup,width=640,height=720');
+    assert.strictEqual(features, 'popup,width=800,height=1000');
     assert.strictEqual(popups[0].opener, null, 'the opener is cut');
 
     assert.dom('[data-test-status]').hasText('opened');
@@ -248,7 +240,7 @@ module('Acceptance | open the secure window', function (hooks) {
       stub.calls[0].url,
       'at the address the card asked for',
     );
-    assert.strictEqual(stub.calls[1].features, 'popup,width=640,height=720');
+    assert.strictEqual(stub.calls[1].features, 'popup,width=800,height=1000');
     assert.strictEqual(stub.popups[0].opener, null, 'the opener is cut');
     assert.dom('[data-test-secure-window-fallback]').doesNotExist();
   });
@@ -289,22 +281,6 @@ module('Acceptance | open the secure window', function (hooks) {
       realm: testRealmURL,
       operation: OPERATION,
     });
-  });
-
-  test('the window is not opened on a deployment that does not sign in on the secure origin', async function (assert) {
-    let { calls } = stubWindowOpen();
-    await visitWeatherStation();
-    ENV.signInOnSecureOrigin = false;
-    let { toolContext } = getService('tool-service');
-    await assert.rejects(
-      new OpenSecureWindowTool(toolContext).execute({
-        mode: 'enter-key',
-        cardId: `${testRealmURL}WeatherStation/home`,
-        operation: OPERATION,
-      }),
-      /does not offer/,
-    );
-    assert.strictEqual(calls.length, 0, 'no window opened');
   });
 
   test('approving opens the window for the one operation a card is blocked on', async function (assert) {
@@ -349,13 +325,18 @@ module('Acceptance | open the secure window', function (hooks) {
     let tool = new OpenSecureWindowTool(toolContext);
     await assert.rejects(
       tool.execute({ mode: 'delete-key', realm: testRealmURL }),
-      /mode must be one of "enter-key", "replace-key", "share-key", "swap-key", "connect", "approve", "review-changes"/,
+      /mode must be one of "enter-key", "replace-key", "share-key", "swap-key", "share-limits", "connect", "approve", "review-changes"/,
       'an unsupported mode',
     );
     await assert.rejects(
       tool.execute({ mode: 'swap-key', realm: testRealmURL }),
       /share is required/,
       'a swap with no share',
+    );
+    await assert.rejects(
+      tool.execute({ mode: 'share-limits', realm: testRealmURL }),
+      /share is required/,
+      'a share’s limits with no share',
     );
     await assert.rejects(
       tool.execute({ mode: 'share-key' }),

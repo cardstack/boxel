@@ -345,6 +345,7 @@ module(basename(import.meta.filename), function (hooks) {
         {
           event: 'grant-rejected',
           grant: here.meta.grant.id,
+          key: key.id,
           host: `127.0.0.1:${VENDOR_PORT}`,
           realm: realmURL.href,
           share: null,

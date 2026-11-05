@@ -753,7 +753,7 @@ module(basename(import.meta.filename), function () {
     test('serves the credential fields to be framed by the app alone', async function (assert) {
       let response = await request
         .get('/secure/credentials')
-        .query({ form: 'login', origin: realmURL.origin })
+        .query({ form: 'change-password', origin: realmURL.origin })
         .set('Host', secureHost)
         .set('Accept', 'text/html');
       assert.strictEqual(response.status, 200, 'status');

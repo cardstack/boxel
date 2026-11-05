@@ -2,7 +2,15 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Sidebar, SidebarGroup, SidebarItem, SidebarTrigger } from './sidebar';
-import type { ShellPlacementAlias, SidebarCollapsible } from './sidebar';
+import type {
+  ShellPlacementAlias,
+  SidebarCollapsible,
+  SidebarScroll,
+} from './sidebar';
+import Folder from '@cardstack/boxel-icons/folder';
+import Globe from '@cardstack/boxel-icons/globe';
+import Eye from '@cardstack/boxel-icons/eye';
+import Copy from '@cardstack/boxel-icons/copy';
 import { FreestyleUsage } from './freestyle-usage';
 import { Toolbar } from './toolbar';
 import { LIBRARY, ORIGINS } from '../internal/structure-shell-fixtures';
@@ -17,11 +25,17 @@ export class SidebarUsage extends Component {
   @tracked bordered = true;
   @tracked activeId = 'lib-0';
   @tracked toggles = 0;
+  @tracked railBreakpoint = 1024;
+  @tracked scroll = 'content';
+  @tracked resizable = true;
 
   collapsibleOptions = ['rail', 'offcanvas', 'none'];
   placementOptions = ['start', 'end'];
-  library = LIBRARY;
-  origins = ORIGINS;
+  scrollOptions = ['page', 'content'];
+  filler = [1, 2, 3, 4, 5, 6];
+  // A different glyph per row: `<:icon>` takes any icon, not only a dot.
+  library = LIBRARY.map((row, i) => ({ ...row, icon: [Folder, Eye, Copy][i % 3] }));
+  origins = ORIGINS.map((row, i) => ({ ...row, icon: [Globe, Copy][i % 2] }));
 
   setOpen = (v: boolean) => {
     this.open = v;
@@ -35,6 +49,15 @@ export class SidebarUsage extends Component {
   };
   setMobile = (v: boolean) => {
     this.mobile = v;
+  };
+  setRailBreakpoint = (v: number) => {
+    this.railBreakpoint = v;
+  };
+  setScroll = (v: string) => {
+    this.scroll = v;
+  };
+  setResizable = (v: boolean) => {
+    this.resizable = v;
   };
   setBordered = (v: boolean) => {
     this.bordered = v;
@@ -50,6 +73,9 @@ export class SidebarUsage extends Component {
   get collapsibleValue(): SidebarCollapsible {
     return this.collapsible as SidebarCollapsible;
   }
+  get scrollValue(): SidebarScroll {
+    return this.scroll as SidebarScroll;
+  }
   get placementValue(): ShellPlacementAlias {
     return this.placement as ShellPlacementAlias;
   }
@@ -61,6 +87,9 @@ export class SidebarUsage extends Component {
       "  @persistKey='studio'",
       "  @collapsible='" + this.collapsible + "'",
       "  @placement='" + this.placement + "'",
+      '  @railBreakpoint={{' + this.railBreakpoint + '}}',
+      "  @scroll='" + this.scroll + "'",
+      '  @resizable={{' + this.resizable + '}}',
       '>',
       '  <:header as |bar|>…</:header>',
       '  <:nav as |bar|>…</:nav>',
@@ -83,8 +112,11 @@ export class SidebarUsage extends Component {
             @onOpenChange={{this.setOpen}}
             @collapsible={{this.collapsibleValue}}
             @placement={{this.placementValue}}
-            @mobile={{this.mobile}}
+            @mobile={{if this.mobile true}}
+            @railBreakpoint={{this.railBreakpoint}}
             @bordered={{this.bordered}}
+            @scroll={{this.scrollValue}}
+            @resizable={{this.resizable}}
           >
             <:header as |bar|>
               <div class='shell-brand' data-compact={{if bar.collapsed 'true' 'false'}}>
@@ -96,38 +128,35 @@ export class SidebarUsage extends Component {
             </:header>
 
             <:nav as |bar|>
-              <SidebarGroup @label='Library' @hideLabel={{bar.collapsed}}>
+              <SidebarGroup @label='Library'>
                 {{#each this.library key='id' as |row|}}
                   <SidebarItem
                     @label={{row.label}}
-                    @badge={{unless bar.collapsed row.badge}}
+                    @badge={{row.badge}}
                     @active={{this.isActive row.id}}
                     @collapsed={{bar.collapsed}}
                     @onClick={{this.selectFor row.id}}
-                  >
-                    <:icon><span class='shell-dot' aria-hidden='true'></span></:icon>
-                  </SidebarItem>
+                    @icon={{row.icon}}
+                  />
                 {{/each}}
               </SidebarGroup>
 
-              <SidebarGroup @label='Origins' @hideLabel={{bar.collapsed}}>
+              <SidebarGroup @label='Origins'>
                 {{#each this.origins key='id' as |row|}}
                   <SidebarItem
                     @label={{row.label}}
                     @active={{this.isActive row.id}}
                     @collapsed={{bar.collapsed}}
                     @onClick={{this.selectFor row.id}}
-                  >
-                    <:icon><span class='shell-dot' aria-hidden='true'></span></:icon>
-                  </SidebarItem>
+                    @icon={{row.icon}}
+                  />
                 {{/each}}
                 <SidebarItem
                   @label='Archived origins'
                   @disabled={{true}}
                   @collapsed={{bar.collapsed}}
-                >
-                  <:icon><span class='shell-dot' aria-hidden='true'></span></:icon>
-                </SidebarItem>
+                  @icon={{Folder}}
+                />
               </SidebarGroup>
             </:nav>
 
@@ -156,11 +185,64 @@ export class SidebarUsage extends Component {
                   the rail becomes a drawer — measured from the shell&apos;s own
                   inline size with a resize observer, not from the viewport,
                   because a card does not know the window it is in.</p>
+                <p class='shell-copy'>Drag this stage&apos;s corner to resize
+                  it: at or above the rail breakpoint the rail is full, between
+                  it and the mobile breakpoint it folds to icons, and below
+                  that it becomes a drawer. A manual toggle holds until the
+                  pane crosses into another band.</p>
+                <p class='shell-copy'>With scroll set to content the shell
+                  keeps its stage&apos;s height and only this pane scrolls; the
+                  rail stays where it is. With resizable on, drag the seam (or
+                  focus it and press the arrow keys) to set the rail&apos;s
+                  width; dragging below the minimum folds it, and a click still
+                  toggles.</p>
+                {{#each this.filler}}
+                  <p class='shell-copy'>Filler paragraph so this pane is taller
+                    than the stage and scrolls on its own.</p>
+                {{/each}}
                 <p class='shell-count'>onOpenChange fired
                   <b>{{this.toggles}}</b>
                   times</p>
               </div>
             </:default>
+          </Sidebar>
+        </div>
+        <p class='shell-note'>The icon rail, pinned collapsed: icons only. Item
+          names live on the tooltip and the accessible name, group labels
+          become hairlines and badges are dropped.</p>
+        <div class='shell-stage shell-stage-rail' data-test-sidebar-rail-example>
+          <Sidebar
+            @label='Collapsed workspace'
+            @mobile={{false}}
+            @open={{false}}
+            @bordered={{true}}
+          >
+            <:nav as |bar|>
+              <SidebarGroup @label='Library'>
+                {{#each this.library key='id' as |row|}}
+                  <SidebarItem
+                    @label={{row.label}}
+                    @badge={{row.badge}}
+                    @active={{this.isActive row.id}}
+                    @collapsed={{bar.collapsed}}
+                    @onClick={{this.selectFor row.id}}
+                  >
+                    <:icon><row.icon aria-hidden='true' /></:icon>
+                  </SidebarItem>
+                {{/each}}
+              </SidebarGroup>
+              <SidebarGroup @label='Origins'>
+                {{#each this.origins key='id' as |row|}}
+                  <SidebarItem
+                    @label={{row.label}}
+                    @collapsed={{bar.collapsed}}
+                    @onClick={{this.selectFor row.id}}
+                  >
+                    <:icon><row.icon aria-hidden='true' /></:icon>
+                  </SidebarItem>
+                {{/each}}
+              </SidebarGroup>
+            </:nav>
           </Sidebar>
         </div>
       </:example>
@@ -228,10 +310,41 @@ export class SidebarUsage extends Component {
         />
         <Args.Bool
           @name='mobile'
-          @description='Force the drawer mode on or off, bypassing the pane measurement. The drawer is the kit Drawer, so the focus trap, Escape and stacking come from the native dialog top layer.'
+          @description='Force the drawer mode on, bypassing the pane measurement (the demo leaves it unset when off so the pane bands show). The drawer is the kit Drawer, so the focus trap, Escape and stacking come from the native dialog top layer.'
           @defaultValue={{false}}
           @value={{this.mobile}}
           @onInput={{this.setMobile}}
+        />
+        <Args.Number
+          @name='railBreakpoint'
+          @description='Opt-in, rail mode only. Pane width in px below which the rail folds to icons on its own; a manual toggle holds within a band, and the automatic change arrives through onOpenChange.'
+          @value={{this.railBreakpoint}}
+          @onInput={{this.setRailBreakpoint}}
+        />
+        <Args.String
+          @name='scroll'
+          @description='What scrolls when the content is taller than the shell. page lets the page scroll, rail and all; content locks the shell to its container height, keeps the rail in place and scrolls only the content pane. The container needs a definite height.'
+          @options={{this.scrollOptions}}
+          @value={{this.scroll}}
+          @onInput={{this.setScroll}}
+          @defaultValue='page'
+        />
+        <Args.Bool
+          @name='resizable'
+          @description='Drag the seam, or press the arrow keys on it, to set the expanded width between minWidth and maxWidth. The seam is a separator with aria-valuenow, valuemin and valuemax; dragging below minWidth folds the rail, and a click still toggles. With persistKey the width is remembered.'
+          @defaultValue={{false}}
+          @value={{this.resizable}}
+          @onInput={{this.setResizable}}
+        />
+        <Args.String
+          @name='minWidth'
+          @description='Smallest dragged width: a px number or a px or rem string.'
+          @defaultValue='12rem'
+        />
+        <Args.String
+          @name='maxWidth'
+          @description='Largest dragged width: a px number or a px or rem string, floored at minWidth.'
+          @defaultValue='24rem'
         />
         <Args.Number
           @name='mobileBreakpoint'
@@ -281,13 +394,24 @@ export class SidebarUsage extends Component {
     <style scoped>
       .shell-stage {
         block-size: 340px;
+        max-inline-size: 100%;
         overflow: hidden;
+        resize: horizontal;
         border-radius: var(--radius-surface, 10px);
         background: var(--card);
         box-shadow: var(
           --pretui-shadow-hairline,
           0 0 0 1px var(--border)
         );
+      }
+      .shell-stage-rail {
+        resize: none;
+        inline-size: 14rem;
+      }
+      .shell-note {
+        margin: 0 0 var(--space-3, 0.5rem);
+        font-size: var(--text-ui-sm, 0.72rem);
+        color: var(--muted-foreground);
       }
       .shell-brand {
         display: flex;
@@ -318,21 +442,12 @@ export class SidebarUsage extends Component {
         white-space: nowrap;
         font-weight: 600;
       }
-      .shell-dot {
-        inline-size: 0.5em;
-        block-size: 0.5em;
-        border-radius: 50%;
-        background: currentColor;
-        opacity: 0.6;
-      }
       .shell-foot {
         margin: 0;
         font-size: var(--text-ui-xs, 11px);
         color: var(--ink-3, var(--boxel-400));
       }
       .shell-page {
-        block-size: 100%;
-        overflow-y: auto;
         padding: var(--space-5, 14px);
         display: grid;
         gap: var(--space-4, 11px);

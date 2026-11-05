@@ -8,6 +8,8 @@ import { parseRealmFiles, runGlintCheck } from '../src/parse-execution.ts';
 
 const TARGET_REALM = 'https://realms.example.test/user/target/';
 const CATALOG_URL = 'https://realms.example.test/catalog/';
+// The prefix map the realm server serves, as the gate reads it off the client.
+const PREFIX_REALM_URLS = { '@cardstack/catalog/': CATALOG_URL };
 
 /**
  * What a catalog realm serves: a CardDef another realm's card can adopt, and a
@@ -146,7 +148,7 @@ module('parse gate > realm-prefixed imports', function (hooks) {
   test('all four adoption shapes type-check against fetched realm sources', async function (assert) {
     assert.timeout(180_000);
     let { errors } = await runGlintCheck(shapeFiles(), {
-      targetRealm: TARGET_REALM,
+      readPrefixRealmURLs: async () => PREFIX_REALM_URLS,
       fetchFn: stubRealmFetch(),
     });
 
@@ -160,7 +162,7 @@ module('parse gate > realm-prefixed imports', function (hooks) {
   test('a clean run carries no warnings', async function (assert) {
     assert.timeout(180_000);
     let { warnings } = await runGlintCheck(shapeFiles(), {
-      targetRealm: TARGET_REALM,
+      readPrefixRealmURLs: async () => PREFIX_REALM_URLS,
       fetchFn: stubRealmFetch(),
     });
 
@@ -190,7 +192,7 @@ export class ContributorE extends Profile {
         },
       ],
       {
-        targetRealm: TARGET_REALM,
+        readPrefixRealmURLs: async () => PREFIX_REALM_URLS,
         fetchFn: stubRealmFetch({ files: DEGRADED_CATALOG_FILES }),
       },
     );
@@ -227,6 +229,7 @@ export class ContributorE extends Profile {
         matrixId: '@tester:example.test',
         realmServerUrl: 'https://realms.example.test/',
       }),
+      prefixRealmURLs: async () => PREFIX_REALM_URLS,
     } as unknown as BoxelCLIClient;
 
     let output = await parseRealmFiles(
@@ -261,7 +264,7 @@ export class ContributorE extends Profile {
   test('an unreachable realm degrades to the shim instead of failing the gate', async function (assert) {
     assert.timeout(180_000);
     let { errors, warnings } = await runGlintCheck(shapeFiles(), {
-      targetRealm: TARGET_REALM,
+      readPrefixRealmURLs: async () => PREFIX_REALM_URLS,
       fetchFn: stubRealmFetch({ fail: true }),
     });
 

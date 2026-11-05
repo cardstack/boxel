@@ -47,6 +47,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
+      - name: Check docs/ holds only linked docs and ADRs
+        run: node scripts/check-docs-dir.mts
+
+      - name: Check env-vars.sh asks mkcert only when it has to
+        if: ${{ !cancelled() }}
+        run: node scripts/check-env-vars-mkcert.mts
+
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
         run: pnpm run lint
@@ -129,6 +136,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/school-example-realm
+      - name: Lint Test Realm Cards
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/test-realm-cards
       - name: Lint Pret UI
         if: ${{ !cancelled() }}
         run: pnpm run lint

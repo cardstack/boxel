@@ -25,6 +25,7 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 import { logger, ri } from '@cardstack/runtime-common';
 
 import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
+import { WORKSPACE_TILE_TARGET } from '@cardstack/host/lib/workspace-actions';
 import {
   favoritesTileWidth,
   isHostedRealm,
@@ -37,10 +38,11 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
+import ManageCatalogs from '../dashboard-modals/manage-catalogs';
+
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
-import ManageCatalogs from './manage-catalogs';
-import Workspace, { WORKSPACE_TILE_TARGET } from './workspace';
+import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface SortOption {
@@ -579,9 +581,6 @@ export default class WorkspaceChooser extends Component<Signature> {
                   @isSelected={{eq this.currentIndex this.addWorkspaceNavIndex}}
                   @selectionActive={{this.isSelectionActive}}
                 />
-                {{#if this.matrixService.isInitializingNewUser}}
-                  <WorkspaceLoadingIndicator />
-                {{/if}}
                 {{#each
                   this.filteredUserRealmIdentifiers
                   as |realmIdentifier i|

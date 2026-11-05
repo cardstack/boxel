@@ -105,12 +105,12 @@ export class ServiceAccountEntry {
   }
 
   // A replace starts from the user the key acts as and the scopes it asks
-  // for now, so leaving them as they are keeps them. The key file is always
-  // chosen anew.
+  // for now, so leaving them as they are keeps them. Only those two are set:
+  // the key file is always chosen anew, and one already chosen stays. The
+  // scopes go one per line, so the field shows each of them whole.
   prefill({ subject, scopes }: ServiceAccountDetails): void {
-    this.clear();
     this.state.subject = subject ?? '';
-    this.state.scopes = scopes.join(' ');
+    this.state.scopes = scopes.join('\n');
   }
 
   clear(): void {

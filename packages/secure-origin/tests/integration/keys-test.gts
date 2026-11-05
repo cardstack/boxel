@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  find,
   render,
   settled,
   triggerEvent,
@@ -11,7 +12,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
 import { forgetSession, storeSession } from '../../src/security/session.js';
-import { navigation } from '../../src/shell/navigation.js';
+import { navigation, noteDocumentAddress } from '../../src/shell/navigation.js';
 import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
 import KeyPage from '../../src/shell/keys/key-page.gts';
 import { openedFor } from '../../src/shell/keys/opened-for.ts';
@@ -63,30 +64,62 @@ const KEYS = [
     state: 'active',
     createdAt: '2026-10-01T12:00:00.000Z',
     updatedAt: '2026-10-01T12:00:00.000Z',
+    anonymous: false,
+    anonymousDailyCap: null as number | null,
+    anonymousMonthlyCap: null as number | null,
     usedWith: ['github.com', 'openweathermap.org'],
     sharedInto: [
       {
         url: 'https://realm-server.test/someone/dashboard/',
         name: 'Dashboard',
-        shares: [{ id: 'share-dash', label: 'Weather', state: 'active' }],
+        shares: [
+          {
+            id: 'share-dash',
+            label: 'Weather',
+            state: 'active',
+            approvedCalls: 4,
+          },
+        ],
       },
       {
         url: 'https://realm-server.test/someone/workspace/',
         name: 'Team',
         shares: [
-          { id: 'share-team-1', label: 'Weather', state: 'active' },
-          { id: 'share-team-2', label: 'Team weather', state: 'suspended' },
+          {
+            id: 'share-team-1',
+            label: 'Weather',
+            state: 'active',
+            approvedCalls: 0,
+          },
+          {
+            id: 'share-team-2',
+            label: 'Team weather',
+            state: 'suspended',
+            approvedCalls: 0,
+          },
         ],
       },
       {
         url: 'https://realm-server.test/someone/old-team/',
         name: null,
-        shares: [{ id: 'share-old', label: 'Weather', state: 'suspended' }],
+        shares: [
+          {
+            id: 'share-old',
+            label: 'Weather',
+            state: 'suspended',
+            approvedCalls: 1,
+          },
+        ],
       },
     ] as {
       url: string;
       name: string | null;
-      shares: { id: string; label: string; state: string }[];
+      shares: {
+        id: string;
+        label: string;
+        state: string;
+        approvedCalls: number;
+      }[];
     }[],
   },
   {
@@ -96,11 +129,19 @@ const KEYS = [
     state: 'active',
     createdAt: '2026-10-02T12:00:00.000Z',
     updatedAt: '2026-10-02T12:00:00.000Z',
+    anonymous: false,
+    anonymousDailyCap: null as number | null,
+    anonymousMonthlyCap: null as number | null,
     usedWith: [] as string[],
     sharedInto: [] as {
       url: string;
       name: string | null;
-      shares: { id: string; label: string; state: string }[];
+      shares: {
+        id: string;
+        label: string;
+        state: string;
+        approvedCalls: number;
+      }[];
     }[],
   },
 ];
@@ -126,7 +167,12 @@ function context(attributes: Record<string, unknown>) {
   });
 }
 
-const WORKSPACE = { url: REALM, name: 'Team Workspace', directWriter: true };
+const WORKSPACE = {
+  url: REALM,
+  name: 'Team Workspace',
+  directWriter: true,
+  opensToAnonymous: false,
+};
 
 // A Google service account's JSON key file, as Google issues it. The page
 // only reads its type and email; the key itself is a placeholder.
@@ -143,8 +189,43 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
   2,
 );
 
+type QUnitAssert = Parameters<Parameters<typeof test>[1]>[0];
+
+// Asserts the Scopes field holds these scopes one per line and is tall enough
+// to show every one of them without scrolling.
+function assertShowsEveryScope(assert: QUnitAssert, scopes: string[]) {
+  assert
+    .dom('[data-test-service-account-scopes]')
+    .hasValue(scopes.join('\n'), 'each scope is on a line of its own');
+  let field = document.querySelector<HTMLTextAreaElement>(
+    '[data-test-service-account-scopes]',
+  )!;
+  assert.ok(
+    field.scrollHeight <= field.clientHeight + 1,
+    `the field shows all ${scopes.length} scopes without scrolling (${field.scrollHeight}px of content in ${field.clientHeight}px)`,
+  );
+}
+
 // Chooses a key file. The module waits on file reads
 // (`setupWaitedBrowserWork`), so this returns once the page has read it.
+// Choosing a file and typing, without settling: for a test that holds a
+// request open, where `triggerEvent` and `fillIn` would wait on it.
+function chooseKeyFileNow(contents: string, name = 'boxel-test.json') {
+  let input = document.querySelector<HTMLInputElement>(
+    '[data-test-service-account-file]',
+  )!;
+  let files = new DataTransfer();
+  files.items.add(new File([contents], name, { type: 'application/json' }));
+  input.files = files.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function typeNow(selector: string, text: string) {
+  let input = document.querySelector<HTMLInputElement>(selector)!;
+  input.value = text;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   await triggerEvent('[data-test-service-account-file]', 'change', {
     files: [new File([contents], name, { type: 'application/json' })],
@@ -546,6 +627,271 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-error-detail="Status"]').doesNotExist();
     });
 
+    test('lists what workspaces opened the user’s keys to people who aren’t signed in, and offers to allow a key that doesn’t', async function (assert) {
+      let notice = (
+        id: string,
+        attributes: Record<string, unknown>,
+      ): Record<string, unknown> => ({
+        type: 'key-policy-notice',
+        id,
+        attributes: {
+          realm: REALM,
+          policy: `${REALM}policies/team`,
+          savedBy: '@admin:example.test',
+          createdAt: '2026-11-01T12:00:00.000Z',
+          ...attributes,
+        },
+      });
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              notice('2', {
+                share: 'share-team-2',
+                label: 'Team weather',
+                key: 'key-1',
+                reason: 'visitors-wanted',
+                operations: [`${REALM}weather#Weather.alerts`],
+              }),
+              notice('1', {
+                share: 'share-team-1',
+                label: 'Weather',
+                key: 'key-1',
+                reason: 'visitors-use',
+                operations: [`${REALM}weather#Weather.forecast`],
+              }),
+              notice('0', {
+                share: 'share-gone',
+                label: 'Deleted',
+                key: null,
+                reason: 'visitors-wanted',
+                operations: [`${REALM}weather#Weather.alerts`],
+              }),
+            ],
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-requests]');
+      assert
+        .dom('[data-test-key-policy-requests] [data-test-key-policy-notice]')
+        .exists(
+          { count: 1 },
+          'only the request still waiting on an answer asks for one: a deleted key’s is settled',
+        );
+      assert
+        .dom('[data-test-key-policy-requests]')
+        .containsText('Action needed')
+        .containsText('wants people who aren’t signed in to use your key')
+        .containsText('Team weather');
+      assert
+        .dom(
+          '[data-test-key-policy-notices] [data-test-key-policy-notice="Weather"]',
+        )
+        .containsText('now use')
+        .containsText('Weather.forecast');
+      assert
+        .dom(
+          '[data-test-key-policy-notices] [data-test-key-policy-notice-allow]',
+        )
+        .doesNotExist('a key visitors already use asks for nothing');
+      await click('[data-test-key-policy-notice-allow]');
+      assert
+        .dom('[data-test-key-anonymous-use-form]')
+        .exists('allowing it opens the key’s own setting');
+      assert
+        .dom(
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+        )
+        .isChecked('already set to allow it, so one Save finishes it');
+    });
+
+    test('the notices the page lists are marked read, so the app’s badge for them clears', async function (assert) {
+      let notice = (id: string, readAt: string | null) => ({
+        type: 'key-policy-notice',
+        id,
+        attributes: {
+          realm: REALM,
+          share: `share-${id}`,
+          label: `Shared ${id}`,
+          key: 'key-1',
+          policy: `${REALM}policies/team`,
+          savedBy: null,
+          reason: 'visitors-use',
+          operations: [`${REALM}weather#Weather.forecast`],
+          declinedAt: null,
+          readAt,
+          createdAt: '2026-11-01T12:00:00.000Z',
+        },
+      });
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              notice('9', null),
+              notice('8', null),
+              notice('4', '2026-10-30T09:00:00.000Z'),
+            ],
+            meta: { unread: 2 },
+          }),
+        'POST _key-policy-notices/read': () =>
+          json(200, { meta: { marked: 2, unread: 0 } }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-notices]');
+      await settled();
+      let marked = requests.filter(
+        (r) => r.method === 'POST' && r.path === '_key-policy-notices/read',
+      );
+      assert.deepEqual(
+        marked.map((r) => r.body),
+        [
+          {
+            data: [
+              { type: 'key-policy-notice', id: '9' },
+              { type: 'key-policy-notice', id: '8' },
+            ],
+          },
+        ],
+        'the unread notices it lists, and only those, are marked once',
+      );
+    });
+
+    test('a page whose notices are all read marks nothing', async function (assert) {
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-policy-notice',
+                id: '4',
+                attributes: {
+                  realm: REALM,
+                  share: 'share-4',
+                  label: 'Shared 4',
+                  key: 'key-1',
+                  policy: `${REALM}policies/team`,
+                  savedBy: null,
+                  reason: 'visitors-use',
+                  operations: [`${REALM}weather#Weather.forecast`],
+                  declinedAt: null,
+                  readAt: '2026-10-30T09:00:00.000Z',
+                  createdAt: '2026-10-30T08:00:00.000Z',
+                },
+              },
+            ],
+            meta: { unread: 0 },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-notices]');
+      await settled();
+      assert.false(
+        requests.some((r) => r.path === '_key-policy-notices/read'),
+        'nothing is sent',
+      );
+    });
+
+    test('a workspace’s request can be declined, which leaves the key as it is', async function (assert) {
+      let declined = false;
+      let request = {
+        type: 'key-policy-notice',
+        id: '7',
+        attributes: {
+          realm: REALM,
+          share: 'share-team-2',
+          label: 'Team weather',
+          key: 'key-1',
+          policy: `${REALM}policies/team`,
+          savedBy: null,
+          reason: 'visitors-wanted',
+          operations: [`${REALM}weather#Weather.alerts`],
+          declinedAt: null as string | null,
+          readAt: '2026-11-01T12:05:00.000Z',
+          createdAt: '2026-11-01T12:00:00.000Z',
+        },
+      };
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              declined
+                ? {
+                    ...request,
+                    attributes: {
+                      ...request.attributes,
+                      declinedAt: '2026-11-02T12:00:00.000Z',
+                    },
+                  }
+                : request,
+            ],
+          }),
+        'POST _key-policy-notices/7/decline': () => {
+          declined = true;
+          return json(200, { data: request });
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-requests]');
+      await click('[data-test-key-policy-notice-decline]');
+      await settled();
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+      assert.deepEqual(
+        requests
+          .filter((r) => r.method === 'POST' && r.path.startsWith('_key'))
+          .map((r) => r.path),
+        ['_key-policy-notices/7/decline'],
+        'nothing about the key is changed',
+      );
+    });
+
+    test('a notice that a workspace wants visitors to use a key is settled once the key allows them', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(200, keyResources([{ ...KEYS[0], anonymous: true }, KEYS[1]])),
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-policy-notice',
+                id: '1',
+                attributes: {
+                  realm: REALM,
+                  share: 'share-team-2',
+                  label: 'Team weather',
+                  key: 'key-1',
+                  policy: `${REALM}policies/team`,
+                  savedBy: null,
+                  reason: 'visitors-wanted',
+                  operations: [`${REALM}weather#Weather.alerts`],
+                  createdAt: '2026-11-01T12:00:00.000Z',
+                },
+              },
+            ],
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+    });
+
+    test('a link naming a key opens its setting for people who aren’t signed in', async function (assert) {
+      visitShell('keys#anonymous=key-2');
+      await render(KeyPage);
+      await waitFor('[data-test-key-anonymous-use-form]');
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+      assert.dom('[data-test-key-anonymous-use-form]').exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+        )
+        .isChecked();
+    });
+
     test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
       serve({
         'GET _key-shares': () =>
@@ -653,9 +999,164 @@ module('Integration | key pages', function (hooks) {
         requests
           .filter((r) => r.path !== '_secure-session')
           .map((r) => `${r.method} ${r.path}`),
-        ['GET _user-keys', 'GET _key-bindings'],
+        [
+          'GET _user-keys',
+          'GET _key-bindings',
+          'GET _key-policy-notices',
+          'GET _key-limit-notices',
+        ],
         'the page asks nothing per key',
       );
+    });
+
+    test('each key says whether people who aren’t signed in can use it, and changes that with its own request', async function (assert) {
+      let keys = [
+        KEYS[0],
+        {
+          ...KEYS[1],
+          anonymous: true,
+          anonymousDailyCap: 50,
+          anonymousMonthlyCap: 1000,
+        },
+      ];
+      serve({
+        'GET _user-keys': () => json(200, keyResources(keys)),
+        'PUT _user-keys/key-1/anonymous-use': ({ body }) => {
+          keys = [{ ...KEYS[0], ...body.data.attributes }, keys[1]];
+          return json(200, {
+            data: { type: 'user-key', id: 'key-1', attributes: keys[0] },
+          });
+        },
+        'PUT _user-keys/key-2/anonymous-use': ({ body }) => {
+          keys = [keys[0], { ...keys[1], ...body.data.attributes }];
+          return json(200, {
+            data: { type: 'user-key', id: 'key-2', attributes: keys[1] },
+          });
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      let weather = '[data-test-key-row="Weather service"]';
+      let maps = '[data-test-key-row="Maps"]';
+      assert
+        .dom(`${weather} [data-test-key-anonymous-use-summary]`)
+        .hasText('Only people who are signed in can use it');
+      assert
+        .dom(`${maps} [data-test-key-anonymous-use-summary]`)
+        .hasText(
+          'People who aren’t signed in can use it where a workspace lets them, up to 50 calls a day and 1000 a month all together',
+        );
+      assert
+        .dom(`${weather} [data-test-key-anonymous-use-change]`)
+        .hasAria(
+          'label',
+          'Change whether people who aren’t signed in can use Weather service',
+        );
+
+      await click(`${weather} [data-test-key-anonymous-use-change]`);
+      assert.dom('[data-test-key-anonymous-use-form]').exists();
+      assert.dom('[data-test-anonymous-use-input]').isNotChecked();
+      assert
+        .dom('[data-test-anonymous-use-agreement]')
+        .hasText('Allow people who aren’t signed in to use this key');
+      assert.dom('[data-test-anonymous-cap-input]').doesNotExist();
+      assert.dom('[data-test-anonymous-monthly-cap-input]').doesNotExist();
+      await click('[data-test-anonymous-use-input]');
+      let capInput = find('[data-test-anonymous-cap-input]')!;
+      let capName = capInput
+        .getAttribute('aria-labelledby')!
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent?.trim())
+        .join(' ');
+      assert.strictEqual(
+        capName,
+        'Daily anonymous cap (optional)',
+        'the cap is named by its label alone',
+      );
+      let monthlyInput = find('[data-test-anonymous-monthly-cap-input]')!;
+      assert.strictEqual(
+        monthlyInput
+          .getAttribute('aria-labelledby')!
+          .split(' ')
+          .map((id) => document.getElementById(id)?.textContent?.trim())
+          .join(' '),
+        'Monthly anonymous cap (optional)',
+        'so is the monthly cap',
+      );
+      assert
+        .dom(
+          document.getElementById(
+            monthlyInput.getAttribute('aria-describedby')!,
+          ),
+        )
+        .includesText('each calendar month (UTC)', 'its note describes it');
+      assert
+        .dom(
+          document.getElementById(capInput.getAttribute('aria-describedby')!),
+        )
+        .includesText('Leave it empty for no cap', 'its note describes it');
+      await fillIn('[data-test-anonymous-cap-input]', '0');
+      assert
+        .dom('[data-test-key-anonymous-use-save]')
+        .isDisabled('a cap is at least one call');
+      await fillIn('[data-test-anonymous-cap-input]', '25');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '0');
+      assert
+        .dom('[data-test-key-anonymous-use-save]')
+        .isDisabled('a monthly cap is at least one call too');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '500');
+      await click('[data-test-key-anonymous-use-save]');
+      await waitFor(
+        `${weather} [data-test-key-anonymous-use-summary]:not(:empty)`,
+      );
+      let put = requests.find(
+        (r) =>
+          r.method === 'PUT' && r.path === '_user-keys/key-1/anonymous-use',
+      )!;
+      assert.deepEqual(put.body, {
+        data: {
+          type: 'anonymous-use',
+          attributes: {
+            anonymous: true,
+            anonymousDailyCap: 25,
+            anonymousMonthlyCap: 500,
+          },
+        },
+      });
+      assert.deepEqual(ticketRequests(), [], 'it takes no ticket');
+      assert.dom('[data-test-key-anonymous-use-form]').doesNotExist();
+      assert
+        .dom(`${weather} [data-test-key-anonymous-use-summary]`)
+        .hasText(
+          'People who aren’t signed in can use it where a workspace lets them, up to 25 calls a day and 500 a month all together',
+          'the list is read again',
+        );
+
+      await click(`${maps} [data-test-key-anonymous-use-change]`);
+      assert
+        .dom('[data-test-anonymous-use-input]')
+        .isChecked('the panel starts from the key’s setting');
+      assert.dom('[data-test-anonymous-cap-input]').hasValue('50');
+      assert.dom('[data-test-anonymous-monthly-cap-input]').hasValue('1000');
+      await click('[data-test-anonymous-use-input]');
+      await click('[data-test-key-anonymous-use-save]');
+      await settled();
+      assert.deepEqual(
+        requests.find(
+          (r) =>
+            r.method === 'PUT' && r.path === '_user-keys/key-2/anonymous-use',
+        )!.body.data.attributes,
+        {
+          anonymous: false,
+          anonymousDailyCap: null,
+          anonymousMonthlyCap: null,
+        },
+        'turning it off clears both caps',
+      );
+      assert
+        .dom(`${maps} [data-test-key-anonymous-use-summary]`)
+        .hasText('Only people who are signed in can use it');
     });
 
     test('unsharing a key from one workspace asks first, then takes out each of its shares there', async function (assert) {
@@ -944,6 +1445,75 @@ module('Integration | key pages', function (hooks) {
       assert.false(requests.some((r) => r.method === 'DELETE'));
     });
 
+    test('a share no call is approved for says so, and Approve for a card sets it up for one of the workspace’s cards', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              KEYS[0]!,
+              {
+                ...KEYS[1]!,
+                sharedInto: [
+                  {
+                    url: REALM,
+                    name: 'Team',
+                    shares: [
+                      {
+                        id: 'share-maps',
+                        label: 'Maps',
+                        state: 'active',
+                        approvedCalls: 0,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ]),
+          ),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      let weather = '[data-test-key-row="Weather service"]';
+      let team = `${weather} [data-test-key-shared-into-workspace="${REALM}"]`;
+      assert
+        .dom(`${team} [data-test-key-share-unapproved="share-team-1"]`)
+        .hasText(
+          '“Weather” isn’t approved for any calls yet Approve for a card…',
+          'one of a workspace’s several shares is named by its label',
+        );
+      assert
+        .dom(`${team} [data-test-key-share-unapproved="share-team-2"]`)
+        .doesNotExist('a suspended share is said to be suspended instead');
+      assert
+        .dom(`${weather} [data-test-key-share-unapproved="share-dash"]`)
+        .doesNotExist('a share approved for calls says nothing more');
+      assert
+        .dom(`${team} [data-test-key-share-approve="share-team-1"]`)
+        .hasAria('label', 'Approve for a card: “Weather” in Team');
+      assert
+        .dom(
+          '[data-test-key-row="Maps"] [data-test-key-share-unapproved="share-maps"]',
+        )
+        .hasText(
+          'Not approved for any calls yet Approve for a card…',
+          'a workspace’s only share needs no label',
+        );
+
+      await click(`${team} [data-test-key-share-approve="share-team-1"]`);
+      assert.deepEqual(navigations, [
+        {
+          how: 'assign',
+          url: `/secure/keys/key-1/use#${new URLSearchParams({
+            realm: REALM,
+            share: 'share-team-1',
+            back: 'keys',
+          })}`,
+        },
+      ]);
+    });
+
     test('Share on a key goes to the share page for that key', async function (assert) {
       visitShell('keys');
       await render(KeyPage);
@@ -1008,6 +1578,120 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-keys-done-next]')
         .doesNotExist('opened for no card, there is no card to mention');
       assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a key can let people who aren’t signed in use it, with an optional cap', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                name: 'Forecasts',
+                anonymous: true,
+                anonymousDailyCap: 100,
+                anonymousMonthlyCap: 2000,
+              },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert
+        .dom('[data-test-anonymous-use]')
+        .includesText('People who aren’t signed in');
+      assert
+        .dom('[data-test-anonymous-use-agreement]')
+        .hasText('Allow people who aren’t signed in to use this key');
+      assert
+        .dom('[data-test-anonymous-use-note]')
+        .hasText(
+          'Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.',
+        );
+      assert.dom('[data-test-anonymous-use-input]').isNotChecked();
+      assert
+        .dom('[data-test-anonymous-cap]')
+        .doesNotExist('the cap is asked for only once they are allowed');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-anonymous-use-input]');
+      assert
+        .dom('[data-test-anonymous-cap]')
+        .includesText('Daily anonymous cap (optional)');
+      assert
+        .dom('[data-test-anonymous-cap]')
+        .includesText(
+          'How many calls people who aren’t signed in can make with this key each day (UTC), all together, in every workspace it’s shared into. Leave it empty for no cap.',
+        );
+      assert.dom('[data-test-anonymous-cap-input]').hasValue('');
+      await fillIn('[data-test-anonymous-cap-input]', '1.5');
+      assert
+        .dom('[data-test-enter-key-save]')
+        .isDisabled('a cap is a whole number of calls');
+      await fillIn('[data-test-anonymous-cap-input]', '100');
+      assert
+        .dom('[data-test-anonymous-monthly-cap]')
+        .includesText('Monthly anonymous cap (optional)');
+      assert
+        .dom('[data-test-anonymous-monthly-cap]')
+        .includesText(
+          'How many calls people who aren’t signed in can make with this key each calendar month (UTC), all together, in every workspace it’s shared into. Leave it empty for no cap.',
+        );
+      await fillIn('[data-test-anonymous-monthly-cap-input]', 'lots');
+      assert
+        .dom('[data-test-enter-key-save]')
+        .isDisabled('a monthly cap is a whole number of calls');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '2000');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body.data.attributes,
+        {
+          name: 'Forecasts',
+          kind: 'static',
+          value: 'sk-forecast',
+          anonymous: true,
+          anonymousDailyCap: 100,
+          anonymousMonthlyCap: 2000,
+        },
+      );
+    });
+
+    test('a key that lets people who aren’t signed in use it needs no cap, and a sign-in app isn’t asked', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: { ...attributesOf(KEYS[0]), anonymous: true },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await click('[data-test-radio-choice="oauth-client"] input');
+      assert.dom('[data-test-anonymous-use]').doesNotExist();
+      await click('[data-test-radio-choice="static"] input');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-anonymous-use-input]');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      let { attributes } = requests.find(
+        (r) => r.method === 'POST' && r.path === '_user-keys',
+      )!.body.data;
+      assert.true(attributes.anonymous);
+      assert.false('anonymousDailyCap' in attributes, 'the cap is optional');
+      assert.false(
+        'anonymousMonthlyCap' in attributes,
+        'so is the monthly cap',
+      );
     });
 
     test('opened for an operation, says what it is for, as the server describes it', async function (assert) {
@@ -1125,6 +1809,50 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
     });
 
+    test('reached from an approve page the CLI opened, Close tells the CLI the approval was cancelled', async function (assert) {
+      let submitted: [string, string][][] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push([...new FormData(this).entries()] as [string, string][]);
+      };
+      try {
+        let cli = `cli_port=51234&cli_state=${'c'.repeat(32)}`;
+        visitShell(
+          `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&then=approve&${cli}`,
+        );
+        await render(EnterKeyPage);
+        await waitFor('[data-test-keys-load-failed]');
+        await click('[data-test-keys-close]');
+        assert.deepEqual(submitted, [
+          [
+            ['state', 'c'.repeat(32)],
+            ['window_outcome', 'cancelled'],
+          ],
+        ]);
+        assert.deepEqual(navigations, [], 'the window goes to the CLI');
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    test('opened with a CLI listener but not from an approve page, Close only closes', async function (assert) {
+      let submitted = 0;
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = () => submitted++;
+      try {
+        visitShell(
+          `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(EnterKeyPage);
+        await waitFor('[data-test-keys-load-failed]');
+        await click('[data-test-keys-close]');
+        assert.strictEqual(submitted, 0);
+        assert.deepEqual(navigations, [{ how: 'close' }]);
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
     test('refused access, says so and doesn’t offer to try again', async function (assert) {
       serve({
         'POST _secure-window/context': () =>
@@ -1152,7 +1880,7 @@ module('Integration | key pages', function (hooks) {
       visitShell(`enter-key#realm=${encodeURIComponent(REALM)}`);
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
-      assert.dom('[data-test-keys-heading]').hasText('Enter a key');
+      assert.dom('[data-test-keys-heading]').hasText('Add key');
       await click('[data-test-toggle-details]');
       assert.dom('[data-test-error-detail="Status"]').hasText('503');
       await click('[data-test-keys-retry]');
@@ -1509,6 +2237,7 @@ module('Integration | key pages', function (hooks) {
     test('the key page shows a service account’s email, subject and scopes, and a replace starts from them', async function (assert) {
       const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
       const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      const CALENDAR = 'https://www.googleapis.com/auth/calendar.events';
       let serviceAccount = {
         ...KEYS[1],
         id: 'key-sa',
@@ -1517,7 +2246,7 @@ module('Integration | key pages', function (hooks) {
         serviceAccount: {
           email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
           subject: 'owner@example.com',
-          scopes: [SHEETS, DRIVE],
+          scopes: [SHEETS, DRIVE, CALENDAR],
         },
       };
       let actsAsItself = {
@@ -1555,7 +2284,7 @@ module('Integration | key pages', function (hooks) {
             `${row} [data-test-service-account-scope]`,
           ),
         ].map((scope) => scope.textContent?.trim()),
-        [SHEETS, DRIVE],
+        [SHEETS, DRIVE, CALENDAR],
       );
       assert
         .dom(
@@ -1574,9 +2303,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-service-account-subject]')
         .hasValue('owner@example.com', 'Act as starts as it is');
-      assert
-        .dom('[data-test-service-account-scopes]')
-        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assertShowsEveryScope(assert, [SHEETS, DRIVE, CALENDAR]);
       assert
         .dom('[data-test-key-replace-save]')
         .isDisabled('the key file is still chosen anew');
@@ -1592,7 +2319,7 @@ module('Integration | key pages', function (hooks) {
         {
           value: SERVICE_ACCOUNT_FILE,
           subject: 'owner@example.com',
-          scopes: [SHEETS, DRIVE],
+          scopes: [SHEETS, DRIVE, CALENDAR],
         },
         'leaving the fields as they are keeps them',
       );
@@ -1675,6 +2402,18 @@ module('Integration | key pages', function (hooks) {
         });
     }
 
+    // The context of a workspace chosen on the page, by its address.
+    function chosenWorkspace(opensToAnonymous = false) {
+      return ({ body }: { body: any }) =>
+        context({
+          realm: {
+            ...WORKSPACE,
+            url: body.data.attributes.realm,
+            opensToAnonymous,
+          },
+        });
+    }
+
     test('from the key page, picks a workspace the user writes, with a ticket for that key and realm', async function (assert) {
       serve({
         'GET _secure-window/realms': () =>
@@ -1692,6 +2431,7 @@ module('Integration | key pages', function (hooks) {
               },
             ],
           }),
+        'POST _secure-window/context': chosenWorkspace(),
         'POST _key-shares': shares(),
       });
       visitShell('keys/key-2/share');
@@ -1762,6 +2502,52 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
+    test('from the key page, a workspace picked that lets people who aren’t signed in use its shared keys takes only a key that allows them', async function (assert) {
+      serve({
+        'GET _secure-window/realms': () =>
+          json(200, {
+            data: [
+              {
+                type: 'secure-window-realm',
+                id: OTHER_REALM,
+                attributes: { name: 'Dashboard' },
+              },
+              {
+                type: 'secure-window-realm',
+                id: REALM,
+                attributes: { name: 'Team Workspace' },
+              },
+            ],
+          }),
+        'POST _secure-window/context': chosenWorkspace(true),
+        'POST _key-shares': shares(),
+      });
+      visitShell('keys/key-2/share');
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert
+        .dom('[data-test-share-key-intro="signed-in"]')
+        .exists('until a workspace is picked, nothing is said of anyone else');
+      await click('[data-test-workspace-dropdown-trigger]');
+      await click('[data-test-workspace-option="Team Workspace"]');
+      assert
+        .dom('[data-test-share-key-intro="anyone"] strong')
+        .hasText('and so will people who aren’t signed in');
+      assert
+        .dom('[data-test-share-key-key-refuses-text]')
+        .hasText(
+          'This workspace lets people who aren’t signed in use the keys shared into it, and this key doesn’t allow them. Allow it on your key page first.',
+        );
+      assert.dom('[data-test-anonymous-use-input]').doesNotExist();
+      assert.dom('[data-test-share-key-save]').isDisabled();
+      await click('[data-test-share-key-go-to-key]');
+      assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
+      assert.false(
+        requests.some((r) => r.path === '_key-shares'),
+        'nothing is shared',
+      );
+    });
+
     test('two workspaces with the same name are told apart by their addresses', async function (assert) {
       const OTHER = 'https://realm-server.test/someone/another/';
       const DASHBOARD = 'https://realm-server.test/someone/dashboard/';
@@ -1778,6 +2564,7 @@ module('Integration | key pages', function (hooks) {
               attributes: { name },
             })),
           }),
+        'POST _secure-window/context': chosenWorkspace(),
         'POST _key-shares': shares(),
       });
       visitShell('keys/key-2/share');
@@ -1853,6 +2640,151 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
+    test('a workspace that lets only signed-in people use its shared keys says so, and says nothing of anyone else even for a key that allows them', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              KEYS[0],
+              { ...KEYS[1], anonymous: true, anonymousDailyCap: 50 },
+            ]),
+          ),
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'POST _key-shares': shares(),
+      });
+      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert
+        .dom('[data-test-share-key-intro="signed-in"]')
+        .hasText(
+          'People who can access the workspace can use the key in their requests. They never see the key itself. Only signed-in people with access to this workspace can use it. People who aren’t signed in can’t. Requests made by people who have access to this workspace will consume your quota and/or be billed against your account with this service provider.',
+        );
+      assert
+        .dom('[data-test-share-key-intro="signed-in"] strong')
+        .hasText('Only signed-in people');
+      await click('[data-test-key-choice="Maps"] input');
+      assert
+        .dom('[data-test-share-key-intro="signed-in"]')
+        .exists('the key allowing them changes nothing here');
+      assert.dom('[data-test-share-key-key-allows]').doesNotExist();
+      assert.dom('[data-test-share-key-key-refuses]').doesNotExist();
+      assert.dom('[data-test-anonymous-use]').doesNotExist();
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_key-shares')!
+          .body.data.attributes,
+        { realm: REALM, keyId: 'key-2', label: 'Maps' },
+      );
+    });
+
+    test('a workspace that lets people who aren’t signed in use its shared keys says they will, shares a key that allows them, and refuses one that doesn’t', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              KEYS[0],
+              {
+                ...KEYS[1],
+                anonymous: true,
+                anonymousDailyCap: 50,
+                anonymousMonthlyCap: 1500,
+              },
+            ]),
+          ),
+        'POST _secure-window/context': () =>
+          context({ realm: { ...WORKSPACE, opensToAnonymous: true } }),
+        'POST _key-shares': shares(),
+      });
+      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert
+        .dom('[data-test-share-key-intro="anyone"]')
+        .hasText(
+          'People who can access the workspace can use the key in their requests, and so will people who aren’t signed in: this workspace lets anyone who opens its cards make calls with a shared key. Nobody sees the key itself. Requests made by anyone who opens those cards will consume your quota and/or be billed against your account with this service provider.',
+        );
+      assert
+        .dom('[data-test-share-key-intro="anyone"] strong')
+        .hasText('and so will people who aren’t signed in');
+
+      await click('[data-test-key-choice="Weather service"] input');
+      assert
+        .dom('[data-test-share-key-key-refuses-text]')
+        .includesText('this key doesn’t allow them');
+      assert.dom('[data-test-share-key-go-to-key]').hasText('Go to your keys');
+      assert.dom('[data-test-share-key-key-allows]').doesNotExist();
+      assert.dom('[data-test-share-key-save]').isDisabled();
+
+      await click('[data-test-key-choice="Maps"] input');
+      assert.dom('[data-test-share-key-key-refuses]').doesNotExist();
+      assert
+        .dom('[data-test-share-key-key-allows-text]')
+        .hasText(
+          'This key allows it, up to 50 calls a day and 1500 a month all together. Sharing it here means they will use it.',
+        );
+      assert.dom('[data-test-anonymous-use-input]').doesNotExist();
+      assert.dom('[data-test-share-key-save]').isEnabled();
+
+      await click('[data-test-key-choice="Weather service"] input');
+      assert
+        .dom('[data-test-share-key-save]')
+        .isDisabled('switching keys reads the page again');
+      assert.dom('[data-test-share-key-key-refuses]').exists();
+      await click('[data-test-key-choice="Maps"] input');
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_key-shares')!
+          .body.data.attributes,
+        { realm: REALM, keyId: 'key-2', label: 'Maps' },
+        'no anonymous attributes are sent',
+      );
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('from the key page, a key that allows people who aren’t signed in says they will use it once shared into a workspace that lets them', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              KEYS[0],
+              { ...KEYS[1], anonymous: true, anonymousDailyCap: null },
+            ]),
+          ),
+        'GET _secure-window/realms': () =>
+          json(200, {
+            data: [
+              {
+                type: 'secure-window-realm',
+                id: REALM,
+                attributes: { name: 'Team Workspace' },
+              },
+            ],
+          }),
+        'POST _secure-window/context': chosenWorkspace(true),
+        'POST _key-shares': shares(),
+      });
+      visitShell('keys/key-2/share');
+      await render(SharePage);
+      await waitFor('[data-test-share-key-key-allows]');
+      assert
+        .dom('[data-test-share-key-key-allows-text]')
+        .hasText(
+          'This key allows it. Sharing it here means they will use it.',
+          'a key with no cap says no cap',
+        );
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert
+        .dom('[data-test-share-key-done-anonymous]')
+        .hasText('People who aren’t signed in will use it too');
+    });
+
     test('with no keys, says to add one on the key page first', async function (assert) {
       serve({
         'GET _user-keys': () => json(200, keyResources([])),
@@ -1862,7 +2794,14 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-key-picker-empty]');
       await click('[data-test-key-picker-go-to-keys]');
-      assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
+      assert.deepEqual(navigations, [
+        {
+          how: 'assign',
+          url: `/secure/keys#${new URLSearchParams({
+            back: `share-key#realm=${encodeURIComponent(REALM)}`,
+          })}`,
+        },
+      ]);
     });
 
     test('a link naming a key that isn’t the user’s says so and doesn’t offer to try again', async function (assert) {
@@ -1984,6 +2923,142 @@ module('Integration | key pages', function (hooks) {
         },
       );
       assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('in a workspace that lets people who aren’t signed in use shared keys, a key is swapped in only if it allows them, and the page says they will use it', async function (assert) {
+      let allowing = KEYS.map((k) =>
+        k.id === 'key-1' ? { ...k, anonymous: true, anonymousDailyCap: 50 } : k,
+      );
+      serve({
+        'POST _secure-window/context': () =>
+          context({ realm: { ...WORKSPACE, opensToAnonymous: true } }),
+        'GET _key-shares': shares(SHARE),
+      });
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-form]');
+      await click('[data-test-key-choice="Weather service"] input');
+      assert.dom('[data-test-swap-key-key-refuses]').exists();
+      assert
+        .dom('[data-test-swap-key-save]')
+        .isDisabled('a key that doesn’t allow them isn’t swapped in');
+
+      serve({ 'GET _user-keys': () => json(200, keyResources(allowing)) });
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-form]');
+      await click('[data-test-key-choice="Weather service"] input');
+      assert
+        .dom('[data-test-swap-key-key-allows] strong')
+        .hasText('they will use this key');
+      assert.dom('[data-test-swap-key-key-allows]').includesText('up to 50');
+      assert.dom('[data-test-swap-key-save]').isNotDisabled();
+    });
+
+    test('opened by the CLI, tells it once the key is in, and only then', async function (assert) {
+      let submitted: { action: string; fields: [string, string][] }[] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push({
+          action: this.action,
+          fields: [...new FormData(this).entries()] as [string, string][],
+        });
+      };
+      try {
+        serve({
+          'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+          'GET _key-shares': shares(SHARE),
+          'POST _key-shares/share-4/swap': () =>
+            json(200, {
+              data: {
+                type: 'key-share',
+                id: 'share-4',
+                attributes: { ...SHARE, state: 'active', keyId: 'key-1' },
+              },
+            }),
+        });
+        visitShell(
+          `swap-key#realm=${encodeURIComponent(REALM)}&share=share-4&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(SwapKeyPage);
+        await waitFor('[data-test-swap-key-form]');
+        await click('[data-test-key-choice="Weather service"] input');
+        await click('[data-test-swap-key-save]');
+        await waitFor('[data-test-keys-done]');
+        await click('[data-test-keys-close]');
+        assert.deepEqual(submitted, [
+          {
+            action: 'http://127.0.0.1:51234/callback',
+            fields: [
+              ['state', 'c'.repeat(32)],
+              ['window_outcome', 'done'],
+            ],
+          },
+        ]);
+        assert.deepEqual(
+          navigations,
+          [{ how: 'close' }],
+          'the window goes to the CLI, and Close after that only closes',
+        );
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    for (let [name, button] of [
+      ['Cancel', '[data-test-keys-cancel]'],
+      ['Close', '[data-test-keys-close]'],
+    ]) {
+      test(`opened by the CLI, ${name} tells it the swap was cancelled, and swaps nothing`, async function (assert) {
+        let submitted: { action: string; fields: [string, string][] }[] = [];
+        let submit = HTMLFormElement.prototype.submit;
+        HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+          submitted.push({
+            action: this.action,
+            fields: [...new FormData(this).entries()] as [string, string][],
+          });
+        };
+        try {
+          serve({
+            'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+            'GET _key-shares': shares(SHARE),
+          });
+          visitShell(
+            `swap-key#realm=${encodeURIComponent(REALM)}&share=share-4&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+          );
+          await render(SwapKeyPage);
+          await waitFor('[data-test-swap-key-form]');
+          await click('[data-test-key-choice="Weather service"] input');
+          await click(button!);
+          assert.deepEqual(submitted, [
+            {
+              action: 'http://127.0.0.1:51234/callback',
+              fields: [
+                ['state', 'c'.repeat(32)],
+                ['window_outcome', 'cancelled'],
+              ],
+            },
+          ]);
+          assert.false(
+            requests.some((r) => r.path === '_key-shares/share-4/swap'),
+            'nothing is swapped',
+          );
+          assert.deepEqual(navigations, [], 'the window goes to the CLI');
+        } finally {
+          HTMLFormElement.prototype.submit = submit;
+        }
+      });
+    }
+
+    test('opened without the CLI, offers no Cancel', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'GET _key-shares': shares(SHARE),
+      });
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-form]');
+      assert.dom('[data-test-keys-cancel]').doesNotExist();
     });
 
     test('a link naming a share the workspace doesn’t have says so and doesn’t offer to try again', async function (assert) {
@@ -2189,7 +3264,20 @@ module('Integration | key pages', function (hooks) {
       visitShell(OPENED);
       await render(ReplaceKeyPage);
       await waitFor('[data-test-replace-key-form]');
-      assert.dom('[data-test-service-account-replace-note]').exists();
+      assert.true(
+        requests.some(
+          (r) => r.method === 'GET' && r.path === '_user-keys/key-1',
+        ),
+        'asks for the key’s details',
+      );
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'sets the key file, the scopes and who it acts as all anew',
+          'a key whose details aren’t known is set anew',
+        );
+      assert.dom('[data-test-service-account-subject]').hasValue('');
+      assert.dom('[data-test-service-account-scopes]').hasValue('');
       assert
         .dom('[data-test-key-value]')
         .doesNotExist('a service account has no value to paste');
@@ -2212,6 +3300,206 @@ module('Integration | key pages', function (hooks) {
         },
         meta: { ticket: 'ticket-1' },
       });
+    });
+
+    function serviceAccountSlot() {
+      return forecastWith([
+        {
+          name: 'userKey',
+          key: 'userKey',
+          bound: {
+            rejected: true,
+            key: {
+              id: 'key-1',
+              name: 'Sheets',
+              kind: 'google-service-account',
+            },
+          },
+        },
+      ]);
+    }
+
+    function serviceAccountKey(serviceAccount: {
+      email: string;
+      subject: string | null;
+      scopes: string[];
+    }) {
+      return json(200, {
+        data: {
+          type: 'user-key',
+          id: 'key-1',
+          attributes: {
+            ...attributesOf(KEYS[0]),
+            name: 'Sheets',
+            kind: 'google-service-account',
+            serviceAccount,
+          },
+        },
+      });
+    }
+
+    test('a service account whose details are known starts from the user it acts as and its scopes', async function (assert) {
+      const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
+      const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      const CALENDAR = 'https://www.googleapis.com/auth/calendar.events';
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': () =>
+          serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: [SHEETS, DRIVE, CALENDAR],
+          }),
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText('start as the key has them now');
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com', 'Act as starts as it is');
+      assertShowsEveryScope(assert, [SHEETS, DRIVE, CALENDAR]);
+      assert
+        .dom('[data-test-replace-key-save]')
+        .isDisabled('the key file is still chosen anew');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .doesNotExist(
+          'a key file for the same service account changes nothing',
+        );
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+        {
+          value: SERVICE_ACCOUNT_FILE,
+          subject: 'owner@example.com',
+          scopes: [SHEETS, DRIVE, CALENDAR],
+        },
+        'leaving the fields as they are keeps them',
+      );
+    });
+
+    test('a key file for another service account says the prefilled fields were granted to the old one', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': () =>
+          serviceAccountKey({
+            email: 'reports-bot@boxel-test.iam.gserviceaccount.com',
+            subject: null,
+            scopes: ['openid'],
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      assert.dom('[data-test-service-account-scopes]').hasValue('openid');
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('', 'a key acting as itself starts with Act as empty');
+      assert.dom('[data-test-service-account-changed]').doesNotExist();
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .includesText(
+          'This key file is for sheets-bot@boxel-test.iam.gserviceaccount.com, not reports-bot@boxel-test.iam.gserviceaccount.com',
+        );
+    });
+
+    test('a key file chosen before the key’s details arrive stays, and the fields still start from them', async function (assert) {
+      let answer!: () => void;
+      let arrived = new Promise<void>((resolve) => (answer = resolve));
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': async () => {
+          await arrived;
+          return serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: ['openid'],
+          });
+        },
+      });
+      visitShell(OPENED);
+      // Not awaited: the key read is held back until answered, and anything
+      // that settles waits for it. It is answered on every path: a stubbed
+      // request still open keeps its waiter pending, and every later test's
+      // `settled()` with it.
+      let rendered = render(ReplaceKeyPage);
+      try {
+        await waitFor('[data-test-service-account-file]');
+        assert
+          .dom('[data-test-service-account-replace-note]')
+          .doesNotExist(
+            'nothing is said about the replace until the key is read',
+          );
+        chooseKeyFileNow(SERVICE_ACCOUNT_FILE);
+        await waitFor('[data-test-service-account-email]');
+      } finally {
+        answer();
+      }
+      await rendered;
+      await settled();
+      assert.dom('[data-test-service-account-scopes]').hasValue('openid');
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com');
+      assert
+        .dom('[data-test-service-account-email]')
+        .includesText('sheets-bot@boxel-test.iam.gserviceaccount.com');
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText('start as the key has them now');
+      assert.dom('[data-test-replace-key-save]').isEnabled();
+    });
+
+    test('what the owner enters before the key’s details arrive is kept', async function (assert) {
+      let answer!: () => void;
+      let arrived = new Promise<void>((resolve) => (answer = resolve));
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': async () => {
+          await arrived;
+          return serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: ['openid'],
+          });
+        },
+      });
+      visitShell(OPENED);
+      // Not awaited, and answered on every path, as above.
+      let rendered = render(ReplaceKeyPage);
+      try {
+        await waitFor('[data-test-service-account-scopes]');
+        typeNow('[data-test-service-account-scopes]', 'email');
+      } finally {
+        answer();
+      }
+      await rendered;
+      await settled();
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText('workspaces use this key', 'the key read has answered');
+      assert.dom('[data-test-service-account-scopes]').hasValue('email');
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'all anew',
+          'the note doesn’t claim a prefill it skipped',
+        );
     });
 
     test('an OAuth connection is signed in again on the connect page, not replaced', async function (assert) {
@@ -2246,7 +3534,13 @@ module('Integration | key pages', function (hooks) {
         .doesNotExist('a connection takes no value');
       await click('[data-test-replace-key-reconnect]');
       assert.deepEqual(navigations, [
-        { how: 'assign', url: '/secure/connect#reconnect=key-1' },
+        {
+          how: 'assign',
+          url: `/secure/connect#${new URLSearchParams({
+            reconnect: 'key-1',
+            back: OPENED,
+          })}`,
+        },
       ]);
       assert.deepEqual(ticketRequests(), [], 'nothing is changed here');
     });
@@ -2358,7 +3652,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-replace-key-unbound]')
         .hasText(
-          'None of your keys is approved for this request yet, so there is nothing to replace.',
+          'None of your keys is approved for this call yet, so there is nothing to replace.',
         );
     });
 
@@ -2562,6 +3856,190 @@ module('Integration | key pages', function (hooks) {
         requests.some((r) => r.path === '_secure-window/context'),
         'asks the server nothing',
       );
+    });
+  });
+
+  module('the trail of pages', function () {
+    const OPENED_FOR_CARD = `card=${encodeURIComponent(CARD)}&operation=forecast`;
+
+    function serveForecast() {
+      serve({
+        'POST _secure-window/context': () =>
+          context({
+            realm: WORKSPACE,
+            card: {
+              name: 'Weather',
+              module: `${REALM}weather`,
+              exportName: 'Weather',
+            },
+            operation: {
+              name: 'forecast',
+              label: 'Get the forecast',
+              base: 'callApi',
+              method: 'GET',
+              destination: {
+                href: 'https://api.weather.co.uk/v2/',
+                host: 'api.weather.co.uk',
+                path: '/v2/',
+                registrableDomain: 'weather.co.uk',
+              },
+              slots: [{ name: 'userKey', key: 'userKey' }],
+            },
+          }),
+      });
+    }
+
+    function crumbs() {
+      return [...document.querySelectorAll('[data-test-breadcrumbs] li')].map(
+        (li) => li.textContent!.replace('›', '').trim(),
+      );
+    }
+
+    test('the page the window was opened on shows no trail, and is titled by its name', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+      });
+      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert.dom('[data-test-breadcrumbs]').doesNotExist();
+      assert.dom('[data-test-keys-heading]').hasText('Share key');
+    });
+
+    test('the key page reached from a share opened for a workspace leads back to it', async function (assert) {
+      let share = `share-key#realm=${encodeURIComponent(REALM)}`;
+      visitShell(`keys#${new URLSearchParams({ back: share })}`);
+      await render(KeyPage);
+      await waitFor('[data-test-key-list]');
+      assert.deepEqual(crumbs(), ['Share key', 'Your keys']);
+      assert
+        .dom('[data-test-breadcrumb-current]')
+        .hasAttribute('aria-current', 'page');
+      assert.dom('[data-test-keys-heading]').hasText('Your keys');
+      assert
+        .dom('[data-test-breadcrumb="0"]')
+        .hasAttribute('href', `/secure/${share}`);
+      await click('[data-test-breadcrumb="0"]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${share}` },
+      ]);
+    });
+
+    test('Add key reached from Approve leads back to the batch as it was opened', async function (assert) {
+      serveForecast();
+      navigation.back = (url: string) => navigations.push({ how: 'back', url });
+      let approve = `approve#${OPENED_FOR_CARD}`;
+      visitShell(
+        `enter-key#${OPENED_FOR_CARD}&then=approve&${new URLSearchParams({ back: approve })}`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert.deepEqual(crumbs(), ['Approve', 'Add key']);
+      assert.dom('[data-test-keys-heading]').hasText('Add key');
+      await click('[data-test-breadcrumb="0"]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${approve}` },
+      ]);
+      assert.deepEqual(ticketRequests(), [], 'nothing is changed on the way');
+    });
+
+    test('a key added from Approve goes back to the batch as it was opened, with the new key chosen', async function (assert) {
+      serveForecast();
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: { ...attributesOf(KEYS[0]), name: 'Forecasts' },
+            },
+          }),
+      });
+      let approve = `approve#${OPENED_FOR_CARD}&key=key-1`;
+      visitShell(
+        `enter-key#${OPENED_FOR_CARD}&key=key-1&then=approve&${new URLSearchParams({ back: approve })}`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-enter-key-save]');
+      await settled();
+      assert.deepEqual(navigations, [
+        {
+          how: 'replace',
+          url: `/secure/approve#${OPENED_FOR_CARD}&key=key-3`,
+        },
+      ]);
+    });
+
+    test('a trail several pages long names each page, and goes back to any of them', async function (assert) {
+      serveForecast();
+      let use = 'keys/key-1/use';
+      let approve = `approve#${OPENED_FOR_CARD}&${new URLSearchParams({ back: use })}`;
+      visitShell(
+        `enter-key#${OPENED_FOR_CARD}&then=approve&${new URLSearchParams({ back: approve })}`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert.deepEqual(crumbs(), [
+        'Your keys',
+        'Use with card',
+        'Approve',
+        'Add key',
+      ]);
+      await click('[data-test-breadcrumb="0"]');
+      await click('[data-test-breadcrumb="1"]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: '/secure/keys' },
+        { how: 'replace', url: `/secure/${use}` },
+      ]);
+    });
+
+    test('a page beneath the key page has the key page above it', async function (assert) {
+      visitShell('keys/add');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert.deepEqual(crumbs(), ['Your keys', 'Add key']);
+      await click('[data-test-breadcrumb="0"]');
+      assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
+    });
+
+    test('a page beneath the key page, reached by a route transition from a key page with a trail, keeps that trail and goes back through the history', async function (assert) {
+      let share = `share-key#realm=${encodeURIComponent(REALM)}`;
+      let keys = `keys#${new URLSearchParams({ back: share })}`;
+      navigation.back = (url: string) => navigations.push({ how: 'back', url });
+      visitShell('keys/add');
+      noteDocumentAddress(keys);
+      try {
+        await render(EnterKeyPage);
+        await waitFor('[data-test-enter-key-form]');
+        assert.deepEqual(crumbs(), ['Share key', 'Your keys', 'Add key']);
+        await click('[data-test-breadcrumb="1"]');
+        await click('[data-test-breadcrumb="0"]');
+        assert.deepEqual(navigations, [
+          { how: 'back', url: `/secure/${keys}` },
+          { how: 'replace', url: `/secure/${share}` },
+        ]);
+      } finally {
+        noteDocumentAddress(undefined);
+      }
+    });
+
+    test('a way back that names a page that isn’t a key page ends the trail', async function (assert) {
+      visitShell(`keys#${new URLSearchParams({ back: 'sign-out' })}`);
+      await render(KeyPage);
+      await waitFor('[data-test-key-list]');
+      assert.dom('[data-test-breadcrumbs]').doesNotExist();
+    });
+
+    test('a way back that names no page of the shell ends the trail', async function (assert) {
+      visitShell(
+        `keys#${new URLSearchParams({ back: 'https://elsewhere.test/secure/keys' })}`,
+      );
+      await render(KeyPage);
+      await waitFor('[data-test-key-list]');
+      assert.dom('[data-test-breadcrumbs]').doesNotExist();
     });
   });
 });

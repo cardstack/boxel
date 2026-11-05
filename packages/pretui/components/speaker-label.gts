@@ -1,6 +1,8 @@
 // Pretui — SpeakerLabel: who said a message in a room with more than one person.
 import Component from '@glimmer/component';
 import { AgentMark } from './agent-mark';
+import { Tooltip } from './tooltip';
+import { fullDate, shortTime } from '../internal/message-time';
 
 export interface SpeakerLabelSignature {
   Args: {
@@ -11,8 +13,12 @@ export interface SpeakerLabelSignature {
     via?: string;
     /** the speaker is the assistant, not a person */
     agent?: boolean;
-    /** when, as the caller formats it: '2:04 PM' */
+    /** what follows the name, as the caller formats it: '2:04 PM', or a
+     * turn's 'Worked for 24s' */
     time?: string;
+    /** when it was said, in place of `@time`: shown as '2:04 PM', with the
+     * full date in a tooltip on hover and keyboard focus */
+    timestamp?: Date;
     /** the assistant is working: its mark animates */
     working?: boolean;
   };
@@ -30,6 +36,15 @@ export interface SpeakerLabelSignature {
  * host's icon, animated while it works), so the two never read alike.
  */
 export class SpeakerLabel extends Component<SpeakerLabelSignature> {
+  get shortTime(): string | undefined {
+    return this.args.timestamp ? shortTime(this.args.timestamp) : undefined;
+  }
+  get fullDate(): string | undefined {
+    return this.args.timestamp ? fullDate(this.args.timestamp) : undefined;
+  }
+  get isoTime(): string | undefined {
+    return this.args.timestamp?.toISOString();
+  }
   get initial(): string {
     return this.args.name.trim()[0] ?? '?';
   }
@@ -56,7 +71,19 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
       {{#if @via}}<span class='pretui-speaker-via' data-test-pretui-speaker-via>
           via
           {{@via}}</span>{{/if}}
-      {{#if @time}}<span class='pretui-speaker-time'>{{@time}}</span>{{/if}}
+      {{#if this.fullDate}}
+        <span class='pretui-speaker-dot' aria-hidden='true'>·</span>
+        <Tooltip @content={{this.fullDate}} @side='right'>
+          <time
+            class='pretui-speaker-tiptime'
+            datetime={{this.isoTime}}
+            tabindex='0'
+            data-test-pretui-speaker-time
+          >{{this.shortTime}}</time>
+        </Tooltip>
+      {{else if @time}}
+        <span class='pretui-speaker-time'>{{@time}}</span>
+      {{/if}}
     </div>
     <style scoped>
       @layer PretComponent {
@@ -104,7 +131,8 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
           text-overflow: ellipsis;
         }
         .pretui-speaker-via,
-        .pretui-speaker-time {
+        .pretui-speaker-time,
+        .pretui-speaker-dot {
           white-space: nowrap;
         }
         /* the assistant's name is one short word and always reads; what
@@ -125,6 +153,17 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
         }
         .pretui-speaker-time {
           font-variant-numeric: tabular-nums;
+        }
+        /* a time with its full date in a tooltip is a keyboard stop; its
+           dot stands outside it, so the focus ring holds the time alone */
+        .pretui-speaker-tiptime {
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-speaker-tiptime:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+          border-radius: var(--boxel-border-radius-xs);
         }
       }
     </style>

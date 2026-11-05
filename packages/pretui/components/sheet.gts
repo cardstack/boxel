@@ -761,7 +761,6 @@ export class Sheet extends Component<SheetSignature> {
       {{/if}}
 
       <Grid
-        {{! @glint-expect-error - the vendored grid bundle declares no element type }}
         class='pretui-sheet-grid'
         style={{this.gridTokens}}
         @sheet={{this.sheet}}
@@ -813,7 +812,6 @@ export class Sheet extends Component<SheetSignature> {
         <:body>
           {{#each this.rowViews key='key' as |row|}}
             <Row
-              {{! @glint-expect-error - the vendored grid bundle declares no element type }}
               class='pretui-sheet-row'
               @rowKey={{row.key}}
               aria-rowindex={{row.ariaRowIndex}}
@@ -826,7 +824,6 @@ export class Sheet extends Component<SheetSignature> {
                       disabled — the engine's readonly kind would print the
                       words "true"/"false" instead }}
                   <Cell
-                    {{! @glint-expect-error - the vendored grid bundle declares no element type }}
                     class='pretui-sheet-cell'
                     @colKey={{cell.colKey}}
                     @value={{cell.value}}
@@ -838,7 +835,6 @@ export class Sheet extends Component<SheetSignature> {
                   />
                 {{else}}
                   <Cell
-                    {{! @glint-expect-error - the vendored grid bundle declares no element type }}
                     class='pretui-sheet-cell'
                     @colKey={{cell.colKey}}
                     @value={{cell.value}}

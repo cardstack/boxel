@@ -123,8 +123,19 @@ export interface StreamFileRef {
   isShimmed?: true;
 }
 
+export interface ReadFileOptions {
+  // Called when the realm's response serves no file at the URL, with that
+  // response's status: 404 when the realm finds no file there, and another
+  // status when it answers otherwise, such as an archived realm's 403 or a
+  // redirect to another path.
+  onNoFile?: (status: number) => void;
+}
+
 export interface Reader {
-  readFile: (url: URL) => Promise<TextFileRef | undefined>;
+  readFile: (
+    url: URL,
+    opts?: ReadFileOptions,
+  ) => Promise<TextFileRef | undefined>;
   readStream: (url: URL) => Promise<StreamFileRef | undefined>;
   mtimes: () => Promise<{ [url: string]: number }>;
 }
@@ -206,6 +217,7 @@ export class Worker {
   #queuePublisher: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
+  #matrixServerName: string;
   #matrixClientCache: Map<string, MatrixClient> = new Map();
   #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
@@ -225,6 +237,7 @@ export class Worker {
     queuePublisher,
     virtualNetwork,
     matrixURL,
+    matrixServerName,
     realmServerMatrixUsername,
     secretSeed,
     reportStatus,
@@ -242,6 +255,9 @@ export class Worker {
     queuePublisher: QueuePublisher;
     virtualNetwork: VirtualNetwork;
     matrixURL: URL;
+    // The name of the Matrix server the homeserver at `matrixURL` serves
+    // (ADR 004 §1.2).
+    matrixServerName: string;
     realmServerMatrixUsername: string;
     secretSeed: string;
     prerenderer: Prerenderer;
@@ -261,6 +277,7 @@ export class Worker {
     this.#indexWriter = indexWriter;
     this.#virtualNetwork = virtualNetwork;
     this.#matrixURL = matrixURL;
+    this.#matrixServerName = matrixServerName;
     this.#secretSeed = secretSeed;
     this.#reportStatus = reportStatus;
     this.#reportProgress = reportProgress;
@@ -286,6 +303,7 @@ export class Worker {
       getReader,
       log: this.#log,
       matrixURL: this.#matrixURL.href,
+      matrixServerName: this.#matrixServerName,
       dbAdapter: this.#dbAdapter,
       indexWriter: this.#indexWriter,
       prerenderer: this.#prerenderer,
@@ -374,6 +392,7 @@ export class Worker {
     } else {
       matrixClient = new MatrixClient({
         matrixURL: new URL(this.#matrixURL),
+        serverName: this.#matrixServerName,
         username: this.#realmServerMatrixUsername,
         seed: this.#secretSeed,
       });
@@ -395,7 +414,7 @@ export class Worker {
     }
     let realmUserId = userIdFromUsername(
       args.realmUsername,
-      this.#matrixURL.href,
+      this.#matrixServerName,
     );
     _fetch = fetcher(
       this.#virtualNetwork.fetch,
@@ -714,10 +733,11 @@ export function getReader(
   };
 
   let reader: Reader = {
-    readFile: (url: URL) =>
+    readFile: (url: URL, opts?: ReadFileOptions) =>
       withRetries('readFile', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
         if (!servesFileAt(url, response)) {
+          opts?.onNoFile?.(response.status);
           await releaseBody(response);
           return undefined;
         }

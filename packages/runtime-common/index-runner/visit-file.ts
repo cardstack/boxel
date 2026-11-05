@@ -25,6 +25,10 @@ import {
 } from '../index.ts';
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
+import {
+  readServedFile,
+  type WrittenFileRereads,
+} from './written-file-rereads.ts';
 
 interface RenderFileForIndexingOptions {
   url: URL;
@@ -51,9 +55,14 @@ interface RenderFileForIndexingOptions {
   // re-reads after peer commits moved the realm (see `renderScopeFor`).
   renderScopeRound: number;
   prerenderer: Prerenderer;
+  // Present in an incremental pass: a read that finds no file is then retried
+  // through the pass's re-read budget, for as long as the realm's record says
+  // it just created the file, before the visit reports the file gone.
+  writtenFileRereads?: WrittenFileRereads;
   consumeClearCacheForRender(): boolean;
   consumeResetStoreForRender(): boolean;
   logDebug(message: string): void;
+  logInfo(message: string): void;
   logWarn(message: string): void;
 }
 
@@ -143,9 +152,11 @@ export async function renderFileForIndexing({
   batchId,
   renderScopeRound,
   prerenderer,
+  writtenFileRereads,
   consumeClearCacheForRender,
   consumeResetStoreForRender,
   logDebug,
+  logInfo,
   logWarn,
 }: RenderFileForIndexingOptions): Promise<IndexVisitRenderResult | undefined> {
   if (isIgnored(realmURL, ignoreMap, url)) {
@@ -164,10 +175,18 @@ export async function renderFileForIndexing({
     return undefined;
   }
 
-  let fileRef = await reader.readFile(url);
-  if (!fileRef) {
-    fileRef = await reader.readFile(new URL(encodeURI(localPath), url));
-  }
+  let readFile = readServedFile(reader, [
+    url,
+    new URL(encodeURI(localPath), url),
+  ]);
+  let fileRef = writtenFileRereads
+    ? await writtenFileRereads.readVisitedFile(readFile, {
+        recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
+        label: `${jobIdentity(jobInfo)} ${url.href}`,
+        ifMissing: 'indexing it as removed',
+        log: { info: logInfo, warn: logWarn },
+      })
+    : (await readFile()).file;
   if (!fileRef) {
     let error = new CardError(`missing file ${url.href}`, { status: 404 });
     error.deps = [url.href];

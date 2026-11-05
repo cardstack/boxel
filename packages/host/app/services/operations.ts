@@ -34,7 +34,7 @@ import {
 } from '@cardstack/runtime-common';
 import { lowerOperationDeclarations } from '@cardstack/runtime-common/card-operations';
 import type { OperationDefinition } from '@cardstack/runtime-common/card-operations';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { makeDefinitionLookup } from '../lib/definition-lookup';
 import OperationLedger from '../lib/operation-ledger';
@@ -336,26 +336,6 @@ export default class OperationsService
     return this.#ledger;
   }
 
-  // The loader that built this instance's class.
-  //
-  // Not the session's current loader, which is a different object after any
-  // reset — and a card the store is already holding keeps the class the
-  // loader that built it produced. Every identity check downstream compares
-  // against that class: `getDeclaredOperations` asks whether it extends
-  // `BaseDef`, and the `BaseDef` it compares against is whichever copy of the
-  // base module the importing loader resolved. Ask the current loader after a
-  // reset and the answer is "this class does not extend BaseDef" — true of
-  // the two copies, and useless — so every operation on a resident card would
-  // quietly stop being optimistic from the first reset onward.
-  //
-  // Falls back to the session's loader for a class no loader claims, which is
-  // the same loader that would have been used before this existed.
-  private loaderFor(instance: CardDef): Loader {
-    return (
-      Loader.getLoaderFor(instance.constructor) ?? this.loaderService.loader
-    );
-  }
-
   // The operation as the realm stored it, lowered here from the same
   // declaration by the same function the indexer runs.
   //
@@ -376,7 +356,7 @@ export default class OperationsService
   private async loweredOperationsFor(
     instance: CardDef,
   ): Promise<Record<string, OperationDefinition> | undefined> {
-    let loader = this.loaderFor(instance);
+    let loader = this.loaderService.loader;
     let codeRef = identifyCard(
       instance.constructor as typeof CardAPI.BaseDef,
     ) as CodeRef | undefined;
@@ -405,8 +385,8 @@ export default class OperationsService
     loader: Loader,
   ): Promise<Record<string, OperationDefinition> | undefined> {
     try {
-      // Both resolved through the instance's own loader, so the classes these
-      // modules compare against are the classes this card was built from.
+      // Base modules are compiled into the host, so every loader resolves
+      // them to the same classes the card's class extends.
       let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
       let operationsApi = await loader.import<typeof OperationsAPI>(
         '@cardstack/base/operations',
@@ -486,7 +466,7 @@ export default class OperationsService
     if (!codeRef) {
       throw new Error('the card names no type to plan the program against');
     }
-    let loader = this.loaderFor(instance);
+    let loader = this.loaderService.loader;
     let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let lookupDefinition = makeDefinitionLookup(
       api,
@@ -666,7 +646,7 @@ export default class OperationsService
 // error and nothing was written — including the entry it names. A response
 // that is not that document at all is reported by status alone rather than
 // read for members it does not carry.
-async function refusal(response: Response): Promise<Error> {
+export async function refusal(response: Response): Promise<Error> {
   let body = await response.text();
   let error: Record<string, unknown> | undefined;
   try {
@@ -681,14 +661,24 @@ async function refusal(response: Response): Promise<Error> {
       detail: body || response.statusText,
     });
   }
-  let meta = (error.meta ?? {}) as { entry?: number | string };
+  let meta = (
+    error.meta && typeof error.meta === 'object' ? error.meta : {}
+  ) as Record<string, unknown> & {
+    entry?: number | string;
+    retryAfterSeconds?: unknown;
+  };
+  let code = typeof error.code === 'string' ? error.code : undefined;
   return new OperationsError({
     status: Number(error.status ?? response.status),
-    ...(typeof error.code === 'string' ? { code: error.code } : {}),
+    ...(code === undefined ? {} : { code }),
     ...(typeof error.title === 'string' ? { title: error.title } : {}),
     ...(typeof error.detail === 'string' ? { detail: error.detail } : {}),
     ...(typeof error.id === 'string' ? { id: error.id } : {}),
     ...(meta.entry === undefined ? {} : { entry: meta.entry }),
+    ...(typeof meta.retryAfterSeconds === 'number'
+      ? { retryAfterSeconds: meta.retryAfterSeconds }
+      : {}),
+    meta,
   });
 }
 

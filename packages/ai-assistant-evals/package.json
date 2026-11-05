@@ -27,9 +27,11 @@
     "@cardstack/runtime-common": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "@playwright/test": "catalog:",
+    "@types/jsonwebtoken": "catalog:",
     "@types/node": "catalog:",
     "concurrently": "catalog:",
     "ember-template-lint": "catalog:",
+    "jsonwebtoken": "catalog:",
     "typescript": "catalog:"
   },
   "volta": {

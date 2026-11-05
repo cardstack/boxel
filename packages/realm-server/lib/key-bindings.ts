@@ -58,9 +58,17 @@ import {
   credentialRejected,
   DEFAULT_PROBE_INTERVAL_MS,
   emitKeyGrantEvent,
+  hostOf,
   markKeyRejected,
   probeDue,
 } from './key-grant-rejection.ts';
+import {
+  chargeInteractiveCall,
+  validateLimitChanges,
+  type LimitSubject,
+} from './key-limits.ts';
+import { refusedFrom, subjectOfRefusal } from './key-use-subject.ts';
+import { recordFillRefusal } from './key-uses.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
 // to send a chosen key in one of the operation's credential slots. Card code
@@ -86,10 +94,27 @@ import {
 //   definition cache lowers the operation to now. A binding whose request has
 //   changed goes to `needs-reapproval`, its owner gets one notice, and nothing
 //   is sent until they approve the new request.
-// - **Pipelines only.** An interactive invocation — a card in the browser, the
-//   AI assistant, the CLI — is refused `interactive-use-not-approved`, since
-//   no binding is approved for interactive use. A pipeline the realm server
-//   runs as its payer (`Realm.handlePipeline`) is served.
+// - **Pipelines, and interactive use when approved for it.** A pipeline the
+//   realm server runs as its payer (`Realm.handlePipeline`) is served by any
+//   active binding. An interactive invocation — a card in the browser, the AI
+//   assistant, the CLI — is served only by a binding approved `interactive`,
+//   and refused `interactive-use-not-approved` by one approved for pipelines
+//   only. Approving interactive use is the owner's choice for the whole
+//   confirmation; a share's first interactive approval also sets the share's
+//   daily budget, since every reader of its realm can then spend it.
+// - **Anonymous use, of a key whose owner allows it.** A caller who isn't
+//   signed in, whom the realm's policy admits to the operation, is served by
+//   an interactive share binding only when the key the share holds allows
+//   anonymous use, which its owner decides for the key itself
+//   (`user-keys.ts`). Any other binding refuses them
+//   `anonymous-use-not-approved`. A `{{userKey}}` slot never fills for such a
+//   caller. A binding itself is never approved for anonymous use: whether
+//   visitors are served follows the policy and the key, so the two can't
+//   disagree binding by binding.
+// - **Within the owner's limits.** An interactive call counts against the
+//   limits of the share or key filling each slot, and is refused
+//   `rate-limited`, `over-budget` or `rate-limit-unavailable` before anything
+//   is opened (`key-limits.ts`). A pipeline's call doesn't count.
 // - **Approved only on the secure origin.** Approving and revoking take a
 //   session signed in on the secure origin, from the secure window or the CLI
 //   (`handle-key-bindings.ts`), never the app page's session, which card code
@@ -366,8 +391,9 @@ export async function approveBindings(
     approver,
     via,
     operations,
-    interactive,
+    interactive = false,
     anonymous,
+    dailyBudgets = {},
   }: {
     core: Pick<
       OperationCore,
@@ -377,15 +403,32 @@ export async function approveBindings(
     approver: string;
     via: SecureSessionClient;
     operations: OperationApproval[];
+    // Approves interactive use as well as pipelines, for every slot.
     interactive?: boolean;
     anonymous?: boolean;
+    // A daily budget for a share this approval fills, by share id. Required
+    // for a share's first interactive approval, accepted for any share an
+    // interactive approval fills, and refused otherwise.
+    dailyBudgets?: Record<string, number>;
   },
 ): Promise<{ batchId: string; approved: ApprovedBinding[] }> {
-  if (interactive || anonymous) {
-    throw new UserKeyError(
-      403,
-      'a binding is approved for pipelines only: interactive and anonymous use are not offered',
-    );
+  if (anonymous) {
+    throw new UserKeyError(403, 'anonymous use of a binding is not offered');
+  }
+  for (let [shareId, budget] of Object.entries(dailyBudgets)) {
+    if (!interactive) {
+      throw new UserKeyError(
+        400,
+        'a daily budget is set with an approval for interactive use',
+      );
+    }
+    let { dailyBudget } = validateLimitChanges({ dailyBudget: budget });
+    if (dailyBudget == null) {
+      throw new UserKeyError(
+        400,
+        `the daily budget for share ${shareId} is a whole number of calls`,
+      );
+    }
   }
   if (operations.length === 0) {
     throw new UserKeyError(400, 'an approval names at least one operation');
@@ -501,20 +544,39 @@ export async function approveBindings(
     });
   }
 
+  let filledShares = new Set(
+    planned.flatMap((p) => p.fills.flatMap((f) => f.shareId ?? [])),
+  );
+  for (let shareId of Object.keys(dailyBudgets)) {
+    if (!filledShares.has(shareId)) {
+      throw new UserKeyError(
+        400,
+        `share ${shareId} fills no slot of this approval, so its daily budget isn't set here`,
+      );
+    }
+  }
+
   let batchId = randomUUID();
   let approved: ApprovedBinding[] = [];
   await dbAdapter.withTransaction(async (txQuery) => {
+    let shareKeys = new Map<string, string>();
+    for (let shareId of [...filledShares].sort()) {
+      shareKeys.set(
+        shareId,
+        await lockApprovableShare(txQuery, realmURL, shareId, approver),
+      );
+      if (interactive) {
+        await setFirstInteractiveBudget(
+          txQuery,
+          shareId,
+          dailyBudgets[shareId],
+        );
+      }
+    }
     for (let plan of planned) {
       for (let fill of plan.fills) {
-        let keyId = fill.keyId;
-        if (fill.shareId !== undefined) {
-          keyId = await lockApprovableShare(
-            txQuery,
-            realmURL,
-            fill.shareId,
-            approver,
-          );
-        }
+        let keyId =
+          fill.shareId !== undefined ? shareKeys.get(fill.shareId) : fill.keyId;
         let { grant, created } = await createOrReuseGrantIn(txQuery, keyring, {
           owner: approver,
           keyId: keyId!,
@@ -535,6 +597,7 @@ export async function approveBindings(
           approver,
           via,
           snapshot,
+          interactive,
         });
         approved.push({ binding, snapshot, grant, grantCreated: created });
       }
@@ -610,6 +673,37 @@ async function lockApprovableShare(
   return share.key_id as string;
 }
 
+// A share approved for interactive use serves every reader of its realm, so
+// the first approval that allows it names the share's daily budget, which is
+// set with it. A later one may name one too, and sets it. Runs with the share
+// locked, so two first approvals can't both skip it.
+async function setFirstInteractiveBudget(
+  txQuery: Querier,
+  shareId: string,
+  dailyBudget: number | undefined,
+): Promise<void> {
+  if (dailyBudget === undefined) {
+    let [already] = await txQuery([
+      `SELECT 1 FROM key_bindings WHERE share_id = `,
+      param(shareId),
+      ` AND interactive LIMIT 1`,
+    ]);
+    if (!already) {
+      throw new UserKeyError(
+        400,
+        `share ${shareId} is approved for interactive use for the first time, so the approval names its daily budget, as dailyBudgets`,
+      );
+    }
+    return;
+  }
+  await txQuery([
+    `UPDATE key_shares SET daily_budget = `,
+    param(dailyBudget),
+    `, updated_at = NOW() WHERE id = `,
+    param(shareId),
+  ]);
+}
+
 // Writes one slot's approval: the binding, created or moved to what was just
 // approved, and its approval row.
 async function writeApproval(
@@ -627,6 +721,7 @@ async function writeApproval(
     approver,
     via,
     snapshot,
+    interactive,
   }: {
     batchId: string;
     realmURL: string;
@@ -640,6 +735,7 @@ async function writeApproval(
     approver: string;
     via: SecureSessionClient;
     snapshot: BindingSnapshot;
+    interactive: boolean;
   },
 ): Promise<KeyBinding> {
   let [existing] = await txQuery([
@@ -673,7 +769,9 @@ async function writeApproval(
         param(grantId),
         `, approved_by = `,
         param(approver),
-        `, interactive = false, anonymous = false, fingerprint = `,
+        `, interactive = `,
+        param(interactive),
+        `, anonymous = false, fingerprint = `,
         param(fingerprint),
         `, approval_id = `,
         param(approvalId),
@@ -682,7 +780,7 @@ async function writeApproval(
         ` RETURNING ${BINDING_COLUMNS}`,
       ])
     : await txQuery([
-        `INSERT INTO key_bindings (id, realm_url, definition_url, export_name, operation_name, instance_url, slot, key_id, share_id, grant_id, approved_by, fingerprint, approval_id, state) VALUES (`,
+        `INSERT INTO key_bindings (id, realm_url, definition_url, export_name, operation_name, instance_url, slot, key_id, share_id, grant_id, approved_by, interactive, fingerprint, approval_id, state) VALUES (`,
         param(bindingId),
         `, `,
         param(realmURL),
@@ -704,6 +802,8 @@ async function writeApproval(
         param(grantId),
         `, `,
         param(approver),
+        `, `,
+        param(interactive),
         `, `,
         param(fingerprint),
         `, `,
@@ -727,6 +827,7 @@ async function writeApproval(
     fingerprint,
     actor: approver,
     via,
+    interactive,
   });
   return toBinding(row);
 }
@@ -750,6 +851,7 @@ async function insertApprovalRow(
     fingerprint: string;
     actor: string;
     via: SecureSessionClient;
+    interactive: boolean;
   },
 ): Promise<void> {
   let { snapshot } = row;
@@ -764,7 +866,9 @@ async function insertApprovalRow(
     param(row.grantId),
     `, `,
     param(row.action),
-    `, false, false, `,
+    `, `,
+    param(row.interactive),
+    `, false, `,
     param(row.realmURL),
     `, `,
     param(row.type.module),
@@ -874,7 +978,7 @@ export async function moveShareBindingsIn(
   },
 ): Promise<string[]> {
   let rows = await txQuery([
-    `SELECT b.id, b.approval_id, b.fingerprint, last.realm_url, last.definition_url, last.export_name, last.operation_name, last.instance_url, last.slot, last.destination, last.method, last.path_template, last.headers_template, last.placement, last.placement_name, last.transform, last.body_template
+    `SELECT b.id, b.approval_id, b.fingerprint, b.interactive, last.realm_url, last.definition_url, last.export_name, last.operation_name, last.instance_url, last.slot, last.destination, last.method, last.path_template, last.headers_template, last.placement, last.placement_name, last.transform, last.body_template
        FROM key_bindings b JOIN key_binding_approvals last ON last.id = b.approval_id
       WHERE b.share_id = `,
     param(shareId),
@@ -938,6 +1042,7 @@ export async function moveShareBindingsIn(
       fingerprint: row.fingerprint as string,
       actor: owner,
       via,
+      interactive: Boolean(row.interactive),
     });
     moved.push(row.id as string);
   }
@@ -953,7 +1058,8 @@ function refusal(
   code:
     | 'share-suspended'
     | 'binding-needs-reapproval'
-    | 'interactive-use-not-approved',
+    | 'interactive-use-not-approved'
+    | 'anonymous-use-not-approved',
   title: string,
   detail: string,
   slot: CallApiSlot,
@@ -1047,6 +1153,9 @@ export interface CheckedSlotBinding {
   approval_id: string;
   state: KeyBindingState;
   share_state: string | null;
+  // Whether the key the binding's share holds allows anonymous use; null for
+  // a personal key's binding, or a share with no key.
+  share_key_anonymous: boolean | null;
   share_key_id: string | null;
   share_owner: string | null;
   grant_state: string | null;
@@ -1083,6 +1192,7 @@ export type SlotCheck =
         | 'share-suspended'
         | 'binding-needs-reapproval'
         | 'interactive-use-not-approved'
+        | 'anonymous-use-not-approved'
         | 'credential-rejected'
         | 'key-rejected';
     };
@@ -1091,7 +1201,9 @@ export type SlotCheck =
 // approved in this realm, for this operation (and this card, when it is
 // approved per instance), by the caller for a `{{userKey}}` slot; its share,
 // if it has one, not suspended; its fingerprint the one the request has now;
-// approved for how the invocation arrived; its grant still there for its key;
+// approved for how the invocation arrived, and for a caller who isn't signed
+// in, its share's key allowing anonymous use; its grant still there for its
+// key;
 // that grant not rejected by the vendor, unless its probe is due; and the
 // grant's key not a service-account key Google refused, unless the key's
 // probe is due. The first check a slot fails is its answer.
@@ -1111,7 +1223,7 @@ export async function checkSlots(
   for (let slot of request.slots) {
     let [binding] = (await query(dbAdapter, [
       `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
-              s.state AS share_state, s.key_id AS share_key_id, s.owner AS share_owner,
+              s.state AS share_state, (SELECT sk.anonymous FROM user_keys sk WHERE sk.id = s.key_id) AS share_key_anonymous, s.key_id AS share_key_id, s.owner AS share_owner,
               g.state AS grant_state, g.destination AS grant_destination,
               k.id AS grant_key_id, k.kind AS key_kind, k.state AS key_state,
               `,
@@ -1156,6 +1268,11 @@ function checkSlot(
   if (lookup.mode === 'interactive' && !binding.interactive) {
     return { slot, binding, refused: 'interactive-use-not-approved' };
   }
+  // A personal key's binding has no share, so a `{{userKey}}` slot reaching
+  // here for such a caller is refused too.
+  if (lookup.anonymous && !binding.share_key_anonymous) {
+    return { slot, binding, refused: 'anonymous-use-not-approved' };
+  }
   if (!binding.grant_id) {
     return { slot, binding, refused: 'binding-not-approved' };
   }
@@ -1174,20 +1291,35 @@ function checkSlot(
 
 // The binding for each of the request's slots, checked (`checkSlots`). A
 // binding whose request has changed goes to `needs-reapproval` here, and its
-// owner gets one notice. Throws the refusal for the first slot that fails.
+// owner gets one notice, unless the call came from a published realm
+// (`publishedRealmURL`), whose copy of the source's code may be older than
+// what was approved: then the call is refused and the binding is left as it
+// is. Throws the refusal for the first slot that fails.
 //
 // A call claims a rejected grant's or key's probe when one is due
 // (`claimProbe: true`); an admission only asks whether one is due, so a run
-// that would probe is admitted and one that would be refused is not.
+// that would probe is admitted and one that would be refused is not. A call
+// (`claimProbe: true`) that arrived interactively is counted against the
+// limits of the shares and keys filling its slots once every slot has passed
+// its checks, and before any probe is claimed, so a call refused for a limit
+// uses up no probe.
 async function checkedBindings(
   dbAdapter: DBAdapter,
   lookup: CallApiSlotLookup,
-  rejection: { probeIntervalMs: number; claimProbe: boolean },
+  rejection: {
+    probeIntervalMs: number;
+    claimProbe: boolean;
+    publishedRealmURL?: string;
+  },
 ): Promise<CheckedBinding[]> {
   let { request } = lookup;
   let refuseNotApproved = () =>
     new OperationFailure(
-      notApproved(lookup.operation, request, lookup.realmURL),
+      notApproved(
+        lookup.operation,
+        request,
+        rejection.publishedRealmURL ?? lookup.realmURL,
+      ),
     );
   let instance = bindingInstance(request, lookup.instance);
   if (instance === undefined) {
@@ -1197,10 +1329,13 @@ async function checkedBindings(
   // The rejected grants and keys this call would probe, claimed only once
   // every slot has passed its other checks, so a call refused for another
   // reason uses up no probe.
-  let rejected = new Map<string, { slot: CallApiSlot; destination: string }>();
+  let rejected = new Map<
+    string,
+    { slot: CallApiSlot; destination: string; subject: LimitSubject }
+  >();
   let rejectedKeys = new Map<
     string,
-    { slot: CallApiSlot; destination: string }
+    { slot: CallApiSlot; destination: string; subject: LimitSubject }
   >();
   for (let check of await checkSlots(
     dbAdapter,
@@ -1219,45 +1354,78 @@ async function checkedBindings(
         }
         throw refuseNotApproved();
       case 'share-suspended':
-        throw refusal(
-          409,
-          'share-suspended',
-          'Share suspended',
-          `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a share this realm suspended`,
-          slot,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            409,
+            'share-suspended',
+            'Share suspended',
+            `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a share this realm suspended`,
+            slot,
+          ),
         );
       case 'binding-needs-reapproval':
-        await markNeedsReapproval(
-          dbAdapter,
-          check.binding.id,
-          check.binding.approval_id,
-        );
-        throw refusal(
-          409,
-          'binding-needs-reapproval',
-          'Binding needs re-approval',
-          `operation "${lookup.operation}" sends another request than the one approved for the credential slot "${slot.name}", so nothing is sent until its key's owner approves it again`,
-          slot,
+        if (!rejection.publishedRealmURL) {
+          await markNeedsReapproval(
+            dbAdapter,
+            check.binding.id,
+            check.binding.approval_id,
+          );
+        }
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            409,
+            'binding-needs-reapproval',
+            'Binding needs re-approval',
+            `operation "${lookup.operation}" sends another request than the one approved for the credential slot "${slot.name}", so nothing is sent until its key's owner approves it again`,
+            slot,
+          ),
         );
       case 'interactive-use-not-approved':
-        throw refusal(
-          403,
-          'interactive-use-not-approved',
-          'Interactive use not approved',
-          `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI`,
-          slot,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            403,
+            'interactive-use-not-approved',
+            'Interactive use not approved',
+            // Says whose key the slot takes, in the words the other refusals
+            // use, since the AI assistant sees only the message and answers a
+            // caller's own key and a realm's shared key differently.
+            slot.key === 'userKey'
+              ? `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
+              : `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
+            slot,
+          ),
+        );
+      case 'anonymous-use-not-approved':
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            401,
+            'anonymous-use-not-approved',
+            'Anonymous use not approved',
+            `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a key whose owner hasn't allowed people who aren't signed in to use it, so it is used only for signed-in callers. Sign in to use it`,
+            slot,
+          ),
         );
       case 'credential-rejected':
-        throw credentialRejected(
-          lookup.operation,
-          slot,
-          check.binding.grant_destination!,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          credentialRejected(
+            lookup.operation,
+            slot,
+            check.binding.grant_destination!,
+          ),
         );
       case 'key-rejected':
-        throw serviceAccountRejected(
-          lookup.operation,
-          slot,
-          check.binding.grant_destination!,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          serviceAccountRejected(
+            lookup.operation,
+            slot,
+            check.binding.grant_destination!,
+          ),
         );
     }
     let { probe, keyProbe } = check;
@@ -1265,15 +1433,26 @@ async function checkedBindings(
       rejected.set(check.binding.grant_id!, {
         slot,
         destination: check.binding.grant_destination!,
+        subject: limitSubjectOf(check.binding),
       });
     }
     if (keyProbe) {
       rejectedKeys.set(check.binding.grant_key_id!, {
         slot,
         destination: check.binding.grant_destination!,
+        subject: limitSubjectOf(check.binding),
       });
     }
     checked.push({ slot, binding: check.binding, probe, keyProbe });
+  }
+  if (rejection.claimProbe && lookup.mode === 'interactive') {
+    await chargeInteractiveCall(dbAdapter, {
+      realmURL: lookup.realmURL,
+      operation: lookup.operation,
+      caller: lookup.caller,
+      ...(lookup.anonymous ? { anonymous: lookup.anonymous } : {}),
+      subjects: checked.map(({ binding }) => limitSubjectOf(binding)),
+    });
   }
   if (rejection.claimProbe && (rejected.size > 0 || rejectedKeys.size > 0)) {
     // Two slots can send under one grant, and two grants of one key share
@@ -1281,19 +1460,35 @@ async function checkedBindings(
     // in one statement, so of calls arriving together only one probes. The
     // claims are one transaction: a call refused at any of them claims none.
     await dbAdapter.withTransaction(async (txQuery) => {
-      for (let [grantId, { slot, destination }] of rejected) {
+      for (let [grantId, { slot, destination, subject }] of rejected) {
         if (!(await claimProbe(txQuery, grantId, rejection.probeIntervalMs))) {
-          throw credentialRejected(lookup.operation, slot, destination);
+          throw refusedFrom(
+            subject,
+            credentialRejected(lookup.operation, slot, destination),
+          );
         }
       }
-      for (let [keyId, { slot, destination }] of rejectedKeys) {
+      for (let [keyId, { slot, destination, subject }] of rejectedKeys) {
         if (!(await claimKeyProbe(txQuery, keyId, rejection.probeIntervalMs))) {
-          throw serviceAccountRejected(lookup.operation, slot, destination);
+          throw refusedFrom(
+            subject,
+            serviceAccountRejected(lookup.operation, slot, destination),
+          );
         }
       }
     });
   }
   return checked;
+}
+
+// What a slot's use counts against: the share it is filled from, or the
+// personal key it is filled with.
+export function limitSubjectOf(
+  binding: Pick<CheckedSlotBinding, 'share_id' | 'key_id'>,
+): LimitSubject {
+  return binding.share_id
+    ? { kind: 'share', id: binding.share_id }
+    : { kind: 'key', id: binding.key_id! };
 }
 
 // A binding that passed every check, with whether the call is the probe of
@@ -1424,6 +1619,16 @@ async function markNeedsReapproval(
   ]);
 }
 
+// How a call fills its slots. `publishedRealmURL` is set for a call made on a
+// published realm, whose lookup names the realm it was published from, where
+// its bindings are: a refusal it is told, and a use recorded for it, name the
+// published realm, and a binding approved for a later request than the
+// published copy sends refuses the call and stays approved for the source.
+export interface FillOptions {
+  probeIntervalMs?: number;
+  publishedRealmURL?: string;
+}
+
 // Fills every slot of a `callApi` request from its binding: the key's value
 // opened from the binding's grant, under the destination the grant stored,
 // with the slot's transform applied. A grant that is gone, belongs to another
@@ -1438,89 +1643,139 @@ export async function fillSlots(
   // refused without the keyring.
   keyring: () => SecretsKeyring,
   lookup: CallApiSlotLookup,
+  options: FillOptions = {},
+): Promise<CallApiFilledSlot[]> {
+  // A refusal raised here is recorded against the share or key that raised
+  // it; one raised once the slots are filled is the executor's to report
+  // (`recordUse`), against every share and key filling them.
+  try {
+    return await fillCheckedSlots(dbAdapter, keyring, lookup, options);
+  } catch (error) {
+    if (error instanceof OperationFailure) {
+      await recordFillRefusal(
+        dbAdapter,
+        { ...lookup, realmURL: options.publishedRealmURL ?? lookup.realmURL },
+        error,
+      );
+    }
+    throw error;
+  }
+}
+
+async function fillCheckedSlots(
+  dbAdapter: DBAdapter,
+  keyring: () => SecretsKeyring,
+  lookup: CallApiSlotLookup,
   {
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
-  }: { probeIntervalMs?: number } = {},
+    publishedRealmURL,
+  }: FillOptions,
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
-  for (let { slot, binding, probe, keyProbe } of await checkedBindings(
-    dbAdapter,
-    lookup,
-    {
-      probeIntervalMs,
-      claimProbe: true,
-    },
-  )) {
-    let opened: Awaited<ReturnType<typeof openGrantForSending>>;
-    let ring = keyring();
+  for (let checked of await checkedBindings(dbAdapter, lookup, {
+    probeIntervalMs,
+    claimProbe: true,
+    ...(publishedRealmURL ? { publishedRealmURL } : {}),
+  })) {
+    // A refusal filling this slot, from an unusable grant or a credential
+    // whose token can't be minted, is this binding's share's or key's.
     try {
-      opened = await openGrantForSending(dbAdapter, ring, {
-        owner: binding.approved_by,
-        grantId: binding.grant_id!,
-      });
+      filled.push(
+        await fillCheckedSlot(
+          dbAdapter,
+          keyring,
+          lookup,
+          checked,
+          publishedRealmURL ?? lookup.realmURL,
+        ),
+      );
     } catch (error) {
-      // A grant that is gone, or whose copy doesn't open, fills nothing: the
-      // binding is as good as unapproved. Anything else is a fault, not a
-      // refusal.
-      let unusable =
-        (error instanceof UserKeyError && error.status === 404) ||
-        error instanceof SecretDecryptionError;
-      log.warn(
-        `binding ${binding.id} can't fill slot "${slot.name}": its grant ${unusable ? 'is unusable' : 'failed to open'} (${error instanceof Error ? error.name : 'unknown error'})`,
-      );
-      if (!unusable) {
-        throw error;
+      if (error instanceof OperationFailure && !subjectOfRefusal(error)) {
+        refusedFrom(limitSubjectOf(checked.binding), error);
       }
-      throw new OperationFailure(
-        notApproved(lookup.operation, lookup.request, lookup.realmURL),
-      );
+      throw error;
     }
-    let bindingKey = binding.key_id ?? binding.share_key_id;
-    if (opened.keyId !== bindingKey) {
-      throw new OperationFailure(
-        notApproved(lookup.operation, lookup.request, lookup.realmURL),
-      );
-    }
-    // A key that mints its access tokens sends the one it mints now; its
-    // grant's marker has only proved the grant real.
-    let mints = MINTING_KINDS.has(opened.kind);
-    let secret = mints
-      ? await mintedToken(dbAdapter, ring, opened, slot, {
-          operation: lookup.operation,
-          grantId: binding.grant_id!,
-          realmURL: lookup.realmURL,
-          shareId: binding.share_id ?? undefined,
-          keyProbe,
-        })
-      : opened.value;
-    let value =
-      slot.transform === 'basic'
-        ? Buffer.from(secret, 'utf8').toString('base64')
-        : secret;
-    filled.push({
-      name: slot.name,
-      value,
-      ...(value !== secret ? { raw: secret } : {}),
-      destination: opened.destination,
-      // A vendor's 401 to a stored key rejects the grant it was sent under. A
-      // minted token's refusal is its connection's to judge when it next
-      // refreshes, so a 401 to one is only the vendor's answer.
-      ...(mints
-        ? {}
-        : {
-            grant: {
-              id: binding.grant_id!,
-              destination: opened.destination,
-              slot: { name: slot.name, key: slot.key },
-              realmURL: lookup.realmURL,
-              ...(binding.share_id ? { shareId: binding.share_id } : {}),
-              copy: opened.copy,
-              probe,
-            },
-          }),
-    });
   }
   return filled;
+}
+
+async function fillCheckedSlot(
+  dbAdapter: DBAdapter,
+  keyring: () => SecretsKeyring,
+  lookup: CallApiSlotLookup,
+  { slot, binding, probe, keyProbe }: CheckedBinding,
+  // The realm the caller invoked, which a refusal names.
+  invokedRealmURL: string,
+): Promise<CallApiFilledSlot> {
+  let opened: Awaited<ReturnType<typeof openGrantForSending>>;
+  let ring = keyring();
+  try {
+    opened = await openGrantForSending(dbAdapter, ring, {
+      owner: binding.approved_by,
+      grantId: binding.grant_id!,
+    });
+  } catch (error) {
+    // A grant that is gone, or whose copy doesn't open, fills nothing: the
+    // binding is as good as unapproved. Anything else is a fault, not a
+    // refusal.
+    let unusable =
+      (error instanceof UserKeyError && error.status === 404) ||
+      error instanceof SecretDecryptionError;
+    log.warn(
+      `binding ${binding.id} can't fill slot "${slot.name}": its grant ${unusable ? 'is unusable' : 'failed to open'} (${error instanceof Error ? error.name : 'unknown error'})`,
+    );
+    if (!unusable) {
+      throw error;
+    }
+    throw new OperationFailure(
+      notApproved(lookup.operation, lookup.request, invokedRealmURL),
+    );
+  }
+  let bindingKey = binding.key_id ?? binding.share_key_id;
+  if (opened.keyId !== bindingKey) {
+    throw new OperationFailure(
+      notApproved(lookup.operation, lookup.request, invokedRealmURL),
+    );
+  }
+  // A key that mints its access tokens sends the one it mints now; its
+  // grant's marker has only proved the grant real.
+  let mints = MINTING_KINDS.has(opened.kind);
+  let secret = mints
+    ? await mintedToken(dbAdapter, ring, opened, slot, {
+        operation: lookup.operation,
+        grantId: binding.grant_id!,
+        realmURL: lookup.realmURL,
+        shareId: binding.share_id ?? undefined,
+        keyProbe,
+      })
+    : opened.value;
+  let value =
+    slot.transform === 'basic'
+      ? Buffer.from(secret, 'utf8').toString('base64')
+      : secret;
+  return {
+    name: slot.name,
+    value,
+    ...(value !== secret ? { raw: secret } : {}),
+    destination: opened.destination,
+    countsAgainst: limitSubjectOf(binding),
+    // A vendor's 401 to a stored key rejects the grant it was sent under. A
+    // minted token's refusal is its connection's to judge when it next
+    // refreshes, so a 401 to one is only the vendor's answer.
+    ...(mints
+      ? {}
+      : {
+          grant: {
+            id: binding.grant_id!,
+            destination: opened.destination,
+            slot: { name: slot.name, key: slot.key },
+            realmURL: lookup.realmURL,
+            ...(binding.share_id ? { shareId: binding.share_id } : {}),
+            copy: opened.copy,
+            probe,
+          },
+        }),
+  };
 }
 
 const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
@@ -1599,6 +1854,14 @@ async function mintedToken(
     ) {
       throw error;
     }
+    emitKeyGrantEvent({
+      event: 'mint-failed',
+      key: opened.keyId,
+      kind: opened.kind,
+      host: hostOf(opened.destination),
+      realm: call.realmURL,
+      reason: error.reason,
+    });
     if (call.keyProbe) {
       emitKeyGrantEvent({
         event: 'key-probe',

@@ -17,6 +17,15 @@
 // operation that sends to a Google API says when a service account fits,
 // without choosing one.
 //
+// A key that can be sent in a card's request, a secret or a service account,
+// also says whether people who aren't signed in may use it: its owner's
+// decision about the key itself, not about any one workspace. Ticked, they
+// can use it wherever a workspace it is shared into lets them use its cards,
+// up to optional anonymous caps on their calls a day and a month, all
+// together, across every such workspace. It can be changed later on the key
+// page. An OAuth app isn't asked: people connect their own accounts through
+// it.
+//
 // This is the one page a new key's value is typed into. Reached from the key
 // page, at `keys/add`, it goes back there once the key is added, rather than
 // closing the window. Reached from the approve page's "Add a new key"
@@ -42,8 +51,9 @@ import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
-import { pageURL } from '../urls.js';
+import { pageURL, shellPath } from '../urls.js';
 
+import AnonymousUseFields, { anonymousCapOf } from './anonymous-use-fields.gts';
 import {
   failureMessage,
   isSignedOut,
@@ -63,7 +73,13 @@ import OAuthClientFields, {
   type OAuthClientForm,
 } from './oauth-client-fields.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { contextRequest, openedFor, returnsToKeyPage } from './opened-for.ts';
+import { addressAbove, keyPageURL, pageTitle } from './trail.ts';
+import {
+  cliOpenedFor,
+  contextRequest,
+  openedFor,
+  returnsToKeyPage,
+} from './opened-for.ts';
 import RadioChoices from './radio-choices.gts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
 import ServiceAccountFields from './service-account-fields.gts';
@@ -111,7 +127,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Enter a key'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -137,7 +153,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       </DonePage>
     {{else if this.entering}}
       <form novalidate {{on 'submit' this.save}} data-test-enter-key-form>
-        <EditPage @heading='Enter a key' data-test-enter-key>
+        <EditPage @heading={{this.title}} data-test-enter-key>
           <:intro>The key is encrypted as soon as it is saved, and nothing can
             read it back. Cards can send it only to the places you approve for
             it.</:intro>
@@ -227,6 +243,18 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 @onChange={{this.setOAuth}}
               />
             {{/if}}
+            {{#unless this.isOAuthClient}}
+              <AnonymousUseFields
+                @anonymous={{this.form.anonymous}}
+                @cap={{this.form.cap}}
+                @monthlyCap={{this.form.monthlyCap}}
+                @agreement='Allow people who aren’t signed in to use this key'
+                @note='Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.'
+                @onToggle={{this.toggleAnonymous}}
+                @onCap={{this.setCap}}
+                @onMonthlyCap={{this.setMonthlyCap}}
+              />
+            {{/unless}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -298,6 +326,8 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
 
   private opened = openedFor();
   private returnsToKeyPage = this.args.fromKeyPage ?? returnsToKeyPage();
+
+  private title = pageTitle('enter-key');
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -306,6 +336,11 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     name: '',
     value: '',
     clientId: '',
+    // Whether people who aren't signed in may use the key, and its anonymous
+    // caps as typed.
+    anonymous: false,
+    cap: '',
+    monthlyCap: '',
     oauth: trackedObject<OAuthClientForm>({
       provider: 'github',
       grantType: 'authorization_code',
@@ -365,7 +400,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     }
   };
 
-  private back = () => navigation.back(pageURL('keys'));
+  private back = () => navigation.back(keyPageURL());
 
   private get isOAuthClient() {
     return this.form.kind === 'oauth-client';
@@ -408,6 +443,12 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   private get submitDisabled() {
     let { saving, name, value, clientId, oauth } = this.form;
     if (saving || !name.trim()) {
+      return true;
+    }
+    if (
+      this.anonymousCap === undefined ||
+      this.anonymousMonthlyCap === undefined
+    ) {
       return true;
     }
     if (this.isServiceAccount) {
@@ -481,6 +522,34 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     this.form.error = undefined;
   };
 
+  // The anonymous caps to send: none for an OAuth app, which isn't asked.
+  private get anonymousCap() {
+    return this.isOAuthClient
+      ? null
+      : anonymousCapOf(this.form.anonymous, this.form.cap);
+  }
+
+  private get anonymousMonthlyCap() {
+    return this.isOAuthClient
+      ? null
+      : anonymousCapOf(this.form.anonymous, this.form.monthlyCap);
+  }
+
+  private toggleAnonymous = () => {
+    this.form.anonymous = !this.form.anonymous;
+    this.form.error = undefined;
+  };
+
+  private setCap = (value: string) => {
+    this.form.cap = value;
+    this.form.error = undefined;
+  };
+
+  private setMonthlyCap = (value: string) => {
+    this.form.monthlyCap = value;
+    this.form.error = undefined;
+  };
+
   private setName = (value: string) => {
     this.form.name = value;
     this.form.error = undefined;
@@ -513,12 +582,19 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
           : await addKey(this.args.api.config, {
               name: this.form.name.trim(),
               entered: entered!,
+              anonymous: this.form.anonymous,
+              ...(this.anonymousCap != null
+                ? { anonymousDailyCap: this.anonymousCap }
+                : {}),
+              ...(this.anonymousMonthlyCap != null
+                ? { anonymousMonthlyCap: this.anonymousMonthlyCap }
+                : {}),
             });
       // The value is gone from the page the moment the server has it.
       this.form.value = '';
       this.serviceAccount.clear();
       if (this.returnsToKeyPage) {
-        navigation.back(pageURL('keys'));
+        navigation.back(keyPageURL());
         return;
       }
       let approval = approvalPageAfter(key.id);
@@ -545,14 +621,31 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   };
 }
 
+// The approve page this one was reached from (`then=approve` or
+// `then=review-changes`), if any.
+function approvalPageThen(): 'approve' | 'review-changes' | undefined {
+  let then = new URLSearchParams(window.location.hash.replace(/^#/, '')).get(
+    'then',
+  );
+  return then === 'approve' || then === 'review-changes' ? then : undefined;
+}
+
 // The approve page this one was opened from, to go back to once `keyId` is
-// added, with what it was opened for and the new key chosen.
+// added, with what it was opened for and the new key chosen: the page above
+// this one in its trail, as it was, or else rebuilt from this page's own
+// fragment.
 function approvalPageAfter(keyId: string): string | undefined {
-  let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  let then = fragment.get('then');
-  if (then !== 'approve' && then !== 'review-changes') {
+  let then = approvalPageThen();
+  if (!then) {
     return undefined;
   }
+  let above = addressAbove();
+  if (above !== undefined && above.split('#')[0] === then) {
+    let aboveFragment = new URLSearchParams(above.split('#')[1] ?? '');
+    aboveFragment.set('key', keyId);
+    return `${shellPath()}${then}#${aboveFragment}`;
+  }
+  let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   fragment.delete('then');
   // The approve page goes back to the key page it was reached from.
   if (fragment.get('after') === 'keys') {
@@ -567,8 +660,17 @@ export default class EnterKeyPage extends Component<{
   Args: { fromKeyPage?: boolean };
 }> {
   <template>
-    <KeysWindow @title='Boxel · Your keys' @page='enter-key' as |api|>
+    <KeysWindow
+      @title='Boxel · Your keys'
+      @page='enter-key'
+      @cli={{this.cli}}
+      as |api|
+    >
       <EnterKey @api={{api}} @fromKeyPage={{@fromKeyPage}} />
     </KeysWindow>
   </template>
+
+  // Reached from an approve page the CLI opened, the window is still the
+  // CLI's: closing it here cancels the approval.
+  private cli = approvalPageThen() ? cliOpenedFor().cli : undefined;
 }

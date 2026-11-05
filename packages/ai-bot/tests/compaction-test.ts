@@ -549,7 +549,7 @@ module('compaction', (hooks) => {
       let id = mediaId(
         JSON.parse((read.content as any).data).attachedFiles[0].url,
       );
-      mediaFailures.set(id, [500, 500]);
+      mediaFailures.set(id, [500]);
       let eventList = room([read]);
       let failure: Error | undefined;
       try {

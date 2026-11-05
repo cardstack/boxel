@@ -1,4 +1,11 @@
-import type { ResetPasswordParams } from '@cardstack/host/components/matrix/forgot-password';
+export type ResetPasswordParams = {
+  sid: string;
+  clientSecret: string;
+  // The email address the reset link was sent to, which names the account
+  // whose secure sessions end once the new password is set. A link that
+  // carries none still resets the password.
+  email?: string;
+};
 
 // The reset parameters a page landed with from a reset email, if any, from its
 // query parameters and its URL fragment. The email address is in the link's

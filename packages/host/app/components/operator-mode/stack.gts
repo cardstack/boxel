@@ -1,7 +1,5 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
-import { task } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 
 import { provide } from 'ember-provide-consume-context';
 
@@ -14,9 +12,12 @@ import {
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
+import StackMotion from './motion/stack-motion';
 import OperatorModeStackItem, {
   type StackItemComponentAPI,
 } from './stack-item';
+
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 import type {
   CreateCardFn,
@@ -48,10 +49,7 @@ interface Signature {
 }
 
 export default class OperatorModeStack extends Component<Signature> {
-  private stackItemComponentAPI = new WeakMap<
-    StackItem,
-    StackItemComponentAPI
-  >();
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   @provide(CardCrudFunctionsContextName)
   // @ts-ignore "cardCrudFunctions" is declared but not used
@@ -65,39 +63,17 @@ export default class OperatorModeStack extends Component<Signature> {
     };
   }
 
-  dismissStackedCardsAbove = task(async (itemIndex: number) => {
+  // Closes every card above the one at `itemIndex`, top card first. The
+  // cards leave the stack at once; the stack's motion region shows them
+  // leaving (ADR 007 §1.1: state never waits on an animation).
+  private dismissStackedCardsAbove = (itemIndex: number) => {
     let itemsToDismiss: StackItem[] = [];
     for (let i = this.args.stackItems.length - 1; i > itemIndex; i--) {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
-
-    // Animate closing items
-    const animations = itemsToDismiss
-      .map((item) => {
-        const componentAPI = this.stackItemComponentAPI.get(item);
-        return componentAPI?.startAnimation('closing') ?? undefined;
-      })
-      .filter(Boolean);
-
-    // Animate next top item moving forward
-    const nextTopItem = this.args.stackItems[itemIndex];
-    const nextTopItemAPI = this.stackItemComponentAPI.get(nextTopItem);
-
-    if (nextTopItemAPI) {
-      animations.push(nextTopItemAPI.startAnimation('movingForward'));
+    for (let item of itemsToDismiss) {
+      this.args.close(item);
     }
-
-    await Promise.all(animations);
-
-    await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
-  });
-
-  private setupStackItem = (
-    item: StackItem,
-    componentAPI: StackItemComponentAPI,
-  ) => {
-    this.args.setupStackItem(item, componentAPI);
-    this.stackItemComponentAPI.set(item, componentAPI);
   };
 
   <template>
@@ -109,20 +85,24 @@ export default class OperatorModeStack extends Component<Signature> {
       }}
       ...attributes
     >
-      <div class='inner'>
+      {{! the stack's motion region: its cards are the participants (motion/stack-motion.gts) }}
+      <StackMotion
+        class='inner'
+        @phone={{this.operatorModeStateService.isMobileViewport}}
+      >
         {{#each @stackItems as |item i|}}
           <OperatorModeStackItem
             @item={{item}}
             @index={{i}}
             @stackItems={{@stackItems}}
             @toolContext={{@toolContext}}
-            @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
+            @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
             @requestDeleteCard={{@deleteCard}}
             @close={{@close}}
-            @setupStackItem={{this.setupStackItem}}
+            @setupStackItem={{@setupStackItem}}
           />
         {{/each}}
-      </div>
+      </StackMotion>
     </div>
 
     <style scoped>
@@ -148,17 +128,17 @@ export default class OperatorModeStack extends Component<Signature> {
         padding-inline: var(--stack-padding-inline);
         padding-bottom: var(--stack-padding-bottom);
         z-index: 0;
-        transition:
-          padding-top var(--boxel-transition),
-          padding-inline var(--boxel-transition);
       }
-      .stack-medium-padding-top:not(:has(.item.expanded)) {
+      /* The padding follows the cards standing in the stack: a leaving card
+         is kept in the region's orphan layer while it fades, and must not
+         hold the padding it had */
+      .stack-medium-padding-top:not(:has(> .inner > .item.expanded)) {
         --stack-padding-top: var(--stack-md-padding-top);
       }
-      .stack-small-padding-top:not(:has(.item.expanded)) {
+      .stack-small-padding-top:not(:has(> .inner > .item.expanded)) {
         --stack-padding-top: var(--stack-sm-padding-top);
       }
-      .operator-mode-stack:has(.item.expanded) {
+      .operator-mode-stack:has(> .inner > .item.expanded) {
         --stack-padding-inline: 0;
         --stack-padding-bottom: 0;
       }
@@ -178,6 +158,10 @@ export default class OperatorModeStack extends Component<Signature> {
         margin: 0 auto;
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
+      }
+      /* A leaving card is a picture of what was: nothing in it takes input */
+      .inner :deep([data-choreo-orphans] *) {
+        pointer-events: none;
       }
     </style>
   </template>

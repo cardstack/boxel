@@ -240,15 +240,16 @@ export class SwitchSubmodeResult extends CardDef {
 
 // What the secure window is opened for. Every field names something; none
 // carries a value. `mode` is `enter-key`, `replace-key`, `share-key`,
-// `swap-key`, `connect`, `approve` or `review-changes`. A key is entered, the
+// `swap-key`, `share-limits`, `connect`, `approve` or `review-changes`. A key is entered, the
 // key an operation sends is replaced, an account connected, or a card's
 // requests approved or their changes reviewed, for an operation on a card
 // instance (`cardId`) or on a card type (`module`, `name` and `realm`);
 // `replace-key`, `approve` and `review-changes` always name the operation, and
 // the last two name only the one a card is blocked on: the window gathers the
 // card's others. A key is shared with `realm`; one of the user's
-// keys is swapped into the suspended share `share` of `realm`; and an account
-// may also be connected for `realm` alone.
+// keys is swapped into the suspended share `share` of `realm`; the limits of
+// the share `share` of `realm` are changed by the owner of its key; and an
+// account may also be connected for `realm` alone.
 // `reason` is one line the window shows as written by whoever opened it.
 export class OpenSecureWindowInput extends CardDef {
   @field mode = contains(StringField);
@@ -316,6 +317,66 @@ export class RealmKeySharesResult extends CardDef {
 
 export class KeyShareInput extends CardDef {
   @field shareId = contains(StringField);
+}
+
+// What a share spent against one of its budgets in the current UTC day or
+// month, the budget in force, and when the period starts over.
+export class KeyUsageBudgetField extends FieldDef {
+  @field used = contains(NumberField);
+  @field budget = contains(NumberField);
+  @field resetsAt = contains(StringField);
+}
+
+// One row of a share's usage counted by `name`: a caller's Matrix id (empty
+// for someone not signed in, and for every caller the user isn't shown, who
+// are counted together with `withheld` set), a refusal's code, or the
+// service's HTTP status. `outcome` is `vendor-forbidden` on a status the
+// service refused with 403.
+export class KeyUsageCountField extends FieldDef {
+  @field name = contains(StringField);
+  @field count = contains(NumberField);
+  @field outcome = contains(StringField);
+  @field withheld = contains(BooleanField);
+}
+
+// Where a share's key is sent by the realm's operations: the `destination`
+// (one per grant, so a host can appear under several paths), and whether the
+// service there rejected the key (`state` is `rejected`, since `rejectedAt`)
+// or last refused a request (`lastForbiddenAt`).
+export class KeyUsageGrantField extends FieldDef {
+  @field destination = contains(StringField);
+  @field state = contains(StringField);
+  @field rejectedAt = contains(StringField);
+  @field lastForbiddenAt = contains(StringField);
+}
+
+// A share's usage, as the realm's direct writers see it: what it spent today
+// and this month against its budgets, and since the start of the month
+// (`since`) every call (`calls`), the last one and by whom, the callers who
+// used it most, the calls refused by code and the service's answers by status;
+// its grants; and its limits. `canEditLimits` says the signed-in user owns the
+// key it holds, so they may change its limits in the secure window. `visible`
+// is false when the user can't see the share: a reader, or a former writer.
+export class KeyShareUsageResult extends CardDef {
+  @field visible = contains(BooleanField);
+  @field day = contains(KeyUsageBudgetField);
+  @field month = contains(KeyUsageBudgetField);
+  @field since = contains(StringField);
+  @field calls = contains(NumberField);
+  @field lastUseAt = contains(StringField);
+  @field lastUseCaller = contains(StringField);
+  @field lastUseCallerWithheld = contains(BooleanField);
+  @field lastUseOperation = contains(StringField);
+  @field lastUseOutcome = contains(StringField);
+  @field topCallers = containsMany(KeyUsageCountField);
+  @field refusals = containsMany(KeyUsageCountField);
+  @field vendorOutcomes = containsMany(KeyUsageCountField);
+  @field grants = containsMany(KeyUsageGrantField);
+  @field canEditLimits = contains(BooleanField);
+  @field rateBurst = contains(NumberField);
+  @field rateRefillPerMinute = contains(NumberField);
+  @field dailyBudget = contains(NumberField);
+  @field monthlyBudget = contains(NumberField);
 }
 
 export class WriteTextFileInput extends CardDef {
@@ -1378,9 +1439,9 @@ export class PublishRealmInput extends CardDef {
   @field force = contains(BooleanField);
 }
 
-// Per-target outcome. The command resolves once the publish request is
-// accepted (the realm-server reindex then runs in the background), so 'status'
-// is 'published' (request accepted) or 'error'.
+// Per-target outcome. 'status' is 'published' (the site is live),
+// 'published-pending' (accepted, and its HTML is still rendering after the
+// readiness wait ran out; it goes live without another publish) or 'error'.
 export class PublishTargetResult extends FieldDef {
   @field publishedRealmURL = contains(StringField);
   @field status = contains(StringField);

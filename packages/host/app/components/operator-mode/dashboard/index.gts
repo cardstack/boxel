@@ -9,6 +9,7 @@ import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Bot from '@cardstack/boxel-icons/bot';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import Lock from '@cardstack/boxel-icons/lock';
+import Star from '@cardstack/boxel-icons/star';
 import Store from '@cardstack/boxel-icons/store';
 import { Button } from '@cardstack/pretui/components/button';
 import { Collapsible } from '@cardstack/pretui/components/collapsible';
@@ -20,19 +21,16 @@ import { modifier } from 'ember-modifier';
 import { add, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 import {
   FailureBordered as FailureIcon,
-  StarFilled,
   WarningTriangleFilled as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { logger } from '@cardstack/runtime-common';
 
-import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
 import {
   isHostedRealm,
-  listedCatalogRealmURLs,
   listedFavoriteRealmIdentifiers,
-  sortByCreatedAtDesc,
+  orderedCatalogRealmURLs,
   unreachableRealmServersMessage,
 } from '@cardstack/host/lib/workspace-list';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -41,13 +39,16 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import ManageCatalogs from '../workspace-chooser/manage-catalogs';
-
 import AddWorkspace from './add-workspace';
+import Agents from './agents';
+import AgentsFlyout from './agents-flyout';
 import ArchivedWorkspace from './archived-workspace';
-import FavoritesFlyout from './favorites-flyout';
+import CatalogSection from './catalog-section';
+import GetStarted from './get-started';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
+import { realmListFlyout } from './realm-list-flyout';
+import SectionHead from './section-head';
 import Workspace from './workspace';
 import {
   COLLAPSED_WORKSPACE_ROWS,
@@ -86,12 +87,14 @@ export default class Dashboard extends Component<Signature> {
   @service declare private realm: RealmService;
 
   // The workspace the dashboard opened over, read once: the cursor starts on
-  // it, so Enter goes straight back to where the user was.
+  // it, so Enter goes straight back to where the user was. With nothing open
+  // there is none, rather than a default workspace the user may never have
+  // opened.
   private returnRealmURL = this.readReturnRealmURL();
 
   private readReturnRealmURL(): string | undefined {
     try {
-      return this.operatorModeStateService.realmURL || undefined;
+      return this.operatorModeStateService.openRealmURL || undefined;
     } catch {
       return undefined;
     }
@@ -133,7 +136,7 @@ export default class Dashboard extends Component<Signature> {
   });
 
   // Each section is named by the title span in its heading, so a count shown
-  // in a heading, as Catalogs has, stays out of the name.
+  // in a heading stays out of the name.
   private headingId = (section: string) => `${guidFor(this)}-${section}`;
 
   // What Show more and Show fewer control.
@@ -220,13 +223,6 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  @cached
-  private get catalogRealmIdentifiers() {
-    return listedCatalogRealmURLs(
-      this.realmServer.displayedCatalogRealmIdentifiers,
-    );
-  }
-
   private isHosted = (url: string): boolean =>
     isHostedRealm(this.realm.info(url));
 
@@ -240,13 +236,12 @@ export default class Dashboard extends Component<Signature> {
     return this.filterByScope(this.realmServer.userRealmIdentifiers);
   }
 
-  // Newest first, except the Boxel catalog, which always leads.
   @cached
   private get filteredCatalogRealmIdentifiers() {
     return this.filterByScope(
-      leadWith(
-        sortByCreatedAtDesc(this.catalogRealmIdentifiers, this.realm.info),
-        catalogRealmURL,
+      orderedCatalogRealmURLs(
+        this.realmServer.displayedCatalogRealmIdentifiers,
+        this.realm.info,
       ),
     );
   }
@@ -274,13 +269,10 @@ export default class Dashboard extends Component<Signature> {
     },
   );
 
-  private get favoritesEmptyMessage(): string | null {
-    if (this.favoriteRealmIdentifiers.length > 0) {
-      return null;
-    }
-    return this.listedFavorites.length === 0
-      ? 'You have no favorites yet'
-      : 'No matching results';
+  // Counted before the scope filter, so a filter that hides every favorite
+  // says so instead of removing the section from the top of the page.
+  private get isFavoritesShown() {
+    return this.listedFavorites.length > 0;
   }
 
   private get userWorkspacesEmptyMessage(): string | null {
@@ -288,15 +280,6 @@ export default class Dashboard extends Component<Signature> {
       return 'No matching results';
     }
     return null;
-  }
-
-  private get catalogEmptyMessage(): string | null {
-    if (this.filteredCatalogRealmIdentifiers.length > 0) {
-      return null;
-    }
-    return this.scope === 'hosted'
-      ? 'No matching results'
-      : 'No catalogs yet. Add public realms with the gear.';
   }
 
   // Columns in the recent tiles' grid and the rows' grid, as CSS laid them
@@ -335,13 +318,7 @@ export default class Dashboard extends Component<Signature> {
     return sortByUpdatedAtDesc(
       this.userRealmIdentifiers,
       this.realm.info,
-    ).slice(
-      0,
-      recentWorkspaceCount(
-        this.recentColumns,
-        this.matrixService.isInitializingNewUser ? 2 : 1,
-      ),
-    );
+    ).slice(0, recentWorkspaceCount(this.recentColumns));
   }
 
   // Everything else, in list order, as rows.
@@ -410,19 +387,28 @@ export default class Dashboard extends Component<Signature> {
   }
 
   private get renderedCatalogCount() {
-    return this.catalogEmptyMessage
-      ? 0
-      : this.filteredCatalogRealmIdentifiers.length;
+    return this.filteredCatalogRealmIdentifiers.length;
   }
 
-  // Where each part of the keyboard cursor's walk starts: Favorites, New
-  // Workspace, the recent tiles, the rows shown, then Catalogs.
+  private get catalogEmptyMessage() {
+    return this.scope === 'hosted'
+      ? 'No matching results'
+      : 'No catalogs yet. Add public realms with the gear.';
+  }
+
+  // Listings aren't hosted workspaces, so Hosted hides the shelf.
+  private get isCatalogShelfShown() {
+    return this.scope !== 'hosted';
+  }
+
+  // Where each part of the keyboard cursor's walk starts, in page order:
+  // Favorites, New Workspace, the recent tiles, the rows shown, and Catalogs.
   private get addWorkspaceNavIndex() {
     return this.favoritesCount;
   }
 
   private get recentNavBase() {
-    return this.favoritesCount + (this.isAddWorkspaceShown ? 1 : 0);
+    return this.addWorkspaceNavIndex + (this.isAddWorkspaceShown ? 1 : 0);
   }
 
   private get rowsNavBase() {
@@ -442,9 +428,7 @@ export default class Dashboard extends Component<Signature> {
       ...(this.isAddWorkspaceShown ? ['new-workspace'] : []),
       ...this.recentRealmIdentifiers.map((url) => `workspace:${url}`),
       ...this.visibleRowRealmIdentifiers.map((url) => `workspace:${url}`),
-      ...(this.catalogEmptyMessage
-        ? []
-        : this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`)),
+      ...this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`),
     ];
   }
 
@@ -471,8 +455,10 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  // The cursor takes focus on open, so it never starts on New Workspace while
-  // anything else is shown: the first Enter would create a workspace.
+  // The workspace the dashboard opened over, otherwise the first favorite or
+  // workspace. The cursor takes focus on open when it is in view, so it never
+  // starts on New Workspace while anything else is shown: the first Enter
+  // would create a workspace.
   private get defaultSelectedIndex() {
     let returnIndex = this.returnNavIndex;
     if (returnIndex !== undefined) {
@@ -490,13 +476,50 @@ export default class Dashboard extends Component<Signature> {
     return 0;
   }
 
-  // No count: the rail counts a section only as its heading does, and this
-  // one's counts belong to its Favorites and Your Workspaces groups.
+  private favoritesSection: DashboardSection = {
+    id: 'favorites',
+    label: 'Favorites',
+    icon: Star,
+    flyout: realmListFlyout(
+      'Favorites',
+      () => this.favoriteRealmIdentifiers,
+      () => 'No matching results',
+    ),
+  };
+
   private workspacesSection: DashboardSection = {
     id: 'workspaces',
     label: 'Workspaces',
     icon: LayoutGrid,
-    flyout: FavoritesFlyout,
+    flyout: realmListFlyout(
+      'Workspaces',
+      () => sortByUpdatedAtDesc(this.userRealmIdentifiers, this.realm.info),
+      () =>
+        this.userWorkspacesEmptyMessage ??
+        'No workspaces yet. Create one from the Workspaces section.',
+    ),
+  };
+
+  private agentsSection: DashboardSection = {
+    id: 'agents',
+    label: 'Agents',
+    icon: Bot,
+    flyout: AgentsFlyout,
+  };
+
+  @action private showAgents() {
+    this.args.sections.scrollTo(this.agentsSection.id);
+  }
+
+  private catalogsSection: DashboardSection = {
+    id: 'catalogs',
+    label: 'Catalogs',
+    icon: Store,
+    flyout: realmListFlyout(
+      'Catalogs',
+      () => this.filteredCatalogRealmIdentifiers,
+      () => this.catalogEmptyMessage,
+    ),
   };
 
   private cursor = new KeyboardCursor({
@@ -510,6 +533,7 @@ export default class Dashboard extends Component<Signature> {
       class={{cn 'dashboard' is-compact=@sections.isCompact}}
       aria-label='Dashboard'
       data-theme='dark'
+      data-keyboard-cursor
       {{on 'keydown' this.cursor.onKeydown}}
       {{on 'focusin' this.cursor.onFocusIn}}
       {{on 'pointerup' this.cursor.onPointerUp}}
@@ -549,60 +573,63 @@ export default class Dashboard extends Component<Signature> {
             {{/if}}
           </div>
 
-          <header class='page-head'>
-            <h1
-              class='greeting'
-              {{this.trackHour}}
-              data-test-dashboard-greeting
-            >{{this.greeting}}</h1>
-            <SegmentedControl
-              class='scope-filter'
-              @options={{this.scopeOptions}}
-              @value={{this.scope}}
-              @onValueChange={{this.setScope}}
-              @label='Filter workspaces'
-              data-test-dashboard-filter
-            />
-          </header>
-
-          <section
-            class='dashboard-section'
-            aria-labelledby={{this.headingId 'workspaces'}}
-            {{@sections.register this.workspacesSection}}
-            data-test-dashboard-section='workspaces'
-          >
-            <div class='section-head'>
-              <h2 class='section-title'>
-                <LayoutGrid
-                  class='section-icon'
-                  width='20'
-                  height='20'
-                  aria-hidden='true'
+          {{! Get started's steps open right below the header. }}
+          <GetStarted @showAgents={{this.showAgents}}>
+            <:head as |getStarted|>
+              <header class='page-head'>
+                <div class='greeting-line'>
+                  <h1
+                    class='greeting'
+                    {{this.trackHour}}
+                    data-test-dashboard-greeting
+                  >{{this.greeting}}</h1>
+                  {{#if getStarted.isReady}}
+                    {{! Light mode on the dark dashboard, so the neutral open state
+                        is a dark fill rather than a light one. }}
+                    <Button
+                      class={{cn
+                        'get-started-button'
+                        is-open=getStarted.isOpen
+                      }}
+                      @tone={{if getStarted.isOpen 'neutral' 'primary'}}
+                      @appearance='accent'
+                      @size='m'
+                      @shape='pill'
+                      aria-expanded={{if getStarted.isOpen 'true' 'false'}}
+                      aria-controls={{if getStarted.isOpen getStarted.panelId}}
+                      data-theme='light'
+                      {{on 'click' getStarted.toggle}}
+                      data-test-get-started-button
+                    >Get started</Button>
+                  {{/if}}
+                </div>
+                <SegmentedControl
+                  class='scope-filter'
+                  @options={{this.scopeOptions}}
+                  @value={{this.scope}}
+                  @onValueChange={{this.setScope}}
+                  @label='Filter workspaces'
+                  data-test-dashboard-filter
                 />
-                <span id={{this.headingId 'workspaces'}}>Workspaces</span>
-              </h2>
-              <p class='section-hint'>Where your cards live.</p>
-            </div>
+              </header>
+            </:head>
+          </GetStarted>
 
-            <div class='group' data-test-favorites-section>
-              <h3 class='group-head'>
-                <StarFilled
-                  class='group-icon'
-                  width='14'
-                  height='14'
-                  aria-hidden='true'
-                />
-                <span class='group-title'>Favorites</span>
-                {{#if this.favoritesCount}}
-                  <span class='group-count'>{{this.favoritesCount}}</span>
-                {{/if}}
-              </h3>
-              {{#if this.favoritesEmptyMessage}}
-                <p
-                  class='group-empty'
-                  data-test-favorites-empty
-                >{{this.favoritesEmptyMessage}}</p>
-              {{else}}
+          {{#if this.isFavoritesShown}}
+            <section
+              class='dashboard-section'
+              aria-labelledby={{this.headingId 'favorites'}}
+              {{@sections.register this.favoritesSection}}
+              data-test-dashboard-section='favorites'
+              data-test-favorites-section
+            >
+              <SectionHead
+                @icon={{Star}}
+                @title='Favorites'
+                @titleId={{this.headingId 'favorites'}}
+                @count={{this.favoritesCount}}
+              >Workspaces you favorited, kept at the top.</SectionHead>
+              {{#if this.favoritesCount}}
                 <div
                   class='desk-list'
                   {{this.trackFavoriteCounts
@@ -621,8 +648,24 @@ export default class Dashboard extends Component<Signature> {
                     />
                   {{/each}}
                 </div>
+              {{else}}
+                <p class='group-empty' data-test-favorites-empty>No matching
+                  results</p>
               {{/if}}
-            </div>
+            </section>
+          {{/if}}
+
+          <section
+            class='dashboard-section'
+            aria-labelledby={{this.headingId 'workspaces'}}
+            {{@sections.register this.workspacesSection}}
+            data-test-dashboard-section='workspaces'
+          >
+            <SectionHead
+              @icon={{LayoutGrid}}
+              @title='Workspaces'
+              @titleId={{this.headingId 'workspaces'}}
+            >Where your cards live.</SectionHead>
 
             <div class='group' data-test-your-workspaces-section>
               <h3 class='group-head'>
@@ -658,14 +701,6 @@ export default class Dashboard extends Component<Signature> {
                       }}
                       @selectionActive={{this.cursor.isRingShown}}
                     />
-                    {{#if this.matrixService.isInitializingNewUser}}
-                      <div
-                        class='new-workspace-pending'
-                        data-test-workspace-loading-indicator
-                      >
-                        <Spinner @size={{20}} aria-label='Creating workspace' />
-                      </div>
-                    {{/if}}
                     {{#each this.recentRealmIdentifiers as |realmIdentifier i|}}
                       {{#let (add this.recentNavBase i) as |navIndex|}}
                         <Workspace
@@ -798,71 +833,27 @@ export default class Dashboard extends Component<Signature> {
             </div>
           </section>
 
-          <section
-            class='dashboard-section'
-            aria-labelledby={{this.headingId 'catalogs'}}
-            data-test-dashboard-section='catalogs'
-          >
-            <div class='section-head'>
-              <h2 class='section-title'>
-                <Store
-                  class='section-icon'
-                  width='20'
-                  height='20'
-                  aria-hidden='true'
-                />
-                <span id={{this.headingId 'catalogs'}}>Catalogs</span>
-                {{#if this.renderedCatalogCount}}
-                  <span class='group-count'>{{this.renderedCatalogCount}}</span>
-                {{/if}}
-              </h2>
-              <ManageCatalogs />
-              <p class='section-hint'>Apps, fields and themes to use in your
-                workspaces.</p>
-            </div>
-            {{#if this.catalogEmptyMessage}}
-              <p
-                class='group-empty'
-                data-test-catalog-empty
-              >{{this.catalogEmptyMessage}}</p>
-            {{else}}
-              <div class='catalog-list' data-test-catalog-list>
-                {{#each
-                  this.filteredCatalogRealmIdentifiers
-                  as |realmIdentifier i|
-                }}
-                  {{#let (add this.catalogNavBase i) as |navIndex|}}
-                    <Workspace
-                      @realmIdentifier={{realmIdentifier}}
-                      @variant='tile'
-                      @navIndex={{navIndex}}
-                      @isSelected={{eq this.cursor.currentIndex navIndex}}
-                      @selectionActive={{this.cursor.isRingShown}}
-                    />
-                  {{/let}}
-                {{/each}}
-              </div>
-            {{/if}}
-          </section>
+          <CatalogSection
+            @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
+            @emptyMessage={{this.catalogEmptyMessage}}
+            @showShelf={{this.isCatalogShelfShown}}
+            @navBase={{this.catalogNavBase}}
+            @cursor={{this.cursor}}
+            {{@sections.register this.catalogsSection}}
+          />
 
           <section
             class='dashboard-section'
             aria-labelledby={{this.headingId 'agents'}}
+            {{@sections.register this.agentsSection}}
             data-test-dashboard-section='agents'
           >
-            <div class='section-head'>
-              <h2 class='section-title'>
-                <Bot
-                  class='section-icon'
-                  width='20'
-                  height='20'
-                  aria-hidden='true'
-                />
-                <span id={{this.headingId 'agents'}}>Agents</span>
-              </h2>
-              <p class='section-hint'>Boxel AI works here; your own agent works
-                through the Boxel plugin.</p>
-            </div>
+            <SectionHead
+              @icon={{Bot}}
+              @title='Agents'
+              @titleId={{this.headingId 'agents'}}
+            >Build with Boxel AI Assistant, or connect your own agent.</SectionHead>
+            <Agents />
           </section>
         </div>
       </div>
@@ -876,6 +867,11 @@ export default class Dashboard extends Component<Signature> {
         to {
           opacity: 1;
         }
+      }
+      /* Only takes focus in place of an item out of view; the cursor's ring
+         marks where the keyboard is. */
+      .dashboard:focus {
+        outline: none;
       }
       .dashboard {
         /* Pret UI selection reads this undefined token and falls back to a
@@ -919,9 +915,9 @@ export default class Dashboard extends Component<Signature> {
         --dashboard-scrim-height: 7rem;
         --dashboard-toggle-height: 2.75rem;
         --dashboard-greeting-font-size: var(--boxel-font-size-xl);
-        --dashboard-greeting-font-weight: 700;
+        --dashboard-greeting-font-weight: 500;
         --dashboard-section-title-font-size: var(--boxel-font-size-lg);
-        --dashboard-section-hint-font-size: var(--boxel-font-size-sm);
+        --dashboard-section-hint-font-size: var(--boxel-font-size-xs);
 
         /* Breakpoints follow the dashboard's own width, which is less than
            the viewport's when the AI assistant panel is open. */
@@ -1003,15 +999,31 @@ export default class Dashboard extends Component<Signature> {
       /* Type scale: greeting, then section title, then everything inside a
          section. Nothing inside a section outranks its heading. */
       .page-head {
+        /* Get started and the filter share one height. */
+        --dashboard-head-control-height: 1.75rem;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp);
       }
-      /* The greeting grows to fill its line, which pushes the filter to the
-         right beside it, and leaves the filter at the start once it wraps. */
-      .greeting {
+      /* The greeting and its Get started button grow to fill their line,
+         which pushes the filter to the right beside them, and leaves the
+         filter at the start once it wraps. */
+      .greeting-line {
+        display: flex;
         flex: 1 1 auto;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xl);
+        min-width: 0;
+      }
+      .get-started-button {
+        --pretui-button-h: var(--dashboard-head-control-height);
+      }
+      .get-started-button.is-open {
+        --pretui-button-fg: var(--boxel-highlight);
+      }
+      .greeting {
         min-width: 0;
         margin: 0;
         overflow-wrap: break-word;
@@ -1022,6 +1034,9 @@ export default class Dashboard extends Component<Signature> {
       /* The rail matches the page, and the selected pill is white on black.
          SegmentedControl has no tone arg, so this sets the tokens it reads. */
       .scope-filter {
+        /* Both knobs set, so a touch screen keeps this size too. */
+        --pretui-seg-h: var(--dashboard-head-control-height);
+        --pretui-seg-px: var(--boxel-sp-sm);
         --inset: var(--boxel-800);
         --border: var(--boxel-light-10);
         --border-strong: var(--boxel-light-25);
@@ -1034,35 +1049,10 @@ export default class Dashboard extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-xl);
       }
-      .section-head {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--boxel-sp-xs);
-        row-gap: var(--boxel-sp-2xs);
-        padding-bottom: var(--boxel-sp-sm);
-        border-bottom: 1px solid var(--boxel-light-10);
-      }
-      .section-title {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        margin: 0;
-        font-size: var(--dashboard-section-title-font-size);
-        font-weight: 700;
-        letter-spacing: -0.015em;
-      }
-      .section-icon,
       .group-icon {
         --icon-color: var(--muted-foreground);
         color: var(--muted-foreground);
         flex-shrink: 0;
-      }
-      .section-hint {
-        flex-basis: 100%;
-        margin: 0;
-        font-size: var(--dashboard-section-hint-font-size);
-        color: var(--muted-foreground);
       }
 
       /* Groups inside a section are quiet labels; the tiles are the
@@ -1103,15 +1093,6 @@ export default class Dashboard extends Component<Signature> {
         color: var(--muted-foreground);
         font: 400 var(--boxel-font-sm);
       }
-      .catalog-list {
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(min(var(--dashboard-tile-min-width), 100%), 1fr)
-        );
-        gap: var(--boxel-sp-lg) var(--boxel-sp);
-        padding: var(--boxel-sp-xs) 0;
-      }
       /* As many desks per row as fit at their minimum width, spanning the
          section like the lists below them. */
       .desk-list {
@@ -1136,14 +1117,6 @@ export default class Dashboard extends Component<Signature> {
         );
         gap: var(--boxel-sp-lg) var(--boxel-sp);
         padding: var(--boxel-sp-xs) 0;
-      }
-      .new-workspace-pending {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: var(--dashboard-tile-height);
-        border-radius: var(--dashboard-tile-radius);
-        background-color: var(--boxel-dark-50);
       }
       .row-list {
         display: grid;
@@ -1220,10 +1193,27 @@ export default class Dashboard extends Component<Signature> {
         .dashboard-scroller {
           --dashboard-gutter: 2.5rem;
         }
+        /* Tablet and phone: less room between the page's parts. */
+        .dashboard-page {
+          gap: var(--boxel-sp-2xl);
+        }
       }
       @container dashboard (max-width: 48rem) {
         .dashboard-scroller {
           --dashboard-gutter: 1.5rem;
+        }
+        /* The greeting takes its own line, with Get started, then the
+           filter, under it, at opposite ends. Once the filter wraps it
+           stays at the start. */
+        .page-head {
+          justify-content: space-between;
+          column-gap: var(--boxel-sp-xl);
+        }
+        .greeting-line {
+          display: contents;
+        }
+        .greeting {
+          flex-basis: 100%;
         }
       }
       @container dashboard (max-width: 40rem) {
@@ -1232,8 +1222,7 @@ export default class Dashboard extends Component<Signature> {
         }
       }
       /* Compact, where the section rail stays as icons, the page tightens
-         too: less room above and between its parts, and a smaller, lighter
-         greeting. */
+         too: less room above it, and a smaller, lighter greeting. */
       /* The frosted band shrinks with the page's top, so it never covers the
          greeting. */
       .dashboard.is-compact {
@@ -1241,9 +1230,6 @@ export default class Dashboard extends Component<Signature> {
           var(--dashboard-top-bar-clearance) + var(--boxel-sp-xs)
         );
         --dashboard-band-height: var(--dashboard-page-padding-top);
-      }
-      .is-compact .dashboard-page {
-        gap: var(--boxel-sp-2xl);
       }
       .is-compact .page-head {
         gap: var(--boxel-sp-xs);

@@ -7,13 +7,16 @@ import { setContextResponse } from '../middleware/index.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import {
   addPlatformClient,
+  cliHandoffFor,
   completeConnect,
   deletePlatformClient,
+  getPlatformClient,
   listConnectableClients,
   listPlatformClients,
   replacePlatformClientSecret,
   startConnect,
   validateClientRef,
+  validateCliHandoff,
 } from '../lib/oauth.ts';
 import { normalizeGrantDestination } from '../lib/user-key-grants.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
@@ -25,6 +28,7 @@ import {
   ticketOf,
 } from './handle-user-keys.ts';
 import { secureClientOf } from './handle-user-key-grants.ts';
+import { operatorCaller } from './handle-system-keys.ts';
 
 // The OAuth routes: which clients a person may connect through, starting a
 // sign-in through one from the secure window, and the realm server's callback
@@ -53,9 +57,10 @@ async function readsRealm(
 }
 
 // `GET /_oauth/clients?realm=<url>&destination=<url>`: the clients connect
-// mode offers the signed-in user — the platform's, the realm's shared ones
-// (when they read the realm) and their own — each with the permissions it
-// asks for. With a destination, only those whose API hosts cover it. With
+// mode offers the signed-in user — the realm's shared ones (when they read
+// the realm), the platform's for services the realm shares none for, then
+// their own — each with the permissions it asks for. With a destination,
+// only those whose API hosts cover it. With
 // `reconnect=<key id>`, only the client that connection signs in through.
 export function handleListConnectableClients(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
@@ -94,12 +99,14 @@ export function handleListConnectableClients(args: CreateRoutesArgs): Handler {
 // `POST /_oauth/connections`: starts a sign-in through a client, from the
 // secure window or the CLI with a secure-origin session. The body names the
 // client and either the new connection's name, with a ticket to `add`, or the
-// connection to reconnect, with a ticket to `replace` it. Answers with the
+// connection to reconnect, with a ticket to `replace` it. The CLI also names
+// its loopback listener (`cli: {port, state}`), which the `connected` page
+// hands the code to; only a CLI's session may name one. Answers with the
 // vendor's authorization URL to send the user to.
 export function handleStartConnect(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
-    await secureClientOf(ctxt, args, 'connections are made');
+    let secureClient = await secureClientOf(ctxt, args, 'connections are made');
     let body = await readJSON(ctxt);
     let data = body.data as
       | { type?: unknown; attributes?: Record<string, unknown> }
@@ -109,9 +116,15 @@ export function handleStartConnect(args: CreateRoutesArgs): Handler {
     }
     let attributes = data.attributes ?? {};
     for (let name of Object.keys(attributes)) {
-      if (!['name', 'reconnect', 'client'].includes(name)) {
+      if (!['name', 'reconnect', 'client', 'cli'].includes(name)) {
         throw new UserKeyError(400, `'${name}' can't be set here`);
       }
+    }
+    if (attributes.cli !== undefined && secureClient !== 'cli') {
+      throw new UserKeyError(
+        400,
+        `only the CLI's session names a listener to hand the sign-in to`,
+      );
     }
     let started = await startConnect(args.dbAdapter, secretsKeyring(), {
       owner,
@@ -123,6 +136,9 @@ export function handleStartConnect(args: CreateRoutesArgs): Handler {
       serverURL: args.serverURL,
       serverSecret: args.realmSecretSeed,
       mayUseShare: (realmURL) => readsRealm(args, owner, realmURL),
+      ...(attributes.cli !== undefined
+        ? { cli: validateCliHandoff(attributes.cli) }
+        : {}),
     });
     await sendJSON(ctxt, 201, {
       data: {
@@ -144,6 +160,11 @@ export function handleStartConnect(args: CreateRoutesArgs): Handler {
 // window signed in as the person who started it. Nothing the vendor issued
 // beyond the one-use code reaches a browser; the code is useless without
 // the PKCE verifier and client secret, which only the realm server holds.
+//
+// A sign-in the CLI started also names the CLI's loopback listener
+// (`cli_port`, `cli_state`), read from the sign-in in progress: the page
+// then hands the code, or why there is none, to the CLI, which finishes the
+// sign-in with its own secure session, so the browser needs none.
 export function handleOAuthCallback(args: CreateRoutesArgs): Handler {
   return async (ctxt) => {
     let { code, state, error } = ctxt.query;
@@ -153,6 +174,14 @@ export function handleOAuthCallback(args: CreateRoutesArgs): Handler {
       typeof state !== 'string'
         ? { error: 'denied' }
         : { code, state };
+    let cli =
+      typeof state === 'string' && state.length > 0
+        ? await cliHandoffFor(args.dbAdapter, state)
+        : undefined;
+    if (cli) {
+      fragment.cli_port = String(cli.port);
+      fragment.cli_state = cli.state;
+    }
     let page = args.secureOriginURL
       ? `${args.secureOriginURL.href.replace(/\/*$/, '/')}connected`
       : new URL('/', args.serverURL).href;
@@ -214,7 +243,9 @@ export function handleCompleteConnect(args: CreateRoutesArgs): Handler {
 }
 
 // The operator routes for the platform's own clients, reached with an
-// operator token for `system-keys`. None answers with a secret.
+// operator token for `system-keys`. None answers with a secret. Every change
+// carries an operator note, recorded in the client's history with what the
+// server observed of the caller.
 export function handleListPlatformClients({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
     await sendJSON(ctxt, 200, {
@@ -223,7 +254,19 @@ export function handleListPlatformClients({ dbAdapter }: CreateRoutesArgs) {
   });
 }
 
-// Body: `name`, `label`, `secret` and `oauth` (the client's settings).
+// The client and its recent history.
+export function handleShowPlatformClient({ dbAdapter }: CreateRoutesArgs) {
+  return keysHandler(async (ctxt) => {
+    await sendJSON(
+      ctxt,
+      200,
+      await getPlatformClient(dbAdapter, ctxt.params.name),
+    );
+  });
+}
+
+// Body: `name`, `label`, `secret`, `oauth` (the client's settings) and
+// `note`.
 export function handleAddPlatformClient({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
     let body = await readJSON(ctxt);
@@ -232,27 +275,40 @@ export function handleAddPlatformClient({ dbAdapter }: CreateRoutesArgs) {
       label: body.label,
       secret: body.secret,
       oauth: body.oauth,
+      note: body.note,
+      caller: operatorCaller(ctxt),
     });
     await sendJSON(ctxt, 201, { client });
   });
 }
 
-// Body: `secret`.
+// Body: `secret` and `note`.
 export function handleReplacePlatformClient({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
     let body = await readJSON(ctxt);
     let client = await replacePlatformClientSecret(
       dbAdapter,
       secretsKeyring(),
-      { name: ctxt.params.name, secret: body.secret },
+      {
+        name: ctxt.params.name,
+        secret: body.secret,
+        note: body.note,
+        caller: operatorCaller(ctxt),
+      },
     );
     await sendJSON(ctxt, 200, { client });
   });
 }
 
+// Body: `note`. A DELETE sent with no body gets the missing-note refusal.
 export function handleDeletePlatformClient({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
-    await deletePlatformClient(dbAdapter, ctxt.params.name);
+    let body = await readJSON(ctxt, { emptyIsObject: true });
+    await deletePlatformClient(dbAdapter, secretsKeyring(), {
+      name: ctxt.params.name,
+      note: body.note,
+      caller: operatorCaller(ctxt),
+    });
     await sendJSON(ctxt, 200, { deleted: ctxt.params.name });
   });
 }

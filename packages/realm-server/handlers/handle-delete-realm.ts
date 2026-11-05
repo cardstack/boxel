@@ -3,7 +3,6 @@ import {
   asExpressions,
   dbAdapterQuerier,
   fetchRealmPermissions,
-  getMatrixUsername,
   notifyAllFileChanges,
   param,
   PUBLISHED_DIRECTORY_NAME,
@@ -135,10 +134,12 @@ export default function handleDeleteRealm({
         return;
       }
 
+      // A realm's namespace is the localpart of an account on this realm
+      // server's Matrix server, so only that account's full id matches it.
       let ownerNamespace = getRealmNamespace(parsedRealmURL);
       if (
         !ownerNamespace ||
-        ownerNamespace !== getMatrixUsername(ownerUserId)
+        ownerUserId !== `@${ownerNamespace}:${matrixClient.serverName}`
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,

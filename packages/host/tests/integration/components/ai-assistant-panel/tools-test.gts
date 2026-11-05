@@ -407,13 +407,16 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   // wait therefore needs a budget sized for that whole chain on a loaded CI
   // runner, not the 1s `waitFor` default. The elapsed time is always logged,
   // and a timeout logs where the chain stopped, so a slow run and a stalled
-  // one read differently in CI output.
+  // one read differently in CI output. Every wait for a tool's result goes
+  // through here, whichever element of the result it waits for.
   const TOOL_RESULT_TIMEOUT_MS = 10_000;
 
-  async function waitForToolResult() {
+  async function waitForToolResult(
+    selector = '[data-test-tool-result-header]',
+  ) {
     let startedAt = performance.now();
     try {
-      await waitFor('[data-test-tool-result-header]', {
+      await waitFor(selector, {
         timeout: TOOL_RESULT_TIMEOUT_MS,
       });
     } catch (e) {
@@ -421,7 +424,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         ...document.querySelectorAll('[data-test-tool-call-apply]'),
       ].map((el) => el.getAttribute('data-test-tool-call-apply'));
       console.error(
-        `[tool-result-wait] no result header after ${Math.round(
+        `[tool-result-wait] no ${selector} after ${Math.round(
           performance.now() - startedAt,
         )}ms; messages=${
           document.querySelectorAll('[data-test-message-idx]').length
@@ -430,7 +433,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       throw e;
     }
     console.log(
-      `[tool-result-wait] result header after ${Math.round(
+      `[tool-result-wait] ${selector} after ${Math.round(
         performance.now() - startedAt,
       )}ms`,
     );
@@ -2627,6 +2630,36 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     };
   }
 
+  // The declaring skill loads, but importing the tool's command module
+  // throws, so resolving the tool rejects rather than finding no command.
+  // Patched on the prototype so a loader reset mid-test is covered too.
+  function failCommandModuleImport() {
+    let loaderPrototype = Object.getPrototypeOf(
+      getService('loader-service').loader,
+    );
+    let originalImport = loaderPrototype.import;
+    let importsRefused = 0;
+    loaderPrototype.import = async function (
+      this: unknown,
+      moduleId: string,
+      ...rest: unknown[]
+    ) {
+      if (String(moduleId).includes('read-file-for-ai-assistant')) {
+        importsRefused++;
+        throw new Error('simulated command module load failure');
+      }
+      return originalImport.call(this, moduleId, ...rest);
+    };
+    return {
+      get importsRefused() {
+        return importsRefused;
+      },
+      restore() {
+        loaderPrototype.import = originalImport;
+      },
+    };
+  }
+
   function finalEditWithHostTool(
     streamingEventId: string,
     body: string,
@@ -2948,23 +2981,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
-    // The declaring skill loads, but importing the tool's command module
-    // throws, so resolving the tool rejects rather than finding no command.
-    // Patched on the prototype so a loader reset mid-test is covered too.
-    let loaderPrototype = Object.getPrototypeOf(
-      getService('loader-service').loader,
-    );
-    let originalImport = loaderPrototype.import;
-    loaderPrototype.import = async function (
-      this: unknown,
-      moduleId: string,
-      ...rest: unknown[]
-    ) {
-      if (String(moduleId).includes('read-file-for-ai-assistant')) {
-        throw new Error('simulated command module load failure');
-      }
-      return originalImport.call(this, moduleId, ...rest);
-    };
+    // This test is about the rejection, not the validation timeout. On a busy
+    // runner, loading the declaring skill before the import can take longer
+    // than the 3s test timeout, and then the call fails for the timeout.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
+    let fail = failCommandModuleImport();
     try {
       simulateRemoteMessage(
         roomId,
@@ -2973,7 +2996,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
       await settled();
     } finally {
-      loaderPrototype.import = originalImport;
+      fail.restore();
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
     }
 
     let hostToolResults = getRoomEvents(roomId).filter(
@@ -2996,6 +3020,123 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-tool-call-apply="applying"]')
       .doesNotExist('no tool is left spinning in the applying state');
+  });
+
+  test('a validation that times out and then finds the call invalid leaves only the failed result', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // Hold the skill load past a short validation timeout, so the drain sends
+    // a failed result for the timeout. Then let the resolve continue into an
+    // import that throws, so the validation that kept running finds the call
+    // invalid after the drain has already answered it.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    let hold = holdDiscoveredSkillLoads();
+    toolService.validateTimeoutMs = 200;
+    let fail = failCommandModuleImport();
+    let toolResults = () =>
+      getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === 'slow-host-read',
+      );
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await hold.reached();
+      await waitUntil(() => toolResults().length > 0, {
+        timeout: 5000,
+        timeoutMessage: 'the drain never reported the validation timeout',
+      });
+    } finally {
+      hold.release();
+    }
+    try {
+      // `settled()` does not wait for a validation the drain stopped waiting
+      // for, so wait for it to end explicitly.
+      await waitUntil(() => toolService.validationsInFlight === 0, {
+        timeout: 10_000,
+        timeoutMessage: 'the timed-out validation never finished',
+      });
+      await settled();
+    } finally {
+      fail.restore();
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
+    }
+
+    assert.true(
+      fail.importsRefused > 0,
+      'the timed-out validation went on to the command module import',
+    );
+    assert.deepEqual(
+      toolResults().map((event) => event.content['m.relates_to']?.key),
+      ['failed'],
+      'only the timeout result, no contradictory invalid',
+    );
+  });
+
+  test('a call whose invalid result cannot be sent still gets a failed result', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // The call is invalid because its command module fails to load, and the
+    // send of that invalid result fails.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
+    let matrixService = getService('matrix-service');
+    let originalSend = matrixService.sendToolResultEvent;
+    let refusedSends = 0;
+    (matrixService as any).sendToolResultEvent = async function (
+      params: { status: string },
+      ...rest: unknown[]
+    ) {
+      if (params.status === 'invalid') {
+        refusedSends++;
+        throw new Error('simulated invalid result send failure');
+      }
+      return (originalSend as any).call(matrixService, params, ...rest);
+    };
+    let fail = failCommandModuleImport();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await settled();
+    } finally {
+      fail.restore();
+      (matrixService as any).sendToolResultEvent = originalSend;
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
+    }
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(refusedSends, 1, 'the invalid result was refused');
+    assert.deepEqual(
+      hostToolResults.map((event) => event.content['m.relates_to']?.key),
+      ['failed'],
+      'the call still gets a terminal result',
+    );
+    let failureReason = String(hostToolResults[0]?.content.failureReason);
+    assert.true(
+      failureReason.includes(
+        'could not be prepared (simulated command module load failure)',
+      ),
+      `the reason still says why the call was invalid: ${failureReason}`,
+    );
+    assert.true(
+      failureReason.includes('simulated invalid result send failure'),
+      `the reason names the send failure: ${failureReason}`,
+    );
   });
 
   test("another agent's call that first resolved to no command is resolved again when its request finishes", async function (assert) {
@@ -3124,7 +3265,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       if (!heldToolIds || heldToolIds.includes(messageTool.id ?? '')) {
         await released;
       }
-      return true;
+      return { valid: true };
     };
     let results: Array<{
       toolCallId: string;
@@ -4131,7 +4272,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     simulateShowCardResult(roomId, 'Stale');
 
-    await waitFor('[data-test-boxel-tool-call-result]');
+    await waitForToolResult('[data-test-boxel-tool-call-result]');
     await settled();
 
     assert
@@ -4182,7 +4323,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     simulateShowCardResult(roomId, 'Stale');
 
-    await waitFor('[data-test-boxel-tool-call-result]');
+    await waitForToolResult('[data-test-boxel-tool-call-result]');
     await settled();
 
     let store = getService('store');
@@ -4208,7 +4349,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     simulateShowCardResult(roomId, 'Snapshot', deletedId);
 
-    await waitFor('[data-test-boxel-tool-call-result]');
+    await waitForToolResult('[data-test-boxel-tool-call-result]');
     await settled();
 
     assert
@@ -4222,6 +4363,158 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isCardInstance(store.peek(deletedId)),
       'the snapshot is not installed in the store under the realm id',
     );
+  });
+
+  test('opening a fold of messages that each ran the same tool shows every call', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    // a reply holding nothing but one finished call to one tool
+    let renameTo = (name: string) => {
+      let requestId = `rename-${name}`;
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: '',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: requestId,
+            name: 'patchCardInstance',
+            arguments: JSON.stringify({
+              description: `Rename to ${name}`,
+              attributes: {
+                cardId: `${testRealmURL}Person/fadhlan`,
+                patch: { attributes: { firstName: name } },
+              },
+            }),
+          },
+        ],
+      });
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: requestId,
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: requestId,
+          },
+          data: {},
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+    };
+    for (let name of ['Ada', 'Bea', 'Cy', 'Dee']) {
+      renameTo(name);
+    }
+
+    await waitFor('[data-test-message-idx="3"] [data-test-tool-run-group="4"]');
+    for (let index of [0, 1, 2]) {
+      assert
+        .dom(`[data-test-message-idx="${index}"]`)
+        .doesNotExist(`the earlier message ${index} folds into the latest`);
+    }
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-pretui-tool-group-header]')
+      .containsText('×4', 'the latest message reads as the whole run');
+
+    await click(
+      '[data-test-message-idx="3"] [data-test-pretui-tool-group-header]',
+    );
+    assert
+      .dom(
+        '[data-test-message-idx="3"] [data-test-tool-run-group] [data-test-tool-call-apply="applied"]',
+      )
+      .exists({ count: 4 }, 'opening the fold shows every call of the run');
+    for (let name of ['Ada', 'Bea', 'Cy', 'Dee']) {
+      assert
+        .dom('[data-test-message-idx="3"] [data-test-tool-run-group]')
+        .containsText(`to ${name}`, `the call renaming to ${name} shows`);
+    }
+
+    // the next call of the run folds the open group into a newer message
+    renameTo('Eve');
+    await waitFor('[data-test-message-idx="4"] [data-test-tool-run-group="5"]');
+    assert
+      .dom(
+        '[data-test-message-idx="4"] [data-test-tool-run-group] [data-test-tool-call-apply="applied"]',
+      )
+      .exists({ count: 5 }, 'the fold stays open as the run grows');
+
+    // closed, it stays closed when the next call of the run lands
+    await click(
+      '[data-test-message-idx="4"] [data-test-pretui-tool-group-header]',
+    );
+    renameTo('Fay');
+    await waitFor('[data-test-message-idx="5"] [data-test-tool-run-group="6"]');
+    assert
+      .dom('[data-test-message-idx="5"] [data-test-pretui-tool-group-header]')
+      .hasAttribute(
+        'aria-expanded',
+        'false',
+        'the fold stays closed as the run grows',
+      );
+  });
+
+  test('a run of two messages that each ran the same tool folds into one group', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    for (let name of ['Ada', 'Bea']) {
+      let requestId = `rename-${name}`;
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: '',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: requestId,
+            name: 'patchCardInstance',
+            arguments: JSON.stringify({
+              description: `Rename to ${name}`,
+              attributes: {
+                cardId: `${testRealmURL}Person/fadhlan`,
+                patch: { attributes: { firstName: name } },
+              },
+            }),
+          },
+        ],
+      });
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: requestId,
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: requestId,
+          },
+          data: {},
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+    }
+
+    await waitFor('[data-test-message-idx="1"] [data-test-tool-run-group="2"]');
+    assert
+      .dom('[data-test-message-idx="0"]')
+      .doesNotExist('the earlier message folds into the latest');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-pretui-tool-group-header]')
+      .containsText('×2', 'the latest message reads as both calls');
+
+    await click(
+      '[data-test-message-idx="1"] [data-test-pretui-tool-group-header]',
+    );
+    assert
+      .dom(
+        '[data-test-message-idx="1"] [data-test-tool-run-group] [data-test-tool-call-apply="applied"]',
+      )
+      .exists({ count: 2 }, 'opening the fold shows both calls');
   });
 
   // A tool call the bot already ran, and the result card it stored in the
@@ -4329,7 +4622,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       }),
     });
 
-    await waitFor('[data-test-tool-result-container]');
+    await waitForToolResult();
     assert
       .dom('[data-test-tool-result-header]')
       .containsText('patchFields', "the result's meta line names the call");

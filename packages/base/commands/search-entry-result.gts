@@ -26,6 +26,8 @@ export class SearchEntriesInput extends CardDef {
   @field scope = contains(StringField);
   // Maximum rows returned; the tool defaults to 5 and clamps to 10.
   @field limit = contains(NumberField);
+  // The room an assistant's call came from, set by the tool service.
+  @field roomId = contains(StringField);
 }
 
 export class SearchEntrySummaryField extends FieldDef {

@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
 import { forgetSession, storeSession } from '../../src/security/session.js';
-import { navigation } from '../../src/shell/navigation.js';
+import { navigation, noteDocumentAddress } from '../../src/shell/navigation.js';
 import ConnectPage from '../../src/shell/keys/connect-page.gts';
 import ConnectedPage from '../../src/shell/keys/connected-page.gts';
 import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
@@ -317,7 +317,9 @@ module('Integration | connecting an account', function (hooks) {
             { realm: REALM, destination: DESTINATION.href },
             'asks for the apps serving the operation’s destination, in its realm',
           );
-          return json(200, clientResources());
+          // A workspace that shares no app for the service: Boxel's, then
+          // the user's own.
+          return json(200, clientResources([CLIENTS[0]!, CLIENTS[2]!]));
         },
       });
       visitShell(
@@ -325,7 +327,7 @@ module('Integration | connecting an account', function (hooks) {
       );
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      assert.dom('[data-test-keys-heading]').hasText('Connect an account');
+      assert.dom('[data-test-keys-heading]').hasText('Connect');
       assert
         .dom('[data-test-opened-for-operation]')
         .hasText('List repositories');
@@ -343,29 +345,18 @@ module('Integration | connecting an account', function (hooks) {
         ['repo', 'read:user'],
         'each permission it asks for, one per line',
       );
-      let shared = '[data-test-client-choice="Team GitHub App"]';
-      assert
-        .dom(`${shared} [data-test-client-owner]`)
-        .hasText('Shared in Team Workspace');
-      assert
-        .dom(`${shared} [data-test-client-no-permissions]`)
-        .hasText('No extra permissions requested');
-      assert.dom(`${shared} [data-test-client-permissions]`).doesNotExist();
-      assert
-        .dom(
-          '[data-test-client-choice="My Forge App"] [data-test-client-owner]',
-        )
-        .hasText('Your app');
+      let own = '[data-test-client-choice="My Forge App"]';
+      assert.dom(`${own} [data-test-client-owner]`).hasText('Your app');
 
-      assert.dom('[data-test-connect-submit]').isDisabled('no app chosen yet');
+      assert
+        .dom(`${platform} input`)
+        .isChecked('Boxel’s app, listed ahead of the user’s own, is chosen');
+      assert.dom('[data-test-connect-name]').hasValue('GitHub');
       assert.dom('[data-test-connect-back]').doesNotExist();
-      await click(`${shared} input`);
+      await click(`${own} input`);
       assert
         .dom('[data-test-connect-name]')
-        .hasValue(
-          'Team GitHub App',
-          'named after the app until a name is typed',
-        );
+        .hasValue('My Forge App', 'named after the app until a name is typed');
       await fillIn('[data-test-connect-name]', ' Work GitHub ');
       await click(`${platform} input`);
       assert
@@ -386,6 +377,90 @@ module('Integration | connecting an account', function (hooks) {
         [{ how: 'assign', url: AUTHORIZE_URL }],
         'the window goes to the service’s sign-in page',
       );
+    });
+
+    test('opened for an operation in a workspace that shares an app for the service, offers that app in Boxel’s place, chosen', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context(),
+        'GET _oauth/clients': () =>
+          json(200, clientResources([CLIENTS[1]!, CLIENTS[2]!])),
+      });
+      visitShell(
+        `connect#card=${encodeURIComponent(CARD)}&operation=listRepos`,
+      );
+      await render(ConnectPage);
+      await waitFor('[data-test-connect-form]');
+      let shared = '[data-test-client-choice="Team GitHub App"]';
+      assert
+        .dom(`${shared} [data-test-client-owner]`)
+        .hasText('Shared in Team Workspace');
+      assert
+        .dom(`${shared} [data-test-client-no-permissions]`)
+        .hasText('No extra permissions requested');
+      assert.dom(`${shared} [data-test-client-permissions]`).doesNotExist();
+      assert.dom(`${shared} input`).isChecked();
+      await click('[data-test-connect-submit]');
+      assert.deepEqual(connectRequest().data.attributes, {
+        client: SHARE_REF,
+        name: 'Team GitHub App',
+      });
+      assert.deepEqual(navigations, [{ how: 'assign', url: AUTHORIZE_URL }]);
+    });
+
+    module('the app that starts out chosen', function () {
+      let [platform, share, own] = CLIENTS;
+      let otherShare = {
+        ...share!,
+        ref: { kind: 'share', shareId: '44444444-4444-4444-8444-444444444444' },
+        label: 'Other Team App',
+      };
+      let otherService = {
+        ...platform!,
+        ref: {
+          kind: 'platform',
+          clientId: '66666666-6666-4666-8666-666666666666',
+        },
+        label: 'Linear',
+        apiHosts: ['https://api.linear.app/'],
+      };
+      let otherOwn = {
+        ...own!,
+        ref: { kind: 'own', keyId: '55555555-5555-4555-8555-555555555555' },
+        label: 'My Other App',
+      };
+      let cases: [string, unknown[], string[]][] = [
+        ['the workspace’s one shared app', [share!, own!], ['Team GitHub App']],
+        ['Boxel’s one app', [platform!, own!], ['GitHub']],
+        ['none among two shared apps', [share!, otherShare, own!], []],
+        [
+          'none among apps for different services',
+          [share!, otherService, own!],
+          [],
+        ],
+        ['none among only the user’s own', [own!, otherOwn], []],
+      ];
+      for (let [name, clients, expected] of cases) {
+        test(name, async function (assert) {
+          serve({
+            'GET _oauth/clients': () =>
+              json(200, clientResources(clients as typeof CLIENTS)),
+          });
+          visitShell('connect');
+          await render(ConnectPage);
+          await waitFor('[data-test-connect-form]');
+          assert.deepEqual(
+            [...document.querySelectorAll('[data-test-client-choice]')]
+              .filter((choice) => choice.querySelector('input')?.checked)
+              .map((choice) => choice.getAttribute('data-test-client-choice')),
+            expected,
+          );
+          if (expected.length === 0) {
+            assert
+              .dom('[data-test-connect-submit]')
+              .isDisabled('nothing to connect through until the user picks');
+          }
+        });
+      }
     });
 
     test('opened bare from the key page, asks for every app the user may use, and goes back', async function (assert) {
@@ -428,6 +503,73 @@ module('Integration | connecting an account', function (hooks) {
       assert.deepEqual(navigations, [], 'the window goes nowhere');
     });
 
+    test('reached by a route transition from a key page with a trail, keeps that trail', async function (assert) {
+      let share = `share-key#realm=${encodeURIComponent('https://realm-server.test/someone/workspace/')}`;
+      let keys = `keys#${new URLSearchParams({ back: share })}`;
+      visitShell('connect');
+      noteDocumentAddress(keys);
+      try {
+        await render(ConnectPage);
+        await waitFor('[data-test-connect-form]');
+        assert.deepEqual(
+          [...document.querySelectorAll('[data-test-breadcrumbs] li')].map(
+            (li) => li.textContent!.replace('›', '').trim(),
+          ),
+          ['Share key', 'Your keys', 'Connect'],
+        );
+        assert
+          .dom('[data-test-connect-back]')
+          .exists('the key page above it is the one it goes back to');
+      } finally {
+        noteDocumentAddress(undefined);
+      }
+    });
+
+    test('reached from Replace key, the trail leads back there rather than to the key page', async function (assert) {
+      serve({
+        'GET _user-keys/conn-1': () =>
+          json(200, { data: connection('rejected') }),
+      });
+      let replace = `replace-key#card=${encodeURIComponent('https://realm-server.test/someone/workspace/Weather/today')}&operation=forecast`;
+      visitShell(
+        `connect#${new URLSearchParams({ reconnect: 'conn-1', back: replace })}`,
+      );
+      await render(ConnectPage);
+      await waitFor('[data-test-connect-form]');
+      assert.dom('[data-test-breadcrumbs] li:last-child').hasText('Reconnect');
+      assert.dom('[data-test-breadcrumb="0"]').hasText('Replace key');
+      assert
+        .dom('[data-test-connect-back]')
+        .doesNotExist('the trail is the way back');
+      await click('[data-test-breadcrumb="0"]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${replace}` },
+      ]);
+    });
+
+    test('reached from a key page with a trail, Back to your keys goes back to that key page as it was', async function (assert) {
+      serve({
+        'GET _user-keys/conn-1': () =>
+          json(200, { data: connection('rejected') }),
+      });
+      let keys = `keys#${new URLSearchParams({ back: 'swap-key#realm=https%3A%2F%2Frealm-server.test%2Fsomeone%2Fworkspace%2F' })}`;
+      visitShell(
+        `connect#${new URLSearchParams({ reconnect: 'conn-1', back: keys })}`,
+      );
+      await render(ConnectPage);
+      await waitFor('[data-test-connect-form]');
+      assert.deepEqual(
+        [...document.querySelectorAll('[data-test-breadcrumbs] li')].map((li) =>
+          li.textContent!.replace('›', '').trim(),
+        ),
+        ['Swap key', 'Your keys', 'Reconnect'],
+      );
+      await click('[data-test-connect-back]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${keys}` },
+      ]);
+    });
+
     test('reconnecting signs the connection in again, with a ticket to replace it', async function (assert) {
       serve({
         'GET _user-keys/conn-1': () =>
@@ -436,7 +578,7 @@ module('Integration | connecting an account', function (hooks) {
       visitShell('connect#reconnect=conn-1');
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      assert.dom('[data-test-keys-heading]').hasText('Reconnect an account');
+      assert.dom('[data-test-keys-heading]').hasText('Reconnect');
       assert
         .dom('[data-test-connect-connection] [data-test-key-row-name]')
         .hasText('Work GitHub');
@@ -580,6 +722,70 @@ module('Integration | connecting an account', function (hooks) {
       assert.strictEqual(window.location.hash, '', 'the code is gone');
     });
 
+    test('a sign-in the CLI started is handed back to it once the user confirms, with no session of the window’s', async function (assert) {
+      serve({ 'GET _secure-session': () => ({ status: 401 }) });
+      let submitted: { action: string; fields: [string, string][] }[] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push({
+          action: this.action,
+          fields: [...new FormData(this).entries()] as [string, string][],
+        });
+      };
+      try {
+        visitShell(
+          `connected#code=one-use-code&state=sign-in-state&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(ConnectedPage);
+        await waitFor('[data-test-connected-cli-continue]');
+        assert.strictEqual(window.location.hash, '', 'the code is gone');
+        assert.deepEqual(submitted, [], 'nothing leaves before the user says');
+        await click('[data-test-connected-cli-continue]');
+        assert.deepEqual(submitted, [
+          {
+            action: 'http://127.0.0.1:51234/callback',
+            fields: [
+              ['state', 'c'.repeat(32)],
+              ['oauth_code', 'one-use-code'],
+              ['oauth_state', 'sign-in-state'],
+            ],
+          },
+        ]);
+        assert.notOk(
+          requests.some((r) => r.path === '_oauth/connections/complete'),
+          'the window finishes nothing itself',
+        );
+        assert
+          .dom('[data-test-secure-title]')
+          .hasText('Returning to your terminal…');
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    test('a sign-in the CLI started that the service declined tells the CLI why', async function (assert) {
+      let submitted: [string, string][][] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push([...new FormData(this).entries()] as [string, string][]);
+      };
+      try {
+        visitShell(
+          `connected#error=denied&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(ConnectedPage);
+        await click('[data-test-connected-cli-continue]');
+        assert.deepEqual(submitted, [
+          [
+            ['state', 'c'.repeat(32)],
+            ['oauth_error', 'denied'],
+          ],
+        ]);
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
     test('a sign-in the realm server won’t finish for this user says it expired', async function (assert) {
       serve({
         'POST _oauth/connections/complete': () =>
@@ -660,7 +866,7 @@ module('Integration | connecting an account', function (hooks) {
         .doesNotExist('a connection is signed in again, not replaced');
       await click(`${row} [data-test-key-reconnect]`);
       assert.deepEqual(navigations, [
-        { how: 'assign', url: '/secure/connect#reconnect=conn-1' },
+        { how: 'assign', url: '/secure/connect#reconnect=conn-1&back=keys' },
       ]);
     });
 

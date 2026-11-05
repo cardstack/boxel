@@ -9,6 +9,8 @@ import { pageURL, withFragment } from './secure-sign-in';
 // definition that needs the user's approval in one confirmation, and its
 // review-changes mode the same for the ones whose request changed since they
 // were approved; the caller names only the one operation it is blocked on.
+// Its share-limits mode is where the owner of a share's key changes the
+// share's limits, which the app's session may not.
 //
 // The app tells the window which page to show and what it is for, and nothing
 // else. Everything it says names something (a realm, a card or a card type,
@@ -23,6 +25,7 @@ export const SECURE_WINDOW_MODES = [
   'replace-key',
   'share-key',
   'swap-key',
+  'share-limits',
   'connect',
   'approve',
   'review-changes',
@@ -58,7 +61,12 @@ export type SecureWindowRequest =
       reason?: string;
     }
   | { mode: 'share-key'; realm: string; reason?: string }
-  | { mode: 'swap-key'; realm: string; share: string; reason?: string }
+  | {
+      mode: 'swap-key' | 'share-limits';
+      realm: string;
+      share: string;
+      reason?: string;
+    }
   | {
       mode: 'connect';
       target?: SecureWindowTarget;
@@ -71,9 +79,11 @@ export type SecureWindowRequest =
       reason?: string;
     };
 
-// The popup's size. The share page lays a key's name and its fields out on one
-// line at this width.
-export const SECURE_WINDOW_FEATURES = 'popup,width=640,height=720';
+// The popup's size: the page area below the address bar. The key pages are
+// laid out for at least 640 wide; the share page puts a key's name and its
+// fields on one line from that width. On a screen too short for the height, the
+// browser fits the window to the screen and the page scrolls.
+export const SECURE_WINDOW_FEATURES = 'popup,width=800,height=1000';
 
 // Whether `value` can name a realm, card or module to the window: an http(s)
 // URL, or a prefix-form id (`@cardstack/…`). The window reads nothing else.
@@ -96,24 +106,23 @@ export function secureWindowURL(request: SecureWindowRequest): string {
   let fragment: Record<string, string> = {};
   if (request.mode === 'share-key') {
     fragment.realm = request.realm;
-  } else if (request.mode === 'swap-key') {
+  } else if (request.mode === 'swap-key' || request.mode === 'share-limits') {
     fragment.realm = request.realm;
     fragment.share = request.share;
-  } else if (request.target?.kind === 'instance') {
-    fragment.card = request.target.card;
-  } else if (request.target?.kind === 'type') {
-    fragment.module = request.target.module;
-    fragment.name = request.target.name;
-    fragment.realm = request.target.realm;
-  } else if (request.mode === 'connect' && request.realm) {
-    fragment.realm = request.realm;
-  }
-  if (
-    request.mode !== 'share-key' &&
-    request.mode !== 'swap-key' &&
-    request.target?.operation
-  ) {
-    fragment.operation = request.target.operation;
+  } else {
+    let target = 'target' in request ? request.target : undefined;
+    if (target?.kind === 'instance') {
+      fragment.card = target.card;
+    } else if (target?.kind === 'type') {
+      fragment.module = target.module;
+      fragment.name = target.name;
+      fragment.realm = target.realm;
+    } else if (request.mode === 'connect' && request.realm) {
+      fragment.realm = request.realm;
+    }
+    if (target?.operation) {
+      fragment.operation = target.operation;
+    }
   }
   if (request.reason) {
     fragment.reason = request.reason;

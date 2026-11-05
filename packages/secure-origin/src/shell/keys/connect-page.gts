@@ -1,7 +1,9 @@
 // The `connect` page: connects one of the user's accounts at a service, by
 // signing in there through an OAuth app. It lists the apps the realm server
-// offers the user — Boxel's own, those shared into the workspace the window
-// was opened for, and the user's own — each with the permissions it asks for.
+// offers the user — those shared into the workspace the window was opened
+// for, Boxel's own for services the workspace shares none for, then the
+// user's own — each with the permissions it asks for. When one app is the
+// workspace's or Boxel's, it starts out chosen.
 // The user picks one and names the connection, and the window goes to the
 // service's sign-in page. The service sends the user back to the realm
 // server, which finishes the sign-in and sends the window on to `connected`.
@@ -30,7 +32,12 @@ import KeyRound from '../../components/icons/key-round.gts';
 import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
-import { pageURL } from '../urls.js';
+import {
+  addressAbove,
+  isKeyPageAddress,
+  keyPageURL,
+  pageTitle,
+} from './trail.ts';
 
 import ClientPicker from './client-picker.gts';
 import {
@@ -48,6 +55,20 @@ import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor } from './opened-for.ts';
 import { addressOf } from './workspace-dropdown.gts';
+
+// The app that starts out chosen: the only one offered, or the one app that
+// is the workspace's or Boxel's, which the realm server lists ahead of the
+// user's own. With several such apps (two shared, or apps for different
+// services) the user picks.
+export function defaultClient(
+  clients: ConnectableClient[],
+): number | undefined {
+  if (clients.length === 1) {
+    return 0;
+  }
+  let offered = clients.filter((client) => client.kind !== 'own');
+  return offered.length === 1 && clients[0] === offered[0] ? 0 : undefined;
+}
 
 type State =
   | { name: 'loading' }
@@ -141,14 +162,14 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{/if}}
           </:default>
           <:actions>
-            {{#unless this.choosing.context}}
+            {{#if this.backToKeys}}
               <Button
                 type='button'
                 @kind='secondary'
                 data-test-connect-back
                 {{on 'click' this.back}}
               >Back to your keys</Button>
-            {{/unless}}
+            {{/if}}
             {{#if this.choosing.clients.length}}
               <Button
                 type='submit'
@@ -211,9 +232,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
   }
 
   private get heading() {
-    return this.opened.reconnect
-      ? 'Reconnect an account'
-      : 'Connect an account';
+    return pageTitle('connect', Boolean(this.opened.reconnect));
   }
 
   private get loading() {
@@ -267,8 +286,11 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
         : -1;
       if (same !== -1) {
         this.selectClient(same);
-      } else if (clients.length === 1) {
-        this.selectClient(0);
+      } else {
+        let preferred = defaultClient(clients);
+        if (preferred !== undefined) {
+          this.selectClient(preferred);
+        }
       }
       this.args.api.visit.loaded();
     } catch (e) {
@@ -324,7 +346,18 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private back = () => navigation.back(pageURL('keys'));
+  private back = () => navigation.back(keyPageURL());
+
+  // Opened for nothing, the page offers the way back to the key page. Reached
+  // from another key page (replacing a key, say), its trail leads back there
+  // instead.
+  private get backToKeys() {
+    let above = addressAbove();
+    return (
+      !this.choosing?.context &&
+      (above === undefined || isKeyPageAddress(above))
+    );
+  }
 
   // Mints the ticket for this sign-in, asks the realm server to start it, and
   // sends the window to the service's sign-in page.

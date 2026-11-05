@@ -91,6 +91,21 @@ for a stored entry whatever produced it.
 | `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                                                                                                                                     |
 | `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a trailing dot on the host, a `path` key no segment takes, a `path` value written as text that is `''`, `.` or `..` or holds `/` or `\`, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET |
 
+**Before indexing, `boxel lint` reports the same issues.** The realm's `_lint`
+engine (`tasks/lint-engines.ts`) runs two rules from `tasks/lint-call-api.ts`,
+registered as the `@cardstack/boxel-operations` plugin. Each reads every
+`@operation static … = { base: 'callApi', … }` from source (string and
+template literals, objects, arrays, `params()`/`instance()`/`actor()`/
+`realmConfig()`/`card()`, `bxl`, and `const`s in the file), and hands it to
+`lowerCallApiRequest` in `lowering.ts`, the function lowering itself calls.
+`call-api` (error) reports each issue as `<code>: <message>` and a `label`
+lowering refuses; `call-api-advice` (warning) reports an operation with no
+`label` and a destination that isn't `https:`. A value source doesn't settle
+(an imported constant, another call) stands in as an opaque reference, and a
+request whose URL or whole member is one isn't lowered at all, so the rules
+never guess. A lint check that mirrors lowering belongs in lowering, where
+both pick it up.
+
 The lowered entry keeps every value as a marker and every slot as the text the
 author wrote, plus `slots: CallApiSlot[]` — `{name, key, transform?,
 placement, at}` — so dispatch knows what a request needs without walking it.
@@ -162,9 +177,10 @@ refusal also writes a key-use line.
    destination, or Google's token endpoint refused the service-account key,
    and no probe is due; see the `user-keys` skill, _Rejected grants_ and
    _Rejected keys_).
-   Every invocation off the network is interactive, and every binding is
-   approved for pipelines only, so a slotted request is sent only from a
-   pipeline (`Realm.handlePipeline`). The `binding-not-approved` detail names
+   Every invocation off the network is interactive, and is served only by a
+   binding its owner approved for interactive use; a pipeline
+   (`Realm.handlePipeline`) is served by any active binding. An interactive
+   call also counts against the key's limits (see the `key-limits` skill). The `binding-not-approved` detail names
    each slot with whose key fills it (`the credential slot "weather" for the
 invoking user's own key`, `… for the realm's key`, from `describeSlots`),
    because a caller that sees only the message, such as the AI assistant,
@@ -269,13 +285,127 @@ with every registered credential removed by the scrubber.
 
 Only these refuse the operation:
 
-| Code                  | Status                           | When                                                                                                                                                                                                                                                                  |
-| --------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `guard-refused`       | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; the built request left its lowered destination; or it is addressed to a token endpoint (`meta.reason: 'platform-only'`) |
-| `upstream-timeout`    | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                                                                                            |
-| `response-too-large`  | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered                                                                                                     |
-| `internal-error`      | 502                              | the connection broke before any response arrived                                                                                                                                                                                                                      |
-| `credential-rejected` | 424                              | the vendor answered 401 to a request carrying a credential; its grants are now rejected                                                                                                                                                                               |
+| Code                  | Status                           | When                                                                                                                                                                                                                                                                                                     |
+| --------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard-refused`       | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; the built request left its lowered destination; or it is addressed to a token endpoint (`meta.reason: 'platform-only'`)                                    |
+| `upstream-timeout`    | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                                                                                                                               |
+| `response-too-large`  | 502                              | the response passed the `call-api` size cap: its declared length was over it (nothing was read), or its decompressed body passed it while streaming (`meta.measured`: `declared-length` / `stream-reached-cap`; `meta.cap` in bytes). The card never gets a cut-off body. See the `outbound-guard` skill |
+| `internal-error`      | 502                              | the connection broke before any response arrived                                                                                                                                                                                                                                                         |
+| `credential-rejected` | 424                              | the vendor answered 401 to a request carrying a credential; its grants are now rejected                                                                                                                                                                                                                  |
+
+## A card that uses the realm's key or the user's own
+
+A slot is either `{{apiKey}}` or `{{userKey}}`, and each is approved on its
+own terms: an `apiKey` slot has one binding per realm, pointing at a share
+and serving every caller there, and a `userKey` slot has one per user,
+serving only them (see the `key-bindings` skill). So a card that should work
+with whichever key is available declares **one operation per slot**: each
+request twice, identical but for the slot.
+
+```ts
+@operation static forecastShared = {
+  base: 'callApi',
+  label: 'Get the 5-day forecast for a place, with the workspace’s key',
+  params: { lat: NumberField, lon: NumberField },
+  url: 'https://api.openweathermap.org/data/2.5/forecast',
+  query: { lat: params('lat'), lon: params('lon'), appid: '{{apiKey}}' },
+} satisfies OperationDeclaration;
+
+@operation static forecastOwn = {
+  // the same request, with appid: '{{userKey}}'
+} satisfies OperationDeclaration;
+```
+
+The card asks `@context.keyReadiness` about both and calls the shared one
+when it answers `ready`, otherwise the caller's own when that one does:
+
+```ts
+let shared = this.args.context?.keyReadiness?.('forecastShared', model);
+let own = this.args.context?.keyReadiness?.('forecastOwn', model);
+let name =
+  shared === 'ready'
+    ? 'forecastShared'
+    : own === 'ready'
+      ? 'forecastOwn'
+      : undefined;
+let answer = name && (await operations(model)[name]({ lat, lon }));
+```
+
+A card that calls several operations with each key asks about all of them
+and treats a key as ready only when every one is: each operation has its own
+binding, so one can need re-approval, or be left unticked on the approve page,
+while the rest are ready. Ask `@context.canInvoke` about the same pairs too.
+Readiness is never answered for an operation the realm's policy doesn't let
+the caller invoke, so `undefined` alone can't tell "still asking" from
+"refused"; `canInvoke` answering `false` can.
+
+When neither is ready, the card opens the secure window itself for the one
+request that fixes it, once per request (a closed window leaves a prompt
+with the same button, and a browser that blocks the popup gets the host's
+button that opens it). The weather showing is the signal that a key works,
+so the card needn't say whose key it is using. The requests:
+
+- `approve` on the caller's own operation at `needs-connect` or
+  `needs-approval`; `review-changes` at `needs-reapproval`.
+- `approve` on the `apiKey` operation at `needs-approval`, for the writer
+  whose share isn't approved for it yet, asked even while the card runs on their own key,
+  since nobody else in the realm can use the share until then.
+- `replace-key` after `credential-rejected`, from the card's error, not
+  opened by itself.
+
+At `needs-connect`, open `approve` rather than `enter-key`: the approve page
+lets the user pick one of their keys or add one, and approving grants the key
+the operation's destination. A key saved through `enter-key` alone has no
+grant, so readiness stays `needs-connect`. The approve page offers first,
+and starts on, letting the operations run on the schedule and when a card is
+opened, which is what a card calling from its template needs; the user can
+narrow it to scheduled pipelines only. It starts on pipelines only when every
+request it asks about was last approved for pipelines only, and when
+`boxel keys approve` opened it without `--interactive`.
+A call that a fix makes ready needs no reload: readiness is asked again when
+the user comes back from the window. Swapping a key into a stopped share is
+the keys page's job, not the card's.
+
+Readiness is also asked again whenever the page takes focus and an answer is
+more than a few seconds old, so a key shared from the key page in another tab
+reaches the card too: the writer who shared it gets `needs-approval` for the
+`apiKey` operation, and the card's approval request opens. A card needs no
+focus handling of its own for readiness.
+
+Don't write one operation whose slot falls back from the realm's key to the
+user's. Who pays would be implicit: every share that was suspended or over
+budget would quietly move calls onto readers' own keys. With two operations
+every approval stays simple, and the `boxel:key-use` line names the
+operation, so it shows whose key paid.
+
+What a card can and can't learn:
+
+- `keyReadiness` answers `needs-admin` for every share problem: no share, a
+  suspended share, a share not approved for the operation. A reader is never
+  told about a realm's shares. The exception is a caller who can fix it: the
+  owner of the share's key is told `needs-approval` or `needs-reapproval`,
+  and a caller with an active share of their own in the realm is told
+  `needs-approval` when the slot has no binding yet, since the approve page
+  offers them their shares for it. Offer them `approve` on the `apiKey`
+  operation. A direct writer can tell the `needs-admin` cases
+  apart with `ListRealmKeySharesTool`
+  (`@cardstack/boxel-host/tools/list-realm-key-shares`). It answers
+  `visible: false` to anyone else, and for a writer it gives each share's
+  `state`, `suspensionReason` and `shareId`, which `swap-key` takes.
+- `needs-sign-in` on the `userKey` operation means the caller isn't signed
+  in. Showing the shared answer is the most such a visitor can be offered.
+- A refusal reaches card code as an `OperationsError` carrying `code`,
+  `title`, `detail`, `retryAfterSeconds` and the card-actionable part of its
+  `meta` (`OperationsErrorMeta`); a share's suspension reason is not part of
+  it. Treat
+  `rate-limited` and `over-budget` as a state ("try again shortly") rather
+  than an error. `credential-rejected` stops the card until the key is
+  replaced (`replace-key`).
+- Calls are refused during a render (`not-during-render`), so the card calls
+  from an action or a modifier when someone opens it or presses refresh,
+  never from a getter or on a timer.
+
+`packages/experiments-realm/weather-app.gts` is a complete example.
 
 ## The key-use channel
 
@@ -305,6 +435,9 @@ null when the refusal came before a request was built. Tests capture it with
   one test per lowering check, lowered from plain data, and the normalized URL
   and destination.
 - `packages/host/tests/unit/call-api-destination-test.ts`: `destinationCovers`.
+- `packages/boxel-cli/tests/integration/file-lint.test.ts`: the lint rules
+  through the realm's `_lint`, one declaration per lowering issue, the
+  `http:` destination and the missing label.
 - `packages/realm-server/tests/realm-endpoints/call-api-test.ts`: end to end
   through `_operations` against the stub vendor on a fixed port, because the
   vendor URL is written into the card module.
@@ -322,3 +455,5 @@ the `agent-peer-collaboration` skill on serving your own dist.
 - **`operations-diagnosis`** — the `boxel:operations` channel around the call.
 - **`key-bindings`** — the bindings that fill slots, and their refusals.
 - **`secrets-at-rest`** — where a key a binding fills from is stored.
+- **`key-outage-triage`** — reading key-use lines across realms and hosts:
+  one key, one vendor, or us; the Keys dashboard and its alerts.

@@ -48,6 +48,14 @@ module('Unit | runtime-common | card directory names', function () {
       );
       assert.strictEqual(
         getCardDirectoryName({
+          module: rri('HTTPS://example.com/pets/../..'),
+          name: 'default',
+        }),
+        'Example',
+        'the root is found whatever the case of the scheme',
+      );
+      assert.strictEqual(
+        getCardDirectoryName({
           module: rri('@cardstack/catalog/../../pet-card'),
           name: 'default',
         }),

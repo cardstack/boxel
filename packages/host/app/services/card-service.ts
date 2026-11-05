@@ -6,6 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   formattedError,
   isJsonContentType,
+  POLICY_AUDIT_CONFIRMATION_HEADER,
+  policyShareAuditFromErrorBody,
   REALM_EVENTS_HEADER,
   SupportedMimeType,
   type CardDocument,
@@ -29,6 +31,7 @@ import type EnvironmentService from './environment-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
+import type PolicyAuditConfirmationService from './policy-audit-confirmation';
 import type Realm from './realm';
 import type SessionService from './session';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -65,6 +68,8 @@ export default class CardService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private network: NetworkService;
+  @service
+  declare private policyAuditConfirmation: PolicyAuditConfirmationService;
   @service declare private environmentService: EnvironmentService;
   @service declare private realm: Realm;
   @service declare private session: SessionService;
@@ -190,7 +195,9 @@ export default class CardService extends Service {
       this.validateCardWriteSize(urlString, jsonString);
     }
 
-    let response = await this.network.authedFetch(url, requestInit);
+    let response = isReadOperation
+      ? await this.network.authedFetch(url, requestInit)
+      : await this.sendWrite(url, requestInit);
     if (!response.ok) {
       let responseText = await response.text();
       let err = new Error(
@@ -309,6 +316,33 @@ export default class CardService extends Service {
     };
   }
 
+  // Sends a write. One the realm refuses because it saves a policy change
+  // that opens shared keys to people who aren't signed in is shown to the
+  // person, and sent again carrying the confirmation once they agree; one
+  // they decline answers with the refusal, which the caller reports as it
+  // reports any failed save.
+  private async sendWrite(
+    url: string | URL,
+    init: RequestInit,
+  ): Promise<Response> {
+    let response = await this.network.authedFetch(url, init);
+    if (response.status !== 409) {
+      return response;
+    }
+    let audit = policyShareAuditFromErrorBody(
+      await response
+        .clone()
+        .json()
+        .catch(() => undefined),
+    );
+    if (!audit || !(await this.policyAuditConfirmation.confirm(audit))) {
+      return response;
+    }
+    let headers = new Headers(init.headers);
+    headers.set(POLICY_AUDIT_CONFIRMATION_HEADER, audit.confirmation);
+    return await this.network.authedFetch(url, { ...init, headers });
+  }
+
   // Identifiers stay in the form the caller holds them in until a request is
   // made; a prefix-form identifier resolves through the virtual network here.
   private toURL(id: RealmResourceIdentifier | RealmIdentifier | URL): URL {
@@ -332,7 +366,7 @@ export default class CardService extends Service {
       let clientRequestId = options?.clientRequestId ?? `${type}:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
 
-      let response = await this.network.authedFetch(url, {
+      let response = await this.sendWrite(url, {
         method: 'POST',
         headers: {
           Accept: 'application/vnd.card+source',
@@ -464,7 +498,7 @@ export default class CardService extends Service {
     if (opts?.clientRequestId) {
       this.clientRequestIds.add(opts.clientRequestId);
     }
-    let response = await this.network.authedFetch(`${realmURL.href}_atomic`, {
+    let response = await this.sendWrite(`${realmURL.href}_atomic`, {
       method: 'POST',
       headers: {
         Accept: SupportedMimeType.JSONAPI,

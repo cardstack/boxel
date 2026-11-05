@@ -5,14 +5,8 @@ import {
   asExpressions,
   addExplicitParens,
   separatedByCommas,
-  loaderFor,
-  internalKeyFor,
-  Deferred,
-  identifyCard,
-  apiFor,
-  loadCardDef,
   baseCardRef,
-  type CodeRef,
+  identify,
   type CardResource,
   type Expression,
   type BoxelIndexTable,
@@ -24,8 +18,11 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 
+import { BUNDLED_BASE_MODULES } from '@cardstack/host/lib/bundled-base';
+
 import { testRealmURL } from './index';
 
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 
 const defaultIndexEntry = {
@@ -34,50 +31,27 @@ const defaultIndexEntry = {
   has_error: false,
 };
 
-let typesCache = new WeakMap<typeof CardDef, Promise<string[]>>();
-
 // this leverages the logic from index-runner.ts to generate the types for a card
-// that are serialized in the same manner as they appear in the index
-export async function getTypes(instance: CardDef): Promise<string[]> {
-  let loader = loaderFor(instance);
-  let card = Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef;
-  let cached = typesCache.get(card);
-  if (cached) {
-    return await cached;
-  }
-  let ref = identifyCard(card);
-  if (!ref) {
-    throw new Error(`could not identify card ${card.name}`);
-  }
-  let deferred = new Deferred<string[]>();
-  typesCache.set(card, deferred.promise);
+// that are serialized in the same manner as they appear in the index. A tag
+// already holds the canonical module, so each type's key is `module/name`.
+export function getTypes(instance: CardDef): string[] {
   let types: string[] = [];
-  let fullRef: CodeRef = ref;
-  while (fullRef) {
-    let loadedCard, loadedCardRef;
-    loadedCard = await loadCardDef(fullRef, { loader });
-    loadedCardRef = identifyCard(loadedCard);
-    if (!loadedCardRef) {
-      throw new Error(`could not identify card ${loadedCard.name}`);
+  let card = Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef;
+  for (;;) {
+    let ref = identify(card);
+    if (!ref) {
+      throw new Error(`could not identify card ${card.name}`);
     }
-    types.push(
-      internalKeyFor(loadedCardRef, undefined, loader.getVirtualNetwork()!),
-    );
-    if (!isEqual(loadedCardRef, baseCardRef)) {
-      fullRef = {
-        type: 'ancestorOf',
-        card: loadedCardRef,
-      };
-    } else {
-      break;
+    types.push(`${trimExecutableExtension(ref.module)}/${ref.name}`);
+    if (isEqual(ref, baseCardRef)) {
+      return types;
     }
+    card = Reflect.getPrototypeOf(card) as typeof CardDef;
   }
-  deferred.fulfill(types);
-  return types;
 }
 
 export async function serializeCard(card: CardDef): Promise<CardResource> {
-  let api = await apiFor(card);
+  let api = (await BUNDLED_BASE_MODULES['card-api']()) as typeof CardAPI;
   return api.serializeCard(card, {}).data as CardResource;
 }
 

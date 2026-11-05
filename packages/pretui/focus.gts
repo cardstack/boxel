@@ -447,6 +447,11 @@ export const tracksPointer = modifier(
   },
 );
 
+/** Anything that can hold focus: used to move focus into, or hand it back to,
+ *  a panel's first control. */
+export const FOCUSABLE =
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
 /** Elements that own the keys a container would otherwise take: text entry
  *  and composite widgets. A container's keydown handler skips events whose
  *  target is inside one. */

@@ -53,7 +53,7 @@ rather than from a React translation table.
 - **Layout** — `layout` FLIP animation with scale correction, `layoutId` shared-element transitions and
   crossfade, `<LayoutGroup>`, nested/relative projection, portals, `layoutChange()` / `instantLayoutTransition()`
 - **Presence** — `<Presence>` with `sync` / `wait` / `popLayout`, `@initial={{false}}`, `@custom`,
-  nested `@propagate`, tracked `h.isPresent`
+  nested `@propagate`, tracked `h.isPresent`; plus `snapshot`, this package's own mode (see below)
 - **Drag** — Motion's pan/drag session: axis lock, direction lock, constraints (object / element / ref,
   re-measured on resize), elastic, momentum, snap to origin, `createDragControls()`, `whileDrag`,
   drag + layout, scroll-while-drag, `correctParentTransform()` / `transformViewBoxPoint()`
@@ -70,20 +70,21 @@ rather than from a React translation table.
 
 ## API
 
-| export                                                                                                         | what                                                                                                             |
-| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `motion`                                                                                                       | the modifier: Motion's props as named arguments, plus `presence` and `transformPagePoint`                        |
-| `Presence`                                                                                                     | `@items @key @mode @initial @custom @onExitComplete @propagate @parent @anchorX @anchorY`, yields `item, handle` |
-| `LayoutGroup`                                                                                                  | `@id @inherit`; hosts the render detector that snapshots layout before the DOM changes                           |
-| `ReorderGroup`, `ReorderItem`                                                                                  | `@values @onReorder @axis` yielding `group`; `@group @value` + forwarded motion args                             |
-| `layoutChange(fn)`, `snapshotAll()`, `requestSettle()`, `afterSettle(fn)`, `instantLayoutTransition(fn)`       | layout pipeline                                                                                                  |
-| `retime(root)`                                                                                                 | restart running motion under an element on its current transition, keeping loop phase (for tuning tools)         |
-| `createDragControls()`, `DragControls`                                                                         | `useDragControls`                                                                                                |
-| `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                           | `transformPagePoint` helpers                                                                                     |
-| `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                              | for re-hosting on another Glimmer runtime                                                                        |
-| `setParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `ParticipantHost`, `MotionParticipant` | the participant-host extension point (below)                                                                     |
-| `registerBusyProbe`, `BusyProbe`                                                                               | count a host's own in-flight work as motion (below)                                                              |
-| `motionValue`, `MotionValue`, `transformValue`, `styleEffect`, `frame`, `animate`                              | the engine's imperative surface (below)                                                                          |
+| export                                                                                                                                  | what                                                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `motion`                                                                                                                                | the modifier: Motion's props as named arguments, plus `presence` and `transformPagePoint`                        |
+| `Presence`                                                                                                                              | `@items @key @mode @initial @custom @onExitComplete @propagate @parent @anchorX @anchorY`, yields `item, handle` |
+| `LayoutGroup`                                                                                                                           | `@id @inherit`; hosts the render detector that snapshots layout before the DOM changes                           |
+| `ReorderGroup`, `ReorderItem`                                                                                                           | `@values @onReorder @axis` yielding `group`; `@group @value` + forwarded motion args                             |
+| `layoutChange(fn)`, `snapshotAll()`, `requestSettle()`, `afterSettle(fn)`, `instantLayoutTransition(fn)`                                | layout pipeline                                                                                                  |
+| `retime(root)`                                                                                                                          | restart running motion under an element on its current transition, keeping loop phase (for tuning tools)         |
+| `createDragControls()`, `DragControls`                                                                                                  | `useDragControls`                                                                                                |
+| `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                                                    | `transformPagePoint` helpers                                                                                     |
+| `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                                                       | for re-hosting on another Glimmer runtime                                                                        |
+| `setParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `ParticipantHost`, `MotionParticipant`                          | the participant-host extension point (below)                                                                     |
+| `registerBusyProbe`, `BusyProbe`                                                                                                        | count a host's own in-flight work as motion (below)                                                              |
+| `keepAsMemory`, `readAnimations`, `trackScrolls`, `MEMORY_ATTRIBUTE`, `MEMORY_HOOK_SUFFIX`, `Shown`, `ShownAnimation`, `ScrollPosition` | keep a removed element on screen as a memory while it exits (below)                                              |
+| `motionValue`, `MotionValue`, `transformValue`, `styleEffect`, `frame`, `animate`                                                       | the engine's imperative surface (below)                                                                          |
 
 Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, `glimmer-motion/reorder/group`, …) are the
 same modules.
@@ -166,6 +167,42 @@ const stage = new Stage();
   remover: a probe over one host instance's state is removed in that instance's destructor, and a probe over
   module-global state may stay registered for the life of the page.
 
+### Memories
+
+A memory is an element that has left, kept on screen for as long as its exit plays. `<Presence
+@mode="snapshot">` keeps a copy of its leaver as one, and a host that parks removed elements itself
+(`<Choreo>`'s orphan layer) keeps each element it parks as one, so a leaver looks and behaves the
+same whichever layer let it go. A memory shows the frame its element last showed, and nothing in it
+acts:
+
+- Its CSS animations hold still: each one the element was showing pauses where it was, and any other
+  jumps to its end, so an entrance does not play again on a leaver. Animations on a scroll timeline
+  follow the restored scroll offsets.
+- Its scroll offsets are restored, its backdrop filters are off, and it is composited as one texture
+  (`will-change: transform, opacity`). That makes it a stacking context and the containing block of
+  every positioned descendant, `position: fixed` included.
+- It is inert and `aria-hidden`. Its HTML elements carry no ids, `autofocus` or form-control names;
+  its SVG elements keep their ids, which its own fills, clips and masks resolve through. A reference
+  resolves to the first element with its id, so while a memory comes before its replacement (as one
+  in `<Choreo>`'s orphan layer does), the replacement's `url(#id)` and `<use>` references resolve to
+  the memory's definitions; definitions that change as their element is replaced need an id per
+  version. Its iframes are blank, and its media neither plays nor loads.
+- Its test hooks carry a suffix: `data-test-title` becomes `data-test-title-memory`, with its value. A
+  test's selector finds only the live element, and a test that means the leaver names it with the
+  suffix. It carries `data-motion-memory`, and `live()` / `liveAll()` in `glimmer-motion/test-support`
+  skip it for any other selector.
+- Its classes and its other attributes stay, so it looks as its element did wherever its styles are
+  keyed on them. A rule keyed on an id (`#panel`, `:target`) no longer reaches it, so style an element
+  that may leave by class. A memory put back in its parent (a `<Presence @mode="snapshot">` copy)
+  still matches structural selectors that read the live scene (`:has()`, `+`, `~`, `:nth-child()`,
+  `:empty`). A rule that should see only live content excludes it:
+  `:has(.menu:not([data-motion-memory], [data-motion-memory] *))`.
+
+A host makes one with `keepAsMemory(element, shown, insert)`, where `insert` puts the element back in
+the document, and `shown` is what the element showed before the render that removed it: its CSS
+animations, from `readAnimations(root)` read before that render, and its scroll offsets, from
+`trackScrolls(root)`, which records them as they change because a removed element has lost its own.
+
 ### The engine's imperative surface
 
 A few of the engine's own functions are exported from `glimmer-motion` directly, for code that drives motion
@@ -194,22 +231,22 @@ one.
 
 ### React → Glimmer
 
-| React                            | here                                                      |
-| -------------------------------- | --------------------------------------------------------- |
-| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG             |
-| `ref`                            | the element, or a `{current}` object filled by a modifier |
-| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                           |
-| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                |
-| `useIsPresent()`                 | `h.isPresent`                                             |
-| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, or `layoutChange()` |
-| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element      |
-| `useDragControls()`              | `createDragControls()`                                    |
-| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                        |
+| React                            | here                                                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG                                                                                            |
+| `ref`                            | the element, or a `{current}` object filled by a modifier                                                                                |
+| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                                                                                                          |
+| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                                                                                               |
+| `useIsPresent()`                 | `h.isPresent`                                                                                                                            |
+| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, `<ReorderGroup>` or `<Choreo>`, a `<Presence>` pass that changes its `@items`, or `layoutChange()` |
+| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element                                                                                     |
+| `useDragControls()`              | `createDragControls()`                                                                                                                   |
+| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                                                                                                       |
 
-### Three rules React does not need
+### Four rules React does not need
 
-React's model hides three things that Glimmer's doesn't, and each surfaced while porting a real app
-onto this binding. They are the only places where the port isn't a mechanical translation.
+React's model hides four things that Glimmer's doesn't. They are the only places where the port
+isn't a mechanical translation.
 
 **1. Motion owns a motion element's inline style, so pass CSS through the modifier, not a `style`
 attribute.** In React the `style` prop belongs to Motion: it merges what you write with the
@@ -232,6 +269,21 @@ re-runs from live tracked state for as long as the leaver is on screen. Anything
 symbol the panel was showing, the rect the modal flew from) has to ride on the item `<Presence>`
 yields, not be read back out of state that has already moved on.
 
+Where it can't, because the leaver renders blocks or state you don't own, use
+`<Presence @mode="snapshot">`. The leaver's block is torn down in the render that removes it, and a
+static copy of the element given the handle plays that element's `exit`. The copy shows the
+element's last frame, lifted out of flow at its recorded seat. That seat is read after every render
+and on resize, because content earlier in the template is patched before `<Presence>` diffs, and may
+already have moved the leaver. A move that is neither, such as a transition on a sibling's width, is
+not seen. `@anchorX` / `@anchorY` pin the copy to edges of its containing block; pick the ones that
+hold still as the render lands (`@anchorY="bottom"` in a container that grows upward from its bottom
+edge). It is kept as a [memory](#memories): inert, held at that frame, with no ids or form-control
+names, and with its test hooks suffixed (`data-test-title-memory`). It also takes the canvas pixels
+the element showed, the option each of its selects had chosen, and the values its script animations
+and transitions had reached. An item that comes back replaces its copy at once, and with no `exit`
+or with animations skipped nothing is copied. A copy is a picture: motion elements nested inside it
+don't play their own exits, and custom elements inside it are constructed again.
+
 **3. Declare what you want tweened, because a value in the stylesheet is invisible to the engine.**
 A layout animation moves and resizes by transform, and the engine corrects `borderRadius` and
 `boxShadow` against the scale in force, but only for values it holds. A radius that lives in CSS
@@ -245,6 +297,52 @@ Motion and every frame is corrected.
 {{! ✓ corrected per frame, against whatever scale the layout animation is applying }}
 <article class='card' {{motion layout=true style=(styles borderRadius='14px')}}></article>
 ```
+
+**4. A layout animation needs a render detector above it, so wrap a list that moves in
+`<LayoutGroup>`.** React snapshots each motion component as it re-renders, in
+`getSnapshotBeforeUpdate`. Glimmer has no such hook, so the box a layout animation starts from is
+measured by a render detector at the start of the render pass, and only `<LayoutGroup>`, `<Presence>`,
+`<ReorderGroup>` and `<Choreo>` carry one. A keyed `{{#each}}` of `layout=true` rows with none of
+them above it moves its DOM nodes with nothing measured first, and the rows jump to their new
+places. A `layoutId` hand-off needs one too: the outgoing element's box is only known if something
+measured it before it left. `<Presence>` measures only on a pass where its `@items` change, so it
+covers a list that reorders, adds or removes, but a row inside one that grows for any other reason
+still needs a `<LayoutGroup>`. The group goes around the `{{#each}}`, not inside each row: Glimmer moves a
+keyed row's DOM before it re-renders anything inside the row, so a group inside the row measures too
+late.
+Key the rows by a stable id as well. With `key='@index'` Glimmer keeps every element where it is and
+swaps its content, so nothing moves at all. A key built from a position, such as `${index}-${id}`,
+changes when the rows before it shift, and Glimmer replaces a row whose key changed with a new
+element, which has no earlier box to animate from.
+
+```gts
+{{! ✗ a sort lands in one frame: nothing measured the rows before they moved }}
+<ul>
+  {{#each this.sorted key='id' as |row|}}
+    <li {{motion layout=true}}>{{row.name}}</li>
+  {{/each}}
+</ul>
+
+{{! ✓ the group snapshots every row before each render pass patches the DOM }}
+<LayoutGroup>
+  <ul>
+    {{#each this.sorted key='id' as |row|}}
+      <li {{motion layout=true}}>{{row.name}}</li>
+    {{/each}}
+  </ul>
+</LayoutGroup>
+```
+
+In development, the first `layout` or `layoutId` element to mount with no render detector above it
+logs a console warning with the element attached. The check reads the element's DOM ancestors, so
+it also warns about three kinds of element that are measured:
+
+- one rendered through a plain `{{#in-element}}` inside a group, which lands outside the group's DOM;
+- one inside a shadow tree, which the lookup doesn't climb out of;
+- one under a `<Presence>` whose yielded handle neither it nor a motion element above it carries.
+
+A `<LayoutGroup>` inside the `{{#in-element}}` block or the shadow tree, or `{{motion presence=p}}`
+on the row, quiets it.
 
 ## Testing
 
@@ -263,14 +361,15 @@ module('the card', function (hooks) {
 });
 ```
 
-| export                                            | what it is for                                                                                                                                                                 |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `setupMotion(hooks)`                              | resets what outlives an owner (the projection root, the layout-loop guard, motion speed, and every registered reset) around each test, and fails a test that ran a layout loop |
-| `animationsSettled(opts?)`                        | resolves when every motion element, layout animation and registered busy probe has stopped, and names what was still moving when it times out                                  |
-| `bounds(el)` / `shape(el)` / `boundsAndShape(el)` | rects relative to the test root; the cumulative 2×2 transform                                                                                                                  |
-| `velocityOf(el)`                                  | async: how fast the element is moving right now, as `{ x, y }` in px/s, sampled across two frames                                                                              |
-| `isMotionIdle()` / `whatIsBusy()`                 | the probe underneath, for a custom wait                                                                                                                                        |
-| `registerMotionReset(fn)` / `resetMotion()`       | add a reset of your own, for a layer that keeps document-wide state; run them all                                                                                              |
+| export                                            | what it is for                                                                                                                                                                                                       |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setupMotion(hooks)`                              | resets what outlives an owner (the projection root, the layout-loop guard, motion speed, and every registered reset) around each test, and fails a test that ran a layout loop                                       |
+| `animationsSettled(opts?)`                        | resolves when every motion element, layout animation and registered busy probe has stopped, and names what was still moving when it times out                                                                        |
+| `bounds(el)` / `shape(el)` / `boundsAndShape(el)` | rects relative to the test root; the cumulative 2×2 transform                                                                                                                                                        |
+| `velocityOf(el)`                                  | async: how fast the element is moving right now, as `{ x, y }` in px/s, sampled across two frames                                                                                                                    |
+| `live(selector)` / `liveAll(selector)`            | `querySelector` that skips [memories](#memories), the leavers kept on screen while they exit, for selectors other than test hooks (a memory's are suffixed); a person never clicks one, so a selector mustn't either |
+| `isMotionIdle()` / `whatIsBusy()`                 | the probe underneath, for a custom wait                                                                                                                                                                              |
+| `registerMotionReset(fn)` / `resetMotion()`       | add a reset of your own, for a layer that keeps document-wide state; run them all                                                                                                                                    |
 
 `animationsSettled()` is explicit rather than a test waiter on purpose. A test that clicks again
 while something is still in flight is testing interruption, and a waiter would silently turn that

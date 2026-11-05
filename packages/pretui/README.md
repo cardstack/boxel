@@ -18,6 +18,7 @@ components/button.md           the component's write-up
 components/button.usage.gts    the component's usage page (knobs + API docs)
 components/button.examples.gts the component's example gallery
 internal/<module>.gts          helpers shared by several components, not components themselves
+helpers.gts                    template helpers for host and cards (eq, and, add, element, …)
 pretui-primitives.gts          shared axis types and resolvers
 pretui-component.gts           PretUISpec, the kit's Spec card
 docs/catalog-taxonomy.md       how each component is classified: category, tier, tags
@@ -39,6 +40,10 @@ Every component's `<style scoped>` content sits in one of two layers, so a calle
 A rule that restyles a boxel-ui component goes in `PretComponent` too: Pret UI's layers sort above all of boxel-ui's. That holds only while the boxel-ui component's own CSS is layered, since unlayered CSS beats any layer; layer that component first.
 
 The `Pret` prefix matters because layer names are document-global. Usage pages and their shell (`freestyle-usage`, the `usage-*` argument rows and `internal/freestyle`), example galleries and `pretui-component.gts` stay unlayered: they are callers of the kit, and their styles win the way any caller's do.
+
+## On the secure origin
+
+The secure origin's pages (`packages/secure-origin`) use Pret UI's components where they can ship there, and everything that origin serves can read every password typed on it. So a Pret UI module the pages ship is held to the origin's rules ([ADR 019](../../docs/adr/019-build-the-secure-origins-pages-as-their-own-ember-app-on-pret-ui.md)): Pret UI, and the boxel-ui and other packages it reaches, are allowed there as a whole, but nothing it reaches may import the base realm (§1.3), and it must run under the origin's Content Security Policy (§1.5), boxel-ui components it renders included. That means no bound `style` attribute and no `<style>` element added at run time or left unscoped. Set a per-instance custom property only through the CSSOM (`element.style.setProperty`); `keepStyle` writes that way, but beside a `style` binding the component still renders, so a module for the origin drops the binding. The origin's lint and its build record cover each module it ships (§1.5, §1.8), so a change to one is reviewed as a change to the origin.
 
 ## Development
 

@@ -37,6 +37,28 @@ or destination by a database writer doesn't open: the caller gets
 field is what keeps two secrets on one row, such as an OAuth client secret and
 its refresh token sent to the same token endpoint, from being swapped.
 
+Every value that fails to open, wherever it was being opened, is also one
+JSON line on the `boxel:secrets-at-rest` channel, at `warn`:
+
+```json
+{
+  "channel": "boxel:secrets-at-rest",
+  "event": "open-failed",
+  "field": "user_key_grants.value",
+  "id": "<row id>",
+  "keyId": "kms-3f9c0a1b2c4d5e6f",
+  "reason": "not-authentic"
+}
+```
+
+`reason` is `unknown-data-key` (sealed under a data key this process hasn't
+loaded), `malformed` (its nonce or tag has the wrong length) or
+`not-authentic` (GCM refused it: altered bytes, or moved to another binding).
+The line names the field, the row and the data key, never the owner or the
+value. The "Stored secret failed to open" alert fires on any of them, and the
+`key-outage-triage` skill reads them. Tests capture them with
+`setSecretOpenFailureSink`.
+
 - A secret with no destination of its own, such as a user's key's master
   copy, is sealed under field, owner and id only. A user's key is never
   re-bound to a destination: each grant seals its own copy, sealed afresh from
@@ -520,6 +542,15 @@ The role can't call `ListGrants`. That leaves nothing unchecked, because no
 principal can create a grant on a key whose policy allows no `CreateGrant`.
 
 ### 3. Who used the key
+
+Every allowed `Decrypt` on the key, and every denied one that names the key or
+carries its encryption context, is also copied as it happens
+into the CloudWatch log group `/aws/events/<env>-boxel-secrets-decrypts` by an
+EventBridge rule in `cardstack/infra:configs/boxel-secrets-kms`. The Keys
+dashboard charts it by principal, and the "Secrets key Decrypt by an
+unexpected principal" alert fires on any Decrypt from neither task role, or
+any denied one (see the `key-outage-triage` skill). The audit below still
+reads CloudTrail, which covers every other call on the key.
 
 Every call on the key is in CloudTrail event history for 90 days. For a first
 audit, start the window at the key's `CreationDate` (from `describe-key`).

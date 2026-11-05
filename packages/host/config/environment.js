@@ -177,12 +177,6 @@ module.exports = function (environment) {
     secureOriginURL: process.env.BOXEL_ENVIRONMENT
       ? defaults.secureOriginURL
       : process.env.SECURE_ORIGIN_URL || defaults.secureOriginURL,
-    // Whether users sign in on the secure origin's own page, which hands the
-    // app a login token, instead of on the app's sign-in form. The realm
-    // server that serves the app rewrites it from its own
-    // SIGN_IN_ON_SECURE_ORIGIN, so each deployment turns it on or off without
-    // a rebuild.
-    signInOnSecureOrigin: process.env.SIGN_IN_ON_SECURE_ORIGIN === 'true',
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
@@ -224,8 +218,9 @@ module.exports = function (environment) {
         : `${normalized}/test/`;
     })(),
     featureFlags: {
-      // Dashboard v2 replaces the workspace chooser. On in staging
-      // (config/staging.env); locally, start the host with DASHBOARD_V2=true.
+      // Dashboard v2 replaces the workspace chooser. On in staging and
+      // production (config/staging.env, config/production.env); locally, start
+      // the host with DASHBOARD_V2=true.
       DASHBOARD_V2: process.env.DASHBOARD_V2 === 'true',
     },
   };
