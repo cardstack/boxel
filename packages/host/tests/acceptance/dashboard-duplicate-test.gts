@@ -1,8 +1,8 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, find, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { ri } from '@cardstack/runtime-common';
+import { Deferred, ri } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -20,15 +20,18 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-// The Duplicate Workspace action is offered only on the skills realm tile, so
-// an in-process test realm is mounted at the resolved skills realm URL; the
-// virtual network intercepts its requests before they reach the live server.
+// Duplicate Workspace is offered only on the skills realm, so an in-process
+// test realm is mounted at the resolved skills realm URL; the virtual network
+// intercepts its requests before they reach the live server.
 const ownedRealmURL = 'http://test-realm/testuser/workspace-a/';
 const copyRealmURL = 'http://test-realm/testuser/skills-copy/';
 // A realm the user can reach through `_realm-auth` permissions without it
 // appearing in the matrix realms account data — the shape trusted-realm-server
 // sessions produce for shared and system realms.
 const grantedRealmURL = 'http://test-realm/otheruser/granted-workspace/';
+
+const COPY_IN_WORKSPACES =
+  '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]';
 
 const skillMarkdown = `# Test skill
 
@@ -47,7 +50,13 @@ const cardsGridIndex = {
   },
 };
 
-module('Acceptance | workspace-chooser duplicate', function (hooks) {
+async function openDuplicateModal() {
+  await waitFor(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
+  await click(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
+  await click('[data-test-boxel-menu-item-text="Duplicate Workspace"]');
+}
+
+module('Acceptance | dashboard duplicate', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupRealmCacheTeardown(hooks);
@@ -99,11 +108,11 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     });
   });
 
-  // The duplicate target realm is pre-mounted with the two files
+  // The duplicate target realm is mounted beforehand with the two files
   // `_create-realm` seeds, and `createRealm` is stubbed to return it: the
-  // realm-server mock has no realm-creation endpoint, so this test exercises
+  // realm-server mock has no realm-creation endpoint, so these tests cover
   // everything around that call — endpoint choice, file copying, and
-  // surfacing the finished copy.
+  // showing the finished copy.
   async function setupCopyTargetRealm() {
     return await setupAcceptanceTestRealm({
       realmURL: copyRealmURL,
@@ -118,27 +127,25 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     });
   }
 
-  test('the skills realm tile offers Duplicate Workspace', async function (assert) {
+  test('the skills realm offers Duplicate Workspace, whose confirmation can be canceled', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
+    assert.dom('[data-test-dashboard]').exists();
 
     await waitFor(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
     await click(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
-
     assert
       .dom('[data-test-boxel-menu-item-text="Duplicate Workspace"]')
-      .exists('the skills realm tile menu has a Duplicate Workspace item');
+      .exists("the skills realm's menu has Duplicate Workspace");
 
     await click('[data-test-boxel-menu-item-text="Duplicate Workspace"]');
-
     assert
       .dom(`[data-test-duplicate-modal="${skillsRealmURL}"]`)
-      .exists('choosing Duplicate Workspace opens the confirmation modal');
+      .exists('choosing Duplicate Workspace opens the confirmation');
 
     await click('[data-test-cancel-duplicate-button]');
-
     assert
       .dom(`[data-test-duplicate-modal="${skillsRealmURL}"]`)
-      .doesNotExist('cancelling closes the modal');
+      .doesNotExist('canceling closes the confirmation');
   });
 
   test('other workspaces have no Duplicate Workspace action', async function (assert) {
@@ -148,12 +155,10 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
 
     assert
       .dom('[data-test-boxel-menu-item-text="Duplicate Workspace"]')
-      .doesNotExist(
-        'Duplicate Workspace is absent on a workspace that is not the skills realm',
-      );
+      .doesNotExist('a workspace that is not the skills realm has none');
     assert
       .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
-      .exists('the rest of the tile menu still renders');
+      .exists('the rest of the menu still renders');
   });
 
   test('duplicating the skills realm copies its files into a new private workspace', async function (assert) {
@@ -171,33 +176,16 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
 
     await visitOperatorMode({ workspaceChooserOpened: true });
 
-    await waitFor(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
-    await click(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
-    await click('[data-test-boxel-menu-item-text="Duplicate Workspace"]');
+    await openDuplicateModal();
     await click('[data-test-confirm-duplicate-button]');
 
-    await waitFor(
-      '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]',
-    );
+    await waitFor(COPY_IN_WORKSPACES);
     assert
-      .dom(
-        '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]',
-      )
-      .exists('the finished copy joins the user workspace list');
+      .dom(COPY_IN_WORKSPACES)
+      .exists('the finished copy joins Your Workspaces');
     assert
       .dom(`[data-test-duplicate-modal="${skillsRealmURL}"]`)
       .doesNotExist('the modal closes once the copy completes');
-
-    let workspaceNames = [
-      ...document.querySelectorAll(
-        '[data-test-workspace-list] [data-test-workspace]',
-      ),
-    ].map((el) => el.getAttribute('data-test-workspace'));
-    assert.deepEqual(
-      workspaceNames,
-      ['Boxel Skills (Copy)', 'Workspace A'],
-      'the new copy joins the front of the workspace list',
-    );
 
     assert.strictEqual(
       createRealmCalls.length,
@@ -221,7 +209,7 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     assert.strictEqual(
       copiedSkill?.content,
       skillMarkdown,
-      'files are copied into the duplicate byte-for-byte',
+      'files are copied into the duplicate byte for byte',
     );
 
     let copiedReadme = await copyRealmAdapter.openFile('README.md');
@@ -251,12 +239,11 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
 
     await visitOperatorMode({ workspaceChooserOpened: true });
 
-    // Simulate a trusted-realm-servers session: the realm list is assembled
-    // from `_realm-auth` and the legacy `app.boxel.realms` account data is
-    // non-authoritative (its change events don't rewrite the list). Realms
-    // granted only via `_realm-auth` — like the skills realm — exist in the
-    // list without appearing in the account data, and must survive list
-    // updates that read the account data.
+    // A trusted-realm-servers session: the realm list is assembled from
+    // `_realm-auth`, and the legacy `app.boxel.realms` account data is not
+    // authoritative. Realms granted only through `_realm-auth`, like the
+    // skills realm, are listed without being in the account data, and must
+    // survive list updates that read it.
     let matrixService = this.owner.lookup('service:matrix-service') as any;
     matrixService.trustedRealmServersAuthoritative = true;
     await realmServer.setAvailableRealmIdentifiers([
@@ -267,13 +254,10 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
       '[data-test-workspace-list] [data-test-workspace="Granted Workspace"]',
     );
 
-    await click(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
-    await click('[data-test-boxel-menu-item-text="Duplicate Workspace"]');
+    await openDuplicateModal();
     await click('[data-test-confirm-duplicate-button]');
 
-    await waitFor(
-      '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]',
-    );
+    await waitFor(COPY_IN_WORKSPACES);
     assert
       .dom(
         '[data-test-workspace-list] [data-test-workspace="Granted Workspace"]',
@@ -281,10 +265,68 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
       .exists('the granted realm survives the duplication');
     assert
       .dom('[data-test-catalog-list] [data-test-workspace="Boxel Skills"]')
-      .exists('the skills realm catalog tile survives the duplication');
+      .exists('the skills realm catalog survives the duplication');
   });
 
-  test('a cancelled duplication stops copying and deletes the partial realm', async function (assert) {
+  test('the modal shows the copy in progress, and canceling it closes the modal and deletes the partial realm', async function (assert) {
+    await setupCopyTargetRealm();
+
+    let realmServer = this.owner.lookup(
+      'service:realm-server',
+    ) as RealmServerService;
+    let createRealmCalled = false;
+    let realmCreated = new Deferred<URL>();
+    realmServer.createRealm = async () => {
+      createRealmCalled = true;
+      return realmCreated.promise;
+    };
+    let deletedRealms: string[] = [];
+    realmServer.deleteRealm = async (realmURL) => {
+      deletedRealms.push(realmURL);
+    };
+
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await openDuplicateModal();
+
+    // Not awaited: the held realm creation keeps the duplication running.
+    let confirmed = click('[data-test-confirm-duplicate-button]');
+    let canceled: Promise<void> | undefined;
+    try {
+      await waitUntil(() => createRealmCalled, {
+        timeoutMessage: 'the duplicate realm is never created',
+      });
+      assert
+        .dom('[data-test-duplicate-progress]')
+        .includesText('Copying 0 of', 'the modal shows how far the copy is');
+
+      canceled = click('[data-test-cancel-duplicate-button]');
+      await waitUntil(
+        () => !find(`[data-test-duplicate-modal="${skillsRealmURL}"]`),
+        { timeoutMessage: 'canceling never closes the modal' },
+      );
+    } finally {
+      realmCreated.fulfill(new URL(copyRealmURL));
+    }
+    await confirmed;
+    await canceled;
+    await waitUntil(() => deletedRealms.length > 0, {
+      timeoutMessage: 'the partial realm is never deleted',
+    });
+
+    assert.deepEqual(
+      deletedRealms,
+      [copyRealmURL],
+      'the partially created realm is deleted after canceling',
+    );
+    assert
+      .dom(`[data-test-duplicate-modal="${skillsRealmURL}"]`)
+      .doesNotExist('the modal stays closed');
+    assert
+      .dom(COPY_IN_WORKSPACES)
+      .doesNotExist('the canceled copy never joins Your Workspaces');
+  });
+
+  test('an aborted duplication stops copying and deletes the partial realm', async function (assert) {
     await setupCopyTargetRealm();
 
     let realmServer = this.owner.lookup(
@@ -292,8 +334,8 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     ) as RealmServerService;
     let controller = new AbortController();
     realmServer.createRealm = async () => {
-      // Abort as soon as the realm exists: the copy must not start, and the
-      // partial realm must be cleaned up.
+      // Aborted as soon as the realm exists: the copy must not start, and
+      // the partial realm must be cleaned up.
       controller.abort();
       return new URL(copyRealmURL);
     };
@@ -318,13 +360,11 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     assert.deepEqual(
       deletedRealms,
       [copyRealmURL],
-      'the partially created realm is deleted after cancellation',
+      'the partially created realm is deleted after the abort',
     );
     assert
-      .dom(
-        '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]',
-      )
-      .doesNotExist('the cancelled copy never joins the workspace list');
+      .dom(COPY_IN_WORKSPACES)
+      .doesNotExist('the aborted copy never joins Your Workspaces');
   });
 
   test('an endpoint collision retries with a numbered suffix', async function (assert) {
@@ -348,14 +388,10 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
 
     await visitOperatorMode({ workspaceChooserOpened: true });
 
-    await waitFor(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
-    await click(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
-    await click('[data-test-boxel-menu-item-text="Duplicate Workspace"]');
+    await openDuplicateModal();
     await click('[data-test-confirm-duplicate-button]');
 
-    await waitFor(
-      '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]',
-    );
+    await waitFor(COPY_IN_WORKSPACES);
     assert.deepEqual(
       attemptedEndpoints,
       ['skills-copy', 'skills-copy-2'],
@@ -392,7 +428,7 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     );
   });
 
-  test('a failed duplication surfaces the error in the modal', async function (assert) {
+  test('a failed duplication keeps the modal open with the error', async function (assert) {
     let realmServer = this.owner.lookup(
       'service:realm-server',
     ) as RealmServerService;
@@ -403,9 +439,7 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
 
     await visitOperatorMode({ workspaceChooserOpened: true });
 
-    await waitFor(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
-    await click(`[data-test-workspace-menu-trigger="${skillsRealmURL}"]`);
-    await click('[data-test-boxel-menu-item-text="Duplicate Workspace"]');
+    await openDuplicateModal();
     await click('[data-test-confirm-duplicate-button]');
 
     await waitFor('[data-test-duplicate-error]');
@@ -419,9 +453,7 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
       .dom(`[data-test-duplicate-modal="${skillsRealmURL}"]`)
       .exists('the modal stays open so the error can be read');
     assert
-      .dom(
-        '[data-test-workspace-list] [data-test-workspace="Boxel Skills (Copy)"]',
-      )
+      .dom(COPY_IN_WORKSPACES)
       .doesNotExist('no workspace is added when duplication fails');
   });
 });

@@ -77,8 +77,6 @@ const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
   { value: 'hosted', label: 'Hosted' },
 ];
 
-// Dashboard v2, shown in place of the workspace chooser when the
-// DASHBOARD_V2 feature flag is on.
 export default class Dashboard extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;

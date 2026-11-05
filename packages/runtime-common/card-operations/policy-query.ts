@@ -3,6 +3,7 @@ import type { Definition } from '../definitions.ts';
 import type { Filter } from '../query.ts';
 import { policyFilterFromWire } from '../search-entry.ts';
 import type { OperationCore } from './dispatch.ts';
+import { unresolvableAsUndefined } from './types.ts';
 import {
   authorizationCardIds,
   matchingGrants,
@@ -426,11 +427,9 @@ async function targetTypeEntry(
   if (!resolved) {
     return undefined;
   }
-  try {
-    return await core.definitionLookup.lookupDefinitionEntry(resolved);
-  } catch {
-    return undefined;
-  }
+  return await unresolvableAsUndefined(() =>
+    core.definitionLookup.lookupDefinitionEntry(resolved),
+  );
 }
 
 // The operation a type declares under `name` itself, as opposed to a built-in

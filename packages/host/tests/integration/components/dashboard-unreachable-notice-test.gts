@@ -8,7 +8,8 @@ import { module, test } from 'qunit';
 
 import { baseRealm, ensureTrailingSlash } from '@cardstack/runtime-common';
 
-import WorkspaceChooser from '@cardstack/host/components/operator-mode/workspace-chooser';
+import Dashboard from '@cardstack/host/components/operator-mode/dashboard';
+import DashboardSections from '@cardstack/host/components/operator-mode/dashboard/sections';
 import ENV from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -25,12 +26,11 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 const testRealmServerURL = ensureTrailingSlash(ENV.realmServerURL);
 
-// The workspace chooser surfaces an unobtrusive notice naming any trusted
-// realm server that couldn't be reached during boot assembly, so the user
-// understands some workspaces may be missing. The notice clears once a retry
-// recovers the server.
+// The dashboard names any trusted realm server it couldn't reach while
+// assembling the realm list at boot, so the user knows some workspaces may be
+// missing. The notice clears once a retry reaches the server.
 module(
-  'Integration | workspace-chooser | unreachable realm server notice',
+  'Integration | dashboard | unreachable realm server notice',
   function (hooks) {
     setupRenderingTest(hooks);
     setupLocalIndexing(hooks);
@@ -56,18 +56,17 @@ module(
       await matrixService.start();
     });
 
-    test('shows a notice naming the unreachable server, then clears it after a successful retry', async function (assert) {
+    test('names the unreachable server, and clears once a retry reaches it', async function (assert) {
+      let sections = new DashboardSections();
       await renderComponent(
         class TestDriver extends GlimmerComponent {
-          <template>
-            <WorkspaceChooser @topBarCenterElement={{null}} />
-          </template>
+          <template><Dashboard @sections={{sections}} /></template>
         },
       );
 
       assert
         .dom('[data-test-unreachable-realm-servers-notice]')
-        .exists('the notice is shown while the trusted server is unreachable');
+        .exists('the notice shows while the trusted server is unreachable');
       assert
         .dom('[data-test-unreachable-realm-servers-notice]')
         .containsText(
@@ -75,7 +74,6 @@ module(
           'the notice names the server',
         );
 
-      // The server recovers; retrying assembly clears the notice.
       setRealmAuthFailure(false);
       let matrixService = getService('matrix-service') as MatrixService;
       await matrixService.retryUnreachableRealmServers();

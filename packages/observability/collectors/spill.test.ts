@@ -5,6 +5,7 @@ import {
   DEFAULT_THRESHOLDS,
   countJob,
   decideSpill,
+  isDivertible,
   isGithubHosted,
   stateAfterFailedWrite,
   thresholdsFromEnv,
@@ -157,6 +158,29 @@ test('jobs are counted by where they run', () => {
     diverted: 2,
     partial: false,
   });
+});
+
+test('only CI Host pushes to main take RunsOn whatever the spill says', () => {
+  const ciHost = '.github/workflows/ci-host.yaml';
+  const main = { event: 'push', branch: 'main' };
+  assert.equal(isDivertible({ ...main, workflowPath: ciHost }), false);
+  // CI's jobs on main take RunsOn only while the spill is on.
+  assert.equal(
+    isDivertible({ ...main, workflowPath: '.github/workflows/ci.yaml' }),
+    true,
+  );
+  assert.equal(
+    isDivertible({
+      event: 'pull_request',
+      branch: 'main',
+      workflowPath: ciHost,
+    }),
+    true,
+  );
+  assert.equal(
+    isDivertible({ event: 'push', branch: 'ci-bisect', workflowPath: ciHost }),
+    true,
+  );
 });
 
 test('GitHub-hosted labels are told apart from RunsOn ones', () => {

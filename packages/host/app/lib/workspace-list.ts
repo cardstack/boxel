@@ -3,8 +3,7 @@ import { ri, type RealmIdentifier } from '@cardstack/runtime-common';
 import config from '@cardstack/host/config/environment';
 import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
 
-// Shared by the workspace chooser and the dashboard, which list the same
-// workspaces and catalogs and navigate their tiles the same way.
+// How the dashboard lists workspaces and catalogs and navigates their tiles.
 
 interface RealmDates {
   createdAt?: string | null;

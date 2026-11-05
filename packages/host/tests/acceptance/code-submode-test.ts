@@ -1875,14 +1875,14 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
     });
 
-    test('Clicking a search result while the workspace chooser is open closes the chooser and shows the file', async function (assert) {
+    test('Clicking a search result while the dashboard is open closes the dashboard and shows the file', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}employee.gts`,
         workspaceChooserOpened: true,
       });
 
-      assert.dom('[data-test-workspace-chooser]').exists();
+      assert.dom('[data-test-dashboard]').exists();
 
       await click('[data-test-open-search-field]');
       await fillIn('[data-test-search-field]', 'Mango');
@@ -1891,7 +1891,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-      assert.dom('[data-test-workspace-chooser]').doesNotExist();
+      assert.dom('[data-test-dashboard]').doesNotExist();
       await waitFor('[data-test-card-url-bar-input]');
       assert
         .dom('[data-test-card-url-bar-input]')

@@ -78,6 +78,7 @@ import {
   type OperationTarget,
   type PolicyExplanation,
   type PolicyExplanationReason,
+  unresolvableAsUndefined,
 } from './types.ts';
 
 // ============================================================================
@@ -805,12 +806,9 @@ async function searchRules(
     if (!resolved) {
       continue;
     }
-    let entry: { types: string[] } | undefined;
-    try {
-      entry = await core.definitionLookup.lookupDefinitionEntry(resolved);
-    } catch {
-      entry = undefined;
-    }
+    let entry = await unresolvableAsUndefined(() =>
+      core.definitionLookup.lookupDefinitionEntry(resolved),
+    );
     if (entry?.types) {
       await matchingGrants(
         policy,
