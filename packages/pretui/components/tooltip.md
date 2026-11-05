@@ -13,9 +13,9 @@ A short label that appears on hover or keyboard focus, positioned against the el
 
 That is the whole API, and the smallness is the point. Two decisions follow from it.
 
-**It is CSS-only.** There is no JavaScript, no timer, no state. The reveal is `:hover` / `:focus-within` on the wrapper toggling opacity. Consequences: it is prerender-safe (nothing to run before hydration), it cannot leak a timer, and it costs zero on a page with two hundred of them — which matters, because tooltips are what you sprinkle across a dense table. The cost is no show/hide delay, so tooltips flash as the pointer crosses a toolbar.
+**The bubble is a manual popover.** Hidden, it is `display: none`: it takes no space, so a tooltip that would open past a scroll container's edge never makes that container scroll. Shown, it sits in the top layer, so no `overflow: hidden` ancestor clips it and no z-index competes with it. Nothing runs until the tooltip opens; the reveal is a 120ms opacity fade, with `@starting-style` on the way in and `allow-discrete` on `display` and `overlay` on the way out. There is no show/hide delay, so tooltips flash as the pointer crosses a toolbar.
 
-**Positioning is `position: absolute` against a `position: relative` wrapper, with no collision handling.** A tooltip on a control at the right edge of the viewport will overflow it. `@side` is a static choice, not a preference. This is a deliberate departure from the rest of the kit's overlays, which use the `anchorTo` measuring modifier — the trade is made for prerender safety and per-instance cost.
+**Positioning is measured against the wrapper on open**, with the same `positionPopup` math the kit's `anchorTo` uses, and re-measured on scroll and resize while open. `@side` is a preference: a tooltip without room on its side flips to the opposite one, and slides along its axis to stay on screen.
 
 The tooltip is **always dark**, in both light and dark modes — the kit calls this "the lining". It is a deliberate constant so the affordance reads identically everywhere.
 
@@ -23,7 +23,7 @@ The tooltip is **always dark**, in both light and dark modes — the kit calls t
 
 **Web Awesome `wa-tooltip`** is the fullest: `placement`, `distance`, `skidding`, `open`, `disabled`, `show-delay` (150ms) / `hide-delay`, `trigger` (`'hover focus'`, also `click`/`manual`), `without-arrow`, and a `for` attribute associating the tooltip to a trigger _by id_ rather than by wrapping it. **Radix `Tooltip`** requires a `Provider` so a group shares `delayDuration` and `skipDelayDuration` — cross the toolbar quickly and subsequent tooltips appear instantly, which is the single best tooltip detail in the ecosystem. **React Spectrum** adds warmup/cooldown timing and is explicit that tooltips must never contain interactive content.
 
-Pretui is smaller than all three on purpose, and it is worth being clear that here the kit is _behind_, not ahead: no delay, no group coordination, no collision flip, no arrow. What it buys is a component with no runtime at all.
+Pretui is smaller than all three on purpose, and it is worth being clear that here the kit is _behind_, not ahead: no delay, no group coordination, no arrow. What it buys is a component that runs nothing until it opens.
 
 One place Pretui is genuinely better: `@content` is a plain string, not a slot. Radix and Web Awesome accept arbitrary children, which invites people to put buttons and links inside tooltips — an accessibility disaster that every one of those libraries then documents against. Making the type `string` makes the mistake unrepresentable.
 

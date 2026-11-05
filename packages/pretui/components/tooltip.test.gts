@@ -2,7 +2,7 @@
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
-// not applied).
+// not applied). Layout assertions lean only on the popover UA styles.
 import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
 import {
@@ -19,6 +19,13 @@ import { Tooltip } from './tooltip';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;
+}
+
+/** A box too small for the tip, so any space the tip takes shows as scroll. */
+function smallScroller(overflow: 'auto' | 'hidden'): HTMLElement {
+  let el = q('[data-test-scroller]');
+  Object.assign(el.style, { width: '4rem', height: '4rem', overflow });
+  return el;
 }
 
 module('Pretui | components/tooltip', function (hooks) {
@@ -185,5 +192,50 @@ module('Pretui | components/tooltip', function (hooks) {
     await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseleave');
     await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
     assert.strictEqual(tip.dataset['open'], 'true', 'leaving and returning arms it again');
+  });
+
+  test('Tooltip takes no space in its scroll container while hidden, on any side', async function (assert) {
+    class State {
+      @tracked side: 'top' | 'bottom' | 'left' | 'right' = 'top';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <div data-test-scroller>
+          <Tooltip @content='Publishes everything in this workspace' @side={{state.side}}>
+            <button type='button'>Go</button>
+          </Tooltip>
+        </div>
+      </template>,
+    );
+    let scroller = smallScroller('auto');
+    for (let side of ['top', 'bottom', 'left', 'right'] as const) {
+      state.side = side;
+      await settled();
+      assert.strictEqual(scroller.scrollWidth, scroller.clientWidth, `${side}: no sideways scroll`);
+      assert.strictEqual(scroller.scrollHeight, scroller.clientHeight, `${side}: no vertical scroll`);
+    }
+  });
+
+  test('Tooltip shows in the top layer, outside its clipping container', async function (assert) {
+    await render(
+      <template>
+        <div data-test-scroller>
+          <Tooltip @content='Publishes everything in this workspace' @side='right'>
+            <button type='button'>Go</button>
+          </Tooltip>
+        </div>
+      </template>,
+    );
+    let scroller = smallScroller('hidden');
+    let tip = q('[role="tooltip"]');
+    assert.false(tip.matches(':popover-open'), 'not in the top layer while hidden');
+
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
+    assert.true(tip.matches(':popover-open'), 'in the top layer while shown');
+    assert.strictEqual(scroller.scrollWidth, scroller.clientWidth, 'and still adds nothing to the container');
+
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseleave');
+    assert.false(tip.matches(':popover-open'), 'out of the top layer again');
   });
 });
