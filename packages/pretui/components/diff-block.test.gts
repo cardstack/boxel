@@ -95,7 +95,7 @@ module('Pretui | components/diff-block', function (hooks) {
     );
   });
 
-  test('lineDiff aligns a small edit to a large file line by line', function (assert) {
+  test('lineDiff shows only the changed lines of a small edit to a large file', function (assert) {
     // changes near both ends leave a 4,800-line middle to align
     const before = Array.from({ length: 5000 }, (_u, i) => `row ${i + 1}`);
     const after = before.flatMap((row, i) =>
