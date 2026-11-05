@@ -95,6 +95,40 @@ module('Pretui | components/diff-block', function (hooks) {
     );
   });
 
+  test('lineDiff aligns a small edit to a large file line by line', function (assert) {
+    // changes near both ends leave a 4,800-line middle to align
+    const before = Array.from({ length: 5000 }, (_u, i) => `row ${i + 1}`);
+    const after = before.flatMap((row, i) =>
+      i === 99 ? ['ROW 100'] : i === 2499 ? [row, 'inserted a', 'inserted b'] : i === 4899 ? [] : [row],
+    );
+    const diff = lineDiff(before.join('\n') + '\n', after.join('\n') + '\n', { context: 0 });
+    assert.deepEqual(
+      diff.filter((l) => l.op).map((l) => [l.op, l.n, l.text]),
+      [
+        ['del', 100, 'row 100'],
+        ['add', 100, 'ROW 100'],
+        ['add', 2501, 'inserted a'],
+        ['add', 2502, 'inserted b'],
+        ['del', 4900, 'row 4900'],
+      ],
+      'only the changed lines, each numbered in its own file',
+    );
+    assert.deepEqual(
+      diff.filter((l) => l.skip).map((l) => l.skip),
+      [99, 2400, 2399, 100],
+      'the unchanged lines between them fold',
+    );
+  });
+
+  test('the number gutter is as wide as the widest line number', async function (assert) {
+    const numbered: DiffLine[] = [
+      { text: 'kept', n: 999 },
+      { op: 'add', text: 'added', n: 1000 },
+    ];
+    await render(<template><DiffBlock @lines={{numbered}} @lineNumbers={{true}} /></template>);
+    assert.strictEqual(block().getAttribute('style'), '--pretui-diff-n-width: 4ch');
+  });
+
   test('diffHunks splits the lines at each skip and counts each run', function (assert) {
     assert.deepEqual(
       diffHunks(TWO_HUNKS).map((h) => [h.start, h.end, h.added, h.removed]),
