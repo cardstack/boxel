@@ -77,6 +77,20 @@ function inboxModule({ listHeader = 'authorization' } = {}) {
         headers: { authorization: 'Bearer {{apiKey}}' },
       };
 
+      @operation static noteAsAccount = {
+        base: 'callApi',
+        url: '${VENDOR}/echo/note-as-account',
+        headers: { authorization: 'Bearer {{userKey}}' },
+        keyKind: 'oauth',
+      };
+
+      @operation static sharedAsAccount = {
+        base: 'callApi',
+        url: '${VENDOR}/echo/shared-as-account',
+        headers: { authorization: 'Bearer {{apiKey}}' },
+        keyKind: 'oauth',
+      };
+
       @operation static ping = {
         base: 'callApi',
         url: '${VENDOR}/echo/ping',
@@ -495,6 +509,33 @@ module(basename(import.meta.filename), function (hooks) {
       await readiness(OWNER, 'shared'),
       'needs-admin',
       'a suspended share is not one its owner can approve',
+    );
+  });
+
+  test('a slot that declares its kind of key counts only keys and shares of that kind as approvable', async function (assert) {
+    let key = await addKey();
+    await approve(OWNER, 'note', { keyId: key.id });
+    assert.strictEqual(
+      await readiness(OWNER, 'note'),
+      'needs-approval',
+      'the pasted key may be sent there',
+    );
+    assert.strictEqual(
+      await readiness(OWNER, 'noteAsAccount'),
+      'needs-connect',
+      'a slot that takes a connected account is not one a pasted key can be approved for',
+    );
+
+    await share(key.id);
+    assert.strictEqual(
+      await readiness(OWNER, 'shared'),
+      'needs-approval',
+      'the share of a pasted key can be approved for a slot that declares no kind',
+    );
+    assert.strictEqual(
+      await readiness(OWNER, 'sharedAsAccount'),
+      'needs-admin',
+      'but not for one that takes a connected account',
     );
   });
 
