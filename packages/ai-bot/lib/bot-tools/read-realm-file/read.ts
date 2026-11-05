@@ -46,9 +46,8 @@ export const readRealmFileTool: Tool = {
       "Read files from a realm on demand — e.g. a skill's SKILL.md, or the " +
       `reference files it lists. Reads up to ${READ_REALM_FILE_MAX_URLS} ` +
       'files in one call, so batch the files you already know you need ' +
-      'rather than reading one at a time — every extra round of reads ' +
-      'delays your answer. Pick the most relevant files first and read ' +
-      "more on a later turn if you still need them. Reading a skill's " +
+      'rather than reading one at a time. Pick the most relevant files ' +
+      "first and read more on a later turn if you still need them. Reading a skill's " +
       'markdown file also unlocks the tools that skill declares: they ' +
       'become callable on your next turn, so read the skill file first ' +
       'when you intend to use its tools.',
