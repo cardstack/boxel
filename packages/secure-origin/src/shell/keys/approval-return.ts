@@ -2,7 +2,9 @@
 // made. The approve page's "Add a new key" opens `enter-key` with
 // `then=approve` (or `then=review-changes`) beside what the approve page was
 // opened for, and the key page that makes the key goes back to it with the
-// new key chosen (`#…&key=<id>`).
+// new key chosen (`#…&key=<id>`): the approve page named as the one above
+// it in its trail (`back`, `trail.ts`), as it was, or else one rebuilt from
+// what the key page itself was opened for.
 //
 // A connected account is made by signing in at the service, which leaves the
 // secure origin: the `connect` page sends the window to the service, the
@@ -14,7 +16,7 @@
 // storage belongs to this origin and this window alone, and lasts across the
 // round trip.
 
-import { pageURL } from '../urls.js';
+import { pageURL, shellPath } from '../urls.js';
 
 const SIGN_IN_RETURN_KEY = 'boxel-connect-return';
 
@@ -42,6 +44,14 @@ export function approvalPageAfter(
     return undefined;
   }
   let fragment = fragmentOf(hash);
+  let above = fragment.get('back');
+  if (above !== null && above.split('#')[0] === then) {
+    let aboveFragment = new URLSearchParams(above.split('#')[1] ?? '');
+    if (keyId) {
+      aboveFragment.set('key', keyId);
+    }
+    return `${shellPath()}${then}#${aboveFragment}`;
+  }
   fragment.delete('then');
   // The approve page goes back to the key page it was reached from.
   if (fragment.get('after') === 'keys') {

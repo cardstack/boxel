@@ -38,7 +38,12 @@ import KeyRound from '../../components/icons/key-round.gts';
 import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
-import { pageURL } from '../urls.js';
+import {
+  addressAbove,
+  isKeyPageAddress,
+  keyPageURL,
+  pageTitle,
+} from './trail.ts';
 
 import { approvalPageThen, keepApprovalForSignIn } from './approval-return.ts';
 import ClientPicker from './client-picker.gts';
@@ -164,14 +169,14 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{/if}}
           </:default>
           <:actions>
-            {{#unless this.choosing.context}}
+            {{#if this.backToKeys}}
               <Button
                 type='button'
                 @kind='secondary'
                 data-test-connect-back
                 {{on 'click' this.back}}
               >Back to your keys</Button>
-            {{/unless}}
+            {{/if}}
             {{#if this.choosing.clients.length}}
               <Button
                 type='submit'
@@ -234,9 +239,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
   }
 
   private get heading() {
-    return this.opened.reconnect
-      ? 'Reconnect an account'
-      : 'Connect an account';
+    return pageTitle('connect', Boolean(this.opened.reconnect));
   }
 
   private get loading() {
@@ -350,7 +353,18 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private back = () => navigation.back(pageURL('keys'));
+  private back = () => navigation.back(keyPageURL());
+
+  // Opened for nothing, the page offers the way back to the key page. Reached
+  // from another key page (replacing a key, say), its trail leads back there
+  // instead.
+  private get backToKeys() {
+    let above = addressAbove();
+    return (
+      !this.choosing?.context &&
+      (above === undefined || isKeyPageAddress(above))
+    );
+  }
 
   // Mints the ticket for this sign-in, asks the realm server to start it, and
   // sends the window to the service's sign-in page.

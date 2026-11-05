@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
 import { forgetSession, storeSession } from '../../src/security/session.js';
-import { navigation } from '../../src/shell/navigation.js';
+import { navigation, noteDocumentAddress } from '../../src/shell/navigation.js';
 import ConnectPage from '../../src/shell/keys/connect-page.gts';
 import ConnectedPage from '../../src/shell/keys/connected-page.gts';
 import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
@@ -328,7 +328,7 @@ module('Integration | connecting an account', function (hooks) {
       );
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      assert.dom('[data-test-keys-heading]').hasText('Connect an account');
+      assert.dom('[data-test-keys-heading]').hasText('Connect');
       assert
         .dom('[data-test-opened-for-operation]')
         .hasText('List repositories');
@@ -504,6 +504,73 @@ module('Integration | connecting an account', function (hooks) {
       assert.deepEqual(navigations, [], 'the window goes nowhere');
     });
 
+    test('reached by a route transition from a key page with a trail, keeps that trail', async function (assert) {
+      let share = `share-key#realm=${encodeURIComponent('https://realm-server.test/someone/workspace/')}`;
+      let keys = `keys#${new URLSearchParams({ back: share })}`;
+      visitShell('connect');
+      noteDocumentAddress(keys);
+      try {
+        await render(ConnectPage);
+        await waitFor('[data-test-connect-form]');
+        assert.deepEqual(
+          [...document.querySelectorAll('[data-test-breadcrumbs] li')].map(
+            (li) => li.textContent!.replace('›', '').trim(),
+          ),
+          ['Share key', 'Your keys', 'Connect'],
+        );
+        assert
+          .dom('[data-test-connect-back]')
+          .exists('the key page above it is the one it goes back to');
+      } finally {
+        noteDocumentAddress(undefined);
+      }
+    });
+
+    test('reached from Replace key, the trail leads back there rather than to the key page', async function (assert) {
+      serve({
+        'GET _user-keys/conn-1': () =>
+          json(200, { data: connection('rejected') }),
+      });
+      let replace = `replace-key#card=${encodeURIComponent('https://realm-server.test/someone/workspace/Weather/today')}&operation=forecast`;
+      visitShell(
+        `connect#${new URLSearchParams({ reconnect: 'conn-1', back: replace })}`,
+      );
+      await render(ConnectPage);
+      await waitFor('[data-test-connect-form]');
+      assert.dom('[data-test-breadcrumbs] li:last-child').hasText('Reconnect');
+      assert.dom('[data-test-breadcrumb="0"]').hasText('Replace key');
+      assert
+        .dom('[data-test-connect-back]')
+        .doesNotExist('the trail is the way back');
+      await click('[data-test-breadcrumb="0"]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${replace}` },
+      ]);
+    });
+
+    test('reached from a key page with a trail, Back to your keys goes back to that key page as it was', async function (assert) {
+      serve({
+        'GET _user-keys/conn-1': () =>
+          json(200, { data: connection('rejected') }),
+      });
+      let keys = `keys#${new URLSearchParams({ back: 'swap-key#realm=https%3A%2F%2Frealm-server.test%2Fsomeone%2Fworkspace%2F' })}`;
+      visitShell(
+        `connect#${new URLSearchParams({ reconnect: 'conn-1', back: keys })}`,
+      );
+      await render(ConnectPage);
+      await waitFor('[data-test-connect-form]');
+      assert.deepEqual(
+        [...document.querySelectorAll('[data-test-breadcrumbs] li')].map((li) =>
+          li.textContent!.replace('›', '').trim(),
+        ),
+        ['Swap key', 'Your keys', 'Reconnect'],
+      );
+      await click('[data-test-connect-back]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${keys}` },
+      ]);
+    });
+
     test('reconnecting signs the connection in again, with a ticket to replace it', async function (assert) {
       serve({
         'GET _user-keys/conn-1': () =>
@@ -512,7 +579,7 @@ module('Integration | connecting an account', function (hooks) {
       visitShell('connect#reconnect=conn-1');
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      assert.dom('[data-test-keys-heading]').hasText('Reconnect an account');
+      assert.dom('[data-test-keys-heading]').hasText('Reconnect');
       assert
         .dom('[data-test-connect-connection] [data-test-key-row-name]')
         .hasText('Work GitHub');
@@ -838,6 +905,26 @@ module('Integration | connecting an account', function (hooks) {
       ]);
     });
 
+    test('an approval named above it in its trail is gone back to as it was, with the new connection chosen', async function (assert) {
+      serve(COMPLETED);
+      // The approve page names itself, with its own fragment, as the page
+      // above the key entry page; that address rides on through connect.
+      let above = `approve#${APPROVAL}&reason=Lists+your+repositories`;
+      await signInFrom(
+        `${APPROVAL}&then=approve&back=${encodeURIComponent(above)}`,
+      );
+      navigations = [];
+      visitShell('connected#code=one-use-code&state=state-from-the-server');
+      await render(ConnectedPage);
+      await waitUntil(() => navigations.length > 0);
+      assert.deepEqual(navigations, [
+        {
+          how: 'replace',
+          url: `/secure/approve#${APPROVAL}&reason=Lists+your+repositories&key=conn-1`,
+        },
+      ]);
+    });
+
     test('declined at the service, says so and offers the way back to the approval, with nothing chosen', async function (assert) {
       serve(COMPLETED);
       await signInFrom(`${APPROVAL}&then=approve`);
@@ -953,7 +1040,7 @@ module('Integration | connecting an account', function (hooks) {
         .doesNotExist('a connection is signed in again, not replaced');
       await click(`${row} [data-test-key-reconnect]`);
       assert.deepEqual(navigations, [
-        { how: 'assign', url: '/secure/connect#reconnect=conn-1' },
+        { how: 'assign', url: '/secure/connect#reconnect=conn-1&back=keys' },
       ]);
     });
 

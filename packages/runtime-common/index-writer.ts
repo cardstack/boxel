@@ -11,6 +11,7 @@ import {
   logger,
 } from './index.ts';
 import { rri } from './realm-identifiers.ts';
+import { executableExtensions } from './constants.ts';
 import { isUrlLike, type VirtualNetwork } from './virtual-network.ts';
 import { normalizeDependencyForLookup } from './index-runner/dependency-normalization.ts';
 import {
@@ -4506,6 +4507,63 @@ export class Batch {
     return [...new Set([url.href, ...matchedURLs])];
   }
 
+  // `invalidationSeeds` for every URL of a fan-out at once. A from-scratch
+  // pass over an existing index, and a commit's validation round, fan out
+  // from every changed file in one call, so asking per URL costs two
+  // statements a file before the walk starts. On Postgres this asks the staged
+  // rows and the committed ones once each, and keeps the per-URL rule: a URL
+  // this batch has staged rows for matches those, and only a URL it hasn't
+  // falls back to the committed rows. SQLite asks per URL.
+  async #invalidationSeedsFor(urls: URL[]): Promise<string[][]> {
+    if (this.#dbAdapter.kind !== 'pg' || urls.length <= 1) {
+      return await Promise.all(
+        urls.map(async (url) => await this.invalidationSeeds(url)),
+      );
+    }
+    let hrefs = [...new Set(urls.map((url) => url.href))];
+    let matching = async (
+      table: 'boxel_index_pending' | 'boxel_index',
+    ): Promise<Map<string, string[]>> => {
+      let seeds: Expression = [
+        '(SELECT jsonb_array_elements_text(CAST(',
+        param(JSON.stringify(hrefs)),
+        'AS jsonb)))',
+      ];
+      let rows = (await this.#query([
+        `SELECT DISTINCT url, file_alias FROM ${table} WHERE realm_url =`,
+        param(this.realmURL.href),
+        ...(table === 'boxel_index_pending'
+          ? ['AND staging_id =', param(this.#stagingId)]
+          : []),
+        'AND (url IN',
+        ...seeds,
+        'OR file_alias IN',
+        ...seeds,
+        ')',
+      ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'file_alias'>[];
+      let bySeed = new Map<string, string[]>();
+      let wanted = new Set(hrefs);
+      for (let { url, file_alias } of rows) {
+        for (let seed of new Set([url, file_alias])) {
+          if (seed && wanted.has(seed)) {
+            let matched = bySeed.get(seed) ?? [];
+            matched.push(url);
+            bySeed.set(seed, matched);
+          }
+        }
+      }
+      return bySeed;
+    };
+    let staged = await matching('boxel_index_pending');
+    let committed = await matching('boxel_index');
+    return urls.map((url) => [
+      ...new Set([
+        url.href,
+        ...(staged.get(url.href) ?? committed.get(url.href) ?? []),
+      ]),
+    ]);
+  }
+
   async invalidate(urls: URL[]): Promise<void> {
     if (this.#prerenderHtmlOnly) {
       // The dependency fan-out already ran once in the spawning index pass
@@ -4545,14 +4603,9 @@ export class Batch {
       followRenderEdges: true,
       visited: new Set(),
     };
-    for (let url of urls) {
-      for (let renderer of [
-        url,
-        ...(await this.calculateInvalidations(url, walk)),
-      ]) {
-        if (!this.#invalidations.has(renderer)) {
-          this.#renderOnlyInvalidations.add(renderer);
-        }
+    for (let renderer of [...urls, ...(await this.#dependentsOf(urls, walk))]) {
+      if (!this.#invalidations.has(renderer)) {
+        this.#renderOnlyInvalidations.add(renderer);
       }
     }
   }
@@ -4588,29 +4641,24 @@ export class Batch {
       : undefined;
     let invalidations = new Set<string>();
     let renderInvalidations = new Set<string>();
-    for (let url of urls) {
-      for (let seed of await this.invalidationSeeds(url)) {
+    let aliases: string[] = [];
+    for (let seedsOfURL of await this.#invalidationSeedsFor(urls)) {
+      for (let seed of seedsOfURL) {
         let alias = trimExecutableExtension(rri(seed));
         if (!this.nodeResolvedInvalidations.includes(alias)) {
           invalidations.add(seed);
         }
-        if (!alias) {
-          continue;
+        if (alias) {
+          aliases.push(alias);
         }
-        for (let dependent of await this.calculateInvalidations(
-          alias,
-          fanOut,
-        )) {
-          invalidations.add(dependent);
-        }
-        if (renderFanOut) {
-          for (let dependent of await this.calculateInvalidations(
-            alias,
-            renderFanOut,
-          )) {
-            renderInvalidations.add(dependent);
-          }
-        }
+      }
+    }
+    for (let dependent of await this.#dependentsOf(aliases, fanOut)) {
+      invalidations.add(dependent);
+    }
+    if (renderFanOut) {
+      for (let dependent of await this.#dependentsOf(aliases, renderFanOut)) {
+        renderInvalidations.add(dependent);
       }
     }
     for (let url of renderInvalidations) {
@@ -4953,9 +5001,13 @@ export class Batch {
                 ]
               : []),
           ]),
+          // Pages are only disjoint over a stable order. Without one the
+          // database may hand back overlapping pages, and the dependents a
+          // reference with more than one page of them misses go stale.
+          'ORDER BY i.url, i.type',
           `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
         ] as Expression)) as ScannedRow[];
-        results = [...results, ...rows];
+        results.push(...rows);
         pageNumber++;
       } while (rows.length === pageSize);
       return { results, pageNumber };
@@ -5072,6 +5124,136 @@ export class Batch {
       ),
     ];
     return [...new Set(results)];
+  }
+
+  // The union of `calculateInvalidations` over `seeds`. On Postgres the whole
+  // closure is one recursive query, so a change that reaches N cards costs
+  // one statement per walk rather than three or four per card.
+  async #dependentsOf(seeds: string[], walk: FanOutWalk): Promise<string[]> {
+    if (seeds.length === 0) {
+      return [];
+    }
+    if (this.#dbAdapter.kind === 'pg') {
+      let walked = await this.#walkDependentsInOneQuery(
+        seeds,
+        walk.followRenderEdges,
+      );
+      if (walked) {
+        return walked;
+      }
+    }
+    let results = new Set<string>();
+    for (let seed of seeds) {
+      for (let dependent of await this.calculateInvalidations(seed, walk)) {
+        results.add(dependent);
+      }
+    }
+    return [...results];
+  }
+
+  // The second spelling a dependency on `path` may be stored under: its
+  // registered-prefix form, the form `unresolveURLs` writes into `deps`.
+  #prefixSpelling(path: string): string | null {
+    let unresolved = this.unresolveURL(path);
+    return unresolved !== path && this.isRegisteredPrefix(unresolved)
+      ? unresolved
+      : null;
+  }
+
+  // The same walk as `calculateInvalidations`, edge for edge, as one
+  // recursive query. A dependency may be stored under a second spelling, its
+  // registered-prefix form, and only the virtual network may produce one
+  // (ADR 002 §1.2), so the query can't spell a node it reaches itself. Each
+  // seed carries the spelling the virtual network gives it. Every other node
+  // is a row of this realm, so the query runs only for a realm with no
+  // registered prefix, where those rows have no second spelling; a node the
+  // virtual network spells all the same (a URL mapping) is caught afterwards.
+  // Either way it answers `undefined`, and the caller walks node by node.
+  async #walkDependentsInOneQuery(
+    seeds: string[],
+    followRenderEdges: boolean,
+  ): Promise<string[] | undefined> {
+    let realm = this.realmURL.href;
+    if (this.#prefixSpelling(realm) !== null) {
+      return undefined;
+    }
+    let edgeCondition = (column: 'deps' | 'relationship_deps'): Expression => [
+      `(i.${column} @> jsonb_build_array(w.node) OR (w.spelling IS NOT NULL AND i.${column} @> jsonb_build_array(w.spelling)))`,
+    ];
+    // The containment test sits alone in a fenced subquery (`OFFSET 0` keeps
+    // the realm test from being pushed into it), so the only index that can
+    // serve it is the GIN on the column. Given the realm test as well, the
+    // planner reaches for the realm's btree and filters every row of the
+    // realm on each probe, which makes a wide walk quadratic.
+    let containing = (
+      table: 'boxel_index' | 'prerendered_html',
+      column: 'deps' | 'relationship_deps',
+    ): Expression => [
+      `SELECT i.url, i.file_alias, i.type FROM (SELECT i.url, i.file_alias, i.type, i.realm_url, i.is_deleted FROM ${table} i WHERE`,
+      ...edgeCondition(column),
+      'OFFSET 0) i WHERE i.realm_url =',
+      param(realm),
+      ...(table === 'boxel_index'
+        ? ['AND (i.is_deleted = false OR i.is_deleted IS NULL)']
+        : []),
+    ];
+    let sources: Expression[] = [
+      [
+        'SELECT i.url, i.file_alias, i.type FROM boxel_index_pending i WHERE i.realm_url =',
+        param(realm),
+        'AND i.staging_id =',
+        param(this.#stagingId),
+        'AND',
+        ...edgeCondition('deps'),
+      ],
+      containing('boxel_index', 'deps'),
+    ];
+    if (followRenderEdges) {
+      sources.push(containing('prerendered_html', 'deps'));
+      if (this.#splitPrerenderHtml) {
+        sources.push(containing('boxel_index', 'relationship_deps'));
+      }
+    }
+    // A node is what `invalidationTraversalAlias` recurses through.
+    // Spelled from `executableExtensions`, with its `.d.ts` exception, so it
+    // agrees with the `hasExecutableExtension` the node-by-node walk uses.
+    let executable = executableExtensions
+      .map((extension) => extension.slice(1))
+      .join('|');
+    let nextNode = `CASE WHEN e.type = 'instance' THEN e.url
+      WHEN e.file_alias IS NOT NULL AND e.url ~ '\\.(${executable})$' AND e.url !~ '\\.d\\.ts$' THEN e.file_alias
+      ELSE e.url END`;
+    // The walk's rows are (node, spelling, url): the node to recurse through,
+    // its second spelling, and the dependent that led to it. UNION drops a
+    // row the walk has already produced, which ends it on a cycle.
+    let rows = (await this.#query([
+      'WITH RECURSIVE resolved AS (SELECT CAST(',
+      param(JSON.stringify(this.nodeResolvedInvalidations)),
+      'AS jsonb) AS nodes),',
+      'walk(node, spelling, url) AS (',
+      'SELECT s->>0, s->>1, NULL::text FROM jsonb_array_elements(CAST(',
+      param(
+        JSON.stringify(seeds.map((seed) => [seed, this.#prefixSpelling(seed)])),
+      ),
+      'AS jsonb)) s',
+      'UNION',
+      'SELECT n.node, NULL::text, e.url',
+      'FROM walk w CROSS JOIN resolved CROSS JOIN LATERAL (',
+      ...sources.flatMap((source, index) =>
+        index === 0 ? source : ['UNION ALL', ...source],
+      ),
+      `) e CROSS JOIN LATERAL (SELECT ${nextNode} AS node) n`,
+      'WHERE NOT (resolved.nodes ? w.node)',
+      ') SELECT DISTINCT node, url FROM walk WHERE url IS NOT NULL',
+    ] as Expression)) as { node: string; url: string }[];
+    let urls = new Set<string>();
+    for (let { node, url } of rows) {
+      if (this.#prefixSpelling(node) !== null) {
+        return undefined;
+      }
+      urls.add(url);
+    }
+    return [...urls];
   }
 
   private invalidationTraversalAlias({

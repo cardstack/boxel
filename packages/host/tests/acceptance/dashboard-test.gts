@@ -3,7 +3,6 @@ import {
   find,
   findAll,
   focus,
-  rerender,
   settled,
   triggerEvent,
   triggerKeyEvent,
@@ -146,9 +145,10 @@ function isInView(el: Element) {
   let scroller = find(
     '[data-test-dashboard-scroller]',
   )!.getBoundingClientRect();
+  // Half a pixel of slack, since layout can leave an edge a fraction past.
   return (
-    top >= Math.max(scroller.top, 0) &&
-    bottom <= Math.min(scroller.bottom, window.innerHeight)
+    top >= Math.max(scroller.top, 0) - 0.5 &&
+    bottom <= Math.min(scroller.bottom, window.innerHeight) + 0.5
   );
 }
 
@@ -462,15 +462,18 @@ module('Acceptance | dashboard', function (hooks) {
         .hasText(/^Good (morning|afternoon|evening), Ada$/);
     });
 
-    test('with fewer than three workspaces of their own, a user sees Catalogs first', async function (assert) {
+    test('with one workspace and no favorites, Workspaces comes first and Catalogs follows them', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
-      assert.deepEqual(sectionOrder(), ['catalogs', 'workspaces', 'agents']);
+      assert.deepEqual(sectionOrder(), ['workspaces', 'catalogs', 'agents']);
+      assert
+        .dom('[data-test-favorites-section]')
+        .doesNotExist('no empty Favorites box at the top');
       assert
         .dom(
           '[data-test-dashboard-section="catalogs"] [data-test-catalog-list]',
         )
-        .exists('the catalog tiles lead with their section');
+        .exists();
       assert
         .dom('[data-test-dashboard-section="workspaces"] h2')
         .hasText('Workspaces');
@@ -480,31 +483,74 @@ module('Acceptance | dashboard', function (hooks) {
       assert.dom('[data-test-dashboard-section="agents"] h2').hasText('Agents');
     });
 
-    test('the keyboard walks the catalogs first when they lead', async function (assert) {
+    test('hovering the gear beside Catalogs shows its tooltip', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      let gear =
+        '[data-test-dashboard-section="catalogs"] [data-test-pretui-tooltip]';
+
+      await triggerEvent(gear, 'mouseenter');
+
+      assert
+        .dom(`${gear} [role="tooltip"]`)
+        .hasAttribute('data-open', 'true')
+        .hasText('Choose Catalogs');
+      assert
+        .dom('[data-test-manage-catalogs]')
+        .hasAttribute('aria-label', 'Choose Catalogs');
+    });
+
+    test('with a favorite, Favorites comes first among the sections', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      (getService('matrix-service') as MatrixService).workspaceFavorites = [
+        realmURL,
+      ];
+      await settled();
+
+      assert.deepEqual(sectionOrder(), [
+        'favorites',
+        'workspaces',
+        'catalogs',
+        'agents',
+      ]);
+      assert
+        .dom('[data-test-favorites-section] h2')
+        .hasText('Favorites 1', 'a heading of its own, with its count');
+      assert
+        .dom(
+          '[data-test-favorites-list] [data-test-workspace-selected="Workspace A"]',
+        )
+        .exists('the new favorite takes the cursor');
+    });
+
+    test('the keyboard walks the catalogs after the workspaces', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       assert
         .dom('[data-test-workspace-selected="Workspace A"]')
-        .exists('the cursor still starts on the workspace, not a catalog');
+        .exists('the cursor starts on the workspace, not a catalog');
       assert
         .dom('[data-test-catalog-list] [data-test-workspace]')
         .exists('the fixture lists a catalog');
 
       await focus('[data-test-workspace-button="Workspace A"]');
-      await pressKey('ArrowLeft');
-      await pressKey('ArrowLeft');
-      assert.dom('[data-test-add-workspace-selected]').exists();
-
-      await pressKey('ArrowLeft');
+      await pressKey('ArrowRight');
+      await pressKey('ArrowRight');
       assert
         .dom('[data-test-catalog-list] [data-test-workspace-selected]')
-        .exists('before New Workspace come the catalogs');
+        .exists('after the last workspace come the catalogs');
+
+      await pressKey('ArrowLeft');
+      assert.dom('[data-test-workspace-selected="Workspace A"]').exists();
+      await pressKey('ArrowLeft');
+      assert
+        .dom('[data-test-add-workspace-selected]')
+        .exists('New Workspace is first, with no catalogs before it');
     });
 
-    test('the Workspaces section holds favorites, your workspaces and archived', async function (assert) {
+    test('the Workspaces section holds your workspaces and archived', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       let workspaces = '[data-test-dashboard-section="workspaces"]';
-      assert.dom(`${workspaces} [data-test-favorites-section]`).exists();
+      assert.dom(`${workspaces} [data-test-favorites-section]`).doesNotExist();
       assert
         .dom(
           `${workspaces} [data-test-workspace-list] [data-test-add-workspace]`,
@@ -603,6 +649,7 @@ module('Acceptance | dashboard', function (hooks) {
         .isNotChecked();
       assert.dom('[data-test-favorites-empty]').hasText('No matching results');
       assert.dom('[data-test-workspaces-empty]').hasText('No matching results');
+      assert.dom('[data-test-catalog-list]').doesNotExist();
       assert.dom('[data-test-catalog-empty]').hasText('No matching results');
 
       markHosted(realmURL);
@@ -624,15 +671,11 @@ module('Acceptance | dashboard', function (hooks) {
       ];
       await settled();
 
-      assert
-        .dom('[data-test-favorites-empty]')
-        .hasText('You have no favorites yet');
+      assert.dom('[data-test-favorites-section]').doesNotExist();
 
       await clickScopeOption('hosted');
 
-      assert
-        .dom('[data-test-favorites-empty]')
-        .hasText('You have no favorites yet');
+      assert.dom('[data-test-favorites-section]').doesNotExist();
     });
 
     test('All brings back the workspaces Hosted hid', async function (assert) {
@@ -1076,17 +1119,11 @@ module('Acceptance | dashboard', function (hooks) {
             .exists('the dashboard stays open');
         }
 
-        test('the section order stays as the dashboard opened while it is open', async function (assert) {
+        test('Catalogs stays after Workspaces once fewer than three workspaces are left', async function (assert) {
           await visitOperatorMode({
             workspaceChooserOpened: true,
             stacks: [[{ id: `${keptRealmURL}index`, format: 'isolated' }]],
           });
-          assert.deepEqual(sectionOrder(), [
-            'workspaces',
-            'catalogs',
-            'agents',
-          ]);
-
           await archiveRemovedWorkspace();
 
           assert.strictEqual(
@@ -1094,12 +1131,6 @@ module('Acceptance | dashboard', function (hooks) {
             2,
             'fewer than three workspaces are left',
           );
-          assert.deepEqual(
-            sectionOrder(),
-            ['workspaces', 'catalogs', 'agents'],
-            'the sections stay where they were',
-          );
-          assert.deepEqual(railOrder(), ['workspaces', 'catalogs', 'agents']);
 
           await click('[data-test-workspace-chooser-toggle]');
           assert.dom('[data-test-dashboard]').doesNotExist();
@@ -1107,10 +1138,10 @@ module('Acceptance | dashboard', function (hooks) {
 
           assert.deepEqual(
             sectionOrder(),
-            ['catalogs', 'workspaces', 'agents'],
-            'reopened, the catalog leads',
+            ['workspaces', 'catalogs', 'agents'],
+            'reopened, Catalogs still follows Workspaces',
           );
-          assert.deepEqual(railOrder(), ['catalogs', 'workspaces', 'agents']);
+          assert.deepEqual(railOrder(), ['workspaces', 'catalogs', 'agents']);
         });
 
         test('archiving it clears the stacks when one of its cards is open', async function (assert) {
@@ -1674,7 +1705,8 @@ module('Acceptance | dashboard', function (hooks) {
           assert.true(scroller.scrollTop > 0, 'the page is scrolled down');
 
           await click('[data-test-section-rail-entry="workspaces"]');
-          await waitUntil(() => scroller.scrollTop === 0);
+          // A smooth scroll this long takes over a second.
+          await waitUntil(() => scroller.scrollTop === 0, { timeout: 3000 });
 
           assert.strictEqual(scroller.scrollTop, 0, 'the page is at its top');
           assert
@@ -1815,7 +1847,7 @@ module('Acceptance | dashboard', function (hooks) {
       module('three workspaces of their own', function (hooks) {
         setupWorkspaces(hooks, 2, '40rem');
 
-        test('Workspaces leads, and Catalogs follows them', async function (assert) {
+        test('Workspaces comes first, and Catalogs follows them', async function (assert) {
           await visitOperatorMode({ workspaceChooserOpened: true });
 
           assert.deepEqual(sectionOrder(), [
@@ -2211,8 +2243,11 @@ module('Acceptance | dashboard', function (hooks) {
       const RAIL = '[data-test-section-rail]';
       const ENTRY = '[data-test-section-rail-entry="workspaces"]';
       const FLYOUT = '[data-test-section-rail-flyout="workspaces"]';
+      const FAVORITES_ENTRY = '[data-test-section-rail-entry="favorites"]';
+      const FAVORITES_FLYOUT = '[data-test-section-rail-flyout="favorites"]';
       const CATALOGS_ENTRY = '[data-test-section-rail-entry="catalogs"]';
       const CATALOGS_FLYOUT = '[data-test-section-rail-flyout="catalogs"]';
+      const ITEM = (id: string) => `[data-test-section-rail-item="${id}"]`;
 
       function favoriteWorkspaceA() {
         let matrixService = getService('matrix-service') as MatrixService;
@@ -2221,10 +2256,10 @@ module('Acceptance | dashboard', function (hooks) {
 
       // As a browser does for Enter on a focused button: the key, then its
       // click.
-      async function pressEntry() {
-        await focus(ENTRY);
-        await triggerKeyEvent(ENTRY, 'keydown', 'Enter');
-        await click(ENTRY);
+      async function pressEntry(entry: string) {
+        await focus(entry);
+        await triggerKeyEvent(entry, 'keydown', 'Enter');
+        await click(entry);
       }
 
       function openCardIds() {
@@ -2238,28 +2273,42 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.deepEqual(
           railOrder(),
-          ['catalogs', 'workspaces', 'agents'],
-          'in page order, with Catalogs first for a user with one workspace',
+          ['workspaces', 'catalogs', 'agents'],
+          'in page order, with no Favorites entry while there are no favorites',
         );
         assert.dom(RAIL).isVisible();
-        assert.dom(ENTRY).containsText('Workspaces');
         assert
-          .dom(`${ENTRY} [data-test-section-rail-count]`)
-          .doesNotExist(
-            'the Workspaces heading has no count, so neither does its entry',
-          );
+          .dom(`${ITEM('workspaces')} [role="tooltip"]`)
+          .hasText('Workspaces', 'a tooltip names its section, with no count');
+        assert.dom(`${ITEM('catalogs')} [role="tooltip"]`).hasText('Catalogs');
         assert
-          .dom(`${CATALOGS_ENTRY} [data-test-section-rail-count]`)
-          .hasText(
-            String(
-              findAll('[data-test-catalog-list] [data-test-workspace]').length,
-            ),
-            'the Catalogs entry counts as its heading does',
-          );
-        assert
-          .dom(CATALOGS_ENTRY)
+          .dom(ENTRY)
           .hasAttribute('aria-current', 'location', 'the top section is read');
-        assert.dom(ENTRY).doesNotHaveAttribute('aria-current');
+        assert.dom(CATALOGS_ENTRY).doesNotHaveAttribute('aria-current');
+      });
+
+      test('with a favorite, the Favorites entry comes first, and its flyout counts the favorites', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        favoriteWorkspaceA();
+        await settled();
+
+        assert.deepEqual(
+          railOrder(),
+          ['favorites', 'workspaces', 'catalogs', 'agents'],
+          'the rail follows the page',
+        );
+        assert
+          .dom(`${ITEM('favorites')} [role="tooltip"]`)
+          .hasText('Favorites');
+        assert
+          .dom(FAVORITES_ENTRY)
+          .hasAttribute('aria-current', 'location', 'the top section is read');
+
+        await click(FAVORITES_ENTRY);
+
+        assert
+          .dom(`${FAVORITES_FLYOUT} [data-test-section-rail-flyout-count]`)
+          .hasText('1', 'the header counts the list below it');
       });
 
       test('the Catalogs entry opens its flyout of catalogs, and a catalog opens its workspace', async function (assert) {
@@ -2271,7 +2320,9 @@ module('Acceptance | dashboard', function (hooks) {
 
         await click(CATALOGS_ENTRY);
 
-        assert.dom(`${CATALOGS_FLYOUT} header`).hasText('Catalogs');
+        assert
+          .dom(`${CATALOGS_FLYOUT} [data-test-section-rail-flyout-count]`)
+          .hasText(String(tileNames.length));
         assert.deepEqual(
           findAll(`${CATALOGS_FLYOUT} [data-test-section-rail-realm]`).map(
             (el) => el.getAttribute('data-test-section-rail-realm'),
@@ -2287,23 +2338,22 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom('[data-test-dashboard]').doesNotExist();
       });
 
-      test('pressing Enter on the Workspaces entry opens its flyout of favorites, and a favorite opens its workspace', async function (assert) {
+      test('the Workspaces entry opens its flyout of workspaces, and a workspace opens it', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
-        favoriteWorkspaceA();
 
-        await focus(ENTRY);
-        assert
-          .dom(FLYOUT)
-          .doesNotExist('focus alone leaves it closed, so Tab passes the rail');
-
-        await pressEntry();
+        await pressEntry(ENTRY);
 
         assert.dom(ENTRY).hasAttribute('aria-expanded', 'true');
-        assert.dom(FLYOUT).exists();
-        assert.dom(`${FLYOUT} header`).hasText('Favorites');
         assert
-          .dom(`${FLYOUT} [data-test-section-rail-realm]`)
-          .exists({ count: 1 });
+          .dom(`${FLYOUT} [data-test-section-rail-flyout-count]`)
+          .hasText('1');
+        assert.deepEqual(
+          findAll(`${FLYOUT} [data-test-section-rail-realm]`).map((el) =>
+            el.getAttribute('data-test-section-rail-realm'),
+          ),
+          ['Workspace A'],
+          'only their own workspaces, not the catalogs',
+        );
 
         await click(`${FLYOUT} [data-test-section-rail-realm="Workspace A"]`);
 
@@ -2319,45 +2369,108 @@ module('Acceptance | dashboard', function (hooks) {
         );
       });
 
-      test('with no favorites, the flyout says how to add one', async function (assert) {
+      test('pressing Enter on the Favorites entry opens its flyout of favorites, and a favorite opens its workspace', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
+        favoriteWorkspaceA();
+        await settled();
 
-        await pressEntry();
-
+        await focus(FAVORITES_ENTRY);
         assert
-          .dom(`${FLYOUT} [data-test-section-rail-flyout-empty]`)
-          .includesText('Favorite a workspace');
+          .dom(FAVORITES_FLYOUT)
+          .doesNotExist('focus alone leaves it closed, so Tab passes the rail');
+
+        await pressEntry(FAVORITES_ENTRY);
+
+        assert.dom(FAVORITES_ENTRY).hasAttribute('aria-expanded', 'true');
+        assert.dom(FAVORITES_FLYOUT).exists();
+        assert.dom(`${FAVORITES_FLYOUT} header`).hasText('Favorites 1');
+        assert
+          .dom(`${FAVORITES_FLYOUT} [data-test-section-rail-realm]`)
+          .exists({ count: 1 });
+
+        await click(
+          `${FAVORITES_FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
+        );
+
+        assert.dom('[data-test-dashboard]').doesNotExist();
+        assert.strictEqual(
+          (
+            getService(
+              'operator-mode-state-service',
+            ) as OperatorModeStateService
+          ).realmURL,
+          realmURL,
+          'Workspace A is the open workspace',
+        );
       });
 
-      test('Escape closes the flyout with focus back on its entry, then folds the rail', async function (assert) {
+      test('under Hosted, each flyout lists only what the page lists', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        favoriteWorkspaceA();
+        await settled();
+        await clickScopeOption('hosted');
+
+        function flyoutNames(flyout: string) {
+          return findAll(`${flyout} [data-test-section-rail-realm]`).map((el) =>
+            el.getAttribute('data-test-section-rail-realm'),
+          );
+        }
+
+        for (let [entry, flyout] of [
+          [FAVORITES_ENTRY, FAVORITES_FLYOUT],
+          [ENTRY, FLYOUT],
+          [CATALOGS_ENTRY, CATALOGS_FLYOUT],
+        ]) {
+          await click(entry);
+          assert.deepEqual(flyoutNames(flyout), [], `${entry} lists nothing`);
+          assert
+            .dom(`${flyout} [data-test-section-rail-flyout-empty]`)
+            .hasText('No matching results');
+          await click(entry);
+        }
+
+        markHosted(realmURL);
+        await settled();
+
+        await click(FAVORITES_ENTRY);
+        assert.deepEqual(
+          flyoutNames(FAVORITES_FLYOUT),
+          ['Workspace A'],
+          'a hosted favorite is listed',
+        );
+        assert
+          .dom(`${FAVORITES_FLYOUT} [data-test-section-rail-flyout-empty]`)
+          .doesNotExist();
+        await click(FAVORITES_ENTRY);
+
+        await click(ENTRY);
+        assert.deepEqual(
+          flyoutNames(FLYOUT),
+          ['Workspace A'],
+          'a hosted workspace is listed',
+        );
+      });
+
+      test('Escape closes the flyout with focus back on its entry', async function (assert) {
         await visitOperatorMode({
           workspaceChooserOpened: true,
           stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
         });
         favoriteWorkspaceA();
-        await pressEntry();
-        await focus(`${FLYOUT} [data-test-section-rail-realm="Workspace A"]`);
+        await settled();
+        await pressEntry(FAVORITES_ENTRY);
+        await focus(
+          `${FAVORITES_FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
+        );
 
         await triggerKeyEvent(
-          `${FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
+          `${FAVORITES_FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
           'keydown',
           'Escape',
         );
 
-        assert.dom(FLYOUT).doesNotExist();
-        assert.dom(ENTRY).isFocused('focus goes back to the entry');
-        assert.dom(RAIL).hasAttribute('data-test-section-rail-folded', 'false');
-
-        await triggerKeyEvent(ENTRY, 'keydown', 'Escape');
-
-        assert
-          .dom(RAIL)
-          .hasAttribute(
-            'data-test-section-rail-folded',
-            'true',
-            'the second Escape folds the rail to its icons',
-          );
-        assert.dom(ENTRY).isFocused('focus stays on the entry');
+        assert.dom(FAVORITES_FLYOUT).doesNotExist();
+        assert.dom(FAVORITES_ENTRY).isFocused('focus goes back to the entry');
         assert.deepEqual(
           openCardIds(),
           [`${realmURL}index`],
@@ -2365,42 +2478,16 @@ module('Acceptance | dashboard', function (hooks) {
         );
       });
 
-      test('a tap on an entry toggles its flyout, and a tap outside the rail closes it', async function (assert) {
-        await visitOperatorMode({ workspaceChooserOpened: true });
-
-        // As on a touch screen: the press focuses the entry before its click.
-        async function tap() {
-          await triggerEvent(ENTRY, 'pointerdown', { pointerType: 'touch' });
-          await focus(ENTRY);
-          await click(ENTRY);
-        }
-
-        await tap();
-        assert.dom(FLYOUT).exists('the first tap opens the flyout');
-
-        await tap();
-        assert.dom(FLYOUT).doesNotExist('the second tap closes it');
-
-        await tap();
-        await triggerEvent('[data-test-dashboard-greeting]', 'pointerdown', {
-          pointerType: 'touch',
-        });
-        assert.dom(FLYOUT).doesNotExist('a tap outside the rail closes it');
-      });
-
-      test('Escape closes a flyout opened by hover while focus is elsewhere on the page', async function (assert) {
+      test('Escape closes a flyout opened by a click that left focus elsewhere on the page', async function (assert) {
         await visitOperatorMode({
           workspaceChooserOpened: true,
           stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
         });
-        await triggerEvent(
-          '[data-test-section-rail-item="workspaces"]',
-          'pointerenter',
-          {
-            pointerType: 'mouse',
-          },
-        );
+        // A click alone, as in a browser whose buttons take no focus on
+        // click, so focus stays off the rail.
+        await triggerEvent(ENTRY, 'click');
         assert.dom(FLYOUT).exists();
+        assert.dom(ENTRY).isNotFocused();
 
         await triggerKeyEvent(document.body, 'keydown', 'Escape');
 
@@ -2412,29 +2499,31 @@ module('Acceptance | dashboard', function (hooks) {
         );
       });
 
-      test('a flyout stays open while the pointer comes back within the grace period, and closes once it has passed', async function (assert) {
+      test('a tap on an entry toggles its flyout, and a tap outside the rail closes it', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
-        let item = find('[data-test-section-rail-item="workspaces"]')!;
 
-        await triggerEvent(item, 'pointerenter', { pointerType: 'mouse' });
-        assert.dom(FLYOUT).exists('hovering an entry opens its flyout');
+        // As on a touch screen: the press focuses the entry before its click.
+        async function tap() {
+          await triggerEvent(CATALOGS_ENTRY, 'pointerdown', {
+            pointerType: 'touch',
+          });
+          await focus(CATALOGS_ENTRY);
+          await click(CATALOGS_ENTRY);
+        }
 
-        // Dispatched by hand and followed by a render only, so the pointer
-        // is back before the grace period ends.
-        item.dispatchEvent(
-          new PointerEvent('pointerleave', { pointerType: 'mouse' }),
-        );
-        await rerender();
-        assert.dom(FLYOUT).exists('it stays through the grace period');
+        await tap();
+        assert.dom(CATALOGS_FLYOUT).exists('the first tap opens the flyout');
 
-        await triggerEvent(item, 'pointerenter', { pointerType: 'mouse' });
-        assert.dom(FLYOUT).exists('coming back keeps it open');
+        await tap();
+        assert.dom(CATALOGS_FLYOUT).doesNotExist('the second tap closes it');
 
-        await triggerEvent(item, 'pointerleave', {
-          pointerType: 'mouse',
-          bubbles: false,
+        await tap();
+        await triggerEvent('[data-test-dashboard-greeting]', 'pointerdown', {
+          pointerType: 'touch',
         });
-        assert.dom(FLYOUT).doesNotExist('it closes after the grace period');
+        assert
+          .dom(CATALOGS_FLYOUT)
+          .doesNotExist('a tap outside the rail closes it');
       });
     });
 
@@ -2560,7 +2649,6 @@ module('Acceptance | dashboard', function (hooks) {
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
         await settled();
 
-        assert.dom('[data-test-agents-pitch]').doesNotExist();
         assert.dom('[data-test-agent-picker]').doesNotExist();
         assert.dom(PANEL).hasAttribute('data-test-agent-panel', 'boxel');
         assert.dom('[data-test-agent-describe-it]').exists();
@@ -2578,8 +2666,8 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.dom('[data-test-agents-show-coding]').doesNotExist();
         assert
-          .dom('[data-test-agents-pitch]')
-          .isFocused('focus moves to what the button opened');
+          .dom('[data-test-agent-picker] input:checked')
+          .isFocused('focus moves to the picked agent in what it opened');
         assert.strictEqual(pickedAgent(), 'claude');
         assert.dom(PANEL).hasAttribute('data-test-agent-panel', 'claude');
         let matrixService = getService('matrix-service') as MatrixService;
@@ -2857,11 +2945,7 @@ module('Acceptance | dashboard', function (hooks) {
           return update.call(matrixService, change);
         };
         try {
-          await triggerEvent(
-            '[data-test-section-rail-item="agents"]',
-            'pointerenter',
-            { pointerType: 'mouse' },
-          );
+          await click(ENTRY);
           await click(`${FLYOUT} [data-test-section-rail-agent="claude"]`);
 
           assert.strictEqual(
@@ -2889,11 +2973,7 @@ module('Acceptance | dashboard', function (hooks) {
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
         await settled();
 
-        await triggerEvent(
-          '[data-test-section-rail-item="agents"]',
-          'pointerenter',
-          { pointerType: 'mouse' },
-        );
+        await click(ENTRY);
 
         assert
           .dom(`${FLYOUT} [data-test-section-rail-agent="boxel"]`)
@@ -2915,11 +2995,7 @@ module('Acceptance | dashboard', function (hooks) {
           .dom('[data-test-agent-panel]')
           .hasAttribute('data-test-agent-panel', 'claude');
 
-        await triggerEvent(
-          '[data-test-section-rail-item="agents"]',
-          'pointerenter',
-          { pointerType: 'mouse' },
-        );
+        await click(ENTRY);
         await click(`${FLYOUT} [data-test-section-rail-agent="codex"]`);
 
         assert
@@ -2930,13 +3006,7 @@ module('Acceptance | dashboard', function (hooks) {
       test('New session in the flyout opens Boxel AI Assistant', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
-        await triggerEvent(
-          '[data-test-section-rail-item="agents"]',
-          'pointerenter',
-          {
-            pointerType: 'mouse',
-          },
-        );
+        await click(ENTRY);
         await click(`${FLYOUT} [data-test-section-rail-ai-new-session]`);
 
         assert.dom(FLYOUT).doesNotExist();
@@ -2982,6 +3052,7 @@ module('Acceptance | dashboard', function (hooks) {
 
     module('get started', function () {
       const GET_STARTED = '[data-test-get-started]';
+      const BUTTON = '[data-test-get-started-button]';
 
       // As `hasText` reads it: the count's markup breaks across lines.
       function countText() {
@@ -2996,12 +3067,28 @@ module('Acceptance | dashboard', function (hooks) {
         );
       }
 
+      // Closes the dashboard and opens it again, where Get started starts
+      // closed.
+      // The chooser's toggle is disabled with no stack open, so this sets
+      // the state it toggles.
+      async function reopenDashboard() {
+        operatorModeState().workspaceChooserOpened = false;
+        await settled();
+        operatorModeState().workspaceChooserOpened = true;
+        await waitFor('[data-test-dashboard-greeting]');
+      }
+
       // From no progress at all, as a new account starts.
       async function visitAsNewUser() {
         await visitOperatorMode({ workspaceChooserOpened: true });
         (getService('recent-cards-service') as any).resetState();
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
         await settled();
+        await reopenDashboard();
+      }
+
+      async function openSteps() {
+        await click(BUTTON);
       }
 
       // Opens the AI panel from the ask step, which makes an empty session.
@@ -3021,9 +3108,15 @@ module('Acceptance | dashboard', function (hooks) {
         });
       }
 
-      test('a new account sees every step but the agent one, none done', async function (assert) {
+      test('a new account finds the steps closed, and the button opens them right after the header', async function (assert) {
         await visitAsNewUser();
 
+        assert.dom(BUTTON).hasText('Get started');
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+        assert.dom(GET_STARTED).doesNotExist();
+
+        await openSteps();
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
         assert.dom(GET_STARTED).exists();
         assert.dom('[data-test-get-started-count]').hasText('0 of 3 done');
         assert.deepEqual(
@@ -3033,39 +3126,96 @@ module('Acceptance | dashboard', function (hooks) {
           ['open-card', 'ask-ai', 'publish'],
         );
         assert.dom('[data-test-get-started-step-done="true"]').doesNotExist();
-        assert
-          .dom('[data-test-get-started-toggle]')
-          .doesNotExist('nothing to fold yet');
+        assert.strictEqual(
+          find('[data-test-dashboard-greeting]')!.closest('header')!
+            .nextElementSibling,
+          find(GET_STARTED),
+          'the steps open right after the header',
+        );
       });
 
-      test('copying an agent setup step ticks the agent step, and the list folds to its next step', async function (assert) {
+      test('the button closes the steps it opened', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
+
+        await click(BUTTON);
+        assert.dom(GET_STARTED).doesNotExist();
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+      });
+
+      test('the minimize button folds the list to its progress and next step, and expands it again', async function (assert) {
+        const TOGGLE = '[data-test-get-started-toggle]';
+        await visitAsNewUser();
+        await openSteps();
+        (getService('recent-cards-service') as any).add(`${realmURL}index`);
+        await settled();
+
+        assert.dom(TOGGLE).hasAria('label', 'Minimize steps');
+        await click(TOGGLE);
+
+        assert.dom(GET_STARTED).exists('the list stays open, folded');
+        assert.dom('[data-test-get-started-step]').doesNotExist();
+        assert.strictEqual(
+          countText(),
+          '1 of 3 done · Next: Ask Boxel AI Assistant to build something',
+        );
+        assert.dom(TOGGLE).hasAria('label', 'Expand steps');
+        assert.dom(TOGGLE).hasAttribute('aria-expanded', 'false');
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
+
+        await click(TOGGLE);
+        assert.dom('[data-test-get-started-step]').exists({ count: 3 });
+        assert.dom(TOGGLE).hasAria('label', 'Minimize steps');
+        assert.dom(TOGGLE).hasAttribute('aria-expanded', 'true');
+      });
+
+      test('reopened from the button, a folded list shows its steps again', async function (assert) {
+        await visitAsNewUser();
+        await openSteps();
+        await click('[data-test-get-started-toggle]');
+
+        await click(BUTTON);
+        await click(BUTTON);
+
+        assert.dom('[data-test-get-started-step]').exists({ count: 3 });
+      });
+
+      test('a step done while the steps are open keeps them open', async function (assert) {
+        await visitAsNewUser();
+        await openSteps();
 
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
           agentSetup: { claude: 1 },
         });
         await settled();
 
-        assert
-          .dom('[data-test-get-started-count]')
-          .hasText('1 of 3 done · Next: Open a card in a workspace');
-        assert.dom('[data-test-get-started-step]').doesNotExist('folded');
-        assert.dom('[data-test-get-started-toggle]').hasText('Show steps');
-
-        await click('[data-test-get-started-toggle]');
-
+        assert.dom('[data-test-get-started-count]').hasText('1 of 3 done');
         assert.strictEqual(stepDone('agent'), 'true');
         assert.strictEqual(stepDone('open-card'), 'false');
-        assert.dom('[data-test-get-started-toggle]').hasText('Hide steps');
+      });
+
+      test('opened steps are closed again when the dashboard reopens', async function (assert) {
+        await visitAsNewUser();
+        await openSteps();
+        (getService('recent-cards-service') as any).add(`${realmURL}index`);
+        await settled();
+
+        await reopenDashboard();
+
+        assert.dom(GET_STARTED).doesNotExist();
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+
+        await openSteps();
+        assert.strictEqual(stepDone('open-card'), 'true');
       });
 
       test('opening a card and publishing a workspace tick their steps', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         (getService('recent-cards-service') as any).add(`${realmURL}index`);
         markHosted(realmURL);
         await settled();
-        await click('[data-test-get-started-toggle]');
 
         assert.strictEqual(stepDone('open-card'), 'true');
         assert.strictEqual(stepDone('publish'), 'true');
@@ -3074,6 +3224,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('asking Boxel AI Assistant something ticks the ask step, and opening a session does not', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         let roomId = await openBoxelAiSession();
         assert.strictEqual(
@@ -3083,38 +3234,42 @@ module('Acceptance | dashboard', function (hooks) {
         );
 
         sendMessage(roomId);
-        await waitUntil(() => countText().startsWith('1 of 3 done'));
+        await waitUntil(() => countText() === '1 of 3 done');
 
-        assert
-          .dom('[data-test-get-started-count]')
-          .hasText('1 of 3 done · Next: Open a card in a workspace');
+        assert.strictEqual(stepDone('ask-ai'), 'true');
       });
 
       test('a session the bot has renamed ticks the ask step, before any message loads', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         let roomId = await openBoxelAiSession();
         mockMatrixUtils.setRoomState(roomId, 'm.room.name', {
           name: 'Task tracker',
         });
-        await waitUntil(() => countText().startsWith('1 of 3 done'));
+        await waitUntil(() => countText() === '1 of 3 done');
 
-        await click('[data-test-get-started-toggle]');
         assert.strictEqual(stepDone('ask-ai'), 'true');
       });
 
-      test('finishing every step dismisses it for good', async function (assert) {
+      test('with every step done, neither the button nor the steps show', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
+        assert.dom(GET_STARTED).exists();
 
-        sendMessage(await openBoxelAiSession());
-        await waitUntil(() => countText().startsWith('1 of 3 done'));
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          agent: 'claude',
+          agentSetup: { claude: 1 },
+        });
         (getService('recent-cards-service') as any).add(`${realmURL}index`);
         markHosted(realmURL);
         await settled();
 
+        assert.dom(GET_STARTED).doesNotExist('nothing left to start');
+        assert.dom(BUTTON).doesNotExist();
+
         let matrixService = getService('matrix-service') as MatrixService;
         await waitUntil(() => matrixService.dashboardState.onboardingDismissed);
-        assert.dom(GET_STARTED).doesNotExist();
         assert
           .dom('[data-test-get-started-dismissed]')
           .doesNotExist('finishing offers no undo');
@@ -3126,14 +3281,18 @@ module('Acceptance | dashboard', function (hooks) {
         (getService('recent-cards-service') as any).resetState();
         await settled();
         assert
-          .dom(GET_STARTED)
+          .dom(BUTTON)
           .doesNotExist(
             'a step that reads as undone later does not bring it back',
           );
+
+        await reopenDashboard();
+        assert.dom(BUTTON).doesNotExist('still gone after reopening');
       });
 
       test('picking a coding agent puts the agent step in place of the ask step', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
           agent: 'codex',
@@ -3150,24 +3309,9 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(stepDone('agent'), 'false');
       });
 
-      test('a coding agent user finishes it without asking Boxel AI Assistant', async function (assert) {
-        await visitAsNewUser();
-
-        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
-          agent: 'claude',
-          agentSetup: { claude: 1 },
-        });
-        (getService('recent-cards-service') as any).add(`${realmURL}index`);
-        markHosted(realmURL);
-        await settled();
-
-        let matrixService = getService('matrix-service') as MatrixService;
-        await waitUntil(() => matrixService.dashboardState.onboardingDismissed);
-        assert.dom(GET_STARTED).doesNotExist();
-      });
-
       test("the agent step's action shows the Agents section", async function (assert) {
         await visitAsNewUser();
+        await openSteps();
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
           agent: 'codex',
         });
@@ -3180,36 +3324,60 @@ module('Acceptance | dashboard', function (hooks) {
           .hasAttribute('aria-current', 'location');
       });
 
-      test('Dismiss hides it and saves that', async function (assert) {
+      test('Dismiss saves that and leaves a note whose Undo brings the list back', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         await click('[data-test-get-started-dismiss]');
 
-        assert.dom(GET_STARTED).doesNotExist();
         let matrixService = getService('matrix-service') as MatrixService;
+        assert.dom(GET_STARTED).doesNotExist();
+        assert
+          .dom('[data-test-get-started-dismissed]')
+          .containsText('Get started won’t show again.');
         assert.true(matrixService.dashboardState.onboardingDismissed);
         assert
           .dom('[data-test-get-started-undo-dismiss]')
           .isFocused('focus moves to Undo, since Dismiss is gone');
-      });
+        assert.dom(BUTTON).doesNotExist('dismissed, the button goes too');
 
-      test('Undo brings back a dismissal made here, and saves that', async function (assert) {
-        await visitAsNewUser();
-
-        await click('[data-test-get-started-dismiss]');
         await click('[data-test-get-started-undo-dismiss]');
 
-        assert.dom(GET_STARTED).exists();
         assert.dom('[data-test-get-started-dismissed]').doesNotExist();
-        let matrixService = getService('matrix-service') as MatrixService;
+        assert.dom('[data-test-get-started-step]').exists({ count: 3 });
         assert.false(matrixService.dashboardState.onboardingDismissed);
-        assert
-          .dom('[data-test-get-started-dismiss]')
-          .isFocused('focus goes back to Dismiss');
+        assert.dom(BUTTON).exists('Undo brings the button back');
+        assert.dom('[data-test-get-started-dismiss]').isFocused();
       });
 
-      test('a dismissal made on another device hides it', async function (assert) {
+      test('an undo from another device clears the dismissed note', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
+        await click('[data-test-get-started-dismiss]');
+        assert.dom('[data-test-get-started-dismissed]').exists();
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          onboardingDismissed: false,
+        });
+        await settled();
+
+        assert.dom('[data-test-get-started-dismissed]').doesNotExist();
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          onboardingDismissed: true,
+        });
+        await settled();
+
+        assert
+          .dom('[data-test-get-started-dismissed]')
+          .doesNotExist('a dismissal made elsewhere brings no note here');
+      });
+
+      test('a dismissal from another device hides the open steps and the button', async function (assert) {
+        await visitAsNewUser();
+        await openSteps();
+        assert.dom(GET_STARTED).exists();
 
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
           onboardingDismissed: true,
@@ -3217,6 +3385,32 @@ module('Acceptance | dashboard', function (hooks) {
         await settled();
 
         assert.dom(GET_STARTED).doesNotExist();
+        assert.dom(BUTTON).doesNotExist();
+        assert.dom('[data-test-get-started-dismissed]').doesNotExist();
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          onboardingDismissed: false,
+        });
+        await settled();
+
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+        assert
+          .dom(GET_STARTED)
+          .doesNotExist('an undo made elsewhere leaves the steps closed');
+      });
+
+      test('once dismissed, neither the steps nor the button show on open', async function (assert) {
+        await visitAsNewUser();
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          onboardingDismissed: true,
+        });
+        await settled();
+
+        await reopenDashboard();
+
+        assert.dom(GET_STARTED).doesNotExist();
+        assert.dom(BUTTON).doesNotExist();
+        assert.dom('[data-test-get-started-dismissed]').doesNotExist();
       });
     });
   });

@@ -27,6 +27,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  CardError,
   isCardInstance,
   isFileDefInstance,
   localId,
@@ -211,6 +212,29 @@ module('Integration | Store', function (hooks) {
       },
     };
   }
+
+  // Make the store's read of a card's stored source fail, as it does when the
+  // file is gone or unreadable. A card the realm has not indexed is built from
+  // that source, so this is what leaves the awaiting-index placeholder as the
+  // store's answer.
+  function withholdSource(pathFragment: string) {
+    let loadCardDocument = cardStore.loadCardDocument.bind(cardStore);
+    (cardStore as any).loadCardDocument = async (url: string, opts?: any) => {
+      if (url.includes(pathFragment)) {
+        return new CardError(`${url} is withheld by this test`, {
+          status: 404,
+        });
+      }
+      return loadCardDocument(url, opts);
+    };
+  }
+
+  hooks.afterEach(function () {
+    // Undo any test's stub of the source read; the method lives on the class.
+    if (cardStore) {
+      delete (cardStore as any).loadCardDocument;
+    }
+  });
 
   // Wait for a resource's card or file to load and render. The resource's read
   // is a realm round trip whose length has no bound on a loaded runner, and it
@@ -4235,7 +4259,307 @@ module('Integration | Store', function (hooks) {
       .containsText('Hassan', 'card is still rendered');
   });
 
-  test('a card the realm holds but has not indexed yet shows as being prepared, then renders once indexing lands', async function (assert) {
+  test('a card the realm has not indexed renders from its source, with its computed fields, and takes the indexed state once indexing lands', async function (assert) {
+    let url = `${testRealmURL}Person/unindexed`;
+    // Writing through the adapter puts the source on the realm without
+    // enqueuing an indexing pass — the state a card+json read sees between a
+    // write landing and the index catching up with it.
+    await testRealmAdapter.write(
+      'Person/unindexed.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Unindexed' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    setCardInOperatorModeState(url);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await settleCardRender(
+      assert,
+      url,
+      `[data-stack-card="${url}"] [data-test-field="name"]`,
+    );
+
+    assert
+      .dom('[data-test-card-awaiting-index]')
+      .doesNotExist(
+        'no placeholder stands in for a card whose source is there',
+      );
+    assert
+      .dom(`[data-stack-card="${url}"] [data-test-field="name"]`)
+      .containsText('Unindexed', 'the card renders from its source');
+    let instance = storeService.peek(url);
+    assert.true(isCardInstance(instance), 'the store holds a running card');
+    assert.strictEqual(
+      (instance as any).boom,
+      'boom',
+      'its computed field evaluates in the tab',
+    );
+
+    await writePerson('Person/unindexed.json', 'Indexed Person');
+    await settled();
+
+    assert
+      .dom(`[data-stack-card="${url}"] [data-test-field="name"]`)
+      .containsText(
+        'Indexed Person',
+        'the index event brings the indexed state',
+      );
+    assert.strictEqual(
+      storeService.peek(url),
+      instance,
+      'into the same instance, so nothing the user holds is swapped out',
+    );
+  });
+
+  test('a full reindex re-reads a card built from its source in place', async function (assert) {
+    // A realm building a brand-new index announces it with a bare `full`
+    // event, which names no cards. A card built from its source is running
+    // rather than held as an error, so it needs its own way to be found.
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+
+    let url = `${testRealmURL}Person/from-source`;
+    await testRealmAdapter.write(
+      'Person/from-source.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'From Source' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    let instance = await storeService.get(url);
+    assert.true(
+      isCardInstance(instance),
+      'the read returns a running card rather than a placeholder',
+    );
+    assert.strictEqual(
+      storeService.peekError(url),
+      undefined,
+      'and records no error for it',
+    );
+
+    let events = interceptRealmEvents();
+    try {
+      await writePerson('Person/from-source.json', 'From Source Indexed');
+      events.deliver({
+        eventName: 'index',
+        indexType: 'full',
+        realmURL: testRealmURL,
+      });
+      await settled();
+    } finally {
+      events.restore();
+    }
+
+    assert.strictEqual(
+      storeService.peek(url),
+      instance,
+      'the same instance is still the one the store hands out',
+    );
+    assert.strictEqual(
+      (instance as any).name,
+      'From Source Indexed',
+      'and it now holds the indexed state',
+    );
+  });
+
+  test('a read that reports the index state answers awaiting-index without changing what other reads of the card get', async function (assert) {
+    async function writeUnindexed(path: string, name: string) {
+      await testRealmAdapter.write(
+        path,
+        JSON.stringify({
+          data: {
+            attributes: { name },
+            meta: {
+              adoptsFrom: { module: testRRI('person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+    }
+
+    // Read for the index state first, then as the user opening the card.
+    let readFirst = `${testRealmURL}Person/report-first`;
+    await writeUnindexed('Person/report-first.json', 'Report First');
+    let reported = await storeService.getWithoutCache(readFirst);
+    assert.true(
+      (reported as CardErrorJSONAPI).awaitingIndex,
+      'the index-state read reports the card as awaiting index',
+    );
+    assert.strictEqual(
+      storeService.peekError(readFirst),
+      undefined,
+      'and records nothing in the store',
+    );
+    assert.true(
+      isCardInstance(await storeService.get(readFirst)),
+      'so opening the card afterwards still builds it from its source',
+    );
+
+    // Opened first, then read for the index state.
+    let openedFirst = `${testRealmURL}Person/opened-first`;
+    await writeUnindexed('Person/opened-first.json', 'Opened First');
+    let opened = await storeService.get(openedFirst);
+    assert.true(isCardInstance(opened), 'the opened card is running');
+    reported = await storeService.getWithoutCache(openedFirst);
+    assert.true(
+      (reported as CardErrorJSONAPI).awaitingIndex,
+      'the index-state read is not handed the card built from source',
+    );
+    assert.strictEqual(
+      storeService.peek(openedFirst),
+      opened,
+      'and the running card stays in place',
+    );
+
+    // Both at once: neither read is handed the other's answer.
+    let concurrent = `${testRealmURL}Person/concurrent`;
+    await writeUnindexed('Person/concurrent.json', 'Concurrent');
+    let [got, reportedConcurrently] = await Promise.all([
+      storeService.get(concurrent),
+      storeService.getWithoutCache(concurrent),
+    ]);
+    assert.true(isCardInstance(got), 'the plain read gets the card');
+    assert.true(
+      (reportedConcurrently as CardErrorJSONAPI).awaitingIndex,
+      'the index-state read gets the awaiting-index answer',
+    );
+  });
+
+  test('a read that reports the index state is not handed a card still being built from its source', async function (assert) {
+    let url = `${testRealmURL}Person/half-built`;
+    await testRealmAdapter.write(
+      'Person/half-built.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Half Built' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    // Hold the build of the card from its source once deserialization has
+    // put the instance in the identity map, before the read that is building
+    // it gets to finish.
+    let reachedBuilt = new Deferred<void>();
+    let releaseBuilt = new Deferred<void>();
+    let service = storeService as any;
+    let createFromSerialized = service.createFromSerialized.bind(service);
+    service.createFromSerialized = async (resource: any, ...rest: any[]) => {
+      let instance = await createFromSerialized(resource, ...rest);
+      if (String(resource?.id ?? '').includes('Person/half-built')) {
+        reachedBuilt.fulfill();
+        await releaseBuilt.promise;
+      }
+      return instance;
+    };
+
+    let reported: CardDef | CardErrorJSONAPI | undefined;
+    let opening: Promise<CardDef | CardErrorJSONAPI> | undefined;
+    try {
+      opening = storeService.get(url);
+      await reachedBuilt.promise;
+      assert.true(
+        isCardInstance(storeService.peek(url)),
+        'the card being built is already in the identity map',
+      );
+      reported = await storeService.getWithoutCache(url);
+    } finally {
+      releaseBuilt.fulfill();
+      delete service.createFromSerialized;
+    }
+
+    assert.true(
+      (reported as CardErrorJSONAPI)?.awaitingIndex,
+      'the index-state read gets the awaiting-index answer, not the card being built',
+    );
+    assert.true(
+      isCardInstance(await opening),
+      'and the read that was building the card still gets it',
+    );
+  });
+
+  test('an index event that lands while a card is being built from its source re-reads it once it is built', async function (assert) {
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+
+    let url = `${testRealmURL}Person/source-racing`;
+    await testRealmAdapter.write(
+      'Person/source-racing.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Source Racing' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    // Hold the source read after it has the document but before the store
+    // builds from it, so the write below lands after the source was read and
+    // its event arrives while the read is still in flight.
+    let reachedSource = new Deferred<void>();
+    let releaseSource = new Deferred<void>();
+    let loadCardDocument = cardStore.loadCardDocument.bind(cardStore);
+    (cardStore as any).loadCardDocument = async (
+      sourceURL: string,
+      opts?: any,
+    ) => {
+      let doc = await loadCardDocument(sourceURL, opts);
+      if (sourceURL.includes('Person/source-racing')) {
+        reachedSource.fulfill();
+        await releaseSource.promise;
+      }
+      return doc;
+    };
+    let events = interceptRealmEvents();
+
+    try {
+      let reading = storeService.get(url);
+      await reachedSource.promise;
+
+      await writePerson('Person/source-racing.json', 'Source Racing Person');
+      events.deliver({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [url],
+        realmURL: testRealmURL,
+      });
+
+      releaseSource.fulfill();
+      await reading;
+      await settled();
+    } finally {
+      releaseSource.fulfill();
+      delete (cardStore as any).loadCardDocument;
+      events.restore();
+    }
+
+    assert.strictEqual(
+      (storeService.peek(url) as any)?.name,
+      'Source Racing Person',
+      'the store re-reads the card rather than keeping the source it read before the write',
+    );
+  });
+
+  test('a card the realm has not indexed and whose source cannot be read shows as being prepared, then renders once indexing lands', async function (assert) {
+    withholdSource('Person/pending');
     // Writing through the adapter puts the source on the realm without
     // enqueuing an indexing pass — the state a card+json read sees between a
     // write landing and the index catching up with it.
@@ -4319,6 +4643,7 @@ module('Integration | Store', function (hooks) {
   });
 
   test('an index event that lands while the first read is in flight still resolves the placeholder', async function (assert) {
+    withholdSource('Person/racing');
     // The store subscribes to a realm's index events when something first
     // references a card in it, so give it the same footing the app has by the
     // time it reads a brand-new card.
@@ -4416,6 +4741,7 @@ module('Integration | Store', function (hooks) {
   });
 
   test('a full reindex resolves a placeholder even though it names no cards', async function (assert) {
+    withholdSource('Person/swept');
     // A realm reindexing at startup announces itself with a bare `full` event
     // and no per-card invalidations, so this is the only word the store gets
     // that the awaited row now exists.
@@ -4613,6 +4939,7 @@ module('Integration | Store', function (hooks) {
   });
 
   test('a full reindex resolves a placeholder whose read was still in flight when it landed', async function (assert) {
+    withholdSource('Person/swept-inflight');
     // The sweep a bare `full` event triggers can only find placeholders the
     // store has already recorded. A read still in flight has recorded nothing
     // yet, and the placeholder it goes on to install is stale the moment it

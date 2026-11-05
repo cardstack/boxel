@@ -84,6 +84,7 @@ import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
   anonymousConfirmation,
@@ -828,7 +829,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   }
 
   private get heading() {
-    return this.args.review ? 'Review changed calls' : 'Approve calls';
+    return pageTitle(this.args.review ? 'review-changes' : 'approve');
   }
   private get loading() {
     return this.page.state.name === 'loading';
@@ -1171,14 +1172,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   };
 
   // Adding a key is the key entry page's; it comes back here, to the same
-  // batch, with the new key chosen.
+  // batch, with the new key chosen, or through its trail without one.
   private addKey = () => {
     let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     if (this.fromKeyPage) {
       fragment.set('after', 'keys');
     }
     fragment.set('then', this.args.review ? 'review-changes' : 'approve');
-    navigation.assign(`${pageURL('enter-key')}#${fragment}`);
+    navigation.assign(withWayBack(`${pageURL('enter-key')}#${fragment}`));
   };
 
   private finish = () => {
@@ -1186,7 +1187,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       return;
     }
     if (this.fromKeyPage) {
-      navigation.back(pageURL('keys'));
+      navigation.back(keyPageURL());
     } else {
       this.args.api.close();
     }

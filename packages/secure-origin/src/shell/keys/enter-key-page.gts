@@ -83,6 +83,7 @@ import OAuthClientFields, {
   type OAuthClientForm,
 } from './oauth-client-fields.gts';
 import OpenedForSummary from './opened-for-summary.gts';
+import { keyPageURL, pageTitle } from './trail.ts';
 import {
   cliOpenedFor,
   contextRequest,
@@ -158,7 +159,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Enter a key'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -184,7 +185,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       </DonePage>
     {{else if this.entering}}
       <form novalidate {{on 'submit' this.save}} data-test-enter-key-form>
-        <EditPage @heading='Enter a key' data-test-enter-key>
+        <EditPage @heading={{this.title}} data-test-enter-key>
           <:intro>The key is encrypted as soon as it is saved, and nothing can
             read it back. Cards can send it only to the places you approve for
             it.</:intro>
@@ -408,6 +409,8 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
 
   private opened = openedFor();
   private returnsToKeyPage = this.args.fromKeyPage ?? returnsToKeyPage();
+
+  private title = pageTitle('enter-key');
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -491,7 +494,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     }
   };
 
-  private back = () => navigation.back(pageURL('keys'));
+  private back = () => navigation.back(keyPageURL());
 
   // The `connect` page, opened for the same card and operation: a connected
   // account is made by signing in there, not entered here. Reached from an
@@ -744,7 +747,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       this.form.value = '';
       this.serviceAccount.clear();
       if (this.returnsToKeyPage) {
-        navigation.back(pageURL('keys'));
+        navigation.back(keyPageURL());
         return;
       }
       let approval = approvalPageAfter(key.id);

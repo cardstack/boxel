@@ -24,8 +24,6 @@ export interface DashboardSection {
   id: string;
   label: string;
   icon: Icon;
-  // Read as the rail renders, so it follows the section's own count.
-  count?: () => number | undefined;
   flyout?: ComponentLike<SectionFlyoutSignature>;
 }
 
