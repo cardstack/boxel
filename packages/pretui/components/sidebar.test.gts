@@ -283,6 +283,9 @@ module('Pretui | components/sidebar', function (hooks) {
     await click('[data-test-pretui-sidebar-handle]');
     await drag(200, 100);
     assert.strictEqual(state(), 'collapsed', 'below the minimum folds');
+    await click('[data-test-pretui-sidebar-handle]');
+    await click('[data-test-pretui-sidebar-resize]');
+    assert.strictEqual(state(), 'collapsed', 'the first click after a folding drag toggles');
   });
 
   test('@resizable: arrow keys resize, and a key press is not taken for a drag', async function (assert) {
