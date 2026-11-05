@@ -167,6 +167,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         'every',
         'in',
         'matches',
+        'near',
         'not',
         'on',
         'range',
