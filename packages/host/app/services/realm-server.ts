@@ -1083,8 +1083,8 @@ export default class RealmServerService
     return { data: json.data ?? [], publicReadableRealms };
   }
 
-  // Cards / files / definitions per realm, for the workspace chooser's favorite
-  // tiles. Deliberately separate from `fetchRealmInfos`: the counts are an
+  // Cards / files / definitions per realm, for the dashboard's favorite
+  // desks. Deliberately separate from `fetchRealmInfos`: the counts are an
   // aggregate over every index row in a realm, and only a favorited realm's
   // tile renders them, so callers ask for the handful they need instead of
   // paying it for every realm at boot.

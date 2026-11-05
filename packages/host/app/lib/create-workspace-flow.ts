@@ -13,9 +13,9 @@ import {
 } from '@cardstack/host/lib/utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-// The New Workspace flow behind the dashboard's and the workspace chooser's
-// New Workspace buttons: the Add Workspace modal's fields, opened with a
-// random name, and the task that creates the workspace and closes it.
+// The New Workspace flow behind the dashboard's New Workspace button: the Add
+// Workspace modal's fields, opened with a random name, and the task that
+// creates the workspace and closes it.
 export class CreateWorkspaceFlow {
   @service declare private matrixService: MatrixService;
 
