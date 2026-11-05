@@ -802,8 +802,11 @@ export async function listConnectableClients(
     reconnect?: string;
   },
 ): Promise<ConnectableClient[]> {
+  // A client that names no API hosts isn't held to any, as a key's API hosts
+  // aren't when it is sent (`apiHostsOfKeySql`).
   let serves = (apiHosts: string[]) =>
     destination === undefined ||
+    apiHosts.length === 0 ||
     apiHosts.some((host) => destinationCovers(host, destination));
   let platform: ConnectableClient[] = [];
   let shared: ConnectableClient[] = [];

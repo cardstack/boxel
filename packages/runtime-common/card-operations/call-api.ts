@@ -433,10 +433,12 @@ export function lowerCallApi(
 const KEY_KIND_LIST = CALL_API_KEY_KINDS.map((k) => `"${k}"`).join(', ');
 
 // `keyKind` as declared: one kind for every slot, or a kind for each slot
-// named. Answers the kind declared for a slot, by its name.
+// named. Answers the kind declared for a slot, by its name. A `|basic` slot
+// sends the base64 of a user and password, which a minted token isn't, so it
+// is declared only `static`.
 function lowerKeyKind(
   keyKind: unknown,
-  slots: Map<string, unknown>,
+  slots: Map<string, Pick<CallApiSlot, 'transform'>>,
   fail: (
     code: OperationLoweringIssueCode,
     path: string,
@@ -446,7 +448,21 @@ function lowerKeyKind(
   if (keyKind === undefined) {
     return () => undefined;
   }
+  let basicOnly = (kind: CallApiKeyKind, name: string, path: string) => {
+    if (kind !== 'static' && slots.get(name)?.transform === 'basic') {
+      fail(
+        'invalid-request',
+        path,
+        `the "${name}" slot is sent as HTTP Basic credentials, which only a key sent as it is can be, so \`${path}\` is "static"`,
+      );
+      return false;
+    }
+    return true;
+  };
   if (isCallApiKeyKind(keyKind)) {
+    for (let name of slots.keys()) {
+      basicOnly(keyKind, name, 'keyKind');
+    }
     return () => keyKind;
   }
   if (!isPlainObject(keyKind)) {
@@ -471,7 +487,7 @@ function lowerKeyKind(
         `keyKind.${name}`,
         `\`keyKind.${name}\` must be one of ${KEY_KIND_LIST}`,
       );
-    } else {
+    } else if (basicOnly(kind, name, `keyKind.${name}`)) {
       bySlot.set(name, kind);
     }
   }

@@ -271,6 +271,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     <p class='empty' data-test-approve-no-keys>
                       {{#if (eq choice.kind 'userKey')}}
                         You have no key to use here yet.
+                      {{else if this.hasShares}}
+                        None of your keys shared with this workspace can be used
+                        here.
                       {{else}}
                         You have no key shared with this workspace yet.
                       {{/if}}
@@ -879,6 +882,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
   private get remaining() {
     return this.choosing ? remainingFor(this.choosing.batch, this.form.use) : 0;
+  }
+
+  // Whether the user has any share in the workspace, whether or not a slot
+  // can take it.
+  private get hasShares() {
+    return (this.batch?.shares.length ?? 0) > 0;
   }
 
   private get choices(): SlotChoice[] {

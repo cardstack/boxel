@@ -561,6 +561,46 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a share counts only where its OAuth client’s API hosts reach the destination', async function (assert) {
+    let robot = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'elsewhere robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'robot',
+        grantType: 'client_credentials',
+        tokenUrl: 'http://localhost:4524/token',
+        apiHosts: ['http://localhost:4524/'],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    await share(robot.id, { owner: WRITER, label: 'Elsewhere robot' });
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-admin',
+      'its tokens are no good where the slot sends, so the approve page offers it nothing',
+    );
+
+    let vendorRobot = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'vendor robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'vendor-robot',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    await share(vendorRobot.id, { owner: WRITER, label: 'Vendor robot' });
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-approval',
+      'a share whose client serves the destination is one to approve',
+    );
+  });
+
   test('a share binding whose grant is gone is its share owner’s to approve again, and an administrator’s to anyone else', async function (assert) {
     let key = await addKey();
     let { id: shareId } = await share(key.id);

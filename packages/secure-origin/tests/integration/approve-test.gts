@@ -1133,6 +1133,67 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-approve-key="Slack bot"]').doesNotExist();
   });
 
+  test('with shares in the workspace but none that fit, the page says none can be used here', async function (assert) {
+    let unfit = batch({
+      groups: [
+        {
+          destination: {
+            href: GRAPHQL,
+            host: 'api.github.com',
+            path: '/graphql/',
+            registrableDomain: 'github.com',
+          },
+          operations: [
+            {
+              ...operation('listPRs', 'List your open pull requests'),
+              slots: [
+                {
+                  slot: 'apiKey',
+                  key: 'apiKey',
+                  kinds: ['static', 'oauth'],
+                  status: 'new',
+                  snapshot: snapshot('{"query":"listPRs"}'),
+                  fingerprint: 'fp-listPRs',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      keys: [],
+      shares: [
+        {
+          id: 'share-slack',
+          label: 'Slack bot',
+          keyId: 'key-slack',
+          keyName: 'Slack bot client',
+          keyKind: 'oauth-client',
+          covers: [],
+          serves: [],
+          interactive: false,
+          dailyBudget: 100,
+          anonymous: false,
+          anonymousDailyCap: null,
+          anonymousMonthlyCap: null,
+        },
+      ],
+    });
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: unfit },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-no-keys]')
+      .hasText(
+        'None of your keys shared with this workspace can be used here.',
+      );
+  });
+
   test('a key the service rejected is offered, marked, and never chosen for the user', async function (assert) {
     serve({
       'POST _key-bindings/batch': () =>

@@ -646,8 +646,6 @@ function instanceIn(
   return canonicalInstance(realmURL, instance);
 }
 
-// The key a share in the realm holds, for its key's owner to approve it with,
-// with the share locked so a swap or suspension waits for the approval.
 // Refuses to approve a key of another kind than the slot's declaration names
 // (`keyKind` on a `callApi`). A slot that declares no kind takes any key a
 // grant can be made for.
@@ -685,6 +683,8 @@ const KEY_NAMES_BY_KIND: Record<string, string> = {
   'oauth-client': 'an OAuth client',
 };
 
+// The key a share in the realm holds, for its key's owner to approve it with,
+// with the share locked so a swap or suspension waits for the approval.
 async function lockApprovableShare(
   txQuery: Querier,
   realmURL: URL,
