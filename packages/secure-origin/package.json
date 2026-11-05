@@ -7,9 +7,10 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:if-stale": "node build/ensure-build.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
-    "lint:build": "SECURE_ORIGIN_BUILD_RECORD=check vite build --outDir dist-lint --emptyOutDir",
+    "lint:build": "SECURE_ORIGIN_BUILD_RECORD=check vite build --outDir dist-lint --emptyOutDir && node build/ensure-build.ts --check dist-lint",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:hbs": "ember-template-lint . --no-error-on-unmatched-pattern",

@@ -20,9 +20,12 @@ pnpm setup:openrouter-in-deployment
 pnpm setup:choreo-gallery-in-deployment
 # The secure origin's pages are served from their build, which the realm
 # server reads once, at startup, and refuses to start without. The image
-# builds them as well; building here keeps the start from depending on how
-# the image was made.
-pnpm build:secure-origin || exit 1
+# holds a build of its own sources, so this normally only checks it, in well
+# under a second. It builds them here when the image's build is missing or
+# was made from different sources, so the start doesn't depend on how the
+# image was made, at the cost of a build inside the health check's grace
+# period.
+pnpm build:secure-origin:if-stale || exit 1
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://realms-staging.stack.cards/submissions/}"

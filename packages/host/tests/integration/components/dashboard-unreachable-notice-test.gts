@@ -20,7 +20,6 @@ import {
   setupLocalIndexing,
   setRealmAuthFailure,
 } from '../../helpers';
-import { setupFeatureFlag } from '../../helpers/feature-flags';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -35,7 +34,6 @@ module(
   function (hooks) {
     setupRenderingTest(hooks);
     setupLocalIndexing(hooks);
-    setupFeatureFlag(hooks, 'DASHBOARD_V2');
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
