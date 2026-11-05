@@ -820,7 +820,7 @@ module('Integration | key usage and limits', function (hooks) {
       assert.true(target.pathname.endsWith('/share-limits'));
       assert.deepEqual(
         Object.fromEntries(new URLSearchParams(target.hash.slice(1))),
-        { realm: REALM, share: 'share-1', then: 'keys' },
+        { realm: REALM, share: 'share-1', then: 'keys', back: 'keys' },
       );
     });
 
@@ -981,8 +981,11 @@ module('Integration | key usage and limits', function (hooks) {
       await render(ShareLimitsPage);
       await waitFor('[data-test-share-limits]');
       assert
+        .dom('[data-test-keys-heading]')
+        .hasText('Limits', 'the page is titled as its crumb is');
+      assert
         .dom('[data-test-share-limits]')
-        .includesText('Limits for Team weather');
+        .includesText('Team weather, your key shared with');
       assert.deepEqual(
         [
           ...document.querySelectorAll('[data-test-key-limit-group] legend'),
@@ -1133,6 +1136,7 @@ module('Integration | key usage and limits', function (hooks) {
           url: `/secure/keys/key-1/use#${new URLSearchParams({
             realm: REALM,
             share: 'share-1',
+            back: `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1`,
           })}`,
         },
       ]);
@@ -1258,6 +1262,23 @@ module('Integration | key usage and limits', function (hooks) {
       assert.true(
         new URL(backTo[0], window.location.href).pathname.endsWith('/keys'),
       );
+    });
+
+    test('opened from a key page with a trail, it goes back to that key page as it was, trail and all', async function (assert) {
+      let backTo: string[] = [];
+      navigation.back = (url: string) => backTo.push(url);
+      serve({
+        'GET _key-shares/share-1/usage': () =>
+          usageResource('share-1', usage()),
+      });
+      let keys = `keys#${new URLSearchParams({ back: `swap-key#realm=${encodeURIComponent(REALM)}` })}`;
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1&then=keys&${new URLSearchParams({ back: keys })}`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-share-limits]');
+      await click('[data-test-share-limits-back]');
+      assert.deepEqual(backTo, [`/secure/${keys}`]);
     });
 
     test('a link naming no shared key in the workspace says so', async function (assert) {
