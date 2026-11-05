@@ -96,6 +96,8 @@
 
 #### Build-time feature flags
 
+These are the host app's flags, fixed when the host is built. Realm-server feature flags are a separate mechanism: environment variables the realm server reads when it starts, set in its deployment config.
+
 - A flag is a boolean under `featureFlags` in `config/environment.js`, typed in `app/config/environment.ts`. App code reads it from `ENV.featureFlags` when it runs. The test build starts with every flag off.
 - To turn a flag on in a test module, call `setupFeatureFlag(hooks, 'FLAG_NAME')` from `tests/helpers/feature-flags.ts`. It turns the flag on before each test and restores it after. Don't set `ENV.featureFlags` directly in a test: the value carries over into every test that runs after it.
 - When you retire a flag, remove its `setupFeatureFlag` calls, its entries in both config files, and any CI job or environment variable that set it. Keep the helper, even when nothing calls it.
