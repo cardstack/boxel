@@ -6,6 +6,8 @@ A short label that appears on hover or keyboard focus, positioned against the el
 
 ```
 @content (string, required), @side? ('top'|'bottom'|'left'|'right', default 'top')
+@labels? (boolean: the tip names its trigger instead of describing it)
+@disabled? (boolean: keeps the tip hidden; the association stays)
 <:default> — the trigger, rendered inline
 ```
 

@@ -2,7 +2,11 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Sidebar, SidebarGroup, SidebarItem, SidebarTrigger } from './sidebar';
-import type { ShellPlacementAlias, SidebarCollapsible } from './sidebar';
+import type {
+  ShellPlacementAlias,
+  SidebarCollapsible,
+  SidebarScroll,
+} from './sidebar';
 import Folder from '@cardstack/boxel-icons/folder';
 import Globe from '@cardstack/boxel-icons/globe';
 import Eye from '@cardstack/boxel-icons/eye';
@@ -22,9 +26,13 @@ export class SidebarUsage extends Component {
   @tracked activeId = 'lib-0';
   @tracked toggles = 0;
   @tracked railBreakpoint = 1024;
+  @tracked scroll = 'content';
+  @tracked resizable = true;
 
   collapsibleOptions = ['rail', 'offcanvas', 'none'];
   placementOptions = ['start', 'end'];
+  scrollOptions = ['page', 'content'];
+  filler = [1, 2, 3, 4, 5, 6];
   // A different glyph per row: `<:icon>` takes any icon, not only a dot.
   library = LIBRARY.map((row, i) => ({ ...row, icon: [Folder, Eye, Copy][i % 3] }));
   origins = ORIGINS.map((row, i) => ({ ...row, icon: [Globe, Copy][i % 2] }));
@@ -45,6 +53,12 @@ export class SidebarUsage extends Component {
   setRailBreakpoint = (v: number) => {
     this.railBreakpoint = v;
   };
+  setScroll = (v: string) => {
+    this.scroll = v;
+  };
+  setResizable = (v: boolean) => {
+    this.resizable = v;
+  };
   setBordered = (v: boolean) => {
     this.bordered = v;
   };
@@ -59,6 +73,9 @@ export class SidebarUsage extends Component {
   get collapsibleValue(): SidebarCollapsible {
     return this.collapsible as SidebarCollapsible;
   }
+  get scrollValue(): SidebarScroll {
+    return this.scroll as SidebarScroll;
+  }
   get placementValue(): ShellPlacementAlias {
     return this.placement as ShellPlacementAlias;
   }
@@ -71,6 +88,8 @@ export class SidebarUsage extends Component {
       "  @collapsible='" + this.collapsible + "'",
       "  @placement='" + this.placement + "'",
       '  @railBreakpoint={{' + this.railBreakpoint + '}}',
+      "  @scroll='" + this.scroll + "'",
+      '  @resizable={{' + this.resizable + '}}',
       '>',
       '  <:header as |bar|>…</:header>',
       '  <:nav as |bar|>…</:nav>',
@@ -96,6 +115,8 @@ export class SidebarUsage extends Component {
             @mobile={{if this.mobile true}}
             @railBreakpoint={{this.railBreakpoint}}
             @bordered={{this.bordered}}
+            @scroll={{this.scrollValue}}
+            @resizable={{this.resizable}}
           >
             <:header as |bar|>
               <div class='shell-brand' data-compact={{if bar.collapsed 'true' 'false'}}>
@@ -115,9 +136,8 @@ export class SidebarUsage extends Component {
                     @active={{this.isActive row.id}}
                     @collapsed={{bar.collapsed}}
                     @onClick={{this.selectFor row.id}}
-                  >
-                    <:icon><row.icon aria-hidden='true' /></:icon>
-                  </SidebarItem>
+                    @icon={{row.icon}}
+                  />
                 {{/each}}
               </SidebarGroup>
 
@@ -128,17 +148,15 @@ export class SidebarUsage extends Component {
                     @active={{this.isActive row.id}}
                     @collapsed={{bar.collapsed}}
                     @onClick={{this.selectFor row.id}}
-                  >
-                    <:icon><row.icon aria-hidden='true' /></:icon>
-                  </SidebarItem>
+                    @icon={{row.icon}}
+                  />
                 {{/each}}
                 <SidebarItem
                   @label='Archived origins'
                   @disabled={{true}}
                   @collapsed={{bar.collapsed}}
-                >
-                  <:icon><Folder aria-hidden='true' /></:icon>
-                </SidebarItem>
+                  @icon={{Folder}}
+                />
               </SidebarGroup>
             </:nav>
 
@@ -172,6 +190,16 @@ export class SidebarUsage extends Component {
                   it and the mobile breakpoint it folds to icons, and below
                   that it becomes a drawer. A manual toggle holds until the
                   pane crosses into another band.</p>
+                <p class='shell-copy'>With scroll set to content the shell
+                  keeps its stage&apos;s height and only this pane scrolls; the
+                  rail stays where it is. With resizable on, drag the seam (or
+                  focus it and press the arrow keys) to set the rail&apos;s
+                  width; dragging below the minimum folds it, and a click still
+                  toggles.</p>
+                {{#each this.filler}}
+                  <p class='shell-copy'>Filler paragraph so this pane is taller
+                    than the stage and scrolls on its own.</p>
+                {{/each}}
                 <p class='shell-count'>onOpenChange fired
                   <b>{{this.toggles}}</b>
                   times</p>
@@ -293,6 +321,31 @@ export class SidebarUsage extends Component {
           @value={{this.railBreakpoint}}
           @onInput={{this.setRailBreakpoint}}
         />
+        <Args.String
+          @name='scroll'
+          @description='What scrolls when the content is taller than the shell. page lets the page scroll, rail and all; content locks the shell to its container height, keeps the rail in place and scrolls only the content pane. The container needs a definite height.'
+          @options={{this.scrollOptions}}
+          @value={{this.scroll}}
+          @onInput={{this.setScroll}}
+          @defaultValue='page'
+        />
+        <Args.Bool
+          @name='resizable'
+          @description='Drag the seam, or press the arrow keys on it, to set the expanded width between minWidth and maxWidth. The seam is a separator with aria-valuenow, valuemin and valuemax; dragging below minWidth folds the rail, and a click still toggles. With persistKey the width is remembered.'
+          @defaultValue={{false}}
+          @value={{this.resizable}}
+          @onInput={{this.setResizable}}
+        />
+        <Args.String
+          @name='minWidth'
+          @description='Smallest dragged width: a px number or a px or rem string.'
+          @defaultValue='12rem'
+        />
+        <Args.String
+          @name='maxWidth'
+          @description='Largest dragged width: a px number or a px or rem string, floored at minWidth.'
+          @defaultValue='24rem'
+        />
         <Args.Number
           @name='mobileBreakpoint'
           @description='Pane width in px below which the rail becomes a drawer. Measured against the shell, not the viewport.'
@@ -395,8 +448,6 @@ export class SidebarUsage extends Component {
         color: var(--ink-3, var(--boxel-400));
       }
       .shell-page {
-        block-size: 100%;
-        overflow-y: auto;
         padding: var(--space-5, 14px);
         display: grid;
         gap: var(--space-4, 11px);

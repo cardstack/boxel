@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader, VirtualNetwork } from '@cardstack/runtime-common';
+import { identify, Loader, VirtualNetwork } from '@cardstack/runtime-common';
 
 import {
   beginTimerBlock,
@@ -238,12 +238,7 @@ module('Unit | loader', function (hooks) {
     let { Person } = await loader.import<{ Person: unknown }>(
       `${testRealmURL}person`,
     );
-    assert.deepEqual(loader.identify(Person), {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-    // The loader knows which loader instance was used to import the card
-    assert.deepEqual(Loader.identify(Person), {
+    assert.deepEqual(identify(Person), {
       module: `${testRealmURL}person`,
       name: 'Person',
     });
@@ -266,13 +261,6 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(module.counter, 0);
     module.increment();
     assert.strictEqual(module.counter, 1);
-  });
-
-  test('can get a loader used to import a specific card', async function (assert) {
-    let module = await loader.import<any>(`${testRealmURL}person`);
-    let card = module.Person;
-    let testingLoader = Loader.getLoaderFor(card);
-    assert.strictEqual(testingLoader, loader, 'the loaders are the same');
   });
 
   test('supports import.meta', async function (assert) {
@@ -703,32 +691,4 @@ module('Unit | loader', function (hooks) {
       }
     });
   }
-
-  test('identify preserves original module for reexports', function (assert) {
-    let throwIfFetch = new Loader(async () => {
-      throw new Error(
-        'fetch should not be invoked during shimmed module tests',
-      );
-    });
-
-    class StringField {}
-
-    throwIfFetch.shimModule(`${baseRealm.url}card-api.gts`, {
-      StringField,
-    });
-
-    throwIfFetch.shimModule(`${baseRealm.url}string.ts`, {
-      default: StringField,
-    });
-
-    // This Loader is constructed without a `virtualNetwork`, so
-    // `captureIdentitiesOfModuleExports` records the raw shim module
-    // identifier without running it through `vn.unresolveURL`. The
-    // identity stays in URL form. Other test setups that build a VN
-    // alongside the Loader see the RRI canonical form here.
-    assert.deepEqual(Loader.identify(StringField), {
-      module: `${baseRealm.url}card-api`,
-      name: 'StringField',
-    });
-  });
 });

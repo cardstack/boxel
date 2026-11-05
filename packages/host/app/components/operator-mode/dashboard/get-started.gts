@@ -7,13 +7,16 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import Check from '@cardstack/boxel-icons/check';
+import ChevronDown from '@cardstack/boxel-icons/chevron-down';
+import ChevronUp from '@cardstack/boxel-icons/chevron-up';
 import { Button } from '@cardstack/pretui/components/button';
+import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { didCancel, dropTask, task, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
-import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import { logger } from '@cardstack/runtime-common';
 
@@ -41,18 +44,49 @@ interface Step {
   done: boolean;
 }
 
+// How many times the value it's given has changed. Untracked, so reading it
+// from a getter is safe: the getter tracks the value itself.
+class ChangeCounter<T> {
+  private seen: { value: T } | undefined;
+  private changes = 0;
+
+  count(value: T) {
+    if (!this.seen || this.seen.value !== value) {
+      this.seen = { value };
+      this.changes++;
+    }
+    return this.changes;
+  }
+}
+
+// What the page's own Get started button needs, yielded to the block that
+// renders the page's header.
+export interface GetStartedToggle {
+  // Whether the button shows: the steps' ticks have been read, one is
+  // still to do, and the list hasn't been dismissed.
+  isReady: boolean;
+  isOpen: boolean;
+  panelId: string;
+  toggle: () => void;
+}
+
 interface Signature {
   Element: HTMLElement;
   Args: {
     // Scrolls the dashboard to its Agents section.
     showAgents: () => void;
   };
+  Blocks: {
+    // The page's header, which holds the button that opens the list. The
+    // list renders right after it.
+    head: [GetStartedToggle];
+  };
 }
 
 // The dashboard's onboarding checklist. Every tick comes from something the
 // user has actually done, read from state the host already keeps, so the list
-// can't drift from what happened. It folds to one line once a step is done,
-// and goes away for good once every step is done or the user dismisses it.
+// can't drift from what happened. A button in the page's header opens and
+// closes it; it starts closed. Dismissing it hides both for good.
 export default class GetStarted extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -61,14 +95,20 @@ export default class GetStarted extends Component<Signature> {
   @service declare private realmServer: RealmServerService;
   @service declare private recentCardsService: RecentCardsService;
 
-  @tracked private isExpanded = false;
-  // Set by the user's own dismissal, so it can be undone until they leave
-  // the dashboard. Finishing every step dismisses it with no undo.
-  @tracked private isJustDismissed = false;
-  // The control that replaced the one just pressed, which takes focus once
-  // it renders, since the pressed one is gone.
-  private focusAfterToggle: 'undo' | 'dismiss' | undefined;
+  // The open list and the dismissed note each hold only for the dismissal
+  // they were shown under, so a dismissal or an undo from another tab or
+  // device closes them rather than leaving them to come back later.
+  @tracked private openedIn: number | undefined;
+  // The icon button folds the open list to its progress line.
+  @tracked private isExpanded = true;
+  // Just dismissed: a note stands in for the list, with Undo.
+  @tracked private dismissedIn: number | undefined;
+  private dismissalChanges = new ChangeCounter<boolean>();
+  // Dismiss or Undo held focus and is gone, so the control that
+  // replaces it takes it.
+  private focusNext: 'undo' | 'dismiss' | undefined;
 
+  private panelId = `${guidFor(this)}-panel`;
   private titleId = `${guidFor(this)}-title`;
   private stepsId = `${guidFor(this)}-steps`;
   private dismissedNoteId = `${guidFor(this)}-dismissed`;
@@ -153,15 +193,36 @@ export default class GetStarted extends Component<Signature> {
     return this.steps.filter((step) => step.done).length;
   }
 
-  private get nextStep() {
-    return this.steps.find((step) => !step.done);
-  }
-
   private get isDismissed() {
     return Boolean(this.matrixService.dashboardState.onboardingDismissed);
   }
 
-  private get isShown() {
+  // Counts the changes to the stored dismissal, from this tab or any other.
+  private get dismissalEpoch() {
+    return this.dismissalChanges.count(this.isDismissed);
+  }
+
+  private get isOpen() {
+    return this.openedIn === this.dismissalEpoch;
+  }
+
+  // Opening from the header always shows the steps.
+  @action private toggle() {
+    this.openedIn = this.isOpen ? undefined : this.dismissalEpoch;
+    this.isExpanded = true;
+  }
+
+  @action private toggleExpanded() {
+    this.isExpanded = !this.isExpanded;
+  }
+
+  private get nextStep() {
+    return this.steps.find((step) => !step.done);
+  }
+
+  // Dismissed, or with every step done, neither the button nor the list
+  // shows.
+  private get isAvailable() {
     return this.isLoaded && !this.isDismissed && this.nextStep !== undefined;
   }
 
@@ -171,14 +232,17 @@ export default class GetStarted extends Component<Signature> {
     return this.isLoaded && !this.isDismissed && this.nextStep === undefined;
   }
 
-  // A new account sees the steps; once one is done the panel folds to a
-  // single line until the user asks for the rest.
-  private get showSteps() {
-    return this.isExpanded || this.doneCount === 0;
+  private get showsDismissedNote() {
+    return this.dismissedIn === this.dismissalEpoch;
   }
 
-  @action private toggleExpanded() {
-    this.isExpanded = !this.isExpanded;
+  private get toggleState(): GetStartedToggle {
+    return {
+      isReady: this.isAvailable,
+      isOpen: this.isAvailable && this.isOpen,
+      panelId: this.panelId,
+      toggle: this.toggle,
+    };
   }
 
   // Runs when the finished state renders, not on every render: its element
@@ -197,35 +261,6 @@ export default class GetStarted extends Component<Signature> {
     }
   });
 
-  private dismissTask = dropTask(async () => {
-    if (await this.saveDismissal()) {
-      this.focusAfterToggle = 'undo';
-      this.isJustDismissed = true;
-    }
-  });
-
-  private undoDismissTask = dropTask(async () => {
-    try {
-      await this.matrixService.updateDashboardState({
-        onboardingDismissed: false,
-      });
-    } catch (error) {
-      log.warn(`undoing the dismissal of Get started failed: ${error}`);
-      return;
-    }
-    this.focusAfterToggle = 'dismiss';
-    this.isJustDismissed = false;
-  });
-
-  private focusIfToggled = modifier(
-    (element: HTMLElement, [control]: ['undo' | 'dismiss']) => {
-      if (this.focusAfterToggle === control) {
-        this.focusAfterToggle = undefined;
-        element.focus();
-      }
-    },
-  );
-
   private async saveDismissal() {
     try {
       await this.matrixService.updateDashboardState({
@@ -237,6 +272,57 @@ export default class GetStarted extends Component<Signature> {
       return false;
     }
   }
+
+  private focusIfNext = modifier(
+    (element: HTMLElement, [control]: ['undo' | 'dismiss']) => {
+      if (this.focusNext !== control) {
+        return;
+      }
+      this.focusNext = undefined;
+      // Only when the focus went with the control this replaces, not
+      // after the user moved it elsewhere while the write was out.
+      let { activeElement, body } = element.ownerDocument;
+      if (!activeElement || activeElement === body) {
+        element.focus();
+      }
+    },
+  );
+
+  // Hides the list and the header's button for good, short of Undo.
+  private dismissTask = dropTask(async () => {
+    if (!(await this.saveDismissal())) {
+      return;
+    }
+    this.focusNext = 'undo';
+    this.openedIn = undefined;
+    this.dismissedIn = this.dismissalEpoch;
+  });
+
+  // Opened, for the change the write makes, before the write, so the
+  // button comes back already open rather than in its closed look for the
+  // moment the write takes.
+  private undoDismissTask = dropTask(async () => {
+    this.focusNext = 'dismiss';
+    this.isExpanded = true;
+    this.openedIn = this.dismissalEpoch + 1;
+    try {
+      await this.matrixService.updateDashboardState({
+        onboardingDismissed: false,
+      });
+    } catch (error) {
+      log.warn(`undoing the dismissal of Get started failed: ${error}`);
+      this.focusNext = undefined;
+      this.openedIn = undefined;
+      return;
+    }
+    // The list won't render if the write was dropped with its session or
+    // every step got done meanwhile, so nothing later opens it or takes the
+    // focus.
+    if (!this.isAvailable) {
+      this.focusNext = undefined;
+      this.openedIn = undefined;
+    }
+  });
 
   @action private async openFirstWorkspace() {
     let [first] = this.realmServer.userRealmIdentifiers;
@@ -250,127 +336,137 @@ export default class GetStarted extends Component<Signature> {
   }
 
   <template>
-    {{#if this.isShown}}
+    {{yield this.toggleState to='head'}}
+    {{#if this.toggleState.isOpen}}
       <section
         class='get-started'
+        id={{this.panelId}}
         aria-labelledby={{this.titleId}}
         data-test-get-started
         ...attributes
       >
-        <header class='get-started-head'>
-          <h2 class='get-started-title' id={{this.titleId}}>Get started</h2>
-          <ProgressBar
-            class='get-started-progress'
-            @value={{this.doneCount}}
-            @max={{this.steps.length}}
-            aria-labelledby={{this.titleId}}
-          />
-          <p class='get-started-count' data-test-get-started-count>
-            {{this.doneCount}}
-            of
-            {{this.steps.length}}
-            done
-            {{#if (not this.showSteps)}}
-              {{#if this.nextStep}}
-                · Next:
-                {{this.nextStep.title}}
-              {{/if}}
-            {{/if}}
-          </p>
-          <div class='get-started-actions'>
-            {{#if this.doneCount}}
-              <Button
-                @tone={{if this.isExpanded 'neutral' 'primary'}}
-                @appearance={{if this.isExpanded 'outlined' 'accent'}}
-                @size='s'
-                aria-expanded={{if this.showSteps 'true' 'false'}}
-                aria-controls={{if this.showSteps this.stepsId}}
-                {{on 'click' this.toggleExpanded}}
-                data-test-get-started-toggle
-              >
-                {{if this.isExpanded 'Hide steps' 'Show steps'}}
-              </Button>
-            {{/if}}
+        <div class='get-started-body'>
+          <header class='get-started-head'>
+            <h2 class='get-started-title' id={{this.titleId}}>Get started</h2>
+            <ProgressBar
+              class='get-started-progress'
+              @value={{this.doneCount}}
+              @max={{this.steps.length}}
+              aria-labelledby={{this.titleId}}
+            />
+            <p class='get-started-count' data-test-get-started-count>
+              {{this.doneCount}}
+              of
+              {{this.steps.length}}
+              done
+              {{#unless this.isExpanded}}
+                {{#if this.nextStep}}
+                  · Next:
+                  {{this.nextStep.title}}
+                {{/if}}
+              {{/unless}}
+            </p>
             <Button
-              @appearance='outlined'
+              class='get-started-dismiss'
+              @tone='danger'
+              @appearance='link'
               @size='s'
               @busy={{this.dismissTask.isRunning}}
               {{on 'click' this.dismissTask.perform}}
-              {{this.focusIfToggled 'dismiss'}}
+              {{this.focusIfNext 'dismiss'}}
               data-test-get-started-dismiss
             >
               Dismiss
             </Button>
-          </div>
-        </header>
+            {{! The minimize button sits at the far end. Its tooltip wraps it,
+                so this wrapper is what the layout places. }}
+            <div class='get-started-actions'>
+              <IconButton
+                @icon={{if this.isExpanded ChevronUp ChevronDown}}
+                @label={{if this.isExpanded 'Minimize steps' 'Expand steps'}}
+                @tooltip={{if this.isExpanded 'Minimize steps' 'Expand steps'}}
+                @appearance='plain'
+                @size='s'
+                aria-expanded={{if this.isExpanded 'true' 'false'}}
+                aria-controls={{if this.isExpanded this.stepsId}}
+                {{on 'click' this.toggleExpanded}}
+                data-test-get-started-toggle
+              />
+            </div>
+          </header>
 
-        {{#if this.showSteps}}
-          <ol class='get-started-steps' id={{this.stepsId}}>
-            {{#each this.steps key='id' as |step|}}
-              <li
-                class={{cn 'get-started-step' is-done=step.done}}
-                data-test-get-started-step={{step.id}}
-                data-test-get-started-step-done={{if step.done 'true' 'false'}}
-              >
-                <span class='tick' aria-hidden='true'>
-                  {{#if step.done}}
-                    <Check width='14' height='14' stroke-width='3' />
-                  {{/if}}
-                </span>
-                <span class='step-words'>
-                  <span class='step-title'>
-                    {{step.title}}
+          {{#if this.isExpanded}}
+            <ol class='get-started-steps' id={{this.stepsId}}>
+              {{#each this.steps key='id' as |step|}}
+                <li
+                  class={{cn 'get-started-step' is-done=step.done}}
+                  data-test-get-started-step={{step.id}}
+                  data-test-get-started-step-done={{if
+                    step.done
+                    'true'
+                    'false'
+                  }}
+                >
+                  <span class='tick' aria-hidden='true'>
                     {{#if step.done}}
-                      <VisuallyHidden>(done)</VisuallyHidden>
+                      <Check width='14' height='14' stroke-width='3' />
                     {{/if}}
                   </span>
-                  <span class='step-hint'>{{step.hint}}</span>
-                </span>
-                {{#unless step.done}}
-                  {{#if (eq step.id 'open-card')}}
-                    {{#if this.realmServer.userRealmIdentifiers.length}}
+                  <span class='step-words'>
+                    <span class='step-title'>
+                      {{step.title}}
+                      {{#if step.done}}
+                        <VisuallyHidden>(done)</VisuallyHidden>
+                      {{/if}}
+                    </span>
+                    <span class='step-hint'>{{step.hint}}</span>
+                  </span>
+                  {{#unless step.done}}
+                    {{#if (eq step.id 'open-card')}}
+                      {{#if this.realmServer.userRealmIdentifiers.length}}
+                        <Button
+                          class='step-action'
+                          @appearance='outlined'
+                          @size='s'
+                          {{on 'click' this.openFirstWorkspace}}
+                          data-test-get-started-action={{step.id}}
+                        >Open a workspace</Button>
+                      {{/if}}
+                    {{else if (eq step.id 'ask-ai')}}
                       <Button
                         class='step-action'
                         @appearance='outlined'
                         @size='s'
-                        {{on 'click' this.openFirstWorkspace}}
+                        {{on 'click' this.askBoxelAi}}
                         data-test-get-started-action={{step.id}}
-                      >Open a workspace</Button>
+                      >Ask Boxel AI Assistant</Button>
+                    {{else if (eq step.id 'agent')}}
+                      <Button
+                        class='step-action'
+                        @appearance='outlined'
+                        @size='s'
+                        {{on 'click' @showAgents}}
+                        data-test-get-started-action={{step.id}}
+                      >Set up an agent</Button>
                     {{/if}}
-                  {{else if (eq step.id 'ask-ai')}}
-                    <Button
-                      class='step-action'
-                      @appearance='outlined'
-                      @size='s'
-                      {{on 'click' this.askBoxelAi}}
-                      data-test-get-started-action={{step.id}}
-                    >Ask Boxel AI Assistant</Button>
-                  {{else if (eq step.id 'agent')}}
-                    <Button
-                      class='step-action'
-                      @appearance='outlined'
-                      @size='s'
-                      {{on 'click' @showAgents}}
-                      data-test-get-started-action={{step.id}}
-                    >Set up an agent</Button>
-                  {{/if}}
-                {{/unless}}
-              </li>
-            {{/each}}
-          </ol>
-        {{/if}}
+                  {{/unless}}
+                </li>
+              {{/each}}
+            </ol>
+          {{/if}}
+        </div>
       </section>
-    {{else if this.isJustDismissed}}
+    {{else if this.showsDismissedNote}}
       <div class='get-started-dismissed' data-test-get-started-dismissed>
         <p class='dismissed-note' id={{this.dismissedNoteId}}>Get started won’t
-          show again</p>
+          show again.</p>
         <Button
           @appearance='link'
           @size='s'
           @busy={{this.undoDismissTask.isRunning}}
           aria-describedby={{this.dismissedNoteId}}
           {{on 'click' this.undoDismissTask.perform}}
-          {{this.focusIfToggled 'undo'}}
+          {{this.focusIfNext 'undo'}}
           data-test-get-started-undo-dismiss
         >
           Undo
@@ -414,10 +510,13 @@ export default class GetStarted extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
         color: var(--muted-foreground);
       }
+      /* Dismiss and the minimize button sit together at the far end. */
+      .get-started-dismiss {
+        margin-inline-start: auto;
+      }
       .get-started-actions {
         display: flex;
         gap: var(--boxel-sp-xs);
-        margin-inline-start: auto;
       }
       .get-started-steps {
         margin: var(--boxel-sp-sm) 0 0;
@@ -475,10 +574,45 @@ export default class GetStarted extends Component<Signature> {
       .dismissed-note {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
+        font-style: italic;
       }
+      /* Narrow, the box stacks: the title row with Dismiss and the
+         minimize button, the progress bar across the box, the count, then
+         the steps. The header's items join the body's grid for that, in
+         their DOM order so Tab follows what's on screen. */
       @container get-started (max-width: 30rem) {
+        .get-started-body {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto auto;
+          grid-template-areas:
+            'title dismiss actions'
+            'progress progress progress'
+            'count count count'
+            'steps steps steps';
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+        }
+        .get-started-head {
+          display: contents;
+        }
+        .get-started-steps {
+          grid-area: steps;
+        }
+        .get-started-title {
+          grid-area: title;
+        }
         .get-started-actions {
-          margin-inline-start: 0;
+          grid-area: actions;
+        }
+        .get-started-progress {
+          grid-area: progress;
+          width: 100%;
+        }
+        .get-started-count {
+          grid-area: count;
+        }
+        .get-started-dismiss {
+          grid-area: dismiss;
         }
         .get-started-step {
           grid-template-columns: var(--_get-started-tick-size) minmax(0, 1fr);

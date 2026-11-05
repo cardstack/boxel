@@ -16,6 +16,8 @@ interface Signature {
     onConfirm: (item: ItemToDelete) => void;
     onCancel: () => void;
     isDeleteRunning?: boolean;
+    // Holds Delete until the dialog knows what deleting would take with it.
+    isConfirmDisabled?: boolean;
     error?: string;
     size?: 'x-small' | 'small' | 'medium' | 'large' | 'full-screen';
     containerClass?: string;
@@ -64,6 +66,7 @@ let component: TemplateOnlyComponent<Signature> = <template>
             data-test-confirm-delete-button
             @size='tall'
             @kind='danger'
+            @disabled={{@isConfirmDisabled}}
             {{on 'click' (fn @onConfirm @itemToDelete)}}
           >
             Delete

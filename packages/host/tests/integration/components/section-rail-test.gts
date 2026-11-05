@@ -10,7 +10,6 @@ import {
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { module, test } from 'qunit';
 
@@ -29,21 +28,15 @@ const ShelfFlyout: TemplateOnlyComponent<SectionFlyoutSignature> = <template>
   <span id={{@titleId}}>Shelf picks</span>
 </template>;
 
-class Counter {
-  @tracked value: number | undefined = 3;
-}
-
 module('Integration | section-rail', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('lists sections in page order, with the counts they give, and names a flyout by its title', async function (assert) {
+  test('lists sections in page order, each named by its tooltip, and names a flyout by its title', async function (assert) {
     let sections = new DashboardSections();
-    let counter = new Counter();
     let shelf: DashboardSection = {
       id: 'shelf',
       label: 'Shelf',
       icon: IconPlus,
-      count: () => counter.value,
       flyout: ShelfFlyout,
     };
     let notes: DashboardSection = {
@@ -72,25 +65,22 @@ module('Integration | section-rail', function (hooks) {
     );
     assert
       .dom(
-        '[data-test-section-rail-entry="shelf"] [data-test-section-rail-count]',
+        '[data-test-section-rail-item="shelf"] [data-test-pretui-tooltip] [role="tooltip"]',
       )
-      .hasText('3');
+      .hasText('Shelf');
     assert
-      .dom(
-        '[data-test-section-rail-entry="notes"] [data-test-section-rail-count]',
-      )
-      .doesNotExist('a section without a count shows none');
+      .dom('[data-test-section-rail-entry="shelf"]')
+      .hasAttribute(
+        'aria-labelledby',
+        find('[data-test-section-rail-item="shelf"] [role="tooltip"]')!.id,
+        'the tooltip names the icon',
+      );
+    assert
+      .dom('[data-test-section-rail-item="notes"] [role="tooltip"]')
+      .hasText('Notes');
     assert
       .dom('[data-test-section-rail-entry="notes"]')
       .hasAttribute('aria-current', 'location', 'the first section is current');
-
-    counter.value = 0;
-    await focus('[data-test-section-rail-entry="notes"]');
-    assert
-      .dom(
-        '[data-test-section-rail-entry="shelf"] [data-test-section-rail-count]',
-      )
-      .doesNotExist('a count of zero shows none');
 
     await focus('[data-test-section-rail-entry="shelf"]');
     assert
@@ -127,7 +117,7 @@ module('Integration | section-rail', function (hooks) {
       .hasAttribute('aria-expanded', 'false');
   });
 
-  test('a press with no hover opens the flyout, and a click after a hover closes it', async function (assert) {
+  test('hovering an entry shows its tooltip and opens no flyout; a press opens the flyout and hides the tooltips', async function (assert) {
     let sections = new DashboardSections();
     let shelf: DashboardSection = {
       id: 'shelf',
@@ -135,62 +125,60 @@ module('Integration | section-rail', function (hooks) {
       icon: IconPlus,
       flyout: ShelfFlyout,
     };
+    let notes: DashboardSection = {
+      id: 'notes',
+      label: 'Notes',
+      icon: IconPlus,
+    };
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <section {{sections.register shelf}}></section>
+          <section {{sections.register notes}}></section>
           <SectionRail @sections={{sections}} />
         </template>
       },
     );
 
-    // As a screen reader's press arrives: a mouse's pointer events and click,
-    // with no hover before them.
-    await triggerEvent(
-      '[data-test-section-rail-entry="shelf"]',
-      'pointerdown',
-      {
-        pointerType: 'mouse',
-      },
-    );
+    const SHELF_TIP =
+      '[data-test-section-rail-item="shelf"] [data-test-pretui-tooltip]';
+    const NOTES_TIP =
+      '[data-test-section-rail-item="notes"] [data-test-pretui-tooltip]';
+
+    await triggerEvent(SHELF_TIP, 'mouseenter');
+    assert
+      .dom(`${SHELF_TIP} [role="tooltip"]`)
+      .hasAttribute('data-open', 'true', 'hover shows the tooltip');
+    assert
+      .dom('[data-test-section-rail-flyout]')
+      .doesNotExist('hover alone opens no flyout');
+
     await click('[data-test-section-rail-entry="shelf"]');
     assert.dom('[data-test-section-rail-flyout="shelf"]').exists();
+    assert
+      .dom(`${SHELF_TIP} [role="tooltip"]`)
+      .doesNotHaveAttribute('data-open', 'the flyout names it instead');
+
+    await triggerEvent(SHELF_TIP, 'mouseleave');
+    await triggerEvent(NOTES_TIP, 'mouseenter');
+    assert
+      .dom(`${NOTES_TIP} [role="tooltip"]`)
+      .doesNotHaveAttribute(
+        'data-open',
+        'no tooltip shows over the open flyout',
+      );
 
     await click('[data-test-section-rail-entry="shelf"]');
     assert
       .dom('[data-test-section-rail-flyout]')
       .doesNotExist('pressing again closes it');
-
-    // A pen that can't hover enters the entry as it touches down.
-    await triggerEvent(
-      '[data-test-section-rail-item="shelf"]',
-      'pointerenter',
-      {
-        pointerType: 'pen',
-      },
-    );
-    await click('[data-test-section-rail-entry="shelf"]');
     assert
-      .dom('[data-test-section-rail-flyout="shelf"]')
-      .exists('a pen tap opens it');
-    await click('[data-test-section-rail-entry="shelf"]');
-
-    await triggerEvent(
-      '[data-test-section-rail-item="shelf"]',
-      'pointerenter',
-      {
-        pointerType: 'mouse',
-      },
-    );
-    assert.dom('[data-test-section-rail-flyout="shelf"]').exists();
-    await click('[data-test-section-rail-entry="shelf"]');
-    assert
-      .dom('[data-test-section-rail-flyout]')
-      .doesNotExist('a mouse click after its hover closes it');
+      .dom(`${NOTES_TIP} [role="tooltip"]`)
+      .hasAttribute('data-open', 'true', 'tooltips come back once it closes');
   });
 
-  test('a press outside the rail closes a flyout the pointer switched to', async function (assert) {
+  test('a press on another entry switches flyouts, and a press outside the rail closes it', async function (assert) {
     let sections = new DashboardSections();
     let shelf: DashboardSection = {
       id: 'shelf',
@@ -216,21 +204,10 @@ module('Integration | section-rail', function (hooks) {
       },
     );
 
-    await triggerEvent(
-      '[data-test-section-rail-item="shelf"]',
-      'pointerenter',
-      {
-        pointerType: 'mouse',
-      },
-    );
-    await triggerEvent(
-      '[data-test-section-rail-item="notes"]',
-      'pointerenter',
-      {
-        pointerType: 'mouse',
-      },
-    );
+    await click('[data-test-section-rail-entry="shelf"]');
+    await click('[data-test-section-rail-entry="notes"]');
     assert.dom('[data-test-section-rail-flyout="notes"]').exists();
+    assert.dom('[data-test-section-rail-flyout="shelf"]').doesNotExist();
 
     await triggerEvent('[data-test-outside]', 'pointerdown');
     assert.dom('[data-test-section-rail-flyout]').doesNotExist();
@@ -262,11 +239,7 @@ module('Integration | section-rail', function (hooks) {
     };
     document.addEventListener('keydown', listener);
     try {
-      await triggerEvent(
-        '[data-test-section-rail-item="shelf"]',
-        'pointerenter',
-        { pointerType: 'mouse' },
-      );
+      await click('[data-test-section-rail-entry="shelf"]');
       await triggerKeyEvent(document.body, 'keydown', 'Escape');
       assert.dom('[data-test-section-rail-flyout]').doesNotExist();
       assert.strictEqual(heard, 0, 'the page never hears it');

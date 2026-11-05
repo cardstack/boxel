@@ -118,6 +118,32 @@ module('Pretui | components/tooltip', function (hooks) {
     assert.strictEqual(tip.dataset['open'], undefined);
   });
 
+  test('Tooltip stays closed while @disabled, and opens once it clears', async function (assert) {
+    class State {
+      @tracked disabled = true;
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Tooltip @content='Hint' @disabled={{state.disabled}}>
+          <button type='button' data-test-trigger>Go</button>
+        </Tooltip>
+      </template>,
+    );
+    let tip = q('[role="tooltip"]');
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
+    assert.strictEqual(tip.dataset['open'], undefined, 'hover leaves it closed');
+    assert.strictEqual(
+      q('[data-test-trigger]').getAttribute('aria-describedby'),
+      tip.id,
+      'still describes its trigger',
+    );
+
+    state.disabled = false;
+    await settled();
+    assert.strictEqual(tip.dataset['open'], 'true', 'the hover still under way opens it');
+  });
+
   test('Tooltip stays closed after a click once the pointer leaves', async function (assert) {
     await render(
       <template>

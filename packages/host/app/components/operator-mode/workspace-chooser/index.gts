@@ -38,9 +38,10 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
+import ManageCatalogs from '../dashboard-modals/manage-catalogs';
+
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
-import ManageCatalogs from './manage-catalogs';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 

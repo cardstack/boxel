@@ -41,6 +41,7 @@ import {
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
+import { pageTitle, withWayBack } from './trail.ts';
 
 import type {
   KeyValue,
@@ -442,12 +443,15 @@ class SlotPanel extends Component<{
   }
 
   // Signing a connection in again is made on the connect page, which keeps
-  // its approvals, as the key page's Reconnect does.
+  // its approvals, as the key page's Reconnect does. Its trail leads back
+  // here.
   private reconnect = () => {
     let view = this.reconnecting;
     if (view) {
       navigation.assign(
-        `${pageURL('connect')}#${new URLSearchParams({ reconnect: view.key.id })}`,
+        withWayBack(
+          `${pageURL('connect')}#${new URLSearchParams({ reconnect: view.key.id })}`,
+        ),
       );
     }
   };
@@ -543,7 +547,7 @@ class ReplaceKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Replace a key'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -558,7 +562,7 @@ class ReplaceKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         {{/if}}
       </DonePage>
     {{else if this.ready}}
-      <EditPage @heading='Replace a key' data-test-replace-key>
+      <EditPage @heading={{this.title}} data-test-replace-key>
         <:intro>The new key takes the old one’s place everywhere it is used. It
           is encrypted as soon as it is saved, and nothing can read it back.</:intro>
         <:default>
@@ -590,6 +594,8 @@ class ReplaceKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       }
     </style>
   </template>
+
+  private title = pageTitle('replace-key');
 
   private opened = openedFor();
   private page = trackedObject<{ state: State }>({
