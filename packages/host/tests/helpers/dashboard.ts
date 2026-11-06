@@ -4,12 +4,18 @@ import { getService } from '@universal-ember/test-support';
 
 import { TrackedObject } from 'tracked-built-ins';
 
+import type { RealmPermissions } from '@cardstack/runtime-common';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { setupMockMatrix } from './mock-matrix';
+import {
+  setupMockMatrix,
+  type Config as MockMatrixConfig,
+} from './mock-matrix';
 import { setupApplicationTest } from './setup';
 
 import {
+  type RealmContents,
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
   setupLocalIndexing,
@@ -51,22 +57,6 @@ export function markHosted(
   });
 }
 
-// Records window.open calls instead of opening windows, until restored.
-export function stubWindowOpen() {
-  let original = window.open;
-  let calls: Parameters<typeof window.open>[] = [];
-  window.open = ((...args: Parameters<typeof window.open>) => {
-    calls.push(args);
-    return null;
-  }) as typeof window.open;
-  return {
-    calls,
-    restore() {
-      window.open = original;
-    },
-  };
-}
-
 // An IconButton whose tip matches its label is named by the tip.
 export function nameFromTip(selector: string) {
   let id = find(selector)?.getAttribute('aria-labelledby') ?? '';
@@ -103,39 +93,73 @@ export function operatorModeState() {
   return getService('operator-mode-state-service') as OperatorModeStateService;
 }
 
-// Sets up the application, the mock Matrix server and Workspace A.
+export interface DashboardRealmFixture {
+  url: string;
+  name: string;
+  // The test user owns the realm unless this says otherwise.
+  permissions?: RealmPermissions;
+  // Files besides `realm.json`, which `name` fills.
+  contents?: RealmContents;
+}
+
+export interface DashboardTestOptions {
+  matrix?: MockMatrixConfig;
+  realms?: DashboardRealmFixture[];
+  authEndpoints?: boolean;
+  // Registers hooks that must run before the realms are set up.
+  beforeRealms?: (hooks: NestedHooks) => void;
+  onRealm?: (realm: DashboardRealm, url: string) => void;
+}
+
+// Sets up the application, the mock Matrix server and the realms each test
+// starts with. By default the test user, shown as Ada Lovelace, owns
+// Workspace A, and their stored dashboard state has Codex picked with two of
+// its setup steps copied; the state and agents tests assert on that state.
 export function setupDashboardTest(
   hooks: NestedHooks,
-  { onRealm }: { onRealm?: (realm: DashboardRealm) => void } = {},
+  {
+    matrix = {
+      loggedInAs: '@testuser:localhost',
+      displayName: 'Ada Lovelace',
+      activeRealms: [realmURL],
+      dashboardState: {
+        agent: 'codex',
+        agentSetup: { codex: 2 },
+      },
+    },
+    realms = [{ url: realmURL, name: 'Workspace A' }],
+    authEndpoints = true,
+    beforeRealms,
+    onRealm,
+  }: DashboardTestOptions = {},
 ) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupRealmCacheTeardown(hooks);
 
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    displayName: 'Ada Lovelace',
-    activeRealms: [realmURL],
-    dashboardState: {
-      agent: 'codex',
-      agentSetup: { codex: 2 },
-    },
-  });
+  let mockMatrixUtils = setupMockMatrix(hooks, matrix);
+
+  beforeRealms?.(hooks);
 
   hooks.beforeEach(async function () {
     setupUserSubscription();
-    setupAuthEndpoints();
-    let { realm } = await setupAcceptanceTestRealm({
-      realmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write', 'realm-owner'],
-      },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
-      },
-    });
-    onRealm?.(realm);
+    if (authEndpoints) {
+      setupAuthEndpoints();
+    }
+    for (let { url, name, permissions, contents } of realms) {
+      let { realm } = await setupAcceptanceTestRealm({
+        realmURL: url,
+        mockMatrixUtils,
+        permissions: permissions ?? {
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
+        },
+        contents: {
+          'realm.json': realmConfigCardJSON({ name }),
+          ...contents,
+        },
+      });
+      onRealm?.(realm, url);
+    }
   });
 
   return mockMatrixUtils;

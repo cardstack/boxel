@@ -19,26 +19,7 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-
-type OpenCall = { url: string; target?: string; features?: string };
-
-// Records each `window.open` and answers it with a stand-in window, or with
-// null, as a browser that blocks the popup does.
-function stubWindowOpen() {
-  let calls: OpenCall[] = [];
-  let popups: { opener: unknown }[] = [];
-  let state = { blocked: false };
-  window.open = ((url?: string | URL, target?: string, features?: string) => {
-    calls.push({ url: String(url), target, features });
-    if (state.blocked) {
-      return null;
-    }
-    let popup = { opener: window as unknown };
-    popups.push(popup);
-    return popup;
-  }) as typeof window.open;
-  return { calls, popups, state };
-}
+import { stubWindowOpen } from '../helpers/window-open';
 
 const OPERATION = 'forecast';
 const REASON = 'Weather Station needs your forecast service key';
@@ -123,7 +104,7 @@ module('Acceptance | open the secure window', function (hooks) {
   }
 
   test('a card opens the window to enter a key for its operation', async function (assert) {
-    let { calls, popups } = stubWindowOpen();
+    let { calls, popups } = stubWindowOpen(window);
     await visitWeatherStation();
     await click('[data-test-enter-key]');
     await waitFor('[data-test-status]:not(:empty)');
@@ -167,7 +148,7 @@ module('Acceptance | open the secure window', function (hooks) {
   });
 
   test('a card opens the window to share a key into a realm', async function (assert) {
-    let { calls } = stubWindowOpen();
+    let { calls } = stubWindowOpen(window);
     await visitWeatherStation();
     await click('[data-test-share-key]');
     await waitFor('[data-test-status]:not(:empty)');
@@ -186,7 +167,7 @@ module('Acceptance | open the secure window', function (hooks) {
   });
 
   test('a card’s Reconnect opens the window to replace the key its operation sends', async function (assert) {
-    let { calls, popups } = stubWindowOpen();
+    let { calls, popups } = stubWindowOpen(window);
     await visitWeatherStation();
     await click('[data-test-reconnect]');
     await waitFor('[data-test-status]:not(:empty)');
@@ -215,7 +196,7 @@ module('Acceptance | open the secure window', function (hooks) {
   });
 
   test('a blocked popup shows a button that opens the window', async function (assert) {
-    let stub = stubWindowOpen();
+    let stub = stubWindowOpen(window);
     stub.state.blocked = true;
     await visitWeatherStation();
     await click('[data-test-enter-key]');
@@ -246,7 +227,7 @@ module('Acceptance | open the secure window', function (hooks) {
   });
 
   test('the fallback can be dismissed without opening the window', async function (assert) {
-    let stub = stubWindowOpen();
+    let stub = stubWindowOpen(window);
     stub.state.blocked = true;
     await visitWeatherStation();
     await click('[data-test-enter-key]');
@@ -257,7 +238,7 @@ module('Acceptance | open the secure window', function (hooks) {
   });
 
   test('a key for an operation on a card type names the module, export and realm', async function (assert) {
-    let { calls } = stubWindowOpen();
+    let { calls } = stubWindowOpen(window);
     await visitWeatherStation();
     let { toolContext } = getService('tool-service');
     let result = await new OpenSecureWindowTool(toolContext).execute({
@@ -284,7 +265,7 @@ module('Acceptance | open the secure window', function (hooks) {
   });
 
   test('approving opens the window for the one operation a card is blocked on', async function (assert) {
-    let { calls } = stubWindowOpen();
+    let { calls } = stubWindowOpen(window);
     await visitWeatherStation();
     let { toolContext } = getService('tool-service');
     let tool = new OpenSecureWindowTool(toolContext);
@@ -319,7 +300,7 @@ module('Acceptance | open the secure window', function (hooks) {
   });
 
   test('what the window is opened for must name things it can read', async function (assert) {
-    let { calls } = stubWindowOpen();
+    let { calls } = stubWindowOpen(window);
     await visitWeatherStation();
     let { toolContext } = getService('tool-service');
     let tool = new OpenSecureWindowTool(toolContext);
