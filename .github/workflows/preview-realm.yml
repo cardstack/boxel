@@ -65,6 +65,13 @@ on:
           comment, and the check stays green.
         type: boolean
         default: true
+      unpublish:
+        description: |
+          Unpublish the preview and say so in the sticky comment, as a
+          closed PR does, while the PR stays open. For a caller whose PR no
+          longer has anything to preview.
+        type: boolean
+        default: false
       publish-timeout-ms:
         description: |
           Total readiness-poll budget for `boxel realm publish`. Covers
@@ -86,7 +93,7 @@ on:
 
 jobs:
   deploy:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && !inputs.unpublish
     name: Deploy preview realm
     runs-on: ubuntu-latest
     steps:
@@ -268,7 +275,7 @@ jobs:
             _${{ steps.stamp.outputs.now }} UTC_
 
   cleanup:
-    if: github.event.action == 'closed'
+    if: github.event.action == 'closed' || inputs.unpublish
     name: Cleanup preview realm
     runs-on: ubuntu-latest
     steps:
