@@ -1943,6 +1943,60 @@ module('Acceptance | dashboard', function (hooks) {
           );
         });
 
+        test("each star's tooltip opens into its tile or row", async function (assert) {
+          await visitDashboard(assert, 2);
+          let workspaces = [
+            ...findAll(RECENT_TILES),
+            ...findAll(ROWS),
+          ] as HTMLElement[];
+          assert.true(
+            workspaces.some(
+              (el) => el.getAttribute('data-test-workspace-variant') === 'tile',
+            ),
+            'tiles are shown',
+          );
+          assert.true(
+            workspaces.some(
+              (el) => el.getAttribute('data-test-workspace-variant') === 'row',
+            ),
+            'rows are shown',
+          );
+          for (let workspace of workspaces) {
+            let name = workspace.getAttribute('data-test-workspace');
+            let isRow =
+              workspace.getAttribute('data-test-workspace-variant') === 'row';
+            let star = workspace.querySelector<HTMLElement>(
+              '[data-test-workspace-favorite-btn]',
+            );
+            let wrap = star?.closest<HTMLElement>('[data-test-pretui-tooltip]');
+            let tip = wrap?.querySelector<HTMLElement>(
+              '[data-test-pretui-tooltip-bubble]',
+            );
+            assert.ok(tip, `${name}'s star has a tooltip`);
+            if (!star || !wrap || !tip) {
+              continue;
+            }
+            await triggerEvent(wrap, 'mouseenter');
+            assert.true(tip.matches(':popover-open'), `${name}'s tip is shown`);
+            // The tip is in the top layer, outside the test container's
+            // scaling, so it's measured against the star, not the workspace.
+            let starBox = star.getBoundingClientRect();
+            let tipBox = tip.getBoundingClientRect();
+            if (isRow) {
+              assert.true(
+                tipBox.right <= starBox.left,
+                `${name}'s tip opens left, into the row`,
+              );
+            } else {
+              assert.true(
+                tipBox.left >= starBox.right,
+                `${name}'s tip opens right, into the tile`,
+              );
+            }
+            await triggerEvent(wrap, 'mouseleave');
+          }
+        });
+
         test("a hosted row's globe opens the same site menu as a tile's chin", async function (assert) {
           await visitDashboard(assert, 2);
           let rowName = workspaceNames(ROWS).find(
