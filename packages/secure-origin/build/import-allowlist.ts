@@ -60,8 +60,8 @@ export const ALLOWED_PACKAGES = new Set([
   'lodash-es',
 
   // Packages the build reaches through the ones above, as ADR 019 §1.3
-  // names them. They arrive with boxel-ui's input and
-  // select, which the pages' fields and pickers render.
+  // names them. They arrive with Pret UI's select and the boxel-ui select it
+  // wraps, which the pages' pickers render.
   //
   // Embroider's run-time macros, which compiled addon code calls into, as it
   // calls the build's runtime helpers.

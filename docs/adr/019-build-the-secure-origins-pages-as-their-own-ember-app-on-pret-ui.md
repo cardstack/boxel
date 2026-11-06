@@ -100,7 +100,7 @@ lockfile pins, and the allowlist MAY name any of them:
   `lodash-es`, `pluralize` and `tracked-built-ins`.
 - The packages the build reaches through those: `@embroider/macros`,
   Embroider's run-time macros, which compiled addon code such as
-  `ember-basic-dropdown`'s calls into; `ember-truth-helpers` and
+  `ember-provide-consume-context`'s calls into; `ember-truth-helpers` and
   `ember-element-helper`, through `ember-basic-dropdown` and
   `ember-power-select`; and `ember-style-modifier`, through
   `ember-basic-dropdown`. `ember-style-modifier` sets style properties
