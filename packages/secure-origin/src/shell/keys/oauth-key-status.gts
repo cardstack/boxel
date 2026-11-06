@@ -11,11 +11,11 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { Alert } from '@cardstack/pretui/components/alert';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import KeyRound from '@cardstack/boxel-icons/key-round';
-import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
-import RefreshCw from '../../components/icons/refresh-cw.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
+import RefreshCw from '@cardstack/boxel-icons/refresh-cw';
+import { eq } from '@cardstack/pretui/helpers';
 
 import type { UserKey } from './context.ts';
 
@@ -44,8 +44,8 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
           again to keep using this account.</:default>
         <:action><Button
             class='action'
-            @kind='secondary'
-            @size='extra-small'
+            @variant='secondary'
+            @size='xs'
             aria-describedby='key-name-{{@key.id}}'
             data-test-key-reconnect
             {{on 'click' (fn @onReconnect @key)}}
@@ -109,7 +109,7 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
       color: var(--muted-foreground);
     }
     .action {
-      gap: var(--boxel-sp-5xs, 0.25rem);
+      --pretui-button-gap: var(--boxel-sp-5xs, 0.25rem);
     }
     .action-icon {
       width: 0.75rem;

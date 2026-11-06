@@ -7,7 +7,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
-import Button from './button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import DropdownArrowDown from './icons/dropdown-arrow-down.gts';
 import DropdownArrowUp from './icons/dropdown-arrow-up.gts';
 import Warning from './icons/warning.gts';
@@ -49,8 +49,8 @@ export default class ErrorDisplay extends Component<Signature> {
         <div class='error-actions'>
           <Button
             class='toggle-details-button'
-            @kind='text-only'
-            @size='extra-small'
+            @variant='ghost'
+            @size='xs'
             aria-expanded={{if this.state.showDetails 'true' 'false'}}
             data-test-toggle-details
             {{on 'click' this.toggleDetails}}
@@ -135,7 +135,7 @@ export default class ErrorDisplay extends Component<Signature> {
         padding: 0;
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+        --pretui-button-gap: var(--boxel-sp-xxs);
         font-weight: 400;
         border: none;
       }

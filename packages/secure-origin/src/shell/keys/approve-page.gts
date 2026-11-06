@@ -81,15 +81,15 @@ import {
   type BatchSlot,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { Checkbox } from '@cardstack/pretui/components/checkbox';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import Warning from '../../components/icons/warning.gts';
 import { Field } from '@cardstack/pretui/components/field';
-import Globe from '../../components/icons/globe.gts';
+import Globe from '@cardstack/boxel-icons/globe';
 import BoxelInput from '../../components/input.gts';
 import KeyRound from '@cardstack/boxel-icons/key-round';
-import { eq, gt } from '../../helpers/truth-helpers.ts';
+import { eq, gt } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
@@ -389,8 +389,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     <Button
                       class='add-key'
                       type='button'
-                      @kind='secondary'
-                      @size='small'
+                      @variant='secondary'
+                      @size='s'
                       data-test-approve-add-key
                       {{on 'click' this.addKey}}
                     >Add a new key</Button>
@@ -622,7 +622,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               <div class='confirm-buttons'>
                 {{#if @api.forCli}}
                   <Button
-                    @kind='secondary'
+                    @variant='secondary'
                     @disabled={{this.form.saving}}
                     data-test-keys-cancel
                     {{on 'click' @api.close}}
@@ -630,7 +630,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 {{/if}}
                 <Button
                   type='submit'
-                  @kind='primary'
+                  @variant='primary'
                   @disabled={{this.submitDisabled}}
                   @loading={{this.form.saving}}
                   data-test-approve-save

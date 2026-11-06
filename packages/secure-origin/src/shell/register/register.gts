@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
 import type { InputGroupValidationState } from '../../components/input-group.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 import {
   AwaitingEmail,
   CreatingAccount,

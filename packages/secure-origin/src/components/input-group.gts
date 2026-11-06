@@ -5,7 +5,7 @@ import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 
 import cn from '../helpers/cn.ts';
-import { and, bool, eq, or } from '../helpers/truth-helpers.ts';
+import { and, bool, eq, or } from '@cardstack/pretui/helpers';
 import FailureBordered from './icons/failure-bordered.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import type { IconComponent } from './icons/types.ts';

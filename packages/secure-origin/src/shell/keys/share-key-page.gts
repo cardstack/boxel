@@ -43,11 +43,11 @@ import {
   writableRealms,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { Field } from '@cardstack/pretui/components/field';
 import KeyRound from '@cardstack/boxel-icons/key-round';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import Tag from '../../components/icons/tag.gts';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import Tag from '@cardstack/boxel-icons/tag';
 import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
@@ -261,8 +261,8 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                     your key page first.</p>
                   <Button
                     type='button'
-                    @kind='secondary'
-                    @size='small'
+                    @variant='secondary'
+                    @size='s'
                     data-test-share-key-go-to-key
                     {{on 'click' this.goToKeys}}
                   >Go to your keys</Button>
@@ -279,14 +279,14 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
             {{#if this.fromKeyPage}}
               <Button
                 type='button'
-                @kind='secondary'
+                @variant='secondary'
                 data-test-share-key-cancel
                 {{on 'click' this.goToKeys}}
               >Cancel</Button>
             {{/if}}
             <Button
               type='submit'
-              @kind='primary'
+              @variant='primary'
               @disabled={{this.submitDisabled}}
               @loading={{this.form.saving}}
               data-test-share-key-save

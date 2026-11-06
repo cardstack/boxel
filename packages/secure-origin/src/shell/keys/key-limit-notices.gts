@@ -17,7 +17,7 @@ import type { TOC } from '@ember/component/template-only';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { StatusChip } from '@cardstack/pretui/components/status-chip';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import type { KeyLimitNotice } from '../../security/keys.ts';
 
 import { addressOf } from './workspace-dropdown.gts';
@@ -139,15 +139,15 @@ const KeyLimitNotices: TOC<Signature> = <template>
                 <div class='actions'>
                   {{#if notice.realm}}
                     <Button
-                      @kind='primary'
-                      @size='small'
+                      @variant='primary'
+                      @size='s'
                       data-test-key-limit-notice-usage
                       {{on 'click' (fn @onOpenShareUsage notice)}}
                     >See usage…</Button>
                   {{else if (if notice.key (@showsKeyUsage notice.key))}}
                     <Button
-                      @kind='primary'
-                      @size='small'
+                      @variant='primary'
+                      @size='s'
                       data-test-key-limit-notice-usage
                       {{on 'click' (fn @onOpenKeyUsage notice.key)}}
                     >See usage…</Button>
