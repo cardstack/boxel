@@ -99,6 +99,12 @@ export interface Run {
   /** nothing left to play: the run completed or was cancelled */
   isDone(): boolean;
   /**
+   * The run completed and every cue it has is an ambient loop, still going
+   * round. Such a run is done but not over: its loops play on until a pass
+   * replaces it.
+   */
+  isLooping(): boolean;
+  /**
    * Where each of this run's ambient loops is in its cycle. A replacement
    * run starts the same loop on the same sprite from there, so an edited
    * timeline retimes a loop rather than sending it back to the top.
@@ -716,6 +722,19 @@ export class ChoreoRun implements Run {
   }
   isDone(): boolean {
     return this.ended || this.cancelled;
+  }
+  isLooping(): boolean {
+    return (
+      this.ended &&
+      !this.cancelled &&
+      this.tracks.length > 0 &&
+      this.tracks.every(
+        (t) =>
+          t.cue.loop &&
+          t.loopAnimation !== undefined &&
+          t.loopAnimation.playState !== 'idle',
+      )
+    );
   }
   /**
    * A text delivery is still standing in for its sprite's text. The clock
