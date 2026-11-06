@@ -387,9 +387,12 @@ class UseKey extends Component<{
       title: card.displayName,
     }));
   }
+  // '' rather than undefined when no card is chosen, so the tiles stay
+  // controlled: RadioCard takes an undefined @value as uncontrolled and
+  // would keep a pick of its own.
   private get chosenCard() {
     let index = this.form.card ? this.form.cards.indexOf(this.form.card) : -1;
-    return index < 0 ? undefined : String(index);
+    return index < 0 ? '' : String(index);
   }
   private cardNameOf = (index: string) => this.form.cards[Number(index)]?.name;
   private selectCard = (index: string) => {

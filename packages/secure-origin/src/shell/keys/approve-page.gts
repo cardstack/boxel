@@ -1098,7 +1098,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private hostsOf = (destinations: string[]) =>
     destinations.map((d) => new URL(d).host).join(', ');
 
-  private chosenIn = (slot: string) => this.form.chosen[slot];
+  // '' rather than undefined when no key is chosen for the slot, so its tiles
+  // stay controlled: RadioCard takes an undefined @value as uncontrolled and
+  // would keep a pick of its own that the form doesn't hold.
+  private chosenIn = (slot: string) => this.form.chosen[slot] ?? '';
   private isTicked = (operation: BatchOperation) =>
     this.form.ticked.has(operationKey(operation));
 

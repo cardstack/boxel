@@ -83,7 +83,10 @@ export class RadioGroup extends Component<RadioGroupSignature> {
           {{#if option.description}}
             <span class='pretui-radio-text'>
               <span class='pretui-radio-label'>{{option.label}}</span>
-              <span class='pretui-radio-description'>{{option.description}}</span>
+              <span
+                class='pretui-radio-description'
+                data-test-pretui-radio-description
+              >{{option.description}}</span>
             </span>
           {{else}}
             {{option.label}}
@@ -141,7 +144,7 @@ export class RadioGroup extends Component<RadioGroupSignature> {
           box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
         }
         .pretui-radio:hover:not(:checked):not(:disabled) {
-          background: var(--pretui-control-hover, var(--hover, var(--boxel-100)));
+          background: var(--pretui-control-hover, var(--hover));
         }
         .pretui-radio:disabled {
           opacity: 0.45;
@@ -174,6 +177,9 @@ export class RadioGroup extends Component<RadioGroupSignature> {
         @media (forced-colors: active) {
           .pretui-radio {
             appearance: auto;
+          }
+          .pretui-radio:checked::before {
+            content: none;
           }
         }
       }

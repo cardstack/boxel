@@ -147,9 +147,9 @@ module('Pretui | components/radio-group', function (hooks) {
       { value: 'b', label: 'Never' },
     ];
     await render(<template><RadioGroup @options={{WITH_DESCRIPTION}} /></template>);
-    assert.dom('[data-test-pretui-radio-option="a"] .pretui-radio-description').hasText('Every time it runs');
+    assert.dom('[data-test-pretui-radio-option="a"] [data-test-pretui-radio-description]').hasText('Every time it runs');
     assert.dom('[data-test-pretui-radio-option="a"]').includesText('Always', 'the label is still the radio’s name');
-    assert.dom('[data-test-pretui-radio-option="b"] .pretui-radio-description').doesNotExist();
+    assert.dom('[data-test-pretui-radio-option="b"] [data-test-pretui-radio-description]').doesNotExist();
   });
 
   test('takes a name for its radios and a name for the group', async function (assert) {

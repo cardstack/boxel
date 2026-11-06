@@ -32,6 +32,10 @@ const cardsOf = (keys: UserKey[]) =>
   keys.map(({ id, name }) => ({ value: id, title: name }));
 const keyOf = (keys: UserKey[], id: string) =>
   keys.find((key) => key.id === id)!;
+// '' rather than undefined when no key is chosen, so the tiles stay
+// controlled: RadioCard takes an undefined @value as uncontrolled and would
+// keep a pick of its own.
+const controlled = (selected: string | undefined) => selected ?? '';
 
 const KeyPicker: TemplateOnlyComponent<Signature> = <template>
   <Field
@@ -51,7 +55,7 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
         <RadioCard
           @name='key'
           @options={{cardsOf @keys}}
-          @value={{@selected}}
+          @value={{controlled @selected}}
           @onValueChange={{@onSelect}}
           aria-labelledby={{labelId}}
           as |card|

@@ -143,7 +143,7 @@ export class Field extends Component<FieldSignature> {
       ...attributes
     >
       {{#if @label}}
-        <div class='pretui-fieldhead'>
+        <div class='pretui-fieldhead' data-test-pretui-field-head>
           {{#if @icon}}
             <@icon class='pretui-fieldicon' aria-hidden='true' />
           {{/if}}
@@ -168,7 +168,7 @@ export class Field extends Component<FieldSignature> {
           elements still gets two grid rows. Horizontal, it is the column
           beside the label. The row wrapper appears ONLY when an accessory
           does. }}
-      <div class='pretui-fieldbody'>
+      <div class='pretui-fieldbody' data-test-pretui-field-body>
         {{#if (has-block 'inlineStart')}}
           <div class='pretui-fieldrow'>
             <span class='pretui-fieldcue'>{{yield to='inlineStart'}}</span>
@@ -194,7 +194,11 @@ export class Field extends Component<FieldSignature> {
           {{yield this.controlId this.messageId this.yieldedLabelId}}
         {{/if}}
         {{#if this.showsMessageLine}}
-        <div class='pretui-fieldmsg' id={{this.messageId}}>
+        <div
+          class='pretui-fieldmsg'
+          id={{this.messageId}}
+          data-test-pretui-field-message
+        >
           {{! always rendered, so a status's first message is announced too;
               a live region added with its text can go unheard }}
           <span
@@ -249,6 +253,10 @@ export class Field extends Component<FieldSignature> {
           justify-items: stretch;
           align-self: center;
           min-inline-size: 0;
+        }
+        /* with no label, the control takes the whole row */
+        .pretui-fieldw[data-orientation='horizontal'] > .pretui-fieldbody:first-child {
+          grid-column: 1 / -1;
         }
         /* the label column: down to the first line of a control box beside
            it, which a caller beside text sets to 0 */

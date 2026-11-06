@@ -38,8 +38,8 @@ module('Pretui | components/field', function (hooks) {
       </template>,
     );
     assert.dom('[data-test-pretui-field]').hasAttribute('data-orientation', 'horizontal');
-    assert.dom('.pretui-fieldhead [data-test-mark]').hasAttribute('aria-hidden', 'true', 'the icon is decorative');
-    assert.dom('.pretui-fieldbody input').exists('the control is in the column beside the label');
+    assert.dom('[data-test-pretui-field-head] [data-test-mark]').hasAttribute('aria-hidden', 'true', 'the icon is decorative');
+    assert.dom('[data-test-pretui-field-body] input').exists('the control is in the column beside the label');
   });
 
   test('a group is named by the label, which then points at no control', async function (assert) {
@@ -74,7 +74,7 @@ module('Pretui | components/field', function (hooks) {
         </Field>
       </template>,
     );
-    assert.dom('.pretui-fieldmsg').doesNotExist('no line kept with nothing to say');
+    assert.dom('[data-test-pretui-field-message]').doesNotExist('no line kept with nothing to say');
 
     await render(
       <template>
@@ -83,6 +83,20 @@ module('Pretui | components/field', function (hooks) {
         </Field>
       </template>,
     );
-    assert.dom('.pretui-fieldmsg').includesText('Required', 'an error still shows');
+    assert.dom('[data-test-pretui-field-message]').includesText('Required', 'an error still shows');
+  });
+
+  test('horizontal with no label gives the control the whole row', async function (assert) {
+    await render(
+      <template>
+        <Field @orientation='horizontal' as |controlId|>
+          <span id={{controlId}}></span>
+        </Field>
+      </template>,
+    );
+    assert.dom('[data-test-pretui-field-head]').doesNotExist();
+    assert
+      .dom('[data-test-pretui-field] > [data-test-pretui-field-body]:first-child')
+      .exists('the body is the first column’s, which its rule spans across the row');
   });
 });

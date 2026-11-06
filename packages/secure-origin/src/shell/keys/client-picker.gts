@@ -48,8 +48,11 @@ const cardsOf = (clients: ConnectableClient[]) =>
   clients.map(({ label }, index) => ({ value: String(index), title: label }));
 const clientOf = (clients: ConnectableClient[], index: string) =>
   clients[Number(index)]!;
+// '' rather than undefined when no client is chosen, so the tiles stay
+// controlled: RadioCard takes an undefined @value as uncontrolled and would
+// keep a pick of its own.
 const selectedOf = (selected: number | undefined) =>
-  selected === undefined ? undefined : String(selected);
+  selected === undefined ? '' : String(selected);
 const chooseIndex = (onSelect: (index: number) => void, index: string) =>
   onSelect(Number(index));
 
