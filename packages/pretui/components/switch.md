@@ -36,13 +36,14 @@ Governing pattern: APG **Switch**. `role="switch"` and `aria-checked` `'true'`/`
 
 Keyboard: it is a native `<button>`, so **Space and Enter both activate**. APG requires Space and permits Enter, so this passes.
 
+Target size: the drawn track is 30×18 CSS px, and a transparent `::before` stretches the hit area to 30×24, the minimum of WCAG 2.5.8. The extra 3px above and below sits outside the button's box, so a control placed closer than that to a Switch shares those pixels with it.
+
 Gaps:
 
 - **No accessible name of its own.** There is no `@label`, and the only content is an empty thumb `<span>`. A Switch outside `Field`/`FormField` and without an explicit `aria-label` is announced as "switch, off" with no indication of what it controls. This is the most likely real-world failure, because a Switch is visually self-evident and developers do not notice the omission.
 - **`@disabled` uses the native attribute**, so a disabled switch leaves the tab order entirely and cannot be discovered by a keyboard user scanning a settings panel. `aria-disabled` would keep it readable.
 - **`opacity: 0.45`** for disabled will fail contrast in most themes.
 - **No focus-visible ring is defined.** The track uses `background` and the thumb uses `box-shadow`; nothing paints `:focus-visible`, so the control relies on the UA outline around a 30×18 pill. Likely WCAG 2.4.7 failure.
-- **Target size is 30×18 CSS px**, below the 24×24 minimum of WCAG 2.5.8 on the short axis. Wrapping it in a larger label row (which `Field` does) resolves it in practice, but a bare Switch in a table row does not.
 - The label, if a wrapper supplies one, must not change with state — "Notifications", not "Notifications on". That is an APG requirement and a caller obligation.
 
 ## Theming

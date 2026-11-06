@@ -2,9 +2,12 @@
 // derives the `data-boxel-theme-scope` value and `themeScopedCss` emits the
 // rules for it. They are the Pret UI counterparts of the same-named exports
 // of `@cardstack/boxel-ui/helpers` (ADR 009 §1.3) and keep their signatures
-// and their output, so a scope minted here matches one boxel-ui's
-// CardContainer mints for the same theme and the two stylesheets are
-// byte-identical duplicates rather than rivals.
+// and their output. That equality carries weight: base's field-component
+// mints a card's scope with boxel-ui's copy, so a ThemeFrame previewing the
+// card's own theme mints the same scope here, and each stylesheet matches
+// both elements. Byte-identical, the two are harmless duplicates; any
+// difference would let one copy restyle the other's element. The host's
+// theme-scoped-css-parity test fails when the copies disagree.
 import { type SafeString, htmlSafe } from '@ember/template';
 import { sanitizeHtml } from '@cardstack/runtime-common';
 

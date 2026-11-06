@@ -3,6 +3,13 @@ import { type SafeString, htmlSafe } from '@ember/template';
 import { extractCssVariables } from './extract-css-variables.ts';
 import { sanitizeHtml } from './sanitize-html.ts';
 
+// Pret UI keeps a copy of `themeScope` and `themeScopedCss` in
+// packages/pretui/theme-scoped-css.gts. Its ThemeFrame mints the same scope
+// for a theme as a card rendered with these helpers, so both stylesheets
+// match both elements and the two copies must emit identical output. The
+// host's theme-scoped-css-parity test fails when they disagree: a change here
+// lands in both.
+
 // Builds a card's theme stylesheet, scoped to `scope` (a per-card
 // `data-boxel-theme-scope` value). The theme's `:root` variables apply by
 // default; its `.dark` variables take over via a CSS style container query on

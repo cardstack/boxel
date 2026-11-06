@@ -78,6 +78,13 @@ export class Switch extends Component<SwitchSignature> {
             var(--pretui-ease-snap, ease);
           flex: none;
         }
+        /* Stretches the hit area to the 24px minimum target of WCAG 2.5.8
+           on the short axis, leaving the drawn 30x18 track as it is. */
+        .pretui-switch::before {
+          content: '';
+          position: absolute;
+          inset: calc((18px - 24px) / 2) 0;
+        }
         .pretui-switch:active:not(:disabled) {
           box-shadow: var(
             --pretui-shadow-inset,

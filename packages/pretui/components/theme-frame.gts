@@ -128,7 +128,7 @@ const ThemeControls: TemplateOnlyComponent<ThemeControlsSignature> = <template>
       .pretui-theme-mode {
         display: inline-flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-2xs);
         color: var(--muted-foreground);
       }
       .pretui-theme-mode-icon {
@@ -215,11 +215,13 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
   get themeCss() {
     return this.activeTheme?.cssVariables ?? undefined;
   }
-  // The scope helper the host's CardContainer also uses: theme id plus a
-  // content hash of the CSS. The hash matters because the emitted rules are
-  // page-global — two cached renders sharing a scope but carrying different
-  // theme CSS would restyle each other. A hand-rolled `${id}-frame` string
-  // could not tell two versions of one theme apart.
+  // Theme id plus a content hash of the CSS, from Pret UI's copy of the scope
+  // helper. It stays equal to boxel-ui's copy, which mints the enclosing
+  // card's scope (theme-scoped-css.gts says why that matters). The hash
+  // matters because the emitted rules are page-global — two cached renders
+  // sharing a scope but carrying different theme CSS would restyle each
+  // other. A hand-rolled `${id}-frame` string could not tell two versions of
+  // one theme apart.
   get themeScopeId() {
     return themeScope(this.activeThemeId, this.themeCss) ?? guidFor(this);
   }
