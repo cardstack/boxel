@@ -4464,6 +4464,16 @@ function applySearchIntent(
       if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
         continue;
       }
+      // A PassageField list is searched passage by passage, through its own
+      // index (`matches … within`), so its words stay out of the card's
+      // vector: a transcript would otherwise outweigh everything else and
+      // match every query.
+      if (
+        field.fieldType === 'containsMany' &&
+        (field.card as unknown as { isPassageField?: boolean }).isPassageField
+      ) {
+        continue;
+      }
       let value = doc[name];
       if (value == null) {
         continue;
