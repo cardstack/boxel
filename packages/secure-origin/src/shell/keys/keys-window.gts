@@ -1,7 +1,9 @@
 // The secure window's key pages, around whichever one is open: a bar with the
 // Boxel logo, what the window is for and a Close button, and the page under
 // it while the window has a session of its own, beneath the trail of key
-// pages the window came through to reach it (`breadcrumbs.gts`).
+// pages the window came through to reach it (`trail.ts`): each page above
+// this one is a link back to it as it was opened, and this page is last,
+// unlinked. A page reached from none has no trail.
 //
 // The key pages never sign in, as they never sign out: the window's session
 // is the one signing in to Boxel on this origin leaves here. Without one, or
@@ -28,6 +30,7 @@ import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
+import { Breadcrumb } from '@cardstack/pretui/components/breadcrumb';
 
 import {
   liveSession,
@@ -45,8 +48,8 @@ import { navigation } from '../navigation.js';
 import { pageAwaitsData } from '../telemetry.ts';
 import type { PageVisit } from '../../telemetry/instrument.ts';
 
-import Breadcrumbs from './breadcrumbs.gts';
 import EditPage from './edit-page.gts';
+import { goBackTo, trail, type Crumb } from './trail.ts';
 
 export type Config = ReturnType<typeof readConfig>;
 
@@ -106,7 +109,15 @@ export default class KeysWindow extends Component<Signature> {
           >Close</span></Button>
       </header>
       {{#if (this.is 'signed-in')}}
-        <Breadcrumbs />
+        {{#if this.hasTrail}}
+          <Breadcrumb
+            class='trail'
+            data-theme='dark'
+            @items={{this.crumbs}}
+            @onSelect={{this.goBack}}
+            data-test-breadcrumbs
+          />
+        {{/if}}
       {{/if}}
       <div class='body' data-test-keys-panel>
         {{#if (this.is 'checking')}}
@@ -178,6 +189,11 @@ export default class KeysWindow extends Component<Signature> {
         --boxel-button-text-color: var(--boxel-light);
         gap: var(--boxel-sp-4xs);
       }
+      /* The trail sits on the purple, so it takes the dark theme's inks, as
+         AuthContainer does on the same background. */
+      .trail {
+        padding: 0 var(--boxel-sp) var(--boxel-sp-xs);
+      }
       .close-icon {
         --icon-color: var(--boxel-light);
         width: 0.625rem;
@@ -221,6 +237,8 @@ export default class KeysWindow extends Component<Signature> {
   private visit = pageAwaitsData();
   private stopListening: (() => void) | undefined;
   private signedInAs: string | undefined;
+  // Read from the address once, when the window first shows the trail.
+  private trailCrumbs: Crumb[] | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -235,6 +253,22 @@ export default class KeysWindow extends Component<Signature> {
   }
 
   private is = (state: State) => this.page.state === state;
+
+  private get crumbs(): Crumb[] {
+    return (this.trailCrumbs ??= trail());
+  }
+
+  private get hasTrail() {
+    return this.crumbs.length > 1;
+  }
+
+  // A crumb goes where `goBackTo` sends it, back through the browser's
+  // history or by loading its address in this page's place, never by
+  // following its link, which would add a page to the history.
+  private goBack = (crumb: Crumb, event: MouseEvent) => {
+    event.preventDefault();
+    goBackTo(crumb, this.crumbs);
+  };
 
   private get api(): KeysWindowAPI {
     return {

@@ -1,5 +1,5 @@
 // The trail of key pages the window has come through to reach this one, drawn
-// as breadcrumbs above the page (`breadcrumbs.gts`), so a user who moves on
+// as breadcrumbs above the page (`keys-window.gts`), so a user who moves on
 // from the page the window was opened on can go back to it, or to any page
 // between, as it was.
 //
@@ -32,7 +32,7 @@ export interface Crumb {
   // The page's path beneath the shell's address, and its fragment.
   address: string;
   // The address to load.
-  url: string;
+  href: string;
 }
 
 const BACK = 'back';
@@ -180,7 +180,7 @@ export function trail(): Crumb[] {
     crumbs.unshift({
       label: labelOf(address),
       address,
-      url: `${shellPath()}${address}`,
+      href: `${shellPath()}${address}`,
     });
     address = parentOf(address);
   }
@@ -200,8 +200,8 @@ export function goBackTo(crumb: Crumb, crumbs: Crumb[]) {
     crumb.address === loaded &&
     split(loaded).page !== currentPage()
   ) {
-    navigation.back(crumb.url);
+    navigation.back(crumb.href);
   } else {
-    navigation.replace(crumb.url);
+    navigation.replace(crumb.href);
   }
 }
