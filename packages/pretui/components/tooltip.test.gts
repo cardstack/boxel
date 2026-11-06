@@ -238,4 +238,38 @@ module('Pretui | components/tooltip', function (hooks) {
     await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseleave');
     assert.false(tip.matches(':popover-open'), 'out of the top layer again');
   });
+
+  test('Tooltip stays centered on its trigger when its content changes while shown', async function (assert) {
+    class State {
+      @tracked content = 'Copy';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <div data-test-stage>
+          <Tooltip @content={{state.content}} @side='bottom'>
+            <button type='button'>Go</button>
+          </Tooltip>
+        </div>
+      </template>,
+    );
+    // Room on both sides, so the viewport clamp never moves the bubble.
+    Object.assign(q('[data-test-stage]').style, { padding: '2rem 24rem' });
+    let tip = q('[role="tooltip"]');
+    // The placement rules the inert scoped style would apply over the popover UA styles.
+    Object.assign(tip.style, { inset: 'auto', margin: '0' });
+    let wrap = q('[data-test-pretui-tooltip]');
+    await triggerEvent(wrap, 'mouseenter');
+
+    state.content = 'Copied the link to this workspace';
+    await settled();
+    // A ResizeObserver reports after the next frame's animation callbacks.
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    let trigger = wrap.getBoundingClientRect();
+    let bubble = tip.getBoundingClientRect();
+    assert.ok(
+      Math.abs(bubble.left + bubble.width / 2 - (trigger.left + trigger.width / 2)) < 1,
+      'the longer tip is centered under the trigger',
+    );
+  });
 });

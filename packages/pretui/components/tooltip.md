@@ -13,9 +13,9 @@ A short label that appears on hover or keyboard focus, positioned against the el
 
 That is the whole API, and the smallness is the point. Two decisions follow from it.
 
-**The bubble is a manual popover.** Hidden, it is `display: none`: it takes no space, so a tooltip that would open past a scroll container's edge never makes that container scroll. Shown, it sits in the top layer, so no `overflow: hidden` ancestor clips it and no z-index competes with it. Nothing runs until the tooltip opens; the reveal is a 120ms opacity fade, with `@starting-style` on the way in and `allow-discrete` on `display` and `overlay` on the way out. There is no show/hide delay, so tooltips flash as the pointer crosses a toolbar.
+**The bubble is a manual popover.** Hidden, it is `display: none`: it takes no space, so a tooltip that would open past a scroll container's edge never makes that container scroll. Shown, it sits in the top layer, so no `overflow: hidden` ancestor clips it and it paints over every z-index, the Toaster included. Nothing runs until the tooltip opens; the reveal is a 120ms opacity fade, with `@starting-style` on the way in and `allow-discrete` on `display` and `overlay` on the way out. There is no show/hide delay, so tooltips flash as the pointer crosses a toolbar.
 
-**Positioning is measured against the wrapper on open**, with the same `positionPopup` math the kit's `anchorTo` uses, and re-measured on scroll and resize while open. `@side` is a preference: a tooltip without room on its side flips to the opposite one, and slides along its axis to stay on screen.
+**Positioning is measured against the wrapper on open**, with the same `positionPopup` math the kit's `anchorTo` uses, and re-measured while open whenever the page scrolls, the window resizes, or the bubble or its trigger changes size, as when `@content` changes. `@side` is a preference: a tooltip without room on its side flips to the opposite one, and slides along its axis to stay on screen.
 
 The tooltip is **always dark**, in both light and dark modes — the kit calls this "the lining". It is a deliberate constant so the affordance reads identically everywhere.
 
