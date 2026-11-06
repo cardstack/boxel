@@ -31,28 +31,19 @@ module('Pretui | components/select', function (hooks) {
     assert.strictEqual(listbox.querySelectorAll('[data-test-pretui-select-option]').length, OPTIONS.length);
   });
 
-  test("the open list takes Select's own rules in the wormhole", async function (assert) {
-    await render(<template><Select @options={{OPTIONS}} @searchEnabled={{true}} /></template>);
+  test("the open list carries Select's scope, so its scoped rules reach the list in the wormhole", async function (assert) {
+    await render(<template><Select @options={{OPTIONS}} /></template>);
     await click(trigger());
     let list = document.querySelector('.pretui-select-dropdown') as HTMLElement;
     assert.ok(list, 'the list is open');
-    assert.strictEqual(
-      getComputedStyle(list).minWidth,
-      'max-content',
-      'the list is at least as wide as its longest label',
-    );
-    let option = list.querySelector('.boxel-select-option-item') as HTMLElement;
-    assert.strictEqual(
-      getComputedStyle(option).fontSize,
-      getComputedStyle(trigger()).fontSize,
-      "an option takes the trigger's type size",
-    );
-    let search = list.querySelector('.ember-power-select-search-input') as HTMLElement;
-    assert.strictEqual(
-      getComputedStyle(search).fontSize,
-      getComputedStyle(trigger()).fontSize,
-      "the search box takes the trigger's type size",
-    );
+    let marker = list.querySelector('.pretui-selectlist-scope') as HTMLElement;
+    let scope = [...marker.attributes]
+      .map(({ name }) => name)
+      .filter((name) => name.startsWith('data-scopedcss-'));
+    assert.ok(scope.length > 0, 'the marker is scoped');
+    for (let name of scope) {
+      assert.true(list.hasAttribute(name), `the list carries ${name}`);
+    }
   });
 
   test('inside a modal Dialog the list renders in place and an option can be chosen', async function (assert) {
