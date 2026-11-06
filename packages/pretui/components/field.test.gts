@@ -59,7 +59,7 @@ module('Pretui | components/field', function (hooks) {
     await render(
       <template>
         <Field as |_controlId _messageId labelId|>
-          <input aria-labelledby={{labelId}} aria-label='Password' data-test-control />
+          <span aria-labelledby={{labelId}} data-test-control></span>
         </Field>
       </template>,
     );
