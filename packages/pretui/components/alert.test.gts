@@ -8,6 +8,7 @@ import { render } from '@ember/test-helpers';
 import { htmlSafe } from '@ember/template';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Alert } from './alert';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 const CALLER_STYLE = htmlSafe('margin: 2px');
 
@@ -129,5 +130,21 @@ module('Pretui | components/alert', function (hooks) {
       'var(--success-foreground)',
     );
     assert.strictEqual(el.style.margin, '2px', "the caller's own declarations are kept");
+  });
+
+  test('the tone is set through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <Alert @tone='success' @title='Saved' />
+          <Alert @tone='danger' @title='Payment failed' />
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.deepEqual(
+      alerts().map((el) => el.style.getPropertyValue('--pretui-alert-hue')),
+      ['var(--success)', 'var(--destructive)'],
+    );
   });
 });

@@ -34,11 +34,6 @@ const AuthButton: TemplateOnlyComponent<Signature> = <template>
     .auth-btn {
       width: 100%;
     }
-    .auth-btn :deep(.boxel-loading-indicator) {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
   </style>
 </template>;
 

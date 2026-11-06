@@ -2,9 +2,13 @@
 // the spoken run that keeps the child's own name.
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { render, settled } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Badge } from './badge';
+import type { PretuiToneArg } from '../pretui-primitives';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function mark(sel = ''): HTMLElement | null {
   return document.querySelector(`${sel} [data-test-pretui-badge-mark]`);
@@ -91,5 +95,40 @@ module('Pretui | components/badge', function (hooks) {
     await render(<template><Badge @count={{0}} @label='unread'><button type='button'>Messages</button></Badge></template>);
     let btn = document.querySelector('[data-test-pretui-badge] button') as HTMLElement;
     assert.notOk(btn.hasAttribute('aria-describedby'));
+  });
+
+  test('the tone is set through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <Badge @count={{3}} @tone='info'><button type='button'>Inbox</button></Badge>
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    let badge = document.querySelector<HTMLElement>('[data-test-pretui-badge]')!;
+    assert.strictEqual(badge.style.getPropertyValue('--pretui-mark-hue'), 'var(--pretui-info)');
+  });
+
+  test('a new @tone reaches the element, and a caller\'s hue wins only over the default tone', async function (assert) {
+    class State {
+      @tracked tone: PretuiToneArg | undefined = 'info';
+    }
+    let state = new State();
+    let callerHue = htmlSafe('--pretui-mark-hue: var(--chart-1)');
+    await render(
+      <template>
+        <Badge @count={{2}} @tone={{state.tone}} style={{callerHue}}><span>Inbox</span></Badge>
+      </template>,
+    );
+    let badge = document.querySelector<HTMLElement>('[data-test-pretui-badge]')!;
+    let hue = () => badge.style.getPropertyValue('--pretui-mark-hue');
+    assert.strictEqual(hue(), 'var(--pretui-info)', 'a passed tone wins over the caller\'s hue');
+    state.tone = 'success';
+    await settled();
+    assert.strictEqual(hue(), 'var(--success)', 'the new tone');
+    state.tone = undefined;
+    await settled();
+    assert.strictEqual(hue(), 'var(--chart-1)', 'with no tone, the caller\'s hue and not the default');
   });
 });
