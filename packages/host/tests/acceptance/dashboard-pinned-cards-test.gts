@@ -14,7 +14,6 @@ import { rri } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -27,6 +26,7 @@ import {
   realmURL,
   setupDashboardTest,
   type DashboardRealm,
+  operatorModeState,
 } from '../helpers/dashboard';
 
 module('Acceptance | dashboard pinned cards', function (hooks) {
@@ -262,9 +262,7 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
 
   // The ids in the stack a pin opens, from the bottom.
   function openedStack() {
-    let { stacks } = (
-      getService('operator-mode-state-service') as OperatorModeStateService
-    ).state;
+    let { stacks } = operatorModeState().state;
     return stacks.map((stack) => stack.map((item) => item.id));
   }
 
