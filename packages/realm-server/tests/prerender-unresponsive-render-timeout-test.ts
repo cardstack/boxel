@@ -175,7 +175,10 @@ module(basename(import.meta.filename), function (hooks) {
     savedEnv = {};
   });
 
-  function setup(wedgeOn: 'everything' | 'render') {
+  function setup(
+    wedgeOn: 'everything' | 'render',
+    opts: { fileAdmission?: boolean } = {},
+  ) {
     let { manager, tabs } = makeBrowserStub(wedgeOn);
     let pool = new PagePool({
       maxPages: 2,
@@ -183,7 +186,7 @@ module(basename(import.meta.filename), function (hooks) {
       browserManager: manager as any,
       boxelHostURL: 'http://localhost:4200',
       standbyTimeoutMs: 500,
-      disableFileAdmission: true,
+      disableFileAdmission: !opts.fileAdmission,
       tabHealthProbeMs: 50,
     });
     pools.push(pool);
@@ -323,6 +326,59 @@ module(basename(import.meta.filename), function (hooks) {
       'the diagnostics record that the tab was answering',
     );
     assert.deepEqual(reports, [], 'nothing was reported');
+  });
+
+  // A fixed pool of 4 tabs with 3 per affinity, which admits 2 file renders of
+  // the affinity at a time and leaves tabs to spare once the timed-out tab is
+  // gone. Returns whether a second file render of the affinity was admitted
+  // while a first one held its tab.
+  async function secondFileRenderAdmitted(pool: PagePool) {
+    let first = await pool.getPage('user:wedged-user', 'file');
+    let secondAdmitted = false;
+    let second = pool.getPage('user:wedged-user', 'file').then((lease) => {
+      secondAdmitted = true;
+      return lease;
+    });
+    // Long enough for a render with a free admission slot to get its tab.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    let admittedWhileFirstRan = secondAdmitted;
+    first.release();
+    (await second).release();
+    return admittedWhileFirstRan;
+  }
+
+  function useAdmissionPool() {
+    process.env.PRERENDER_PAGE_POOL_MIN = '4';
+    process.env.PRERENDER_PAGE_POOL_MAX = '4';
+    process.env.PRERENDER_AFFINITY_TAB_MAX = '3';
+  }
+
+  test("a visit that times out on a tab that still answers lowers its realm's file admission", async function (assert) {
+    useAdmissionPool();
+    let { pool, runner } = setup('render', { fileAdmission: true });
+    await pool.warmStandbys();
+
+    let { pool: poolInfo } = await renderVisitWithStash(runner);
+    assert.true(poolInfo.timedOut, 'the visit timed out');
+
+    assert.false(
+      await secondFileRenderAdmitted(pool),
+      'a second render of the affinity waits while the first runs',
+    );
+  });
+
+  test("a visit that times out on a tab that stopped answering leaves its realm's file admission alone", async function (assert) {
+    useAdmissionPool();
+    let { pool, runner } = setup('everything', { fileAdmission: true });
+    await pool.warmStandbys();
+
+    let { pool: poolInfo } = await renderVisitWithStash(runner);
+    assert.true(poolInfo.timedOut, 'the visit timed out');
+
+    assert.true(
+      await secondFileRenderAdmitted(pool),
+      'a second render of the affinity runs beside the first',
+    );
   });
 
   module('UnresponsiveTabTracker', function () {
