@@ -9,7 +9,7 @@
 // is, whose chosen fill then shows through.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import KeyRound from '../../components/icons/key-round.gts';
+import User from '@cardstack/boxel-icons/user';
 import cn from '../../helpers/cn.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
@@ -48,7 +48,7 @@ interface Signature {
 
 const KeyTile: TemplateOnlyComponent<Signature> = <template>
   <div class={{cn 'key-tile' unframed=(eq @framed false)}} ...attributes>
-    <span class='key-icon' aria-hidden='true'><KeyRound /></span>
+    <span class='key-icon' aria-hidden='true'><User /></span>
     <div class='key-text'>
       <div
         id='key-name-{{@key.id}}'

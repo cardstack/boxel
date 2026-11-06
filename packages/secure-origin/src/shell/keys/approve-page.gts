@@ -18,11 +18,12 @@
 // in for a host. Unticking an operation leaves it unapproved.
 //
 // A key of the user's own and a key they share with the workspace are never
-// drawn alike. Each slot's row is labelled and iconed by whom its key serves,
-// and says so (`KeyAudience`): the user's own key serves only them, and
-// everyone else who uses the card chooses their own; a shared key serves
-// everyone who uses the card in the workspace. The intro and the done page
-// name the same.
+// drawn alike. Each slot is a tinted section of its own (`KeyAudience`),
+// headed by whom its key serves: the user alone (everyone else who uses the
+// card chooses their own), or everyone who uses the card in the workspace,
+// as "When calls run" and the share's key decide. Each tile carries a key
+// icon for the user's own key, a group icon for a share. The intro and the
+// done page name the same.
 //
 // The user chooses, once for the batch, where the approved requests may run:
 // in the card's scheduled pipelines and also when a card is opened, in the
@@ -87,7 +88,6 @@ import Warning from '../../components/icons/warning.gts';
 import { Field } from '@cardstack/pretui/components/field';
 import Globe from '../../components/icons/globe.gts';
 import BoxelInput from '../../components/input.gts';
-import KeyRound from '../../components/icons/key-round.gts';
 import User from '@cardstack/boxel-icons/user';
 import Users from '@cardstack/boxel-icons/users';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
@@ -163,8 +163,7 @@ interface ApproveArgs {
   review: boolean;
 }
 
-// A slot's row is labelled, and drawn with an icon, by whom the key chosen
-// for it serves: the user alone, or everyone in the workspace.
+// What kind of key a slot's section is for.
 function slotLabel(choice: SlotChoice): string {
   if (choice.kind === 'userKey') {
     return 'Your own key';
@@ -172,9 +171,6 @@ function slotLabel(choice: SlotChoice): string {
   let [, name] = choice.slot.split(':');
   return name ? `Shared key: ${name}` : 'Shared key';
 }
-
-const slotIcon = (choice: SlotChoice) =>
-  choice.kind === 'userKey' ? User : Users;
 
 // "A", "A and B", "A, B and C".
 const listPhrase = (items: string[]) =>
@@ -319,60 +315,68 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               @onSelect={{this.chooseUse}}
             />
             {{#each this.choices as |choice|}}
-              <Field
-                @reserveMessage={{false}}
-                @orientation='horizontal'
-                @labelTag='span'
+              <KeyAudience
+                @kind={{choice.kind}}
+                @use={{this.form.use}}
+                @anonymous={{this.servesVisitors choice}}
+                @workspace={{this.batch.realm.name}}
                 @label={{slotLabel choice}}
-                @icon={{slotIcon choice}}
+                @headingId='approve-slot-{{choice.slot}}'
                 data-test-approve-slot={{choice.slot}}
                 data-test-approve-slot-kind={{choice.kind}}
-                as |_controlId _messageId labelId|
               >
                 <div class='picker'>
-                  <KeyAudience
-                    @kind={{choice.kind}}
-                    @use={{this.form.use}}
-                    @anonymous={{this.servesVisitors choice}}
-                  />
                   {{#if choice.options.length}}
                     <RadioCard
                       @name='slot-{{choice.slot}}'
                       @options={{cardsOf choice.options}}
                       @value={{this.chosenIn choice.slot}}
                       @onValueChange={{fn this.choose choice.slot}}
-                      aria-labelledby={{labelId}}
-                      as |card|
+                      aria-labelledby='approve-slot-{{choice.slot}}'
                     >
-                      {{#let (optionOf choice.options card.value) as |option|}}
-                        <span
-                          class='option'
-                          data-test-approve-key={{option.name}}
-                        >
-                          <span class='option-name'>{{option.name}}</span>
-                          {{#if option.rejected}}
-                            <span
-                              class='option-detail'
-                              data-test-approve-key-rejected
-                            >The service rejected this key. Replace it on your
-                              key page first.</span>
-                          {{/if}}
-                          {{#if option.detail}}
-                            <span
-                              class='option-detail'
-                              data-test-approve-share-key
-                            >Shares your key
-                              <strong>{{option.detail}}</strong></span>
-                          {{/if}}
-                          {{#if (gt option.covers.length 0)}}
-                            <span
-                              class='option-detail'
-                              data-test-approve-key-covers
-                            >Already allowed for
-                              {{this.hostsOf option.covers}}</span>
+                      <:media>
+                        <span class='option-media' data-kind={{choice.kind}}>
+                          {{#if (eq choice.kind 'apiKey')}}
+                            <Users class='option-icon' />
+                          {{else}}
+                            <User class='option-icon' />
                           {{/if}}
                         </span>
-                      {{/let}}
+                      </:media>
+                      <:default as |card|>
+                        {{#let
+                          (optionOf choice.options card.value)
+                          as |option|
+                        }}
+                          <span
+                            class='option'
+                            data-test-approve-key={{option.name}}
+                          >
+                            <span class='option-name'>{{option.name}}</span>
+                            {{#if option.rejected}}
+                              <span
+                                class='option-detail'
+                                data-test-approve-key-rejected
+                              >The service rejected this key. Replace it on your
+                                key page first.</span>
+                            {{/if}}
+                            {{#if option.detail}}
+                              <span
+                                class='option-detail'
+                                data-test-approve-share-key
+                              >Shares your key
+                                <strong>{{option.detail}}</strong></span>
+                            {{/if}}
+                            {{#if (gt option.covers.length 0)}}
+                              <span
+                                class='option-detail'
+                                data-test-approve-key-covers
+                              >Already allowed for
+                                {{this.hostsOf option.covers}}</span>
+                            {{/if}}
+                          </span>
+                        {{/let}}
+                      </:default>
                     </RadioCard>
                   {{else}}
                     <p class='empty' data-test-approve-no-keys>
@@ -397,7 +401,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     >Add a new key</Button>
                   {{/if}}
                 </div>
-              </Field>
+              </KeyAudience>
             {{/each}}
 
             {{#each this.batch.groups as |group|}}
@@ -561,7 +565,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   @orientation='horizontal'
                   @labelTag='span'
                   @label='Daily budget for {{share.label}}'
-                  @icon={{KeyRound}}
+                  @icon={{Users}}
                   data-test-approve-budget={{share.label}}
                   as |_controlId _messageId labelId|
                 >
@@ -665,6 +669,27 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .option-name {
         font-weight: 600;
+      }
+      .option-media {
+        display: grid;
+        place-items: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: var(--boxel-border-radius-sm);
+        background-color: var(--muted);
+        color: var(--foreground);
+      }
+      .option-media[data-kind='apiKey'] {
+        background-color: color-mix(
+          in oklch,
+          var(--pretui-info, var(--boxel-blue)) 18%,
+          var(--card)
+        );
+        color: var(--pretui-info-ink, var(--boxel-blue));
+      }
+      .option-icon {
+        width: 1.125rem;
+        height: 1.125rem;
       }
       .option-detail strong {
         font-weight: 600;

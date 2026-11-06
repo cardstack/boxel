@@ -28,8 +28,8 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import Button from '../../components/button.gts';
 import Globe from '../../components/icons/globe.gts';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import Users from '../../components/icons/users.gts';
+import Users from '@cardstack/boxel-icons/users';
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 import { anonymousUseSummary } from './anonymous-use-fields.gts';
@@ -105,7 +105,7 @@ export default class KeyUse extends Component<Signature> {
         {{/if}}
       </div>
       <div class='use-row' data-test-key-shared-into>
-        <LayoutGrid class='use-icon' aria-hidden='true' />
+        <Users class='use-icon' aria-hidden='true' />
         {{#if @key.sharedInto.length}}
           <div class='shared'>
             <p
@@ -216,7 +216,7 @@ export default class KeyUse extends Component<Signature> {
       </div>
       {{#if @onChangeAnonymousUse}}
         <div class='use-row' data-test-key-anonymous-use>
-          <Users class='use-icon' aria-hidden='true' />
+          <HatGlasses class='use-icon' aria-hidden='true' />
           <div class='anonymous'>
             <p class='use-text' data-test-key-anonymous-use-summary>
               {{anonymousUseSummary @key}}

@@ -9,7 +9,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
-import KeyRound from '../../components/icons/key-round.gts';
+import User from '@cardstack/boxel-icons/user';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 
 import { gt } from '../../helpers/truth-helpers.ts';
@@ -43,7 +43,7 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
     @orientation='horizontal'
     @labelTag='span'
     @label='Key'
-    @icon={{KeyRound}}
+    @icon={{User}}
     data-test-key-picker
     as |_controlId _messageId labelId|
   >

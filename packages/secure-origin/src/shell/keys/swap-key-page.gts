@@ -24,7 +24,7 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
 import Tag from '../../components/icons/tag.gts';
-import Users from '../../components/icons/users.gts';
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 import { pageTitle, withWayBack } from './trail.ts';
@@ -40,6 +40,7 @@ import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import { servesVisitors } from './anonymous-use-fields.gts';
+import KeyAudience from './key-audience.gts';
 import KeyPicker from './key-picker.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
@@ -104,35 +105,45 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @context={{this.choosing.context}}
               @reason={{this.opened.reason}}
             />
-            <Field
-              @reserveMessage={{false}}
-              @orientation='horizontal'
-              @labelTag='span'
+            <KeyAudience
+              @kind='apiKey'
               @label='Shared key'
-              @icon={{Tag}}
-              data-test-swap-share
+              @workspace={{this.choosing.context.realm.name}}
+              @anonymous={{this.keyAllowsAnonymous}}
+              @line='The key you choose takes this share’s place for everyone who uses it in the workspace, and their calls count against the share’s limits.'
+              @headingId='swap-key-audience'
+              data-test-swap-key-audience
             >
-              <div class='share'>
-                <div class='share-label' data-test-swap-share-label>
-                  {{this.choosing.share.label}}
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
+                @label='Shared key'
+                @icon={{Tag}}
+                data-test-swap-share
+              >
+                <div class='share'>
+                  <div class='share-label' data-test-swap-share-label>
+                    {{this.choosing.share.label}}
+                  </div>
+                  <div class='share-state'>Suspended.
+                    {{this.suspendedBecause}}</div>
                 </div>
-                <div class='share-state'>Suspended.
-                  {{this.suspendedBecause}}</div>
-              </div>
-            </Field>
-            <KeyPicker
-              @keys={{this.form.keys}}
-              @selected={{this.form.selected}}
-              @onSelect={{this.select}}
-              @onGoToKeys={{this.goToKeys}}
-            />
+              </Field>
+              <KeyPicker
+                @keys={{this.form.keys}}
+                @selected={{this.form.selected}}
+                @onSelect={{this.select}}
+                @onGoToKeys={{this.goToKeys}}
+              />
+            </KeyAudience>
             {{#if this.keyAllowsAnonymous}}
               <Field
                 @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='People who aren’t signed in'
-                @icon={{Users}}
+                @icon={{HatGlasses}}
                 data-test-swap-key-key-allows
               >
                 <p class='visitors'>This workspace lets people who aren’t signed
@@ -147,7 +158,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='People who aren’t signed in'
-                @icon={{Users}}
+                @icon={{HatGlasses}}
                 data-test-swap-key-key-refuses
               >
                 <div class='refuses'>

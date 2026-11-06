@@ -28,9 +28,6 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
-import KeyRound from '../../components/icons/key-round.gts';
-import User from '@cardstack/boxel-icons/user';
-import Users from '@cardstack/boxel-icons/users';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 import { navigation } from '../navigation.js';
@@ -100,27 +97,15 @@ class UseKey extends Component<{
             {{/if}}
           </:intro>
           <:default>
-            <Field
-              @reserveMessage={{false}}
-              @orientation='horizontal'
-              @labelTag='span'
-              @label='Key'
-              @icon={{KeyRound}}
-            >
-              <KeyTile @key={{this.choosing.key}} />
-            </Field>
-            <Field
-              @reserveMessage={{false}}
-              @orientation='horizontal'
-              @labelTag='span'
-              @label='Used for'
-              @icon={{if this.choosing.share Users User}}
+            <KeyAudience
+              @kind={{if this.choosing.share 'apiKey' 'userKey'}}
+              @label={{if this.choosing.share 'Shared key' 'Your own key'}}
+              @workspace={{this.choosing.share.workspace.name}}
+              @headingId='use-key-audience'
               data-test-use-key-audience
             >
-              <KeyAudience
-                @kind={{if this.choosing.share 'apiKey' 'userKey'}}
-              />
-            </Field>
+              <KeyTile @key={{this.choosing.key}} />
+            </KeyAudience>
             {{#if this.choosing.share}}
               <Field
                 @reserveMessage={{false}}

@@ -1479,7 +1479,7 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-use-key]')
       .includesText('every call the card makes with your own key');
     assert
-      .dom('[data-test-use-key-audience] [data-test-key-audience="userKey"]')
+      .dom('[data-test-use-key-audience][data-test-key-audience="userKey"]')
       .includesText('Only you', 'the key serves only the user');
     assert
       .dom('[data-test-key-audience="apiKey"]')
@@ -2245,9 +2245,16 @@ module('Integration | approve pages', function (hooks) {
       .includesText('Your own key');
     assert
       .dom(
-        '[data-test-approve-slot="userKey"] [data-test-key-audience="userKey"] [data-test-key-audience-who]',
+        '[data-test-approve-slot="userKey"][data-test-key-audience="userKey"] [data-test-key-audience-who]',
       )
       .hasText('Only you');
+    assert
+      .dom('[data-test-approve-slot="userKey"]')
+      .hasAttribute(
+        'data-test-key-audience-tone',
+        'neutral',
+        'the user’s own key is a neutral section',
+      );
     assert
       .dom('[data-test-key-audience="userKey"]')
       .includesText('Everyone else who uses it chooses a key of their own.');
@@ -2286,9 +2293,16 @@ module('Integration | approve pages', function (hooks) {
       .includesText('Shared key');
     assert
       .dom(
-        '[data-test-approve-slot="apiKey"] [data-test-key-audience="apiKey"] [data-test-key-audience-who]',
+        '[data-test-approve-slot="apiKey"][data-test-key-audience="apiKey"] [data-test-key-audience-who]',
       )
-      .hasText('Everyone in this workspace');
+      .hasText('Everyone in Team Workspace');
+    assert
+      .dom('[data-test-approve-slot="apiKey"]')
+      .hasAttribute(
+        'data-test-key-audience-tone',
+        'info',
+        'a shared key is a section in the info tone',
+      );
     assert
       .dom('[data-test-key-audience="apiKey"]')
       .includesText(
@@ -2356,13 +2370,11 @@ module('Integration | approve pages', function (hooks) {
       );
     assert
       .dom(
-        '[data-test-approve-slot="userKey"] [data-test-key-audience="userKey"]',
+        '[data-test-approve-slot="userKey"][data-test-key-audience="userKey"]',
       )
       .exists();
     assert
-      .dom(
-        '[data-test-approve-slot="apiKey"] [data-test-key-audience="apiKey"]',
-      )
+      .dom('[data-test-approve-slot="apiKey"][data-test-key-audience="apiKey"]')
       .exists();
 
     await click('[data-test-approve-save]');
@@ -2390,7 +2402,7 @@ module('Integration | approve pages', function (hooks) {
       );
     assert
       .dom('[data-test-key-audience="apiKey"] [data-test-key-audience-who]')
-      .hasText('The card’s schedule in this workspace');
+      .hasText('The card’s schedule in Team Workspace');
     assert
       .dom('[data-test-key-audience="apiKey"]')
       .includesText(
@@ -2575,9 +2587,9 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-use-key]')
       .includesText('the key you shared as “Team GitHub”');
     assert
-      .dom('[data-test-use-key-audience] [data-test-key-audience="apiKey"]')
+      .dom('[data-test-use-key-audience][data-test-key-audience="apiKey"]')
       .includesText(
-        'Everyone in this workspace',
+        'Everyone in Team Workspace',
         'the share serves everyone who uses the card in the workspace',
       );
     assert.dom('[data-test-key-audience="userKey"]').doesNotExist();
@@ -2684,13 +2696,20 @@ module('Integration | approve pages', function (hooks) {
         'Anyone, signed in or not',
         'the slot says the share serves people who aren’t signed in too',
       );
+    assert
+      .dom('[data-test-key-audience="apiKey"]')
+      .hasAttribute(
+        'data-test-key-audience-tone',
+        'warning',
+        'a share that serves people who aren’t signed in is a warning section',
+      );
     await click('[data-test-pretui-radio-option="pipelines"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
       .doesNotExist('a pipeline serves nobody who opens the card');
     assert
       .dom('[data-test-key-audience="apiKey"] [data-test-key-audience-who]')
-      .hasText('The card’s schedule in this workspace');
+      .hasText('The card’s schedule in Team Workspace');
     await click('[data-test-pretui-radio-option="interactive"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
@@ -2725,7 +2744,7 @@ module('Integration | approve pages', function (hooks) {
       );
     assert
       .dom('[data-test-key-audience="apiKey"] [data-test-key-audience-who]')
-      .hasText('Everyone in this workspace');
+      .hasText('Everyone in Team Workspace');
     assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
     await click('[data-test-approve-tick="listTeamPRs"]');
     await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');

@@ -10,7 +10,7 @@ import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import Button from '../../components/button.gts';
-import KeyRound from '../../components/icons/key-round.gts';
+import User from '@cardstack/boxel-icons/user';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 import RefreshCw from '../../components/icons/refresh-cw.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
@@ -27,7 +27,7 @@ interface Signature {
 const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
   {{#if @key.oauth.connection}}
     <div class='row' data-test-oauth-connection>
-      <KeyRound class='row-icon' aria-hidden='true' />
+      <User class='row-icon' aria-hidden='true' />
       <p class='row-text' data-test-oauth-connection-client>Signs in with
         {{#if @key.oauth.connection.client.label}}
           <strong>{{@key.oauth.connection.client.label}}</strong>

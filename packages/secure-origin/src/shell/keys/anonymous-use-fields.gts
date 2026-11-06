@@ -10,8 +10,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { Checkbox } from '@cardstack/pretui/components/checkbox';
 import { Field } from '@cardstack/pretui/components/field';
 
-import KeyRound from '../../components/icons/key-round.gts';
-import Users from '../../components/icons/users.gts';
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import BoxelInput from '../../components/input.gts';
 
 import { anonymousCapsPhrase, type AnonymousCaps } from './anonymous-caps.ts';
@@ -97,7 +96,7 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
     @reserveMessage={{false}}
     @orientation='horizontal'
     @label='People who aren’t signed in'
-    @icon={{Users}}
+    @icon={{HatGlasses}}
     data-test-anonymous-use
     as |controlId|
   >
@@ -122,7 +121,7 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
       @orientation='horizontal'
       @labelTag='span'
       @label='Daily anonymous cap (optional)'
-      @icon={{KeyRound}}
+      @icon={{HatGlasses}}
       data-test-anonymous-cap
       as |_controlId _messageId labelId|
     >
@@ -149,7 +148,7 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
       @orientation='horizontal'
       @labelTag='span'
       @label='Monthly anonymous cap (optional)'
-      @icon={{KeyRound}}
+      @icon={{HatGlasses}}
       data-test-anonymous-monthly-cap
       as |_controlId _messageId labelId|
     >
