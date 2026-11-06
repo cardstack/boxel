@@ -5,7 +5,7 @@ import { Cue } from '@cardstack/pretui/components/cue';
 
 import AuthFormField from '../components/auth-form-field.gts';
 import { Input } from '@cardstack/pretui/components/input';
-import { autofocus } from '../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 import type { NewPassword } from './new-password.ts';
 
 // The new password and confirmation fields of the app's registration and
@@ -43,7 +43,7 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
       @errorMessage={{@password.passwordError}}
       @onInput={{@password.setPassword}}
       {{on 'blur' @password.checkPassword}}
-      {{autofocus (if @autofocus true false)}}
+      {{focusWhen (if @autofocus true false)}}
     />
     {{#if @hints}}
       {{#if @password.passwordValid}}

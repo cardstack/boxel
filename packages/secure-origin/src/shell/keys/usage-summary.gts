@@ -7,7 +7,7 @@
 // codes, statuses, destinations, sites and who called.
 import Component from '@glimmer/component';
 
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 import type { KeyUsage } from '../../security/keys.ts';
 import { hostAndPath } from './key-grants.gts';
 

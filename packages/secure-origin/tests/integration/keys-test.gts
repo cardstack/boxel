@@ -1433,9 +1433,21 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Weather service"]');
-      await click(
-        '[data-test-key-row="Weather service"] [data-test-key-delete]',
-      );
+      let deleteButton =
+        '[data-test-key-row="Weather service"] [data-test-key-delete]';
+      assert
+        .dom(deleteButton)
+        .hasTagName('button', 'the delete control is a button')
+        .hasAria('label', 'Delete Weather service', 'named by its key')
+        .hasNoText('showing only its icon');
+      assert
+        .dom(`${deleteButton} svg`)
+        .hasAria(
+          'hidden',
+          'true',
+          'and the icon is hidden from screen readers',
+        );
+      await click(deleteButton);
       await waitFor('[data-test-key-delete-shares]');
       assert.dom('[data-test-key-delete-shares]').includesText('Weather');
       assert.dom('[data-test-key-delete-shares]').includesText(REALM);

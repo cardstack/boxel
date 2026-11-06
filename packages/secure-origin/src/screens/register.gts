@@ -20,7 +20,7 @@ import {
   InputGroup,
   type InputGroupState,
 } from '@cardstack/pretui/components/input-group';
-import { autofocus } from '../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface RegisterFormSignature {
   Args: {
@@ -92,7 +92,7 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
             @errorMessage={{@nameError}}
             @onInput={{@onNameInput}}
             {{on 'blur' @onNameBlur}}
-            {{autofocus (if @autofocus true false)}}
+            {{focusWhen (if @autofocus true false)}}
           />
         </AuthFormField>
         <AuthFormField
@@ -267,7 +267,7 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
           placeholder='Enter invite code'
           @errorMessage={{@tokenError}}
           @onInput={{@onTokenInput}}
-          {{autofocus (if @autofocus true false)}}
+          {{focusWhen (if @autofocus true false)}}
         />
       </AuthFormField>
       <div class='button-wrapper'>

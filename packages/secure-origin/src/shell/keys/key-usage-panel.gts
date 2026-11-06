@@ -13,8 +13,8 @@ import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import { not } from '../../helpers/truth-helpers.ts';
+import { Button } from '@cardstack/pretui/components/button';
+import { not } from '@cardstack/pretui/helpers';
 import {
   keyUsage,
   setKeyLimits,
@@ -71,8 +71,8 @@ export default class KeyUsagePanel extends Component<Signature> {
               This key’s usage couldn’t be loaded:
               {{this.failed.message}}
               <Button
-                @kind='text-only'
-                @size='extra-small'
+                @variant='ghost'
+                @size='xs'
                 data-test-key-usage-retry
                 {{on 'click' this.load}}
               >Try again</Button>
