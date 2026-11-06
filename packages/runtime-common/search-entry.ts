@@ -2,6 +2,8 @@ import {
   assertQuery,
   InvalidQueryError,
   isRelevanceSort,
+  type Facet,
+  type FacetStats,
   type Filter,
   type Query,
   type Sort,
@@ -1279,7 +1281,7 @@ export interface SearchEntryWireQuery {
   sort?: SearchEntryWireSortExpression[];
   page?: { number?: number; size: number; generation?: number };
   // field paths through `item.`, as in a sort
-  facets?: { by: string; size?: number }[];
+  facets?: (Facet & { by: string })[];
   fields?: { entry: string[] };
   cardUrls?: string[];
   realms?: string[];
@@ -1384,6 +1386,38 @@ export function searchEntryWireQueryFromQuery(
 // per request), so the first echo wins.
 // ---------------------------------------------------------------------------
 
+// Two realms' statistics for one facet. Counts, sums and missing counts add
+// up; min and max combine; the average is re-derived from the sum and the
+// number values. `distinct` adds up too, so it is an upper bound across
+// realms that share values.
+function mergeFacetStats(a: FacetStats, b: FacetStats): FacetStats {
+  let merged: FacetStats = {
+    count: a.count + b.count,
+    distinct: a.distinct + b.distinct,
+  };
+  if (a.order ?? b.order) {
+    merged.order = a.order ?? b.order;
+  }
+  if (a.missing !== undefined || b.missing !== undefined) {
+    merged.missing = (a.missing ?? 0) + (b.missing ?? 0);
+  }
+  let pick = (x: unknown, y: unknown, fn: (p: any, q: any) => any) =>
+    x === undefined ? y : y === undefined ? x : fn(x, y);
+  merged.min = pick(a.min, b.min, (p, q) => (p < q ? p : q));
+  merged.max = pick(a.max, b.max, (p, q) => (p > q ? p : q));
+  if (a.values !== undefined || b.values !== undefined) {
+    merged.values = (a.values ?? 0) + (b.values ?? 0);
+    merged.sum = (a.sum ?? 0) + (b.sum ?? 0);
+    merged.avg = merged.values > 0 ? merged.sum / merged.values : undefined;
+  }
+  for (let key of Object.keys(merged) as (keyof FacetStats)[]) {
+    if (merged[key] === undefined) {
+      delete merged[key];
+    }
+  }
+  return merged;
+}
+
 export function combineSearchEntryResults(
   docs: EntryCollectionDocument[],
   // How many realms the request asked for. A realm goes missing two ways and
@@ -1425,9 +1459,26 @@ export function combineSearchEntryResults(
         for (let { value, count } of counts) {
           merged.set(value, (merged.get(value) ?? 0) + count);
         }
-        facets[by] = [...merged]
-          .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+        // A facet that sorts by value (an interval, `order: 'value'`) or
+        // keeps its buckets in order (ranges) says so in its stats; the rest
+        // sort by count.
+        let order = doc.meta.facetStats?.[by]?.order;
+        let isRanges =
+          doc.meta.facetStats?.[by] !== undefined && order === undefined;
+        let entries = [...merged].map(([value, count]) => ({ value, count }));
+        facets[by] = isRanges
+          ? entries
+          : order === 'value'
+            ? entries.sort((a, b) => a.value.localeCompare(b.value))
+            : entries.sort(
+                (a, b) => b.count - a.count || a.value.localeCompare(b.value),
+              );
+      }
+    }
+    if (doc.meta?.facetStats) {
+      let all = (combined.meta.facetStats ??= {});
+      for (let [by, stats] of Object.entries(doc.meta.facetStats)) {
+        all[by] = all[by] ? mergeFacetStats(all[by], stats) : { ...stats };
       }
     }
     if (doc.meta?.realmTotals) {

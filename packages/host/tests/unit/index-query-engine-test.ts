@@ -331,6 +331,69 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test('facets beyond plain values: own selection, stats, ranges, intervals, prefix, missing', async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            age: 35,
+            nickNames: ['Mangy', 'Mango-man'],
+            birthday: '2024-01-15',
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            age: 30,
+            nickNames: ['Vinny'],
+            birthday: '2024-02-10',
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: { name: 'Ringo', age: 25, birthday: '2024-02-20' },
+        },
+      },
+    ]);
+    let type = await personCardType(testCards);
+    let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+      filter: { every: [{ type }, { on: type, eq: { name: 'Mango' } }] },
+      facets: [
+        { by: 'name', own: 'ignore', order: 'value' },
+        { by: 'age', stats: true, ranges: [{ to: 30 }, { from: 30 }] },
+        { by: 'nickNames', prefix: 'man', missing: true },
+        { by: 'birthday', interval: 'month' },
+      ],
+    });
+    assert.strictEqual(meta.page.total, 1, 'the selection filters the page');
+    assert.deepEqual(
+      meta.facets?.name?.map((c) => c.value),
+      ['Mango', 'Ringo', 'Van Gogh'],
+      'own: ignore keeps the other names, in value order',
+    );
+    assert.deepEqual(meta.facets?.age, [
+      { value: '*-30', count: 0 },
+      { value: '30-*', count: 1 },
+    ]);
+    assert.strictEqual(meta.facetStats?.age?.max, 35);
+    assert.deepEqual(meta.facets?.nickNames, [
+      { value: 'Mango-man', count: 1 },
+      { value: 'Mangy', count: 1 },
+    ]);
+    assert.strictEqual(meta.facetStats?.nickNames?.missing, 0);
+    assert.deepEqual(meta.facets?.birthday, [
+      { value: '2024-01-01', count: 1 },
+    ]);
+  });
+
   test('can get all cards with empty filter', async function (assert) {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(dbAdapter, [mango, vangogh, paper]);

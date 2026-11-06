@@ -89,6 +89,10 @@ import {
   DEFAULT_FACET_SIZE,
   type Facet,
   type FacetCount,
+  type FacetInterval,
+  type FacetRange,
+  type FacetStats,
+  facetRangeLabel,
   type PassageMatch,
   typeAheadWords,
   type TypeAheadFilter,
@@ -421,6 +425,9 @@ export interface QueryResultsMeta {
   // A query's `facets`, counted over every match: per facet's `by`, its
   // values with how many matched cards hold each, most common first.
   facets?: Record<string, FacetCount[]>;
+  // Per facet's `by`, its statistics, for a facet that asked for them or
+  // whose field declares a number or date shape (see `Facet`).
+  facetStats?: Record<string, FacetStats>;
   // For a search with a `matches … within <field>` term: per card on the page
   // (keyed by card URL), the passages of that field that matched, best first.
   passages?: Record<string, PassageMatch[]>;
@@ -1304,6 +1311,12 @@ export class IndexQueryEngine {
   }> {
     try {
       sort = await this.#expandRelevanceSorts(sort, filter);
+      // A facet of plain values is counted with the page (one statement on
+      // Postgres); any other shape, or one counted without its own
+      // selection, gets its own queries (`#extendedFacet`).
+      let requestedFacets = facets ?? [];
+      let facetPlans = await this.#facetPlans(requestedFacets, filter);
+      facets = facetPlans.filter((plan) => plan.plain).map((p) => p.facet);
       let conditions: CardExpression[] = [
         ['i.realm_url = ', param(realmURL.href)],
         ['i.is_deleted = FALSE OR i.is_deleted IS NULL'],
@@ -1572,6 +1585,59 @@ export class IndexQueryEngine {
       // A projection that returns `search_doc` (file rows) returns it whole.
       await restoreSpilledSearchDocs(this.#dbAdapter, results);
 
+      let filterContext: FilterContext = {
+        inAny: false,
+        prerenderedTable: prerenderedTableFromOpts(opts),
+        indexTable: tableFromOpts(opts),
+      };
+      let extendedPlans = facetPlans.filter((plan) => !plan.plain);
+      let extendedResults = await Promise.all(
+        extendedPlans.map((plan) => {
+          let condition = everyCondition;
+          if (plan.facet.own === 'ignore') {
+            let rest = filter
+              ? filterWithout(filter, plan.facet.by)
+              : undefined;
+            condition = every([
+              ...baseConditions,
+              ...(rest
+                ? [
+                    this.filterCondition(
+                      rest,
+                      baseCardRef,
+                      'positive',
+                      filterContext,
+                    ),
+                  ]
+                : []),
+            ]);
+          }
+          return this.#extendedFacet(plan, opts, condition);
+        }),
+      );
+      let plainCounts = new Map<string, FacetCount[]>(
+        (facets ?? []).map((facet, i) => [
+          facet.by,
+          (facetResults[i] as { value: unknown; count: unknown }[])
+            .filter((row) => row.value != null)
+            .map(
+              (row): FacetCount => ({
+                value: String(row.value),
+                count: Number(row.count),
+              }),
+            ),
+        ]),
+      );
+      let extendedByFacet = new Map(
+        extendedPlans.map((plan, i) => [plan.facet, extendedResults[i]]),
+      );
+      let facetStats: Record<string, FacetStats> = {};
+      for (let [facet, result] of extendedByFacet) {
+        if (result.stats) {
+          facetStats[facet.by] = result.stats;
+        }
+      }
+
       let passageTerms = collectPositiveMatchTerms(filter).filter(
         (m) => m.within,
       );
@@ -1588,23 +1654,19 @@ export class IndexQueryEngine {
         meta: {
           page: { total: Number(totalResults[0].total) },
           ...(passages ? { passages } : {}),
-          ...(facets?.length
+          ...(requestedFacets.length
             ? {
                 facets: Object.fromEntries(
-                  facets.map((facet, i) => [
+                  requestedFacets.map((facet) => [
                     facet.by,
-                    (facetResults[i] as { value: unknown; count: unknown }[])
-                      .filter((row) => row.value != null)
-                      .map(
-                        (row): FacetCount => ({
-                          value: String(row.value),
-                          count: Number(row.count),
-                        }),
-                      ),
+                    extendedByFacet.get(facet)?.counts ??
+                      plainCounts.get(facet.by) ??
+                      [],
                   ]),
                 ),
               }
             : {}),
+          ...(Object.keys(facetStats).length ? { facetStats } : {}),
         },
       };
     } catch (error) {
@@ -2925,6 +2987,321 @@ export class IndexQueryEngine {
     return ['(i.url, i.realm_url, i.type) IN (', ...union, ')'];
   }
 
+  // How each requested facet is counted: its shape (a query's `stats`,
+  // `ranges` or `interval` wins; otherwise the field's declared
+  // `search: { facet }`, read from the type the filter is anchored on), and
+  // whether it is plain values counted with the page.
+  async #facetPlans(
+    facets: Facet[],
+    filter: Filter | undefined,
+  ): Promise<FacetPlan[]> {
+    if (facets.length === 0) {
+      return [];
+    }
+    let anchor = filterAnchor(filter);
+    let definition: Definition | undefined;
+    if (anchor) {
+      try {
+        definition = await this.getDefinition(anchor);
+      } catch {
+        definition = undefined;
+      }
+    }
+    let plans: FacetPlan[] = [];
+    for (let facet of facets) {
+      let shape: FacetShape = facet.ranges
+        ? 'range'
+        : facet.interval
+          ? 'date'
+          : 'values';
+      if (!facet.stats && !facet.ranges && !facet.interval && definition) {
+        try {
+          let field = await getField(
+            definition,
+            facet.by,
+            this.#definitionLookup,
+          );
+          let declared = field.search ? field.search.facet : undefined;
+          if (declared === true) {
+            shape = NUMBER_SERIALIZERS.has(field.serializerName ?? '')
+              ? 'range'
+              : DATE_SERIALIZERS.has(field.serializerName ?? '')
+                ? 'date'
+                : 'values';
+          } else if (declared) {
+            shape = declared;
+          }
+        } catch {
+          // A path the type doesn't declare counts as plain values.
+        }
+      }
+      let plain =
+        shape === 'values' &&
+        Object.keys(facet).every((key) => key === 'by' || key === 'size');
+      plans.push({ facet, shape, plain });
+    }
+    return plans;
+  }
+
+  // A facet that isn't plain values counted with the page: its counts (by
+  // value, by range or by date bucket) and, when it asked for them or its
+  // shape implies them, its statistics.
+  async #extendedFacet(
+    { facet, shape }: FacetPlan,
+    opts: QueryOptions,
+    condition: CardExpression,
+  ): Promise<{ counts: FacetCount[]; stats?: FacetStats }> {
+    let size = facet.size ?? DEFAULT_FACET_SIZE;
+    let interval: FacetInterval | undefined =
+      shape === 'date' ? (facet.interval ?? 'month') : undefined;
+    let order: 'count' | 'value' =
+      facet.order ?? (interval ? 'value' : 'count');
+    let wantStats =
+      Boolean(facet.stats) ||
+      shape !== 'values' ||
+      Boolean(facet.missing) ||
+      order === 'value';
+    let stats = wantStats
+      ? await this.#facetStatsQuery(facet, opts, condition)
+      : undefined;
+    let counts: FacetCount[];
+    if (shape === 'range') {
+      let ranges = facet.ranges ?? autoFacetRanges(stats);
+      counts =
+        ranges.length > 0
+          ? await this.#facetRangeCounts(facet, ranges, opts, condition)
+          : await this.#facetValueCounts(facet, size, order, opts, condition);
+    } else if (interval) {
+      counts = await this.#facetIntervalCounts(
+        facet,
+        interval,
+        size,
+        order,
+        opts,
+        condition,
+      );
+    } else {
+      counts = await this.#facetValueCounts(
+        facet,
+        size,
+        order,
+        opts,
+        condition,
+      );
+    }
+    if (!stats) {
+      return { counts };
+    }
+    let out: FacetStats = { count: stats.count, distinct: stats.distinct };
+    if (facet.stats || shape !== 'values') {
+      Object.assign(out, stats);
+    }
+    if (facet.missing) {
+      let [row] = await this.#queryCards(
+        [
+          'SELECT COUNT(*) AS total FROM (SELECT DISTINCT i.url, i.type',
+          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)} ${tableValuedFunctionsPlaceholder}`,
+          'WHERE',
+          ...condition,
+          ') AS t',
+        ],
+        opts.timings,
+      );
+      out.missing = Math.max(0, Number(row?.total ?? 0) - stats.count);
+    }
+    if (shape !== 'range') {
+      out.order = order;
+    }
+    return { counts, stats: out };
+  }
+
+  // The facet's values over the rows `condition` admits, one row per match
+  // and distinct value (a list contributes each element): `value` as text
+  // and `num` when it is a number.
+  #facetValuesTable(
+    facet: Facet,
+    opts: QueryOptions,
+    condition: CardExpression,
+  ): CardExpression {
+    let path = facet.by.split('.');
+    return [
+      dbExpression({
+        pg: [
+          `(SELECT DISTINCT f.url, f.type, fv0.value #>> '{}' AS value, CASE WHEN jsonb_typeof(fv0.value) = 'number' THEN (fv0.value #>> '{}')::numeric END AS num FROM (`,
+          'SELECT DISTINCT i.url, i.type, spill_unmark(i.search_doc #>',
+          param(`{${path.map((p) => `"${p}"`).join(',')}}`),
+          '::text[]) AS v',
+        ],
+        sqlite: [
+          `(SELECT DISTINCT f.url, f.type, fv0.value AS value, CASE WHEN fv0.type IN ('integer', 'real') THEN fv0.value END AS num FROM (`,
+          'SELECT DISTINCT i.url, i.type, i.search_doc ->',
+          param(`$.${facet.by}`),
+          'AS v',
+        ],
+      }),
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)} ${tableValuedFunctionsPlaceholder}`,
+      'WHERE',
+      ...condition,
+      ') AS f',
+      dbExpression({
+        pg: [
+          `CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(f.v) = 'array' THEN f.v ELSE jsonb_build_array(f.v) END) AS fv0(value)`,
+          `WHERE jsonb_typeof(fv0.value) <> 'null'`,
+        ],
+        sqlite: [
+          `CROSS JOIN json_each(CASE WHEN json_type(f.v) = 'array' THEN f.v ELSE json_array(json(f.v)) END) AS fv0`,
+          `WHERE fv0.type <> 'null'`,
+        ],
+      }),
+      ') AS fv',
+    ];
+  }
+
+  async #facetValueCounts(
+    facet: Facet,
+    size: number,
+    order: 'count' | 'value',
+    opts: QueryOptions,
+    condition: CardExpression,
+  ): Promise<FacetCount[]> {
+    let rows = await this.#queryCards(
+      [
+        'SELECT fv.value AS facet_value, COUNT(*) AS count FROM',
+        ...this.#facetValuesTable(facet, opts, condition),
+        ...(facet.prefix
+          ? [
+              'WHERE LOWER(fv.value) LIKE LOWER(',
+              param(`${escapeSqliteLikePattern(facet.prefix)}%`),
+              `) ESCAPE '\\'`,
+            ]
+          : []),
+        'GROUP BY fv.value',
+        order === 'value'
+          ? 'ORDER BY fv.value'
+          : 'ORDER BY count DESC, fv.value',
+        `LIMIT ${Number(size)}`,
+      ],
+      opts.timings,
+    );
+    return facetCountsOf(rows);
+  }
+
+  async #facetStatsQuery(
+    facet: Facet,
+    opts: QueryOptions,
+    condition: CardExpression,
+  ): Promise<FacetStats> {
+    let [row] = await this.#queryCards(
+      [
+        `SELECT COUNT(DISTINCT fv.url || '|' || fv.type) AS count, COUNT(DISTINCT fv.value) AS distinct_count, COUNT(fv.num) AS numeric_count, MIN(fv.num) AS min_num, MAX(fv.num) AS max_num, SUM(fv.num) AS sum_num, MIN(fv.value) AS min_text, MAX(fv.value) AS max_text FROM`,
+        ...this.#facetValuesTable(facet, opts, condition),
+      ],
+      opts.timings,
+    );
+    let stats: FacetStats = {
+      count: Number(row?.count ?? 0),
+      distinct: Number(row?.distinct_count ?? 0),
+    };
+    let values = Number(row?.numeric_count ?? 0);
+    if (values > 0) {
+      let sum = Number(row!.sum_num);
+      Object.assign(stats, {
+        values,
+        min: Number(row!.min_num),
+        max: Number(row!.max_num),
+        sum,
+        avg: sum / values,
+      });
+    } else if (row?.min_text != null) {
+      Object.assign(stats, {
+        min: String(row.min_text),
+        max: String(row.max_text),
+      });
+    }
+    return stats;
+  }
+
+  async #facetRangeCounts(
+    facet: Facet,
+    ranges: FacetRange[],
+    opts: QueryOptions,
+    condition: CardExpression,
+  ): Promise<FacetCount[]> {
+    let columns: CardExpression = [];
+    ranges.forEach((range, index) => {
+      let column =
+        typeof (range.from ?? range.to) === 'number' ? 'fv.num' : 'fv.value';
+      let bounds: CardExpression = [];
+      if (range.from !== undefined) {
+        bounds.push(`${column} >=`, param(range.from));
+      }
+      if (range.to !== undefined) {
+        bounds.push(
+          ...(bounds.length ? ['AND'] : []),
+          `${column} <`,
+          param(range.to),
+        );
+      }
+      columns.push(
+        ...(index > 0 ? [','] : []),
+        `COUNT(DISTINCT CASE WHEN ${column} IS NOT NULL AND`,
+        ...bounds,
+        `THEN fv.url || '|' || fv.type END) AS r${index}`,
+      );
+    });
+    let [row] = await this.#queryCards(
+      [
+        'SELECT',
+        ...columns,
+        'FROM',
+        ...this.#facetValuesTable(facet, opts, condition),
+      ],
+      opts.timings,
+    );
+    return ranges.map((range, index) => ({
+      value: facetRangeLabel(range),
+      count: Number(row?.[`r${index}`] ?? 0),
+    }));
+  }
+
+  async #facetIntervalCounts(
+    facet: Facet,
+    interval: FacetInterval,
+    size: number,
+    order: 'count' | 'value',
+    opts: QueryOptions,
+    condition: CardExpression,
+  ): Promise<FacetCount[]> {
+    let pgInstant = `CASE WHEN fv.num IS NOT NULL THEN to_timestamp((CASE WHEN abs(fv.num) >= 100000000000 THEN fv.num / 1000 ELSE fv.num END)::float8) AT TIME ZONE 'UTC' WHEN fv.value ~ '^\\d{4}-\\d{2}-\\d{2}' THEN fv.value::timestamptz AT TIME ZONE 'UTC' END`;
+    let sqliteInstant = `CASE WHEN fv.num IS NOT NULL THEN datetime(CASE WHEN abs(fv.num) >= 100000000000 THEN fv.num / 1000.0 ELSE fv.num END, 'unixepoch') ELSE datetime(fv.value) END`;
+    let sqliteBucket = {
+      day: `date(${sqliteInstant})`,
+      week: `date(${sqliteInstant}, '-6 days', 'weekday 1')`,
+      month: `strftime('%Y-%m-01', ${sqliteInstant})`,
+      year: `strftime('%Y-01-01', ${sqliteInstant})`,
+    }[interval];
+    let rows = await this.#queryCards(
+      [
+        'SELECT b.bucket AS facet_value, COUNT(DISTINCT b.k) AS count FROM (SELECT',
+        dbExpression({
+          pg: [
+            `to_char(date_trunc('${interval}', ${pgInstant}), 'YYYY-MM-DD') AS bucket`,
+          ],
+          sqlite: [`${sqliteBucket} AS bucket`],
+        }),
+        `, fv.url || '|' || fv.type AS k FROM`,
+        ...this.#facetValuesTable(facet, opts, condition),
+        ') AS b WHERE b.bucket IS NOT NULL GROUP BY b.bucket',
+        order === 'value'
+          ? 'ORDER BY b.bucket'
+          : 'ORDER BY count DESC, b.bucket',
+        `LIMIT ${Number(size)}`,
+      ],
+      opts.timings,
+    );
+    return facetCountsOf(rows);
+  }
+
   // One facet's counts over the rows the filter matches (the same FROM and
   // WHERE as the page's count, so counts agree with `page.total`). Each
   // matched (url, type) pair counts once per distinct value it holds; a list
@@ -4077,6 +4454,93 @@ function markdownVector(alias: string, staged: boolean): string {
   return staged
     ? `to_tsvector('english', markdown_search_text(${alias}.markdown))`
     : `${alias}.markdown_tsv`;
+}
+
+type FacetShape = 'values' | 'range' | 'date';
+interface FacetPlan {
+  facet: Facet;
+  shape: FacetShape;
+  plain: boolean;
+}
+const NUMBER_SERIALIZERS = new Set(['number', 'big-integer']);
+const DATE_SERIALIZERS = new Set(['date', 'datetime']);
+
+// The column is `facet_value`, not `value`: the shared row coercion reads a
+// column named `value` as JSON.
+function facetCountsOf(rows: Record<string, unknown>[]): FacetCount[] {
+  return rows
+    .filter((row) => row.facet_value != null)
+    .map((row) => ({
+      value: String(row.facet_value),
+      count: Number(row.count),
+    }));
+}
+
+// Range buckets for a number facet that declares its shape but names no
+// ranges: up to ten equal buckets of a round width across the values'
+// span, the last holding the maximum.
+export function autoFacetRanges(stats: FacetStats | undefined): FacetRange[] {
+  if (
+    !stats?.values ||
+    typeof stats.min !== 'number' ||
+    typeof stats.max !== 'number'
+  ) {
+    return [];
+  }
+  let { min, max } = stats;
+  if (min === max) {
+    return [{ from: min }];
+  }
+  let rough = (max - min) / 5;
+  let magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+  let step = rough / magnitude;
+  let width = (step <= 1 ? 1 : step <= 2 ? 2 : step <= 5 ? 5 : 10) * magnitude;
+  let round = (n: number) => Number(n.toPrecision(12));
+  let ranges: FacetRange[] = [];
+  for (
+    let from = round(Math.floor(min / width) * width);
+    from <= max && ranges.length < 10;
+    from = round(from + width)
+  ) {
+    ranges.push({ from, to: round(from + width) });
+  }
+  return ranges;
+}
+
+// `filter` without the nodes that constrain only `by`, for a facet counted
+// without its own selection (`own: 'ignore'`). A removed node's type anchor
+// stays, so the count keeps the filter's type.
+export function filterWithout(filter: Filter, by: string): Filter | undefined {
+  let node = filter as any;
+  let anchor = (): Filter | undefined =>
+    node.on ? ({ type: node.on } as Filter) : undefined;
+  for (let operator of ['eq', 'in', 'range', 'contains']) {
+    if (operator in node) {
+      let keys = Object.keys(node[operator] ?? {});
+      return keys.length > 0 && keys.every((key) => key === by)
+        ? anchor()
+        : filter;
+    }
+  }
+  if ('not' in node) {
+    return filterWithout(node.not, by) === node.not ? filter : anchor();
+  }
+  if ('any' in node) {
+    let branches = (node.any as Filter[]).map((b) => filterWithout(b, by));
+    let removed = branches.every(
+      (branch, i) => branch !== (node.any as Filter[])[i],
+    );
+    return removed
+      ? (anchor() ?? branches.find((branch) => branch !== undefined))
+      : filter;
+  }
+  if ('every' in node) {
+    let kept = (node.every as Filter[])
+      .map((b) => filterWithout(b, by))
+      .filter((b): b is Filter => b !== undefined);
+    return kept.length === 0 ? anchor() : ({ ...node, every: kept } as Filter);
+  }
+  return filter;
 }
 
 const RELEVANCE_SORT_KEY_NAME = '_relevance';

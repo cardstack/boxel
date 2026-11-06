@@ -40,17 +40,70 @@ export type SparseFieldsets = Record<string, string[]>;
 // every match, not only the page returned. `by` is a field path, dotted for a
 // compound field; `size` caps how many values come back (default 50, at most
 // 1000). The counts ride `meta.facets[by]`.
+//
+// The other members are optional (docs/search-intent.md, Facets):
+// - `own: 'ignore'` counts the facet over the filter without its own
+//   selection, so a multi-select list keeps its other values while one is
+//   picked: every filter node that constrains only `by` is left out.
+// - `stats: true` adds the values' count, distinct count, and min, max, sum
+//   and average (numbers) or min and max (text) in `meta.facetStats[by]`.
+// - `ranges` counts the matches with a value in each `[from, to)` bucket,
+//   labelled by `key` or "from-to" (`*` for an open end).
+// - `interval` counts matches by the day, week (from Monday), month or year
+//   of a date value (an ISO date string, or a number of seconds or
+//   milliseconds since the epoch), labelled by the bucket's first day.
+// - `prefix` keeps the values that start with it, ignoring case.
+// - `missing: true` adds the count of matches with no value
+//   (`meta.facetStats[by].missing`).
+// - `order` sorts the values by `count` (most first, the default) or by
+//   `value`; an interval sorts by value unless it says otherwise.
+// A field declared `search: { facet }` takes its shape from the declaration
+// when the query names none of `stats`, `ranges` and `interval`: a number
+// facet is range buckets with stats, a date facet a monthly histogram with
+// stats.
 export interface Facet {
   by: string;
   size?: number;
+  own?: 'ignore';
+  stats?: boolean;
+  ranges?: FacetRange[];
+  interval?: FacetInterval;
+  prefix?: string;
+  missing?: boolean;
+  order?: 'count' | 'value';
 }
+export interface FacetRange {
+  key?: string;
+  from?: number | string;
+  to?: number | string;
+}
+export const FACET_INTERVALS = ['day', 'week', 'month', 'year'] as const;
+export type FacetInterval = (typeof FACET_INTERVALS)[number];
 export const MAX_FACETS = 8;
 export const DEFAULT_FACET_SIZE = 50;
 export const MAX_FACET_SIZE = 1000;
+export const MAX_FACET_RANGES = 50;
 
 export interface FacetCount {
   value: string;
   count: number;
+}
+
+// A facet's statistics, in `meta.facetStats[by]`: `count` matches hold a
+// value, `distinct` values in all; over number values, `min`, `max`, `sum`
+// and `avg` (with `values`, how many number values they cover, so realms can
+// be combined), or over text, `min` and `max`. `missing` is present when the
+// facet asked for it; `order` says how its counts are sorted.
+export interface FacetStats {
+  count: number;
+  distinct: number;
+  values?: number;
+  min?: number | string;
+  max?: number | string;
+  sum?: number;
+  avg?: number;
+  missing?: number;
+  order?: 'count' | 'value';
 }
 
 interface QueryCommon {
@@ -1205,10 +1258,11 @@ function assertFacets(
       throw new InvalidQueryError(`${at}: a facet must be an object`);
     }
     for (let key of Object.keys(facet)) {
-      if (key !== 'by' && key !== 'size') {
+      if (!FACET_MEMBERS.has(key)) {
         throw new InvalidQueryError(`${at}: unknown facet member "${key}"`);
       }
     }
+    assertFacetMembers(facet, at);
     if (typeof facet.by !== 'string' || !FACET_PATH.test(facet.by)) {
       throw new InvalidQueryError(
         `${at}/by: by must be a field path such as "category" or "speaker.name"`,
@@ -1225,6 +1279,112 @@ function assertFacets(
       );
     }
   });
+}
+
+const FACET_MEMBERS = new Set([
+  'by',
+  'size',
+  'own',
+  'stats',
+  'ranges',
+  'interval',
+  'prefix',
+  'missing',
+  'order',
+]);
+
+function assertFacetMembers(facet: any, at: string) {
+  if (facet.own !== undefined && facet.own !== 'ignore') {
+    throw new InvalidQueryError(`${at}/own: own must be "ignore"`);
+  }
+  for (let flag of ['stats', 'missing'] as const) {
+    if (facet[flag] !== undefined && typeof facet[flag] !== 'boolean') {
+      throw new InvalidQueryError(`${at}/${flag}: ${flag} must be a boolean`);
+    }
+  }
+  if (facet.prefix !== undefined && typeof facet.prefix !== 'string') {
+    throw new InvalidQueryError(`${at}/prefix: prefix must be a string`);
+  }
+  if (
+    facet.order !== undefined &&
+    facet.order !== 'count' &&
+    facet.order !== 'value'
+  ) {
+    throw new InvalidQueryError(
+      `${at}/order: order must be "count" or "value"`,
+    );
+  }
+  if (
+    facet.interval !== undefined &&
+    !(FACET_INTERVALS as readonly unknown[]).includes(facet.interval)
+  ) {
+    throw new InvalidQueryError(
+      `${at}/interval: interval must be one of ${FACET_INTERVALS.join(', ')}`,
+    );
+  }
+  if (facet.ranges !== undefined) {
+    if (facet.interval !== undefined) {
+      throw new InvalidQueryError(
+        `${at}: a facet takes ranges or interval, not both`,
+      );
+    }
+    if (
+      !Array.isArray(facet.ranges) ||
+      facet.ranges.length === 0 ||
+      facet.ranges.length > MAX_FACET_RANGES
+    ) {
+      throw new InvalidQueryError(
+        `${at}/ranges: ranges must be a list of 1 to ${MAX_FACET_RANGES} buckets`,
+      );
+    }
+    facet.ranges.forEach((range: any, j: number) => {
+      let where = `${at}/ranges[${j}]`;
+      if (typeof range !== 'object' || range == null || Array.isArray(range)) {
+        throw new InvalidQueryError(`${where}: a range must be an object`);
+      }
+      for (let key of Object.keys(range)) {
+        if (key !== 'key' && key !== 'from' && key !== 'to') {
+          throw new InvalidQueryError(
+            `${where}: a range takes key, from and to`,
+          );
+        }
+      }
+      if (range.from === undefined && range.to === undefined) {
+        throw new InvalidQueryError(`${where}: a range needs from or to`);
+      }
+      for (let end of ['from', 'to'] as const) {
+        let bound = range[end];
+        if (
+          bound !== undefined &&
+          !(
+            typeof bound === 'string' ||
+            (typeof bound === 'number' && Number.isFinite(bound))
+          )
+        ) {
+          throw new InvalidQueryError(
+            `${where}/${end}: a bound must be a number or a string`,
+          );
+        }
+      }
+      if (
+        range.from !== undefined &&
+        range.to !== undefined &&
+        typeof range.from !== typeof range.to
+      ) {
+        throw new InvalidQueryError(
+          `${where}: from and to must both be numbers or both be strings`,
+        );
+      }
+      if (range.key !== undefined && typeof range.key !== 'string') {
+        throw new InvalidQueryError(`${where}/key: key must be a string`);
+      }
+    });
+  }
+}
+
+// A range bucket's label: its `key`, or "from-to" with `*` for an open end.
+export function facetRangeLabel(range: FacetRange): string {
+  return range.key ?? `${range.from ?? '*'}-${range.to ?? '*'}`;
 }
 
 function assertTypeAheadFilter(
