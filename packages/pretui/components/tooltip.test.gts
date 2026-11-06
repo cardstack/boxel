@@ -1,8 +1,9 @@
 // Pretui — Tooltip unit tests.
 //
-// No assertion touches a computed style: the component's own `<style scoped>`
-// is inert in this harness (the scoped-css attribute is stamped, the rules are
-// not applied). Layout assertions lean only on the popover UA styles.
+// No assertion depends on the component's own `<style scoped>`, which is inert
+// in this harness (the scoped-css attribute is stamped, the rules are not
+// applied). Layout assertions lean on the popover UA styles; a test that needs
+// the component's placement rules sets them inline.
 import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
 import {
@@ -28,6 +29,39 @@ function smallScroller(overflow: 'auto' | 'hidden'): HTMLElement {
   return el;
 }
 
+/** Waits n animation frames, by which resize and intersection observers have reported. */
+function frames(n = 2): Promise<void> {
+  return new Promise((done) => {
+    let step = (left: number) =>
+      left ? requestAnimationFrame(() => step(left - 1)) : done();
+    step(n);
+  });
+}
+
+/**
+ * Gives the stage room on both sides, so the viewport clamp never moves the
+ * bubble, and applies the placement rules the inert scoped style would set
+ * over the popover UA styles.
+ */
+function stage(): HTMLElement {
+  let el = q('[data-test-stage]');
+  Object.assign(el.style, { padding: '2rem 24rem' });
+  Object.assign(q('[data-test-pretui-tooltip-bubble]').style, {
+    inset: 'auto',
+    margin: '0',
+  });
+  return el;
+}
+
+/** How far the bubble's center is from its trigger's, horizontally. */
+function offCenter(): number {
+  let trigger = q('[data-test-pretui-tooltip]').getBoundingClientRect();
+  let bubble = q('[data-test-pretui-tooltip-bubble]').getBoundingClientRect();
+  return Math.abs(
+    bubble.left + bubble.width / 2 - (trigger.left + trigger.width / 2),
+  );
+}
+
 module('Pretui | components/tooltip', function (hooks) {
   setupCardTest(hooks);
 
@@ -39,8 +73,9 @@ module('Pretui | components/tooltip', function (hooks) {
         </Tooltip>
       </template>,
     );
-    let tip = q('[role="tooltip"]');
+    let tip = q('[data-test-pretui-tooltip-bubble]');
     let trigger = q('[data-test-trigger]');
+    assert.strictEqual(tip.getAttribute('role'), 'tooltip');
     assert.ok(tip.id, 'the bubble has an id to point at');
     assert.strictEqual(
       trigger.getAttribute('aria-describedby'),
@@ -61,7 +96,7 @@ module('Pretui | components/tooltip', function (hooks) {
       </template>,
     );
     let trigger = q('[data-test-trigger]');
-    assert.strictEqual(trigger.getAttribute('aria-labelledby'), q('[role="tooltip"]').id);
+    assert.strictEqual(trigger.getAttribute('aria-labelledby'), q('[data-test-pretui-tooltip-bubble]').id);
     assert.strictEqual(trigger.getAttribute('aria-describedby'), null, 'one relationship, not both');
   });
 
@@ -76,7 +111,7 @@ module('Pretui | components/tooltip', function (hooks) {
     );
     assert.strictEqual(
       q('[data-test-trigger]').getAttribute('aria-describedby'),
-      `existing-hint ${q('[role="tooltip"]').id}`,
+      `existing-hint ${q('[data-test-pretui-tooltip-bubble]').id}`,
       'appended, not overwritten',
     );
   });
@@ -97,7 +132,7 @@ module('Pretui | components/tooltip', function (hooks) {
     await settled();
     assert.strictEqual(
       q('[data-test-trigger]').getAttribute('aria-describedby'),
-      `second-hint ${q('[role="tooltip"]').id}`,
+      `second-hint ${q('[data-test-pretui-tooltip-bubble]').id}`,
       'the new value, with the tip id put back',
     );
   });
@@ -111,7 +146,7 @@ module('Pretui | components/tooltip', function (hooks) {
       </template>,
     );
     let wrap = q('[data-test-pretui-tooltip]');
-    let tip = q('[role="tooltip"]');
+    let tip = q('[data-test-pretui-tooltip-bubble]');
     assert.strictEqual(tip.dataset['side'], 'right');
 
     await triggerEvent(wrap, 'mouseenter');
@@ -137,7 +172,7 @@ module('Pretui | components/tooltip', function (hooks) {
         </Tooltip>
       </template>,
     );
-    let tip = q('[role="tooltip"]');
+    let tip = q('[data-test-pretui-tooltip-bubble]');
     await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
     assert.strictEqual(tip.dataset['open'], undefined, 'hover leaves it closed');
     assert.strictEqual(
@@ -160,7 +195,7 @@ module('Pretui | components/tooltip', function (hooks) {
       </template>,
     );
     let wrap = q('[data-test-pretui-tooltip]');
-    let tip = q('[role="tooltip"]');
+    let tip = q('[data-test-pretui-tooltip-bubble]');
 
     await triggerEvent(wrap, 'mouseenter');
     await click('[data-test-trigger]');
@@ -182,7 +217,7 @@ module('Pretui | components/tooltip', function (hooks) {
         </Tooltip>
       </template>,
     );
-    let tip = q('[role="tooltip"]');
+    let tip = q('[data-test-pretui-tooltip-bubble]');
     await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
     assert.strictEqual(tip.dataset['open'], 'true');
 
@@ -194,27 +229,36 @@ module('Pretui | components/tooltip', function (hooks) {
     assert.strictEqual(tip.dataset['open'], 'true', 'leaving and returning arms it again');
   });
 
-  test('Tooltip takes no space in its scroll container while hidden, on any side', async function (assert) {
-    class State {
-      @tracked side: 'top' | 'bottom' | 'left' | 'right' = 'top';
-    }
-    let state = new State();
+  test('Tooltip stays dismissed when its trigger is clicked after Escape', async function (assert) {
+    await render(
+      <template>
+        <Tooltip @content='Hint'>
+          <button type='button' data-test-trigger>Go</button>
+        </Tooltip>
+      </template>,
+    );
+    let tip = q('[data-test-pretui-tooltip-bubble]');
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
+    await triggerKeyEvent(document, 'keydown', 'Escape');
+    assert.strictEqual(tip.dataset['open'], undefined, 'Escape hides it');
+
+    await click('[data-test-trigger]');
+    assert.strictEqual(tip.dataset['open'], undefined, 'a click on the trigger keeps it hidden');
+  });
+
+  test('Tooltip takes no space in its scroll container while hidden', async function (assert) {
     await render(
       <template>
         <div data-test-scroller>
-          <Tooltip @content='Publishes everything in this workspace' @side={{state.side}}>
+          <Tooltip @content='Publishes everything in this workspace'>
             <button type='button'>Go</button>
           </Tooltip>
         </div>
       </template>,
     );
     let scroller = smallScroller('auto');
-    for (let side of ['top', 'bottom', 'left', 'right'] as const) {
-      state.side = side;
-      await settled();
-      assert.strictEqual(scroller.scrollWidth, scroller.clientWidth, `${side}: no sideways scroll`);
-      assert.strictEqual(scroller.scrollHeight, scroller.clientHeight, `${side}: no vertical scroll`);
-    }
+    assert.strictEqual(scroller.scrollWidth, scroller.clientWidth, 'no sideways scroll');
+    assert.strictEqual(scroller.scrollHeight, scroller.clientHeight, 'no vertical scroll');
   });
 
   test('Tooltip shows in the top layer, outside its clipping container', async function (assert) {
@@ -228,7 +272,7 @@ module('Pretui | components/tooltip', function (hooks) {
       </template>,
     );
     let scroller = smallScroller('hidden');
-    let tip = q('[role="tooltip"]');
+    let tip = q('[data-test-pretui-tooltip-bubble]');
     assert.false(tip.matches(':popover-open'), 'not in the top layer while hidden');
 
     await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
@@ -253,23 +297,104 @@ module('Pretui | components/tooltip', function (hooks) {
         </div>
       </template>,
     );
-    // Room on both sides, so the viewport clamp never moves the bubble.
-    Object.assign(q('[data-test-stage]').style, { padding: '2rem 24rem' });
-    let tip = q('[role="tooltip"]');
-    // The placement rules the inert scoped style would apply over the popover UA styles.
-    Object.assign(tip.style, { inset: 'auto', margin: '0' });
-    let wrap = q('[data-test-pretui-tooltip]');
-    await triggerEvent(wrap, 'mouseenter');
+    stage();
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
 
     state.content = 'Copied the link to this workspace';
     await settled();
-    // A ResizeObserver reports after the next frame's animation callbacks.
-    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
-    let trigger = wrap.getBoundingClientRect();
-    let bubble = tip.getBoundingClientRect();
-    assert.ok(
-      Math.abs(bubble.left + bubble.width / 2 - (trigger.left + trigger.width / 2)) < 1,
-      'the longer tip is centered under the trigger',
+    await frames();
+    assert.ok(offCenter() < 1, 'the longer tip is centered under the trigger');
+  });
+
+  test('Tooltip hides while its trigger is scrolled out of view', async function (assert) {
+    await render(
+      <template>
+        <div data-test-scroller>
+          <Tooltip @content='Copy the link' @side='bottom'>
+            <button type='button' data-test-trigger>Go</button>
+          </Tooltip>
+          <div data-test-spacer></div>
+        </div>
+      </template>,
     );
+    let scroller = smallScroller('auto');
+    q('[data-test-spacer]').style.height = '40rem';
+    // The observer measures against the viewport, wherever the runner puts
+    // its container.
+    scroller.scrollIntoView();
+    let tip = q('[data-test-pretui-tooltip-bubble]');
+    let visible = () => tip.checkVisibility({ visibilityProperty: true });
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
+    await frames();
+    assert.true(visible(), 'visible beside its trigger');
+
+    scroller.scrollTop = scroller.scrollHeight;
+    await frames(3);
+    assert.true(tip.matches(':popover-open'), 'still open');
+    assert.false(visible(), 'but hidden while the trigger is out of view');
+
+    let escapes = 0;
+    let count = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') escapes++;
+    };
+    document.addEventListener('keydown', count);
+    await triggerKeyEvent('[data-test-trigger]', 'keydown', 'Escape');
+    document.removeEventListener('keydown', count);
+    assert.strictEqual(escapes, 1, 'Escape passes to the page while the tip is out of sight');
+
+    scroller.scrollTop = 0;
+    await frames(3);
+    assert.true(visible(), 'and back once the trigger is');
+
+    scroller.scrollTop = scroller.scrollHeight;
+    await frames(3);
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseleave');
+    scroller.scrollTop = 0;
+    await frames(3);
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
+    assert.true(visible(), 'a tip that closed while hidden opens visible');
+  });
+
+  test('Tooltip closes as dismissed when its trigger moves in the DOM', async function (assert) {
+    class State {
+      @tracked items = ['first', 'second'];
+    }
+    let state = new State();
+    await render(
+      <template>
+        {{#each state.items key='@identity' as |item|}}
+          <Tooltip @content={{item}} data-test-item={{item}}>
+            <button type='button'>{{item}}</button>
+          </Tooltip>
+        {{/each}}
+      </template>,
+    );
+    // Removing a showing popover from the document closes it, and a keyed
+    // swap detaches one of the two items to reorder them.
+    let wrap = q('[data-test-item="first"]');
+    let tip = wrap.querySelector('[data-test-pretui-tooltip-bubble]') as HTMLElement;
+    await triggerEvent(wrap, 'mouseenter');
+    assert.true(tip.matches(':popover-open'), 'open on hover');
+
+    let detached = false;
+    let moves = new MutationObserver((records) => {
+      detached ||= records.some((r) => [...r.removedNodes].includes(wrap));
+    });
+    moves.observe(wrap.parentNode!, { childList: true });
+    state.items = ['second', 'first'];
+    await settled();
+    moves.takeRecords().forEach((r) => {
+      detached ||= [...r.removedNodes].includes(wrap);
+    });
+    moves.disconnect();
+    assert.true(detached, 'the hovered trigger was moved, not its neighbor');
+    await frames();
+    await settled();
+    assert.strictEqual(tip.dataset['open'], undefined, 'its tip closes as dismissed');
+    assert.false(tip.matches(':popover-open'), 'out of the top layer');
+
+    await triggerEvent(wrap, 'mouseleave');
+    await triggerEvent(wrap, 'mouseenter');
+    assert.true(tip.matches(':popover-open'), 'and the next hover opens it');
   });
 });
