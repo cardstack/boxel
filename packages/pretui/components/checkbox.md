@@ -5,10 +5,13 @@ A single binary choice, rendered as a label-wrapped native checkbox with a custo
 ## The contract
 
 ```
-@label?, @checked?, @defaultChecked?, @disabled?
+@label?, @controlId?, @checked?, @defaultChecked?, @disabled?
 @onCheckedChange?(checked: boolean)
+<:default>   — the label's content when it needs markup; wins over @label
 Element: HTMLLabelElement
 ```
+
+`@controlId` is the input's id, so a **Field**'s `<label for>` points at it: the checkbox is then named by the Field's label and its own.
 
 **The root element is the `<label>`, not the input.** `...attributes` therefore land on the label. This is what makes `@label` optional and safe: the input is _inside_ its label, so the implicit association exists whether or not text is rendered, and clicking anywhere in the row toggles. It also means that if you want to put attributes on the input itself, you cannot — the API is deliberately closed there.
 
@@ -39,11 +42,11 @@ Honest gaps:
 - **`@disabled` uses the native attribute**, removing the control from the tab order — so a disabled checkbox cannot be discovered or read by a keyboard user scanning the form. Spectrum and Web Awesome behave the same way, so this is conventional, but `aria-disabled` would be kinder in a long form.
 - **`opacity: 0.45` for disabled** will fail text contrast against most themes' backgrounds.
 - **Focus-visible paints its own ring**: `outline: 2px solid var(--ring)` with a 2px offset, since `appearance: none` discards the UA ring.
-- The `clip-path` tick has no `forced-colors` treatment, so in Windows High Contrast mode the checked state may render as an empty box.
+- Under forced colors (Windows High Contrast) the platform's checkbox, drawn in the system colors, stands in for the painted face, so the checked state still shows.
 
 ## Theming
 
-`--pretui-control-rest` (falling back to `--field`), `--pretui-control-border` (falling back to `--input`), `--pretui-control-hover` (falling back to `--hover`), `--primary` (checked fill), `--primary-foreground` (the tick), `--border` (mixed into the checked hairline), `--pretui-edge-highlight` (the inset top highlight that gives the checked box its pressed-metal read), `--pretui-dur-snap` / `--pretui-ease-snap`, `--text-ui-md`.
+`--pretui-control-rest` (falling back to `--field`), `--pretui-control-border` (falling back to `--input`), `--pretui-control-checked-border` (the checked edge, falling back to `--primary` mixed with `--border`; a theme whose `--primary` is too faint for a 3:1 edge sets an ink here), `--pretui-control-hover` (falling back to `--hover`), `--primary` (checked fill), `--primary-foreground` (the tick), `--border` (mixed into the checked hairline), `--pretui-edge-highlight` (the inset top highlight that gives the checked box its pressed-metal read), `--pretui-dur-snap` / `--pretui-ease-snap`, `--text-ui-md`.
 
 The 15px box, 5px radius and 9px tick are fixed; a theme cannot scale the control. If a theme sets `--primary` very light, the tick (painted `--primary-foreground`, usually white) disappears — define both together, as with Button's tone/on-tone pairs.
 

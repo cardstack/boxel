@@ -11,7 +11,7 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 import Globe from '@cardstack/boxel-icons/globe';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '@cardstack/boxel-icons/tag';
@@ -55,8 +55,10 @@ export default class ServiceAccountFields extends Component<Signature> {
           empty only if it should act as the service account itself.</p>
       {{/if}}
     {{/if}}
-    <FieldContainer
-      @tag='div'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
+      @labelTag='span'
       @label='Key file'
       @icon={{KeyRound}}
       data-test-key-field='key-file'
@@ -96,15 +98,18 @@ export default class ServiceAccountFields extends Component<Signature> {
             Service Accounts → Keys, add a key of type JSON.</p>
         {{/if}}
       </div>
-    </FieldContainer>
-    <FieldContainer
-      @tag='label'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Act as'
       @icon={{Tag}}
       data-test-key-field='subject'
+      as |controlId|
     >
       <div class='with-hint'>
         <BoxelInput
+          @id={{controlId}}
           @type='email'
           @autocomplete='off'
           @placeholder='Optional: someone@your-domain.com'
@@ -116,15 +121,18 @@ export default class ServiceAccountFields extends Component<Signature> {
         <p class='hint'>Only for a service account with domain-wide delegation.
           Leave it empty to act as the service account itself.</p>
       </div>
-    </FieldContainer>
-    <FieldContainer
-      @tag='label'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Scopes'
       @icon={{Globe}}
       data-test-key-field='scopes'
+      as |controlId|
     >
       <div class='with-hint'>
         <BoxelInput
+          @id={{controlId}}
           @type='textarea'
           @autocomplete='off'
           @placeholder='https://www.googleapis.com/auth/spreadsheets'
@@ -137,7 +145,7 @@ export default class ServiceAccountFields extends Component<Signature> {
         <p class='hint'>What its tokens may do, one per line, or separated by
           spaces.</p>
       </div>
-    </FieldContainer>
+    </Field>
     {{#if this.accountChange}}
       <p
         class='replace-note'

@@ -28,8 +28,8 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import { Button } from '@cardstack/pretui/components/button';
 import Globe from '@cardstack/boxel-icons/globe';
-import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import Users from '@cardstack/boxel-icons/users';
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { eq } from '@cardstack/pretui/helpers';
 
 import { anonymousUseSummary } from './anonymous-use-fields.gts';
@@ -105,7 +105,7 @@ export default class KeyUse extends Component<Signature> {
         {{/if}}
       </div>
       <div class='use-row' data-test-key-shared-into>
-        <LayoutGrid class='use-icon' aria-hidden='true' />
+        <Users class='use-icon' aria-hidden='true' />
         {{#if @key.sharedInto.length}}
           <div class='shared'>
             <p
@@ -216,7 +216,7 @@ export default class KeyUse extends Component<Signature> {
       </div>
       {{#if @onChangeAnonymousUse}}
         <div class='use-row' data-test-key-anonymous-use>
-          <Users class='use-icon' aria-hidden='true' />
+          <HatGlasses class='use-icon' aria-hidden='true' />
           <div class='anonymous'>
             <p class='use-text' data-test-key-anonymous-use-summary>
               {{anonymousUseSummary @key}}

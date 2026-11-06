@@ -15,7 +15,7 @@ import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
 
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 import Globe from '@cardstack/boxel-icons/globe';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
@@ -107,14 +107,17 @@ export default class OAuthClientFields extends Component<Signature> {
       @onSelect={{this.setGrant}}
     />
     {{#if this.peopleSignIn}}
-      <FieldContainer
-        @tag='label'
+      <Field
+        @reserveMessage={{false}}
+        @orientation='horizontal'
         @label='Sign-in page'
         @icon={{Globe}}
         data-test-key-field='authorize-url'
+        as |controlId|
       >
         <div class='with-hint'>
           <BoxelInput
+            @id={{controlId}}
             @type='url'
             @autocomplete='off'
             @placeholder='https://example.com/oauth/authorize'
@@ -128,17 +131,20 @@ export default class OAuthClientFields extends Component<Signature> {
             in. The site’s developer documentation calls it the authorization
             URL.</span>
         </div>
-      </FieldContainer>
+      </Field>
       <CallbackAddress />
     {{/if}}
-    <FieldContainer
-      @tag='label'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Token address'
       @icon={{Globe}}
       data-test-key-field='token-url'
+      as |controlId|
     >
       <div class='with-hint'>
         <BoxelInput
+          @id={{controlId}}
           @type='url'
           @autocomplete='off'
           @placeholder='https://example.com/oauth/token'
@@ -151,15 +157,18 @@ export default class OAuthClientFields extends Component<Signature> {
         <span class='hint'>Where Boxel collects access once someone signs in.
           The documentation calls it the token URL.</span>
       </div>
-    </FieldContainer>
-    <FieldContainer
-      @tag='label'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Permissions'
       @icon={{RectangleEllipsis}}
       data-test-key-field='scopes'
+      as |controlId|
     >
       <div class='with-hint'>
         <BoxelInput
+          @id={{controlId}}
           @type='text'
           @autocomplete='off'
           @placeholder='For example: read:user'
@@ -173,17 +182,18 @@ export default class OAuthClientFields extends Component<Signature> {
           documentation calls them scopes), separated by spaces. Leave this
           empty if you chose the app’s permissions on the site.</span>
       </div>
-    </FieldContainer>
-    <FieldContainer
-      @tag='label'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Used for'
       @icon={{LayoutGrid}}
       data-test-key-field='api-hosts'
-      as |labelId|
+      as |controlId|
     >
       <div class='with-hint'>
         <textarea
-          aria-labelledby={{labelId}}
+          id={{controlId}}
           class='api-hosts'
           name='api-hosts'
           rows='2'
@@ -198,7 +208,7 @@ export default class OAuthClientFields extends Component<Signature> {
           per line. When a card needs to reach one of them, Boxel offers this
           app for signing in.</span>
       </div>
-    </FieldContainer>
+    </Field>
     <details class='advanced' data-test-oauth-advanced>
       <summary>Advanced</summary>
       <RadioChoices
@@ -292,7 +302,10 @@ function callbackAddress(): string {
 }
 
 const CallbackAddress: TemplateOnlyComponent<{ Args: {} }> = <template>
-  <FieldContainer
+  <Field
+    @reserveMessage={{false}}
+    @orientation='horizontal'
+    @labelTag='span'
     @label='Address to give the site'
     @icon={{Globe}}
     data-test-key-field='callback-url'
@@ -302,7 +315,7 @@ const CallbackAddress: TemplateOnlyComponent<{ Args: {} }> = <template>
       <span class='hint'>Paste this into the app’s settings on the site, where
         it asks for a callback URL (sometimes called a redirect URL).</span>
     </p>
-  </FieldContainer>
+  </Field>
   <style scoped>
     .callback {
       display: flex;
