@@ -158,8 +158,14 @@ jobs:
             glimmer-motion:
               - *shared
               - 'packages/glimmer-motion/**'
+            # The secure origin's build compiles Pret UI and boxel-ui from
+            # their source and reads boxel-icons' build, so a change to any of
+            # them can change what the origin ships (ADR 019 §1.8).
             secure-origin:
               - *shared
+              - 'packages/boxel-icons/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/pretui/**'
               - 'packages/secure-origin/**'
             # Realm content the realm-server image carries and each deploy
             # copies onto the realm's disk, so a change to it needs a staging
@@ -183,6 +189,9 @@ jobs:
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
+            # Pret UI is here for the secure origin's policy test
+            # (`secure-origin-policy-test.ts`), which loads each page the
+            # origin's build makes from Pret UI, boxel-ui and boxel-icons.
             realm-server:
               - *shared
               - *test-web-assets
@@ -193,6 +202,7 @@ jobs:
               - 'packages/host/**'
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
+              - 'packages/pretui/**'
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
@@ -715,6 +725,13 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
+      # The pages read boxel-icons from its build; `test:components` builds it
+      # when this misses. It doesn't save on a miss: the key belongs to the
+      # build Lint makes and saves.
+      - name: Restore boxel-icons build cache
+        uses: ./.github/actions/restore-icons-cache
+        with:
+          save: "false"
       - name: Run test suite
         run: pnpm test:components
         working-directory: packages/secure-origin

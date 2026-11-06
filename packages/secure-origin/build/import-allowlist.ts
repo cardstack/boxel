@@ -24,6 +24,11 @@ import {
   PACKAGE_ROOT,
 } from './module-package.ts';
 
+// A package joins this list only by a change to it, reviewed as a change to
+// the origin's trusted code (ADR 019 §1.3). It never joins because a package
+// already on it, Pret UI or boxel-ui included, starts depending on it: the
+// build then fails, naming it. The list names only the packages the build
+// reaches.
 export const ALLOWED_PACKAGES = new Set([
   'ember-source',
   '@glimmer/component',
@@ -31,6 +36,63 @@ export const ALLOWED_PACKAGES = new Set([
   // The build's runtime helpers, which compiled code calls into.
   '@babel/runtime',
   'decorator-transforms',
+
+  // Pret UI and what it imports at run time (ADR 019 §1.3). boxel-ui reaches
+  // the pages only through Pret UI: the package never imports it.
+  '@cardstack/pretui',
+  '@cardstack/boxel-ui',
+  '@cardstack/boxel-icons',
+  'ember-modifier',
+
+  // boxel-ui's run-time dependencies, as ADR 019 §1.3 names them.
+  '@ember/test-waiters',
+  '@floating-ui/dom',
+  'awesome-phonenumber',
+  'classnames',
+  'dayjs',
+  'dompurify',
+  'ember-basic-dropdown',
+  'ember-concurrency',
+  'ember-css-url',
+  'ember-draggable-modifiers',
+  'ember-focus-trap',
+  'ember-power-calendar',
+  'ember-power-calendar-moment',
+  'ember-power-select',
+  'ember-sortable',
+  'ember-velcro',
+  'focus-trap',
+  'lodash-es',
+  'tracked-built-ins',
+
+  // Packages the build reaches through the ones above that ADR 019 §1.3
+  // doesn't name, each reviewed here. Everything boxel-ui's `components`
+  // index reaches is in the bundle once one Pret UI wrapper of a boxel-ui
+  // component is, so these arrive with the first.
+  //
+  // Embroider's run-time macros, which compiled addon code calls into, as it
+  // calls the build's runtime helpers.
+  '@embroider/macros',
+  // `@floating-ui/dom`'s own building blocks.
+  '@floating-ui/core',
+  '@floating-ui/utils',
+  // `focus-trap`'s list of the elements focus can reach.
+  'tabbable',
+  // The date library `ember-power-calendar-moment` adapts.
+  'moment',
+  // `ember-basic-dropdown`'s and `ember-power-select`'s helpers and
+  // modifier: the `eq`/`and`/`or` helpers, a dynamic `{{element}}`, and a
+  // modifier that sets style properties through the CSSOM
+  // (`element.style.setProperty`), which the policy allows.
+  'ember-truth-helpers',
+  'ember-element-helper',
+  'ember-style-modifier',
+  // The drag-and-drop engine under `ember-draggable-modifiers`, and its two
+  // small helpers.
+  '@atlaskit/pragmatic-drag-and-drop',
+  '@atlaskit/pragmatic-drag-and-drop-hitbox',
+  'bind-event-listener',
+  'raf-schd',
 ]);
 
 // Modules the bundler itself generates, which have no file on disk.
