@@ -4533,6 +4533,64 @@ export class Realm {
   ): Promise<Response> {
     let adapter = this.#dbAdapter as any;
     let original = adapter.execute.bind(adapter);
+    // `?diag` answers fixed read-only checks of the markdown_tsv migration;
+    // `?diag&repair` also finishes its backfill and builds its index.
+    let reqURL = new URL(request.url);
+    if (reqURL.searchParams.has('diag')) {
+      let out: string[] = [];
+      let run = async (label: string, sql: string) => {
+        try {
+          let rows = await original(sql);
+          out.push(`== ${label}\n${JSON.stringify(rows, null, 1)}`);
+        } catch (e: any) {
+          out.push(`== ${label}\nERROR ${e.message}`);
+        }
+      };
+      if (reqURL.searchParams.has('repair')) {
+        let total = 0;
+        for (;;) {
+          let rows = (await original(
+            `WITH b AS (SELECT url, realm_url, type FROM prerendered_html WHERE markdown_tsv IS NULL AND markdown IS NOT NULL LIMIT 500)
+             UPDATE prerendered_html AS p SET markdown_tsv = to_tsvector('english', markdown_search_text(p.markdown))
+             FROM b WHERE p.url = b.url AND p.realm_url = b.realm_url AND p.type = b.type RETURNING 1 AS x`,
+          )) as unknown[];
+          total += rows.length;
+          if (rows.length === 0) {
+            break;
+          }
+        }
+        out.push(`== repair backfilled ${total} rows`);
+        await run(
+          'repair index',
+          `CREATE INDEX CONCURRENTLY IF NOT EXISTS prerendered_html_markdown_tsv_idx ON prerendered_html USING GIN (markdown_tsv)`,
+        );
+        await run('analyze', `ANALYZE prerendered_html`);
+      }
+      await run(
+        'latest migrations',
+        `SELECT name, run_on FROM migrations ORDER BY id DESC LIMIT 4`,
+      );
+      await run(
+        'tsv coverage',
+        `SELECT count(*) AS rows, count(markdown) AS with_markdown, count(markdown_tsv) AS with_tsv FROM prerendered_html`,
+      );
+      await run(
+        'indexes',
+        `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'prerendered_html'`,
+      );
+      await run(
+        'invalid indexes',
+        `SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE NOT i.indisvalid`,
+      );
+      await run(
+        'triggers',
+        `SELECT tgname, tgrelid::regclass::text AS tbl FROM pg_trigger WHERE tgname LIKE '%markdown_tsv%'`,
+      );
+      return new Response(out.join('\n'), {
+        status: 200,
+        headers: { 'content-type': 'text/plain; charset=utf-8' },
+      });
+    }
     let captured: { sql: string; opts: any }[] = [];
     adapter.execute = (sql: string, opts?: any) => {
       if (/^\s*SELECT/i.test(sql)) {
