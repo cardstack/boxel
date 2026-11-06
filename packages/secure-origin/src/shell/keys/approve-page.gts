@@ -151,8 +151,9 @@ type State =
       // Whether the approval serves people who aren't signed in too.
       anonymous?: boolean;
       // Whether the approved calls send the user's own key, and the labels of
-      // the shares they send, for the user's calls and everyone's alike.
+      // the shares they send (how many, and named as one phrase).
       ownKey: boolean;
+      shareCount: number;
       shares: string;
     };
 type ChoosingState = Extract<State, { name: 'choosing' }>;
@@ -216,7 +217,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             your own key{{#if this.done.shares}} and{{/if}}
           {{/if}}
           {{#if this.done.shares}}
-            the key you share as
+            {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}
+            you share as
             <strong data-test-approve-done-shares>{{this.done.shares}}</strong>
           {{/if}}
           {{#if this.done.anonymous}}
@@ -233,8 +235,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               class='done-audience'
               data-test-approve-done-audience='userKey'
             >
-              Only your use of this card sends your own key. Everyone else who
-              uses it chooses a key of their own.
+              {{#if this.done.interactive}}
+                Only your use of this card sends your own key. Everyone else who
+                uses it chooses a key of their own.
+              {{else}}
+                Only the card’s scheduled calls send your own key. Opening the
+                card doesn’t use it.
+              {{/if}}
             </span>
           {{/if}}
           {{#if this.done.shares}}
@@ -242,9 +249,22 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               class='done-audience'
               data-test-approve-done-audience='apiKey'
             >
-              Everyone who uses this card in
-              <strong>{{this.done.realm}}</strong>
-              makes these calls with the key you share.
+              {{#if this.done.interactive}}
+                Everyone who uses this card in
+                <strong>{{this.done.realm}}</strong>
+                makes the calls that send
+                {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}
+                you share, and they count against
+                {{if (gt this.done.shareCount 1) 'each share’s' 'the share’s'}}
+                limits.
+              {{else}}
+                Only the card’s scheduled calls in
+                <strong>{{this.done.realm}}</strong>
+                send
+                {{if (gt this.done.shareCount 1) 'the keys' 'the key'}}
+                you share. Opening the card doesn’t use
+                {{if (gt this.done.shareCount 1) 'them' 'it'}}.
+              {{/if}}
             </span>
           {{/if}}
         {{/if}}
@@ -259,11 +279,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             {{else}}
               {{#if (eq this.keyAudience 'apiKey')}}
                 This card calls another service with a key you share with this
-                workspace, for everyone who uses the card there.
+                workspace,
+                {{this.sharedFor}}.
               {{else if (eq this.keyAudience 'both')}}
                 This card calls another service with your own key, for you
-                alone, and with a key you share with this workspace, for
-                everyone who uses the card there.
+                alone, and with a key you share with this workspace,
+                {{this.sharedFor}}.
               {{else}}
                 This card calls another service with your own key, for you
                 alone.
@@ -309,7 +330,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 as |_controlId _messageId labelId|
               >
                 <div class='picker'>
-                  <KeyAudience @kind={{choice.kind}} />
+                  <KeyAudience
+                    @kind={{choice.kind}}
+                    @use={{this.form.use}}
+                    @anonymous={{this.servesVisitors choice}}
+                  />
                   {{#if choice.options.length}}
                     <RadioCard
                       @name='slot-{{choice.slot}}'
@@ -1175,6 +1200,23 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return kinds.size > 1 ? 'both' : kinds.has('apiKey') ? 'apiKey' : 'userKey';
   }
 
+  // Whom a shared key serves, as the intro says it: everyone who uses the
+  // card, or, approved for the schedule only, the card's scheduled calls.
+  private get sharedFor() {
+    return this.interactive
+      ? 'for everyone who uses the card there'
+      : 'for the card’s scheduled calls there';
+  }
+
+  // Whether the share chosen for a slot serves people who aren't signed in
+  // too: the realm's policy opens a ticked call to them, and the share's key
+  // allows them (`sharesForVisitors`).
+  private servesVisitors = (choice: SlotChoice) =>
+    choice.kind === 'apiKey' &&
+    this.visitors.anyone.some(
+      (share) => share.id === this.form.chosen[choice.slot],
+    );
+
   private hostsOf = (destinations: string[]) =>
     destinations.map((d) => new URL(d).host).join(', ');
 
@@ -1235,6 +1277,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           realm: batch.realm.name,
           interactive: false,
           ownKey: false,
+          shareCount: 0,
           shares: '',
         };
         this.args.api.visit.loaded();
@@ -1331,6 +1374,16 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     try {
       let interactive = this.interactive;
       let anonymous = this.visitors.anyone.length > 0;
+      // What the done page says is read before the request, from what is
+      // approved, since the form stays live while it is in flight.
+      let ownKey = this.tickedOperations.some((o) =>
+        o.slots.some((s) => s.key === 'userKey'),
+      );
+      let shares = chosenShares(
+        state.batch,
+        this.tickedOperations,
+        this.form.chosen,
+      ).map((share) => share.label);
       let operations = approvalOf(
         this.batch!,
         this.choices,
@@ -1356,16 +1409,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         realm: state.batch.realm.name,
         interactive,
         anonymous,
-        ownKey: this.tickedOperations.some((o) =>
-          o.slots.some((s) => s.key === 'userKey'),
-        ),
-        shares: listPhrase(
-          chosenShares(
-            state.batch,
-            this.tickedOperations,
-            this.form.chosen,
-          ).map((share) => share.label),
-        ),
+        ownKey,
+        shareCount: shares.length,
+        shares: listPhrase(shares),
       };
       if (!this.args.api.tellCliDone() && !this.fromKeyPage) {
         this.args.api.close();
