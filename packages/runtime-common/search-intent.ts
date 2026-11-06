@@ -85,19 +85,38 @@ export type SearchTextTier = 'A' | 'B' | 'C' | 'D';
 // A card's searchable text, grouped by weight tier. Stamped into the search
 // doc under `SEARCH_TEXT_KEY` by the render, turned into the row's weighted
 // full-text vector by the index writer, and never stored in the promoted doc.
-export type SearchText = Partial<Record<SearchTextTier, string>>;
+// Two more groups ride along: `typos`, the words of fields declared
+// `typos: true`, which the writer adds to the realm's word list so a
+// misspelt term can be corrected; and `patterns`, the values of fields
+// searched by glob or regex (declared `patterns: true`, or an `identifier`
+// or `code` role), one per line, which the writer keeps trigram-indexed.
+export type SearchTextGroup = SearchTextTier | 'typos' | 'patterns';
+export type SearchText = Partial<Record<SearchTextGroup, string>>;
 
 export const SEARCH_TEXT_KEY = '_searchText';
 
 // The most characters a tier holds. A title tier is short by nature; the
 // prose tiers are capped so one huge field can't push the vector past
 // Postgres's 1 MB tsvector limit.
-export const SEARCH_TEXT_TIER_MAX: Record<SearchTextTier, number> = {
+export const SEARCH_TEXT_TIER_MAX: Record<SearchTextGroup, number> = {
   A: 10_000,
   B: 40_000,
   C: 200_000,
   D: 200_000,
+  typos: 100_000,
+  patterns: 20_000,
 };
+
+// Whether a field's values are searched by glob or regex.
+export function searchesByPattern(
+  intent: FieldSearchIntent | undefined,
+): boolean {
+  return (
+    Boolean(intent?.patterns) ||
+    intent?.role === 'identifier' ||
+    intent?.role === 'code'
+  );
+}
 
 export function searchTierOf(
   intent: FieldSearchIntent | undefined,
@@ -115,11 +134,11 @@ export const TITLE_TIER: SearchTextTier = 'A';
 // card's title and its `cardInfo.name` are usually the same string) and
 // stopping each tier at its cap.
 export class SearchTextBuilder {
-  #parts = new Map<SearchTextTier, string[]>();
-  #seen = new Map<SearchTextTier, Set<string>>();
-  #lengths = new Map<SearchTextTier, number>();
+  #parts = new Map<SearchTextGroup, string[]>();
+  #seen = new Map<SearchTextGroup, Set<string>>();
+  #lengths = new Map<SearchTextGroup, number>();
 
-  add(tier: SearchTextTier, text: string) {
+  add(tier: SearchTextGroup, text: string) {
     let value = text.trim();
     if (!value) {
       return;

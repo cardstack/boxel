@@ -128,7 +128,15 @@ export type SearchEntryScope = 'cards' | 'files' | 'all';
 const SEARCH_ENTRY_SCOPES: SearchEntryScope[] = ['cards', 'files', 'all'];
 
 // The operator members whose value is an object keyed by field paths.
-const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range', 'near'];
+const FIELD_KEYED_OPERATORS = [
+  'eq',
+  'contains',
+  'in',
+  'range',
+  'near',
+  'pattern',
+  'regex',
+];
 
 // Which form of the `item` serialization the fieldset selects.
 export type SearchEntryItemSelection =
@@ -440,9 +448,10 @@ function translateFilterNode(
     } else if (key === 'matches') {
       // Full-text match over the whole document — no field path to address.
       out.matches = value;
-    } else if (key === 'prefix') {
-      // matches' type-ahead flag; assertQuery checks it sits beside matches.
-      out.prefix = value;
+    } else if (key === 'prefix' || key === 'typos' || key === 'scope') {
+      // matches' type-ahead, typo and title-scope options; assertQuery
+      // checks they sit beside matches.
+      out[key] = value;
     } else if (key === 'typeahead') {
       // Type-ahead over the `_typeahead` text — no field path to address.
       out.typeahead = value;
@@ -1202,6 +1211,8 @@ const SHAPE_MEMBERS = [
   'matches',
   'typeahead',
   'near',
+  'pattern',
+  'regex',
 ] as const;
 
 // The single member that decides what an unanchored node matches, or
@@ -1256,6 +1267,8 @@ export interface SearchEntryWireSortExpression {
   method?: 'rrf';
   k?: number;
   weight?: number;
+  // a `_relevance` sort's signal weights (see `RelevanceSortExpression`)
+  weights?: Record<string, number>;
 }
 
 export type SearchEntryWireFilter = {
@@ -1274,6 +1287,10 @@ export type SearchEntryWireFilter = {
   within?: string;
   typeahead?: string;
   near?: Record<string, unknown>;
+  pattern?: Record<string, string>;
+  regex?: Record<string, string>;
+  typos?: boolean;
+  scope?: 'title';
 };
 
 export interface SearchEntryWireQuery {
@@ -1302,19 +1319,18 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
     } else if (key === 'not') {
       out.not = wireFilterFromFilter(value as Filter);
     } else if (FIELD_KEYED_OPERATORS.includes(key)) {
-      out[key as 'eq' | 'contains' | 'in' | 'range' | 'near'] =
-        Object.fromEntries(
-          Object.entries(value as Record<string, unknown>).map(
-            ([fieldPath, fieldValue]) => [
-              `${ITEM_PREFIX}${fieldPath}`,
-              fieldValue,
-            ],
-          ),
-        );
+      (out as Record<string, unknown>)[key] = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(
+          ([fieldPath, fieldValue]) => [
+            `${ITEM_PREFIX}${fieldPath}`,
+            fieldValue,
+          ],
+        ),
+      );
     } else if (key === 'matches') {
       out.matches = value as string;
-    } else if (key === 'prefix') {
-      out.prefix = value as boolean;
+    } else if (key === 'prefix' || key === 'typos' || key === 'scope') {
+      (out as Record<string, unknown>)[key] = value;
     } else if (key === 'typeahead') {
       out.typeahead = value as string;
     } else if (key === 'within') {
@@ -1337,6 +1353,7 @@ function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
     ...(entry.direction ? { direction: entry.direction } : {}),
     ...('near' in entry && entry.near != null ? { near: entry.near } : {}),
     ...(entry.weight != null ? { weight: entry.weight } : {}),
+    ...(entry.weights != null ? { weights: entry.weights } : {}),
     ...(Array.isArray(entry.of) ? { of: entry.of.map(wireSortFromSort) } : {}),
     ...(entry.method ? { method: entry.method } : {}),
     ...(entry.k != null ? { k: entry.k } : {}),

@@ -162,6 +162,8 @@ export type Filter =
   | MatchesFilter
   | TypeAheadFilter
   | NearFilter
+  | PatternFilter
+  | RegexFilter
   | CardTypeFilter;
 
 export interface TypedFilter {
@@ -360,6 +362,26 @@ export interface MatchesFilter extends TypedFilter {
   // `in`, which is the membership operator: a node holding both would read as
   // two operators.
   scope?: 'title';
+  // A misspelt word still matches (docs/search-intent.md): each word also
+  // matches the closest words of the realm's fields declared `typos: true`.
+  // Postgres only; SQLite matches the words as typed.
+  typos?: boolean;
+  // Set by the engine, never on the wire: the term's words widened to their
+  // corrections, as tsquery text.
+  typoQuery?: string;
+}
+
+// A glob over a field's whole value, ignoring case: `*` is any run of
+// characters, `?` any one. Only on a field searched by pattern (declared
+// `search: { patterns: true }`, or an `identifier` or `code` role).
+export interface PatternFilter extends TypedFilter {
+  pattern: { [fieldName: string]: string };
+}
+
+// A POSIX regular expression over a field's value (Postgres's `~`), on the
+// same fields as `pattern`. Postgres only.
+export interface RegexFilter extends TypedFilter {
+  regex: { [fieldName: string]: string };
 }
 
 // One passage that matched a search's `matches … within` term (see PassageField).
@@ -393,7 +415,7 @@ export function isTypeAheadFilter(filter: Filter): filter is TypeAheadFilter {
 // One positive `matches` term, as a `_matchRelevance` sort scores it.
 export type MatchTerm = Pick<
   MatchesFilter,
-  'matches' | 'prefix' | 'within' | 'scope'
+  'matches' | 'prefix' | 'within' | 'scope' | 'typos' | 'typoQuery'
 >;
 
 // The type-ahead split of a `prefix` query: the finished words, and the
@@ -478,6 +500,8 @@ export function collectPositiveMatchTerms(
             ...(filter.prefix ? { prefix: true } : {}),
             ...(filter.within ? { within: filter.within } : {}),
             ...(filter.scope ? { scope: filter.scope } : {}),
+            ...(filter.typos ? { typos: true } : {}),
+            ...(filter.typoQuery ? { typoQuery: filter.typoQuery } : {}),
           },
         ]
       : [];
@@ -895,7 +919,38 @@ const FILTER_OPERATOR_ASSERTS: Record<
   matches: assertMatchesFilter,
   typeahead: assertTypeAheadFilter,
   near: assertNearFilter,
+  pattern: (filter, pointer) =>
+    assertStringKeyedFilter(filter, pointer, 'pattern'),
+  regex: (filter, pointer) => assertStringKeyedFilter(filter, pointer, 'regex'),
 };
+
+function assertStringKeyedFilter(
+  filter: any,
+  pointer: string[],
+  operator: 'pattern' | 'regex',
+) {
+  let at = pointer.concat(operator);
+  let value = filter[operator];
+  if (typeof value !== 'object' || value == null || Array.isArray(value)) {
+    throw new InvalidQueryError(
+      `${at.join('/') || '/'}: ${operator} must be an object of field paths`,
+    );
+  }
+  let entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new InvalidQueryError(
+      `${at.join('/') || '/'}: ${operator} needs a field`,
+    );
+  }
+  for (let [key, v] of entries) {
+    assertKey(key, at);
+    if (typeof v !== 'string' || v === '') {
+      throw new InvalidQueryError(
+        `${at.concat(key).join('/')}: a ${operator} must be a non-empty string`,
+      );
+    }
+  }
+}
 
 const FILTER_OPERATORS = Object.keys(FILTER_OPERATOR_ASSERTS);
 
@@ -955,6 +1010,11 @@ function assertFilter(
   if ('prefix' in filter && operator !== 'matches') {
     throw new InvalidQueryError(
       `${pointer.concat('prefix').join('/') || '/'}: prefix belongs beside matches`,
+    );
+  }
+  if ('typos' in filter && operator !== 'matches') {
+    throw new InvalidQueryError(
+      `${pointer.concat('typos').join('/') || '/'}: typos belongs beside matches`,
     );
   }
   if ('scope' in filter && operator !== 'matches') {
@@ -1223,6 +1283,16 @@ function assertMatchesFilter(
   if ('prefix' in filter && typeof filter.prefix !== 'boolean') {
     throw new InvalidQueryError(
       `${pointer.concat('prefix').join('/') || '/'}: prefix must be a boolean`,
+    );
+  }
+  if ('typos' in filter && typeof filter.typos !== 'boolean') {
+    throw new InvalidQueryError(
+      `${pointer.concat('typos').join('/') || '/'}: typos must be a boolean`,
+    );
+  }
+  if ('typoQuery' in filter) {
+    throw new InvalidQueryError(
+      `${pointer.concat('typoQuery').join('/') || '/'}: typoQuery is set by the engine`,
     );
   }
   if ('scope' in filter && filter.scope !== 'title') {

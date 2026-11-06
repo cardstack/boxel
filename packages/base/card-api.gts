@@ -123,6 +123,7 @@ import {
   isNonTextString,
   NON_TEXT_SERIALIZERS,
   searchTierOf,
+  searchesByPattern,
   SearchTextBuilder,
   type CardSearchIntent,
   type FieldSearchIntent,
@@ -4479,12 +4480,19 @@ function applySearchIntent(
           continue;
         }
         let tier = searchTierOf(intent);
-        if (!tier) {
-          continue;
-        }
+        let byPattern = searchesByPattern(intent);
         for (let item of values) {
-          if (typeof item === 'string' && !isNonTextString(item)) {
+          if (typeof item !== 'string' || isNonTextString(item)) {
+            continue;
+          }
+          if (tier) {
             text.add(tier, item);
+          }
+          if (intent?.typos) {
+            text.add('typos', item);
+          }
+          if (byPattern) {
+            text.add('patterns', item.replace(/\s*\n\s*/g, ' '));
           }
         }
         continue;

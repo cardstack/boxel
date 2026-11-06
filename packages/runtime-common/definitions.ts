@@ -31,8 +31,9 @@ export interface FieldDefinition {
   // and definition-build validation — not a pre-resolved plan. Persisted as
   // plain JSON in `modules.definitions`; omitted when the field declares none.
   searchable?: Searchable;
-  // The field's own `search` option (docs/search-intent.md), as declared;
-  // omitted when it declares none. The query engine reads `rank` from it.
+  // The field's `search` option (docs/search-intent.md): its own, or else its
+  // type's `searchDefaults`; omitted when neither says anything. The query
+  // engine reads `rank`, `facet` and `patterns` from it.
   search?: FieldSearchOption;
 }
 
@@ -159,9 +160,17 @@ export function getFieldDefinitions(
           : undefined,
       query: queryDefinition,
       searchable: field.searchable,
-      ...(field.searchIntent !== undefined
-        ? { search: field.searchIntent }
-        : {}),
+      ...(() => {
+        // A link's target is a card, whose `searchDefaults` are card-level
+        // defaults, not a field intent.
+        let typeDefault =
+          field.fieldType === 'contains' || field.fieldType === 'containsMany'
+            ? (field.card as { searchDefaults?: FieldSearchOption })
+                .searchDefaults
+            : undefined;
+        let search = field.searchIntent ?? typeDefault;
+        return search !== undefined ? { search } : {};
+      })(),
     };
     fields[fieldName] = intern(def);
   }

@@ -70,6 +70,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=boxel_index_vectors \
   --exclude-table-and-children=boxel_index_passages \
   --exclude-table-and-children=boxel_index_spill \
+  --exclude-table-and-children=boxel_index_words \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \

@@ -52,6 +52,7 @@
    source_content_hash TEXT,
    relationship_deps BLOB,
    search_tsv,
+   pattern_text TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

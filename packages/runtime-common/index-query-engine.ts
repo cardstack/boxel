@@ -58,6 +58,7 @@ import {
 } from './query.ts';
 import {
   rankFieldsOf,
+  searchesByPattern,
   SEARCH_RANK_SIGNALS,
   SEARCH_TEXT_KEY,
 } from './search-intent.ts';
@@ -75,6 +76,8 @@ import {
   type ContainsFilter,
   type MatchesFilter,
   type NearFilter,
+  type PatternFilter,
+  type RegexFilter,
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
@@ -1310,6 +1313,7 @@ export class IndexQueryEngine {
     results: Partial<IndexRowWithHtml>[];
   }> {
     try {
+      filter = await this.#resolveTypos(filter, realmURL);
       sort = await this.#expandRelevanceSorts(sort, filter);
       // A facet of plain values is counted with the page (one statement on
       // Postgres); any other shape, or one counted without its own
@@ -2168,6 +2172,13 @@ export class IndexQueryEngine {
       return this.typeAheadCondition(filter, typeConditionRef, context);
     } else if (isNearFilter(filter)) {
       return this.nearCondition(filter, typeConditionRef);
+    } else if ('pattern' in filter || 'regex' in filter) {
+      return this.#patternCondition(
+        filter as PatternFilter | RegexFilter,
+        on,
+        typeConditionRef,
+        context,
+      );
     } else if ('every' in filter) {
       // State each type's membership test once per conjunction. A sibling
       // anchored on a type the AND already tests keeps that type for resolving
@@ -2490,6 +2501,25 @@ export class IndexQueryEngine {
       for (let path of Object.keys(filter.near)) {
         await this.#assertNearField(on, path, `near filter on "${path}"`);
       }
+    } else if ('pattern' in filter || 'regex' in filter) {
+      let operator = 'regex' in filter ? 'regex' : 'pattern';
+      if (operator === 'regex' && this.#dbAdapter.kind !== 'pg') {
+        throw new InvalidQueryError(
+          'a regex filter needs Postgres; this index has no regular expressions',
+        );
+      }
+      let definition = await this.getDefinition(on);
+      for (let path of Object.keys(
+        (filter as unknown as Record<string, Record<string, string>>)[operator],
+      )) {
+        let field = await getField(definition, path, this.#definitionLookup);
+        let search = field.search === false ? undefined : field.search;
+        if (!searchesByPattern(search)) {
+          throw new InvalidQueryError(
+            `a ${operator} filter on "${path}" needs a field searched by pattern: declare it \`search: { patterns: true }\`, or give it an identifier or code role`,
+          );
+        }
+      }
     } else if ('every' in filter) {
       for (let child of filter.every) {
         await this.#assertNearFilters(child, on);
@@ -2501,6 +2531,126 @@ export class IndexQueryEngine {
     } else if ('not' in filter) {
       await this.#assertNearFilters(filter.not, on);
     }
+  }
+
+  // A glob (`pattern`) or regular expression (`regex`) over a field's value.
+  // On Postgres the row's `pattern_text` (every pattern field's value, one per
+  // line, trigram-indexed) narrows to the rows that can match first; the
+  // field itself decides. A glob matches the whole value, ignoring case.
+  #patternCondition(
+    filter: PatternFilter | RegexFilter,
+    on: CodeRef,
+    typeConditionRef: CodeRef | undefined,
+    context: FilterContext,
+  ): CardExpression {
+    let isRegex = 'regex' in filter;
+    let entries = Object.entries(
+      isRegex
+        ? (filter as RegexFilter).regex
+        : (filter as PatternFilter).pattern,
+    );
+    let prefilter =
+      this.#dbAdapter.kind === 'pg' &&
+      context.indexTable === DEFAULT_FILTER_CONTEXT.indexTable;
+    let conditions: CardExpression[] = [];
+    for (let [key, value] of entries) {
+      let operand = isRegex ? value : globToLike(value);
+      if (prefilter) {
+        if (!isRegex) {
+          conditions.push(['i.pattern_text ILIKE', param(`%${operand}%`)]);
+        } else if (!value.startsWith('(?')) {
+          // Newline-sensitive, so `^` and `$` hold at each value's ends.
+          conditions.push(['i.pattern_text ~', param(`(?n)${value}`)]);
+        }
+      }
+      conditions.push([
+        fieldArity({
+          type: on,
+          path: key,
+          value: [
+            fieldQuery(key, on, false, 'filter'),
+            isRegex ? '~' : 'ILIKE',
+            fieldValue(key, [param(operand)], on, 'filter'),
+          ],
+          errorHint: 'filter',
+        }),
+      ]);
+    }
+    return every([
+      ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+      ...conditions,
+    ]);
+  }
+
+  // Widens each `typos` term's words to the closest words of the realm's
+  // word list (fields declared `typos: true`), as tsquery text the term then
+  // matches with (`typoQuery`). A word of three letters or fewer, or one the
+  // list already holds, stays as typed. Postgres only.
+  async #resolveTypos(
+    filter: Filter | undefined,
+    realmURL: URL,
+  ): Promise<Filter | undefined> {
+    if (!filter || this.#dbAdapter.kind !== 'pg') {
+      return filter;
+    }
+    let node = filter as any;
+    if ('matches' in node) {
+      if (!node.typos || node.matches.trim() === '') {
+        return filter;
+      }
+      let words = typeAheadWords(node.matches);
+      if (words.length === 0) {
+        return filter;
+      }
+      let rows = (await this.#dbAdapter.execute(
+        `SELECT q.w AS word, c.word AS correction
+           FROM unnest($1::text[]) AS q(w)
+           CROSS JOIN LATERAL (
+             SELECT bw.word FROM boxel_index_words AS bw
+              WHERE bw.realm_url = $2 AND char_length(q.w) > 3
+                AND bw.word % q.w AND bw.word <> q.w
+              ORDER BY similarity(bw.word, q.w) DESC, bw.word
+              LIMIT 3
+           ) AS c`,
+        { bind: [words, realmURL.href] },
+      )) as { word: string; correction: string }[];
+      let corrections = new Map<string, string[]>();
+      for (let { word, correction } of rows) {
+        corrections.set(word, [...(corrections.get(word) ?? []), correction]);
+      }
+      let unfinished =
+        node.prefix && !/\s$/.test(node.matches) ? words.length - 1 : -1;
+      let typoQuery = words
+        .map((word, index) => {
+          let alternatives = [word, ...(corrections.get(word) ?? [])]
+            .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+            .filter(Boolean);
+          if (index === unfinished) {
+            alternatives.push(`${alternatives[0]}:*`);
+          }
+          return `(${[...new Set(alternatives)].join(' | ')})`;
+        })
+        .join(' & ');
+      return { ...node, typoQuery } as Filter;
+    }
+    if ('every' in node || 'any' in node) {
+      let key = 'every' in node ? 'every' : 'any';
+      return {
+        ...node,
+        [key]: await Promise.all(
+          (node[key] as Filter[]).map((child) =>
+            this.#resolveTypos(child, realmURL),
+          ),
+        ),
+      } as Filter;
+    }
+    if ('not' in node) {
+      return {
+        ...node,
+        not: await this.#resolveTypos(node.not, realmURL),
+      } as Filter;
+    }
+    return filter;
   }
 
   // A near filter: the card has a vector at the path of the target's
@@ -2934,6 +3084,10 @@ export class IndexQueryEngine {
         }
         selects.push([
           `SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
+          ...matchTsQuery(branch),
+        ]);
+        selects.push([
+          `SELECT tsi.url, tsi.realm_url, tsi.type FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)} @@`,
           ...matchTsQuery(branch),
         ]);
         continue;
@@ -3573,8 +3727,16 @@ export class IndexQueryEngine {
               // every row holding all its words across the table (60 s for
               // "type system"), while the unfenced plan rechecks only the
               // typed rows.
+              //
+              // A card matches by its rendered markdown or by its fields'
+              // role-weighted vector (`search_tsv`), which holds the words of
+              // fields the card doesn't render, such as a transcript's
+              // segments. Each side is its own GIN-indexed lookup, so the
+              // union stays an index answer.
               pg: [
                 `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
+                ...matchTsQuery(filter),
+                `UNION SELECT tsi.url, tsi.realm_url, tsi.type FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)} @@`,
                 ...matchTsQuery(filter),
                 filter.matches.includes('"') ? `)` : `OFFSET 0)`,
               ],
@@ -4547,6 +4709,15 @@ const RELEVANCE_SORT_KEY_NAME = '_relevance';
 
 // The card type a filter is anchored on: its own `on` or `type`, or the first
 // anchor among the branches of a top-level `every`.
+// A glob as a LIKE pattern: `*` is `%`, `?` is `_`, and LIKE's own
+// wildcards and escape are escaped.
+export function globToLike(glob: string): string {
+  return glob
+    .replace(/[\\%_]/g, (c) => `\\${c}`)
+    .replace(/\*/g, '%')
+    .replace(/\?/g, '_');
+}
+
 function filterAnchor(filter: Filter | undefined): CodeRef | undefined {
   if (!filter) {
     return undefined;
@@ -4817,6 +4988,10 @@ const MIN_PREFIX_LETTERS = 3;
 const PASSAGES_PER_CARD = 5;
 
 function matchTsQuery(term: MatchTerm): Expression {
+  if (term.typoQuery) {
+    // The words widened to their corrections (`#resolveTypos`).
+    return [`to_tsquery('english',`, param(term.typoQuery), `)`];
+  }
   let { words, partial } = term.prefix
     ? splitTypeAheadQuery(term.matches)
     : { words: term.matches, partial: undefined };

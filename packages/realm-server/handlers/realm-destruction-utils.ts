@@ -127,6 +127,8 @@ export async function removeRealmDatabaseArtifacts(args: {
     `DELETE FROM boxel_index_passages WHERE realm_url =`,
     param(realmURL),
   ]);
+  await q([`DELETE FROM boxel_index_spill WHERE realm_url =`, param(realmURL)]);
+  await q([`DELETE FROM boxel_index_words WHERE realm_url =`, param(realmURL)]);
   await q([
     `DELETE FROM prerendered_html_pending WHERE realm_url =`,
     param(realmURL),

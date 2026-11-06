@@ -63,7 +63,9 @@ module('Unit | search intent', function (hooks) {
 
     class Segment extends FieldDef {
       @field text = contains(StringField);
-      @field speaker = contains(StringField, { search: { role: 'name' } });
+      @field speaker = contains(StringField, {
+        search: { role: 'name', typos: true },
+      });
     }
     class TalkCard extends CardDef {
       static searchDefaults = {
@@ -139,7 +141,17 @@ module('Unit | search intent', function (hooks) {
       ['first segment', 'long editor notes', 'second segment'],
       "a TextAreaField's body default, and a body list's subfields",
     );
-    let all = Object.values(text).join('\n');
+    assert.strictEqual(
+      text.typos,
+      'Ada Lovelace',
+      'a typos field adds its words to the word list, once',
+    );
+    assert.strictEqual(
+      text.patterns,
+      'dQw4w9WgXcQ',
+      'an identifier is searched by pattern',
+    );
+    let all = [text.A, text.B, text.C, text.D].join('\n');
     assert.false(all.includes('dQw4w9WgXcQ'), 'an identifier is not ranked');
     assert.false(all.includes('not for the index'), 'search: false is not');
     assert.false(all.includes('42'), 'numbers are not words');

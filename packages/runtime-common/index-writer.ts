@@ -3433,8 +3433,12 @@ export class Batch {
       // Derived at promotion and kept there for a row that brings no
       // `_searchText` (see `applyBatchUpdates`); staging has no such column.
       search_tsv: _remove6,
+      pattern_text: _remove7,
       ...productionVersion
-    } = entry as typeof entry & { search_tsv?: unknown };
+    } = entry as typeof entry & {
+      search_tsv?: unknown;
+      pattern_text?: unknown;
+    };
     return {
       ...productionVersion,
       last_modified: entry.last_modified ? parseInt(entry.last_modified) : null,
@@ -3810,9 +3814,9 @@ export class Batch {
             // A row staged without the render's `_searchText` (an error row
             // carrying its last good doc forward, or a render from before
             // search intent) keeps the vector it has.
-            name === 'search_tsv'
+            name === 'search_tsv' || name === 'pattern_text'
               ? [
-                  'search_tsv=COALESCE(EXCLUDED.search_tsv, boxel_index.search_tsv)',
+                  `${name}=CASE WHEN EXCLUDED.search_tsv IS NULL THEN boxel_index.${name} ELSE EXCLUDED.${name} END`,
                 ]
               : [`${name}=EXCLUDED.${name}`],
           ),
@@ -3826,6 +3830,7 @@ export class Batch {
       await this.#syncVectorIndex();
       await this.#syncPassageIndex();
       await this.#syncSpillIndex();
+      await this.#syncWordList();
 
       // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
       // split-mode index pass — in which case HTML flows only through the
@@ -4045,6 +4050,41 @@ export class Batch {
     }
   }
 
+  // Adds the words of this pass's `typos` fields to the realm's word list
+  // (see the `add-typo-words-and-pattern-text` migration): lowercased, split
+  // on anything but letters and digits, three characters or more. A word
+  // already listed stays as it is.
+  async #syncWordList() {
+    if (this.#dbAdapter.kind !== 'pg') {
+      return;
+    }
+    let urls = [...this.#invalidations];
+    const CHUNK = 500;
+    for (let start = 0; start < urls.length; start += CHUNK) {
+      let chunk = urls.slice(start, start + CHUNK);
+      await this.#query([
+        'INSERT INTO boxel_index_words (realm_url, word)',
+        'SELECT DISTINCT p.realm_url, w.word',
+        `FROM boxel_index_pending AS p CROSS JOIN LATERAL regexp_split_to_table(lower(p.search_doc -> '${SEARCH_TEXT_KEY}' ->> 'typos'), '[^[:alnum:]]+') AS w(word)`,
+        'WHERE',
+        ...every([
+          ['p.realm_url =', param(this.realmURL.href)],
+          ['p.staging_id =', param(this.#stagingId)],
+          [
+            'p.url IN',
+            ...addExplicitParens(
+              separatedByCommas(chunk.map((url) => [param(url)])),
+            ),
+          ],
+          any([['p.is_deleted = false'], ['p.is_deleted IS NULL']]),
+          [`p.search_doc -> '${SEARCH_TEXT_KEY}' ? 'typos'`],
+          ['char_length(w.word) >= 3'],
+        ]),
+        'ON CONFLICT ON CONSTRAINT boxel_index_words_pkey DO NOTHING',
+      ] as Expression);
+    }
+  }
+
   // The swap's SELECT list: every column as staged, except `generation`,
   // which takes this commit's. The pending rows carry the provisional
   // generation the pass anticipated at setup, which a peer that committed
@@ -4064,16 +4104,24 @@ export class Batch {
             [
               `(COALESCE(spilled_search_doc, search_doc) - '${SEARCH_TEXT_KEY}') AS search_doc`,
             ]
-          : column === 'search_tsv'
-            ? // The row's role-weighted full-text vector, built from the
-              // render's `_searchText` (see the `add-boxel-index-search-tsv`
-              // migration). Staging has no such column.
+          : column === 'pattern_text'
+            ? // The row's pattern-field values, one per line, from the
+              // render's `_searchText` (see `add-typo-words-and-pattern-text`).
               [
                 this.#dbAdapter.kind === 'pg'
-                  ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_text_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS search_tsv`
-                  : 'NULL AS search_tsv',
+                  ? `search_doc -> '${SEARCH_TEXT_KEY}' ->> 'patterns' AS pattern_text`
+                  : 'NULL AS pattern_text',
               ]
-            : [column],
+            : column === 'search_tsv'
+              ? // The row's role-weighted full-text vector, built from the
+                // render's `_searchText` (see the `add-boxel-index-search-tsv`
+                // migration). Staging has no such column.
+                [
+                  this.#dbAdapter.kind === 'pg'
+                    ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_text_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS search_tsv`
+                    : 'NULL AS search_tsv',
+                ]
+              : [column],
     );
   }
 
