@@ -1,5 +1,11 @@
+import { service } from '@ember/service';
+
 import {
+  CATALOG_REALM_PREFIX,
+  PREFIX_REALM_PREFIXES,
+  RealmPaths,
   isScopedCSSRequest,
+  ri,
   rri,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
@@ -9,6 +15,7 @@ import HostBaseTool from '../lib/host-base-tool';
 import CanReadRealmTool from './can-read-realm';
 import GetRealmOfResourceIdentifierTool from './get-realm-of-resource-identifier';
 
+import type NetworkService from '../services/network';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 const GLOBAL_URL_STEMS = [
@@ -17,12 +24,20 @@ const GLOBAL_URL_STEMS = [
   'https://boxel-icons.boxel.ai',
 ];
 
+// The platform's own realms (base, Pret UI, skills and the rest). The catalog
+// is left in: a catalog card's listing is made from catalog modules.
+const PLATFORM_REALM_PATHS = PREFIX_REALM_PREFIXES.filter(
+  (prefix) => prefix !== CATALOG_REALM_PREFIX,
+).map((prefix) => new RealmPaths(ri(prefix)));
+
 export default class SanitizeModuleListTool extends HostBaseTool<
   typeof BaseToolModule.SanitizeModuleListInput,
   typeof BaseToolModule.SanitizeModuleListResult
 > {
+  @service declare private network: NetworkService;
+
   description =
-    'Filter and deduplicate a list of module URLs, removing globals and unreadable realms';
+    'Filter and deduplicate a list of module URLs, removing globals, platform realm modules and unreadable realms';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -54,6 +69,12 @@ export default class SanitizeModuleListTool extends HostBaseTool<
         }
         // Exclude known global/package/icon sources
         if (GLOBAL_URL_STEMS.some((urlStem) => dep.startsWith(urlStem))) {
+          return null;
+        }
+        // Readable, but never a listing's own code, whether spelled by prefix
+        // or by the URL the realm is served at.
+        let unresolved = this.network.virtualNetwork.unresolveURL(dep);
+        if (PLATFORM_REALM_PATHS.some((paths) => paths.inRealm(unresolved))) {
           return null;
         }
 
