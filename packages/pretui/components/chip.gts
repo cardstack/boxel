@@ -1,6 +1,7 @@
 // Pretui — Chip: a compact label, muted or outlined in a tone; @hue colors the dot.
 import Component from '@glimmer/component';
-import { hueStyle } from '../internal/ink';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
+import { cssValue } from '../pretui-css';
 import {
   PRETUI_TONES,
   resolveTone,
@@ -44,13 +45,23 @@ export class Chip extends Component<ChipSignature> {
       'outlined',
     );
   }
-  get style() {
-    return hueStyle('--pretui-chip-hue', this.args.hue);
+  // `@hue` is written through the CSSOM, on top of any `style` a caller
+  // passes, rather than in a `style` attribute, which a strict Content
+  // Security Policy refuses. A caller string, so it goes through `cssValue`;
+  // a rejected one leaves the stylesheet's own dot colour.
+  get keptStyle(): KeptProperty[] {
+    return [
+      {
+        property: '--pretui-chip-hue',
+        value: cssValue(this.args.hue),
+        strength: 'arg',
+      },
+    ];
   }
   <template>
     <span
       class='pretui-chip'
-      style={{this.style}}
+      {{keepStyle this.keptStyle}}
       data-tone={{this.tone}}
       data-appearance={{this.appearance}}
       data-test-pretui-chip

@@ -9,6 +9,8 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import { Alert } from '@cardstack/pretui/components/alert';
+
 import Button from '../../components/button.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
@@ -37,23 +39,28 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
       </p>
     </div>
     {{#if (eq @key.oauth.connection.status 'rejected')}}
-      <div class='alert' role='status' data-test-oauth-status='rejected'>
-        <p class='alert-text'>Your sign-in expired or was cancelled on the site.
-          Sign in again to keep using this account.</p>
-        <Button
-          class='action'
-          @kind='secondary'
-          @size='extra-small'
-          aria-describedby='key-name-{{@key.id}}'
-          data-test-key-reconnect
-          {{on 'click' (fn @onReconnect @key)}}
-        ><RefreshCw class='action-icon' aria-hidden='true' />Reconnect</Button>
-      </div>
+      <Alert @tone='danger' role='status' data-test-oauth-status='rejected'>
+        <:default>Your sign-in expired or was cancelled on the site. Sign in
+          again to keep using this account.</:default>
+        <:action><Button
+            class='action'
+            @kind='secondary'
+            @size='extra-small'
+            aria-describedby='key-name-{{@key.id}}'
+            data-test-key-reconnect
+            {{on 'click' (fn @onReconnect @key)}}
+          ><RefreshCw
+              class='action-icon'
+              aria-hidden='true'
+            />Reconnect</Button></:action>
+      </Alert>
     {{else if (eq @key.oauth.connection.status 'needs-admin')}}
-      <div class='alert' role='status' data-test-oauth-status='needs-admin'>
-        <p class='alert-text'>The app this account signs in with needs its owner
-          to fix it. Ask whoever added the app.</p>
-      </div>
+      <Alert
+        @tone='warning'
+        role='status'
+        data-test-oauth-status='needs-admin'
+      >The app this account signs in with needs its owner to fix it. Ask whoever
+        added the app.</Alert>
     {{/if}}
   {{else if @key.oauth.client}}
     <div class='row' data-test-oauth-client>
@@ -70,10 +77,9 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
       </p>
     </div>
     {{#if (eq @key.oauth.client.state 'broken')}}
-      <div class='alert' role='status' data-test-oauth-status='broken'>
-        <p class='alert-text'>The site refused this app’s secret. Replace it
-          with the app’s current secret.</p>
-      </div>
+      <Alert @tone='danger' role='status' data-test-oauth-status='broken'>The
+        site refused this app’s secret. Replace it with the app’s current
+        secret.</Alert>
     {{/if}}
   {{/if}}
   <style scoped>
@@ -102,30 +108,7 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
     .muted {
       color: var(--muted-foreground);
     }
-    /* A problem stands apart from the details: its own tinted box, with
-       room around the action it offers. */
-    .alert {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--boxel-sp-xs);
-      padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-      border-radius: var(--boxel-border-radius-sm);
-      background-color: color-mix(
-        in oklab,
-        var(--destructive, var(--boxel-danger)) 8%,
-        transparent
-      );
-      color: var(--destructive-ink, var(--boxel-danger));
-    }
-    .alert-text {
-      flex: 1 1 14rem;
-      margin: 0;
-      font-weight: 500;
-    }
     .action {
-      flex-shrink: 0;
       gap: var(--boxel-sp-5xs, 0.25rem);
     }
     .action-icon {
