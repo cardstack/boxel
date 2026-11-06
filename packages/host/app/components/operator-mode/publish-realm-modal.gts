@@ -1049,6 +1049,7 @@ export default class PublishRealmModal extends Component<Signature> {
       @isOpen={{@isOpen}}
       @onClose={{this.handleCancel}}
       data-test-publish-realm-modal
+      ...attributes
     >
       <:header>
         <div class='modal-subtitle'>

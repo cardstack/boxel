@@ -22,15 +22,19 @@ import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 interface ModalFocusArgs {
   onClose: () => void;
-  returnFocusTarget: () => HTMLElement | undefined;
+  returnFocusTarget?: () => HTMLElement | undefined;
 }
 
-// Focus opens on Cancel, stays in the modal, and goes back to the tile on
-// close. Escape closes the modal. The confirm button turns busy
+// Focus opens on the element marked `data-modal-initial-focus` (Cancel), or
+// on the modal itself when none is, stays in the modal, and goes back to the
+// tile on close. Escape closes the modal. The confirm button turns busy
 // rather than being replaced while its task runs, so it keeps focus.
-function modalFocusTrapOptions(dialogId: string, args: ModalFocusArgs) {
+export function modalFocusTrapOptions(dialogId: string, args: ModalFocusArgs) {
   return {
-    initialFocus: `#${dialogId} [data-modal-initial-focus]`,
+    initialFocus: () =>
+      document.querySelector<HTMLElement>(
+        `#${dialogId} [data-modal-initial-focus]`,
+      ) ?? `#${dialogId}`,
     fallbackFocus: `#${dialogId}`,
     allowOutsideClick: true,
     escapeDeactivates: () => {
@@ -38,7 +42,7 @@ function modalFocusTrapOptions(dialogId: string, args: ModalFocusArgs) {
       return false;
     },
     setReturnFocus: (previous: HTMLElement | SVGElement) =>
-      args.returnFocusTarget() ?? previous,
+      args.returnFocusTarget?.() ?? previous,
   };
 }
 

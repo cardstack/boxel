@@ -82,6 +82,9 @@ export class WorkspaceActions {
     | undefined;
   @tracked reindexError: string | undefined;
   @tracked showPublishModal = false;
+  // Once opened, the publish dialog stays rendered while closed, as it does
+  // in host mode, so a publish it started still reports its result.
+  @tracked publishModalRendered = false;
 
   #getRealmIdentifier: () => RealmIdentifier;
 
@@ -427,13 +430,12 @@ export class WorkspaceActions {
       return;
     }
     this.rememberFocusContext();
+    this.publishModalRendered = true;
     this.showPublishModal = true;
   }
 
-  // The publish modal has no focus trap to hand focus back, so it's done here.
   @action closePublishModal() {
     this.showPublishModal = false;
-    this.returnFocusTarget()?.focus();
   }
 
   @action private openDeleteModal() {

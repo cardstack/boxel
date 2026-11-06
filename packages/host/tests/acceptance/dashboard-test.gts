@@ -41,6 +41,7 @@ import {
   registerRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
 import { setupApplicationTest } from '../helpers/setup';
+import { getTestRealmRegistry } from '../helpers/test-realm-registry';
 
 const realmURL = 'http://test-realm/testuser/workspace-a/';
 
@@ -72,7 +73,17 @@ function markHosted(
 }
 
 // The realm server marks a workspace publishable; a published copy isn't.
+// Its info says so too, so a reload of the info keeps it.
 function markPublishable(url: string) {
+  let realm = getTestRealmRegistry().get(url)?.realm;
+  if (!realm) {
+    throw new Error(`no test realm at ${url}`);
+  }
+  let getRealmInfo = realm.getRealmInfo.bind(realm);
+  realm.getRealmInfo = async () => ({
+    ...(await getRealmInfo()),
+    publishable: true,
+  });
   let realmResource = (getService('realm') as any).realms.get(url);
   realmResource.info = new TrackedObject({
     ...realmResource.info,
@@ -251,7 +262,15 @@ module('Acceptance | dashboard', function (hooks) {
           permissions: { '@testuser:localhost': [...permissions] },
           contents: { 'realm.json': realmConfigCardJSON({ name }) },
         });
+        // A session minted again later, as reauthenticating does, carries
+        // the same permissions.
+        mockMatrixUtils.setRealmSessionPermissions(url, [...permissions]);
       }
+      mockMatrixUtils.setRealmSessionPermissions(realmURL, [
+        'read',
+        'write',
+        'realm-owner',
+      ]);
       mockMatrixUtils.setActiveRealms([
         realmURL,
         ownedRealmURL,
@@ -985,6 +1004,30 @@ module('Acceptance | dashboard', function (hooks) {
             .dom(`${tile(name)} [data-test-workspace-menu-trigger]`)
             .isFocused('focus goes back to the menu that opened it');
         }
+      });
+
+      test('the publish dialog takes focus, and Escape closes it', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await waitFor(tile('Workspace B'));
+        markPublishable(ownedRealmURL);
+        await settled();
+
+        await openMenu('Workspace B');
+        await click('[data-test-boxel-menu-item-text="Publish"]');
+        await waitFor(PUBLISH_MODAL);
+
+        assert.true(
+          find(PUBLISH_MODAL)!.contains(document.activeElement),
+          'focus moves into the dialog',
+        );
+
+        await pressKey('Escape');
+
+        assert.dom(PUBLISH_MODAL).doesNotExist();
+        assert.dom('[data-test-dashboard]').exists();
+        assert
+          .dom(`${tile('Workspace B')} [data-test-workspace-menu-trigger]`)
+          .isFocused();
       });
 
       test("a workspace that isn't publishable has no Publish", async function (assert) {
@@ -3322,21 +3365,39 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom('[data-test-get-started-action="publish"]').doesNotExist();
         assert
           .dom('[data-test-get-started-publish-unavailable]')
-          .hasText('Publishing needs a workspace you own.');
+          .hasText(
+            'Publishing needs a workspace you own. Create one to publish it.',
+          );
       });
 
       module('with workspaces to publish', function (hooks) {
         setupMoreWorkspaces(hooks);
 
-        test('the publish step opens the publish dialog for the most recently updated workspace the user can publish', async function (assert) {
+        const PUBLISH_ACTION = '[data-test-get-started-action="publish"]';
+        const MENU_ITEMS = '[data-test-pretui-menu-panel] [role="menuitem"]';
+
+        test('with one workspace to publish, the publish step opens its dialog', async function (assert) {
           await visitAsNewUser();
-          // Ownership is known once each workspace's session is in.
-          let realmService = getService('realm') as RealmService;
-          await waitUntil(() =>
-            [realmURL, ownedRealmURL].every((url) =>
-              realmService.isRealmOwner(url),
-            ),
-          );
+          markPublishable(ownedRealmURL);
+          // Publishable, but shared with the user rather than theirs.
+          markPublishable(sharedRealmURL);
+          await settled();
+          await openSteps();
+          await waitFor(PUBLISH_ACTION);
+
+          await click(PUBLISH_ACTION);
+          await waitFor(PUBLISH_MODAL);
+
+          assert.dom(PUBLISH_MODAL).containsText('workspace-b/');
+          assert.dom(GET_STARTED).exists('the steps stay open behind it');
+
+          await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
+          assert.dom(PUBLISH_MODAL).doesNotExist();
+          assert.dom(PUBLISH_ACTION).isFocused('focus goes back to the button');
+        });
+
+        test('with several workspaces to publish, the publish step asks which, most recently updated first', async function (assert) {
+          await visitAsNewUser();
           let now = Date.now();
           for (let url of [realmURL, ownedRealmURL, sharedRealmURL]) {
             markPublishable(url);
@@ -3347,21 +3408,22 @@ module('Acceptance | dashboard', function (hooks) {
           markUpdated(sharedRealmURL, new Date(now));
           await settled();
           await openSteps();
+          await waitFor(PUBLISH_ACTION);
 
-          assert
-            .dom('[data-test-get-started-publish-unavailable]')
-            .doesNotExist();
-          await click('[data-test-get-started-action="publish"]');
+          await click(PUBLISH_ACTION);
+
+          assert.deepEqual(
+            findAll(MENU_ITEMS).map((item) => item.textContent?.trim()),
+            ['Workspace B', 'Workspace A'],
+          );
+
+          await click(findAll(MENU_ITEMS)[1]);
           await waitFor(PUBLISH_MODAL);
 
-          assert.dom(PUBLISH_MODAL).containsText('workspace-b/');
-          assert.dom(GET_STARTED).exists('the steps stay open behind it');
+          assert.dom(PUBLISH_MODAL).containsText('workspace-a/');
 
           await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
-          assert.dom(PUBLISH_MODAL).doesNotExist();
-          assert
-            .dom('[data-test-get-started-action="publish"]')
-            .isFocused('focus goes back to the button');
+          assert.dom(PUBLISH_ACTION).isFocused('focus goes back to the button');
         });
       });
 

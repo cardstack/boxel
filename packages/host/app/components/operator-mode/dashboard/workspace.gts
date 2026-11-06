@@ -2,7 +2,6 @@ import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -34,7 +33,6 @@ import {
   formatUpdatedTime,
 } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
-import type NetworkService from '@cardstack/host/services/network';
 
 import {
   ArchiveWorkspaceModal,
@@ -538,14 +536,15 @@ export default class Workspace extends Component<Signature> {
           }}
         />
       {{/if}}
-      {{#if this.workspace.showPublishModal}}
+      {{#if this.workspace.publishModalRendered}}
         <ToElsewhere
           @named='modal-elsewhere'
           @send={{component
             PublishRealmDialog
             realmURL=this.workspace.realmURL
-            isOpen=true
+            isOpen=this.workspace.showPublishModal
             onClose=this.workspace.closePublishModal
+            returnFocusTarget=this.workspace.returnFocusTarget
           }}
         />
       {{/if}}
@@ -1238,8 +1237,6 @@ export default class Workspace extends Component<Signature> {
     </style>
   </template>
 
-  @service declare private network: NetworkService;
-
   @tracked private isHostDropdownOpen = false;
 
   private workspace = new WorkspaceActions(
@@ -1252,8 +1249,7 @@ export default class Workspace extends Component<Signature> {
     this.args.variant === 'desk'
       ? {
           realm: this.args.realmIdentifier,
-          realmURL: this.network.virtualNetwork.toURL(this.args.realmIdentifier)
-            .href,
+          realmURL: this.workspace.realmURL,
         }
       : undefined,
   );
