@@ -1,7 +1,25 @@
 ---
 name: adr
 allowed-tools: Read, Grep, Glob, Bash, Write, Edit
-description: Write, supersede, or backfill Architecture Decision Records in docs/adr/ — short, normative records (BCP 14 MUST/SHOULD requirements, numbered sections) of why the codebase is shaped as it is, with the options each decision rejected. ADR 001 is the normative source for the format; this skill is the procedure. Covers when a change warrants an ADR, numbering and frontmatter (status, date, scope globs that scripts/adr-for.mts matches against paths), drafting from the template, the deletion pass, the rule that every reason in a retroactive ADR cites a source or is listed as an open question, superseding instead of editing, citing ADRs by section, and keeping ADRs free of private-tracker IDs and production data. Also covers a proposed ADR's remediation file (docs/adr/remediation/<number>.md): surveying its scope for code that doesn't conform yet, closing those gaps in later PRs, and getting the ADR ready for a person to accept. Use when making or proposing an architectural decision in a PR, when a PR's "Key decisions" outlive the PR, when asked to write/draft/backfill/supersede an ADR, when fixing code an ADR's remediation file lists or bringing a proposed ADR to acceptance, and before changing or reversing a rule in code that an ADR's scope covers.
+description: >-
+  Write, supersede, or backfill Architecture Decision Records in docs/adr/ —
+  short, normative records (BCP 14 MUST/SHOULD requirements, numbered
+  sections) of why the codebase is shaped as it is, with the options each
+  decision rejected. ADR 001 is the normative source for the format; this
+  skill is the procedure. Covers when a change warrants an ADR, numbering and
+  frontmatter (status, date, scope globs that scripts/adr-for.mts matches
+  against paths), drafting from the template, the deletion pass, the rule that
+  every reason in a retroactive ADR cites a source or is listed as an open
+  question, superseding instead of editing, citing ADRs by section, and
+  keeping ADRs free of private-tracker IDs and production data. Also covers a
+  proposed ADR's remediation file (docs/adr/remediation/<number>.md):
+  surveying its scope for code that doesn't conform yet, closing those gaps in
+  later PRs, and getting the ADR ready for a person to accept. Use when making
+  or proposing an architectural decision in a PR, when a PR's "Key decisions"
+  outlive the PR, when asked to write/draft/backfill/supersede an ADR, when
+  fixing code an ADR's remediation file lists or bringing a proposed ADR to
+  acceptance, and before changing or reversing a rule in code that an ADR's
+  scope covers.
 ---
 
 # Architecture Decision Records

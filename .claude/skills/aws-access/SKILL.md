@@ -1,6 +1,31 @@
 ---
 name: aws-access
-description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. It also covers finding the secure origin's (`secure.boxel.ai` / `secure.stack.cards`) access logs and app log lines. It also covers auditing the secrets-at-rest KMS key (`alias/<env>-boxel-secrets`): its metadata, key policy and rotation, and every use of it recorded in CloudTrail. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
+description: >-
+  Provision an AWS STS session for Claude to use against staging or prod, and
+  reach the deployed environment's data plane from there. Covers (1) the
+  first-time setup walkthrough for a teammate who has never let Claude reach
+  AWS, (2) refreshing an expired session, (3) running read-only queries
+  against the private staging/prod boxel Postgres via SSM port-forwarding
+  through the realm-server ECS task, authenticated as `claude_readonly_user`
+  (a dedicated DB user, member of `readonly_role`), (4) browsing the
+  realm-server's EFS filesystem read-only via a dedicated
+  `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded
+  over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6)
+  tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth
+  params), and (7) reading the realm-server ALB access logs from S3 to
+  attribute 5xx / latency spikes to specific URL paths. It also covers finding
+  the secure origin's (`secure.boxel.ai` / `secure.stack.cards`) access logs
+  and app log lines. It also covers auditing the secrets-at-rest KMS key
+  (`alias/<env>-boxel-secrets`): its metadata, key policy and rotation, and
+  every use of it recorded in CloudTrail. Claude operates as the dedicated
+  `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly
+  that role's policy, regardless of which IAM groups the user is in. Use
+  whenever Claude needs to call AWS APIs against the cardstack accounts,
+  read/inspect the boxel_index database, browse `/persistent/` files, or read
+  service logs in a deployed environment, or whenever the user asks "how do I
+  connect Claude to AWS / staging / prod" or any of the deployed-env triage
+  questions ("why is this realm indexing slowly", "show me the realm-server
+  logs from last night", "is this file actually on disk in staging").
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
