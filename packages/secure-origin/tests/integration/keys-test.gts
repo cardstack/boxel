@@ -4063,7 +4063,7 @@ module('Integration | key pages', function (hooks) {
     function crumbs() {
       return [
         ...document.querySelectorAll(
-          '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item] > :not([data-test-pretui-breadcrumb-sep])',
+          '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-label]',
         ),
       ].map((crumb) => crumb.textContent!.trim());
     }
@@ -4086,7 +4086,7 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-key-list]');
       assert.deepEqual(crumbs(), ['Share key', 'Your keys']);
       assert
-        .dom('[data-test-breadcrumbs] [aria-current]')
+        .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-current]')
         .hasAttribute('aria-current', 'page');
       assert.dom('[data-test-keys-heading]').hasText('Your keys');
       assert
@@ -4191,11 +4191,9 @@ module('Integration | key pages', function (hooks) {
         .style.setProperty('width', '10rem');
       let nav = document.querySelector<HTMLElement>('[data-test-breadcrumbs]')!;
       let lines = new Set(
-        [
-          ...nav.querySelectorAll(
-            '[data-test-pretui-breadcrumb-item] > :not([data-test-pretui-breadcrumb-sep])',
-          ),
-        ].map((crumb) => Math.round(crumb.getBoundingClientRect().top)),
+        [...nav.querySelectorAll('[data-test-pretui-breadcrumb-label]')].map(
+          (crumb) => Math.round(crumb.getBoundingClientRect().top),
+        ),
       );
       assert.true(lines.size > 1, 'the crumbs sit on more than one line');
       assert.true(

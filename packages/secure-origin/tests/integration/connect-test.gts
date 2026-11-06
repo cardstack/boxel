@@ -515,7 +515,7 @@ module('Integration | connecting an account', function (hooks) {
         assert.deepEqual(
           [
             ...document.querySelectorAll(
-              '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item] > :not([data-test-pretui-breadcrumb-sep])',
+              '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-label]',
             ),
           ].map((crumb) => crumb.textContent!.trim()),
           ['Share key', 'Your keys', 'Connect'],
@@ -539,7 +539,9 @@ module('Integration | connecting an account', function (hooks) {
       );
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      assert.dom('[data-test-breadcrumbs] [aria-current]').hasText('Reconnect');
+      assert
+        .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-current]')
+        .hasText('Reconnect');
       assert
         .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a')
         .hasText('Replace key');
@@ -568,7 +570,7 @@ module('Integration | connecting an account', function (hooks) {
       assert.deepEqual(
         [
           ...document.querySelectorAll(
-            '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item] > :not([data-test-pretui-breadcrumb-sep])',
+            '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-label]',
           ),
         ].map((crumb) => crumb.textContent!.trim()),
         ['Swap key', 'Your keys', 'Reconnect'],

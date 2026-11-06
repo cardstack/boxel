@@ -4280,13 +4280,13 @@
       ]
     },
     "shell.js": {
-      "bytes": 376147,
+      "bytes": 376325,
       "modules": [
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/breadcrumb.gts",
-          "sha256": "876aa149bad48e32b9e65333e3bec8b2ef447c211c3668f6a406e8436515e013",
-          "size": 2018
+          "sha256": "2a542806cc8fbade0279ead8bef9bea125a2b8c8da78f947ecf0b290f28ba3cb",
+          "size": 2212
         },
         {
           "package": "@cardstack/secure-origin",

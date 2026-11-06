@@ -46,6 +46,8 @@ module('Pretui | components/breadcrumb', function (hooks) {
       ],
     );
     assert.strictEqual(nav.querySelector('b')?.textContent?.trim(), 'Wuyi Origins', 'the leaf is not a link');
+    assert.dom('[data-test-pretui-breadcrumb-current]').hasText('Wuyi Origins');
+    assert.deepEqual(texts('[data-test-pretui-breadcrumb-label]'), ['Realm', 'Suppliers', 'Wuyi Origins'], 'each crumb names its label element');
     assert.deepEqual(
       Array.from(nav.querySelectorAll('[aria-current]')).map((e) => [e.textContent?.trim(), e.getAttribute('aria-current')]),
       [['Wuyi Origins', 'page']],

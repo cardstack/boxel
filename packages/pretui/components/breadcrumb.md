@@ -18,7 +18,7 @@ Three render branches per item, in priority order: **the last item is always `<b
 
 That last-item rule is the whole opinion. The current location is not a link even if you gave it one, because linking to where you already are is a dead affordance — and making it structurally impossible means no call site has to remember. The `<span>` branch exists for intermediate ancestors that are real but unreachable (a folder you cannot open, a realm you cannot read), which is a genuine Boxel case.
 
-Each item is an `<li>` carrying `data-test-pretui-breadcrumb-item` with its index. Separators are `/` characters at the start of every item but the first, styled `--subtle-foreground`.
+Each item is an `<li>` carrying `data-test-pretui-breadcrumb-item` with its index; its label element carries `data-test-pretui-breadcrumb-label`, and the current one `data-test-pretui-breadcrumb-current` too. Separators are `/` characters at the start of every item but the first, styled `--subtle-foreground`.
 
 ## Prior art
 

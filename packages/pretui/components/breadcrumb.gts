@@ -36,11 +36,11 @@ export class Breadcrumb<T extends CrumbSpec = CrumbSpec> extends Component<Bread
           <li data-test-pretui-breadcrumb-item={{index}}>
             {{#if index}}<span class='sep' aria-hidden='true' data-test-pretui-breadcrumb-sep>/</span>{{/if}}
             {{#if (this.isLast index)}}
-              <b aria-current='page'>{{item.label}}</b>
+              <b aria-current='page' data-test-pretui-breadcrumb-label data-test-pretui-breadcrumb-current>{{item.label}}</b>
             {{else if item.href}}
-              <a href={{item.href}} {{on 'click' (fn this.select item)}}>{{item.label}}</a>
+              <a href={{item.href}} data-test-pretui-breadcrumb-label {{on 'click' (fn this.select item)}}>{{item.label}}</a>
             {{else}}
-              <span>{{item.label}}</span>
+              <span data-test-pretui-breadcrumb-label>{{item.label}}</span>
             {{/if}}
           </li>
         {{/each}}
