@@ -99,11 +99,13 @@ lockfile pins, and the allowlist MAY name any of them:
   `ember-resize-modifier`, `ember-sortable`, `ember-velcro`, `focus-trap`,
   `lodash-es`, `pluralize` and `tracked-built-ins`.
 - The packages the build reaches through those: `@embroider/macros`,
-  Embroider's run-time macros, which compiled addon code calls into; and
-  `ember-truth-helpers`, `ember-element-helper` and `ember-style-modifier`,
-  through `ember-basic-dropdown` and `ember-power-select`.
-  `ember-style-modifier` sets style properties through the CSSOM
-  (`element.style.setProperty`), which the policy allows (§1.5).
+  Embroider's run-time macros, which compiled addon code such as
+  `ember-basic-dropdown`'s calls into; `ember-truth-helpers` and
+  `ember-element-helper`, through `ember-basic-dropdown` and
+  `ember-power-select`; and `ember-style-modifier`, through
+  `ember-basic-dropdown`. `ember-style-modifier` sets style properties
+  through the CSSOM (`element.style.setProperty`), which the policy allows
+  (§1.5).
 
 Any other package, including a package the build reaches through one of these,
 MUST be added in a change reviewed for it, the change that first lets Pret UI

@@ -59,8 +59,8 @@ export const ALLOWED_PACKAGES = new Set([
   'ember-power-select',
   'lodash-es',
 
-  // Packages the build reaches through the ones above that ADR 019 §1.3
-  // doesn't name, each reviewed here. They arrive with boxel-ui's input and
+  // Packages the build reaches through the ones above, as ADR 019 §1.3
+  // names them. They arrive with boxel-ui's input and
   // select, which the pages' fields and pickers render.
   //
   // Embroider's run-time macros, which compiled addon code calls into, as it
