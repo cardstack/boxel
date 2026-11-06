@@ -299,11 +299,41 @@ module('Pretui | components/tooltip', function (hooks) {
     );
     stage();
     await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
+    // Let the observers' first reports pass, so only the bubble's resize
+    // can place it again.
+    await frames();
 
     state.content = 'Copied the link to this workspace';
     await settled();
     await frames();
     assert.ok(offCenter() < 1, 'the longer tip is centered under the trigger');
+  });
+
+  test('Tooltip stays centered on its trigger when the trigger changes size while shown', async function (assert) {
+    class State {
+      @tracked label = 'Go';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <div data-test-stage>
+          <Tooltip @content='Copy' @side='bottom'>
+            <button type='button'>{{state.label}}</button>
+          </Tooltip>
+        </div>
+      </template>,
+    );
+    stage();
+    // The wrapper's display the inert scoped style would set; an inline box
+    // reports no size changes.
+    q('[data-test-pretui-tooltip]').style.display = 'inline-flex';
+    await triggerEvent(q('[data-test-pretui-tooltip]'), 'mouseenter');
+    await frames();
+
+    state.label = 'A much longer trigger label than before';
+    await settled();
+    await frames();
+    assert.ok(offCenter() < 1, 'centered under the wider trigger');
   });
 
   test('Tooltip hides while its trigger is scrolled out of view', async function (assert) {
@@ -396,5 +426,34 @@ module('Pretui | components/tooltip', function (hooks) {
     await triggerEvent(wrap, 'mouseleave');
     await triggerEvent(wrap, 'mouseenter');
     assert.true(tip.matches(':popover-open'), 'and the next hover opens it');
+  });
+
+  test('Tooltip opens on keyboard focus after its trigger moved and closed it', async function (assert) {
+    class State {
+      @tracked items = ['first', 'second'];
+    }
+    let state = new State();
+    await render(
+      <template>
+        {{#each state.items key='@identity' as |item|}}
+          <Tooltip @content={{item}} data-test-item={{item}}>
+            <button type='button' data-test-button={{item}}>{{item}}</button>
+          </Tooltip>
+        {{/each}}
+      </template>,
+    );
+    let wrap = q('[data-test-item="first"]');
+    let tip = wrap.querySelector('[data-test-pretui-tooltip-bubble]') as HTMLElement;
+    await triggerEvent(wrap, 'mouseenter');
+    state.items = ['second', 'first'];
+    await settled();
+    await frames();
+    await settled();
+    assert.strictEqual(tip.dataset['open'], undefined, 'closed by the move');
+
+    // No mouseleave or focusout clears the dismissal; keyboard focus arriving
+    // from outside does.
+    await focus('[data-test-button="first"]');
+    assert.true(tip.matches(':popover-open'), 'keyboard focus from outside opens it again');
   });
 });

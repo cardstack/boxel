@@ -291,6 +291,9 @@ export class Tooltip extends Component<TooltipSignature> {
           inset: auto;
           margin: 0;
           border: 0;
+          /* the bubble's edge in forced-colors mode, which drops its shadow;
+             an outline, unlike a border, leaves the bridge's box alone */
+          outline: 1px solid transparent;
           overflow: visible;
           background-color: var(--tooltip);
           color: var(--tooltip-foreground);

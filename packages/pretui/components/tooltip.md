@@ -40,7 +40,6 @@ Pretui's honest scorecard:
 - **Persistent:** passes — there is no timeout.
 - **Keyboard:** keyboard focus opens it; focus from a mouse press doesn't, so a clicked trigger doesn't keep its tip up after the pointer leaves.
 - `white-space: nowrap` means long content doesn't wrap, and a tip wider than the viewport runs past its edge.
-- In forced-colors mode the bubble has no edge: the mode removes its shadow, and it has no border.
 
 ## Theming
 
