@@ -7,7 +7,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import EditPage from './edit-page.gts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: { realm: { name: string; url: string } };

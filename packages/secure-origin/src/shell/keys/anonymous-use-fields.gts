@@ -11,7 +11,7 @@ import Checkbox from '../../components/checkbox.gts';
 import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import Users from '../../components/icons/users.gts';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 
 import { anonymousCapsPhrase, type AnonymousCaps } from './anonymous-caps.ts';
 
@@ -66,10 +66,6 @@ function capInvalid(anonymous: boolean, text: string): boolean {
   return anonymousCapOf(anonymous, text) === undefined;
 }
 
-function capState(anonymous: boolean, text: string): 'none' | 'invalid' {
-  return capInvalid(anonymous, text) ? 'invalid' : 'none';
-}
-
 function capError(anonymous: boolean, text: string): string | undefined {
   return capInvalid(anonymous, text)
     ? 'A whole number of calls, at least one, or empty for no cap'
@@ -118,13 +114,13 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
       data-test-anonymous-cap
       as |labelId|
     >
-      <BoxelInput
+      <Input
         @type='text'
-        @autocomplete='off'
-        @placeholder='No cap'
+        autocomplete='off'
+        placeholder='No cap'
         @value={{@cap}}
         @onInput={{@onCap}}
-        @state={{capState @anonymous @cap}}
+        @invalid={{capInvalid @anonymous @cap}}
         @errorMessage={{capError @anonymous @cap}}
         @describedBy='anonymous-cap-note'
         inputmode='numeric'
@@ -143,13 +139,13 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
       data-test-anonymous-monthly-cap
       as |labelId|
     >
-      <BoxelInput
+      <Input
         @type='text'
-        @autocomplete='off'
-        @placeholder='No cap'
+        autocomplete='off'
+        placeholder='No cap'
         @value={{@monthlyCap}}
         @onInput={{@onMonthlyCap}}
-        @state={{capState @anonymous @monthlyCap}}
+        @invalid={{capInvalid @anonymous @monthlyCap}}
         @errorMessage={{capError @anonymous @monthlyCap}}
         @describedBy='anonymous-monthly-cap-note'
         inputmode='numeric'

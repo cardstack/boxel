@@ -36,7 +36,7 @@ import Button from '../../components/button.gts';
 import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import { navigation } from '../navigation.js';
 import {
   addressAbove,
@@ -61,7 +61,7 @@ import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { cliOpenedFor, contextRequest, openedFor } from './opened-for.ts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 // The app that starts out chosen: the only one offered, or the one app that
 // is the workspace's or Boxel's, which the realm server lists ahead of the
@@ -135,10 +135,10 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
                   @icon={{Tag}}
                   data-test-connect-field='name'
                 >
-                  <BoxelInput
+                  <Input
                     @type='text'
-                    @autocomplete='off'
-                    @placeholder='A name you’ll recognize, such as “Work GitHub”'
+                    autocomplete='off'
+                    placeholder='A name you’ll recognize, such as “Work GitHub”'
                     @value={{this.form.name}}
                     @onInput={{this.setName}}
                     name='connection-name'

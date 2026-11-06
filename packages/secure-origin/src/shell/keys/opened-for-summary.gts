@@ -14,7 +14,7 @@ import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 
 import type { WindowContext } from './context.ts';
 import Destination from './destination.gts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: {

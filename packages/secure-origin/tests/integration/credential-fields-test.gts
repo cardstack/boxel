@@ -110,7 +110,7 @@ module('Integration | credential fields', function (hooks) {
       assert
         .dom('[data-test-password-field]')
         .hasAttribute('autocomplete', 'current-password')
-        .hasAttribute('data-test-boxel-input-validation-state', 'initial');
+        .hasAttribute('data-test-boxel-input-validation-state', 'none');
     });
   });
 
@@ -134,7 +134,7 @@ module('Integration | credential fields', function (hooks) {
       assert.notOk(JSON.stringify(sent).includes('a-long-password'));
     });
 
-    test('shows an invalid field as BoxelInput does, and clears it on typing', async function (assert) {
+    test('shows an invalid field as Pret UI Input does, and clears it on typing', async function (assert) {
       await renderForm('change-password');
       await fillIn('[data-test-new-password-field]', 'short');
       await blur('[data-test-new-password-field]');
@@ -158,7 +158,7 @@ module('Integration | credential fields', function (hooks) {
         .dom('[data-test-new-password-field]')
         .doesNotHaveClass('invalid')
         .doesNotHaveAttribute('aria-invalid')
-        .hasAttribute('data-test-boxel-input-validation-state', 'initial');
+        .hasAttribute('data-test-boxel-input-validation-state', 'none');
       assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
     });
 

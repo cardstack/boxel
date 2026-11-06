@@ -15,7 +15,10 @@ import FieldContainer from '../../components/field-container.gts';
 import Globe from '../../components/icons/globe.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
+import { Textarea } from '@cardstack/pretui/components/textarea';
+
+import { fitContent } from '../../modifiers/fit-content.ts';
 
 import type { ServiceAccountDetails } from './context.ts';
 import type { ServiceAccountEntry } from './service-account-entry.ts';
@@ -104,10 +107,10 @@ export default class ServiceAccountFields extends Component<Signature> {
       data-test-key-field='subject'
     >
       <div class='with-hint'>
-        <BoxelInput
+        <Input
           @type='email'
-          @autocomplete='off'
-          @placeholder='Optional: someone@your-domain.com'
+          autocomplete='off'
+          placeholder='Optional: someone@your-domain.com'
           @value={{@entry.subject}}
           @onInput={{this.setSubject}}
           name='service-account-subject'
@@ -124,15 +127,15 @@ export default class ServiceAccountFields extends Component<Signature> {
       data-test-key-field='scopes'
     >
       <div class='with-hint'>
-        <BoxelInput
-          @type='textarea'
-          @autocomplete='off'
-          @placeholder='https://www.googleapis.com/auth/spreadsheets'
+        <Textarea
+          autocomplete='off'
+          placeholder='https://www.googleapis.com/auth/spreadsheets'
           @value={{@entry.scopes}}
           @onInput={{this.setScopes}}
           name='service-account-scopes'
           spellcheck='false'
           data-test-service-account-scopes
+          {{fitContent @entry.scopes}}
         />
         <p class='hint'>What its tokens may do, one per line, or separated by
           spaces.</p>

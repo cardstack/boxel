@@ -2,7 +2,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 import FieldContainer from '../components/field-container.gts';
-import BoxelInput from '../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import cn from '../helpers/cn.ts';
 import { modifier, testAttribute } from '../modifiers/modifier.ts';
 import type { CredentialFrame } from '../security/credentials.js';
@@ -78,16 +78,6 @@ export default class CredentialFields extends Component<Signature> {
     }));
   }
 
-  // A field with an error is shown invalid, as a BoxelInput given
-  // `@state='invalid'` is. The forms whose fields the app gives a validation
-  // state show the rest as `initial`; the others give them none.
-  private state = (error: string | undefined) => {
-    if (error) {
-      return 'invalid';
-    }
-    return this.frame.form.stateful ? 'initial' : undefined;
-  };
-
   private input = (name: string) => (value: string) =>
     this.frame.input(name, value);
 
@@ -153,17 +143,17 @@ export default class CredentialFields extends Component<Signature> {
             class='profile-field password-settings-field'
             as |labelId|
           >
-            <BoxelInput
-              @id={{entry.field.id}}
+            <Input
+              @controlId={{entry.field.id}}
               @type={{entry.field.type}}
-              @autocomplete={{entry.field.autocomplete}}
-              @placeholder={{entry.field.placeholder}}
+              autocomplete={{entry.field.autocomplete}}
+              placeholder={{entry.field.placeholder}}
               @value={{entry.value}}
-              @state={{this.state entry.error}}
+              @invalid={{if entry.error true false}}
               @errorMessage={{entry.error}}
               @onInput={{this.input entry.name}}
-              @onBlur={{this.blur entry.name}}
-              @onChange={{this.change entry.name}}
+              {{on 'blur' (this.blur entry.name)}}
+              {{on 'change' (this.change entry.name)}}
               name={{entry.field.inputName}}
               aria-labelledby={{labelId}}
               aria-label={{entry.field.accessibleName}}
@@ -179,17 +169,17 @@ export default class CredentialFields extends Component<Signature> {
             class='profile-field'
             as |labelId|
           >
-            <BoxelInput
-              @id={{entry.field.id}}
+            <Input
+              @controlId={{entry.field.id}}
               @type={{entry.field.type}}
-              @autocomplete={{entry.field.autocomplete}}
-              @placeholder={{entry.field.placeholder}}
+              autocomplete={{entry.field.autocomplete}}
+              placeholder={{entry.field.placeholder}}
               @value={{entry.value}}
-              @state={{this.state entry.error}}
+              @invalid={{if entry.error true false}}
               @errorMessage={{entry.error}}
               @onInput={{this.input entry.name}}
-              @onBlur={{this.blur entry.name}}
-              @onChange={{this.change entry.name}}
+              {{on 'blur' (this.blur entry.name)}}
+              {{on 'change' (this.change entry.name)}}
               name={{entry.field.inputName}}
               aria-labelledby={{labelId}}
               aria-label={{entry.field.accessibleName}}
@@ -262,6 +252,12 @@ export default class CredentialFields extends Component<Signature> {
       }
 
       .credential-fields {
+        /* The fields are the size of the app's own form controls, in the
+           page's type, through Pret UI's field knobs: as tall as
+           --boxel-form-control-height, which the app also sizes the frame
+           by before the fields report their height. */
+        --pretui-field-h: var(--boxel-form-control-height);
+        --pretui-field-font-size: 1em;
         display: flex;
         flex-direction: column;
         margin: 0;

@@ -57,7 +57,7 @@ import Button from '../../components/button.gts';
 import FieldContainer from '../../components/field-container.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -264,10 +264,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                         @icon={{RectangleEllipsis}}
                         data-test-key-field='client-id'
                       >
-                        <BoxelInput
+                        <Input
                           @type='text'
-                          @autocomplete='off'
-                          @placeholder='The app’s Client ID, shown on the site'
+                          autocomplete='off'
+                          placeholder='The app’s Client ID, shown on the site'
                           @value={{this.form.clientId}}
                           @onInput={{this.setClientId}}
                           name='client-id'

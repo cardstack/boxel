@@ -20,7 +20,7 @@ import Globe from '../../components/icons/globe.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 
 import { readConfig } from '../../security/session.js';
 
@@ -114,10 +114,10 @@ export default class OAuthClientFields extends Component<Signature> {
         data-test-key-field='authorize-url'
       >
         <div class='with-hint'>
-          <BoxelInput
+          <Input
             @type='url'
-            @autocomplete='off'
-            @placeholder='https://example.com/oauth/authorize'
+            autocomplete='off'
+            placeholder='https://example.com/oauth/authorize'
             @value={{@form.authorizeUrl}}
             @onInput={{this.setAuthorizeUrl}}
             name='authorize-url'
@@ -138,10 +138,10 @@ export default class OAuthClientFields extends Component<Signature> {
       data-test-key-field='token-url'
     >
       <div class='with-hint'>
-        <BoxelInput
+        <Input
           @type='url'
-          @autocomplete='off'
-          @placeholder='https://example.com/oauth/token'
+          autocomplete='off'
+          placeholder='https://example.com/oauth/token'
           @value={{@form.tokenUrl}}
           @onInput={{this.setTokenUrl}}
           name='token-url'
@@ -159,10 +159,10 @@ export default class OAuthClientFields extends Component<Signature> {
       data-test-key-field='scopes'
     >
       <div class='with-hint'>
-        <BoxelInput
+        <Input
           @type='text'
-          @autocomplete='off'
-          @placeholder='For example: read:user'
+          autocomplete='off'
+          placeholder='For example: read:user'
           @value={{@form.scopes}}
           @onInput={{this.setScopes}}
           name='scopes'

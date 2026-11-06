@@ -49,7 +49,7 @@ import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import Tag from '../../components/icons/tag.gts';
 import Users from '../../components/icons/users.gts';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
@@ -72,7 +72,8 @@ import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedForShare } from './opened-for.ts';
-import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
+import { Select } from '@cardstack/pretui/components/select';
+import { addressOf, workspaceOptions } from './workspaces.ts';
 import { anonymousCapsClause } from './anonymous-caps.ts';
 
 interface Realm {
@@ -188,12 +189,24 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 data-test-realm-picker
                 as |labelId|
               >
-                <WorkspaceDropdown
-                  @workspaces={{this.form.realms}}
-                  @selected={{this.form.realm}}
-                  @onSelect={{this.selectRealm}}
-                  @labelId={{labelId}}
-                />
+                {{#if this.form.realms.length}}
+                  <Select
+                    @options={{workspaceOptions this.form.realms}}
+                    @value={{this.form.realm}}
+                    @onValueChange={{this.selectRealm}}
+                    @placeholder='Select a workspace'
+                    @searchEnabled={{true}}
+                    @labelledBy={{labelId}}
+                    data-test-workspace-dropdown
+                  />
+                {{else}}
+                  <p
+                    class='no-workspaces'
+                    data-test-workspace-dropdown-no-results
+                  >
+                    You don’t edit any workspace you could share a key with.
+                  </p>
+                {{/if}}
               </FieldContainer>
             {{/unless}}
             <FieldContainer
@@ -202,10 +215,10 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               @icon={{Tag}}
               data-test-key-field='label'
             >
-              <BoxelInput
+              <Input
                 @type='text'
-                @autocomplete='off'
-                @placeholder='What people with access to the workspace see it as'
+                autocomplete='off'
+                placeholder='What people with access to the workspace see it as'
                 @value={{this.form.label}}
                 @onInput={{this.setLabel}}
                 name='share-label'
@@ -279,6 +292,12 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         display: flex;
         flex-direction: column;
         flex: 1;
+      }
+      .no-workspaces {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        color: var(--muted-foreground);
       }
       .busy {
         margin-top: var(--boxel-sp-xl);

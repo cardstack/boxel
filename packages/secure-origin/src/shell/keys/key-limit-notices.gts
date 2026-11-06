@@ -17,7 +17,7 @@ import type { TOC } from '@ember/component/template-only';
 import Button from '../../components/button.gts';
 import type { KeyLimitNotice } from '../../security/keys.ts';
 
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: {

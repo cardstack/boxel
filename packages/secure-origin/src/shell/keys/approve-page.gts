@@ -78,7 +78,7 @@ import Checkbox from '../../components/checkbox.gts';
 import Warning from '../../components/icons/warning.gts';
 import FieldContainer from '../../components/field-container.gts';
 import Globe from '../../components/icons/globe.gts';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import KeyRound from '../../components/icons/key-round.gts';
 import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
@@ -457,12 +457,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   data-test-approve-budget={{share.label}}
                   as |labelId|
                 >
-                  <BoxelInput
+                  <Input
                     @type='text'
-                    @autocomplete='off'
+                    autocomplete='off'
                     @value={{this.budgetText share}}
                     @onInput={{fn this.setBudget share.id}}
-                    @state={{if (this.budgetValid share) 'none' 'invalid'}}
+                    @invalid={{if (this.budgetValid share) false true}}
                     @errorMessage={{this.budgetError share}}
                     @describedBy='budget-note-{{share.id}}'
                     inputmode='numeric'

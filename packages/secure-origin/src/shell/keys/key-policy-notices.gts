@@ -19,7 +19,7 @@ import Button from '../../components/button.gts';
 import type { KeyPolicyNotice } from '../../security/keys.ts';
 
 import type { ListedKey } from './context.ts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: {

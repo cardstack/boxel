@@ -1,7 +1,8 @@
+import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import AuthFormField from '../components/auth-form-field.gts';
-import BoxelInput from '../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import ValidationHint from '../components/validation-hint.gts';
 import { autofocus } from '../modifiers/autofocus.ts';
 import type { NewPassword } from './new-password.ts';
@@ -28,7 +29,7 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
     data-test-secure-field='password'
     as |labelId|
   >
-    <BoxelInput
+    <Input
       aria-labelledby={{labelId}}
       data-test-password-field
       name='password'
@@ -36,10 +37,10 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
       @type='password'
       @value={{@password.password}}
       placeholder={{@passwordPlaceholder}}
-      @state={{if @password.passwordError 'invalid' 'initial'}}
+      @invalid={{if @password.passwordError true false}}
       @errorMessage={{@password.passwordError}}
       @onInput={{@password.setPassword}}
-      @onBlur={{@password.checkPassword}}
+      {{on 'blur' @password.checkPassword}}
       {{autofocus (if @autofocus true false)}}
     />
     {{#if @hints}}
@@ -53,7 +54,7 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
     data-test-secure-field='confirm-password'
     as |labelId|
   >
-    <BoxelInput
+    <Input
       aria-labelledby={{labelId}}
       data-test-confirm-password-field
       name='confirm-password'
@@ -61,10 +62,10 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
       @type='password'
       @value={{@password.confirm}}
       placeholder={{@confirmPlaceholder}}
-      @state={{if @password.confirmError 'invalid' 'initial'}}
+      @invalid={{if @password.confirmError true false}}
       @errorMessage={{@password.confirmError}}
       @onInput={{@password.setConfirm}}
-      @onBlur={{@password.checkConfirm}}
+      {{on 'blur' @password.checkConfirm}}
     />
     {{#if @hints}}
       {{#if @password.confirmValid}}

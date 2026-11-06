@@ -15,7 +15,7 @@ import {
 import type { Session } from '../../security/session.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
 import AuthFormField from '../../components/auth-form-field.gts';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import { bool } from '../../helpers/truth-helpers.ts';
 import SignInScreen from '../../screens/sign-in.gts';
 import { navigation } from '../navigation.js';
@@ -58,10 +58,10 @@ const Fields: TemplateOnlyComponent<{
     @label='Email Address or Username'
     data-test-secure-field='username'
   >
-    <BoxelInput
+    <Input
       @type='text'
-      @autocomplete='username'
-      @placeholder='Your email address'
+      autocomplete='username'
+      placeholder='Your email address'
       @value={{@username}}
       @onInput={{@onUsername}}
       name='username'
@@ -70,10 +70,10 @@ const Fields: TemplateOnlyComponent<{
     />
   </AuthFormField>
   <AuthFormField @label='Password' data-test-secure-field='password'>
-    <BoxelInput
+    <Input
       @type='password'
-      @autocomplete='current-password'
-      @placeholder='Your password'
+      autocomplete='current-password'
+      placeholder='Your password'
       @value={{@password}}
       @onInput={{@onPassword}}
       name='password'

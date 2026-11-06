@@ -18,7 +18,7 @@ import DisclosureToggle from '../../components/disclosure-toggle.gts';
 import { eq, not } from '../../helpers/truth-helpers.ts';
 
 import type { KeyBinding, KeyGrant, ListedKey } from '../../security/keys.ts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: {

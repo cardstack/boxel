@@ -10,7 +10,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { DestinationDisplay } from '../../security/keys.ts';
 
 import { methodPhrase } from './context.ts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: {
