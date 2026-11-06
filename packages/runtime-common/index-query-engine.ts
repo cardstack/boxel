@@ -59,6 +59,7 @@ import {
 import {
   rankFieldsOf,
   searchesByPattern,
+  typoCorrections,
   SEARCH_RANK_SIGNALS,
   SEARCH_TEXT_KEY,
 } from './search-intent.ts';
@@ -2602,6 +2603,9 @@ export class IndexQueryEngine {
       if (words.length === 0) {
         return filter;
       }
+      // Candidates by trigram similarity (the word list's GIN index), for
+      // each word the list doesn't already hold; `typoCorrections` keeps
+      // those within the word's edit budget.
       let rows = (await this.#dbAdapter.execute(
         `SELECT q.w AS word, c.word AS correction
            FROM unnest($1::text[]) AS q(w)
@@ -2609,15 +2613,25 @@ export class IndexQueryEngine {
              SELECT bw.word FROM boxel_index_words AS bw
               WHERE bw.realm_url = $2 AND char_length(q.w) > 3
                 AND bw.word % q.w AND bw.word <> q.w
+                AND NOT EXISTS (
+                  SELECT 1 FROM boxel_index_words AS known
+                   WHERE known.realm_url = $2 AND known.word = q.w
+                )
               ORDER BY similarity(bw.word, q.w) DESC, bw.word
-              LIMIT 3
+              LIMIT 10
            ) AS c`,
         { bind: [words, realmURL.href] },
       )) as { word: string; correction: string }[];
-      let corrections = new Map<string, string[]>();
+      let candidates = new Map<string, string[]>();
       for (let { word, correction } of rows) {
-        corrections.set(word, [...(corrections.get(word) ?? []), correction]);
+        candidates.set(word, [...(candidates.get(word) ?? []), correction]);
       }
+      let corrections = new Map<string, string[]>(
+        [...candidates].map(([word, list]) => [
+          word,
+          typoCorrections(word, list),
+        ]),
+      );
       let unfinished =
         node.prefix && !/\s$/.test(node.matches) ? words.length - 1 : -1;
       let typoQuery = words

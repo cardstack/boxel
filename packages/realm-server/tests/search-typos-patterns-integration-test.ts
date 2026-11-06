@@ -7,6 +7,9 @@ import {
   IndexQueryEngine,
   IndexWriter,
   SEARCH_TEXT_KEY,
+  editDistance,
+  typoBudget,
+  typoCorrections,
   VirtualNetwork,
   assertQuery,
   internalKeyFor,
@@ -177,6 +180,22 @@ const corpus: Record<string, TalkData> = {
     speaker: 'Rob Pike',
     note: 'plain',
   },
+  // A long word that shares most of its trigrams with a misspelling of
+  // another: "concurency" must not be corrected to "cryptocurrency".
+  coins: {
+    title: 'Ledgers',
+    text: 'blocks and chains',
+    vid: 'zzCoins0001',
+    speaker: 'Cryptocurrency Club',
+    note: 'plain',
+  },
+  kit: {
+    title: 'Lock-free queues',
+    text: 'atomics',
+    vid: 'zzKit000001',
+    speaker: 'Concurrency Kit',
+    note: 'plain',
+  },
 };
 
 module(basename(import.meta.filename), function (hooks) {
@@ -241,7 +260,18 @@ module(basename(import.meta.filename), function (hooks) {
     )) as { word: string }[];
     assert.deepEqual(
       rows.map((r) => r.word),
-      ['kleppmann', 'martin', 'matsakis', 'niko', 'pike', 'rob'],
+      [
+        'club',
+        'concurrency',
+        'cryptocurrency',
+        'kit',
+        'kleppmann',
+        'martin',
+        'matsakis',
+        'niko',
+        'pike',
+        'rob',
+      ],
     );
   });
 
@@ -270,6 +300,38 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'a word with nothing close matches nothing',
     );
+  });
+
+  test("a correction stays within the word's edit budget", async function (assert) {
+    assert.deepEqual(
+      await ids({ filter: { on, matches: 'concurency', typos: true } }),
+      ['go.json', 'kit.json'],
+      'one edit away: concurrency, not cryptocurrency',
+    );
+    assert.deepEqual(
+      await ids({ filter: { on, matches: 'concurrency', typos: true } }),
+      ['go.json', 'kit.json'],
+      'a word the list holds is matched as typed',
+    );
+  });
+
+  test('typo budget and edit distance', function (assert) {
+    assert.strictEqual(typoBudget('rob'), 0, 'under four letters: none');
+    assert.strictEqual(typoBudget('kleppman'), 2, 'eight letters: two');
+    assert.strictEqual(typoBudget('pike'), 1);
+    assert.strictEqual(editDistance('kleppman', 'kleppmann'), 1);
+    assert.strictEqual(editDistance('teh', 'the'), 1, 'a swap is one edit');
+    assert.true(editDistance('concurency', 'cryptocurrency') > 2);
+    assert.deepEqual(
+      typoCorrections('concurency', [
+        'cryptocurrency',
+        'concurrency',
+        'concurrent',
+      ]),
+      ['concurrency'],
+      'concurrent is three edits away',
+    );
+    assert.deepEqual(typoCorrections('rob', ['bob']), [], 'no budget');
   });
 
   test('pattern: a glob over a pattern field, ignoring case', async function (assert) {
@@ -307,7 +369,7 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
     assert.deepEqual(
       await ids({ filter: { on, not: { regex: { vid: '^dQ' } } } }),
-      ['go.json'],
+      ['coins.json', 'go.json', 'kit.json'],
       'a regex negates',
     );
   });

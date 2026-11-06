@@ -334,3 +334,65 @@ export function cardSearchIntentOf(
   }
   return merged;
 }
+
+// How many edits a typo-tolerant word may be from the word it is corrected
+// to: none under four letters, one up to seven, two from eight. Trigram
+// similarity nominates the candidates; this budget decides, so a long word
+// can't be "corrected" to a different long word that merely shares most of
+// its trigrams ("concurency" is not "cryptocurrency").
+export function typoBudget(word: string): number {
+  let length = [...word].length;
+  return length < 4 ? 0 : length < 8 ? 1 : 2;
+}
+
+// The optimal-string-alignment distance between two words: insertions,
+// deletions, substitutions and swaps of adjacent letters each cost one.
+export function editDistance(a: string, b: string): number {
+  let s = [...a];
+  let t = [...b];
+  let d: number[][] = Array.from({ length: s.length + 1 }, (_, i) =>
+    Array.from({ length: t.length + 1 }, (_, j) =>
+      i === 0 ? j : j === 0 ? i : 0,
+    ),
+  );
+  for (let i = 1; i <= s.length; i++) {
+    for (let j = 1; j <= t.length; j++) {
+      let cost = s[i - 1] === t[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + cost,
+      );
+      if (i > 1 && j > 1 && s[i - 1] === t[j - 2] && s[i - 2] === t[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return d[s.length][t.length];
+}
+
+// The corrections a typo-tolerant word takes from its candidates: those
+// within the word's typo budget, closest first (ties in the candidates'
+// order), at most `limit`.
+export function typoCorrections(
+  word: string,
+  candidates: string[],
+  limit = 3,
+): string[] {
+  let budget = typoBudget(word);
+  if (budget === 0) {
+    return [];
+  }
+  return candidates
+    .map((candidate, index) => ({
+      candidate,
+      index,
+      distance: editDistance(word, candidate),
+    }))
+    .filter(
+      ({ candidate, distance }) => candidate !== word && distance <= budget,
+    )
+    .sort((x, y) => x.distance - y.distance || x.index - y.index)
+    .slice(0, limit)
+    .map(({ candidate }) => candidate);
+}
