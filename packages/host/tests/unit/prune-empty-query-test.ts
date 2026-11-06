@@ -14,6 +14,10 @@ const listing = {
   module: listingModule,
   name: 'Listing',
 } as unknown as CodeRef;
+const spec = {
+  module: '@cardstack/base/spec',
+  name: 'Spec',
+} as unknown as CodeRef;
 
 module('Unit | prune-empty-query', function () {
   test('drops the empty parts a model fills in for every schema property', function (assert) {
@@ -112,6 +116,10 @@ module('Unit | prune-empty-query', function () {
         { on: listing, matches: 'invoice', not: 'draft' },
       ],
       [{ not: 'draft' }, { not: 'draft' }],
+      [
+        { type: listing, on: spec },
+        { type: listing, on: spec },
+      ],
     ];
     for (let [filter, expected] of cases) {
       let pruned = pruneEmptyQueryParts({ filter } as unknown as Query);
@@ -127,19 +135,27 @@ module('Unit | prune-empty-query', function () {
       );
     }
 
-    let sorted = pruneEmptyQueryParts({
-      sort: [{ by: 'cardTitle', on: 'Spec' }],
-    } as unknown as Query);
-    assert.deepEqual(
-      sorted.sort,
-      [{ by: 'cardTitle', on: 'Spec' }] as unknown as Query['sort'],
-      'kept a sort anchor given by name',
-    );
-    assert.throws(
-      () => assertQuery(sorted),
-      InvalidQueryError,
-      'validation refuses a sort anchor given by name',
-    );
+    // Not left unfilled: dropping one of these would return the results
+    // unsorted, or sorted without the card type the model named.
+    for (let sort of [
+      ['lastModified'],
+      [{ by: ['cardTitle'] }],
+      [{ by: 'cardTitle', on: 'Spec' }],
+      [{ by: 'cardTitle', on: listing }, 'lastModified'],
+      { by: 'cardTitle' },
+    ]) {
+      let pruned = pruneEmptyQueryParts({ sort } as unknown as Query);
+      assert.deepEqual(
+        pruned.sort,
+        sort as unknown as Query['sort'],
+        `kept sort ${JSON.stringify(sort)}`,
+      );
+      assert.throws(
+        () => assertQuery(pruned),
+        InvalidQueryError,
+        `validation refuses sort ${JSON.stringify(sort)}`,
+      );
+    }
   });
 
   test('still drops a part with nothing in it', function (assert) {
@@ -163,6 +179,27 @@ module('Unit | prune-empty-query', function () {
       { filter: { type: listing } } as unknown as Query,
       'a filter left with a blank type beside its card type is a type filter',
     );
+    assert.deepEqual(
+      pruneEmptyQueryParts({
+        filter: { on: listing, eq: [], contains: [], in: [''], range: null },
+      } as unknown as Query),
+      { filter: { type: listing } } as unknown as Query,
+      'an operator with an empty list is dropped like an empty object',
+    );
+    assert.deepEqual(
+      pruneEmptyQueryParts({
+        sort: [{ by: '', direction: 'asc' }, { direction: 'desc' }, {}, ''],
+      } as unknown as Query),
+      {},
+      'a sort entry that names no field is dropped',
+    );
+    for (let blank of [null, '', {}]) {
+      assert.deepEqual(
+        pruneEmptyQueryParts({ sort: blank, page: blank } as unknown as Query),
+        {},
+        `an empty sort and page (${JSON.stringify(blank)}) are dropped`,
+      );
+    }
   });
 
   test('drops the anchor from a relevance sort', function (assert) {

@@ -1,3 +1,5 @@
+import { isEqual } from 'lodash-es';
+
 import {
   MATCH_RELEVANCE_SORT_KEY,
   type Query,
@@ -10,7 +12,8 @@ import {
 //
 // After pruning, a filter left with only `on` (or with `on` and the same
 // `type`) names a card type and nothing else, so it becomes a pure type
-// filter.
+// filter. A sort entry that names no field (`by` left blank) is dropped too:
+// there is nothing to sort by.
 //
 // A part that is not empty but has the wrong shape — a `filter` that is a
 // string, a `matches` that is a list, a card type given by name — is not a
@@ -24,21 +27,32 @@ export function pruneEmptyQueryParts(query: Query): Query {
   } else {
     result.filter = filter;
   }
+  for (let key of ['sort', 'page'] as const) {
+    if (key in result && isEmpty(result[key])) {
+      delete result[key];
+    }
+  }
   if (Array.isArray(result.sort)) {
     // A relevance sort ranks by the query's search terms; with none left
     // (a model often sends an empty `matches`), the engine rejects it.
     let hasTerms = hasPositiveMatches(isObject(filter) ? filter : undefined);
     let sort = (result.sort as unknown[]).filter(
       (entry) =>
-        isObject(entry) &&
-        isNonEmptyString(entry.by) &&
-        (hasTerms || entry.by !== MATCH_RELEVANCE_SORT_KEY),
+        !isEmpty(entry) &&
+        !(
+          isObject(entry) &&
+          (isEmpty(entry.by) ||
+            (!hasTerms && entry.by === MATCH_RELEVANCE_SORT_KEY))
+        ),
     );
     if (sort.length === 0) {
       delete result.sort;
     } else {
       result.sort = sort.map((entry) => {
-        let { on, ...rest } = entry as Record<string, unknown>;
+        if (!isObject(entry)) {
+          return entry;
+        }
+        let { on, ...rest } = entry;
         // Relevance is not a field of any card type, so it takes no anchor;
         // the engine rejects `_matchRelevance` with `on` in every realm.
         if (rest.by === MATCH_RELEVANCE_SORT_KEY) {
@@ -92,11 +106,7 @@ function pruneFilter(
       if (!isEmpty(value)) {
         result[key] = value;
       }
-    } else if (isObject(value)) {
-      if (Object.keys(value).length > 0) {
-        result[key] = value;
-      }
-    } else if (value !== undefined && value !== null && value !== '') {
+    } else if (!isEmpty(value)) {
       result[key] = value;
     }
   }
@@ -106,11 +116,14 @@ function pruneFilter(
     return undefined;
   }
   // A ref of the wrong shape stays under the key the model wrote, so the
-  // refusal names that key.
-  let onlyUsableTypes = keys.every(
-    (key) => CODE_REF_KEYS.has(key) && isUsableCodeRef(result[key]),
-  );
-  if (onlyUsableTypes) {
+  // refusal names that key. So does an `on` that names a different type from
+  // `type`: neither one is the filter's single card type.
+  let onlyOneUsableType =
+    keys.every(
+      (key) => CODE_REF_KEYS.has(key) && isUsableCodeRef(result[key]),
+    ) &&
+    (keys.length === 1 || isEqual(result.on, result.type));
+  if (onlyOneUsableType) {
     return { type: result.type ?? result.on };
   }
   return result;
