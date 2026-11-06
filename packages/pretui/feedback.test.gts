@@ -204,33 +204,39 @@ module('Pretui | feedback', function (hooks) {
     assert.strictEqual(q('.pretui-shimmer-label').textContent?.trim(), 'Indexing');
     assert.strictEqual(q('.pretui-elapsed').textContent?.trim(), '4.2s');
     let delays = all('.pretui-pixel').map((p) =>
-      /(\d+)ms infinite/.exec(p.getAttribute('style') ?? '')?.[1],
+      p.style.getPropertyValue('--pretui-pixel-delay'),
     );
     assert.deepEqual(
       delays,
-      ['90', '180', '270', '0', '90', '180', '90', '180', '270'],
+      ['90ms', '180ms', '270ms', '0ms', '90ms', '180ms', '90ms', '180ms', '270ms'],
       'the ramp is symmetric about the middle row, so the sweep reads as a chevron',
     );
-    assert.deepEqual(
-      all('.pretui-pixel').map((p) => p.dataset['round']),
-      Array(9).fill(undefined),
-      'only the dots variant rounds the pixels',
+    assert.strictEqual(
+      q('.pretui-pixelgrid').dataset['variant'],
+      'drive',
+      'only the dots variant rounds the pixels, keyed on the grid',
     );
   });
 
   test('LoadingState orbit leaves the centre pixel dark rather than animating it', async function (assert) {
     await render(<template><LoadingState @variant='orbit' /></template>);
-    let styles = all('.pretui-pixel').map((p) => p.getAttribute('style') ?? '');
-    assert.strictEqual(styles.filter((s) => s.includes('animation: none')).length, 1, 'exactly one still pixel');
-    assert.true(styles[4]?.includes('animation: none'), 'and it is the centre of the 3×3');
-    assert.true(styles[0]?.includes('950ms'), 'the orbit runs on its own, slower period');
+    let pixels = all('.pretui-pixel');
+    assert.strictEqual(pixels.filter((p) => p.hasAttribute('data-idle')).length, 1, 'exactly one still pixel');
+    assert.true(pixels[4]?.hasAttribute('data-idle'), 'and it is the centre of the 3×3');
+    assert.strictEqual(
+      q('.pretui-pixelgrid').dataset['variant'],
+      'orbit',
+      'the orbit runs on its own, slower period, keyed on the grid',
+    );
   });
 
   test('LoadingState dots rounds every pixel', async function (assert) {
     await render(<template><LoadingState @variant='dots' /></template>);
-    assert.deepEqual(
-      all('.pretui-pixel').map((p) => p.dataset['round']),
-      Array(9).fill('true'),
+    assert.strictEqual(
+      q('.pretui-pixelgrid').dataset['variant'],
+      'dots',
+      'the grid rounds all nine pixels',
     );
+    assert.strictEqual(all('.pretui-pixel').filter((p) => p.hasAttribute('data-idle')).length, 0, 'and none is still');
   });
 });

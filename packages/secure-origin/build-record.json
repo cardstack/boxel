@@ -52,7 +52,7 @@
       "bytes": 1052
     },
     "credentials.js": {
-      "bytes": 12487,
+      "bytes": 12482,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -108,7 +108,7 @@
       ]
     },
     "probe/probe.css": {
-      "bytes": 174785,
+      "bytes": 3753,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -117,290 +117,6 @@
         {
           "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/accordion/item/79d7ef0833.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/add-button/63c3a14c4b.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/alert/4efaa46b94.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/alert/541ad54820.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/alert/c3c25d5f99.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/avatar/784ee46691.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/basic-fitted/fea77ae371.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/broken-link/411b07008e.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/button/6c7dbd1683.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/card-container/c46e0755f8.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/card-header/d7bcf2c6d0.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/circle-spinner/0a24b1077b.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/color-palette/596d6b9752.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/color-picker/01fa575293.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/container/3e5c1553ea.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/context-button/bd4a606549.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/date-range-picker/c45faaa308.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/drag-and-drop/ae95ab726f.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/dropdown/33317dae40.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/entity-icon-display/4bb4327108.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/entity-thumbnail-display/f5e1b4aed1.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/field-container/91f793d412.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/filter-list/3554195165.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/filter-list/3d8f37ad40.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/fitted-card/1f78827d88.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/grid-container/3d42bfe910.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/header/ca943bf67e.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/icon-button/cd9c7937ab.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/3414112d42.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/accessories/68bba714fe.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/accessories/6ca717a623.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input/95f9b29188.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/162fc2bc00.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/658c97ae70.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/7932d4536d.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/8d0d4d6d7b.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/9724abf299.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/cff4df1cde.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/f2d52efaaa.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/label/a989f1120a.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/loading-indicator/803b34d81d.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/markdown-content-shell/fcf9dfc7c8.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/menu/1de37e1c56.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/modal/e70e0d8928.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/multi-select/052a1e0bb2.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/picker/a26f9501cc.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/picker/e49bb5bb28.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/picker/fc1e518b1a.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/pill/a9d6889207.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/progress-bar/64a3e81f64.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/progress-radial/535df1cf00.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/radio-input/56f8e6ebef.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/radio-input/f4f0b6972e.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/realm-icon/ecb32485d2.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/2660ef6d73.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/afedb5ac6b.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/b95c198d1a.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/07eefebab2.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/26399f7c1f.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/743ac815ce.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/b595555c27.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/selection-checkmark/8923c4ab27.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/selection-menu/f5b8a58baf.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/skeleton-placeholder/8da90486ae.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/sort-dropdown/73461ec7ef.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/swatch/9b9e02c36c.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/switch/3b4b19d446.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/tabbed-header/6d1c75a5fc.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/tag-list/f14b17b420.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/tag/4cfa9ab146.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/tooltip/dbcaae1f21.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/view-selector/e874bdbb02.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -416,920 +132,31 @@
       "bytes": 1154
     },
     "probe/probe.js": {
-      "bytes": 1243679,
+      "bytes": 253230,
       "modules": [
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop-hitbox@1.2.0",
-          "module": "dist/esm/closest-edge.js",
-          "size": 2216
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop-hitbox@1.2.0",
-          "module": "dist/esm/internal/memoize.js",
-          "size": 671
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop-hitbox@1.2.0",
-          "module": "dist/esm/tree-item.js",
-          "size": 3561
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/adapter/element-adapter-native-data-key.js",
-          "size": 245
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/adapter/element-adapter.js",
-          "size": 3897
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/honey-pot-fix/get-element-from-point-without-honey-pot.js",
-          "size": 551
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/honey-pot-fix/honey-pot-data-attribute.js",
-          "size": 271
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/honey-pot-fix/is-honey-pot-element.js",
-          "size": 302
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/honey-pot-fix/make-honey-pot-fix.js",
-          "size": 5166
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/ledger/dispatch-consumer-event.js",
-          "size": 2365
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/ledger/lifecycle-manager.js",
-          "size": 4376
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/ledger/usage-ledger.js",
-          "size": 700
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/make-adapter/make-adapter.js",
-          "size": 1295
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/make-adapter/make-drop-target.js",
-          "size": 9252
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/make-adapter/make-monitor.js",
-          "size": 4032
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/public-utils/combine.js",
-          "size": 393
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/public-utils/once.js",
-          "size": 449
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/add-attribute.js",
-          "size": 371
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/android.js",
-          "size": 328
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/changing-window/count-events-for-safari.js",
-          "size": 1489
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/changing-window/is-from-another-window.js",
-          "size": 374
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/changing-window/is-leaving-window.js",
-          "size": 582
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/detect-broken-drag.js",
-          "size": 510
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/get-input.js",
-          "size": 454
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/is-firefox.js",
-          "size": 260
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/is-safari.js",
-          "size": 322
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/max-z-index.js",
-          "size": 192
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/media-types/text-media-type.js",
-          "size": 214
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/media-types/url-media-type.js",
-          "size": 215
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/popover-reset-styles.js",
-          "size": 339
-        },
-        {
-          "package": "@atlaskit/pragmatic-drag-and-drop@1.8.1",
-          "module": "dist/esm/util/supports-popover.js",
-          "size": 332
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/arrayLikeToArray.js",
-          "size": 284
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/arrayWithHoles.js",
-          "size": 193
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/arrayWithoutHoles.js",
-          "size": 220
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/defineProperty.js",
-          "size": 320
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/iterableToArray.js",
-          "size": 276
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/iterableToArrayLimit.js",
-          "size": 722
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/nonIterableRest.js",
-          "size": 324
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/nonIterableSpread.js",
-          "size": 323
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/objectWithoutProperties.js",
-          "size": 473
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/objectWithoutPropertiesLoose.js",
-          "size": 351
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/slicedToArray.js",
-          "size": 281
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/toConsumableArray.js",
-          "size": 280
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/toPrimitive.js",
-          "size": 452
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/toPropertyKey.js",
-          "size": 237
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/typeof.js",
-          "size": 445
-        },
-        {
-          "package": "@babel/runtime@7.29.7",
-          "module": "helpers/esm/unsupportedIterableToArray.js",
-          "size": 533
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/check.js",
-          "sha256": "aec2a56eef69c23d11f1a1577d2f40edb5522e01ad0dd0d9e07e4177dd1d3a4c",
-          "size": 782
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/chevron-down.js",
-          "sha256": "565d9dc3c16ac7057e5e4ff77acff22fa99b54913c4558b3160fca10c19913be",
-          "size": 807
-        },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/chevron-right.js",
           "sha256": "f922a36ee50c4c15fe41934bf9196877bfb5df4369ca07efddf20047ca4c076a",
-          "size": 814
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/chevron-up.js",
-          "sha256": "e5aff4ec29698871ba80ca2e6e7ce1ecc9d6fb9c6da1b64e5ffb1bc88d8044f9",
-          "size": 801
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/copy.js",
-          "sha256": "7384be38e324ab03a7dfad01ec1920fb8de37eb9c86d978e2398e0c45948135d",
-          "size": 957
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/dots-vertical.js",
-          "sha256": "b7295490e9f3bcd279a6934c5d4202e7c8449dfe89fde8bdcb897bf0bf90e1f3",
-          "size": 1016
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/eye-off.js",
-          "sha256": "0b78dbe8b9e424c885629815edab8f9924af435bc9a325c3dd19d255bf03e631",
-          "size": 1043
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/eye.js",
-          "sha256": "96f77f6d02339152abe5de0abf6b909361158523b2a2f20ed9e1f13222dac264",
-          "size": 941
+          "size": 808
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/key-round.js",
           "sha256": "eb742fec42e69fc7fd0e18ddbce1904149dd5014115bb4389176f0ad5603b78a",
-          "size": 1071
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/link-off.js",
-          "sha256": "30582aa2dc0459cacafd578f9d4594edde5335cb2332f69350412cd74e147f21",
-          "size": 1034
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/loader.js",
-          "sha256": "fed7b09fd36871df6aab79af3143254b2ab0ee5c0da769eb1143294006c131a9",
-          "size": 871
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/maximize.js",
-          "sha256": "f9a6456c2cd143f52d815e1614327cdd0adcf1780fd843699161ec433714d512",
-          "size": 873
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/plus.js",
-          "sha256": "d6f37acb4d158600e2c127c7c7f6bd8e1ec20db1f3c52084fd5d1502c752ef9c",
-          "size": 781
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/square-kanban.js",
-          "sha256": "e4c34ff11abe04dd7a6b699408ccfa384a8832d36663d12490ae597013c2f58e",
-          "size": 936
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/trash-2.js",
-          "sha256": "a2b0f594ea96315cc291b8b861c0e12d8224124951b038bd6e726441f16b3e28",
-          "size": 876
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/x.js",
-          "sha256": "28a68fc26b1d95e7631859116873c5537ba10a33ff39be3f2ab36d34e57e197a",
-          "size": 771
+          "size": 1069
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/accordion/index.gts",
           "sha256": "9db20a329feaaf6a1b31060f5b7bfe3710014fdef16c3e765a9a2a8faafbdfb8",
-          "size": 644
+          "size": 642
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/accordion/item/index.gts",
           "sha256": "7a9aa88ce7d33eb8f5ad9b4e87690069219abf4d47b9d990c94c46ec5c6d0575",
-          "size": 1942
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/add-button/index.gts",
-          "sha256": "262652fd7b8276f2c450039bfa7bc22d765a922736eae7d0eb4f62c0068573dc",
-          "size": 733
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/alert/index.gts",
-          "sha256": "adaa2ea3392434bcbd35134c7894ea368062ef526d84efc83610b18cb001a94f",
-          "size": 2818
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/avatar/index.gts",
-          "sha256": "29394888172bd68c3280e4f3b484e65dc93df1aa5f6025bff31834fdf1d73b86",
-          "size": 1514
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/basic-fitted/index.gts",
-          "sha256": "5b15237b7228fab56d7d9dafb6d7148418adcc5ce5f24c991dede0b026ae9ec7",
-          "size": 2311
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/broken-link/index.gts",
-          "sha256": "38c8449433e3eb3280c099e94b726fc831f2031a5bac46c4eac33961e61de48e",
-          "size": 13162
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/button/index.gts",
-          "sha256": "59fb31250cb570a50add5f2d400f9dc276fe2f00d9d9b58198d4be5f0a951abf",
-          "size": 2409
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/card-container/index.gts",
-          "sha256": "28748ec37189708e7ea65268c9781e103a176fbecfb54b5248d71708ef479311",
-          "size": 1506
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/card-header/index.gts",
-          "sha256": "968f44685096030abdf53587aee68403f04d78efe2c801601b1b5ecd7314d3be",
-          "size": 8724
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/circle-spinner/index.gts",
-          "sha256": "25125221630b6c4dcde5ac791885175c235988d01c8b0579e6264dc8c40056a5",
-          "size": 506
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/color-palette/index.gts",
-          "sha256": "5921c6d7df35e5487d5ced6e14ba9e36fc57417dc3e9604de9c8d4a7530b3112",
-          "size": 2271
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/color-picker/index.gts",
-          "sha256": "70ea9f18b902e64fb9d75aee2fcbb58591ef41f70a49a60d2fb345d93acbe54e",
-          "size": 2043
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/container/index.gts",
-          "sha256": "2ed60a97ea92394bcd54eddc48a01396a5604c6230db2223dfda1d6ce2ee9063",
-          "size": 891
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/context-button/index.gts",
-          "sha256": "f2fd364b62a41c770e50e04a0b757e4df6d6858dd2cb5700b764789d2106ea73",
-          "size": 1775
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/copy-button/index.gts",
-          "sha256": "171225540dc26fbf1f365928f479f29037d8f0357a8b2f6c7836be52e7328925",
-          "size": 1888
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/date-range-picker/index.gts",
-          "sha256": "a5eb50f40225a8334e2320db7d209a4968a3e7bc28ebebafe16bc5df19041a41",
-          "size": 6520
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/date-range-picker/setup.gts",
-          "sha256": "cfcd137a48fcf063d66c26712591fa9ccbe0c1639f025efdc3d3af8565a86da5",
-          "size": 217
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/drag-and-drop/index.gts",
-          "sha256": "3ae82f53c31fec7158f91d19fb3e36107cea8b048df6db8546d32b7c12156b63",
-          "size": 4206
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/dropdown/index.gts",
-          "sha256": "df99d473e101230f9c77b8771b4f8e71204c9c26f003d85ef53e1fe9bbcc9589",
-          "size": 6576
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/email-input/index.gts",
-          "sha256": "1d9047cbc2cf034532c71fed6779ac8395ec5924b9716f48ebeb7222e06d97b7",
-          "size": 3096
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/entity-icon-display/index.gts",
-          "sha256": "4086f230c54ebf626dd0704913124450e28edd0e7603003649fdc08b3296eb74",
-          "size": 1918
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/entity-thumbnail-display/index.gts",
-          "sha256": "6ffbc161de1e3741ff9b2134389cda55339d2c1dea97bb1d11941978fd52ee9e",
-          "size": 1948
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/field-container/index.gts",
-          "sha256": "a18f53aa2a54df6ce3ab7e2a8579d196ddf5ece253e016f88f92a9d62dc5e722",
-          "size": 2041
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/filter-list/index.gts",
-          "sha256": "634d7d6c13b95c28fe311974312f92b5a1e2b0d2f3b0e83e4bc38ab2dbeae03b",
-          "size": 5339
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/fitted-card-container/index.gts",
-          "sha256": "793d0aad12b175ee054da4fd300a76dc60247cdeefb300cbb087309eba9a8ede",
-          "size": 1296
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/fitted-card/index.gts",
-          "sha256": "ca0308c25942e4aed6835eaa388bbb10ad2a3b21a8b9480f036b55b7c2b4c128",
-          "size": 3812
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/grid-container/grid-item-container/index.gts",
-          "sha256": "2cfeb9b666329f7c98f2960c38f61a689b84422f1fdb02dc9218a03a6beed8cc",
-          "size": 891
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/grid-container/index.gts",
-          "sha256": "b05886008422fcd545b158b1f620f40b03e39a3289455fa3dae6d9f7ad47d8e3",
-          "size": 1998
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/header/index.gts",
-          "sha256": "7c7dacf2f3bf5afdd31bbd07f9d25df0bdbb573a6eaae91879b07f959fe1ce9c",
-          "size": 1261
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/icon-button/index.gts",
-          "sha256": "ac6918137e14d08516bdd40f3c51d41e2fd2fda1d490616b70e4fde1184c74bd",
-          "size": 1549
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/accessories/index.gts",
-          "sha256": "da7548c11d08ced5b6066ac60db866e7d6356932e2574a2893a017d6ef943172",
-          "size": 3255
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/controls/index.gts",
-          "sha256": "f1ddd53d3984b7c3a2a447a0b54c97324711f269e703066fbed00a5e8de03596",
-          "size": 1124
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/index.gts",
-          "sha256": "628a1a4fe7cd9bc10cb534b5dc7fda6a56e1c2b584f9e5f365fd43abf6502992",
-          "size": 4356
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input/index.gts",
-          "sha256": "27bc6d017b3dae8e6c4d5e7aeb5662bc3ff210f8c4fe114626707c2f9ebc5296",
-          "size": 6086
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/card.gts",
-          "sha256": "5959683827953f54f26a8373ada5163845d6c6f459a5bafcc468e72aeb0b6562",
-          "size": 870
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/column-config-sidebar-row.gts",
-          "sha256": "01d30ad2ac3cfa586e887458feede516a0adc1081c534d1e12eb6247c5d1ec84",
-          "size": 3919
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/column-config-sidebar.gts",
-          "sha256": "0c10235fe0726d6ac033f3504861f68e7d60d55d609da7c63308e913df82c24c",
-          "size": 4094
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/column-header.gts",
-          "sha256": "6c6de01682f6e9d27edf64e5a2ace75d4686e565ec13a7d12185e96a9709240e",
-          "size": 2716
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/drag.gts",
-          "sha256": "e1e634b349e041e73c638361dffc1e844f605b94406e3bb45af3ec44dba2464f",
-          "size": 25265
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/engine.ts",
-          "sha256": "b15243a2bc6b13550a78b5ac4255367c08b3460d52af504bf016024b5c708153",
-          "size": 3556
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/ghost.gts",
-          "sha256": "6fa42fb36cf9cf01d503d112db8b37f0cc3c0eb5a0241973e2d37eb717db2d3a",
-          "size": 595
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/modifiers.gts",
-          "sha256": "26c5ff448979fd7210dd45d2224251648b4a3085b59b20841b2748d8c80264d1",
-          "size": 697
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/plane-inner.gts",
-          "sha256": "922c65201a57512b4cf355f13de546518d679c3684789fdae390a6c65b4d368b",
-          "size": 10323
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/kanban/plane.gts",
-          "sha256": "b025324d9022c0e00ef7f95250746beb7beb909e0fcf0191768331f33e70201b",
-          "size": 2699
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/label/index.gts",
-          "sha256": "0ca8925160ac8956768957c40789c933943dc902dfd8b2a8b914595c6cb9bee1",
-          "size": 804
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/loading-indicator/index.gts",
-          "sha256": "bbebf52d1d09684eb38f29b5d26f7508edd68ec07ea144c8fe196aec18ee043d",
-          "size": 828
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/markdown-content-shell/index.gts",
-          "sha256": "b0ca0122487632107862ca93a73ee49e66cd7556d68a5713bf9320c6ae143102",
-          "size": 550
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/menu/index.gts",
-          "sha256": "5f6190ec46160d31e9b309b1d27277d8778b616a04b28a6600f394cec2f7ad03",
-          "size": 5595
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/modal/index.gts",
-          "sha256": "a69a71ffc2b617fb99a8a3b6fe3ff32b0eca6483aead72fd238a7bf0e10a1261",
-          "size": 1904
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/multi-select/index.gts",
-          "sha256": "91d8c1bcd744f78cd399fb52a91e3b6e207457d0d4bebb0ab7256d8d529b50d4",
-          "size": 3558
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/phone-input/index.gts",
-          "sha256": "33823c66420f768c75650ac6fa5fe83884ded8a7760c8128a1fe6b4c49f95446",
-          "size": 3828
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/picker/before-options-with-search.gts",
-          "sha256": "42cc68e58d01a806b4da045dfdfc5b7eb1bca0e57bedcf15e042549c1d5b4fc1",
-          "size": 7323
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/picker/index.gts",
-          "sha256": "8b8da85b1f44368f2922641a4da75521deb9d5813266b8894fd3ce2fcae89fb7",
-          "size": 10707
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/picker/option-row.gts",
-          "sha256": "2ec31899c42752cbd943b82ca2913448470f94bbc7f3033c767ba5cd1255df40",
-          "size": 7510
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/picker/selected-item.gts",
-          "sha256": "177f1769dc4a332d50b6e48df7a7fdb7ae3840e26c35ac0d1bee8e4dc4b61585",
-          "size": 4411
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/picker/trigger-labeled.gts",
-          "sha256": "a8728a48db5fd5063e29b7e08a0243318212a49c32d1a9489c188ddafee673ce",
-          "size": 4028
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/pill/index.gts",
-          "sha256": "f5f7bd5b5f847092969d00bdae0afeac48b1dfbf09a9473309b6c13b799ddece",
-          "size": 1888
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/progress-bar/index.gts",
-          "sha256": "babb6cdf90c519e41f62d17dbc5a48cc137acff303b1b168679d174db82e9912",
-          "size": 2007
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/progress-radial/index.gts",
-          "sha256": "43b0a8b4e487e77a159ae547050770b7c5f35aa2be2b1215df684d97e8d4a562",
-          "size": 1386
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/radio-input/index.gts",
-          "sha256": "ba436c1aeed4558f7b8f5681075d69b4fd36e751476fa57381046f1e1fc80605",
-          "size": 2211
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/radio-input/item.gts",
-          "sha256": "ba0e55d715731500b591d55199f2e5eb74d4788cb301fed313639398e6ff8219",
-          "size": 1828
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/realm-icon/index.gts",
-          "sha256": "799b30810e2bce81aa962adc174f6611bc3210d9ccd26bf8210be404650c4304",
-          "size": 1204
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/handle.gts",
-          "sha256": "0b723947ed5f0a1e10c42aff05dddbce7a2e590be41ec90aa441cae72f6f9418",
-          "size": 2263
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/index.gts",
-          "sha256": "caa70363b168457e89a11272416cda871f353fb53695b04c471eac97d2c8a97d",
-          "size": 6807
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/panel.gts",
-          "sha256": "afaefda25e20d4143da1fe98aa1b1712f3d75da9c97a3e0b68c280e13b70458d",
-          "size": 1686
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/adjust-layout-by-delta.ts",
-          "sha256": "2e2280f7c1f89bdd6d2b3a5a7223d251fbc4fea95bbf8f1d8f85e8f600edd1d1",
-          "size": 4030
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/assert.ts",
-          "sha256": "54cc1a13fc5c4d3731f153fd960f91b722d536a88728e6cc515444cc773550c5",
-          "size": 216
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/calculate-delta-percentage.ts",
-          "sha256": "1f88a7481fd16299c096e3d93d38f2eaeef5dab346a568c1c680e049c2df3779",
-          "size": 1094
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/calculate-unsafe-default-layout.ts",
-          "sha256": "361fbf24fb57b320274f6b5b9e0d15cec253295e6fe17e99a337924b6fbd1754",
-          "size": 1200
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/compare-layouts.ts",
-          "sha256": "492bcc5adddaf9f7b5cef02047261ae97fbe243004a38131bcb6511a6006c7d8",
-          "size": 280
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/determine-pivot-indices.ts",
-          "sha256": "82c8dadd5bb982ed5de7a703fc0a8689619dd48acbc487172889af392e2c5142",
-          "size": 323
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/dom/get-panel-group-element.ts",
-          "sha256": "3060f4a95be2616163a3e1bdfcb4ecd773c86d89885440722df15d76a73f5ed0",
-          "size": 438
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/dom/get-resize-handle-element-index.ts",
-          "sha256": "50e08fe745a688f4b04a751780f97b5ff45c01a1b8467bc837ca6d93b2d4627d",
-          "size": 341
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/dom/get-resize-handle-element.ts",
-          "sha256": "7978d3a250d3546d478832e0ff8ddeebeace82f6dfc58f5fd34efd70d868524b",
-          "size": 298
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/dom/get-resize-handle-elements-for-group.ts",
-          "sha256": "ffa790208988110855b5faa22a21aa2213b8ef667f40bc49c078060beec18b87",
-          "size": 317
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/fuzzy-layouts-equal.ts",
-          "sha256": "61df7a677ac0bf1594b63900d4079cef62c1f3bc470231d0d1a4af89498b089e",
-          "size": 450
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/fuzzy-numbers.ts",
-          "sha256": "83b36460a49092d8c51ef86c3e95767a5a3a52b1461e9cfabd3cd22f90040fde",
-          "size": 431
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/get-resize-event-coordinates.ts",
-          "sha256": "82def6704145fba422567fe31c416b3406ec99c40f700bb8550a0cd835c91991",
-          "size": 209
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/get-resize-event-cursor-position.ts",
-          "sha256": "de159f8f4479a96378b5fa8dc2e6cb8340380a155cbed0da0978de1bb906b7ac",
-          "size": 246
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/panel-resize-handle-registry.ts",
-          "sha256": "d850d1bbfcd0a2407786719b36471d938c80237101a2bda30b8dc4c4cb9f8afc",
-          "size": 8098
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/resize-panel.ts",
-          "sha256": "717f61cac4e340482f9d71328dbcd1997998a79efe5ccce08a6d26bc8a1183b7",
-          "size": 581
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/resizable-panel-group/utils/validate-panel-group-layout.ts",
-          "sha256": "ed2153c17cf4cd00692a859340f511e9dff2d096135a07960390a4dbc3ed57cc",
-          "size": 1798
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/index.gts",
-          "sha256": "312588c74e169dac334f8d1efba8d25bf4bf1c7f3d0ab8b5e581dfe27b6c0944",
-          "size": 14780
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/trigger.gts",
-          "sha256": "c4f0c380157b1cbb9c46c3b9d414642ef9bec04f6db304cb2be0e972d7b3f47c",
-          "size": 2563
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/selection-checkmark/index.gts",
-          "sha256": "ae45cddbdf8a0ee5f3123acf11dd759eef98fe6f2f2c43ef5984008ce7598527",
-          "size": 1017
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/selection-menu/index.gts",
-          "sha256": "f2f0c163438da607d86152d232358ed9c8108930cdbd8847acfcf3a8a87d2dfa",
-          "size": 1941
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/skeleton-placeholder/index.gts",
-          "sha256": "8746e57075870fc6d8e4ca0e724ef362c2f4c1a59d25fe891a8547001384fb0e",
-          "size": 649
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/sort-dropdown/index.gts",
-          "sha256": "dfc3a132d2fe8f50f5757aea4f773c4d991632119401a34eb92e616662b71cc9",
-          "size": 2243
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/swatch/index.gts",
-          "sha256": "5c96f577ec173f68bdd49004cb3187c16cf537ca65d81d38bc40f2af4e37cfee",
-          "size": 1485
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/switch/index.gts",
-          "sha256": "69eb29d6540971851ba89a9b92c72e385d8192eb359cc5d97b6c551df76701b1",
-          "size": 2530
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/tabbed-header/index.gts",
-          "sha256": "220f9edf1a9dfc657f95aea93453a56dd5be4f558a6df958bf5bf2358256b19c",
-          "size": 2493
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/tag-list/index.gts",
-          "sha256": "a13a51930d9c538da6b672673dcef062fb0cac8d8bda0b138ae57a29430e6faa",
-          "size": 1259
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/tag/index.gts",
-          "sha256": "37dbd7249bf996d5b86189d661f1fafa19895dce3c2098119b3e0cb7b89d3bff",
-          "size": 854
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/tooltip/index.gts",
-          "sha256": "f5109db41bbc162688df6f6c0102f77e8ee613be19d83bdf0ef0522e9af1d1e2",
-          "size": 5375
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/view-selector/index.gts",
-          "sha256": "0af67f5811b27392bafdf5acd575c881bc02d9aec5d92db717e0aeaeae726040",
-          "size": 2133
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/add-class-to-svg.ts",
-          "sha256": "33a2590b42cc78cc66e44351aef967a8ac897b258c39dff96fe685114cc00a38",
-          "size": 291
+          "size": 1939
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1339,627 +166,9 @@
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/color-tools.ts",
-          "sha256": "2eb1a73902901168760aea2c413597d0d68823f9996b21afae9ddd9c18bb2288",
-          "size": 1592
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/compact.ts",
-          "sha256": "221976b584572924ebb8f998d04735c6064980a3a4ed7d292da81c1361a654b7",
-          "size": 133
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/contrast-color.ts",
-          "sha256": "748cbba405caa99ce2894a1cc9b128d5020ca5bf7b085280138b4904e26c6bb1",
-          "size": 375
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/css-var.ts",
-          "sha256": "9191405ce158784cfec701000368e2cf787f62153d322b49520c4663831b9f83",
-          "size": 548
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/currency-format.ts",
-          "sha256": "ad6701aadff4001366cfa722c9eb54b089bbdaf97e27e758568efc403ac672e0",
-          "size": 386
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/dayjs-format.ts",
-          "sha256": "675d3b433d68d167a5c269c8faeb4cc47d45c185d86923c0d3b7c04dc5490ae4",
-          "size": 132
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/deterministic-color-from-string.ts",
-          "sha256": "f97928d2f5d544a7d261b9da75ab9bc23d7ff241d3bafdc82d1680c5e6313e1b",
-          "size": 814
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/element.ts",
-          "sha256": "9b89b4f9be9c9bc0c460aba77223325eda557b229024dc61e9ad7925b34e8013",
-          "size": 173
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/extract-css-variables.ts",
-          "sha256": "fe225e88fa3d59b05e5068bf639a0a1288968f139c84d2fec7b2c17ee5b1ec7d",
-          "size": 2799
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/format-relative-time.ts",
-          "sha256": "31164ebdaaa660bc79204d42d4958da1b9496973e9f7aa997e1d7608670c95d0",
-          "size": 635
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/menu-divider.ts",
-          "sha256": "4a57411dff1a6298eddb790223a15f4c7b53430b6b89cbfad67057ce54b45e35",
-          "size": 191
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/menu-item.ts",
-          "sha256": "fe911872d110b55a706f329899f35fef76907de54c03647c47fa189b1938c086",
-          "size": 999
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/helpers/optional.ts",
           "sha256": "a2cad5e8c50c377a02a0be99ce0d2a8c405dffbbd9ed4c5939d640b5ddc99974",
           "size": 127
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/pick.ts",
-          "sha256": "d8edf8803cb27f29ff10bb6287d989b0c9011b816e28c918fb74f82c7fabbc91",
-          "size": 147
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/sanitize-html.ts",
-          "sha256": "c9c85faf46138ec34d51612f05a0516f6264a2c93ebf0d756fc7e2aa5dd9f208",
-          "size": 842
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/set-body-class.ts",
-          "sha256": "55afc8c9eb02c9e124eee819ccbeaa0b585b9f45432c2a12f4f8a77a88d22239",
-          "size": 889
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/theme-css.ts",
-          "sha256": "80ed209ca592d3ac9f89a58f57d3178a2ba842884af24842a79708ab08bd7388",
-          "size": 463
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/theme-scoped-css.ts",
-          "sha256": "de8645670ec0ec3b207762573407d5d65b505bbef3eb1d2f17c3e8c17638dba0",
-          "size": 1261
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/truth-helpers.ts",
-          "sha256": "8107c76549c6f34a62a5a941bf4b468a6cf675edc0d123556f28fc460eff498e",
-          "size": 483
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/validate-email-format.ts",
-          "sha256": "bc8585b743cd9831a032b97c623264cd88bd57d0c4ff2e8fac79bcc88dd576b4",
-          "size": 2522
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/validate-phone-format.ts",
-          "sha256": "123c4ad242fc941be18336e8f05b661d0ebac62d71cb46446441d0c8485bb7e5",
-          "size": 3313
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/ai-bw.gts",
-          "sha256": "ea60ad7d79f947bfd2f07014a2b1dced011152ec1f203c18239fcf02b6cc9c68",
-          "size": 835
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/arrow-left.gts",
-          "sha256": "a7a31227e769abbb221732568718537d5c71d924aca6c095c4d227454c82752e",
-          "size": 840
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/arrow-right.gts",
-          "sha256": "b0f07417544ee30920809b9c3183072d9e30185fa267e0f702b407a97164c352",
-          "size": 1055
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/arrow-top-left.gts",
-          "sha256": "aaef1c7794fcd6f2a6e32a62e99c5495357672ac72e7929b3e2d753facd02114",
-          "size": 920
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/arrow-up.gts",
-          "sha256": "a7fded4fa8e83dca97e7594752478602d649908ff3c62728cd5758c50c080383",
-          "size": 855
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/atom.gts",
-          "sha256": "c367424a0a4b73a3101169f41d9296a19f4e3a5d54ea4d26d01b2c71a3cdcb61",
-          "size": 746
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/boxel-icon-with-text.gts",
-          "sha256": "50685d03ec12a43af817ddb2e8485e22482ca120f9660ec7ad81bbdf0fa56621",
-          "size": 2069
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/boxel-icon.gts",
-          "sha256": "e6f8a8ed630d5db860fd7694a9cb81f12f9b91ae70fd57ad89dd3d9ecfc13f46",
-          "size": 1937
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/card-definition.gts",
-          "sha256": "53e4f6f755df90b691281184ae3bb269678346bb9a4acc32ea7e490a0ed81429",
-          "size": 956
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/card-instance.gts",
-          "sha256": "485e5141feb56a44d5d6d8e298792d9c4e38b2324df025b98d0837fd68081f0c",
-          "size": 911
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/card.gts",
-          "sha256": "9a70069f6435b543a48625c54fab34a8c1f83efa71430ec593f9c161a038da07",
-          "size": 843
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/cardbot-lg.gts",
-          "sha256": "b5e0fec40f5e5f21df59fed1ab4f5cea33db0424e934e33f2cf900c0556f0fc1",
-          "size": 996
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/caret-down.gts",
-          "sha256": "8b516db8829e35aa46c3fccb0cf0e551d34f5ed329d578f4d4f3064f2738e94d",
-          "size": 693
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/check-mark.gts",
-          "sha256": "29c68b8b8ce057095cca3974be15001134cf931fedf14cfee175696660891bfa",
-          "size": 684
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/chevron-right.gts",
-          "sha256": "09f341030a352d61bba2d93338371f6aa1db23ab8445bfdbb32dbf4513b1c0fb",
-          "size": 716
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/copy.gts",
-          "sha256": "2e8fb3ff954c7e9671dd0c22198e24573cd65393bb77a149b987289a81d3cedd",
-          "size": 1191
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/diagonal-arrow-left-up.gts",
-          "sha256": "ae674e3219da738fca4ef4af3a4361c15ca0c79f009828bdf113c1a3e6c65d1f",
-          "size": 870
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/download.gts",
-          "sha256": "08cb0dc28782fc3133b6020d94a5e3b8b4ac429ac69e6d49d888962b987ee865",
-          "size": 2331
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/dropdown-arrow-down.gts",
-          "sha256": "ae6210eedf6a0a26af89fc99ebb6e4f695d84b375f8814e7b8b6b1190c334d78",
-          "size": 748
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/dropdown-arrow-filled.gts",
-          "sha256": "a7a4bce3330d034bb4ecad58a0b0bad64c5c242d07d1ff2c75f4f03dc814829d",
-          "size": 673
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/dropdown-arrow-up.gts",
-          "sha256": "c73411d329d73dee73368d1a232067bf2bb81e45a82f60a478e8fea398d35491",
-          "size": 743
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/embedded.gts",
-          "sha256": "8924cba0e7132afea9aabd0277459067e4f0fd66864df54c3a1194c01dfa545c",
-          "size": 1037
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/exclamation-circle.gts",
-          "sha256": "8ee650e7ac4db937aa03d59eb136d932e1ed9b076d182f494635c69ee6923575",
-          "size": 925
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/exclamation.gts",
-          "sha256": "79df19e420087806cd51446902bcc931a2bc41ba681e5151019c87f9acd82661",
-          "size": 828
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/eye.gts",
-          "sha256": "cafcd02371d2270e78007e69939d4f309b6769c3c217bec0b336cbdd907bd986",
-          "size": 1224
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/failure-bordered.gts",
-          "sha256": "0664bbe5015d960bdd41145df4adedf6c8bd97767dc952a62182c91e3ce62c36",
-          "size": 1067
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/field.gts",
-          "sha256": "87e5fdc956a6270fdf8b5ed8c9cb057961ff6c4a368c229d6eab24af5898b233",
-          "size": 882
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/file-alert.gts",
-          "sha256": "2729c21d348ef9002f92b897424db966e0f8a4b71c51fe088ce2eeb8ae82cdbb",
-          "size": 985
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/file.gts",
-          "sha256": "e7833dd1ffb3c8f4acaf188793bf23b27bab657883c4bf6bfb1e76cecc929a28",
-          "size": 1111
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/fitted.gts",
-          "sha256": "1a934a755fc355d2c93752c500bd9192152a5658751c8405fab89b09f4fc5fac",
-          "size": 1152
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/folder.gts",
-          "sha256": "28cce33b19bd88226638f554f4e607686f42a087e85da13d35c98f08eddecc67",
-          "size": 897
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/form.gts",
-          "sha256": "dc00839c7b1fc73bc2aec3413d52dfd694025a8a265ae7d335809c703fc79512",
-          "size": 1094
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/four-lines.gts",
-          "sha256": "debb660fcde4b7d8ffa85176d6540ceec46ce13852f013322318a791f8389e02",
-          "size": 735
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/google-color.gts",
-          "sha256": "56d1446f2a4819c4c0a1fa2146091f61005478d206af38051f2963e3b2b15f80",
-          "size": 1278
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/grid-3x3.gts",
-          "sha256": "86dbdc5b9378b9f3685481f54ca588517b58030951a3ab35cb5bc301e6fb5b16",
-          "size": 873
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/group.gts",
-          "sha256": "68c9f841b07f5b668366ffe27430eaa91ac51a3ae18c30b637163e1d83382e06",
-          "size": 2341
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/head.gts",
-          "sha256": "5054b463cafd1f4e3a3d75cdf69c79d8f1e63f74d830c4a6456e0988675c443f",
-          "size": 960
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/highlight-icon.gts",
-          "sha256": "c8da82b7c812eb6d153e2f4a9db53187e75c640f9e4775459918cdf0c6c9f5ac",
-          "size": 1176
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-circle-selected.gts",
-          "sha256": "7fdd786137c03c340069efd1f647fbfef38303b7bcf35c233f5d8641bd6010f6",
-          "size": 908
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-circle.gts",
-          "sha256": "a2acf20e9da6ec182a558828d8613237280801812de798a650ce22bbb0c48bb1",
-          "size": 767
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-code.gts",
-          "sha256": "eb086676f5a47eabda8888785c113d2913ffdf915de0dcd71eb6bbdf858e46ca",
-          "size": 857
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-funnel.gts",
-          "sha256": "5c087caa77a08eb917a3de5c910d98d518563a9f9471c15a4c4aea1db39850df",
-          "size": 682
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-globe.gts",
-          "sha256": "9315ed52795aaf7f925e0770e9721c72e9b899529e047066eb1bb1603d259a50",
-          "size": 1174
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-grid.gts",
-          "sha256": "ff870aad15a618e1776135275326f1a5bd59c4afdf912979df4cee36f45d77b5",
-          "size": 2315
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-hexagon.gts",
-          "sha256": "59b48ad9c45c854fa73d10253c6d041039763bace53f0b3fb9ebf78419dc705f",
-          "size": 811
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-inherit.gts",
-          "sha256": "64f97fd0eab09c51d00f069f002c0e7eb3ac9971681561aa42b8e506d0eb44e3",
-          "size": 1072
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-link.gts",
-          "sha256": "72294be402e07e085175a455116d84cae4f8540cf62ec702731ac3db127b6290",
-          "size": 1223
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-list.gts",
-          "sha256": "689ea59ea5a7a5c1a1e21118f30be5012b3974cfcc20bff935f2388f04bbf4e9",
-          "size": 1397
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-minus-circle.gts",
-          "sha256": "d21989eef4772dd6bdbe57da55a3cd8cc86e9137046d8b9df15c9aedf66bc212",
-          "size": 920
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-pencil-crossed-out.gts",
-          "sha256": "48b6f7e743217f910cae1a9cbfcf87859fde722e14e6e561dfa8aa242ee9a5db",
-          "size": 1455
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-pencil-not-crossed-out.gts",
-          "sha256": "98e2d8946ccab82b99da6bde8b4053eebdf79dadb9155c4a1221eb5fb7b29973",
-          "size": 1180
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-pencil.gts",
-          "sha256": "15080e750596fd4cdac004d000d997231d4d012915ebe53227f3046327dafaad",
-          "size": 1077
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-plus-circle.gts",
-          "sha256": "48b62ef1c4a290b349f01059734b24682e6a0d10422e5795900b204a70631186",
-          "size": 991
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-plus-thin.gts",
-          "sha256": "54351084f6039994324b0d9d0c339e986222675bfe435cb8542b8a4512af8289",
-          "size": 641
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-plus.gts",
-          "sha256": "db0e3f323e4562ac05045ca7e751edc6e9eca658bed51fc1e734740b31a7f232",
-          "size": 664
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-search-thick.gts",
-          "sha256": "bcd497918aadb31803adcf256533eaae936ab25c761c175eb70abfa2633b4d4f",
-          "size": 909
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-search.gts",
-          "sha256": "8fb177d3eb9651a7b5d601c32cd17c51d1b288b08c9664a57aa1f51c1e70bf2b",
-          "size": 922
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-trash.gts",
-          "sha256": "a999ad1701bb252678055c0b8e60174c8f41d4775468d88c2209023e2c1e50ad",
-          "size": 889
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-turn-down-right.gts",
-          "sha256": "3e57feac9aa66ec40b2258cc5dfef956f7311161b90c2ca865f22035f7d35bf5",
-          "size": 760
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/icon-x.gts",
-          "sha256": "e28fc4d27a40f8e5e7f7204825e57cb179ab6370886ba0dd58b40964c7d6b29c",
-          "size": 704
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/image-placeholder.gts",
-          "sha256": "c4cdf8fa1e7fba88895cf8f0d6b9b8c5d444c840d15cd18baa21ea1e4b0a1dee",
-          "size": 1010
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/isolated.gts",
-          "sha256": "b8d2df00687b232584ada264adbc0cf0aaf5f61eeecf41ce88dafd52df886a91",
-          "size": 663
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/loading-indicator.gts",
-          "sha256": "aff77dd5c7fc7b0b360647ba1a41b3dd9a0189e56b1d0b154764c2ce139ed6b8",
-          "size": 920
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/lock.gts",
-          "sha256": "56ec73a54a946f3eba81b4dad97a15bc8f0310ef2f6cacc86c2d008702a86c1a",
-          "size": 938
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/profile.gts",
-          "sha256": "3dda633e63ae9302d1457e501d8ce00f4831ea8eef480d4a08bd36b8e19f1381",
-          "size": 988
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/publish-site-icon.gts",
-          "sha256": "60c8c0750f2fc2229f54473c15c7f800c514d8a7f90513828b13a0a2f666d553",
-          "size": 975
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/rows-4.gts",
-          "sha256": "b39d1aef545c9060a4863882a9edbc688cee34e09ebc98ac184a71fd061ee743",
-          "size": 880
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/select-all.gts",
-          "sha256": "38462b3253b0a16e0de431043c226b0c7b352f295e1db82773eb26843449c1f7",
-          "size": 980
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/send.gts",
-          "sha256": "45302d8d8bb3a02f2d56cfbc55e44b7d4ad71ebb42f8a6f7d37ae0273aca3e96",
-          "size": 829
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/sparkle.gts",
-          "sha256": "385134c09e526a208cead9ce4b67a3736ca2d0e23a0247404950a2a5cf4eff2d",
-          "size": 1241
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/star-filled.gts",
-          "sha256": "ad491de9ee067f35b8c815e91f1ced3ad5090bf121c4b419a55fb6e73f744d3a",
-          "size": 842
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/star-half-fill.gts",
-          "sha256": "a12143180b5dfddb352897f3ea801afbebf5258a94d8794e03258bc2c69dee9f",
-          "size": 980
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/star.gts",
-          "sha256": "555df0158c0e80ee75c19f665ec1ed9cd88d4450888ebd2e77272d2d9a357d69",
-          "size": 790
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/success-bordered.gts",
-          "sha256": "1810eb678084004f7de89591e045f5eb1e44889aa0165ff85a7c66e1c2af2b7e",
-          "size": 1059
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/three-dots-horizontal.gts",
-          "sha256": "f6e6345691f1273f5cf94ed02c080a10f8d79c15a6fbee6b1df2e47be05805f6",
-          "size": 934
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/triangle-left.gts",
-          "sha256": "adf7f0e5b5f84b328fcf1b0e94f92fe6b083785dd0691e98c8e4823e5da93b45",
-          "size": 709
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/triangle-right.gts",
-          "sha256": "fec9d4eb15f047946d68124e40794e8cec29420e2f98bd0205f48c90916186e8",
-          "size": 712
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/upload.gts",
-          "sha256": "07531302491f3cd39311bfd2ba6ffb157aa4229ee0738d991b754d4c20655ae1",
-          "size": 1077
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/warning-triangle-filled.gts",
-          "sha256": "ba8597619a9c19066289e5909c520c143bcf8bb2df289146e880923bcb1e3e04",
-          "size": 1045
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/warning.gts",
-          "sha256": "b6ca84c3b23b67a548c79cec286265f22fe831c13a6137422d58fa2ee7711bb7",
-          "size": 1065
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/modifiers/auto-focus.ts",
-          "sha256": "6e866f86d7048b4bdd6fcd0198a399b3b798a29ec19448898b89638333ebeb5f",
-          "size": 125
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/modifiers/set-css-var.ts",
-          "sha256": "306659fdfdb4a62c48869118e5d0c53bab9348e0adcef70c51199629bbce5fb8",
-          "size": 399
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/utils/fitted-formats.ts",
-          "sha256": "7093279e16acfef14655236fec8cd23a1c7fc6db986ab434446c4a298a9bc934",
-          "size": 1989
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1975,62 +184,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/probe/probe-page.gts",
-          "size": 1166
-        },
-        {
-          "package": "@ember/test-waiters@4.1.2",
-          "module": "dist/index.js",
-          "size": 1172
-        },
-        {
-          "package": "@embroider/macros@1.21.1",
-          "module": "src/addon/es-compat2.js",
-          "size": 292
-        },
-        {
-          "package": "@floating-ui/core@1.7.5",
-          "module": "dist/floating-ui.core.mjs",
-          "size": 13500
-        },
-        {
-          "package": "@floating-ui/dom@1.7.6",
-          "module": "dist/floating-ui.dom.mjs",
-          "size": 18823
-        },
-        {
-          "package": "@floating-ui/utils@0.2.11",
-          "module": "dist/floating-ui.utils.dom.mjs",
-          "size": 4851
-        },
-        {
-          "package": "@floating-ui/utils@0.2.11",
-          "module": "dist/floating-ui.utils.mjs",
-          "size": 3487
-        },
-        {
-          "package": "@glimmer/component@2.1.1",
-          "module": "dist/index.js",
-          "size": 2377
-        },
-        {
-          "package": "awesome-phonenumber@7.8.0",
-          "module": "index-esm.mjs",
-          "size": 884085
-        },
-        {
-          "package": "bind-event-listener@3.0.0",
-          "module": "dist/bind-all.js",
-          "size": 1381
-        },
-        {
-          "package": "bind-event-listener@3.0.0",
-          "module": "dist/bind.js",
-          "size": 542
-        },
-        {
-          "package": "bind-event-listener@3.0.0",
-          "module": "dist/index.js",
-          "size": 603
+          "size": 1165
         },
         {
           "package": "classnames@2.5.1",
@@ -2038,474 +192,24 @@
           "size": 1417
         },
         {
-          "package": "dayjs@1.11.21",
-          "module": "dayjs.min.js",
-          "size": 10218
-        },
-        {
-          "package": "dayjs@1.11.21",
-          "module": "plugin/advancedFormat.js",
-          "size": 1615
-        },
-        {
-          "package": "dayjs@1.11.21",
-          "module": "plugin/localizedFormat.js",
-          "size": 1228
-        },
-        {
-          "package": "dayjs@1.11.21",
-          "module": "plugin/quarterOfYear.js",
-          "size": 1187
-        },
-        {
-          "package": "dayjs@1.11.21",
-          "module": "plugin/timezone.js",
-          "size": 3162
-        },
-        {
-          "package": "dayjs@1.11.21",
-          "module": "plugin/utc.js",
-          "size": 3159
-        },
-        {
-          "package": "decorator-transforms@2.3.2",
-          "module": "dist/runtime-CYyqkz5q.js",
-          "size": 1411
-        },
-        {
-          "package": "decorator-transforms@2.4.0",
-          "module": "dist/runtime--fcdnjmJ.js",
-          "size": 1835
-        },
-        {
-          "package": "dompurify@3.4.10",
-          "module": "dist/purify.es.mjs",
-          "size": 55934
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/components/basic-dropdown-content.js",
-          "size": 16682
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/components/basic-dropdown-trigger.js",
-          "size": 3361
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/components/basic-dropdown.js",
-          "size": 10703
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/config.js",
-          "size": 278
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/modifiers/basic-dropdown-trigger.js",
-          "size": 6028
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/utils/calculate-position.js",
-          "size": 7943
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/utils/has-moved.js",
-          "size": 692
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/utils/scroll-helpers.js",
-          "size": 3924
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/async-arrow-runtime.js",
-          "size": 636
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/cancelable-promise-helpers.js",
-          "size": 1975
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/ember-environment.js",
-          "size": 668
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/environment.js",
-          "size": 733
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/generator-state.js",
-          "size": 1073
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/bounded-policy.js",
-          "size": 357
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/drop-policy.js",
-          "size": 672
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/enqueued-policy.js",
-          "size": 595
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/execution-states.js",
-          "size": 487
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/keep-latest-policy.js",
-          "size": 970
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/restartable-policy.js",
-          "size": 740
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/unbounded-policy.js",
-          "size": 443
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/refresh.js",
-          "size": 2630
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/scheduler.js",
-          "size": 1156
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/state-tracker/null-state-tracker.js",
-          "size": 387
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/state-tracker/null-state.js",
-          "size": 357
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/state-tracker/state-tracker.js",
-          "size": 930
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/state-tracker/state.js",
-          "size": 1335
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-factory.js",
-          "size": 3620
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-instance/base.js",
-          "size": 1566
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-instance/cancelation.js",
-          "size": 721
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-instance/executor.js",
-          "size": 7924
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-instance/initial-state.js",
-          "size": 413
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task/default-state.js",
-          "size": 467
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task/task.js",
-          "size": 2266
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task/taskable.js",
-          "size": 1537
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/yieldables.js",
-          "size": 2291
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/scheduler/ember-scheduler.js",
-          "size": 334
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/task-factory.js",
-          "size": 996
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/task-instance.js",
-          "size": 2041
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/task.js",
-          "size": 1229
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/taskable-mixin.js",
-          "size": 761
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/tracked-state.js",
-          "size": 1212
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/utils.js",
-          "size": 585
-        },
-        {
-          "package": "ember-css-url@1.0.0",
-          "module": "dist/index.js",
-          "size": 687
-        },
-        {
-          "package": "ember-draggable-modifiers@1.0.0",
-          "module": "dist/modifiers/draggable-item.js",
-          "size": 896
-        },
-        {
-          "package": "ember-draggable-modifiers@1.0.0",
-          "module": "dist/modifiers/drop-target.js",
-          "size": 3333
-        },
-        {
-          "package": "ember-draggable-modifiers@1.0.0",
-          "module": "dist/modifiers/sortable-item.js",
-          "size": 535
-        },
-        {
-          "package": "ember-draggable-modifiers@1.0.0",
-          "module": "dist/utils/array.js",
-          "size": 889
-        },
-        {
-          "package": "ember-element-helper@0.8.8",
-          "module": "dist/helpers/element.js",
-          "size": 1998
-        },
-        {
-          "package": "ember-focus-trap@1.2.0",
-          "module": "dist/modifiers/focus-trap.js",
-          "size": 2440
-        },
-        {
-          "package": "ember-modifier@4.3.0",
-          "module": "dist/index.js",
-          "size": 2298
-        },
-        {
-          "package": "ember-power-calendar-moment@1.0.4",
-          "module": "dist/index.js",
-          "size": 3913
-        },
-        {
-          "package": "ember-power-calendar@2.0.0",
-          "module": "dist/components/power-calendar-range.js",
-          "size": 7673
-        },
-        {
-          "package": "ember-power-calendar@2.0.0",
-          "module": "dist/components/power-calendar-range/days.js",
-          "size": 9843
-        },
-        {
-          "package": "ember-power-calendar@2.0.0",
-          "module": "dist/components/power-calendar-range/nav.js",
-          "size": 2240
-        },
-        {
-          "package": "ember-power-calendar@2.0.0",
-          "module": "dist/days-utils-BZGAcXYS.js",
-          "size": 4306
-        },
-        {
-          "package": "ember-power-calendar@2.0.0",
-          "module": "dist/helpers/ember-power-calendar-day-classes.js",
-          "size": 1168
-        },
-        {
-          "package": "ember-power-calendar@2.0.0",
-          "module": "dist/helpers/power-calendar-format-date.js",
-          "size": 353
-        },
-        {
-          "package": "ember-power-calendar@2.0.0",
-          "module": "dist/utils.js",
-          "size": 2551
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select.js",
-          "size": 30344
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/before-options.js",
-          "size": 2933
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/input.js",
-          "size": 5402
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/label.js",
-          "size": 1393
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/no-matches-message.js",
-          "size": 1107
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/options.js",
-          "size": 7300
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/placeholder.js",
-          "size": 1068
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/power-select-group.js",
-          "size": 1115
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/search-message.js",
-          "size": 1028
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/trigger.js",
-          "size": 8589
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/helpers/ember-power-select-is-equal.js",
-          "size": 542
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/helpers/ember-power-select-is-group.js",
-          "size": 323
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/helpers/ember-power-select-is-selected-present.js",
-          "size": 370
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/utils/equal.js",
-          "size": 453
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/utils/group-utils.js",
-          "size": 12915
-        },
-        {
-          "package": "ember-sortable@5.3.4",
-          "module": "dist/_rollupPluginBabelHelpers-a7bede49.js",
-          "size": 1620
-        },
-        {
-          "package": "ember-sortable@5.3.4",
-          "module": "dist/modifiers/sortable-group.js",
-          "size": 17926
-        },
-        {
-          "package": "ember-sortable@5.3.4",
-          "module": "dist/modifiers/sortable-item.js",
-          "size": 20437
-        },
-        {
-          "package": "ember-sortable@5.3.4",
-          "module": "dist/utils/constant.js",
-          "size": 474
-        },
-        {
-          "package": "ember-sortable@5.3.4",
-          "module": "dist/utils/coordinate.js",
-          "size": 550
-        },
-        {
-          "package": "ember-sortable@5.3.4",
-          "module": "dist/utils/css-calculation.js",
-          "size": 495
-        },
-        {
-          "package": "ember-sortable@5.3.4",
-          "module": "dist/utils/defaults.js",
-          "size": 1041
-        },
-        {
-          "package": "ember-sortable@5.3.4",
-          "module": "dist/utils/keyboard.js",
-          "size": 1115
-        },
-        {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/deprecations/index.js",
-          "size": 2058
+          "size": 1767
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/error-handling/index.js",
-          "size": 457
+          "size": 414
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/meta/lib/meta.js",
-          "size": 7964
+          "size": 7956
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/owner/index.js",
-          "size": 454
+          "size": 452
         },
         {
           "package": "ember-source@6.10.1",
@@ -2515,12 +219,12 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/runtime/lib/mixins/-proxy.js",
-          "size": 1459
+          "size": 1447
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/runtime/lib/mixins/action_handler.js",
-          "size": 571
+          "size": 569
         },
         {
           "package": "ember-source@6.10.1",
@@ -2540,12 +244,12 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/runtime/lib/mixins/target_action_support.js",
-          "size": 1664
+          "size": 1648
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/string/index.js",
-          "size": 1406
+          "size": 1344
         },
         {
           "package": "ember-source@6.10.1",
@@ -2554,53 +258,23 @@
         },
         {
           "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/-internals/views/lib/component_lookup.js",
-          "size": 561
-        },
-        {
-          "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/views/lib/mixins/action_support.js",
-          "size": 534
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/-internals/views/lib/system/event_dispatcher.js",
-          "size": 3527
+          "size": 532
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/views/lib/system/utils.js",
-          "size": 1939
+          "size": 1859
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/views/lib/views/core_view.js",
-          "size": 1290
+          "size": 1284
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/views/lib/views/states.js",
-          "size": 1331
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/application/index.js",
-          "size": 4919
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/application/instance.js",
-          "size": 4337
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/application/lib/lazy_load.js",
-          "size": 598
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/application/namespace.js",
-          "size": 940
+          "size": 1327
         },
         {
           "package": "ember-source@6.10.1",
@@ -2610,7 +284,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/array/index.js",
-          "size": 8504
+          "size": 8472
         },
         {
           "package": "ember-source@6.10.1",
@@ -2625,47 +299,27 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/controller/index.js",
-          "size": 1064
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/debug/container-debug-adapter.js",
-          "size": 1037
+          "size": 1062
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/debug/index.js",
-          "size": 374
+          "size": 280
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/debug/lib/assert.js",
-          "size": 261
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/debug/lib/deprecate.js",
-          "size": 303
+          "size": 259
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/debug/lib/inspect.js",
-          "size": 2317
+          "size": 2309
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/debug/lib/testing.js",
           "size": 300
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/destroyable/index.js",
-          "size": 349
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/engine/index.js",
-          "size": 3327
         },
         {
           "package": "ember-source@6.10.1",
@@ -2690,17 +344,12 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/helper/index.js",
-          "size": 312
+          "size": 251
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/instrumentation/index.js",
           "size": 1740
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/modifier/index.js",
-          "size": 281
         },
         {
           "package": "ember-source@6.10.1",
@@ -2720,7 +369,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/object/core.js",
-          "size": 5725
+          "size": 5721
         },
         {
           "package": "ember-source@6.10.1",
@@ -2735,7 +384,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/object/lib/computed/computed_macros.js",
-          "size": 1233
+          "size": 1225
         },
         {
           "package": "ember-source@6.10.1",
@@ -2745,27 +394,12 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/object/observable.js",
-          "size": 1497
+          "size": 1481
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/owner/index.js",
           "size": 258
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/hash-location.js",
-          "size": 1396
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/history-location.js",
-          "size": 2952
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/lib/cache.js",
-          "size": 816
         },
         {
           "package": "ember-source@6.10.1",
@@ -2776,11 +410,6 @@
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/routing/lib/generate_controller.js",
           "size": 790
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/lib/location-utils.js",
-          "size": 355
         },
         {
           "package": "ember-source@6.10.1",
@@ -2795,37 +424,32 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/routing/lib/utils.js",
-          "size": 3977
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/none-location.js",
-          "size": 901
+          "size": 3973
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/routing/route.js",
-          "size": 16574
+          "size": 16516
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/routing/router-service.js",
-          "size": 3362
+          "size": 3342
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/routing/router.js",
-          "size": 23489
+          "size": 23451
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/runloop/index.js",
-          "size": 1785
+          "size": 1371
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/service/index.js",
-          "size": 599
+          "size": 381
         },
         {
           "package": "ember-source@6.10.1",
@@ -2834,18 +458,13 @@
         },
         {
           "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/utils/lib/is_empty.js",
-          "size": 697
-        },
-        {
-          "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/utils/lib/type-of.js",
-          "size": 1046
+          "size": 1032
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/destroyable/index.js",
-          "size": 2868
+          "size": 2866
         },
         {
           "package": "ember-source@6.10.1",
@@ -2855,17 +474,12 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/global-context/index.js",
-          "size": 927
+          "size": 923
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/manager/index.js",
-          "size": 13925
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@glimmer/node/index.js",
-          "size": 2757
+          "size": 9093
         },
         {
           "package": "ember-source@6.10.1",
@@ -2890,7 +504,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/runtime/index.js",
-          "size": 110143
+          "size": 100135
         },
         {
           "package": "ember-source@6.10.1",
@@ -2900,7 +514,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/validator/index.js",
-          "size": 16613
+          "size": 15766
         },
         {
           "package": "ember-source@6.10.1",
@@ -2919,23 +533,18 @@
         },
         {
           "package": "ember-source@6.10.1",
-          "module": "dist/packages/dag-map/index.js",
-          "size": 3939
-        },
-        {
-          "package": "ember-source@6.10.1",
           "module": "dist/packages/ember/version.js",
           "size": 250
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/route-recognizer/index.js",
-          "size": 15568
+          "size": 15564
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/alias-CPqbuwcg.js",
-          "size": 1974
+          "size": 1966
         },
         {
           "package": "ember-source@6.10.1",
@@ -2945,7 +554,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/cache-DtDz7X5V.js",
-          "size": 24180
+          "size": 24158
         },
         {
           "package": "ember-source@6.10.1",
@@ -2955,7 +564,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/chunk-3SQBS3Y5-Cj4eryg1.js",
-          "size": 3292
+          "size": 3258
         },
         {
           "package": "ember-source@6.10.1",
@@ -2970,47 +579,37 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/index-BGP1rw3B.js",
-          "size": 1391
+          "size": 993
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/index-DaCZcoCY.js",
-          "size": 70128
+          "size": 61650
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/is_proxy-DxRbm8wn.js",
-          "size": 459
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/shared-chunks/managers-CbMgnSoo.js",
-          "size": 336
+          "size": 455
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/mandatory-setter-CXNsxygN.js",
-          "size": 3109
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/shared-chunks/name-BVdprEDX.js",
-          "size": 409
+          "size": 3101
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/namespace_search-Dh_YNV5f.js",
-          "size": 2819
+          "size": 346
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/property_set-n9lAuzYY.js",
-          "size": 1323
+          "size": 1319
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/registry-BJpQx6hv.js",
-          "size": 10878
+          "size": 10870
         },
         {
           "package": "ember-source@6.10.1",
@@ -3020,17 +619,12 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/rsvp-ziM3qQyS.js",
-          "size": 23112
+          "size": 22966
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/set_properties-D2_u0phU.js",
-          "size": 896
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/shared-chunks/setup-registry-DktVPnKH.js",
-          "size": 1130
+          "size": 892
         },
         {
           "package": "ember-source@6.10.1",
@@ -3040,387 +634,17 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/unrecognized-url-error-Csk7hcJF.js",
-          "size": 8939
-        },
-        {
-          "package": "ember-style-modifier@4.6.0",
-          "module": "dist/modifiers/style.js",
-          "size": 1589
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/and.js",
-          "size": 358
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/eq.js",
-          "size": 200
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/not-eq.js",
-          "size": 207
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/not.js",
-          "size": 231
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/or.js",
-          "size": 355
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/utils/truth-convert.js",
-          "size": 396
-        },
-        {
-          "package": "ember-velcro@2.2.0",
-          "module": "dist/components/velcro/index.js",
-          "size": 4612
-        },
-        {
-          "package": "ember-velcro@2.2.0",
-          "module": "dist/modifiers/velcro.js",
-          "size": 2002
-        },
-        {
-          "package": "focus-trap@7.8.0",
-          "module": "dist/focus-trap.esm.js",
-          "size": 27965
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_arrayMap.js",
-          "size": 320
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_assocIndexOf.js",
-          "size": 249
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_baseGet.js",
-          "size": 338
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_baseGetTag.js",
-          "size": 439
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_baseIsNative.js",
-          "size": 706
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_baseToString.js",
-          "size": 574
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_castPath.js",
-          "size": 249
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_coreJsData.js",
-          "size": 148
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_freeGlobal.js",
-          "size": 195
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_getMapData.js",
-          "size": 249
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_getNative.js",
-          "size": 222
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_getRawTag.js",
-          "size": 676
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_getValue.js",
-          "size": 185
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_Hash.js",
-          "size": 459
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_hashClear.js",
-          "size": 200
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_hashDelete.js",
-          "size": 236
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_hashGet.js",
-          "size": 430
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_hashHas.js",
-          "size": 285
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_hashSet.js",
-          "size": 333
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_isKey.js",
-          "size": 513
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_isKeyable.js",
-          "size": 286
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_isMasked.js",
-          "size": 342
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_ListCache.js",
-          "size": 519
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_listCacheClear.js",
-          "size": 174
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_listCacheDelete.js",
-          "size": 375
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_listCacheGet.js",
-          "size": 241
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_listCacheHas.js",
-          "size": 183
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_listCacheSet.js",
-          "size": 309
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_Map.js",
-          "size": 132
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_MapCache.js",
-          "size": 507
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_mapCacheClear.js",
-          "size": 256
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_mapCacheDelete.js",
-          "size": 238
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_mapCacheGet.js",
-          "size": 174
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_mapCacheHas.js",
-          "size": 174
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_mapCacheSet.js",
-          "size": 272
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_memoizeCapped.js",
-          "size": 327
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_nativeCreate.js",
-          "size": 153
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_objectToString.js",
-          "size": 240
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_root.js",
-          "size": 243
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_stringToPath.js",
-          "size": 551
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_Symbol.js",
-          "size": 127
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_toKey.js",
-          "size": 304
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "_toSource.js",
-          "size": 323
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "eq.js",
-          "size": 189
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "get.js",
-          "size": 256
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "isArray.js",
-          "size": 130
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "isFunction.js",
-          "size": 423
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "isObject.js",
-          "size": 224
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "isObjectLike.js",
-          "size": 188
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "isSymbol.js",
-          "size": 255
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "memoize.js",
-          "size": 690
-        },
-        {
-          "package": "lodash-es@4.18.1",
-          "module": "toString.js",
-          "size": 181
-        },
-        {
-          "package": "moment@2.30.1",
-          "module": "dist/moment.js",
-          "size": 112019
-        },
-        {
-          "package": "raf-schd@4.0.3",
-          "module": "dist/raf-schd.esm.js",
-          "size": 628
-        },
-        {
-          "package": "tabbable@6.4.0",
-          "module": "dist/index.esm.js",
-          "size": 13048
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/array.js",
-          "size": 259
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/map.js",
-          "size": 339
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/new/array.js",
-          "size": 874
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/new/map.js",
-          "size": 1429
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/new/set.js",
-          "size": 1429
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/object.js",
-          "size": 258
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/old/object.js",
-          "size": 1999
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/set.js",
-          "size": 339
-        },
-        {
-          "package": "tracked-built-ins@4.1.2",
-          "module": "dist/-private/tracked-storage.js",
-          "size": 1277
+          "size": 8923
         }
       ]
     },
     "probe/rolldown-runtime.js": {
-      "bytes": 1121,
+      "bytes": 568,
       "modules": [
         {
           "package": "(bundler)",
           "module": "rolldown/runtime.js",
-          "size": 1888
+          "size": 1124
         }
       ]
     },
@@ -3452,7 +676,7 @@
       ]
     },
     "shared.js": {
-      "bytes": 285952,
+      "bytes": 286000,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -3987,27 +1211,35 @@
       ]
     },
     "shell.css": {
-      "bytes": 81967,
+      "bytes": 85695,
       "sources": [
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/43ec649b08.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/919ac9890d.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/b2e0c6c378.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/bd5579bb2b.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/c19257535b.css"
+        },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/e67bd21f1d.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/2a4b56d7da.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/2b5d9db39c.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/30af999b0b.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/365822eb1d.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4019,11 +1251,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/8bdbff4e39.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/b61fa3248b.css"
+          "module": "src/components/79371b8b57.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4032,6 +1260,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/ca076b9590.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/d14a4de9d3.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4051,6 +1283,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/components/f7ee36bddb.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/components/icons/3a3357bf22.css"
         },
         {
@@ -4063,7 +1299,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/screens/1c3237ba01.css"
+          "module": "src/screens/349b4c7408.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4075,7 +1311,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/screens/5d7eae1ae3.css"
+          "module": "src/screens/5a87087861.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4088,6 +1324,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/d16e694656.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/f563e3b71b.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4140,6 +1380,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/5d013fdeab.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/5dd2bb4118.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4219,15 +1463,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/de85b19ebc.css"
+          "module": "src/shell/keys/e0e818f1ff.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/e493049fec.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/e76a708c45.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4239,7 +1479,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/f646894f58.css"
+          "module": "src/shell/keys/f3dfd6f83f.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4280,13 +1520,103 @@
       ]
     },
     "shell.js": {
-      "bytes": 376325,
+      "bytes": 389381,
       "modules": [
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/alert-triangle.js",
+          "sha256": "841a407c161c735a3ae4082ff8ae1c8daba023fc1ae233168eba2bcc0809ff4a",
+          "size": 892
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/check.js",
+          "sha256": "aec2a56eef69c23d11f1a1577d2f40edb5522e01ad0dd0d9e07e4177dd1d3a4c",
+          "size": 782
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/info-small.js",
+          "sha256": "379a5a5d7e50d54af94e098bf5ad2c1fe43139d53c7aceed4b36e820a585fddb",
+          "size": 922
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/x.js",
+          "sha256": "28a68fc26b1d95e7631859116873c5537ba10a33ff39be3f2ab36d34e57e197a",
+          "size": 767
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/alert.gts",
+          "sha256": "0eb39abd62adadd184312abd61eea81ae0d666683a1081b12d2b8beb5ba54fce",
+          "size": 2958
+        },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/breadcrumb.gts",
           "sha256": "ecb88d6094f7283860b53485aba30780c5bd7b3220724e4ad1656b11b87da6b7",
           "size": 2212
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/chip.gts",
+          "sha256": "9a4ab497429c8d1315f4dadd5fdf5dca34da82453a1f6f6edcb2f65294e9df35",
+          "size": 1365
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/cue.gts",
+          "sha256": "4874501c1f13e6cc847e6673752e150432c7fde9721a63fd207975332361c74f",
+          "size": 3055
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/spinner.gts",
+          "sha256": "188406b73308eec06706aba331dcb5b069adc9eb6d1b9dad239c0d5be2a225e5",
+          "size": 928
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/status-chip.gts",
+          "sha256": "dca3af01f9e34e35da901e5c4ab34bc02a96a89b4c994557581e77c1f47845be",
+          "size": 758
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/visually-hidden.gts",
+          "sha256": "dc1932369c671d8d88fb1fa8d224f73ec338bf1ea3cc6a542bc09eee27a01096",
+          "size": 563
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/feedback.gts",
+          "sha256": "ffcc6c9168da263f1ec154578b8cccd87ac2a8353256e4fc4676aa9dafebbaec",
+          "size": 202
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/ink.gts",
+          "sha256": "59af15cd77b5ce784dfb3c1c06bf0d771e4d5ae174af25b2433fdad9cdb4bc98",
+          "size": 225
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/keep-style.gts",
+          "sha256": "f1c93b8ac1a47d55fdb6750ff6a353c257c50882ae9afb47c2f27089af4e4640",
+          "size": 2122
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "pretui-css.gts",
+          "sha256": "87aa6d293256e4f2eb896437817bffc4e73e807308ca97a14dc7d1b0c809d958",
+          "size": 1912
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "pretui-primitives.gts",
+          "sha256": "515ada8c7b13fbd4d8391b668fbb8207c750f58daae9114b05dc0cb7fc459767",
+          "size": 881
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4311,12 +1641,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/busy-message.gts",
-          "size": 682
+          "size": 717
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/button.gts",
-          "size": 1775
+          "size": 1965
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4426,12 +1756,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input-group.gts",
-          "size": 3916
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/loading-indicator.gts",
-          "size": 1171
+          "size": 3951
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4445,13 +1770,8 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/validation-hint.gts",
-          "size": 549
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/modifiers/autofocus.ts",
-          "size": 137
+          "size": 139
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4461,7 +1781,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/register.gts",
-          "size": 9106
+          "size": 9166
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4581,7 +1901,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-limit-notices.gts",
-          "size": 5577
+          "size": 5837
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4596,7 +1916,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-policy-notices.gts",
-          "size": 6905
+          "size": 7189
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4641,7 +1961,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/oauth-key-status.gts",
-          "size": 4216
+          "size": 3951
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4716,7 +2036,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/workspace-dropdown.gts",
-          "size": 9178
+          "size": 9186
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4726,7 +2046,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/new-password-fields.gts",
-          "size": 2093
+          "size": 2472
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4869,6 +2189,11 @@
           "size": 204
         },
         {
+          "package": "ember-modifier@4.3.0",
+          "module": "dist/index.js",
+          "size": 2298
+        },
+        {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/views/lib/component_lookup.js",
           "size": 561
@@ -4876,7 +2201,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/application/index.js",
-          "size": 4890
+          "size": 4917
         },
         {
           "package": "ember-source@6.10.1",

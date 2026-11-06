@@ -3,3 +3,4 @@
 # patterns and no `!` lines, which rsync reads as "clear the list".
 *.test.gts
 scripts/
+test-support/

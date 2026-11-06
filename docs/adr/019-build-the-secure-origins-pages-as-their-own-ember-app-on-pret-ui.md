@@ -234,11 +234,12 @@ above, for Pret UI and for the boxel-ui it brings:
 - **Size.** Pret UI exports each component from its own module, with no
   index to pull in, so the bundle holds only the Pret UI modules a page
   imports. Pret UI's wrappers of boxel-ui components import boxel-ui's
-  `components` index, though, and boxel-ui declares no `sideEffects`, so the
-  first such wrapper a page uses can bring much of boxel-ui and its
-  dependencies with it: ADR 008 measured 1,265 KB through those index
-  modules. That cost is accepted. The build record shows it (§1.8), and it
-  shrinks as ADR 009 §1.6 moves Pret UI off boxel-ui.
+  `components` index, and boxel-ui declares only its stylesheets and its
+  own tests as side effects, so a wrapper brings the boxel-ui component it
+  wraps and that component's imports, not the whole index. ADR 008 measured
+  1,265 KB through those index modules without that declaration. The build
+  record shows what each page ships (§1.8), and it shrinks further as
+  ADR 009 §1.6 moves Pret UI off boxel-ui.
 - **Style attributes.** boxel-ui's LoadingIndicator and BoxelIcon set
   `style` attributes the policy refuses, and so do about 130 of the modules
   in Pret UI's `components/`. So §1.5 holds for every Pret UI and boxel-ui

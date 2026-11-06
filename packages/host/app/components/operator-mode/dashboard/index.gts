@@ -979,9 +979,10 @@ export default class Dashboard extends Component<Signature> {
           )
           var(--dashboard-gutter-start);
         /* Only the contents fade in; the dark background paints at once, so
-           the operator-mode canvas never flashes after sign-in. */
-        opacity: 0;
-        animation: dashboard-fade-in 0.5s ease-in forwards;
+           the operator-mode canvas never flashes after sign-in. The transparent
+           start lives only in the keyframes, so where the animation doesn't run
+           (a snapshot, a renderer without animations) the contents still show. */
+        animation: dashboard-fade-in 0.5s ease-in both;
       }
       .dashboard-page {
         display: flex;
@@ -1236,7 +1237,6 @@ export default class Dashboard extends Component<Signature> {
         --dashboard-greeting-font-size: var(--boxel-font-size-lg);
         --dashboard-greeting-font-weight: 400;
       }
-      /* One tile per row, filling the dashboard's width. */
       @media (prefers-reduced-motion: reduce) {
         .dashboard-scroller {
           animation-duration: 0.01ms;

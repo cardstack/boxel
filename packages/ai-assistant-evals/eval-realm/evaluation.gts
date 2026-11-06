@@ -151,6 +151,11 @@ export class EvaluationCard extends CardDef {
   // cards in the stack so they are part of the message context.
   @field initialCards = linksToMany(CardDef);
   @field initialFiles = linksToMany(FileDef);
+  // The seed script, by name, whose cards are copied in too: cards built in
+  // code by the runner (packages/ai-assistant-evals/eval-seeds/) instead of
+  // committed here, for a set too large to keep as fixtures. The script also
+  // names which of its cards are initial, prompt and expected changed cards.
+  @field seedScript = contains(StringField);
   // Seeded cards the prompt asks the assistant to change, each one also in
   // `initialCards` or a card `.json` in `initialFiles`. When set, the runner's
   // "a card rendered" check needs every one of these to differ from its seed
@@ -236,6 +241,15 @@ export class EvaluationCard extends CardDef {
             <div class='links'>
               <@fields.initialFiles @format='atom' />
             </div>
+          </section>
+        {{/if}}
+
+        {{#if @model.seedScript}}
+          <section>
+            <h2>Seed script</h2>
+            <p class='hint'>Its cards are built when a run starts and copied
+              in with the initial cards and files.</p>
+            <code>{{@model.seedScript}}</code>
           </section>
         {{/if}}
 
