@@ -6,9 +6,10 @@
 // It builds boxel-icons in full (`build`: its JavaScript, which the origin
 // ships, and its type declarations, which the package's type check reads)
 // when there is no build, and writes a stamp into `dist/` holding a hash of
-// what that build was made from: boxel-icons' own inputs, as CI's cache of
-// its build is keyed, and what decides the versions of the tools that build
-// it (the lockfile and the dependency fetch's other inputs). It builds again
+// what that build was made from: boxel-icons' own inputs and what decides
+// the versions of the tools that build it (the lockfile and the dependency
+// fetch's other inputs), the same inputs CI's cache of its build is keyed
+// on (`.github/actions/restore-icons-cache`). It builds again
 // when the stamp no longer matches. A build with no stamp was made by
 // something else: CI's cache or test-assets artifact, the realm-server image's
 // boxel-icons stage, or boxel-icons' own `pnpm build`. That build is kept, as
