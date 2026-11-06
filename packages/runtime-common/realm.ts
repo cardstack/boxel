@@ -3391,6 +3391,15 @@ export class Realm {
         this.searchEntriesResponse.bind(this),
         SEARCH_ROUTE,
       )
+      // ENV-ONLY DEBUG (not for the PR): run a search as `_search` does,
+      // capture the SQL it executes, and answer each SELECT's
+      // EXPLAIN (ANALYZE, BUFFERS) as plain text. Realm owner only.
+      .query(
+        '/_explain-search',
+        SupportedMimeType.CardJson,
+        this.explainSearchResponse.bind(this),
+        ACL_ONLY,
+      )
       // Answered on the realm ACL alone, as `_lint` and `_mtimes` are.
       .get(
         '/_types',
@@ -4515,6 +4524,58 @@ export class Realm {
       ...anonymous
     } = content;
     return anonymous;
+  }
+
+  // ENV-ONLY DEBUG (not for the PR). See the `_explain-search` route.
+  private async explainSearchResponse(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let adapter = this.#dbAdapter as any;
+    let original = adapter.execute.bind(adapter);
+    let captured: { sql: string; opts: any }[] = [];
+    adapter.execute = (sql: string, opts?: any) => {
+      if (/^\s*SELECT/i.test(sql)) {
+        captured.push({ sql, opts });
+      }
+      return original(sql, opts);
+    };
+    let started = Date.now();
+    let status: number;
+    try {
+      let response = await this.searchEntriesResponse(request, requestContext);
+      status = response.status;
+      await response.text();
+    } finally {
+      adapter.execute = original;
+    }
+    let elapsed = Date.now() - started;
+    let out: string[] = [
+      `search status ${status} in ${elapsed} ms; ${captured.length} SELECT statements`,
+    ];
+    for (let [n, { sql, opts }] of captured.entries()) {
+      out.push(`\n===== statement ${n + 1} =====\n${sql}`);
+      if (opts?.bind) {
+        out.push(`-- bind: ${JSON.stringify(opts.bind).slice(0, 2000)}`);
+      }
+      try {
+        let rows = await original(
+          `EXPLAIN (ANALYZE, BUFFERS, SETTINGS) ${sql}`,
+          opts?.bind ? { bind: opts.bind } : undefined,
+        );
+        out.push(
+          (rows as any[])
+            .map((r) => r['QUERY PLAN'] ?? JSON.stringify(r))
+            .join('\n'),
+        );
+      } catch (e: any) {
+        out.push(`-- explain failed: ${e.message}`);
+      }
+    }
+    return new Response(out.join('\n'), {
+      status: 200,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    });
   }
 
   private async invalidateURLs(
