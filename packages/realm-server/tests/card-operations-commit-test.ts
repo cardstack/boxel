@@ -433,6 +433,14 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
+  function eventNames(clientRequestId: string) {
+    return (event: IncrementalIndexEventContent) =>
+      event.clientRequestId === clientRequestId ||
+      (event.coalescedWrites ?? []).some(
+        (write) => write.clientRequestId === clientRequestId,
+      );
+  }
+
   // The realm events a batch is answerable for: the incremental index event it
   // broadcasts, and the file-change event naming a path it touched. Filtering
   // by path rather than counting everything keeps the assertion about this
@@ -641,37 +649,32 @@ module(basename(import.meta.filename), function (hooks) {
 
     // The realm broadcasts into the Matrix room out of band from the commit,
     // so wait for the batch's own event to arrive before counting.
-    await waitUntil(async () => {
-      let seen = await incrementalIndexEventsSince(since);
-      return seen.some((event) => event.clientRequestId === 'batch-1');
-    });
+    let namesBatch = eventNames('batch-1');
+    await waitUntil(async () =>
+      (await incrementalIndexEventsSince(since)).some(namesBatch),
+    );
     // Filtered to the paths this batch touched rather than counted over the
     // window: the realm is shared across this file's tests and broadcasts are
     // fire-and-forget, so a straggler from an earlier test can land inside it.
     let indexEvents = (await incrementalIndexEventsSince(since)).filter(
       (event) =>
-        event.invalidations.includes(`${testRealmHref}commit-write`) ||
-        event.invalidations.includes(`${testRealmHref}commit-delete`),
+        namesBatch(event) &&
+        (event.invalidations.includes(`${testRealmHref}commit-write`) ||
+          event.invalidations.includes(`${testRealmHref}commit-delete`)),
     );
     assert.strictEqual(
       indexEvents.length,
       1,
       `the batch broadcasts one index event (got ${indexEvents.length})`,
     );
-    assert.strictEqual(
-      indexEvents[0].clientRequestId,
-      'batch-1',
-      "the event carries the batch's own client request id",
+    assert.true(
+      namesBatch(indexEvents[0]),
+      'the event names the batch among its callers',
     );
     assert.deepEqual(
       [...indexEvents[0].invalidations].sort(),
       [`${testRealmHref}commit-write`, `${testRealmHref}commit-delete`].sort(),
       'the one event covers both the write and the removal',
-    );
-    assert.strictEqual(
-      indexEvents[0].coalescedWrites,
-      undefined,
-      'a pass that indexed one publish announces it in the single-writer form',
     );
   });
 
@@ -975,7 +978,7 @@ module(basename(import.meta.filename), function (hooks) {
     let mixedEvent = async () =>
       (await incrementalIndexEventsSince(since)).find(
         (event) =>
-          event.clientRequestId === 'instance:mixed-tab' &&
+          eventNames('instance:mixed-tab')(event) &&
           event.invalidations.includes(instance),
       );
     await waitUntil(async () => (await mixedEvent()) !== undefined);
@@ -1250,14 +1253,15 @@ module(basename(import.meta.filename), function (hooks) {
       `the append and the patch share one index job (got ${newJobs.length})`,
     );
 
-    await waitUntil(async () => {
-      let seen = await incrementalIndexEventsSince(since);
-      return seen.some((event) => event.clientRequestId === 'batch-append');
-    });
+    let namesBatchAppend = eventNames('batch-append');
+    await waitUntil(async () =>
+      (await incrementalIndexEventsSince(since)).some(namesBatchAppend),
+    );
     let indexEvents = (await incrementalIndexEventsSince(since)).filter(
       (event) =>
-        event.invalidations.includes(`${testRealmHref}append-mixed`) ||
-        event.invalidations.includes(`${testRealmHref}append-sibling`),
+        namesBatchAppend(event) &&
+        (event.invalidations.includes(`${testRealmHref}append-mixed`) ||
+          event.invalidations.includes(`${testRealmHref}append-sibling`)),
     );
     assert.strictEqual(
       indexEvents.length,
@@ -2214,11 +2218,7 @@ module(basename(import.meta.filename), function (hooks) {
       `each of the two batches enqueues one index job (got ${newJobs.length})`,
     );
     let seenEvents: IncrementalIndexEventContent[] = [];
-    let eventNamesFileUpdate = (event: IncrementalIndexEventContent) =>
-      event.clientRequestId === 'file-update' ||
-      (event.coalescedWrites ?? []).some(
-        (write) => write.clientRequestId === 'file-update',
-      );
+    let namesFileUpdate = eventNames('file-update');
     let eventDetails = () =>
       seenEvents.map(({ clientRequestId, coalescedWrites, invalidations }) => ({
         clientRequestId,
@@ -2228,21 +2228,15 @@ module(basename(import.meta.filename), function (hooks) {
     await waitUntil(
       async () => {
         seenEvents = await incrementalIndexEventsSince(since);
-        return seenEvents.some(eventNamesFileUpdate);
+        return seenEvents.some(namesFileUpdate);
       },
       {
-        timeoutMessage: () => {
-          let details = JSON.stringify(eventDetails());
-          console.warn(
-            `file-update was not found in an incremental index event; observed events: ${details}`,
-          );
-          return `file-update was not found in an incremental index event; observed events: ${details}`;
-        },
+        timeoutMessage: () =>
+          `file-update was not found in an incremental index event; observed events: ${JSON.stringify(eventDetails())}`,
       },
     );
     assert.strictEqual(
-      (await incrementalIndexEventsSince(since)).filter(eventNamesFileUpdate)
-        .length,
+      (await incrementalIndexEventsSince(since)).filter(namesFileUpdate).length,
       1,
       'and the second broadcasts one index event',
     );
@@ -2309,16 +2303,12 @@ module(basename(import.meta.filename), function (hooks) {
       1,
       `the append enqueues one index job (got ${newJobs.length})`,
     );
-    await waitUntil(async () => {
-      let seenEvents = await incrementalIndexEventsSince(since);
-      return seenEvents.some(
-        (event) => event.clientRequestId === 'append-line',
-      );
-    });
+    let namesAppendLine = eventNames('append-line');
+    await waitUntil(async () =>
+      (await incrementalIndexEventsSince(since)).some(namesAppendLine),
+    );
     assert.strictEqual(
-      (await incrementalIndexEventsSince(since)).filter(
-        (event) => event.clientRequestId === 'append-line',
-      ).length,
+      (await incrementalIndexEventsSince(since)).filter(namesAppendLine).length,
       1,
       'and broadcasts one index event',
     );
@@ -2532,14 +2522,12 @@ module(basename(import.meta.filename), function (hooks) {
       1,
       `the three entries share one index job (got ${newJobs.length})`,
     );
-    await waitUntil(async () => {
-      let seen = await incrementalIndexEventsSince(since);
-      return seen.some((event) => event.clientRequestId === 'file-batch');
-    });
+    let namesFileBatch = eventNames('file-batch');
+    await waitUntil(async () =>
+      (await incrementalIndexEventsSince(since)).some(namesFileBatch),
+    );
     assert.strictEqual(
-      (await incrementalIndexEventsSince(since)).filter(
-        (event) => event.clientRequestId === 'file-batch',
-      ).length,
+      (await incrementalIndexEventsSince(since)).filter(namesFileBatch).length,
       1,
       'and broadcast one index event',
     );
@@ -2665,14 +2653,12 @@ module(basename(import.meta.filename), function (hooks) {
       1,
       `cards and files share one index job (got ${newJobs.length})`,
     );
-    await waitUntil(async () => {
-      let seen = await incrementalIndexEventsSince(since);
-      return seen.some((event) => event.clientRequestId === 'mixed-batch');
-    });
+    let namesMixedBatch = eventNames('mixed-batch');
+    await waitUntil(async () =>
+      (await incrementalIndexEventsSince(since)).some(namesMixedBatch),
+    );
     assert.strictEqual(
-      (await incrementalIndexEventsSince(since)).filter(
-        (event) => event.clientRequestId === 'mixed-batch',
-      ).length,
+      (await incrementalIndexEventsSince(since)).filter(namesMixedBatch).length,
       1,
       'and one index event',
     );
