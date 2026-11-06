@@ -55,14 +55,18 @@ async function seedRow(
     url,
     markdown,
     searchDoc = {},
+    // The card's own field words (its role-weighted `search_tsv`). By default
+    // the markdown's words, as for a card whose page renders its fields.
+    fieldText = markdown,
   }: {
     url: string;
     markdown: string | null;
     searchDoc?: Record<string, unknown>;
+    fieldText?: string | null;
   },
 ) {
   await query(dbAdapter, [
-    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at)`,
+    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, search_tsv)`,
     `VALUES (`,
     param(url),
     `,`,
@@ -88,6 +92,12 @@ async function seedRow(
     param(false),
     `,`,
     param(Date.now()),
+    `,`,
+    `CASE WHEN`,
+    param(fieldText),
+    `::text IS NULL THEN NULL ELSE setweight(to_tsvector('english',`,
+    param(fieldText),
+    `), 'C') END`,
     `)`,
   ]);
   // The full-text `matches` predicate reads the rendering half of the row:
@@ -516,6 +526,31 @@ module(basename(import.meta.filename), function () {
         await prefixUrls('   '),
         [],
         'a blank query matches nothing',
+      );
+    });
+
+    test("prefix: the unfinished word reads the card's fields, not its page's chrome", async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}chrome.json`,
+        markdown: 'Special Purpose Processors. Connected concepts: none',
+        fieldText: 'Special Purpose Processors',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}concurrency.json`,
+        markdown: 'Concurrency and Parallelism. Connected concepts: none',
+        fieldText: 'Concurrency and Parallelism',
+      });
+      assert.deepEqual(
+        await relevanceUrls({ filter: { matches: 'conc', prefix: true } }),
+        [`${testRealmURL}concurrency.json`],
+        "a heading's word does not prefix-match every page",
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({ filter: { matches: 'concepts', prefix: true } })
+        ).sort(),
+        [`${testRealmURL}chrome.json`, `${testRealmURL}concurrency.json`],
+        'a whole word still matches the page',
       );
     });
 

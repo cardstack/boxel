@@ -25,11 +25,23 @@ const momentSource = `
     contains,
     containsMany,
     field,
+    linksToMany,
     CardDef,
     FieldDef,
   } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
   import NumberField from "@cardstack/base/number";
+
+  export class Concept extends CardDef {
+    static displayName = 'Concept';
+    @field name = contains(StringField, { search: { role: 'title' } });
+    @field definition = contains(StringField);
+    @field cardTitle = contains(StringField, {
+      computeVia: function (this: Concept) {
+        return this.name;
+      },
+    });
+  }
 
   export class TranscriptSegment extends FieldDef {
     @field start = contains(NumberField);
@@ -62,6 +74,9 @@ const momentSource = `
     @field start = contains(NumberField, { search: false });
     @field segments = containsMany(TranscriptSegment, {
       search: { role: 'body' },
+    });
+    @field concepts = linksToMany(() => Concept, {
+      search: { include: ['name'], facet: true },
     });
     @field cardTitle = contains(StringField, {
       computeVia: function (this: Moment) {
@@ -143,12 +158,46 @@ const moments: Record<string, MomentData> = {
   },
 };
 
+const concepts: Record<string, { name: string; definition: string }> = {
+  crdt: {
+    name: 'CRDT',
+    definition: 'a replicated data type that merges without conflicts',
+  },
+  'event-sourcing': {
+    name: 'Event sourcing',
+    definition: 'storing changes as an append-only log of events',
+  },
+  simplicity: { name: 'Simplicity', definition: 'one fold, one braid' },
+};
+
+// Which concepts each talk links to.
+const momentConcepts: Record<string, string[]> = {
+  'local-first': ['crdt'],
+  'simple-made-easy': ['simplicity'],
+  'turning-the-database': ['event-sourcing', 'crdt'],
+};
+
 function fileSystem() {
   let files: Record<string, unknown> = { 'moment.gts': momentSource };
+  for (let [name, attributes] of Object.entries(concepts)) {
+    files[`Concept/${name}.json`] = {
+      data: {
+        attributes,
+        meta: { adoptsFrom: { module: rri('../moment'), name: 'Concept' } },
+      },
+    };
+  }
   for (let [name, attributes] of Object.entries(moments)) {
+    let linked = momentConcepts[name] ?? [];
     files[`Moment/${name}.json`] = {
       data: {
         attributes,
+        relationships: Object.fromEntries(
+          linked.map((concept, index) => [
+            `concepts.${index}`,
+            { links: { self: `../Concept/${concept}` } },
+          ]),
+        ),
         meta: { adoptsFrom: { module: rri('../moment'), name: 'Moment' } },
       },
     };
@@ -287,6 +336,70 @@ module(basename(import.meta.filename), function () {
         ).sort(),
         [idOf('local-first'), idOf('simple-made-easy')].sort(),
       );
+    });
+
+    test('include: a link keeps its id and the included fields only', async function (assert) {
+      let [row] = (await dbAdapter.execute(
+        `SELECT search_doc FROM boxel_index WHERE url = $1 AND type = 'instance'`,
+        {
+          bind: [`${idOf('turning-the-database')}.json`],
+          coerceTypes: { search_doc: 'JSON' },
+        },
+      )) as { search_doc: Record<string, unknown> }[];
+      assert.deepEqual(row.search_doc.concepts, [
+        { id: `${realmHref}Concept/event-sourcing`, name: 'Event sourcing' },
+        { id: `${realmHref}Concept/crdt`, name: 'CRDT' },
+      ]);
+    });
+
+    test('include: a filter reads an included field, and nothing else past the link', async function (assert) {
+      assert.deepEqual(
+        (
+          await ids({
+            filter: { on: moment(), eq: { 'concepts.name': 'CRDT' } },
+          })
+        ).sort(),
+        [idOf('local-first'), idOf('turning-the-database')].sort(),
+      );
+      await assert.rejects(
+        search({
+          filter: {
+            on: moment(),
+            contains: { 'concepts.definition': 'merges' },
+          },
+        }),
+        /searchable|not searchable|nonsearchable/i,
+        'a field the link does not include is refused',
+      );
+    });
+
+    test('a link facet counts by id and labels each value with its title', async function (assert) {
+      let { meta } = await search({
+        filter: {
+          every: [
+            { type: moment() },
+            {
+              on: moment(),
+              eq: { 'concepts.id': `${realmHref}Concept/simplicity` },
+            },
+          ],
+        },
+        facets: [{ by: 'concepts', own: 'ignore' }],
+      });
+      assert.strictEqual(meta.page.total, 1, 'the selection, by id');
+      assert.deepEqual(meta.facets?.concepts, [
+        { value: `${realmHref}Concept/crdt`, count: 2, label: 'CRDT' },
+        {
+          value: `${realmHref}Concept/event-sourcing`,
+          count: 1,
+          label: 'Event sourcing',
+        },
+        {
+          value: `${realmHref}Concept/simplicity`,
+          count: 1,
+          label: 'Simplicity',
+        },
+      ]);
     });
 
     test('the search pane: facets by declaration, the channel list multi-select', async function (assert) {

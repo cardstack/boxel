@@ -122,7 +122,11 @@ import {
   type Definition,
   type FieldDefinition,
 } from './definitions.ts';
-import { matchSearchableRoutes, routesForField } from './searchable-routes.ts';
+import {
+  linkIncludes,
+  matchSearchableRoutes,
+  routesForField,
+} from './searchable-routes.ts';
 import {
   CARD_INSTANCE_FILE_KEY,
   CARD_TITLE_KEY,
@@ -3164,7 +3168,7 @@ export class IndexQueryEngine {
         }
         selects.push([
           `SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
-          ...matchTsQuery(branch),
+          ...renderedTsQuery(branch),
         ]);
         selects.push([
           `SELECT tsi.url, tsi.realm_url, tsi.type FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)} @@`,
@@ -3245,6 +3249,19 @@ export class IndexQueryEngine {
     }
     let plans: FacetPlan[] = [];
     for (let facet of facets) {
+      let link = false;
+      if (definition) {
+        try {
+          let field = await getField(
+            definition,
+            facet.by,
+            this.#definitionLookup,
+          );
+          link = field.type === 'linksTo' || field.type === 'linksToMany';
+        } catch {
+          link = false;
+        }
+      }
       let shape: FacetShape = facet.ranges
         ? 'range'
         : facet.interval
@@ -3272,9 +3289,10 @@ export class IndexQueryEngine {
         }
       }
       let plain =
+        !link &&
         shape === 'values' &&
         Object.keys(facet).every((key) => key === 'by' || key === 'size');
-      plans.push({ facet, shape, plain });
+      plans.push({ facet, shape: link ? 'values' : shape, plain, link });
     }
     return plans;
   }
@@ -3283,7 +3301,7 @@ export class IndexQueryEngine {
   // value, by range or by date bucket) and, when it asked for them or its
   // shape implies them, its statistics.
   async #extendedFacet(
-    { facet, shape }: FacetPlan,
+    { facet, shape, link }: FacetPlan,
     opts: QueryOptions,
     condition: CardExpression,
   ): Promise<{ counts: FacetCount[]; stats?: FacetStats }> {
@@ -3323,7 +3341,11 @@ export class IndexQueryEngine {
         order,
         opts,
         condition,
+        link,
       );
+      if (link) {
+        counts = await this.#labelLinkCounts(counts, opts);
+      }
     }
     if (!stats) {
       return { counts };
@@ -3358,18 +3380,22 @@ export class IndexQueryEngine {
     facet: Facet,
     opts: QueryOptions,
     condition: CardExpression,
+    // A link's values are `{ id, … }` objects; it counts their ids.
+    link = false,
   ): CardExpression {
     let path = facet.by.split('.');
+    let pgValue = link ? `fv0.value ->> 'id'` : `fv0.value #>> '{}'`;
+    let sqliteValue = link ? `json_extract(fv0.value, '$.id')` : 'fv0.value';
     return [
       dbExpression({
         pg: [
-          `(SELECT DISTINCT f.url, f.type, fv0.value #>> '{}' AS value, CASE WHEN jsonb_typeof(fv0.value) = 'number' THEN (fv0.value #>> '{}')::numeric END AS num FROM (`,
+          `(SELECT DISTINCT f.url, f.type, ${pgValue} AS value, CASE WHEN jsonb_typeof(fv0.value) = 'number' THEN (fv0.value #>> '{}')::numeric END AS num FROM (`,
           'SELECT DISTINCT i.url, i.type, spill_unmark(i.search_doc #>',
           param(`{${path.map((p) => `"${p}"`).join(',')}}`),
           '::text[]) AS v',
         ],
         sqlite: [
-          `(SELECT DISTINCT f.url, f.type, fv0.value AS value, CASE WHEN fv0.type IN ('integer', 'real') THEN fv0.value END AS num FROM (`,
+          `(SELECT DISTINCT f.url, f.type, ${sqliteValue} AS value, CASE WHEN fv0.type IN ('integer', 'real') THEN fv0.value END AS num FROM (`,
           'SELECT DISTINCT i.url, i.type, i.search_doc ->',
           param(`$.${facet.by}`),
           'AS v',
@@ -3399,11 +3425,12 @@ export class IndexQueryEngine {
     order: 'count' | 'value',
     opts: QueryOptions,
     condition: CardExpression,
+    link = false,
   ): Promise<FacetCount[]> {
     let rows = await this.#queryCards(
       [
         'SELECT fv.value AS facet_value, COUNT(*) AS count FROM',
-        ...this.#facetValuesTable(facet, opts, condition),
+        ...this.#facetValuesTable(facet, opts, condition, link),
         ...(facet.prefix
           ? [
               'WHERE LOWER(fv.value) LIKE LOWER(',
@@ -3420,6 +3447,35 @@ export class IndexQueryEngine {
       opts.timings,
     );
     return facetCountsOf(rows);
+  }
+
+  // Labels each link facet value (a linked card's id) with that card's
+  // indexed title, in one lookup for the values returned. A value whose card
+  // isn't indexed in this realm keeps no label; the id still renders the card
+  // by delegating to its prerendered HTML.
+  async #labelLinkCounts(
+    counts: FacetCount[],
+    opts: QueryOptions,
+  ): Promise<FacetCount[]> {
+    if (counts.length === 0) {
+      return counts;
+    }
+    let ids = counts.map((c) => c.value);
+    let rows = await this.#queryCards(
+      [
+        `SELECT i.file_alias AS card_id, i.search_doc ->> '${CARD_TITLE_KEY}' AS card_title FROM ${tableFromOpts(opts)} AS i WHERE i.type = 'instance' AND i.file_alias IN`,
+        ...addExplicitParens(separatedByCommas(ids.map((id) => [param(id)]))),
+      ],
+      opts.timings,
+    );
+    let titles = new Map(
+      rows
+        .filter((row) => row.card_title != null)
+        .map((row) => [String(row.card_id), String(row.card_title)]),
+    );
+    return counts.map((c) =>
+      titles.has(c.value) ? { ...c, label: titles.get(c.value)! } : c,
+    );
   }
 
   async #facetStatsQuery(
@@ -3819,7 +3875,7 @@ export class IndexQueryEngine {
               // union stays an index answer.
               pg: [
                 `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
-                ...matchTsQuery(filter),
+                ...renderedTsQuery(filter),
                 `UNION SELECT tsi.url, tsi.realm_url, tsi.type FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)} @@`,
                 ...matchTsQuery(filter),
                 filter.matches.includes('"') ? `)` : `OFFSET 0)`,
@@ -4470,7 +4526,12 @@ export class IndexQueryEngine {
             reason: 'query-backed',
           });
         }
-        if (!matched && !crossingToIdOnly) {
+        // A link declared `search: { include: [...] }` carries the included
+        // fields beside its id, so a path into one of those is answerable.
+        let crossingToIncluded =
+          pathSegments.length === 1 &&
+          linkIncludes(field.search, pathSegments[0], pathTraveled.length);
+        if (!matched && !crossingToIdOnly && !crossingToIncluded) {
           throw new FilterRefersToNonsearchableFieldError({
             type: definition.codeRef,
             path: [currentPath, ...pathSegments].join('.'),
@@ -4707,6 +4768,9 @@ interface FacetPlan {
   facet: Facet;
   shape: FacetShape;
   plain: boolean;
+  // A link field: counted by the linked card's id, each value labelled with
+  // the card's title (docs/search-intent.md, `facet`).
+  link?: boolean;
 }
 const NUMBER_SERIALIZERS = new Set(['number', 'big-integer']);
 const DATE_SERIALIZERS = new Set(['date', 'datetime']);
@@ -4763,7 +4827,9 @@ export function filterWithout(filter: Filter, by: string): Filter | undefined {
   for (let operator of ['eq', 'in', 'range', 'contains']) {
     if (operator in node) {
       let keys = Object.keys(node[operator] ?? {});
-      return keys.length > 0 && keys.every((key) => key === by)
+      // A link facet's selection filters by the linked card's id.
+      return keys.length > 0 &&
+        keys.every((key) => key === by || key === `${by}.id`)
         ? anchor()
         : filter;
     }
@@ -5070,6 +5136,36 @@ const MIN_PREFIX_LETTERS = 3;
 
 // How many matching passages a search reports per card and field.
 const PASSAGES_PER_CARD = 5;
+
+// The query a `matches` term runs against a card's rendered markdown. With
+// `prefix`, the word still being typed matches the rendered page only as a
+// whole word (and its typo corrections): a page carries its template's own
+// words (headings such as "Connected concepts", labels), so a short prefix
+// would match every card of a type, and a prefix scan over every rendered
+// page in the realm is slow. The prefix itself matches the card's own field
+// words (`search_tsv`), which `matchTsQuery` builds.
+function renderedTsQuery(term: MatchTerm): Expression {
+  if (!term.prefix) {
+    return matchTsQuery(term);
+  }
+  let { words, partial } = splitTypeAheadQuery(term.matches);
+  // A negated partial ("dog -painterl") excludes by prefix, which only
+  // narrows, so the page reads it as a prefix too.
+  if (partial === undefined || /(^|\s)-$/.test(words)) {
+    return matchTsQuery(term);
+  }
+  if (term.typoQuery === undefined) {
+    return [`websearch_to_tsquery('english',`, param(term.matches), `)`];
+  }
+  let partialAlternatives = [partial, ...(term.typoPartial ?? '').split(' | ')]
+    .map((w) => w.trim())
+    .filter(Boolean)
+    .join(' | ');
+  let tsquery = [term.typoQuery, `(${partialAlternatives})`]
+    .filter(Boolean)
+    .join(' & ');
+  return [`to_tsquery('english',`, param(tsquery), `)`];
+}
 
 // A word still being typed takes typo corrections only from this many
 // letters (`#resolveTypos`); shorter, it matches as a prefix alone.

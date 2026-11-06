@@ -87,6 +87,10 @@ export const MAX_FACET_RANGES = 50;
 export interface FacetCount {
   value: string;
   count: number;
+  // A link facet's value is the linked card's id; `label` is its title, for
+  // a plain-text list. Show the card itself by delegating to its
+  // prerendered HTML by id.
+  label?: string;
 }
 
 // A facet's statistics, in `meta.facetStats[by]`: `count` matches hold a
