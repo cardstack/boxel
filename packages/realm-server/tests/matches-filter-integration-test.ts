@@ -991,13 +991,15 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('IndexQueryEngine emits the null-rejecting guard in its matches SQL', async function (assert) {
-      // The join-shape test below proves the guard *would* reduce the join, but
-      // it composes the predicate itself, so it can't catch IndexQueryEngine
-      // dropping the guard. This test closes that gap: it captures the SQL the
-      // engine actually emits for a `matches` search and asserts the guard is
-      // present, so a regression in the engine fails here rather than passing on
-      // a predicate the engine no longer produces.
+    test('IndexQueryEngine asks the markdown index once, through an indexed subquery', async function (assert) {
+      // Every positive `matches` term compiles to an uncorrelated
+      // `(url, realm_url, type) IN (SELECT … FROM prerendered_html AS phm …)`,
+      // which Postgres runs as a hashed SubPlan over the markdown GIN index.
+      // Inline beside a type anchor the planner misestimated some terms and
+      // recomputed every typed row's tsvector (~2 s over 6k transcripts). The
+      // subquery keeps the null-rejecting guard on its own rows. This captures
+      // the SQL the engine actually emits, so a regression back to the inline
+      // form fails here.
       let executed: string[] = [];
       let originalExecute = dbAdapter.execute.bind(dbAdapter);
       dbAdapter.execute = ((
@@ -1015,9 +1017,9 @@ module(basename(import.meta.filename), function () {
         dbAdapter.execute = originalExecute;
       }
 
-      let guard = `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown))`;
+      let guard = `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM prerendered_html AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown))`;
       let matchesSql = executed.filter((sql) =>
-        sql.includes('markdown_search_text(ph.markdown)'),
+        sql.includes('markdown_search_text(phm.markdown)'),
       );
       assert.ok(
         matchesSql.length > 0,
@@ -1026,7 +1028,7 @@ module(basename(import.meta.filename), function () {
       for (let sql of matchesSql) {
         assert.ok(
           sql.includes(guard),
-          `emitted matches SQL should include the null-rejecting guard; got: ${sql}`,
+          `emitted matches SQL should use the indexed subquery; got: ${sql}`,
         );
       }
     });

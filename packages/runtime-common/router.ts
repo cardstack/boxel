@@ -84,6 +84,7 @@ function formatUnknownError(
 export type Method = 'GET' | 'QUERY' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 
 import { SupportedMimeType } from './supported-mime-type.ts';
+import { InvalidQueryError } from './invalid-query-error.ts';
 export { SupportedMimeType };
 
 function isHTTPMethod(method: unknown): method is Method {
@@ -502,6 +503,29 @@ export class Router {
       // policy admitted asked for.
       if (err instanceof ArchivedRealmError) {
         throw err;
+      }
+      // A query the engine finds malformed only once it resolves the
+      // filter's fields (a field the anchored type doesn't have) is the
+      // caller's error: answer it with the same JSON:API 400 a query that
+      // fails validation up front gets, not a 500 with a text body.
+      if (err instanceof InvalidQueryError) {
+        // The body matches `buildSearchErrorBody` (search-utils.ts, which
+        // imports this module, so it isn't imported back here).
+        return new Response(
+          JSON.stringify({
+            errors: [
+              {
+                status: '400',
+                title: 'Invalid Query',
+                message: `Invalid query: ${err.message}`,
+              },
+            ],
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+        );
       }
       if (err instanceof CardError) {
         // Without this line a thrown CardError is indistinguishable in the

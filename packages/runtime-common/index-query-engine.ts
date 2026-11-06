@@ -531,6 +531,45 @@ export { isValidPrerenderedHtmlFormat };
 // NULL while `@>` yields FALSE, and `NOT NULL` vs `NOT FALSE` diverge.
 type FilterPolarity = 'positive' | 'negated';
 
+// An `any` whose branches are each a single-key `eq` on the same field (and
+// the same type anchor) is an `in`: `any: [{eq: {vid: a}}, {eq: {vid: b}}]`
+// selects exactly what `in: {vid: [a, b]}` does. Folding it lets the `in`
+// plan (one indexed lookup) serve what would otherwise be an OR of
+// per-branch type and containment checks, which slowed sharply past ~10
+// branches. Returns undefined when the branches don't all have that shape.
+function foldSameKeyEqs(branches: Filter[]): Filter | undefined {
+  if (branches.length < 2) {
+    return undefined;
+  }
+  let key: string | undefined;
+  let anchor: string | undefined;
+  let on: CodeRef | undefined;
+  let values: JSONTypes.Value[] = [];
+  for (let branch of branches) {
+    let keys = Object.keys(branch).filter((k) => k !== 'on');
+    if (keys.length !== 1 || keys[0] !== 'eq') {
+      return undefined;
+    }
+    let eq = (branch as EqFilter).eq;
+    let entries = Object.entries(eq);
+    if (entries.length !== 1) {
+      return undefined;
+    }
+    let [k, v] = entries[0];
+    let branchOn = (branch as { on?: CodeRef }).on;
+    let branchAnchor = JSON.stringify(branchOn ?? null);
+    if (key === undefined) {
+      key = k;
+      anchor = branchAnchor;
+      on = branchOn;
+    } else if (k !== key || branchAnchor !== anchor) {
+      return undefined;
+    }
+    values.push(v);
+  }
+  return { ...(on ? { on } : {}), in: { [key!]: values } } as Filter;
+}
+
 function flipPolarity(polarity: FilterPolarity): FilterPolarity {
   return polarity === 'positive' ? 'negated' : 'positive';
 }
@@ -1788,6 +1827,13 @@ export class IndexQueryEngine {
         ),
       ]);
     } else if ('any' in filter) {
+      let folded = foldSameKeyEqs(filter.any);
+      if (folded) {
+        return every([
+          ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+          this.filterCondition(folded, on, polarity, context),
+        ]);
+      }
       let union = this.#anyAsIndexedUnion(filter.any, context);
       if (union) {
         return every([
@@ -2697,40 +2743,22 @@ export class IndexQueryEngine {
         ? ['FALSE']
         : [
             dbExpression({
-              // A prefix query compiles the same way: Postgres can't estimate how
-              // many rows a prefix matches, and beside a type anchor it guesses
-              // high and recomputes every typed row's tsvector instead of
-              // asking the index once.
-              pg:
-                context.inAny || filter.prefix
-                  ? [
-                      // Under an `any`, the LEFT JOIN to prerendered_html can't
-                      // be reduced (a row may qualify through another branch),
-                      // so the inline form below recomputes every row's
-                      // tsvector. An uncorrelated IN instead becomes a hashed
-                      // SubPlan: the markdown GIN index answers it once, and
-                      // each row is a hash probe. Keyed on the join's own
-                      // primary key, so it selects exactly the rows the inline
-                      // form would.
-                      `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
-                      ...matchTsQuery(filter),
-                      `)`,
-                    ]
-                  : [
-                      // The leading `ph.markdown IS NOT NULL` is a null-rejecting
-                      // guard, not a behavior change: `markdown_search_text` coalesces
-                      // null markdown to '' and a non-empty query never matches an
-                      // empty tsvector, so absent-markdown rows are already excluded.
-                      // But because that coalesce hides the null-rejection from the
-                      // planner, without this guard it cannot reduce the LEFT JOIN to
-                      // prerendered_html, drives the query from boxel_index, and
-                      // recomputes every row's tsvector at query time instead of using
-                      // the markdown GIN index. The explicit guard restores the
-                      // reduction so the index is used, and stays correct under `not`
-                      // and `any` (an absent row still can't match a positive term).
-                      `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@`,
-                      ...matchTsQuery(filter),
-                    ],
+              // Always an uncorrelated IN, which becomes a hashed SubPlan: the
+              // markdown GIN index answers the term once, and each row is a
+              // hash probe. Inline beside a type anchor, Postgres estimates a
+              // term's matches from statistics, and for some words (a prefix,
+              // or a plain word like "compiler") it guesses high and recomputes
+              // the tsvector of every typed row: ~2 s over 6k talk transcripts
+              // where the index answers in ~10 ms. Under an `any` the LEFT JOIN
+              // to prerendered_html can't be reduced, so the inline form
+              // recomputes every row there too. Keyed on the join's own primary
+              // key, it selects exactly the rows the inline form would, and the
+              // subquery never yields NULL, so it negates cleanly under `not`.
+              pg: [
+                `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
+                ...matchTsQuery(filter),
+                `)`,
+              ],
               sqlite: [
                 `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
                 param(`%${escapeSqliteLikePattern(filter.matches)}%`),
@@ -3472,10 +3500,17 @@ async function getField(
         },
       } as FieldDefinition;
     }
-    throw new Error(
+    let onBaseType =
+      definition.codeRef &&
+      'name' in definition.codeRef &&
+      definition.codeRef.name === 'CardDef';
+    throw new InvalidQueryError(
       `Your filter refers to a nonexistent field "${cleansedPath}" on type ${stringify(
         definition.codeRef,
-      )}`,
+      )}` +
+        (onBaseType
+          ? `. A type anchor applies only to the filter object it is on: put "on" (on the wire, "item.on") beside the field's operator, not in a sibling clause`
+          : ''),
     );
   }
   return field;
