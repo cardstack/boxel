@@ -1,7 +1,8 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import FieldContainer from '../components/field-container.gts';
+import { Field as PretField } from '@cardstack/pretui/components/field';
+
 import BoxelInput from '../components/input.gts';
 import cn from '../helpers/cn.ts';
 import { modifier, testAttribute } from '../modifiers/modifier.ts';
@@ -9,8 +10,9 @@ import type { CredentialFrame } from '../security/credentials.js';
 import type { Changes } from './changes.ts';
 
 // The credential fields the app frames, drawn the way the app draws its own:
-// the settings modal's in a horizontal FieldContainer, and the change-email
-// modal's confirmation in a vertical one. What the fields hold,
+// the settings modal's in a horizontal Field, its label in the column the
+// app's FieldContainers give theirs, and the change-email modal's
+// confirmation in a vertical one. What the fields hold,
 // and everything said to the app about them, is the `CredentialFrame`'s; this
 // only draws it and reports to it what is typed.
 
@@ -18,7 +20,6 @@ interface Field {
   name: string;
   label?: string;
   type: 'text' | 'password';
-  id?: string;
   inputName?: string;
   autocomplete: string;
   placeholder?: string;
@@ -147,14 +148,14 @@ export default class CredentialFields extends Component<Signature> {
       {{/if}}
       {{#each this.fields key='name' as |entry|}}
         {{#if (this.isLayout 'settings')}}
-          <FieldContainer
+          <PretField
+            @orientation='horizontal'
             @label={{entry.field.label}}
-            @tag='label'
             class='profile-field password-settings-field'
-            as |labelId|
+            as |controlId _messageId labelId|
           >
             <BoxelInput
-              @id={{entry.field.id}}
+              @id={{controlId}}
               @type={{entry.field.type}}
               @autocomplete={{entry.field.autocomplete}}
               @placeholder={{entry.field.placeholder}}
@@ -170,17 +171,15 @@ export default class CredentialFields extends Component<Signature> {
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
             />
-          </FieldContainer>
+          </PretField>
         {{else}}
-          <FieldContainer
+          <PretField
             @label={{entry.field.label}}
-            @tag='label'
-            @vertical={{true}}
             class='profile-field'
-            as |labelId|
+            as |controlId _messageId labelId|
           >
             <BoxelInput
-              @id={{entry.field.id}}
+              @id={{controlId}}
               @type={{entry.field.type}}
               @autocomplete={{entry.field.autocomplete}}
               @placeholder={{entry.field.placeholder}}
@@ -196,7 +195,7 @@ export default class CredentialFields extends Component<Signature> {
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
             />
-          </FieldContainer>
+          </PretField>
         {{/if}}
       {{/each}}
     </form>
@@ -276,6 +275,28 @@ export default class CredentialFields extends Component<Signature> {
       .layout-settings.narrow .password-settings-field {
         grid-template-columns: 1fr;
         gap: var(--boxel-sp-xs);
+      }
+
+      /* Labelled as the app labels its own fields, which the page's styles
+         say. The input shows its own error, so no line is kept for a
+         message. */
+      .profile-field {
+        --boxel-ui-label-font-size: var(
+          --boxel-label-font-size,
+          var(--boxel-body-font-size)
+        );
+        --boxel-ui-label-font-weight: var(--boxel-label-font-weight, 500);
+        --boxel-ui-label-line-height: var(--boxel-label-line-height, 1.1);
+        --boxel-ui-label-letter-spacing: var(--boxel-lsp-xs);
+        --pretui-field-message-min-height: 0;
+        justify-items: stretch;
+      }
+      .password-settings-field {
+        --pretui-field-label-size: var(
+          --boxel-field-label-size,
+          minmax(8rem, 25%)
+        );
+        --pretui-field-column-gap: 0;
       }
 
       /* The settings modal's and the change-email modal's fields show an

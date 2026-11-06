@@ -52,7 +52,12 @@ const EditPage: TemplateOnlyComponent<Signature> = <template>
       color: var(--muted-foreground);
       overflow-wrap: anywhere;
     }
+    /* Each row's label in the panel's text size, and no line kept under a
+       row for a message: a row's control shows its own errors. */
     .fields {
+      --boxel-ui-label-font-size: var(--boxel-font-size-sm);
+      --boxel-ui-label-line-height: var(--boxel-line-height-sm);
+      --pretui-field-message-min-height: 0;
       display: grid;
       gap: var(--boxel-sp-lg);
       padding: var(--boxel-sp-xl);

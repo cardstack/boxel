@@ -74,13 +74,13 @@ import {
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import Checkbox from '../../components/checkbox.gts';
+import { Checkbox } from '@cardstack/pretui/components/checkbox';
+import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import Warning from '../../components/icons/warning.gts';
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 import Globe from '../../components/icons/globe.gts';
 import BoxelInput from '../../components/input.gts';
 import KeyRound from '../../components/icons/key-round.gts';
-import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -109,6 +109,7 @@ import {
   type ApprovalUse,
   type NewGrant,
   type SlotChoice,
+  type SlotOption,
 } from './approval-batch.ts';
 import {
   failureMessage,
@@ -153,6 +154,13 @@ function slotLabel(choice: SlotChoice): string {
   let [, name] = choice.slot.split(':');
   return name ? `Shared key: ${name}` : 'Shared key';
 }
+
+// A slot's keys and shares as tiles to choose between, and the one a tile
+// stands for.
+const cardsOf = (options: SlotOption[]) =>
+  options.map(({ id, name }) => ({ value: id, title: name }));
+const optionOf = (options: SlotOption[], id: string) =>
+  options.find((option) => option.id === id)!;
 
 class Approve extends Component<{ Args: ApproveArgs }> {
   <template>
@@ -230,44 +238,51 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               @onSelect={{this.chooseUse}}
             />
             {{#each this.choices as |choice|}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label={{slotLabel choice}}
                 @icon={{KeyRound}}
                 data-test-approve-slot={{choice.slot}}
+                as |_controlId _messageId labelId|
               >
-                <fieldset class='picker'>
-                  <legend class='visually-hidden'>{{slotLabel choice}}</legend>
-                  {{#each choice.options as |option|}}
-                    <RadioTile
+                <div class='picker'>
+                  {{#if choice.options.length}}
+                    <RadioCard
                       @name='slot-{{choice.slot}}'
-                      @value={{option.id}}
-                      @checked={{this.isChosen choice.slot option.id}}
-                      @onChange={{fn this.choose choice.slot option.id}}
-                      data-test-approve-key={{option.name}}
+                      @options={{cardsOf choice.options}}
+                      @value={{this.chosenIn choice.slot}}
+                      @onValueChange={{fn this.choose choice.slot}}
+                      aria-labelledby={{labelId}}
+                      as |card|
                     >
-                      <span class='option'>
-                        <span class='option-name'>{{option.name}}</span>
-                        {{#if option.rejected}}
-                          <span
-                            class='option-detail'
-                            data-test-approve-key-rejected
-                          >The service rejected this key. Replace it on your key
-                            page first.</span>
-                        {{/if}}
-                        {{#if option.detail}}
-                          <span class='option-detail'>holds
-                            {{option.detail}}</span>
-                        {{/if}}
-                        {{#if (gt option.covers.length 0)}}
-                          <span
-                            class='option-detail'
-                            data-test-approve-key-covers
-                          >Already allowed for
-                            {{this.hostsOf option.covers}}</span>
-                        {{/if}}
-                      </span>
-                    </RadioTile>
+                      {{#let (optionOf choice.options card.value) as |option|}}
+                        <span
+                          class='option'
+                          data-test-approve-key={{option.name}}
+                        >
+                          <span class='option-name'>{{option.name}}</span>
+                          {{#if option.rejected}}
+                            <span
+                              class='option-detail'
+                              data-test-approve-key-rejected
+                            >The service rejected this key. Replace it on your
+                              key page first.</span>
+                          {{/if}}
+                          {{#if option.detail}}
+                            <span class='option-detail'>holds
+                              {{option.detail}}</span>
+                          {{/if}}
+                          {{#if (gt option.covers.length 0)}}
+                            <span
+                              class='option-detail'
+                              data-test-approve-key-covers
+                            >Already allowed for
+                              {{this.hostsOf option.covers}}</span>
+                          {{/if}}
+                        </span>
+                      {{/let}}
+                    </RadioCard>
                   {{else}}
                     <p class='empty' data-test-approve-no-keys>
                       {{#if (eq choice.kind 'userKey')}}
@@ -279,7 +294,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                         You have no key shared with this workspace yet.
                       {{/if}}
                     </p>
-                  {{/each}}
+                  {{/if}}
                   {{#if (eq choice.kind 'userKey')}}
                     <Button
                       class='add-key'
@@ -290,8 +305,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                       {{on 'click' this.addKey}}
                     >Add a new key</Button>
                   {{/if}}
-                </fieldset>
-              </FieldContainer>
+                </div>
+              </Field>
             {{/each}}
 
             {{#each this.batch.groups as |group|}}
@@ -353,12 +368,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                       class='operation'
                       data-test-approve-operation={{operation.name}}
                     >
-                      <label class='tick'>
-                        <Checkbox
-                          @checked={{this.isTicked operation}}
-                          @onChange={{fn this.toggle operation}}
-                          data-test-approve-tick={{operation.name}}
-                        />
+                      <Checkbox
+                        class='tick'
+                        @checked={{this.isTicked operation}}
+                        @onCheckedChange={{fn this.toggle operation}}
+                        data-test-approve-tick={{operation.name}}
+                      >
                         <span class='label' data-test-approve-label>
                           {{operation.label}}
                         </span>
@@ -379,7 +394,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             data-test-approve-open-cards
                           >Approved for open cards</span>
                         {{/if}}
-                      </label>
+                      </Checkbox>
                       <details class='request'>
                         <summary class='summary' data-test-approve-summary>
                           <span class='method'>{{operation.method}}</span>
@@ -450,12 +465,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 </div>
               </div>
               {{#each this.budgetShares as |share|}}
-                <FieldContainer
-                  @tag='div'
+                <Field
+                  @orientation='horizontal'
+                  @labelTag='span'
                   @label='Daily budget for {{share.label}}'
                   @icon={{KeyRound}}
                   data-test-approve-budget={{share.label}}
-                  as |labelId|
+                  as |_controlId _messageId labelId|
                 >
                   <BoxelInput
                     @type='text'
@@ -490,7 +506,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     to change its other limits: how fast each person can make
                     calls, and how many calls this share makes in a month, in
                     total across everyone.</span>
-                </FieldContainer>
+                </Field>
               {{/each}}
             {{/if}}
             {{#if this.form.error}}
@@ -545,25 +561,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         margin-top: var(--boxel-sp-xl);
       }
       .picker {
-        margin: 0;
-        padding: 0;
-        border: 0;
         display: grid;
         gap: var(--boxel-sp-xs);
         min-width: 0;
       }
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
       .option {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         min-width: 0;
         overflow-wrap: anywhere;
       }
@@ -623,10 +627,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         padding-top: var(--boxel-sp-xs);
       }
       .tick {
-        display: flex;
         gap: var(--boxel-sp-xs);
         align-items: baseline;
-        cursor: pointer;
       }
       .label {
         flex: 1;
@@ -1094,8 +1096,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private hostsOf = (destinations: string[]) =>
     destinations.map((d) => new URL(d).host).join(', ');
 
-  private isChosen = (slot: string, id: string) =>
-    this.form.chosen[slot] === id;
+  private chosenIn = (slot: string) => this.form.chosen[slot];
   private isTicked = (operation: BatchOperation) =>
     this.form.ticked.has(operationKey(operation));
 

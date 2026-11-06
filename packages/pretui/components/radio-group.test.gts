@@ -140,4 +140,21 @@ module('Pretui | components/radio-group', function (hooks) {
     assert.deepEqual(labels.map((l) => l.textContent?.trim()), ['Green', 'Oolong', 'Pu-erh']);
     assert.strictEqual(labels[0]?.tagName, 'LABEL', 'wrapping, so no for/id pairing to get wrong');
   });
+
+  test('an option says what it means under its label', async function (assert) {
+    const WITH_DESCRIPTION: RadioOption[] = [
+      { value: 'a', label: 'Always', description: 'Every time it runs' },
+      { value: 'b', label: 'Never' },
+    ];
+    await render(<template><RadioGroup @options={{WITH_DESCRIPTION}} /></template>);
+    assert.dom('[data-test-pretui-radio-option="a"] .pretui-radio-description').hasText('Every time it runs');
+    assert.dom('[data-test-pretui-radio-option="a"]').includesText('Always', 'the label is still the radio’s name');
+    assert.dom('[data-test-pretui-radio-option="b"] .pretui-radio-description').doesNotExist();
+  });
+
+  test('takes a name for its radios and a name for the group', async function (assert) {
+    await render(<template><RadioGroup @options={{OPTIONS}} @name='tea' @label='Tea' /></template>);
+    assert.deepEqual([...new Set(radios().map((r) => r.name))], ['tea']);
+    assert.dom('[data-test-pretui-radio-group]').hasAttribute('aria-label', 'Tea');
+  });
 });

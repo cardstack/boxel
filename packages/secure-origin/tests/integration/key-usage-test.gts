@@ -188,6 +188,10 @@ function usageResource(id: string, attributes: Record<string, unknown>) {
   return json(200, { data: { type: 'key-usage', id, attributes } });
 }
 
+// The button of a key's usage disclosure.
+const USAGE_TOGGLE =
+  '[data-test-key-usage-toggle] [data-test-pretui-collapsible-trigger]';
+
 module('Integration | key usage and limits', function (hooks) {
   setupRenderingTest(hooks);
   setupWaitedBrowserWork(hooks);
@@ -299,15 +303,13 @@ module('Integration | key usage and limits', function (hooks) {
         'nothing is asked for until it is opened',
       );
 
-      assert
-        .dom('[data-test-key-usage-toggle]')
-        .hasAttribute('aria-expanded', 'false');
-      await click('[data-test-key-usage-toggle]');
+      assert.dom(USAGE_TOGGLE).hasAttribute('aria-expanded', 'false');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-usage]');
       assert
-        .dom('[data-test-key-usage-toggle]')
+        .dom(USAGE_TOGGLE)
         .hasAttribute('aria-expanded', 'true')
-        .hasText('Usage and limits', 'the disclosure keeps its name open');
+        .includesText('Usage and limits', 'the disclosure keeps its name open');
       assert
         .dom('[data-test-key-usage-details]')
         .doesNotHaveAttribute('open', 'the detailed counts start closed');
@@ -384,7 +386,7 @@ module('Integration | key usage and limits', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Weather service"]');
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-usage]');
 
       assert.deepEqual(
@@ -426,7 +428,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
 
       assert
@@ -490,7 +492,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       await fillIn('[data-test-key-limit-input="dailyBudget"]', '900');
       await click('[data-test-key-limits-save]');
@@ -505,7 +507,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       await fillIn('[data-test-key-limit-input="monthlyBudget"]', '2.5');
       await click('[data-test-key-limits-save]');
@@ -535,7 +537,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       assert
         .dom('[data-test-key-limit-input="monthlyBudget"]')
@@ -586,7 +588,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
 
       let input = document.querySelector(
@@ -627,7 +629,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       assert
         .dom('[data-test-key-limit-input="rateRefillPerMinute"]')
@@ -645,7 +647,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       for (let typed of ['1,2,3', ',,5', '15,00']) {
         await fillIn('[data-test-key-limit-input="monthlyBudget"]', typed);
@@ -682,7 +684,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       assert.dom('[data-test-key-limit-input="dailyBudget"]').hasValue('500');
       assert
@@ -708,7 +710,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-usage-error]');
       fail = false;
       await click('[data-test-key-usage-retry]');
@@ -763,9 +765,7 @@ module('Integration | key usage and limits', function (hooks) {
 
       await click('[data-test-key-limit-notice-usage]');
       await waitFor('[data-test-key-usage]');
-      assert
-        .dom('[data-test-key-usage-toggle]')
-        .hasAttribute('aria-expanded', 'true');
+      assert.dom(USAGE_TOGGLE).hasAttribute('aria-expanded', 'true');
       assert
         .dom('[data-test-key-limit-input="dailyBudget"]')
         .hasAttribute(
@@ -773,9 +773,7 @@ module('Integration | key usage and limits', function (hooks) {
           '2,400',
           'the key’s limits are there to change',
         );
-      assert
-        .dom('[data-test-key-usage-toggle]')
-        .isFocused('focus moves to the panel it opened');
+      assert.dom(USAGE_TOGGLE).isFocused('focus moves to the panel it opened');
       assert
         .dom('[data-test-key-limit-notice-usage]')
         .hasText('See usage…', 'the same action as on any other notice');

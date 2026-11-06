@@ -6,13 +6,20 @@ The wrapper every control needs: a label bound to the control by id, and a **res
 
 ```
 @label?, @hint?, @error?
-<:default as |controlId messageId|>
+@orientation?  'vertical' (default) | 'horizontal'
+@icon?         an icon drawn before the label, aria-hidden
+@labelTag?     'label' (default) | 'span'
+<:default as |controlId messageId labelId|>
 Element: HTMLDivElement
 ```
 
 Two decisions carry the component.
 
 **It mints the id and yields it.** `guidFor(this) + '-ctl'` goes on `<label for>` and is handed to the block, which passes it to the control's own id arg. Ownership of the association sits in exactly one place, and no control has to generate an id it might collide on. The cost is real and worth stating: **a control that takes no id arg cannot be labeled through this API at all** — which currently rules out `RadioGroup`, `Slider`, `Checkbox` and `Rating`.
+
+**Horizontal is a record's edit row.** `@orientation='horizontal'` puts the label (and its `@icon`) in a column of its own, `--pretui-field-label-size` wide (`minmax(8rem, 25%)` by default), and the control with its message line in the column beside it, which the control fills. The label sits `--pretui-field-label-offset` (`--boxel-sp-sm`) down, on the first line of an input box beside it; a row whose control is text or a list of choices sets it to 0. `--pretui-field-column-gap` sets the gap between the columns.
+
+**A group names itself by the label's id.** A radio group, a fieldset, several controls, or a value shown rather than edited is no single element a `<label for>` can point at. `@labelTag='span'` draws the label as a `span`, and the group takes `aria-labelledby={{labelId}}`, the block's third param. The label always has that id; it is yielded only when there is a label, so nothing points at an id no element has.
 
 **The message line is always there.** `.pretui-fieldmsg` is one line tall (1rem by default) whether or not there is anything to say. This is the kit's alignment law: two fields side by side never shift when an error appears on one of them. Every design system eventually learns this; most learn it after shipping the jump.
 
@@ -52,7 +59,7 @@ Use **FormField** for anything validated. Field is right for a labeled control o
 
 Repointed into descendants when invalid: on Input, Textarea and the other boxel-ui-wrapped controls, `--border` → `--destructive-ink` and `--background` → `--field`, matching Select and Autocomplete; and on the Field itself `--input` → `--destructive-ink`, which the select-type triggers draw their edge from. A Field whose control is disabled keeps the usual edges.
 
-The row gap is `--boxel-sp-3xs`. The reserved message line's height is `--pretui-cue-line-height` (1rem by default): the flex row takes it as its `min-height` and the message Cue as its line-height, so setting it on an ancestor changes both. A `@status` or error shows its tone's glyph, so the tone isn't hue alone. A theme must keep `--muted-foreground` and `--destructive-ink` distinguishable at 11px — hint and error occupy the same slot, so the error's glyph, its weight (`--pretui-cue-emphasis-font-weight`, 500 by default) and its hue tell them apart.
+The row gap is `--boxel-sp-3xs`. The reserved message line's height is `--pretui-field-message-min-height`, else `--pretui-cue-line-height` (1rem by default); a field whose control shows its own errors sets the first to 0. Horizontal: `--pretui-field-label-size`, `--pretui-field-label-offset`, `--pretui-field-column-gap`; an `@icon` is `--pretui-field-icon-size` (1rem) square. Otherwise the line height is `--pretui-cue-line-height`: the flex row takes it as its `min-height` and the message Cue as its line-height, so setting it on an ancestor changes both. A `@status` or error shows its tone's glyph, so the tone isn't hue alone. A theme must keep `--muted-foreground` and `--destructive-ink` distinguishable at 11px — hint and error occupy the same slot, so the error's glyph, its weight (`--pretui-cue-emphasis-font-weight`, 500 by default) and its hue tell them apart.
 
 The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
 

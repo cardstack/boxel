@@ -1,33 +1,38 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import FieldContainer from './field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 
 // AuthFormField, which the sign-in, registration and password-reset screens
-// wrap each field in, in the app and on the secure origin alike. Its block is given its label's id,
-// as FieldContainer's is.
+// wrap each field in, in the app and on the secure origin alike: Pret UI's
+// Field, its label above the control. Its block is given its label's id and
+// the id its control takes, which the label points at; a control that can't
+// take an id (`@labelTag='span'`) names itself by the label's id alone.
 interface Signature {
   Element: HTMLElement;
   Args: {
     label?: string;
+    labelTag?: 'label' | 'span';
   };
-  Blocks: { default: [labelId: string | undefined] };
+  Blocks: { default: [labelId: string | undefined, controlId: string] };
 }
 
 const AuthFormField: TemplateOnlyComponent<Signature> = <template>
-  <FieldContainer
+  <Field
     @label={{@label}}
-    @tag='label'
-    @vertical={{true}}
+    @labelTag={{@labelTag}}
     class='auth-form-field'
     ...attributes
-    as |labelId|
+    as |controlId _messageId labelId|
   >
-    {{yield labelId}}
-  </FieldContainer>
+    {{yield labelId controlId}}
+  </Field>
 
   <style scoped>
+    /* The control shows its own error, so no line is kept for a message. */
     .auth-form-field {
+      --pretui-field-message-min-height: 0;
       margin-top: var(--boxel-sp);
+      justify-items: stretch;
     }
     .auth-form-field :deep(input:autofill) {
       transition:

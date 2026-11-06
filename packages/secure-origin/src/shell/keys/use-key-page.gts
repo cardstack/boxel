@@ -23,12 +23,11 @@ import {
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
+import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
-import RadioTile from '../../components/radio-tile.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
@@ -95,12 +94,18 @@ class UseKey extends Component<{
             {{/if}}
           </:intro>
           <:default>
-            <FieldContainer @tag='div' @label='Key' @icon={{KeyRound}}>
+            <Field
+              @orientation='horizontal'
+              @labelTag='span'
+              @label='Key'
+              @icon={{KeyRound}}
+            >
               <KeyTile @key={{this.choosing.key}} />
-            </FieldContainer>
+            </Field>
             {{#if this.choosing.share}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Workspace'
                 @icon={{LayoutGrid}}
                 data-test-use-key-share-realm
@@ -115,14 +120,15 @@ class UseKey extends Component<{
                       this.choosing.share.workspace.url
                     }}</span>
                 </p>
-              </FieldContainer>
+              </Field>
             {{else}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Workspace'
                 @icon={{LayoutGrid}}
                 data-test-use-key-realm
-                as |labelId|
+                as |_controlId _messageId labelId|
               >
                 <WorkspaceDropdown
                   @workspaces={{this.form.realms}}
@@ -130,43 +136,48 @@ class UseKey extends Component<{
                   @onSelect={{this.selectRealm}}
                   @labelId={{labelId}}
                 />
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.form.realm}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Card'
                 @icon={{RectangleEllipsis}}
                 data-test-use-key-cards
+                as |_controlId _messageId labelId|
               >
                 {{#if this.form.loadingCards}}
                   <BusyMessage @title='Loading…' />
                 {{else}}
-                  <fieldset class='cards'>
-                    <legend class='visually-hidden'>Card</legend>
-                    {{#each this.form.cards as |card|}}
-                      <RadioTile
-                        @name='card'
-                        @checked={{eq this.form.card card}}
-                        @onChange={{this.selectCard card}}
-                        data-test-use-key-card={{card.name}}
-                      >
-                        <span class='card-name'>{{card.displayName}}</span>
-                      </RadioTile>
-                    {{else}}
-                      <p class='empty' data-test-use-key-no-cards>
-                        {{#if this.choosing.share}}
-                          No card in this workspace sends the workspace’s key in
-                          a request this key works for.
-                        {{else}}
-                          No card in this workspace makes a request this key
-                          works for.
-                        {{/if}}
-                      </p>
-                    {{/each}}
-                  </fieldset>
+                  {{#if this.form.cards.length}}
+                    <RadioCard
+                      class='cards'
+                      @name='card'
+                      @options={{this.cardChoices}}
+                      @value={{this.chosenCard}}
+                      @onValueChange={{this.selectCard}}
+                      aria-labelledby={{labelId}}
+                      as |choice|
+                    >
+                      <span
+                        class='card-name'
+                        data-test-use-key-card={{this.cardNameOf choice.value}}
+                      >{{choice.title}}</span>
+                    </RadioCard>
+                  {{else}}
+                    <p class='empty' data-test-use-key-no-cards>
+                      {{#if this.choosing.share}}
+                        No card in this workspace sends the workspace’s key in a
+                        request this key works for.
+                      {{else}}
+                        No card in this workspace makes a request this key works
+                        for.
+                      {{/if}}
+                    </p>
+                  {{/if}}
                 {{/if}}
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
@@ -202,20 +213,7 @@ class UseKey extends Component<{
         margin-top: var(--boxel-sp-xl);
       }
       .cards {
-        margin: 0;
-        padding: 0;
-        border: 0;
-        display: grid;
         gap: var(--boxel-sp-xs);
-        min-width: 0;
-      }
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
       }
       .workspace {
         display: grid;
@@ -231,7 +229,6 @@ class UseKey extends Component<{
       }
       .card-name {
         display: block;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-weight: 600;
         overflow-wrap: anywhere;
       }
@@ -378,8 +375,21 @@ class UseKey extends Component<{
     }
   };
 
-  private selectCard = (card: Card) => () => {
-    this.form.card = card;
+  // Each card as a tile to choose, by its place in the list, since a card
+  // definition is named by its module and export together.
+  private get cardChoices() {
+    return this.form.cards.map((card, index) => ({
+      value: String(index),
+      title: card.displayName,
+    }));
+  }
+  private get chosenCard() {
+    let index = this.form.card ? this.form.cards.indexOf(this.form.card) : -1;
+    return index < 0 ? undefined : String(index);
+  }
+  private cardNameOf = (index: string) => this.form.cards[Number(index)]?.name;
+  private selectCard = (index: string) => {
+    this.form.card = this.form.cards[Number(index)];
   };
 
   private goToKeys = () => navigation.back(keyPageURL());

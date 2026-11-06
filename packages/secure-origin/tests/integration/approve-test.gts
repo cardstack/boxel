@@ -336,7 +336,9 @@ module('Integration | approve pages', function (hooks) {
       'the key whose grants already cover the batch comes first',
     );
     assert
-      .dom('[data-test-approve-key="GitHub token"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub token"]) input',
+      )
       .isChecked('and is chosen, as the only one that covers a destination');
 
     assert
@@ -449,10 +451,12 @@ module('Integration | approve pages', function (hooks) {
       await render(<template><ApprovePage /></template>);
       await waitFor('[data-test-approve-form]');
       assert
-        .dom('[data-test-approve-key="Another token"] input')
+        .dom(
+          '[data-test-pretui-choice-card]:has([data-test-approve-key="Another token"]) input',
+        )
         .isChecked('the key the CLI named starts chosen');
       assert
-        .dom('[data-test-radio-choice="pipelines"] input')
+        .dom('[data-test-pretui-radio-option="pipelines"] input')
         .isChecked('without --interactive the CLI approves for pipelines only');
       assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
       assert.deepEqual(submitted, [], 'nothing leaves before the user says');
@@ -504,7 +508,9 @@ module('Integration | approve pages', function (hooks) {
     );
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    assert
+      .dom('[data-test-pretui-radio-option="interactive"] input')
+      .isChecked();
   });
 
   module('opened by the CLI, ended before approving', function (hooks) {
@@ -692,7 +698,9 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
 
-    await click('[data-test-approve-key="Another token"] input');
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="Another token"]) input',
+    );
     assert.deepEqual(
       [...document.querySelectorAll('[data-test-approve-new-grant-host]')].map(
         (e) => e.textContent?.trim(),
@@ -762,7 +770,9 @@ module('Integration | approve pages', function (hooks) {
       .includesText('totalCount')
       .includesText('nodes { title }');
     assert
-      .dom('[data-test-approve-key="Another token"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="Another token"]) input',
+      )
       .isChecked('the key it was last approved with starts chosen');
   });
 
@@ -819,14 +829,18 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     await click('[data-test-approve-tick="listReviews"]');
-    await click('[data-test-approve-key="Another token"] input');
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="Another token"]) input',
+    );
     await click('[data-test-approve-save]');
     await waitFor('[data-test-keys-error]');
     assert
-      .dom('[data-test-approve-tick="listReviews"]')
+      .dom('[data-test-approve-tick="listReviews"] input')
       .isNotChecked('an operation the user unticked stays unticked');
     assert
-      .dom('[data-test-approve-key="Another token"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="Another token"]) input',
+      )
       .isChecked('the key the user chose stays chosen');
     assert.strictEqual(answered, 2, 'the batch is read again');
     assert.dom('[data-test-keys-error]').includesText('show it again');
@@ -892,7 +906,9 @@ module('Integration | approve pages', function (hooks) {
         'one operation declaring it binds the whole choice',
       );
     assert
-      .dom('[data-test-approve-key="GitHub account"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub account"]) input',
+      )
       .isChecked('the only key that fits starts chosen');
     assert.dom('[data-test-approve-key="GitHub token"]').doesNotExist();
   });
@@ -1043,18 +1059,24 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-approve-form]');
     assert.dom('[data-test-approve-key="GitHub API account"]').doesNotExist();
 
-    await click('[data-test-radio-choice="pipelines"] input');
-    await click('[data-test-approve-key="GitHub API account"] input');
+    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+    );
     assert
-      .dom('[data-test-approve-key="GitHub API account"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+      )
       .isChecked();
 
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     assert
       .dom('[data-test-approve-key="GitHub API account"]')
       .doesNotExist('the upload it can’t reach is back in the batch');
     assert
-      .dom('[data-test-approve-key="GitHub token"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub token"]) input',
+      )
       .isChecked('the key the slot starts on is chosen in its place');
   });
 
@@ -1128,7 +1150,9 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-approve-form]');
     assert.dom('[data-test-approve-key]').exists({ count: 1 });
     assert
-      .dom('[data-test-approve-key="GitHub bot"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub bot"]) input',
+      )
       .isChecked('the only share that fits starts chosen');
     assert.dom('[data-test-approve-key="Slack bot"]').doesNotExist();
   });
@@ -1219,7 +1243,9 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-approve-form]');
     assert.dom('[data-test-approve-key-rejected]').exists();
     assert
-      .dom('[data-test-approve-key="GitHub token"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub token"]) input',
+      )
       .isNotChecked('the user chooses it themselves, if at all');
     assert.dom('[data-test-approve-save]').isDisabled();
   });
@@ -1318,30 +1344,29 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-key-grants]');
 
     let graphql = '[data-test-key-grant="api.github.com/graphql/"]';
-    let count = `${graphql} [data-test-key-grant-count]`;
-    let list = `${graphql} [data-test-key-grant-bindings]`;
-    assert.dom(count).hasText('2 approvals');
+    // The count opens a disclosure of the approvals: its button, and the
+    // region it opens and closes.
+    let count = `${graphql} [data-test-key-grant-count] [data-test-pretui-collapsible-trigger]`;
+    let region = `${graphql} [data-test-key-grant-count] [data-test-pretui-collapsible-content]`;
+    assert.dom(count).includesText('2 approvals');
     assert
       .dom(count)
       .hasAttribute('aria-expanded', 'false', 'the approvals start collapsed');
-    let describedBy = document
-      .querySelector(count)
-      ?.getAttribute('aria-describedby');
     assert
-      .dom(`#${describedBy}`)
-      .hasText('api.github.com/graphql/', 'the count names its grant');
-    assert.dom(list).isNotVisible();
+      .dom(count)
+      .includesText('api.github.com/graphql/', 'the count names its grant');
+    assert.dom(region).hasAttribute('data-state', 'closed');
 
     let uploadsCount =
       '[data-test-key-grant="uploads.github.com/"] [data-test-key-grant-count]';
     assert.dom(uploadsCount).hasText('0 approvals');
     assert
-      .dom(uploadsCount)
-      .doesNotHaveAttribute('aria-expanded', 'a grant with none has no toggle');
+      .dom(`${uploadsCount} button`)
+      .doesNotExist('a grant with none has no toggle');
 
     await click(count);
     assert.dom(count).hasAttribute('aria-expanded', 'true');
-    assert.dom(list).isVisible();
+    assert.dom(region).hasAttribute('data-state', 'open');
     assert
       .dom('[data-test-key-grant-binding="listPRs"]')
       .hasText(
@@ -1349,22 +1374,36 @@ module('Integration | approve pages', function (hooks) {
       );
 
     await click(count);
-    assert.dom(list).isNotVisible();
+    assert.dom(region).hasAttribute('data-state', 'closed');
 
     await click(`${graphql} [data-test-key-grant-remove]`);
     assert
       .dom('[data-test-key-grant-remove-panel]')
       .includesText('revokes the approvals above');
-    assert.dom(list).isVisible('the approvals the removal revokes are listed');
+    assert
+      .dom(region)
+      .hasAttribute(
+        'data-state',
+        'open',
+        'the approvals the removal revokes are listed',
+      );
     assert
       .dom(count)
-      .isDisabled('the list stays open while the removal is confirmed');
+      .hasAttribute(
+        'aria-disabled',
+        'true',
+        'the list stays open while the removal is confirmed',
+      );
 
     await click('[data-test-key-grant-remove-cancel]');
     assert
-      .dom(list)
-      .isNotVisible('cancelling leaves the list as the user left it');
-    assert.dom(count).isNotDisabled();
+      .dom(region)
+      .hasAttribute(
+        'data-state',
+        'closed',
+        'cancelling leaves the list as the user left it',
+      );
+    assert.dom(count).doesNotHaveAttribute('aria-disabled');
 
     await click(`${graphql} [data-test-key-grant-remove]`);
     assert.deepEqual(removed, [], 'nothing is removed before it is confirmed');
@@ -1437,7 +1476,9 @@ module('Integration | approve pages', function (hooks) {
       'the cards there that this key can fill',
     );
     assert
-      .dom('[data-test-use-key-card="Inbox"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-use-key-card="Inbox"]) input',
+      )
       .isChecked('the one card there is chosen');
     await click('[data-test-use-key-next]');
     let url = new URL(navigations[0]!.url!, window.location.href);
@@ -1513,7 +1554,11 @@ module('Integration | approve pages', function (hooks) {
         .attributes.target,
       { kind: 'type', module: MODULE, name: 'Inbox', realm: REALM },
     );
-    assert.dom('[data-test-approve-key="Another token"] input').isChecked();
+    assert
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="Another token"]) input',
+      )
+      .isChecked();
     await click('[data-test-approve-save]');
     await waitFor('[data-test-keys-done]');
     await click('[data-test-keys-done-close]');
@@ -1577,24 +1622,24 @@ module('Integration | approve pages', function (hooks) {
       'the batch also answers what is approved for pipelines only',
     );
     assert.deepEqual(
-      [...document.querySelectorAll('[data-test-radio-choice]')].map((choice) =>
-        choice.getAttribute('data-test-radio-choice'),
+      [...document.querySelectorAll('[data-test-pretui-radio-option]')].map(
+        (choice) => choice.getAttribute('data-test-pretui-radio-option'),
       ),
       ['interactive', 'pipelines'],
       'interactive use is the first choice',
     );
     assert
-      .dom('[data-test-radio-choice="interactive"] input')
+      .dom('[data-test-pretui-radio-option="interactive"] input')
       .isChecked('interactive use is where the choice starts');
     assert.dom('[data-test-approve-operation="listReviews"]').exists();
 
-    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-pretui-radio-option="pipelines"] input');
     assert
       .dom('[data-test-approve-operation="listReviews"]')
       .doesNotExist('one approved for pipelines already needs nothing more');
     assert.dom('[data-test-approve-interactive]').doesNotExist();
 
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     assert.dom('[data-test-approve-operation="listReviews"]').exists();
     assert
       .dom('[data-test-approve-confirmation]')
@@ -1620,7 +1665,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-pretui-radio-option="pipelines"] input');
     await click('[data-test-approve-save]');
     await settled();
     let [approval] = approvals();
@@ -1694,7 +1739,9 @@ module('Integration | approve pages', function (hooks) {
 
   test('a batch holding only requests approved for pipelines starts on interactive use, each marked', async function (assert) {
     await openWith([pipelinesOnly('listPRs', 'List PRs')]);
-    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    assert
+      .dom('[data-test-pretui-radio-option="interactive"] input')
+      .isChecked();
     assert
       .dom(
         '[data-test-approve-operation="listPRs"] [data-test-approve-pipelines-only]',
@@ -1704,7 +1751,9 @@ module('Integration | approve pages', function (hooks) {
 
   test('a batch whose every request was last approved for interactive use starts on it, so approving again keeps it', async function (assert) {
     await openWith([changedInteractive('listPRs', 'List PRs')]);
-    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    assert
+      .dom('[data-test-pretui-radio-option="interactive"] input')
+      .isChecked();
   });
 
   test('a batch whose every request was last approved for pipelines only starts on it, so approving again keeps it', async function (assert) {
@@ -1712,7 +1761,7 @@ module('Integration | approve pages', function (hooks) {
       changedPipelinesOnly('listPRs', 'List PRs'),
       changedPipelinesOnly('listReviews', 'List reviews'),
     ]);
-    assert.dom('[data-test-radio-choice="pipelines"] input').isChecked();
+    assert.dom('[data-test-pretui-radio-option="pipelines"] input').isChecked();
   });
 
   test('new requests among ones last approved for pipelines only start on interactive use', async function (assert) {
@@ -1720,7 +1769,9 @@ module('Integration | approve pages', function (hooks) {
       changedPipelinesOnly('listPRs', 'List PRs'),
       operation('listReviews', 'List reviews'),
     ]);
-    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    assert
+      .dom('[data-test-pretui-radio-option="interactive"] input')
+      .isChecked();
   });
 
   test('one request approved for interactive use among new ones starts on interactive use', async function (assert) {
@@ -1729,8 +1780,10 @@ module('Integration | approve pages', function (hooks) {
       operation('listReviews', 'List reviews'),
       pipelinesOnly('listComments', 'List comments'),
     ]);
-    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
-    await click('[data-test-radio-choice="pipelines"] input');
+    assert
+      .dom('[data-test-pretui-radio-option="interactive"] input')
+      .isChecked();
+    await click('[data-test-pretui-radio-option="pipelines"] input');
     assert
       .dom('[data-test-approve-operation="listComments"]')
       .doesNotExist('one approved for pipelines needs nothing for pipelines');
@@ -1751,7 +1804,7 @@ module('Integration | approve pages', function (hooks) {
         '[data-test-approve-operation="listReviews"] [data-test-approve-open-cards]',
       )
       .doesNotExist();
-    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-pretui-radio-option="pipelines"] input');
     assert
       .dom('[data-test-approve-demoted]')
       .includesText('stops the calls marked “Approved for open cards”');
@@ -1762,12 +1815,12 @@ module('Integration | approve pages', function (hooks) {
       .doesNotExist('an unticked call is not approved, so keeps its use');
     await click('[data-test-approve-tick="listPRs"]');
     assert.dom('[data-test-approve-demoted]').exists();
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     assert
       .dom('[data-test-approve-demoted]')
       .doesNotExist('interactive use keeps it');
 
-    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-pretui-radio-option="pipelines"] input');
     await click('[data-test-approve-save]');
     await settled();
     let [approval] = approvals();
@@ -1853,7 +1906,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     assert
       .dom('[data-test-approve-confirmation]')
       .exists({ count: 1 })
@@ -1941,7 +1994,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     assert
       .dom('[data-test-approve-budget="Team GitHub"] input')
       .hasValue('2400');
@@ -1990,7 +2043,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
 
     // The click that brings the window back starts the re-read, and the
     // approval goes out while it is still under way.
@@ -2029,7 +2082,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     await fillIn('[data-test-approve-budget="Team GitHub"] input', '800');
     window.dispatchEvent(new Event('focus'));
     await settled();
@@ -2149,15 +2202,21 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     assert
-      .dom('[data-test-approve-key="Other GitHub"] input')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="Other GitHub"]) input',
+      )
       .isChecked('the share the page was opened for');
-    assert.dom('[data-test-approve-key="Team GitHub"] input').isNotChecked();
     assert
-      .dom('[data-test-approve-tick="listTeamIssues"]')
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="Team GitHub"]) input',
+      )
+      .isNotChecked();
+    assert
+      .dom('[data-test-approve-tick="listTeamIssues"] input')
       .isChecked('the calls that send the workspace’s key start ticked');
-    assert.dom('[data-test-approve-tick="listTeamPRs"]').isChecked();
+    assert.dom('[data-test-approve-tick="listTeamPRs"] input').isChecked();
     assert
-      .dom('[data-test-approve-tick="listPRs"]')
+      .dom('[data-test-approve-tick="listPRs"] input')
       .isNotChecked('the call that sends the user’s own key does not');
   });
 
@@ -2317,11 +2376,11 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-pretui-radio-option="pipelines"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
       .doesNotExist('a pipeline serves nobody who opens the card');
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
       .hasText(
@@ -2373,7 +2432,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
     assert
       .dom('[data-test-approve-signed-in-only-note]')
@@ -2391,7 +2450,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-pretui-radio-option="interactive"] input');
     assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
     assert.dom('[data-test-approve-signed-in-only-note]').doesNotExist();
     assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });

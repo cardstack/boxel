@@ -44,7 +44,7 @@ import {
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import Tag from '../../components/icons/tag.gts';
@@ -164,14 +164,15 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               />
             {{/if}}
             {{#if this.choosing.key}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Key'
                 @icon={{KeyRound}}
                 data-test-share-key-key
               >
                 <KeyTile @key={{this.choosing.key}} />
-              </FieldContainer>
+              </Field>
             {{else}}
               <KeyPicker
                 @keys={{this.form.keys}}
@@ -181,12 +182,13 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               />
             {{/if}}
             {{#unless this.choosing.context}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Workspace'
                 @icon={{LayoutGrid}}
                 data-test-realm-picker
-                as |labelId|
+                as |_controlId _messageId labelId|
               >
                 <WorkspaceDropdown
                   @workspaces={{this.form.realms}}
@@ -194,15 +196,17 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                   @onSelect={{this.selectRealm}}
                   @labelId={{labelId}}
                 />
-              </FieldContainer>
+              </Field>
             {{/unless}}
-            <FieldContainer
-              @tag='label'
+            <Field
+              @orientation='horizontal'
               @label='Shared as'
               @icon={{Tag}}
               data-test-key-field='label'
+              as |controlId|
             >
               <BoxelInput
+                @id={{controlId}}
                 @type='text'
                 @autocomplete='off'
                 @placeholder='What people with access to the workspace see it as'
@@ -211,12 +215,13 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 name='share-label'
                 data-test-share-label
               />
-            </FieldContainer>
+            </Field>
             {{#if this.policyUnknown}}
               {{! Asked of the workspace just chosen: which reading applies. }}
             {{else if this.keyAllowsAnonymous}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='People who aren’t signed in'
                 @icon={{Users}}
                 data-test-share-key-key-allows
@@ -224,10 +229,11 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 <p class='allows' data-test-share-key-key-allows-text>This key
                   allows it{{anonymousCapsClause this.chosenKey}}. Sharing it
                   here means they will use it.</p>
-              </FieldContainer>
+              </Field>
             {{else if this.keyRefusesAnonymous}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='People who aren’t signed in'
                 @icon={{Users}}
                 data-test-share-key-key-refuses
@@ -245,7 +251,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                     {{on 'click' this.goToKeys}}
                   >Go to your keys</Button>
                 </div>
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>

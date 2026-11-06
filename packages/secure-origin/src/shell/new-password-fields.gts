@@ -26,9 +26,10 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
   <AuthFormField
     @label={{@passwordLabel}}
     data-test-secure-field='password'
-    as |labelId|
+    as |labelId controlId|
   >
     <BoxelInput
+      @id={{controlId}}
       aria-labelledby={{labelId}}
       data-test-password-field
       name='password'
@@ -51,9 +52,10 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
   <AuthFormField
     @label={{@confirmLabel}}
     data-test-secure-field='confirm-password'
-    as |labelId|
+    as |labelId controlId|
   >
     <BoxelInput
+      @id={{controlId}}
       aria-labelledby={{labelId}}
       data-test-confirm-password-field
       name='confirm-password'

@@ -12,9 +12,11 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
+import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
+
 import Button from '../../components/button.gts';
 import cn from '../../helpers/cn.ts';
-import DisclosureToggle from '../../components/disclosure-toggle.gts';
 import { eq, not } from '../../helpers/truth-helpers.ts';
 
 import type { KeyBinding, KeyGrant, ListedKey } from '../../security/keys.ts';
@@ -51,28 +53,9 @@ export default class KeyGrants extends Component<Signature> {
                 id='key-grant-where-{{grant.id}}'
               >{{hostAndPath grant.destination}}</span>
               {{#if @bindings}}
-                {{#let (this.bindingsOf grant) as |bindings|}}
-                  {{#if bindings.length}}
-                    {{! Held open while Remove asks, since its confirmation
-                        names the approvals listed above it. }}
-                    <DisclosureToggle
-                      class='count toggle'
-                      @expanded={{this.isExpanded grant}}
-                      @disabled={{this.isRemoving grant}}
-                      aria-controls='key-grant-bindings-{{grant.id}}'
-                      aria-describedby='key-grant-where-{{grant.id}}'
-                      data-test-key-grant-count
-                      {{on 'click' (fn this.toggle grant)}}
-                    >{{bindings.length}}
-                      {{if
-                        (eq bindings.length 1)
-                        'approval'
-                        'approvals'
-                      }}</DisclosureToggle>
-                  {{else}}
-                    <span class='count' data-test-key-grant-count>0 approvals</span>
-                  {{/if}}
-                {{/let}}
+                {{#unless (this.hasBindings grant)}}
+                  <span class='count' data-test-key-grant-count>0 approvals</span>
+                {{/unless}}
               {{/if}}
               {{#unless (this.isRemoving grant)}}
                 <Button
@@ -84,22 +67,44 @@ export default class KeyGrants extends Component<Signature> {
                 >Remove</Button>
               {{/unless}}
             </div>
-            <ul
-              class='bindings'
-              id='key-grant-bindings-{{grant.id}}'
-              hidden={{not (this.isExpanded grant)}}
-              data-test-key-grant-bindings
-            >
-              {{#each (this.bindingsOf grant) as |binding|}}
-                <li data-test-key-grant-binding={{binding.operation}}>
-                  {{binding.operationLabel}}
-                  on
-                  {{binding.cardName}}
-                  in
-                  {{addressOf binding.realm}}
-                </li>
-              {{/each}}
-            </ul>
+            {{#let (this.bindingsOf grant) as |bindings|}}
+              {{#if bindings.length}}
+                {{! Held open while Remove asks, since its confirmation
+                    names the approvals listed above it. }}
+                <Disclosure
+                  class='approvals'
+                  @size='xs'
+                  @open={{this.isExpanded grant}}
+                  @onOpenChange={{fn this.toggle grant}}
+                  @disabled={{this.isRemoving grant}}
+                  data-test-key-grant-count
+                >
+                  <:trigger>{{bindings.length}}
+                    {{if
+                      (eq bindings.length 1)
+                      'approval'
+                      'approvals'
+                    }}<VisuallyHidden>
+                      sending it to
+                      {{hostAndPath
+                        grant.destination
+                      }}</VisuallyHidden></:trigger>
+                  <:default>
+                    <ul class='bindings' data-test-key-grant-bindings>
+                      {{#each bindings as |binding|}}
+                        <li data-test-key-grant-binding={{binding.operation}}>
+                          {{binding.operationLabel}}
+                          on
+                          {{binding.cardName}}
+                          in
+                          {{addressOf binding.realm}}
+                        </li>
+                      {{/each}}
+                    </ul>
+                  </:default>
+                </Disclosure>
+              {{/if}}
+            {{/let}}
             {{#if (this.isRemoving grant)}}
               <div class='panel' role='alert' data-test-key-grant-remove-panel>
                 <p class='confirm'>
@@ -174,8 +179,8 @@ export default class KeyGrants extends Component<Signature> {
       .count {
         color: var(--muted-foreground);
       }
-      .toggle:enabled:hover {
-        color: var(--foreground);
+      .approvals {
+        color: var(--muted-foreground);
       }
       .bindings {
         margin: var(--boxel-sp-5xs) 0 0;
@@ -210,6 +215,8 @@ export default class KeyGrants extends Component<Signature> {
 
   private bindingsOf = (grant: KeyGrant) =>
     (this.args.bindings ?? []).filter((b) => b.grantId === grant.id);
+
+  private hasBindings = (grant: KeyGrant) => this.bindingsOf(grant).length > 0;
 
   private isRemoving = (grant: KeyGrant) => this.state.grant === grant.id;
 

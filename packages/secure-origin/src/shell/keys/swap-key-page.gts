@@ -22,7 +22,7 @@ import {
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 import Tag from '../../components/icons/tag.gts';
 import Users from '../../components/icons/users.gts';
 import { navigation } from '../navigation.js';
@@ -104,8 +104,9 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @context={{this.choosing.context}}
               @reason={{this.opened.reason}}
             />
-            <FieldContainer
-              @tag='div'
+            <Field
+              @orientation='horizontal'
+              @labelTag='span'
               @label='Shared key'
               @icon={{Tag}}
               data-test-swap-share
@@ -117,7 +118,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
                 <div class='share-state'>Suspended.
                   {{this.suspendedBecause}}</div>
               </div>
-            </FieldContainer>
+            </Field>
             <KeyPicker
               @keys={{this.form.keys}}
               @selected={{this.form.selected}}
@@ -125,8 +126,9 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @onGoToKeys={{this.goToKeys}}
             />
             {{#if this.keyAllowsAnonymous}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='People who aren’t signed in'
                 @icon={{Users}}
                 data-test-swap-key-key-allows
@@ -136,10 +138,11 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
                   <strong>they will use this key</strong>{{anonymousCapsClause
                     this.chosenKey
                   }}. It allows them.</p>
-              </FieldContainer>
+              </Field>
             {{else if this.keyRefusesAnonymous}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='People who aren’t signed in'
                 @icon={{Users}}
                 data-test-swap-key-key-refuses
@@ -156,7 +159,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
                     {{on 'click' this.goToKeys}}
                   >Go to your keys</Button>
                 </div>
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
