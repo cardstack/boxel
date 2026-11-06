@@ -949,6 +949,11 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     return { claimed, host: this, inserted, kept, removed, root };
   }
 
+  /** the scroller whose scroll height the barrier holds while this region measures */
+  scroller(): HTMLElement | null {
+    return this.element ? scrollerOf(this.element) : null;
+  }
+
   /** phase 3: identities are settled — compile this region's timeline and play it */
   finishPass(pass: Pass) {
     const { claimed, inserted, kept, root } = pass;
