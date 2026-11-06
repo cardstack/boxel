@@ -4546,6 +4546,24 @@ export class Realm {
           out.push(`== ${label}\nERROR ${e.message}`);
         }
       };
+      if (reqURL.searchParams.has('untrigger')) {
+        await run(
+          'drop prerendered_html trigger',
+          `DROP TRIGGER IF EXISTS prerendered_html_markdown_tsv_sync ON prerendered_html`,
+        );
+        await run(
+          'drop pending trigger',
+          `DROP TRIGGER IF EXISTS prerendered_html_pending_markdown_tsv_sync ON prerendered_html_pending`,
+        );
+        await run(
+          'drop function',
+          `DROP FUNCTION IF EXISTS prerendered_markdown_tsv_sync()`,
+        );
+        await run(
+          'drop pending column',
+          `ALTER TABLE prerendered_html_pending DROP COLUMN IF EXISTS markdown_tsv`,
+        );
+      }
       if (reqURL.searchParams.has('repair')) {
         let total = 0;
         for (;;) {
