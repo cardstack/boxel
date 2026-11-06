@@ -18,7 +18,7 @@ import type { TOC } from '@ember/component/template-only';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { StatusChip } from '@cardstack/pretui/components/status-chip';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import type { KeyPolicyNotice } from '../../security/keys.ts';
 
 import type { ListedKey } from './context.ts';
@@ -155,14 +155,14 @@ const KeyPolicyNotices: TOC<Signature> = <template>
                 <Operations @notice={{request.notice}} />
                 <div class='actions'>
                   <Button
-                    @kind='primary'
-                    @size='small'
+                    @variant='primary'
+                    @size='s'
                     data-test-key-policy-notice-allow
                     {{on 'click' (fn @onAllow request.key)}}
                   >Allow anonymous use…</Button>
                   <Button
-                    @kind='secondary'
-                    @size='small'
+                    @variant='secondary'
+                    @size='s'
                     @loading={{isDeclining @declining request.notice.id}}
                     data-test-key-policy-notice-decline
                     {{on 'click' (fn @onDecline request.notice)}}

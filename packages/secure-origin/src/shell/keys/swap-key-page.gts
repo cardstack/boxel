@@ -21,9 +21,9 @@ import {
   windowContext,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { Field } from '@cardstack/pretui/components/field';
-import Tag from '../../components/icons/tag.gts';
+import Tag from '@cardstack/boxel-icons/tag';
 import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -168,8 +168,8 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
                     allow them. Allow it on your key page first.</p>
                   <Button
                     type='button'
-                    @kind='secondary'
-                    @size='small'
+                    @variant='secondary'
+                    @size='s'
                     data-test-swap-key-go-to-key
                     {{on 'click' this.goToKeys}}
                   >Go to your keys</Button>
@@ -185,7 +185,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
           <:actions>
             {{#if @api.forCli}}
               <Button
-                @kind='secondary'
+                @variant='secondary'
                 @disabled={{this.form.saving}}
                 data-test-keys-cancel
                 {{on 'click' @api.close}}
@@ -193,7 +193,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{/if}}
             <Button
               type='submit'
-              @kind='primary'
+              @variant='primary'
               @disabled={{this.submitDisabled}}
               @loading={{this.form.saving}}
               data-test-swap-key-save

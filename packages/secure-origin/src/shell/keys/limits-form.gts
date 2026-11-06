@@ -12,7 +12,7 @@ import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { Input } from '@cardstack/pretui/components/input';
 import type {
   KeyLimitChanges,
@@ -201,8 +201,8 @@ export default class LimitsForm extends Component<Signature> {
       <div class='actions'>
         <Button
           type='submit'
-          @kind='primary'
-          @size='extra-small'
+          @variant='primary'
+          @size='xs'
           @disabled={{this.state.saving}}
           @loading={{this.state.saving}}
           data-test-key-limits-save

@@ -36,6 +36,7 @@
     "@cardstack/pretui": "workspace:*",
     "@glimmer/component": "catalog:",
     "decorator-transforms": "catalog:",
+    "ember-modifier": "^4.1.0",
     "ember-source": "catalog:"
   },
   "devDependencies": {

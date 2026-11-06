@@ -16,13 +16,13 @@ import type { Session } from '../../security/session.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
 import AuthFormField from '../../components/auth-form-field.gts';
 import { Input } from '@cardstack/pretui/components/input';
-import { bool } from '../../helpers/truth-helpers.ts';
+import { bool } from '@cardstack/pretui/helpers';
 import SignInScreen from '../../screens/sign-in.gts';
 import { navigation } from '../navigation.js';
 import { asSentence, signInFailed } from '../sign-in-copy.js';
 import { cliParams, pageURL } from '../urls.js';
 
-import { autofocus } from '../../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 type Config = ReturnType<typeof import('../../security/session.js').readConfig>;
 
@@ -68,7 +68,7 @@ const Fields: TemplateOnlyComponent<{
       @onInput={{@onUsername}}
       name='username'
       data-test-secure-username
-      {{autofocus @focusUsername}}
+      {{focusWhen @focusUsername}}
     />
   </AuthFormField>
   <AuthFormField
@@ -85,7 +85,7 @@ const Fields: TemplateOnlyComponent<{
       @onInput={{@onPassword}}
       name='password'
       data-test-secure-password
-      {{autofocus @focusPassword}}
+      {{focusWhen @focusPassword}}
     />
   </AuthFormField>
 </template>;

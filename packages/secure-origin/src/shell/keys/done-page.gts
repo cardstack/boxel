@@ -4,7 +4,7 @@
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 
 import EditPage from './edit-page.gts';
 
@@ -23,7 +23,7 @@ const DonePage: TemplateOnlyComponent<Signature> = <template>
     </:default>
     <:actions>
       <Button
-        @kind='primary'
+        @variant='primary'
         data-test-keys-done-close
         {{on 'click' @onClose}}
       >Close</Button>

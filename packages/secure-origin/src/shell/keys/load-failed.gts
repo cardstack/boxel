@@ -5,7 +5,7 @@
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import ErrorDisplay from '../../components/error-display.gts';
 
 import type { LoadFailure } from './context.ts';
@@ -27,7 +27,7 @@ const LoadFailed: TemplateOnlyComponent<Signature> = <template>
       </:default>
       <:actions>
         <Button
-          @kind='secondary'
+          @variant='secondary'
           data-test-keys-retry
           {{on 'click' @onRetry}}
         >Try again</Button>
