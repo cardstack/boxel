@@ -10,6 +10,7 @@ import CopyIcon from '@cardstack/boxel-icons/copy';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import IconTrash from '@cardstack/boxel-icons/trash-2';
+import PublishIcon from '@cardstack/boxel-icons/world-upload';
 
 import { format as formatDate } from 'date-fns';
 import { didCancel, dropTask, task } from 'ember-concurrency';
@@ -52,8 +53,8 @@ export type TileStat = { label: string; count: number };
 export const WORKSPACE_TILE_TARGET = '[data-workspace-tile] [data-nav-index]';
 
 // The state and actions of one workspace as the dashboard shows it: its
-// options menu, the delete, archive, duplicate and re-index flows with their
-// modals, and where focus goes once a modal closes.
+// options menu, the publish, delete, archive, duplicate and re-index flows
+// with their modals, and where focus goes once a modal closes.
 // Each workspace component makes its own, since the modals and the focus
 // they return belong to that one item, and keeps only its markup.
 //
@@ -80,6 +81,7 @@ export class WorkspaceActions {
     | { copied: number; total: number }
     | undefined;
   @tracked reindexError: string | undefined;
+  @tracked showPublishModal = false;
 
   #getRealmIdentifier: () => RealmIdentifier;
 
@@ -210,6 +212,10 @@ export class WorkspaceActions {
     return this.realmInfo.name;
   }
 
+  get realmURL() {
+    return this.network.virtualNetwork.toURL(this.realmIdentifier).href;
+  }
+
   get realmURLDescriptionId() {
     return `${guidFor(this)}-realm-url`;
   }
@@ -266,6 +272,15 @@ export class WorkspaceActions {
         action: this.openRealmConfig,
       }),
     );
+    if (this.canPublish) {
+      items.push(
+        new MenuItem({
+          label: 'Publish',
+          icon: PublishIcon,
+          action: this.openPublishModal,
+        }),
+      );
+    }
     if (this.isRealmOwner) {
       items.push(
         new MenuItem({
@@ -373,6 +388,12 @@ export class WorkspaceActions {
     return this.realm.isRealmOwner(this.realmIdentifier);
   }
 
+  // The realm server publishes only for the realm's owner, and only a realm
+  // marked publishable; a published copy isn't.
+  get canPublish() {
+    return this.isRealmOwner && this.realmInfo.publishable === true;
+  }
+
   private get canDuplicateWorkspace() {
     return (
       this.network.virtualNetwork.unresolveURL(
@@ -399,6 +420,20 @@ export class WorkspaceActions {
     }
     let { copied, total } = this.duplicateProgress;
     return `Copying ${copied} of ${total} ${pluralize('file', total)}…`;
+  }
+
+  @action private openPublishModal() {
+    if (!this.canPublish) {
+      return;
+    }
+    this.rememberFocusContext();
+    this.showPublishModal = true;
+  }
+
+  // The publish modal has no focus trap to hand focus back, so it's done here.
+  @action closePublishModal() {
+    this.showPublishModal = false;
+    this.returnFocusTarget()?.focus();
   }
 
   @action private openDeleteModal() {
