@@ -2,6 +2,7 @@ import { transpileAmd } from './amd-transpile/index.ts';
 import { Deferred } from './deferred.ts';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch.ts';
 import { executableExtensions, logger } from './index.ts';
+import { isPathLike } from './loader-plugin.ts';
 
 import {
   CardError,
@@ -1272,31 +1273,23 @@ export class Loader {
     return this.moduleCanonicalURLs.get(this.moduleCacheKey(moduleIdentifier));
   }
 
-  // Collapse a module identifier to its virtual-alias URL form when one
-  // exists, so the dependency tracker keys aren't fragmented across the
-  // virtual-alias (`https://cardstack.com/base/X`) and resolved real URL
-  // (`https://localhost:4201/base/X`) for the same module. Returns the
-  // input unchanged when no virtual alias is registered.
-
-  // The URL a specifier names when imported from `referrer`: the specifier is
-  // mapped by `resolveImport`, then parsed against the referrer. Static imports
-  // and `import.meta.resolve` both go through here, so a module's answer to
-  // "what would `import x` fetch?" is the URL its static `import x` fetches.
-  private resolveDependency(specifier: string, referrer: string): URL {
-    return new URL(this.resolveImport(specifier), new URL(referrer));
-  }
-
   // The namespace object a module's importers receive (ADR 010 §1.1). Its
   // target is the private instance the module body installs its exports on,
-  // so reads go to the live bindings; the traps refuse every write the way a
-  // native module namespace does: `[[Set]]` and `[[DefineOwnProperty]]` fail,
-  // `[[Delete]]` fails for a property the namespace has, and the prototype is
-  // null and cannot be changed. A proxy may only report what its target can
-  // back, so the `Symbol.toStringTag` of 'Module' is a real property of the
-  // target, and `[[IsExtensible]]` reports the target's own extensibility:
-  // `evaluate` makes it non-extensible once the module body has installed its
-  // exports. An importer in a cycle with the module reads the namespace before
-  // that, while it is still extensible.
+  // so reads go to the live bindings. The traps refuse writes as a native
+  // namespace does: `[[Set]]` fails, `[[Delete]]` fails for a property the
+  // namespace has, and the prototype is null and cannot be changed.
+  // `[[OwnPropertyKeys]]` lists the export names sorted, then the symbols, as
+  // native does. `[[DefineOwnProperty]]` always fails. That is stricter than
+  // native, which accepts a descriptor matching the current one; doing the
+  // same takes the non-configurable data properties a native namespace has,
+  // where the transpiler installs configurable getters.
+  //
+  // A proxy may only report what its target can back, so the
+  // `Symbol.toStringTag` of 'Module' is a real property of the target, and
+  // `[[IsExtensible]]` reports the target's own extensibility: `evaluate`
+  // makes it non-extensible once the module body has installed its exports.
+  // An importer in a cycle with the module reads the namespace before that,
+  // while it is still extensible.
   private moduleNamespace(privateModuleInstance: object): object {
     return new Proxy(privateModuleInstance, {
       set(_target, prop) {
@@ -1322,6 +1315,15 @@ export class Loader {
       },
       setPrototypeOf(_target, proto) {
         return proto === null;
+      },
+      // The default sort compares UTF-16 code units, the order the spec gives
+      // a namespace's export names.
+      ownKeys(target) {
+        let keys = Reflect.ownKeys(target);
+        return [
+          ...keys.filter((key) => typeof key === 'string').sort(),
+          ...keys.filter((key) => typeof key === 'symbol'),
+        ];
       },
     });
   }
@@ -1454,7 +1456,10 @@ export class Loader {
           }
           return {
             type: 'dep',
-            moduleURL: this.resolveDependency(depId, moduleIdentifier),
+            moduleURL: new URL(
+              this.resolveImport(depId),
+              new URL(moduleIdentifier),
+            ),
           };
         },
       );
@@ -1527,15 +1532,26 @@ export class Loader {
         switch (entry.type) {
           case 'exports':
             return privateModuleInstance;
-          case '__import_meta__':
+          case '__import_meta__': {
+            let url =
+              this.getCanonicalModuleURL(moduleIdentifier) ?? moduleIdentifier;
             return {
-              url:
-                this.getCanonicalModuleURL(moduleIdentifier) ??
-                moduleIdentifier,
+              url,
               loader: this,
+              // The URL `import(specifier)` from this module loads (ADR 010
+              // §1.2): `loaderPlugin` rewrites `import()` to parse a path-like
+              // specifier against `import.meta.url`, and `Loader.import` maps
+              // what it is given through `resolveImport`.
               resolve: (specifier: string) =>
-                this.resolveDependency(specifier, moduleIdentifier).href,
+                new URL(
+                  this.resolveImport(
+                    isPathLike(specifier)
+                      ? new URL(specifier, url).href
+                      : specifier,
+                  ),
+                ).href,
             };
+          }
           case 'completing-dep':
           case 'dep': {
             let depModule = this.getModule(entry.moduleURL.href);

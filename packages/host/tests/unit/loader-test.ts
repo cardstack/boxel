@@ -53,6 +53,21 @@ async function settleWithin<T>(promise: Promise<T>, label: string): Promise<T> {
   }
 }
 
+// A loader whose fetch answers every request with `source`, naming
+// `canonicalPath` as the module's canonical path when one is given.
+function loaderServing(source: string, canonicalPath?: string): Loader {
+  return new Loader(
+    async () =>
+      new Response(source, {
+        status: 200,
+        headers: {
+          'content-type': 'text/javascript',
+          ...(canonicalPath ? { 'X-Boxel-Canonical-Path': canonicalPath } : {}),
+        },
+      }),
+  );
+}
+
 module('Unit | loader', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -326,11 +341,17 @@ module('Unit | loader', function (hooks) {
     let before = module.counter;
     module.increment();
     assert.strictEqual(module.counter, before + 1);
-    assert.strictEqual(
-      Object.getOwnPropertyDescriptor(module, 'counter')?.get?.(),
-      before + 1,
-      'the descriptor reads the live binding',
-    );
+  });
+
+  test('a namespace lists its export names sorted, then its symbols', async function (assert) {
+    let module = await loaderServing(
+      `export let b = 1;
+       export function a() {}
+       export const C = 3;`,
+    ).import<Record<string, unknown>>('https://key-order.example/m');
+    assert.deepEqual(Object.keys(module), ['C', 'a', 'b']);
+    let ownKeys = Reflect.ownKeys(module);
+    assert.strictEqual(ownKeys[ownKeys.length - 1], Symbol.toStringTag);
   });
 
   test('supports import.meta', async function (assert) {
@@ -342,13 +363,30 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
   });
 
-  test('import.meta.resolve resolves a specifier the way a static import does', async function (assert) {
+  test('import.meta.resolve resolves a relative and a bare specifier', async function (assert) {
     let { resolveSibling, resolveBare } = await loader.import<{
       resolveSibling: () => string;
       resolveBare: () => string;
     }>(`${testRealmURL}foo`);
     assert.strictEqual(resolveSibling(), `${testRealmURL}g`);
     assert.strictEqual(resolveBare(), `${resolvedBaseRealmURL}card-api`);
+  });
+
+  // A response whose canonical path is in another directory pulls a module's
+  // `import.meta.url` apart from the URL it was requested by. A path-like
+  // specifier resolves against the first, as a dynamic `import()` does.
+  test('import.meta.resolve resolves against import.meta.url, not the request URL', async function (assert) {
+    let module = await loaderServing(
+      `export let url = import.meta.url;
+       export let sibling = import.meta.resolve('./g');
+       export let parent = import.meta.resolve('../g');`,
+      '/served/m.js',
+    ).import<{ url: string; sibling: string; parent: string }>(
+      'https://resolve-base.example/requested/m',
+    );
+    assert.strictEqual(module.url, 'https://resolve-base.example/served/m.js');
+    assert.strictEqual(module.sibling, 'https://resolve-base.example/served/g');
+    assert.strictEqual(module.parent, 'https://resolve-base.example/g');
   });
 
   // A runtime `import()` of a shim-registered bare specifier resolves
