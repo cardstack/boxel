@@ -14,6 +14,9 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TOC } from '@ember/component/template-only';
 
+import { Alert } from '@cardstack/pretui/components/alert';
+import { StatusChip } from '@cardstack/pretui/components/status-chip';
+
 import Button from '../../components/button.gts';
 import type { KeyLimitNotice } from '../../security/keys.ts';
 
@@ -74,78 +77,83 @@ const KeyLimitNotices: TOC<Signature> = <template>
         <ul>
           {{#each shown key='id' as |notice|}}
             <li
-              class='notice {{if (reached notice) "reached" "nearing"}}'
               data-test-key-limit-notice={{notice.label}}
               data-test-key-limit-notice-threshold={{notice.threshold}}
             >
-              <p class='summary'>
-                <span class='badge'>
-                  {{#if (reached notice)}}
-                    Limit reached
-                  {{else}}
-                    Nearing limit
-                  {{/if}}
-                </span>
-                {{#if notice.realm}}
-                  {{#if notice.yours}}
-                    <strong>“{{notice.label}}”</strong>, your key shared with
-                  {{else}}
-                    <strong>“{{notice.label}}”</strong>
-                    in
-                  {{/if}}
-                  <strong>{{addressOf notice.realm}}</strong>,
-                {{else}}
-                  Your key
-                  <strong>“{{notice.label}}”</strong>
-                {{/if}}
-                {{#if (reached notice)}}
-                  used its whole
-                  {{periodly notice}}
-                  budget of
-                  {{calls notice.budget}}.
-                {{else}}
-                  is close to its
-                  {{periodly notice}}
-                  budget of
-                  {{calls notice.budget}}.
-                {{/if}}
-              </p>
-              <p class='explain' data-test-key-limit-notice-explain>
-                {{#if (reached notice)}}
+              <Alert @tone={{if (reached notice) 'warning' 'info'}}>
+                <p class='summary'>
+                  <StatusChip
+                    class='badge'
+                    @value={{if
+                      (reached notice)
+                      'Limit reached'
+                      'Nearing limit'
+                    }}
+                    @tone={{if (reached notice) 'warning' 'neutral'}}
+                    @appearance='soft'
+                    @dot={{false}}
+                  />
                   {{#if notice.realm}}
-                    Cards there can’t use it until
-                    {{resets notice}}.
+                    {{#if notice.yours}}
+                      <strong>“{{notice.label}}”</strong>, your key shared with
+                    {{else}}
+                      <strong>“{{notice.label}}”</strong>
+                      in
+                    {{/if}}
+                    <strong>{{addressOf notice.realm}}</strong>,
                   {{else}}
-                    Calls with it are refused until
+                    Your key
+                    <strong>“{{notice.label}}”</strong>
+                  {{/if}}
+                  {{#if (reached notice)}}
+                    used its whole
+                    {{periodly notice}}
+                    budget of
+                    {{calls notice.budget}}.
+                  {{else}}
+                    is close to its
+                    {{periodly notice}}
+                    budget of
+                    {{calls notice.budget}}.
+                  {{/if}}
+                </p>
+                <p class='explain' data-test-key-limit-notice-explain>
+                  {{#if (reached notice)}}
+                    {{#if notice.realm}}
+                      Cards there can’t use it until
+                      {{resets notice}}.
+                    {{else}}
+                      Calls with it are refused until
+                      {{resets notice}}.
+                    {{/if}}
+                  {{else}}
+                    Its count starts over
                     {{resets notice}}.
                   {{/if}}
-                {{else}}
-                  Its count starts over
-                  {{resets notice}}.
-                {{/if}}
-                {{#if notice.yours}}
-                  Raise the budget to keep it working, or leave it as it is.
-                {{else}}
-                  Only the key’s owner can change its limits.
-                {{/if}}
-              </p>
-              <div class='actions'>
-                {{#if notice.realm}}
-                  <Button
-                    @kind='primary'
-                    @size='small'
-                    data-test-key-limit-notice-usage
-                    {{on 'click' (fn @onOpenShareUsage notice)}}
-                  >See usage…</Button>
-                {{else if (if notice.key (@showsKeyUsage notice.key))}}
-                  <Button
-                    @kind='primary'
-                    @size='small'
-                    data-test-key-limit-notice-usage
-                    {{on 'click' (fn @onOpenKeyUsage notice.key)}}
-                  >See usage…</Button>
-                {{/if}}
-              </div>
+                  {{#if notice.yours}}
+                    Raise the budget to keep it working, or leave it as it is.
+                  {{else}}
+                    Only the key’s owner can change its limits.
+                  {{/if}}
+                </p>
+                <div class='actions'>
+                  {{#if notice.realm}}
+                    <Button
+                      @kind='primary'
+                      @size='small'
+                      data-test-key-limit-notice-usage
+                      {{on 'click' (fn @onOpenShareUsage notice)}}
+                    >See usage…</Button>
+                  {{else if (if notice.key (@showsKeyUsage notice.key))}}
+                    <Button
+                      @kind='primary'
+                      @size='small'
+                      data-test-key-limit-notice-usage
+                      {{on 'click' (fn @onOpenKeyUsage notice.key)}}
+                    >See usage…</Button>
+                  {{/if}}
+                </div>
+              </Alert>
             </li>
           {{/each}}
         </ul>
@@ -173,42 +181,12 @@ const KeyLimitNotices: TOC<Signature> = <template>
     p {
       margin: 0;
     }
-    .notice {
-      padding: var(--boxel-sp-sm);
-      border: 1px solid var(--border);
-      border-left-width: 4px;
-      border-radius: var(--boxel-border-radius);
-    }
-    .reached {
-      border-color: var(--warning);
-      background-color: color-mix(in oklab, var(--warning) 10%, var(--card));
-    }
-    .nearing {
-      border-left-color: var(--muted-foreground);
-    }
     .summary {
       line-height: var(--boxel-line-height-sm);
       overflow-wrap: anywhere;
     }
     .badge {
-      display: inline-block;
       margin-right: var(--boxel-sp-4xs);
-      padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-      border-radius: var(--boxel-border-radius-sm);
-      font-size: var(--boxel-font-size-xs);
-      line-height: var(--boxel-line-height-xs);
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      vertical-align: 1px;
-    }
-    .reached .badge {
-      background-color: var(--warning);
-      color: var(--warning-foreground);
-    }
-    .nearing .badge {
-      background-color: var(--muted);
-      color: var(--foreground);
     }
     .explain {
       margin-top: var(--boxel-sp-4xs);

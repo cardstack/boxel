@@ -1,11 +1,11 @@
 // boxel-ui's Button: a <button>, or with `@as='anchor'` an <a>, drawn by
-// kind and size, with a loading indicator while `@loading`. boxel-ui's
+// kind and size, with Pret UI's Spinner while `@loading`. boxel-ui's
 // `link-to` form, which needs the app's router, is left out. The scoped rules
 // are boxel-ui's own, copied in.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 
-import LoadingIndicator from './loading-indicator.gts';
+import { Spinner } from '@cardstack/pretui/components/spinner';
 
 export type ButtonKind =
   | 'default'
@@ -99,7 +99,8 @@ const Button: TemplateOnlyComponent<Signature> = <template>
         ...attributes
       >
         {{#if @loading}}
-          <LoadingIndicator
+          <Spinner
+            @size={{16}}
             class='loading-indicator'
             data-test-boxel-button-loading-indicator
           />
@@ -112,11 +113,6 @@ const Button: TemplateOnlyComponent<Signature> = <template>
     @layer boxelComponentL1 {
       /* Button */
       .boxel-button {
-        --boxel-loading-indicator-size: var(
-          --boxel-button-loading-icon-size,
-          var(--boxel-icon-xs)
-        );
-
         display: inline-flex;
         justify-content: center;
         height: min-content;
@@ -166,8 +162,6 @@ const Button: TemplateOnlyComponent<Signature> = <template>
       }
 
       .loading-indicator {
-        /* boxel-ui passes this as the indicator's @color. */
-        --boxel-loading-indicator-color: var(--boxel-button-text-color);
         margin-right: var(
           --boxel-button-loading-indicator-gap,
           var(--boxel-sp-xxs)
@@ -357,7 +351,6 @@ const Button: TemplateOnlyComponent<Signature> = <template>
       * --boxel-button-min-height
       * --boxel-button-font
       * --boxel-button-letter-spacing
-      * --boxel-loading-indicator-size
       *
       */
 

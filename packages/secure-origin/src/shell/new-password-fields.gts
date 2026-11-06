@@ -1,8 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
+import { Cue } from '@cardstack/pretui/components/cue';
+
 import AuthFormField from '../components/auth-form-field.gts';
 import BoxelInput from '../components/input.gts';
-import ValidationHint from '../components/validation-hint.gts';
 import { autofocus } from '../modifiers/autofocus.ts';
 import type { NewPassword } from './new-password.ts';
 
@@ -44,7 +45,12 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
     />
     {{#if @hints}}
       {{#if @password.passwordValid}}
-        <ValidationHint data-test-password-valid>password is valid</ValidationHint>
+        <Cue
+          @tone='success'
+          @text='password is valid'
+          class='validation-hint'
+          data-test-password-valid
+        />
       {{/if}}
     {{/if}}
   </AuthFormField>
@@ -68,10 +74,21 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
     />
     {{#if @hints}}
       {{#if @password.confirmValid}}
-        <ValidationHint data-test-passwords-match>passwords match</ValidationHint>
+        <Cue
+          @tone='success'
+          @text='passwords match'
+          class='validation-hint'
+          data-test-passwords-match
+        />
       {{/if}}
     {{/if}}
   </AuthFormField>
+  <style scoped>
+    .validation-hint {
+      display: flex;
+      margin-top: var(--boxel-sp-2xs);
+    }
+  </style>
 </template>;
 
 export default NewPasswordFields;
