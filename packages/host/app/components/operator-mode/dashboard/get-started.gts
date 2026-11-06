@@ -14,16 +14,19 @@ import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { didCancel, dropTask, task, timeout } from 'ember-concurrency';
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { modifier } from 'ember-modifier';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import { logger } from '@cardstack/runtime-common';
 
+import PublishRealmDialog from '@cardstack/host/components/operator-mode/publish-realm-dialog';
 import { isHostedRealm } from '@cardstack/host/lib/workspace-list';
 import { NEW_SESSION_NAME } from '@cardstack/host/services/ai-assistant-panel-service';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -90,6 +93,7 @@ interface Signature {
 export default class GetStarted extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
@@ -104,6 +108,9 @@ export default class GetStarted extends Component<Signature> {
   // Just dismissed: a note stands in for the list, with Undo.
   @tracked private dismissedIn: number | undefined;
   private dismissalChanges = new ChangeCounter<boolean>();
+  // The workspace the publish dialog is open for.
+  @tracked private publishRealmURL: string | undefined;
+  private publishButton: HTMLElement | undefined;
   // Dismiss or Undo held focus and is gone, so the control that
   // replaces it takes it.
   private focusNext: 'undo' | 'dismiss' | undefined;
@@ -331,6 +338,39 @@ export default class GetStarted extends Component<Signature> {
     }
   }
 
+  // The user's most recently updated workspace that they can publish: one
+  // they own that is marked publishable.
+  private get workspaceToPublish() {
+    let candidates = this.realmServer.userRealmIdentifiers.filter(
+      (url) =>
+        this.realm.isRealmOwner(url) &&
+        this.realm.info(url).publishable === true,
+    );
+    let updatedAt = (url: string) =>
+      Date.parse(this.realm.info(url).updatedAt ?? '') || 0;
+    return candidates.sort((a, b) => updatedAt(b) - updatedAt(a))[0];
+  }
+
+  private capturePublishButton = modifier((element: HTMLElement) => {
+    this.publishButton = element;
+  });
+
+  @action private openPublishDialog() {
+    let workspace = this.workspaceToPublish;
+    if (workspace) {
+      this.publishRealmURL = this.network.virtualNetwork.toURL(workspace).href;
+    }
+  }
+
+  // The publish modal has no focus trap to hand focus back. Once publishing
+  // ticks the step its button is gone, and focus stays where it lands.
+  @action private closePublishDialog() {
+    this.publishRealmURL = undefined;
+    if (this.publishButton?.isConnected) {
+      this.publishButton.focus();
+    }
+  }
+
   @action private async askBoxelAi() {
     await this.aiAssistantPanelService.openNewSession();
   }
@@ -448,6 +488,22 @@ export default class GetStarted extends Component<Signature> {
                         {{on 'click' @showAgents}}
                         data-test-get-started-action={{step.id}}
                       >Set up an agent</Button>
+                    {{else if (eq step.id 'publish')}}
+                      {{#if this.workspaceToPublish}}
+                        <Button
+                          class='step-action'
+                          @appearance='outlined'
+                          @size='s'
+                          {{on 'click' this.openPublishDialog}}
+                          {{this.capturePublishButton}}
+                          data-test-get-started-action={{step.id}}
+                        >Publish a workspace</Button>
+                      {{else}}
+                        <p
+                          class='step-action step-note'
+                          data-test-get-started-publish-unavailable
+                        >Publishing needs a workspace you own.</p>
+                      {{/if}}
                     {{/if}}
                   {{/unless}}
                 </li>
@@ -474,6 +530,19 @@ export default class GetStarted extends Component<Signature> {
       </div>
     {{else if this.isFinished}}
       <span hidden {{this.dismissWhenFinished}}></span>
+    {{/if}}
+    {{! Sent out of the dashboard so its size container can't trap this
+        fixed-position modal. }}
+    {{#if this.publishRealmURL}}
+      <ToElsewhere
+        @named='modal-elsewhere'
+        @send={{component
+          PublishRealmDialog
+          realmURL=this.publishRealmURL
+          isOpen=true
+          onClose=this.closePublishDialog
+        }}
+      />
     {{/if}}
 
     <style scoped>
@@ -561,6 +630,11 @@ export default class GetStarted extends Component<Signature> {
         font-weight: 500;
       }
       .step-hint {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+      }
+      .step-note {
+        margin: 0;
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }

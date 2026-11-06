@@ -71,6 +71,17 @@ function markHosted(
   });
 }
 
+// The realm server marks a workspace publishable; a published copy isn't.
+function markPublishable(url: string) {
+  let realmResource = (getService('realm') as any).realms.get(url);
+  realmResource.info = new TrackedObject({
+    ...realmResource.info,
+    publishable: true,
+  });
+}
+
+const PUBLISH_MODAL = '[data-test-publish-realm-modal]';
+
 // Records window.open calls instead of opening windows, until restored.
 function stubWindowOpen() {
   let original = window.open;
@@ -222,6 +233,32 @@ module('Acceptance | dashboard', function (hooks) {
       },
     });
   });
+
+  const ownedRealmURL = 'http://test-realm/testuser/workspace-b/';
+  const sharedRealmURL = 'http://test-realm/testuser/workspace-c/';
+
+  // Workspace B, which the user owns too, and Workspace C, which is only
+  // shared with them.
+  function setupMoreWorkspaces(hooks: NestedHooks) {
+    hooks.beforeEach(async function () {
+      for (let [url, name, permissions] of [
+        [ownedRealmURL, 'Workspace B', ['read', 'write', 'realm-owner']],
+        [sharedRealmURL, 'Workspace C', ['read', 'write']],
+      ] as const) {
+        await setupAcceptanceTestRealm({
+          realmURL: url,
+          mockMatrixUtils,
+          permissions: { '@testuser:localhost': [...permissions] },
+          contents: { 'realm.json': realmConfigCardJSON({ name }) },
+        });
+      }
+      mockMatrixUtils.setActiveRealms([
+        realmURL,
+        ownedRealmURL,
+        sharedRealmURL,
+      ]);
+    });
+  }
 
   module('state', function () {
     test('loads the stored state at login', async function (assert) {
@@ -908,6 +945,74 @@ module('Acceptance | dashboard', function (hooks) {
             face.getBoundingClientRect().bottom + 0.5,
           'the error stays within the face, off the name and chip below it',
         );
+      });
+    });
+
+    module('publishing from the menu', function (hooks) {
+      setupMoreWorkspaces(hooks);
+
+      function tile(name: string) {
+        return `[data-test-workspace-list] [data-test-workspace="${name}"]`;
+      }
+
+      async function openMenu(name: string) {
+        await click(`${tile(name)} [data-test-workspace-menu-trigger]`);
+      }
+
+      test("a publishable workspace's Publish opens the publish dialog for that workspace, on the dashboard", async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await waitFor(tile('Workspace B'));
+        markPublishable(realmURL);
+        markPublishable(ownedRealmURL);
+        await settled();
+
+        // Two workspaces, so the dialog can't be showing the same one for
+        // both by chance.
+        for (let [name, path] of [
+          ['Workspace A', 'workspace-a/'],
+          ['Workspace B', 'workspace-b/'],
+        ]) {
+          await openMenu(name);
+          await click('[data-test-boxel-menu-item-text="Publish"]');
+          await waitFor(PUBLISH_MODAL);
+
+          assert.dom(PUBLISH_MODAL).containsText(path, `${name}'s dialog`);
+          assert.dom('[data-test-dashboard]').exists('the dashboard stays');
+
+          await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
+          assert.dom(PUBLISH_MODAL).doesNotExist();
+          assert
+            .dom(`${tile(name)} [data-test-workspace-menu-trigger]`)
+            .isFocused('focus goes back to the menu that opened it');
+        }
+      });
+
+      test("a workspace that isn't publishable has no Publish", async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await waitFor(tile('Workspace B'));
+        markPublishable(realmURL);
+        await settled();
+
+        await openMenu('Workspace B');
+
+        assert
+          .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
+          .exists();
+        assert.dom('[data-test-boxel-menu-item-text="Publish"]').doesNotExist();
+      });
+
+      test('a publishable workspace the user does not own has no Publish', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await waitFor(tile('Workspace C'));
+        markPublishable(sharedRealmURL);
+        await settled();
+
+        await openMenu('Workspace C');
+
+        assert
+          .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
+          .exists();
+        assert.dom('[data-test-boxel-menu-item-text="Publish"]').doesNotExist();
       });
     });
 
@@ -3208,6 +3313,56 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(stepDone('open-card'), 'true');
         assert.strictEqual(stepDone('publish'), 'true');
         assert.strictEqual(stepDone('ask-ai'), 'false');
+      });
+
+      test('with no workspace to publish, the publish step says why instead of offering a button', async function (assert) {
+        await visitAsNewUser();
+        await openSteps();
+
+        assert.dom('[data-test-get-started-action="publish"]').doesNotExist();
+        assert
+          .dom('[data-test-get-started-publish-unavailable]')
+          .hasText('Publishing needs a workspace you own.');
+      });
+
+      module('with workspaces to publish', function (hooks) {
+        setupMoreWorkspaces(hooks);
+
+        test('the publish step opens the publish dialog for the most recently updated workspace the user can publish', async function (assert) {
+          await visitAsNewUser();
+          // Ownership is known once each workspace's session is in.
+          let realmService = getService('realm') as RealmService;
+          await waitUntil(() =>
+            [realmURL, ownedRealmURL].every((url) =>
+              realmService.isRealmOwner(url),
+            ),
+          );
+          let now = Date.now();
+          for (let url of [realmURL, ownedRealmURL, sharedRealmURL]) {
+            markPublishable(url);
+          }
+          markUpdated(realmURL, new Date(now - 60_000));
+          markUpdated(ownedRealmURL, new Date(now - 30_000));
+          // The newest, but shared with the user rather than theirs.
+          markUpdated(sharedRealmURL, new Date(now));
+          await settled();
+          await openSteps();
+
+          assert
+            .dom('[data-test-get-started-publish-unavailable]')
+            .doesNotExist();
+          await click('[data-test-get-started-action="publish"]');
+          await waitFor(PUBLISH_MODAL);
+
+          assert.dom(PUBLISH_MODAL).containsText('workspace-b/');
+          assert.dom(GET_STARTED).exists('the steps stay open behind it');
+
+          await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
+          assert.dom(PUBLISH_MODAL).doesNotExist();
+          assert
+            .dom('[data-test-get-started-action="publish"]')
+            .isFocused('focus goes back to the button');
+        });
       });
 
       test('asking Boxel AI Assistant something ticks the ask step, and opening a session does not', async function (assert) {

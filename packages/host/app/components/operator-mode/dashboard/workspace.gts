@@ -26,6 +26,7 @@ import { Star, StarFilled } from '@cardstack/boxel-ui/icons';
 
 import type { RealmIdentifier } from '@cardstack/runtime-common';
 
+import PublishRealmDialog from '@cardstack/host/components/operator-mode/publish-realm-dialog';
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import { urlDisplayText } from '@cardstack/host/lib/realm-utils';
 import {
@@ -534,6 +535,17 @@ export default class Workspace extends Component<Signature> {
             onConfirm=(perform this.workspace.archiveWorkspaceTask)
             onClose=this.workspace.closeArchiveModal
             returnFocusTarget=this.workspace.returnFocusTarget
+          }}
+        />
+      {{/if}}
+      {{#if this.workspace.showPublishModal}}
+        <ToElsewhere
+          @named='modal-elsewhere'
+          @send={{component
+            PublishRealmDialog
+            realmURL=this.workspace.realmURL
+            isOpen=true
+            onClose=this.workspace.closePublishModal
           }}
         />
       {{/if}}

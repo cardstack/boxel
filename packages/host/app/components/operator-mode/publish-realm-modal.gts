@@ -41,6 +41,7 @@ import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
+import { publishedRealmURLsFromInfo } from '@cardstack/host/lib/utils';
 
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -80,6 +81,8 @@ interface Signature {
   Args: {
     isOpen: boolean;
     onClose: () => void;
+    // The workspace to publish. Without it, the one open in operator mode.
+    realmURL?: string;
     handlePublish: (publishedRealmURLs: string[]) => void;
     publishError?: PublishError | null;
     handleUnpublish: (publishedRealmURL: string) => void;
@@ -151,7 +154,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get isSubdirectoryRealmPublished() {
-    return this.hostModeService.isPublished(this.subdirectoryRealmUrl);
+    return this.isPublished(this.subdirectoryRealmUrl);
   }
 
   get isPublishDisabled() {
@@ -249,7 +252,7 @@ export default class PublishRealmModal extends Component<Signature> {
       return false;
     }
 
-    return this.hostModeService.isPublished(this.claimedDomainPublishedUrl);
+    return this.isPublished(this.claimedDomainPublishedUrl);
   }
 
   get shouldShowUnclaimDomainButton() {
@@ -265,8 +268,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private getFormattedLastPublishedTime(publishedRealmURL: string) {
-    const publishedAt =
-      this.hostModeService.lastPublishedTimestamp(publishedRealmURL);
+    const publishedAt = this.lastPublishedTimestamp(publishedRealmURL);
     if (!publishedAt) {
       return null;
     }
@@ -332,10 +334,7 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get isUnlistedRealmPublished() {
-    return (
-      !!this.unlistedRealmUrl &&
-      this.hostModeService.isPublished(this.unlistedRealmUrl)
-    );
+    return !!this.unlistedRealmUrl && this.isPublished(this.unlistedRealmUrl);
   }
 
   get unlistedLastPublishedTime() {
@@ -418,7 +417,7 @@ export default class PublishRealmModal extends Component<Signature> {
     if (!this.customSubdomainOverrideUrl) {
       return false;
     }
-    return this.hostModeService.isPublished(this.customSubdomainOverrideUrl);
+    return this.isPublished(this.customSubdomainOverrideUrl);
   }
 
   get customSubdomainOverrideLastPublishedTime() {
@@ -460,7 +459,26 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   get currentRealmURL() {
-    return this.hostModeService.realmURL;
+    return this.args.realmURL ?? this.hostModeService.realmURL;
+  }
+
+  private get lastPublishedAt(): Record<string, unknown> {
+    let { lastPublishedAt } = this.realm.info(this.currentRealmURL);
+    return lastPublishedAt && typeof lastPublishedAt === 'object'
+      ? (lastPublishedAt as Record<string, unknown>)
+      : {};
+  }
+
+  private lastPublishedTimestamp(publishedRealmURL: string): number | null {
+    if (!(publishedRealmURL in this.lastPublishedAt)) {
+      return null;
+    }
+    let publishedAt = Number(this.lastPublishedAt[publishedRealmURL] ?? 0);
+    return Number.isFinite(publishedAt) ? publishedAt : 0;
+  }
+
+  private isPublished(publishedRealmURL: string) {
+    return this.lastPublishedTimestamp(publishedRealmURL) !== null;
   }
 
   get subdirectoryRealmUrl() {
@@ -999,9 +1017,9 @@ export default class PublishRealmModal extends Component<Signature> {
       ? this.selectedPublishedRealmURLs
       : [
           ...new Set(
-            this.hostModeService.publishedRealmURLs.map((url) =>
-              this.canonicalSpaceUrl(url),
-            ),
+            publishedRealmURLsFromInfo(
+              this.realm.info(this.currentRealmURL),
+            ).map((url) => this.canonicalSpaceUrl(url)),
           ),
         ];
 
