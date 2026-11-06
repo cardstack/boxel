@@ -75,8 +75,9 @@ function indexCardURL(realmURL: string): string {
 
 // Pins can only move when the index card is reindexed: a write to it, which
 // also covers its other fields, or a reindex of the realm that rewrites it.
-// An edit to a pinned card re-renders the index card's HTML but doesn't
-// reindex it, so it isn't one of these.
+// On the split index path, an edit to a pinned card re-renders the index
+// card's HTML without reindexing it, so it isn't one of these. The fused path
+// (SQLite) reindexes it, which only costs an extra search.
 function indexCardReindexed(
   event: RealmEventContent,
   realmURL: string,
