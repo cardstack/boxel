@@ -4546,6 +4546,46 @@ export class Realm {
           out.push(`== ${label}\nERROR ${e.message}`);
         }
       };
+      if (reqURL.searchParams.has('reservations')) {
+        // Active job reservations, whether their worker process is alive
+        // (worker ids end in -pid-<n>; workers run on this machine), and the
+        // job each one holds.
+        let rows = (await original(
+          `SELECT r.id, r.job_id, r.worker_id, r.locked_until, r.created_at, j.job_type, j.concurrency_group, j.status
+             FROM job_reservations r JOIN jobs j ON j.id = r.job_id
+            WHERE r.completed_at IS NULL AND r.locked_until > NOW()
+            ORDER BY r.created_at`,
+        )) as any[];
+        let alive = (workerId: string) => {
+          let pid = Number(/-pid-(\d+)/.exec(workerId ?? '')?.[1]);
+          if (!pid) return undefined;
+          try {
+            process.kill(pid, 0);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        let annotated = rows.map((r) => ({
+          ...r,
+          workerAlive: alive(r.worker_id),
+        }));
+        out.push(
+          `== active reservations\n${JSON.stringify(annotated, null, 1)}`,
+        );
+        if (reqURL.searchParams.has('release')) {
+          let dead = annotated.filter((r) => r.workerAlive === false);
+          for (let r of dead) {
+            await original(
+              `UPDATE job_reservations SET completed_at = NOW(), completion_reason = 'interrupted' WHERE id = $1 AND completed_at IS NULL`,
+              { bind: [r.id] },
+            );
+          }
+          out.push(
+            `== released ${dead.length} reservations held by dead workers: ${JSON.stringify(dead.map((r) => r.id))}`,
+          );
+        }
+      }
       if (reqURL.searchParams.has('untrigger')) {
         await run(
           'drop prerendered_html trigger',
