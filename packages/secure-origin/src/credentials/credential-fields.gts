@@ -150,7 +150,7 @@ export default class CredentialFields extends Component<Signature> {
                 @controlId={{controlId}}
                 @type={{entry.field.type}}
                 autocomplete={{entry.field.autocomplete}}
-                @placeholder={{entry.field.placeholder}}
+                placeholder={{entry.field.placeholder}}
                 @value={{entry.value}}
                 @invalid={{if entry.error true false}}
                 @errorMessage={{entry.error}}
@@ -177,7 +177,7 @@ export default class CredentialFields extends Component<Signature> {
                 @controlId={{controlId}}
                 @type={{entry.field.type}}
                 autocomplete={{entry.field.autocomplete}}
-                @placeholder={{entry.field.placeholder}}
+                placeholder={{entry.field.placeholder}}
                 @value={{entry.value}}
                 @invalid={{if entry.error true false}}
                 @errorMessage={{entry.error}}
@@ -263,6 +263,7 @@ export default class CredentialFields extends Component<Signature> {
            by before the fields report their height. */
         --pretui-field-h: var(--boxel-form-control-height);
         --pretui-field-font-size: 1em;
+        --pretui-field-message-font-size: var(--boxel-font-size-sm);
         display: flex;
         flex-direction: column;
         margin: 0;

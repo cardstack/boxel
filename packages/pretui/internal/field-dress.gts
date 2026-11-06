@@ -42,8 +42,13 @@ export const FieldDress: TemplateOnlyComponent<FieldDressSignature> =
           );
           --boxel-input-height: var(--boxel-form-control-height);
           --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
-          /* the helper and error rows, a step below the field's text */
-          --boxel-font-size-sm: var(--boxel-font-size-2xs);
+          /* the helper and error rows, a step below the field's text;
+             --pretui-field-message-font-size: opt-in knob, set beside
+             --pretui-field-font-size */
+          --boxel-font-size-sm: var(
+            --pretui-field-message-font-size,
+            var(--boxel-font-size-2xs)
+          );
           --boxel-sp-xs: var(--boxel-sp-3xs);
           /* Select's 0.625rem text inset on both sides, less this edge's 1px
              border. While a validation icon shows, BoxelInput reserves its

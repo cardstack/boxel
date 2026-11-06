@@ -161,12 +161,19 @@ const nameFromLabel = modifier(
 // search icon and focus on open. BoxelSelect's own before-options component
 // turns autofocus off, which leaves the box reachable by pointer only: from
 // the trigger, typing runs typeahead and Tab closes the list.
+// The space kept between an open list and the window's edge, in px.
+const LIST_WINDOW_MARGIN = 8;
+
 interface SelectSearchSignature {
   Args: {
     select: {
       searchText: string;
       isOpen: boolean;
-      actions: { close: (e?: Event) => void; search: (term: string) => void };
+      actions: {
+        close: (e?: Event) => void;
+        search: (term: string) => void;
+        reposition?: () => void;
+      };
     };
     searchEnabled?: boolean;
     onInput: (e: Event) => unknown;
@@ -182,22 +189,36 @@ interface SelectSearchSignature {
   Element: HTMLDivElement;
 }
 
-// Gives the list the marker's scope attribute: the list renders outside any
-// template of this module, so without it this module's scoped rules for the
-// list wouldn't reach it.
-const scopeList = modifier((marker: HTMLElement) => {
-  let list = marker.closest('.ember-power-select-dropdown');
-  if (!list) {
-    return;
-  }
-  for (let { name } of [...marker.attributes]) {
-    if (name.startsWith('data-scopedcss-')) {
-      list.setAttribute(name, '');
-    }
-  }
-});
-
 class SelectSearch extends Component<SelectSearchSignature> {
+  // Runs as the list opens, from a marker this template always renders
+  // inside it. It gives the list the marker's scope attribute: the list
+  // renders outside any template of this module, so without it this
+  // module's scoped rules for the list wouldn't reach it. Then, once the list
+  // is placed, a list wider than the room right of where it starts is held
+  // to that room, so its lines wrap rather than run past the window.
+  fitList = modifier((marker: HTMLElement) => {
+    let list = marker.closest<HTMLElement>('.ember-power-select-dropdown');
+    if (!list) {
+      return;
+    }
+    for (let { name } of [...marker.attributes]) {
+      if (name.startsWith('data-scopedcss-')) {
+        list.setAttribute(name, '');
+      }
+    }
+    let frame = requestAnimationFrame(() => {
+      let { left, right } = list.getBoundingClientRect();
+      let edge = document.documentElement.clientWidth - LIST_WINDOW_MARGIN;
+      if (left >= LIST_WINDOW_MARGIN && right > edge) {
+        let room = `${Math.floor(edge - left)}px`;
+        list.style.setProperty('min-width', room);
+        list.style.setProperty('max-width', room);
+        this.args.select.actions.reposition?.();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
   handleInput = (e: Event) => {
     this.args.onInput(e);
   };
@@ -220,7 +241,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
   });
 
   <template>
-    <span class='pretui-selectlist-scope' hidden {{scopeList}}></span>
+    <span class='pretui-selectlist-scope' hidden {{this.fitList}}></span>
     {{#if @searchEnabled}}
       <div
         class='ember-power-select-search pretui-selectsearch'
@@ -276,8 +297,20 @@ class SelectSearch extends Component<SelectSearchSignature> {
           --_select-px: 0.625rem;
           --_select-h: var(--boxel-form-control-height-sm);
           /* the list matches the trigger's width as a floor, never a ceiling:
-             a trigger sized to a short value must not clip the other labels */
+             a trigger sized to a short value must not clip the other labels.
+             It never runs past the window, though: an option's meta wraps
+             on its own line under the label instead. */
           min-width: max-content;
+          max-width: calc(100vw - 2 * var(--boxel-sp));
+          --boxel-select-option-text-display: block;
+        }
+        /* in the list, an option's meta sits on a line of its own and wraps,
+           since the part that tells two options apart may be at its end */
+        .pretui-select-dropdown :deep(.pretui-select-meta) {
+          display: block;
+          margin-inline-start: 0;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         /* the trigger's type, copied onto the list on each open */
         .pretui-select-dropdown :deep(.boxel-select-option-item) {
@@ -413,6 +446,15 @@ export class Select extends Component<SelectSignature> {
       ? `${this.args.label}: ${this.iconValue}`
       : this.iconValue;
   }
+  // The trigger is one line, so a chosen option's meta can end in an
+  // ellipsis there; its title, like its name, carries the whole of it.
+  get triggerTitle(): string | undefined {
+    if (this.iconFace) {
+      return this.iconName;
+    }
+    let chosen = this.selectedOption;
+    return chosen?.meta ? `${chosen.label} ${chosen.meta}` : undefined;
+  }
   valueId = `${guidFor(this)}-value`;
   // an icon face shows no value, so a caller's label is read with it
   get iconLabelledBy(): string | undefined {
@@ -491,7 +533,7 @@ export class Select extends Component<SelectSignature> {
           this.iconFace
           (component SelectIconFace icon=this.iconFace)
         }}
-        title={{this.iconName}}
+        title={{this.triggerTitle}}
         data-pretui-select-trigger
         data-test-pretui-select-trigger
         as |option|

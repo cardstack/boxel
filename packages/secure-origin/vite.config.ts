@@ -10,6 +10,7 @@ import { buildInputs } from './build/build-inputs.ts';
 import { buildRecord } from './build/build-record.ts';
 import { importAllowlist } from './build/import-allowlist.ts';
 import { layerOrderFirst } from './build/layer-order.ts';
+import { modulePackage } from './build/module-package.ts';
 import { probeOutDir } from './build/probe.ts';
 import { relativeModuleNames } from './build/relative-module-names.ts';
 
@@ -157,9 +158,17 @@ export default defineConfig(({ mode }) => ({
             },
             {
               name: 'shared',
-              test: (id: string) =>
-                id.includes('/node_modules/') ||
-                /\/src\/(components|helpers|modifiers)\//.test(id),
+              // Dependencies, Pret UI, boxel-ui and boxel-icons (this
+              // repository's other packages) included, and this package's
+              // components, helpers and modifiers.
+              test: (id: string) => {
+                let found = modulePackage(id);
+                return (
+                  id.includes('/node_modules/') ||
+                  (found.virtual === undefined && found.workspace) ||
+                  /\/src\/(components|helpers|modifiers)\//.test(id)
+                );
+              },
               // Counted on the modules each entry keeps once unused exports
               // are dropped, so a module the shell reaches through a barrel
               // the credential fields also import (boxel-ui's `components`)
