@@ -135,7 +135,7 @@ export default class ErrorDisplay extends Component<Signature> {
         padding: 0;
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+        --pretui-button-gap: var(--boxel-sp-xxs);
         font-weight: 400;
         border: none;
       }

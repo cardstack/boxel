@@ -2,7 +2,7 @@
 // every button on the sign-in screens is. It paints from the theme's
 // `--boxel-button-*` variables, which the sign-in screens' themes set, over
 // Pret UI's own treatment, so the screens keep their look: a pill, the
-// heavier type, no shadow, and the theme's colours for each variant and for
+// heavier type, no shadow, and the theme's colors for each variant and for
 // a disabled button. A link that looks like a button is drawn by giving it
 // `@href`.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -60,18 +60,6 @@ const AuthButton: TemplateOnlyComponent<Signature> = <template>
       --auth-btn-border: 1px solid
         var(--boxel-button-default-border, var(--border));
     }
-    .auth-btn-default:not(:disabled):hover {
-      --auth-btn-bg: var(
-        --boxel-button-default-active-background,
-        var(--accent)
-      );
-      --auth-btn-fg: var(
-        --boxel-button-default-active-foreground,
-        var(--accent-foreground)
-      );
-      --auth-btn-border: 1px solid
-        var(--boxel-button-default-active-border, var(--border));
-    }
     .auth-btn-primary {
       --auth-btn-bg: var(--boxel-button-primary-background, var(--primary));
       --auth-btn-fg: var(
@@ -89,15 +77,52 @@ const AuthButton: TemplateOnlyComponent<Signature> = <template>
       --auth-btn-border: 1px solid
         var(--boxel-button-secondary-border, var(--secondary));
     }
-    .auth-btn-primary:not(:disabled):hover,
-    .auth-btn-secondary:not(:disabled):hover {
+    /* Hover and press follow boxel-ui's Button: each variant's active
+       colors on hover and press, then a hovered fill at 90%. A button that
+       is disabled or busy takes neither. */
+    .auth-btn-default:not(:disabled, [aria-disabled='true']):is(
+        :hover,
+        :active
+      ) {
+      --auth-btn-bg: var(
+        --boxel-button-default-active-background,
+        var(--accent)
+      );
+      --auth-btn-fg: var(
+        --boxel-button-default-active-foreground,
+        var(--accent-foreground)
+      );
+      --auth-btn-border: 1px solid
+        var(--boxel-button-default-active-border, var(--border));
+    }
+    .auth-btn-primary:not(:disabled, [aria-disabled='true']):is(
+        :hover,
+        :active
+      ) {
+      --auth-btn-bg: var(
+        --boxel-button-primary-active-background,
+        var(--primary)
+      );
+    }
+    .auth-btn-secondary:not(:disabled, [aria-disabled='true']):is(
+        :hover,
+        :active
+      ) {
+      --auth-btn-border: 1px solid
+        var(--boxel-button-secondary-active-border, var(--secondary));
+    }
+    .auth-btn:not(:disabled, [aria-disabled='true']):hover {
       background-color: color-mix(
         in oklab,
         var(--auth-btn-bg) 90%,
         transparent
       );
     }
-    /* A busy button keeps its colours. */
+    .auth-btn:active {
+      transform: none;
+    }
+    /* A busy button keeps its colors, and its label at full strength beside
+       the spinner. */
     .auth-btn:disabled:not([data-state='busy']),
     a.auth-btn[aria-disabled='true'] {
       border: var(--boxel-button-disabled-border, var(--auth-btn-border));
@@ -109,6 +134,7 @@ const AuthButton: TemplateOnlyComponent<Signature> = <template>
       opacity: var(--boxel-button-disabled-opacity, 0.5);
     }
     .auth-btn[data-state='busy'] {
+      --pretui-button-busy-label-opacity: 1;
       opacity: 1;
     }
   </style>

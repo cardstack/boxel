@@ -348,17 +348,15 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                         </div>
                       {{/if}}
                     </div>
-                    <button
-                      type='button'
+                    <Button
                       class='remove'
-                      aria-label='Delete {{key.name}}'
+                      @variant='ghost'
+                      @display='icon'
+                      @icon={{Trash}}
+                      @label='Delete {{key.name}}'
                       data-test-key-delete
                       {{on 'click' (fn this.startDelete key)}}
-                    ><Trash
-                        width='18'
-                        height='18'
-                        aria-hidden='true'
-                      /></button>
+                    >Delete {{key.name}}</Button>
                   </li>
                 {{/each}}
               </ul>
@@ -417,28 +415,19 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         gap: var(--boxel-sp-xs);
         align-items: start;
       }
+      /* Icon-only, as tall as the tile's header, with an 18px icon. */
       .remove {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        --pretui-button-h: 4rem;
         width: var(--boxel-icon-lg);
-        height: 4rem;
-        padding: 0;
-        border: 0;
-        border-radius: var(--boxel-border-radius);
-        background: none;
+        font-size: 0.9rem;
         color: var(--muted-foreground);
-        cursor: pointer;
       }
       .remove:focus-visible,
       .remove:hover {
         color: var(--destructive, var(--boxel-danger));
       }
-      .remove:focus-visible {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-      }
       .action {
-        gap: var(--boxel-sp-5xs, 0.25rem);
+        --pretui-button-gap: var(--boxel-sp-5xs, 0.25rem);
       }
       .action-icon {
         width: 0.75rem;
@@ -495,7 +484,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         gap: var(--boxel-sp-xs);
       }
       .add-new {
-        gap: var(--boxel-sp-3xs);
+        --pretui-button-gap: var(--boxel-sp-3xs);
         width: fit-content;
       }
       .plus {

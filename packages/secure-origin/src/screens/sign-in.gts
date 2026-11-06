@@ -151,6 +151,24 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       font: inherit;
       letter-spacing: inherit;
     }
+    /* On hover and press they change color, with no underline, as
+       boxel-ui's link buttons do. */
+    .forgot-password:is(:hover, :active),
+    .register-link:is(:hover, :active) {
+      text-decoration-line: none;
+    }
+    .forgot-password:is(:hover, :active) {
+      color: var(
+        --boxel-button-link-muted-active-foreground,
+        var(--foreground)
+      );
+    }
+    .register-link:is(:hover, :active) {
+      color: var(
+        --boxel-button-link-primary-active-foreground,
+        color-mix(in oklab, var(--primary) 80%, black)
+      );
+    }
     .forgot-password {
       --host-outline-offset: 2px;
       --pretui-button-fg: var(
@@ -164,10 +182,8 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       margin-inline-start: auto;
     }
     .google-button {
+      --pretui-button-gap: var(--boxel-sp-xs);
       margin-top: var(--boxel-sp-sm);
-    }
-    .google-button :deep(.pretui-btn-label) {
-      gap: var(--boxel-sp-xs);
     }
     .google-g {
       flex-shrink: 0;

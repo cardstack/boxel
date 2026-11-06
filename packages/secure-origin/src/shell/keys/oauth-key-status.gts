@@ -109,7 +109,7 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
       color: var(--muted-foreground);
     }
     .action {
-      gap: var(--boxel-sp-5xs, 0.25rem);
+      --pretui-button-gap: var(--boxel-sp-5xs, 0.25rem);
     }
     .action-icon {
       width: 0.75rem;
