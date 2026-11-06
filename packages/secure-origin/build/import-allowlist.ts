@@ -48,6 +48,7 @@ export const ALLOWED_PACKAGES = new Set([
   '@cardstack/pretui',
   '@cardstack/boxel-ui',
   '@cardstack/boxel-icons',
+  'ember-modifier',
 
   // boxel-ui's run-time dependencies, as ADR 019 §1.3 names them.
   'classnames',
