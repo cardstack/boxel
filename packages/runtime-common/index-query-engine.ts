@@ -2796,11 +2796,15 @@ export class IndexQueryEngine {
               // a term it guesses is common ("compiler") it drives from every
               // typed row and recomputes that row's tsvector as a filter on a
               // primary-key probe (6,449 talks × 0.8 ms = 1.7 s, once for the
-              // page and again for the count).
+              // page and again for the count). A phrase is the exception: the
+              // index holds no word positions, so a fenced phrase rechecks
+              // every row holding all its words across the table (60 s for
+              // "type system"), while the unfenced plan rechecks only the
+              // typed rows.
               pg: [
                 `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
                 ...matchTsQuery(filter),
-                `OFFSET 0)`,
+                filter.matches.includes('"') ? `)` : `OFFSET 0)`,
               ],
               sqlite: [
                 `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
