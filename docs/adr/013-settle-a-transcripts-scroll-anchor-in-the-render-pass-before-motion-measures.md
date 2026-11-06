@@ -18,7 +18,7 @@ scope:
 
 # 013. Settle a transcript's scroll anchor in the render pass, before motion measures
 
-ADR 012 sets how the transcript's scroll owner holds one anchor through every change. This ADR adds what a transcript with a motion layer needs. The owner settles that anchor in the same render pass, before the motion layer measures, so what the reader looks at stays still and only what really moved on screen is animated. Every scroll lands inside a pass, the motion layer counts a scroll as a move, whatever scrolls with the messages takes part in their motion, and a move spends painted frames rather than wall time, so a follow glides even behind a long render. Only what can be seen is wired for motion; a load or a jump lands as layout puts it; and no two blocks are ever drawn over each other. And the latest turn gets shorter only when an activity ends: what it shows live and what it shows settled share one place, so the motion layer carries real change and never has to hide a furniture swap. §1.1 to §1.3, §1.5, §1.6 and §1.12 point to ADR 012; their numbers stay so that citations of them stay valid.
+ADR 012 sets how the transcript's scroll owner holds one anchor through every change. This ADR adds what a transcript with a motion layer needs. The owner settles that anchor in the same render pass, before the motion layer measures, so what the reader looks at stays still and only what really moved on screen is animated. Every scroll lands inside a pass, the motion layer counts a scroll as a move, whatever scrolls with the messages takes part in their motion, and a move spends painted frames rather than wall time, so a follow glides even behind a long render. Only what can be seen is wired for motion; a load or a jump lands as layout puts it; no two blocks are ever drawn over each other, and measuring never moves the scroll. And the latest turn gets shorter only when an activity ends: what it shows live and what it shows settled share one place, so the motion layer carries real change and never has to hide a furniture swap. §1.1 to §1.3, §1.5, §1.6 and §1.12 point to ADR 012; their numbers stay so that citations of them stay valid.
 
 ## 1. Decision
 
@@ -102,6 +102,10 @@ What the reader didn't watch happen MUST land as layout puts it, unanimated: the
 
 Two blocks of a transcript MUST NOT be drawn over each other in any frame. That holds when every wired block moves on one clock (§1.10), when anything a move can bring into view is wired (§1.18), and when a move that needs more than that lands instead (§1.19).
 
+### 1.21. Measuring doesn't move the scroll
+
+The render-pass barrier MUST NOT leave a scroller at a different scroll position because its regions measured. While they put their runs at rest to measure, and until the runs stand again, it MUST hold the scroll height of the nearest scroller above each region in the pass to at least the bottom of its view, so that the browser clamps nothing. It MUST hold a scroller only where doing so moves nothing the regions measure: a scroller laid out in normal flow (block or flow-root) whose own box keeps its size.
+
 ## 2. Rationale
 
 ADR 012 §2 says why the scroll owner holds one anchor by priority.
@@ -126,6 +130,8 @@ The motion layer had been animating these shrinks. That made them smoother, not 
 
 §1.18 to §1.20 came from the same takes. On page load the transcript's score switched on after a fixed timer, while the room's history arrived later, so a 200-message history played as arrivals, each offset by a follow the height of the transcript, and every message was drawn over the others. And an arriving reply took its offset from the median move of the pass: the user bubble above it moved less than the rest, and the reply's first line was drawn over the bubble's last. Every snapshot also measured every message in the room, on every pass, though only a screenful could move on screen.
 
+§1.21 came from a trace of five-turn sessions in which the transcript stopped following on its own. To measure, a region puts its run at rest. A message flying up from below the end carries a translate that adds to the scroll height, so at rest the height was 89 px shorter, and the browser clamped the reader up by that much. The run stood again in the same task, so by the time the scroll event fired the height was back. The scroll owner then saw an upward scroll it didn't write, with no input and no change in size, and took it as the reader leaving (§1.2).
+
 ## 3. Considered options
 
 - **The anchor settled in the SETTLE phase, before measure.** Chosen. The scroll is then part of the state the pass produced, and the motion layer measures the page as the reader will see it.
@@ -136,6 +142,9 @@ The motion layer had been animating these shrinks. That made them smoother, not 
 - **Wiring every message and skipping far ones when compiling the run.** Rejected: the measuring is the cost, and a block that isn't wired must not be read at all.
 - **A fixed delay before motion starts.** Rejected: the history doesn't arrive on a timer, and whatever lands after the delay plays as arrivals.
 - **Holding every block at the tallest height it reached.** Rejected: it fixed the shrink, and left uneven gaps under every finished row.
+- **Putting the scroll back after the runs stand.** Rejected: the regions would still measure at the clamped scroll, and a new run compiled from that measurement starts from where the clamp put things, so the scroll has nowhere to go back to.
+- **A strut in every scroller, whatever its display.** Rejected: in a flex or grid container an extra last child can be aligned, stretched or wrapped around, and the regions would measure a layout that isn't the one they run in. The same holds for a scroller whose own size follows its content.
+- **Ignoring an upward scroll that comes with no input** (ADR 012 §1.2). Rejected: it hides the clamp from one scroll owner, while every region still measures at a scroll the reader didn't choose.
 - **Fading arrivals during a follow.** Rejected: a second pass mid-arrival drops the fade and the arrival shows at full opacity over its neighbor.
 
 ## 4. Sources
@@ -147,6 +156,7 @@ The motion layer had been animating these shrinks. That made them smoother, not 
 - `packages/choreo/tests/integration/choreo/run-clock-test.gts`, and the mid-run scroll case in `settle-test.gts`: §1.8 and §1.11, each failing with its fix disabled.
 - `packages/host/tests/unit/reply-furniture-test.ts`, `card-ref-label-test.ts`: §1.13.
 - `packages/choreo/tests/integration/choreo/in-view-test.gts`: §1.18 and §1.19.
+- `packages/choreo/tests/integration/choreo/measure-scroll-test.gts`: §1.21, failing with its fix disabled.
 
 ## 5. Remediation
 

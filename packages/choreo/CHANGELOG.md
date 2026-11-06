@@ -37,6 +37,15 @@ versions may change behavior until `1.0.0`.
 
 ### Fixed
 
+- **Measuring doesn't move the scroll.** A region measures with its runs' values at rest, and a
+  translate that reached past the end of its scroller had added to the scroll height, so a reader
+  at the end was clamped to the shorter height, and a scroll owner such as a stick-to-bottom
+  transcript took the clamp for the reader scrolling up. While the regions measure, the render
+  pass now holds the scroll height of the nearest block-flow scroller above each region with a
+  hidden block after its content, and takes the block out once the runs stand again. A scroller
+  that is a flex or grid container, or whose own size would change with the block in, is not
+  held. While the block stands, a stylesheet rule that picks the scroller's children by their
+  place among siblings (`:last-child`) doesn't match the real last child.
 - **`animationsSettled()` waits for a text delivery to give its text back.** A `@by='character'`
   or `@by='word'` delivery lands on its own platform animations, which can finish after the run's
   clock has ended. The region now reports `delivery in flight` until the sprite's original text is
