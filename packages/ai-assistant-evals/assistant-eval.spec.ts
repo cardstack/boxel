@@ -528,16 +528,11 @@ async function readActivityOnce(page: Page): Promise<Activity> {
   return page.evaluate(() => {
     let q = (sel: string) => document.querySelectorAll(sel).length;
     let settled = q('[data-test-room-settled]') > 0;
-    // The bar's "new messages" button stays while the panel is not scrolled
-    // to the end, and it takes the place of the bar's other states, the Stop
-    // button among them. Scroll to the last message so the next read sees the
-    // bar's real state; until then the bar counts as busy.
+    // The composer's action bar (its Stop button) shows while the bot works.
+    // The "new messages" chip is not read here: it floats above the bar
+    // without hiding it, and says only where the transcript is scrolled,
+    // which can leave it up in a room that has finished.
     let actionBar = q('[data-test-ai-assistant-action-bar]');
-    let unread = q('[data-test-unread-messages-button]') > 0;
-    if (unread) {
-      let messages = document.querySelectorAll('[data-test-message-idx]');
-      messages[messages.length - 1]?.scrollIntoView({ block: 'end' });
-    }
     // Only a call the host is running. A call still streaming ("preparing")
     // is the model writing, which the stall check below watches instead.
     let applying = q('[data-test-apply-state="applying"]');
@@ -618,8 +613,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     }
     let busy = [
       settled ? '' : 'room not settled',
-      unread ? 'new messages button' : '',
-      actionBar && !unread ? `${actionBar} action bar` : '',
+      actionBar ? `${actionBar} action bar` : '',
       applying ? `${applying} applying` : '',
       preparing ? `${preparing} preparing` : '',
       loading ? 'session preparation' : '',
@@ -650,6 +644,31 @@ async function readActivityOnce(page: Page): Promise<Activity> {
         ),
     };
   });
+}
+
+// The screenshot is judged as what the reader sees at the end of the run, so
+// it should show the transcript's last answer. The transcript can be left
+// scrolled above its end with the "new messages" chip up, even in a finished
+// room. Scroll its scroll area, not the last message: a scroll that lands at
+// the very end is what makes the transcript follow its end again, and a
+// message's own scrollIntoView can stop short of it. Best effort: a page
+// without a transcript is captured as it is.
+async function showTranscriptEnd(page: Page) {
+  try {
+    await page.evaluate(() => {
+      let viewport = document.querySelector<HTMLElement>(
+        '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
+      );
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    });
+    await expect(
+      page.locator('[data-test-unread-messages-button]'),
+    ).toHaveCount(0, { timeout: 2_000 });
+  } catch {
+    // the chip stayed or the page is gone: capture what is there
+  }
 }
 
 async function stopGeneration(page: Page) {
@@ -1449,6 +1468,7 @@ async function runModel(
     result.cardRendered = rendered.cardId;
     result.renderedIn = rendered.where;
     result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+    await showTranscriptEnd(page);
     await page.screenshot({ path: result.screenshot, fullPage: false });
 
     let events = await allRoomEvents(result.roomId, credentials.accessToken);
@@ -1489,6 +1509,7 @@ async function runModel(
     );
     try {
       result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+      await showTranscriptEnd(page);
       await page.screenshot({ path: result.screenshot });
     } catch {
       // the page may be gone

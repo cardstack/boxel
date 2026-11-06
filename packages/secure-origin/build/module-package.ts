@@ -6,6 +6,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 export const PACKAGE_ROOT = join(import.meta.dirname, '..');
+// Where this repository's packages are, this one among them.
+const WORKSPACE_PACKAGES = dirname(PACKAGE_ROOT);
 export const PACKAGE_NAME: string = JSON.parse(
   readFileSync(join(PACKAGE_ROOT, 'package.json'), 'utf8'),
 ).name;
@@ -22,6 +24,10 @@ export type ModulePackage =
   | {
       virtual?: undefined;
       own: boolean;
+      // A package of this repository's other than this one, compiled or read
+      // from its source tree rather than installed: its version doesn't
+      // change when its code does.
+      workspace: boolean;
       name: string | undefined;
       version?: string;
       path: string;
@@ -58,10 +64,20 @@ export function modulePackage(id: string): ModulePackage {
   }
   let found = nearestPackage(dirname(file));
   if (!found) {
-    return { own: false, name: undefined, path: toPosix(file) };
+    return {
+      own: false,
+      workspace: false,
+      name: undefined,
+      path: toPosix(file),
+    };
   }
+  let own = found.root === PACKAGE_ROOT;
   return {
-    own: found.root === PACKAGE_ROOT,
+    own,
+    workspace:
+      !own &&
+      !found.root.split(sep).includes('node_modules') &&
+      !relative(WORKSPACE_PACKAGES, found.root).startsWith('..'),
     name: found.name,
     version: found.version,
     path: toPosix(relative(found.root, file)),

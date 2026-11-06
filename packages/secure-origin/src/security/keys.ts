@@ -779,6 +779,9 @@ export interface BatchSlot {
   // `google-service-account`, `oauth`); only a key of that kind is approved
   // for it.
   keyKind?: string;
+  // The kinds of key that can fill it: the declared one, or every kind its
+  // request can take.
+  kinds?: string[];
   status: BatchSlotStatus;
   snapshot: RequestSnapshot;
   fingerprint: string;
@@ -811,6 +814,9 @@ export interface BatchKey {
   kind: string;
   state: string;
   covers: string[];
+  // The batch's destinations its credential is good at: for an OAuth
+  // connection or client, those its client's API hosts cover.
+  serves?: string[];
 }
 // A share also says whether any of its bindings allows interactive use yet,
 // and the daily budget in force: a share's first interactive approval names
@@ -822,6 +828,7 @@ export interface BatchShare {
   keyName: string;
   keyKind: string;
   covers: string[];
+  serves?: string[];
   interactive: boolean;
   dailyBudget: number;
   // Whether the share's key lets people who aren't signed in use it, and the
@@ -975,17 +982,23 @@ export async function readableRealms(
 
 // The card definitions used in a realm that send the user's own key in a
 // request, by name, or with `slot: 'apiKey'` those that send the realm's key,
-// which a share there is approved for.
+// which a share there is approved for. With `key`, only those that key can
+// fill: of a kind the request takes, at a destination its credential is good
+// at.
 export async function realmCardsWithRequests(
   config: Config,
   realm: string,
-  slot: 'userKey' | 'apiKey' = 'userKey',
+  { slot = 'userKey', key }: { slot?: 'userKey' | 'apiKey'; key?: string } = {},
 ): Promise<{ module: string; name: string; displayName: string }[]> {
   let json = await authorizedRequest(config, '_secure-window/cards', {
     body: {
       data: {
         type: 'secure-window-cards',
-        attributes: slot === 'userKey' ? { realm } : { realm, slot },
+        attributes: {
+          realm,
+          ...(slot === 'userKey' ? {} : { slot }),
+          ...(key === undefined ? {} : { key }),
+        },
       },
     },
   });

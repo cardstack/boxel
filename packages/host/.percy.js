@@ -119,11 +119,13 @@ module.exports = {
         color: inherit !important;
       }
       /*
-       * Land every CSS animation and transition on its final state so Percy
-       * captures aren't racing the animation clock. Negative delay + 1ms
-       * duration fast-forwards each animation past its last keyframe before
-       * the snapshot is taken, which removes the "sending message muted"
-       * and "retry button" opacity/colour mid-transition false positives.
+       * Shorten every CSS animation and transition to 1ms and start it 1ms
+       * in, so a capture that runs them sees the final state instead of
+       * racing the clock (the "sending message muted" and "retry button"
+       * mid-transition false positives). Don't rely on it to reveal content:
+       * Percy can capture an animated element in its base style, as if the
+       * animation never ran. Keep the visible state in the base style and
+       * the hidden start in the from keyframe, with animation-fill-mode: both.
        */
       *, *::before, *::after {
         animation-delay: -1ms !important;

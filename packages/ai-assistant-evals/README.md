@@ -49,7 +49,8 @@ endpoint is the URL.
   "Interactive use not approved"), `expectsNoWrites` marking a
   conversation-only evaluation (the run passes when every prompt was sent and
   nothing was written, with no card to render; any write fails it, as does a
-  seeded card that no longer holds its seed data), and a query-backed
+  seeded card that no longer holds its seed data), `seedScript` naming a seed
+  script whose cards are copied in too (see below), and a query-backed
   `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
   mechanical fields (verdict, turns, cost, caching rate, start and end, tool
@@ -99,19 +100,26 @@ prompt in a single session. `bulk-vendors-invoices` sets all 45 vendors to
 NET 30 (6 already are) past customer cards with the same field, lists the
 unpaid invoices more than 60 days overdue as of a date the prompt names, and
 makes every vendor adopt from a subclass, which takes more files than one
-`run-realm-code` call can write. `bulk-records` raises the variant prices of 60 coffee products, more
-than a search returns when it names no page size, and reassigns a leaving
-agent's open tickets, which is a link change. Their seeds live under
-`eval-realm/bulk-operations/`. Their `expectedChangedCards` list a sample of
-each task's targets, and the judge checks the rest from the workspace
-snapshot. Keep a bulk task under about 100 changed cards: each card a run
-changes adds a correctness check to one Matrix event, and about 100 take that
-event past Matrix's 64 KB limit, which breaks the room.
+`run-realm-code` call can write. `bulk-records` raises the variant prices of 110 coffee products, more
+than two pages of what a search returns when it names no page size, and
+reassigns a leaving agent's open tickets, which is a link change. Their
+definitions live under `eval-realm/bulk-operations/`, with the vendors and
+invoices beside them; `bulk-records` builds its 159 cards from a seed script.
+Their `expectedChangedCards` list a sample of each task's targets, and the
+judge checks the rest from the workspace snapshot.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
 puts it in `initialCards` / `initialFiles`; the runner copies those in before
-the prompt.
+the prompt. A set too large to keep as fixtures comes from a seed script
+instead: a module in `eval-seeds/`, registered in `eval-seeds/index.ts`, that
+builds card documents by path from the realm root, the way host tests hand a
+realm its `contents`, and names which of them are initial, prompt and
+expected changed cards. The evaluation names it in `seedScript`. The runner
+builds the cards when a run starts and copies them in with the rest, and the
+run's `evaluation.json` records them as the seeds the judge compares against.
+A seed script never uses a random source: criteria quote its counts and
+values, so every run must start from the same bytes.
 
 A skill change that targets a core use case adds an evaluation that shows the
 problem it fixes; the `skill-change-eval` skill in `.claude/skills` covers how.
