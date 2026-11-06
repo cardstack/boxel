@@ -1767,7 +1767,7 @@ export class IndexQueryEngine {
     if ('eq' in filter) {
       return this.eqCondition(filter, on, typeConditionRef, polarity);
     } else if ('in' in filter) {
-      return this.inCondition(filter, on, typeConditionRef, polarity);
+      return this.inCondition(filter, on, typeConditionRef, polarity, context);
     } else if ('contains' in filter) {
       return this.containsCondition(filter, on, typeConditionRef);
     } else if ('not' in filter) {
@@ -1962,6 +1962,7 @@ export class IndexQueryEngine {
     on: CodeRef,
     typeConditionRef?: CodeRef,
     polarity: FilterPolarity = 'positive',
+    context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     let typeRef = typeConditionRef;
     return every([
@@ -1972,6 +1973,7 @@ export class IndexQueryEngine {
           values as JSONTypes.Value[],
           on,
           polarity,
+          context,
         );
       }),
     ]);
@@ -2825,6 +2827,7 @@ export class IndexQueryEngine {
     values: JSONTypes.Value[],
     onRef: CodeRef,
     polarity: FilterPolarity = 'positive',
+    context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     if (values.length === 0) {
       // Empty set matches nothing
@@ -2857,11 +2860,27 @@ export class IndexQueryEngine {
         inList.push(fieldValue(key, [param(v)], onRef, 'filter'));
         containments.push(jsonContainsQuery(key, onRef, [param(v)]));
       });
+      // Postgres misestimates an OR of containments ANDed with a separate
+      // type-membership clause, and rechecks every typed row once per value
+      // (~0.5 s a value on 6k cards). An uncorrelated IN becomes a hashed
+      // SubPlan: the GIN index answers the OR once, and each outer row is a
+      // hash probe, whatever else the filter ANDs in. The unqualified
+      // `search_doc` in each containment binds to the subquery's own row.
+      // Keyed on the index's primary key, so it selects exactly the rows the
+      // inline form would.
+      let matched: CardExpression =
+        this.#dbAdapter.kind === 'pg'
+          ? [
+              `(i.url, i.realm_url, i.type) IN (SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE`,
+              ...containments,
+              ')',
+            ]
+          : ['(', ...containments, ')'];
       conditions.push([
         fieldArity({
           type: onRef,
           path: key,
-          value: ['(', ...containments, ')'],
+          value: matched,
           pluralValue: [query, 'IN', '(', ...inList, ')'],
           errorHint: 'filter',
         }),
