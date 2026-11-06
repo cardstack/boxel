@@ -236,9 +236,12 @@ module(basename(import.meta.filename), function (hooks) {
       `the title's words carry weight A: ${row.title_words}`,
     );
     assert.true(
-      row.body_words.includes("'generat'") &&
-        !row.body_words.includes("'compil'"),
+      row.body_words.includes("'generat'"),
       `the body's words carry weight D: ${row.body_words}`,
+    );
+    assert.false(
+      row.body_words.includes("'compil'"),
+      `a title word is not in the body tier: ${row.body_words}`,
     );
   });
 
