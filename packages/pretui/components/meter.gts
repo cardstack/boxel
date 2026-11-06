@@ -22,7 +22,7 @@ export class Meter extends Component<MeterSignature> {
   get bars(): { on: boolean; height: KeptProperty[] }[] {
     let segments = this.segmentsCount;
     let heights = this.args.heights ?? [6, 10, 14];
-    let out = [];
+    let out: { on: boolean; height: KeptProperty[] }[] = [];
     for (let i = 0; i < segments; i++) {
       let h = heights[i] ?? heights[heights.length - 1];
       out.push({
