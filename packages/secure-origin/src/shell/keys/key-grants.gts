@@ -7,7 +7,8 @@
 // every one, then hands the grant to `@onRemove`, which removes it and
 // answers whether it did, in a Pret UI Alert. A card that needs the key there
 // again asks for its approval again. The question takes the place of Remove,
-// so focus moves to its Cancel, and Cancel gives it back to Remove.
+// so focus moves to its Cancel, and Cancel gives it back to Remove, once: when
+// focus moves on from there, a later redraw of the list leaves it where it is.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
@@ -67,6 +68,7 @@ export default class KeyGrants extends Component<Signature> {
                   aria-label='Remove {{hostAndPath grant.destination}}'
                   data-test-key-grant-remove
                   {{focusWhen (eq this.state.returnFocus grant.id)}}
+                  {{on 'blur' this.forgetReturnFocus}}
                   {{on 'click' (fn this.startRemove grant)}}
                 >Remove</Button>
               {{/unless}}
@@ -252,6 +254,10 @@ export default class KeyGrants extends Component<Signature> {
   private cancel = () => {
     this.state.returnFocus = this.state.grant;
     this.state.grant = undefined;
+  };
+
+  private forgetReturnFocus = () => {
+    this.state.returnFocus = undefined;
   };
 
   private remove = async (grant: KeyGrant) => {

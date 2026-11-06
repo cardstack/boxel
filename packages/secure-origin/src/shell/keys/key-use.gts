@@ -16,7 +16,8 @@
 // then hands the key and the workspace to `@onUnshare`, which takes the key's shares
 // there out and answers whether it did. The key stays shared everywhere else.
 // The question takes the place of Unshare, so focus moves to its Cancel, and
-// Cancel gives it back to Unshare.
+// Cancel gives it back to Unshare, once: when focus moves on from there, a
+// later redraw of the list leaves it where it is.
 //
 // An active share that no operation in its workspace is approved to send
 // says so, since until one is, no card there calls with it: the workspace's
@@ -178,6 +179,7 @@ export default class KeyUse extends Component<Signature> {
                           }}'
                           data-test-key-unshare
                           {{focusWhen (eq this.returnFocus workspace.url)}}
+                          {{on 'blur' this.forgetReturnFocus}}
                           {{on 'click' (fn this.ask workspace)}}
                         >Unshare</Button>
                       {{/unless}}
@@ -391,6 +393,10 @@ export default class KeyUse extends Component<Signature> {
   private cancel = () => {
     this.state.returnFocus = this.state.confirming;
     this.state.confirming = undefined;
+  };
+
+  private forgetReturnFocus = () => {
+    this.state.returnFocus = undefined;
   };
 
   private unshare = async (workspace: SharedWorkspace) => {

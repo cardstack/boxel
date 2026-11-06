@@ -1420,6 +1420,71 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-key-grants]').doesNotExist();
   });
 
+  test('a cancelled Remove takes focus back once, not again when the key list is read again', async function (assert) {
+    let removed: string[] = [];
+    let key = (id: string, name: string, grants: unknown[]) => ({
+      type: 'user-key',
+      id,
+      attributes: {
+        name,
+        kind: 'static',
+        state: 'active',
+        createdAt: '2026-10-01T12:00:00.000Z',
+        updatedAt: '2026-10-01T12:00:00.000Z',
+        grants,
+        usedWith: ['github.com'],
+        sharedInto: [],
+      },
+    });
+    let grant = (id: string, destination: string) => ({
+      id,
+      destination,
+      state: 'active',
+      approvedAt: '2026-10-01T12:00:00.000Z',
+    });
+    serve({
+      'GET _user-keys': () =>
+        json(200, {
+          data: [
+            key('key-gh', 'GitHub token', [grant('grant-1', GRAPHQL)]),
+            key(
+              'key-uploads',
+              'Uploads token',
+              removed.includes('grant-2') ? [] : [grant('grant-2', UPLOADS)],
+            ),
+          ],
+        }),
+      'GET _key-bindings': () => json(200, { data: [] }),
+      'DELETE _user-key-grants/grant-2': () => {
+        removed.push('grant-2');
+        return json(200, {
+          data: { id: 'grant-2' },
+          meta: { revokedBindings: [] },
+        });
+      },
+    });
+    visitShell('keys');
+    await render(<template><KeyPage /></template>);
+    await waitFor('[data-test-key-grants]');
+    let graphql = '[data-test-key-grant="api.github.com/graphql/"]';
+    let uploads = '[data-test-key-grant="uploads.github.com/"]';
+
+    await click(`${graphql} [data-test-key-grant-remove]`);
+    await click(`${graphql} [data-test-key-grant-remove-cancel]`);
+    assert.dom(`${graphql} [data-test-key-grant-remove]`).isFocused();
+
+    // Another key's change reads the key list again, which draws every grant
+    // anew.
+    await click(`${uploads} [data-test-key-grant-remove]`);
+    await click(`${uploads} [data-test-key-grant-remove-confirm]`);
+    await settled();
+    assert.deepEqual(removed, ['grant-2']);
+    assert.dom(uploads).doesNotExist('the list was read again');
+    assert
+      .dom(`${graphql} [data-test-key-grant-remove]`)
+      .isNotFocused('an earlier Cancel doesn’t pull focus back on a redraw');
+  });
+
   test('a key is set up for a card from its own page, then approved on the approve page', async function (assert) {
     serve({
       'GET _user-keys': () =>

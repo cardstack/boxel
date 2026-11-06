@@ -227,7 +227,6 @@ export default class UsageSummary extends Component<Signature> {
         scheduled runs.
       </p>
       <Disclosure
-        class='details'
         @size='s'
         @label='Details this month'
         data-test-key-usage-details
@@ -347,15 +346,11 @@ export default class UsageSummary extends Component<Signature> {
         margin: 0;
         color: var(--muted-foreground);
       }
-      .details {
-        font-weight: 600;
-      }
       .detail-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
         gap: var(--boxel-sp-sm);
         margin-top: var(--boxel-sp-xs);
-        font-weight: normal;
       }
       .group {
         display: grid;

@@ -409,10 +409,14 @@ module('Integration | key usage and limits', function (hooks) {
       await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-usage]');
       assert
-        .dom('[data-test-key-usage-budget="day"] .pretui-progress-step')
+        .dom(
+          '[data-test-key-usage-budget="day"] [data-test-pretui-progress-step]',
+        )
         .doesNotExist('a budget of ten calls is one bar');
       assert
-        .dom('[data-test-key-usage-budget="day"] .pretui-progress-fill')
+        .dom(
+          '[data-test-key-usage-budget="day"] [data-test-pretui-progress-fill]',
+        )
         .exists();
     });
 

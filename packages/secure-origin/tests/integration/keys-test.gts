@@ -1233,6 +1233,56 @@ module('Integration | key pages', function (hooks) {
         .hasText('Shared with 2 workspaces', 'and the key stays in the rest');
     });
 
+    test('a cancelled Unshare takes focus back once, not again when the key list is read again', async function (assert) {
+      const DASHBOARD = 'https://realm-server.test/someone/dashboard/';
+      let mapsShared = true;
+      let maps = () => ({
+        ...KEYS[1],
+        sharedInto: mapsShared
+          ? [
+              {
+                url: DASHBOARD,
+                name: 'Dashboard',
+                shares: [
+                  {
+                    id: 'share-maps-dash',
+                    label: 'Maps',
+                    state: 'active' as const,
+                    approvedCalls: 1,
+                  },
+                ],
+              },
+            ]
+          : [],
+      });
+      serve({
+        'GET _user-keys': () => json(200, keyResources([KEYS[0], maps()])),
+        'DELETE _key-shares/share-maps-dash': () => {
+          mapsShared = false;
+          return { status: 204 };
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      let team = `[data-test-key-row="Weather service"] [data-test-key-shared-into-workspace="${REALM}"]`;
+      let mapsDashboard = `[data-test-key-row="Maps"] [data-test-key-shared-into-workspace="${DASHBOARD}"]`;
+
+      await click(`${team} [data-test-key-unshare]`);
+      await click(`${team} [data-test-key-unshare-cancel]`);
+      assert.dom(`${team} [data-test-key-unshare]`).isFocused();
+
+      // Another key's change reads the key list again, which draws every
+      // workspace row anew.
+      await click(`${mapsDashboard} [data-test-key-unshare]`);
+      await click(`${mapsDashboard} [data-test-key-unshare-confirm-button]`);
+      await settled();
+      assert.dom(mapsDashboard).doesNotExist('the list was read again');
+      assert
+        .dom(`${team} [data-test-key-unshare]`)
+        .isNotFocused('an earlier Cancel doesn’t pull focus back on a redraw');
+    });
+
     test('an unshare refused part-way through shows what is left, and unsharing again removes only that', async function (assert) {
       let teamShares = KEYS[0].sharedInto.find((w) => w.url === REALM)!.shares;
       let left = teamShares;

@@ -93,7 +93,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
     return this.args.valueText ?? (this.stepped ? this.args.count : undefined);
   }
   // `@hue` is a caller string, so it goes through `cssValue`; a rejected one
-  // leaves the stylesheet's own fill colour.
+  // leaves the stylesheet's own fill color.
   get keptStyle(): KeptProperty[] {
     return [{ property: '--pretui-progress-hue', value: cssValue(this.args.hue), strength: 'arg' }];
   }
@@ -119,12 +119,12 @@ export class ProgressBar extends Component<ProgressBarSignature> {
       {{#if this.stepped}}
         <div class='pretui-progress-steps'>
           {{#each this.stepList as |s|}}
-            <span class='pretui-progress-step' data-on={{if s.on 'true'}}></span>
+            <span class='pretui-progress-step' data-on={{if s.on 'true'}} data-test-pretui-progress-step></span>
           {{/each}}
         </div>
       {{else}}
         <div class='pretui-progress'>
-          <div class='pretui-progress-fill' {{keepStyle this.fillStyle}}></div>
+          <div class='pretui-progress-fill' {{keepStyle this.fillStyle}} data-test-pretui-progress-fill></div>
         </div>
       {{/if}}
     </div>

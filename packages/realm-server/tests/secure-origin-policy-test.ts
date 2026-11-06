@@ -702,8 +702,10 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     // An Alert's text sits on its own tint, not on the panel, so it is also
-    // measured there: each tone's hue (Pret UI's `ALERT_COLORS`) put through
-    // the Alert rule's own background and colour, on a probe in the panel.
+    // measured there: each tone's hue, put through the Alert rule's own
+    // background and color on a probe in the panel. The hues are a copy of
+    // Pret UI's `ALERT_COLORS`, whose comment points back here; the build
+    // exposes no rule that names them.
     let tinted = await page.evaluate(() => {
       let panel = document.querySelector('[data-test-keys-panel]')!;
       let rule: CSSStyleRule | undefined;
