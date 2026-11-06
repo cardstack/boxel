@@ -17,6 +17,10 @@ import type { ComponentLike } from '@glint/template';
 export interface SelectOption {
   value: string;
   label: string;
+  /** a muted second part after the label, on the trigger and in the list —
+   * an address that tells two options with the same label apart. The
+   * search matches the label alone. */
+  meta?: string;
 }
 
 export const SELECT_DISPLAYS = ['full', 'icon'] as const;
@@ -426,6 +430,12 @@ export class Select extends Component<SelectSignature> {
         as |option|
       >
         <span data-test-pretui-select-option>{{option.label}}</span>
+        {{#if option.meta}}
+          <span
+            class='pretui-select-meta'
+            data-test-pretui-select-option-meta
+          >{{option.meta}}</span>
+        {{/if}}
       </PoweredSelect>
     </div>
     <style scoped>
@@ -541,16 +551,19 @@ export class Select extends Component<SelectSignature> {
             );
           }
         }
-      }
-    </style>
-    {{! template-lint-disable require-scoped-style }}
-    <style>
-      @layer PretComponent {
-        /* Unscoped: the dropdown renders in the wormhole, outside this
-           component's subtree, and BoxelSelect has no knobs for its type or
-           row metrics. The options and the search box take the trigger's
-           type, inline padding and height. */
-        .pretui-select-dropdown.ember-power-select-dropdown {
+        /* an option's meta follows its label on the same line, a shade
+           quieter; it takes the row's color, so it reads on a highlighted
+           row too */
+        .pretui-select-meta {
+          margin-inline-start: var(--boxel-sp-2xs);
+          opacity: 0.7;
+        }
+        /* The dropdown renders in the wormhole, outside this component's
+           subtree, and BoxelSelect has no knobs for its type or row metrics,
+           so these rules name it by its class through :global(). The options
+           and the search box take the trigger's type, inline padding and
+           height. */
+        :global(.pretui-select-dropdown.ember-power-select-dropdown) {
           /* the trigger's padding and default height, restated: the wrapper's
              knobs do not reach the wormhole */
           --_select-px: 0.625rem;
@@ -559,12 +572,12 @@ export class Select extends Component<SelectSignature> {
              a trigger sized to a short value must not clip the other labels */
           min-width: max-content;
         }
-        .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
-        .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+        :global(.pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item),
+        :global(.pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input) {
           letter-spacing: var(--boxel-lsp-xs);
         }
         /* the trigger's type, copied onto the list on each open */
-        .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item {
+        :global(.pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item) {
           font-size: var(--pretui-select-list-font-size);
           line-height: var(--pretui-select-list-line-height);
           min-height: var(--_select-h);
@@ -572,30 +585,29 @@ export class Select extends Component<SelectSignature> {
           padding-inline: var(--_select-px);
         }
         /* the trigger's 1px edge, and its 2px focus ring laid over it */
-        .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+        :global(.pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input) {
           font-size: var(--boxel-font-size-xs);
           line-height: var(--boxel-line-height-xs);
           min-height: var(--_select-h);
           padding-block: 0;
           border: 1px solid var(--border);
         }
-        .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input:focus {
+        :global(.pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input:focus) {
           outline: 2px solid var(--ring);
           outline-offset: -1px;
         }
         /* iOS zooms into inputs under 16px on focus; the options' rows
            grow as Autocomplete's do */
         @media (pointer: coarse) {
-          .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+          :global(.pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input) {
             font-size: var(--boxel-form-control-touch-font-size);
             line-height: var(--boxel-form-control-line-height-sm);
           }
-          .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item {
+          :global(.pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item) {
             padding-block: 0.6em;
           }
         }
       }
     </style>
-    {{! template-lint-enable require-scoped-style }}
   </template>
 }

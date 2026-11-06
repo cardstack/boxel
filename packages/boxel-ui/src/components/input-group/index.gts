@@ -152,6 +152,7 @@ export default class InputGroup extends Component<Signature> {
           <div
             id={{concat 'error-message-' this.elementId}}
             class='error-message'
+            aria-live='polite'
             data-test-boxel-input-group-error-message
           >{{@errorMessage}}</div>
         {{/if}}

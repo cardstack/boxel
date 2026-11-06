@@ -6,7 +6,8 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import SearchIcon from '@cardstack/boxel-icons/search';
 
-export const SEARCH_START_PADDING = 'padding-inline-start: 1.875rem;';
+export const SEARCH_START_INSET = '1.875rem';
+export const SEARCH_START_PADDING = `padding-inline-start: ${SEARCH_START_INSET};`;
 
 interface SearchGlyphSignature {
   Args: { dimmed?: boolean };

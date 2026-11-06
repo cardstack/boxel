@@ -7,7 +7,7 @@ The kit's single-line text control. Every typed value that is not a picker goes 
 ```
 @value?, @placeholder?, @type? (default 'text'), @invalid?, @disabled?, @controlId?
 @onInput?(value: string)
-@helperText?, @errorMessage?, @required?, @optional?
+@helperText?, @errorMessage?, @describedBy? (ids of elements that describe the input, read with the error and helper lines), @required?, @optional?
 ```
 
 `@onInput` receives the **string value**, not the event. That is the kit-wide convention for controls and it is why call sites never touch `event.target`.

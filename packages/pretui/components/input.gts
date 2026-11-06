@@ -1,12 +1,12 @@
 // Pretui — Input: BoxelInput retrofit in Pretui control dress.
 import Component from '@glimmer/component';
-import { htmlSafe } from '@ember/template';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
-import { TYPED_BLOCK_RULES, TYPED_FONT } from '../internal/extras';
+import { TYPED_PROPERTIES, typedProperties } from '../internal/extras';
 import { FieldDress } from '../internal/field-dress';
-import { SEARCH_START_PADDING, SearchGlyph } from '../internal/search-glyph';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
+import { SEARCH_START_INSET, SearchGlyph } from '../internal/search-glyph';
 
 export interface InputSignature {
   Args: ControlAliasArgs & {
@@ -21,6 +21,9 @@ export interface InputSignature {
     helperText?: string;
     /** additive — error line under the control; renders while @invalid */
     errorMessage?: string;
+    /** additive — the id (or ids) of elements that describe the control, such
+     * as a note under it; read with the error and helper lines */
+    describedBy?: string;
     /** additive — native required; also suppresses the optional indicator */
     required?: boolean;
     /** additive — renders an 'Optional' indicator above the control */
@@ -39,21 +42,26 @@ export interface InputSignature {
 // validation-state plumbing, aria-invalid/aria-errormessage/aria-describedby
 // wiring, error + helper message rows — while FieldDress (internal/
 // field-dress) re-dresses it through the token channel, as on every
-// BoxelInput-based control. The
-// inline style beats the two spots the channel cannot reach — the UA font on native controls and element-local
-// var definitions in boxel's own sheet; splatted attributes land on the
-// inner input, so aria-label / autocomplete / min / max keep working.
-// The inline style carries TYPED_BLOCK_RULES (see internal/extras). The
-// inline inset is left to the wrapper's --boxel-sp-sm and
-// --boxel-input-padding-inline-end, so BoxelInput can reserve the validation
-// icon's column. A search input draws the kit's magnifier and clears it with
-// its start padding; Input renders the Optional label itself, so the
-// magnifier's positioned box is the field alone. A color input keeps
+// BoxelInput-based control. `keepStyle` writes, through the CSSOM, the
+// properties the channel cannot reach — the UA font on native controls and
+// element-local var definitions in boxel's own sheet — so the input renders
+// no `style` attribute, as the secure origin's policy requires. Splatted
+// attributes and modifiers land on the inner input, so aria-label /
+// autocomplete / min / max keep working, and a caller's `style` keeps its own
+// declarations beside these. The properties are TYPED_PROPERTIES (see
+// internal/extras). The inline inset is left to the wrapper's --boxel-sp-sm
+// and --boxel-input-padding-inline-end, so BoxelInput can reserve the
+// validation icon's column. A search input draws the kit's magnifier and
+// clears it with its start padding; Input renders the Optional label itself,
+// so the magnifier's positioned box is the field alone. A color input keeps
 // BoxelInput's `padding: 0`, or its swatch shrinks inside the fixed box.
-const SEARCH_INPUT_FONT = htmlSafe(
-  `${TYPED_BLOCK_RULES} ${SEARCH_START_PADDING}`,
-);
-const COLOR_INPUT_FONT = htmlSafe('font: inherit; letter-spacing: inherit;');
+const SEARCH_INPUT_PROPERTIES = typedProperties({
+  'padding-inline-start': SEARCH_START_INSET,
+});
+const COLOR_INPUT_PROPERTIES: KeptProperty[] = [
+  { property: 'font', value: 'inherit', strength: 'arg' },
+  { property: 'letter-spacing', value: 'inherit', strength: 'arg' },
+];
 
 export class Input extends Component<InputSignature> {
   get invalid() {
@@ -89,11 +97,11 @@ export class Input extends Component<InputSignature> {
   get state() {
     return this.invalid ? 'invalid' : 'none';
   }
-  get inputStyle() {
+  get inputProperties(): KeptProperty[] {
     if (this.args.type === 'color') {
-      return COLOR_INPUT_FONT;
+      return COLOR_INPUT_PROPERTIES;
     }
-    return this.isSearch ? SEARCH_INPUT_FONT : TYPED_FONT;
+    return this.isSearch ? SEARCH_INPUT_PROPERTIES : TYPED_PROPERTIES;
   }
   handleInput = (value: string) => {
     emit(
@@ -113,10 +121,11 @@ export class Input extends Component<InputSignature> {
           @readonly={{this.readonly}}
           @state={{this.state}}
           @errorMessage={{unless this.disabled @errorMessage}}
+          @describedBy={{@describedBy}}
           @helperText={{this.helperText}}
           @required={{this.required}}
           @onInput={{this.handleInput}}
-          style={{this.inputStyle}}
+          {{keepStyle this.inputProperties}}
           ...attributes
         />
         {{#if this.isSearch}}

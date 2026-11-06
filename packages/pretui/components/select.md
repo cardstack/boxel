@@ -5,7 +5,7 @@ Choose one value from a known list. Use it when the options are enumerable and t
 ## The contract
 
 ```
-@options: { value, label }[]   (required)
+@options: { value, label, meta? }[]   (required; meta is a muted second part after the label, such as an address that tells two same-named options apart; search matches the label alone)
 @value?, @defaultValue?, @placeholder? (default 'Select…'), @disabled?, @controlId?
 @searchEnabled?   (a search box above the list, focused on open)
 @label?, @labelledBy?   (the trigger's accessible name)
@@ -58,7 +58,7 @@ On touch screens (`pointer: coarse`) the trigger, its placeholder, the options a
 
 The options take the trigger's font size and line height, so setting `--boxel-select-trigger-font-size` and `--boxel-select-trigger-line-height` on your class resizes both. Select copies them onto the list each time it opens. The search box keeps its own size, so on touch screens it stays at 16px.
 
-BoxelSelect has no knobs for the dropdown's type or row metrics, and the wormhole is outside Select's subtree, so Select restyles it through unscoped rules on its dropdown class: the options and search box take the trigger's type, inline padding and height, the search box takes the trigger's hairline and focus ring and an icon inset, and on touch screens the option rows grow as Autocomplete's do. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so `:deep()` rules set them. All of these sit in `@layer PretComponent`, which outranks BoxelSelect's layers.
+BoxelSelect has no knobs for the dropdown's type or row metrics, and the wormhole is outside Select's subtree, so Select restyles it through `:global()` rules on its dropdown class, inside its scoped style (an unscoped `<style>` would be inline style to a policy that refuses it): the options and search box take the trigger's type, inline padding and height, the search box takes the trigger's hairline and focus ring and an icon inset, and on touch screens the option rows grow as Autocomplete's do. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so `:deep()` rules set them. All of these sit in `@layer PretComponent`, which outranks BoxelSelect's layers.
 
 ## React ecosystem
 

@@ -64,6 +64,10 @@ export interface Signature {
   Args: {
     autocomplete?: string;
     bottomTreatment?: InputBottomTreatment;
+    // The id (or space-separated ids) of elements that describe the input,
+    // such as a note under it. They are read with the error message and the
+    // helper text, when those show.
+    describedBy?: string;
     disabled?: boolean;
     errorMessage?: string;
     helperText?: string;
@@ -151,6 +155,18 @@ export default class BoxelInput extends Component<Signature> {
     return this.isInvalid && this.args.errorMessage;
   }
 
+  // The error message describes the input as well as being its
+  // `aria-errormessage`, which screen readers announce unevenly, so the error
+  // is read with the field either way.
+  private get describedBy() {
+    let ids = [
+      this.args.describedBy,
+      this.shouldShowErrorMessage ? `error-message-${this.guid}` : undefined,
+      this.args.helperText ? `helper-text-${this.guid}` : undefined,
+    ].filter(Boolean);
+    return ids.length > 0 ? ids.join(' ') : undefined;
+  }
+
   @action
   private onKeyPress(event: Event) {
     this.args.onKeyPress?.(event as KeyboardEvent);
@@ -192,11 +208,7 @@ export default class BoxelInput extends Component<Signature> {
           disabled={{@disabled}}
           readonly={{@readonly}}
           autocomplete={{@autocomplete}}
-          aria-describedby={{if
-            @helperText
-            (concat 'helper-text-' this.guid)
-            false
-          }}
+          aria-describedby={{this.describedBy}}
           aria-invalid={{if this.isInvalid 'true'}}
           aria-errormessage={{if
             this.shouldShowErrorMessage
