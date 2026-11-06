@@ -20,4 +20,4 @@ BASE_REALM_READY="$BASE_REALM$READY_PATH"
 WAIT_ON_TIMEOUT=600000 START_SERVER_AND_TEST_INSECURE=1 start-server-and-test \
   'pnpm run wait' \
   "$BASE_REALM_READY" \
-  'pnpm playwright test'
+  "MATRIX_TEST_SHARD= pnpm playwright test tests/logout-race-proof.spec.ts tests/host-mode.spec.ts tests/glimmer-scoped-css.spec.ts --grep 'logout race proof|dangling|:global is ignored' --repeat-each=8 --retries=0"
