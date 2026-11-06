@@ -623,6 +623,38 @@ module(basename(import.meta.filename), function () {
       none: { title: 'none', topic: 'a' },
     };
 
+    test("promotion stores each row's full-text vector and keeps it in step with its markdown", async function (assert) {
+      let tsvOf = async (name: string) =>
+        (
+          (await adapter.execute(
+            `SELECT markdown_tsv::text AS tsv FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+            { bind: [url(name)] },
+          )) as { tsv: string | null }[]
+        )[0]?.tsv ?? null;
+      await index({
+        talk: { title: 'talk', __markdown: 'a talk about lighthouses' },
+      });
+      assert.ok(
+        (await tsvOf('talk'))?.includes("'lighthous'"),
+        'the first promotion stores the vector',
+      );
+      await index({ talk: { title: 'talk', __markdown: 'notes on harbours' } });
+      let updated = await tsvOf('talk');
+      assert.ok(updated?.includes("'harbour'"), 'a later pass replaces it');
+      assert.notOk(updated?.includes('lighthous'), 'the old words are gone');
+      await index({ talk: { title: 'talk' } });
+      assert.strictEqual(
+        await tsvOf('talk'),
+        null,
+        'a pass with no markdown clears it',
+      );
+      await index({ talk: { title: 'talk', __markdown: 'notes on harbours' } });
+      let { meta } = await engine.searchCards(new URL(testRealm), {
+        filter: { matches: '"notes on harbours"' },
+      });
+      assert.strictEqual(meta.page.total, 1, 'a phrase finds the promoted row');
+    });
+
     pgvectorTest(
       'indexing copies search-doc vectors into boxel_index_vectors',
       async (assert) => {

@@ -89,11 +89,13 @@ async function seedRow(
     param(Date.now()),
     `)`,
   ]);
-  // The full-text `matches` predicate reads `prerendered_html.markdown`, so
-  // the rendering half of the row — the markdown — is seeded there.
+  // The full-text `matches` predicate reads the rendering half of the row:
+  // its markdown, and the full-text vector the index writer stores beside it
+  // as it promotes a pass (`markdown_tsv`). Seeded directly here, so the
+  // vector is computed the same way the writer computes it.
   await query(dbAdapter, [
-    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, generation, is_deleted, rendered_at)`,
-    `VALUES (`,
+    `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, generation, is_deleted, rendered_at, markdown_tsv)`,
+    `SELECT v.*, CASE WHEN v.markdown IS NULL THEN NULL ELSE to_tsvector('english', markdown_search_text(v.markdown)) END FROM (VALUES (`,
     param(url),
     `,`,
     param(url),
@@ -103,13 +105,13 @@ async function seedRow(
     param('instance'),
     `,`,
     param(markdown),
-    `,`,
+    `::text,`,
     param(1),
-    `,`,
+    `::integer,`,
     param(false),
-    `,`,
+    `::boolean,`,
     param(Date.now()),
-    `)`,
+    `::bigint)) AS v(url, file_alias, realm_url, type, markdown, generation, is_deleted, rendered_at)`,
   ]);
 }
 
@@ -160,38 +162,6 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(meta.page.total, 1, 'one row matched');
       assert.strictEqual(cards.length, 1, 'one card returned');
-    });
-
-    test('the stored markdown_tsv follows markdown on insert, update and clear', async function (assert) {
-      let url = `${testRealmURL}tsv-sync.json`;
-      await seedRow(dbAdapter, { url, markdown: 'a talk about lighthouses' });
-      let tsvOf = async () =>
-        (
-          await dbAdapter.execute(
-            `SELECT markdown_tsv::text AS tsv FROM prerendered_html WHERE url = $1`,
-            { bind: [url] },
-          )
-        )[0]?.tsv as string | null;
-      assert.ok(
-        (await tsvOf())?.includes('lighthous'),
-        'an insert computes the vector',
-      );
-      await dbAdapter.execute(
-        `UPDATE prerendered_html SET markdown = 'notes on harbours' WHERE url = $1`,
-        { bind: [url] },
-      );
-      let updated = await tsvOf();
-      assert.ok(updated?.includes('harbour'), 'an update recomputes it');
-      assert.notOk(updated?.includes('lighthous'), 'the old words are gone');
-      await dbAdapter.execute(
-        `UPDATE prerendered_html SET markdown = NULL WHERE url = $1`,
-        { bind: [url] },
-      );
-      assert.strictEqual(await tsvOf(), null, 'clearing markdown clears it');
-      let { meta } = await engine.searchCards(new URL(testRealmURL), {
-        filter: { matches: '"notes on harbours"' },
-      });
-      assert.strictEqual(meta.page.total, 0, 'a cleared row matches nothing');
     });
 
     test('rejects a multi-operator filter at the engine, not just the wire', async function (assert) {

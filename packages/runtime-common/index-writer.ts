@@ -4166,15 +4166,30 @@ export class Batch {
     }
     let prerenderedColumns = columns.map((c) => [c]);
     let prerenderedNames = columns;
+    // Production rows carry the card's full-text vector in `markdown_tsv`,
+    // which staging doesn't have: it's computed here, from the markdown being
+    // promoted, so every production row's vector matches its markdown and
+    // each render pays for it once. It uses Postgres's own parser and stemmer
+    // so it agrees with the tsquery a search builds. SQLite has no full-text
+    // vector; its `matches` reads the markdown directly.
+    let selectList = (
+      opts?.monotonicGuard
+        ? prerenderedColumns
+        : this.#restampedColumns(prerenderedNames)
+    ).map((expression, index) =>
+      prerenderedNames[index] === 'markdown_tsv'
+        ? [
+            this.#dbAdapter.kind === 'pg'
+              ? `CASE WHEN markdown IS NULL THEN NULL ELSE to_tsvector('english', markdown_search_text(markdown)) END AS markdown_tsv`
+              : 'NULL AS markdown_tsv',
+          ]
+        : expression,
+    );
     await this.#query([
       'INSERT INTO prerendered_html',
       ...addExplicitParens(separatedByCommas(prerenderedColumns)),
       'SELECT',
-      ...separatedByCommas(
-        opts?.monotonicGuard
-          ? prerenderedColumns
-          : this.#restampedColumns(prerenderedNames),
-      ),
+      ...separatedByCommas(selectList),
       'FROM prerendered_html_pending',
       'WHERE',
       ...every([

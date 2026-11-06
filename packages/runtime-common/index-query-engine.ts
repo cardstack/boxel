@@ -1354,13 +1354,20 @@ export class IndexQueryEngine {
           );
         }
         if ((sort ?? []).some(isMatchRelevanceSort)) {
-          relevanceColumn = [',', ...this.matchRelevanceExpression(matches)];
+          relevanceColumn = [
+            ',',
+            ...this.matchRelevanceExpression(
+              matches,
+              opts?.pendingStagingId !== undefined,
+            ),
+          ];
         }
       }
       let { nearColumns, nearJoins } = await this.#nearSortExpressions(sort);
       let { blendColumns, blendJoins } = await this.#blendSortExpressions(
         sort,
         sortsByMatchRelevance ? collectPositiveMatchTerms(filter) : [],
+        opts?.pendingStagingId !== undefined,
       );
       relevanceColumn = [...relevanceColumn, ...nearColumns, ...blendColumns];
       nearJoins = [...nearJoins, ...blendJoins];
@@ -2222,6 +2229,7 @@ export class IndexQueryEngine {
   async #blendSortExpressions(
     sort: Sort | undefined,
     matches: MatchTerm[],
+    staged: boolean,
   ): Promise<{ blendColumns: CardExpression; blendJoins: CardExpression }> {
     let blendColumns: CardExpression = [];
     let blendJoins: CardExpression = [];
@@ -2240,6 +2248,7 @@ export class IndexQueryEngine {
           matches,
           `nb${index}_${j}`,
           blendJoins,
+          staged,
         );
         let direction = component.direction ?? 'desc';
         terms.push([
@@ -2278,10 +2287,11 @@ export class IndexQueryEngine {
     matches: MatchTerm[],
     joinAlias: string,
     joins: CardExpression,
+    staged: boolean,
   ): Promise<CardExpression> {
     if (isMatchRelevanceSort(component)) {
       // ts_rank_cd is 0 for a card the terms don't match: no signal.
-      return ['NULLIF(', ...this.matchRelevanceScore(matches), ', 0)'];
+      return ['NULLIF(', ...this.matchRelevanceScore(matches, staged), ', 0)'];
     }
     if (isNearSort(component)) {
       await this.#assertNearField(
@@ -2393,16 +2403,22 @@ export class IndexQueryEngine {
   //
   // `MAX(...)` lets the value survive `GROUP BY i.url, i.type` (and any
   // table-valued fan-out, where every fanned row shares the same markdown).
-  private matchRelevanceExpression(matches: MatchTerm[]): CardExpression {
+  private matchRelevanceExpression(
+    matches: MatchTerm[],
+    staged: boolean,
+  ): CardExpression {
     return [
-      ...this.matchRelevanceScore(matches),
+      ...this.matchRelevanceScore(matches, staged),
       `AS "${MATCH_RELEVANCE_SORT_KEY}"`,
     ];
   }
 
   // The aggregated relevance value alone (no alias), shared by the
   // `_matchRelevance` column and a `_blend` signal.
-  private matchRelevanceScore(allMatches: MatchTerm[]): CardExpression {
+  private matchRelevanceScore(
+    allMatches: MatchTerm[],
+    staged: boolean,
+  ): CardExpression {
     // Terms scoped to a passage list score the card's best passage; the
     // others score its markdown. A card's relevance is the better of the two.
     let passageTerms = allMatches.filter((m) => m.within);
@@ -2413,7 +2429,7 @@ export class IndexQueryEngine {
     if (passageTerms.length > 0) {
       return [
         'GREATEST(',
-        ...this.matchRelevanceScore(matches),
+        ...this.matchRelevanceScore(matches, staged),
         ', MAX(',
         ...this.#passageRelevance(passageTerms),
         '))',
@@ -2441,7 +2457,7 @@ export class IndexQueryEngine {
       'MAX(',
       dbExpression({
         pg: [
-          `ts_rank_cd(COALESCE(ph.markdown_tsv, ''::tsvector), `,
+          `ts_rank_cd(COALESCE(${markdownVector('ph', staged)}, ''::tsvector), `,
           ...pgTsQuery,
           `, 32)`,
         ],
@@ -2487,7 +2503,7 @@ export class IndexQueryEngine {
           continue;
         }
         selects.push([
-          `SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown_tsv @@`,
+          `SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
           ...matchTsQuery(branch),
         ]);
         continue;
@@ -2804,7 +2820,7 @@ export class IndexQueryEngine {
               // "type system"), while the unfenced plan rechecks only the
               // typed rows.
               pg: [
-                `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown_tsv @@`,
+                `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
                 ...matchTsQuery(filter),
                 filter.matches.includes('"') ? `)` : `OFFSET 0)`,
               ],
@@ -3606,6 +3622,17 @@ function tableFromOpts(opts: WIPOptions | undefined) {
 // The prerendered_html rows paired with the boxel_index rows `tableFromOpts`
 // selects: the same pass's staged HTML rows for a staged read, the production
 // table otherwise.
+// A card's full-text vector, as `matches` and relevance read it. Production
+// rows carry it in `markdown_tsv`, which the index writer computes as it
+// promotes a pass (see `promotePrerenderedHtmlPending`); a pass's staged rows
+// don't carry it, so a search over them computes it inline, which is
+// affordable because staging only ever holds one pass.
+function markdownVector(alias: string, staged: boolean): string {
+  return staged
+    ? `to_tsvector('english', markdown_search_text(${alias}.markdown))`
+    : `${alias}.markdown_tsv`;
+}
+
 function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
   return opts?.pendingStagingId === undefined
     ? 'prerendered_html'

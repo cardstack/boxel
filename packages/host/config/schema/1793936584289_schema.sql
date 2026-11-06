@@ -187,7 +187,6 @@
    captures BLOB,
    job_id INTEGER,
    staging_id TEXT NOT NULL,
-   markdown_tsv,
    PRIMARY KEY ( realm_url, staging_id, url, type ) 
 );
 
