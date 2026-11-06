@@ -21,7 +21,7 @@ import { Card } from '@cardstack/pretui/components/card';
 import { Item } from '@cardstack/pretui/components/item';
 import { StatusChip } from '@cardstack/pretui/components/status-chip';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import type { KeyPolicyNotice } from '../../security/keys.ts';
 
 import type { ListedKey } from './context.ts';
@@ -161,14 +161,14 @@ const KeyPolicyNotices: TOC<Signature> = <template>
                 <:action>
                   <div class='actions'>
                     <Button
-                      @kind='primary'
-                      @size='small'
+                      @variant='primary'
+                      @size='s'
                       data-test-key-policy-notice-allow
                       {{on 'click' (fn @onAllow request.key)}}
                     >Allow anonymous use…</Button>
                     <Button
-                      @kind='secondary'
-                      @size='small'
+                      @variant='secondary'
+                      @size='s'
                       @loading={{isDeclining @declining request.notice.id}}
                       data-test-key-policy-notice-decline
                       {{on 'click' (fn @onDecline request.notice)}}

@@ -11,7 +11,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { Card } from '@cardstack/pretui/components/card';
 
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 
 import type { UserKey } from './context.ts';
 import KeyMark from './key-mark.gts';

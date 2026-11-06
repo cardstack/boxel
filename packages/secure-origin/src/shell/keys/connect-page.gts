@@ -32,11 +32,11 @@ import {
   windowContext,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { Field } from '@cardstack/pretui/components/field';
 import { Alert } from '@cardstack/pretui/components/alert';
 import KeyRound from '@cardstack/boxel-icons/key-round';
-import Tag from '../../components/icons/tag.gts';
+import Tag from '@cardstack/boxel-icons/tag';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
 import {
@@ -178,7 +178,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{#if this.backToKeys}}
               <Button
                 type='button'
-                @kind='secondary'
+                @variant='secondary'
                 data-test-connect-back
                 {{on 'click' this.back}}
               >Back to your keys</Button>
@@ -186,7 +186,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{#if this.choosing.clients.length}}
               <Button
                 type='submit'
-                @kind='primary'
+                @variant='primary'
                 @disabled={{this.submitDisabled}}
                 @loading={{this.form.connecting}}
                 data-test-connect-submit

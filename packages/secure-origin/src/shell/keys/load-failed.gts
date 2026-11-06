@@ -12,7 +12,7 @@ import { Alert } from '@cardstack/pretui/components/alert';
 import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { KeyValue } from '@cardstack/pretui/components/key-value';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 
 import type { LoadFailure } from './context.ts';
 import EditPage from './edit-page.gts';
@@ -104,8 +104,8 @@ const LoadFailed: TemplateOnlyComponent<Signature> = <template>
       >
         <:default><ErrorDetails @failure={{@failure}} /></:default>
         <:action><Button
-            @kind='secondary'
-            @size='small'
+            @variant='secondary'
+            @size='s'
             data-test-keys-retry
             {{on 'click' @onRetry}}
           >Try again</Button></:action>

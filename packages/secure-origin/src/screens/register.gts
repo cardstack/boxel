@@ -20,7 +20,7 @@ import BoxelInput from '../components/input.gts';
 import InputGroup, {
   type InputGroupValidationState,
 } from '../components/input-group.gts';
-import { autofocus } from '../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface RegisterFormSignature {
   Args: {
@@ -88,7 +88,7 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
             @errorMessage={{@nameError}}
             @onInput={{@onNameInput}}
             @onBlur={{@onNameBlur}}
-            {{autofocus (if @autofocus true false)}}
+            {{focusWhen (if @autofocus true false)}}
           />
         </AuthFormField>
         <AuthFormField
@@ -256,7 +256,7 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
           placeholder='Enter invite code'
           @errorMessage={{@tokenError}}
           @onInput={{@onTokenInput}}
-          {{autofocus (if @autofocus true false)}}
+          {{focusWhen (if @autofocus true false)}}
         />
       </AuthFormField>
       <div class='button-wrapper'>

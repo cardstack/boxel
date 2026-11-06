@@ -17,7 +17,7 @@ import { KeyValue } from '@cardstack/pretui/components/key-value';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { StatusChip } from '@cardstack/pretui/components/status-chip';
 
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 import type { KeyUsage } from '../../security/keys.ts';
 import { hostAndPath } from './key-grants.gts';
 

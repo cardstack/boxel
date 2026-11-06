@@ -25,12 +25,12 @@ import {
   type SharedWorkspace,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { Field } from '@cardstack/pretui/components/field';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import { Alert } from '@cardstack/pretui/components/alert';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import { navigation } from '../navigation.js';
 import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
@@ -199,13 +199,13 @@ class UseKey extends Component<{
           <:actions>
             <Button
               type='button'
-              @kind='secondary'
+              @variant='secondary'
               data-test-use-key-cancel
               {{on 'click' this.goToKeys}}
             >Cancel</Button>
             <Button
               type='submit'
-              @kind='primary'
+              @variant='primary'
               @disabled={{this.nextDisabled}}
               data-test-use-key-next
             >Next</Button>

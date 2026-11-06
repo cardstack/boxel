@@ -6,7 +6,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { KeyValue } from '@cardstack/pretui/components/key-value';
 
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 
 import type { UserKey } from './context.ts';
 

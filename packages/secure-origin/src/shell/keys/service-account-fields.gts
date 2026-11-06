@@ -12,9 +12,9 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 import { Field } from '@cardstack/pretui/components/field';
-import Globe from '../../components/icons/globe.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Tag from '../../components/icons/tag.gts';
+import Globe from '@cardstack/boxel-icons/globe';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import Tag from '@cardstack/boxel-icons/tag';
 import BoxelInput from '../../components/input.gts';
 
 import type { ServiceAccountDetails } from './context.ts';

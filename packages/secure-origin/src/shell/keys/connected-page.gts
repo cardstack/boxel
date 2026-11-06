@@ -30,7 +30,7 @@ import { cliCallback, handToCli } from '../../security/cli-handoff.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
 import { completeConnect, showKey } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { navigation } from '../navigation.js';
 import MessagePage from '../sign-in/message-page.gts';
 import { pageURL } from '../urls.js';
@@ -156,23 +156,23 @@ class Connected extends Component<{ Args: ConnectedArgs }> {
             card, so it leads; closing leaves the card blocked. }}
           {{#if @approval}}
             <Button
-              @kind='secondary'
+              @variant='secondary'
               data-test-connected-close
               {{on 'click' @api.close}}
             >Close</Button>
             <Button
-              @kind='primary'
+              @variant='primary'
               data-test-connected-approval
               {{on 'click' this.backToApproval}}
             >Back to the approval</Button>
           {{else}}
             <Button
-              @kind='secondary'
+              @variant='secondary'
               data-test-connected-keys
               {{on 'click' this.keys}}
             >Back to your keys</Button>
             <Button
-              @kind='primary'
+              @variant='primary'
               data-test-connected-close
               {{on 'click' @api.close}}
             >Close</Button>
@@ -313,7 +313,7 @@ class ReturnToCli extends Component<{
       >
         <div class='actions'>
           <Button
-            @kind='primary'
+            @variant='primary'
             data-test-connected-cli-continue
             {{on 'click' this.handOver}}
           >Continue in the terminal</Button>

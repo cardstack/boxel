@@ -16,10 +16,10 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
 
 import { Field } from '@cardstack/pretui/components/field';
-import Globe from '../../components/icons/globe.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
+import Globe from '@cardstack/boxel-icons/globe';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import BoxelInput from '../../components/input.gts';
 
 import { readConfig } from '../../security/session.js';
