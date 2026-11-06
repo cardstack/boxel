@@ -14,6 +14,12 @@
 // destination. Opened with `#reconnect=<key id>`, from a connection on the key
 // page, it signs that connection in again under its own name. With no app to
 // offer, it says who can set one up.
+//
+// Reached from an approve page's "Add a new key" (`then=approve` or
+// `then=review-changes`, by way of `enter-key`), it keeps that page for
+// `connected` to go back to once the user has signed in, with the new
+// connection chosen (`approval-return.ts`). An approval `boxel keys approve`
+// opened is still the CLI's here: closing the window cancels it.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -39,6 +45,7 @@ import {
   pageTitle,
 } from './trail.ts';
 
+import { approvalPageThen, keepApprovalForSignIn } from './approval-return.ts';
 import ClientPicker from './client-picker.gts';
 import {
   failureMessage,
@@ -53,7 +60,7 @@ import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { contextRequest, openedFor } from './opened-for.ts';
+import { cliOpenedFor, contextRequest, openedFor } from './opened-for.ts';
 import { addressOf } from './workspace-dropdown.gts';
 
 // The app that starts out chosen: the only one offered, or the one app that
@@ -380,6 +387,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
           ? { client: client.ref, reconnect: choosing.connection.id }
           : { client: client.ref, name: this.form.name.trim() },
       );
+      keepApprovalForSignIn(authorizeUrl);
       navigation.assign(authorizeUrl);
     } catch (e) {
       this.form.connecting = false;
@@ -394,8 +402,15 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
 
 export default class ConnectPage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Your keys' @page='connect' as |api|>
+    <KeysWindow
+      @title='Boxel · Your keys'
+      @page='connect'
+      @cli={{this.cli}}
+      as |api|
+    >
       <Connect @api={{api}} />
     </KeysWindow>
   </template>
+
+  private cli = approvalPageThen() ? cliOpenedFor().cli : undefined;
 }

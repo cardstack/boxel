@@ -6,9 +6,15 @@
 // exchanges the code, and only for the user who started the sign-in, so a
 // sign-in link someone else started can't put this user's account under
 // theirs. The page then says what happened in plain words, naming a new
-// connection as the key listing does. The window can't tell whether it was opened for
-// something, so it offers to close and to go back to the user's keys, and
-// closes itself only when the user asks.
+// connection as the key listing does, and offers to close and to go back to
+// the user's keys, closing itself only when the user asks.
+//
+// A sign-in started for an approve page (its "Add a new key", by way of
+// `enter-key` and `connect`) goes back to that page once connected, with the
+// new connection chosen. One that failed says why and offers the way back to
+// the approval in place of the user's keys. The approve page is the one
+// `connect` kept in this window's session storage for the sign-in's `state`
+// (`approval-return.ts`).
 //
 // A sign-in `boxel keys connect` started also names the CLI's loopback
 // listener (`cli_port`, `cli_state`). The page then finishes nothing itself
@@ -29,10 +35,12 @@ import { navigation } from '../navigation.js';
 import MessagePage from '../sign-in/message-page.gts';
 import { pageURL } from '../urls.js';
 
+import { approvalPageAfter, takeApprovalForSignIn } from './approval-return.ts';
 import { isSignedOut, LinkError, loadFailure } from './context.ts';
 import EditPage from './edit-page.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
+import { cliOpenedFor } from './opened-for.ts';
 
 // Why a sign-in failed, as the realm server's callback names it, in the
 // words the page uses.
@@ -103,9 +111,14 @@ type State =
   | { name: 'failed'; heading: string; message: string }
   | { name: 'unknown' };
 
-class Connected extends Component<{
-  Args: { api: KeysWindowAPI; outcome: Outcome };
-}> {
+interface ConnectedArgs {
+  api: KeysWindowAPI;
+  outcome: Outcome;
+  // The fragment of the approve page this sign-in was started for.
+  approval?: string;
+}
+
+class Connected extends Component<{ Args: ConnectedArgs }> {
   <template>
     {{#if this.loading}}
       <BusyMessage class='busy' @title='Loading…' />
@@ -139,16 +152,31 @@ class Connected extends Component<{
           </p>
         </:default>
         <:actions>
-          <Button
-            @kind='secondary'
-            data-test-connected-keys
-            {{on 'click' this.keys}}
-          >Back to your keys</Button>
-          <Button
-            @kind='primary'
-            data-test-connected-close
-            {{on 'click' @api.close}}
-          >Close</Button>
+          {{! Reached for an approval, going back to it is what unblocks the
+            card, so it leads; closing leaves the card blocked. }}
+          {{#if @approval}}
+            <Button
+              @kind='secondary'
+              data-test-connected-close
+              {{on 'click' @api.close}}
+            >Close</Button>
+            <Button
+              @kind='primary'
+              data-test-connected-approval
+              {{on 'click' this.backToApproval}}
+            >Back to the approval</Button>
+          {{else}}
+            <Button
+              @kind='secondary'
+              data-test-connected-keys
+              {{on 'click' this.keys}}
+            >Back to your keys</Button>
+            <Button
+              @kind='primary'
+              data-test-connected-close
+              {{on 'click' @api.close}}
+            >Close</Button>
+          {{/if}}
         </:actions>
       </EditPage>
     {{/if}}
@@ -177,7 +205,7 @@ class Connected extends Component<{
     ),
   );
 
-  constructor(owner: Owner, args: { api: KeysWindowAPI; outcome: Outcome }) {
+  constructor(owner: Owner, args: ConnectedArgs) {
     super(owner, args);
     this.load();
   }
@@ -217,6 +245,18 @@ class Connected extends Component<{
       }
     }
     if (connected) {
+      // Back to the approval this sign-in was started for, with the new
+      // connection chosen. Only a sign-in finished here is known to be the
+      // one that approval started.
+      let approval =
+        this.args.approval && code && state
+          ? approvalPageAfter(connected, this.args.approval)
+          : undefined;
+      if (approval) {
+        this.args.api.visit.loaded();
+        navigation.replace(approval);
+        return;
+      }
       try {
         let key = await showKey(this.args.api.config, connected);
         this.page.state = { name: 'connected', keyName: key.name };
@@ -246,6 +286,16 @@ class Connected extends Component<{
   }
 
   private keys = () => navigation.assign(pageURL('keys'));
+
+  // In place of this page, which has nothing to show once its outcome has
+  // been read, so the browser's back button doesn't return to it.
+  private backToApproval = () => {
+    let approval =
+      this.args.approval && approvalPageAfter(undefined, this.args.approval);
+    if (approval) {
+      navigation.replace(approval);
+    }
+  };
 }
 
 // Hands a sign-in the CLI started back to it, once the user says to: the
@@ -302,13 +352,31 @@ export default class ConnectedPage extends Component {
     {{#if this.cliOutcome}}
       <ReturnToCli @outcome={{this.cliOutcome}} />
     {{else}}
-      <KeysWindow @title='Boxel · Your keys' @page='connected' as |api|>
-        <Connected @api={{api}} @outcome={{this.outcome}} />
+      <KeysWindow
+        @title='Boxel · Your keys'
+        @page='connected'
+        @cli={{this.approvalCli}}
+        as |api|
+      >
+        <Connected
+          @api={{api}}
+          @outcome={{this.outcome}}
+          @approval={{this.approval}}
+        />
       </KeysWindow>
     {{/if}}
   </template>
 
   private outcome = takeOutcome();
+  // A sign-in `boxel keys connect` started is the CLI's own, for no approval.
+  private approval = this.outcome.cli
+    ? undefined
+    : takeApprovalForSignIn(this.outcome.state);
+  // An approval `boxel keys approve` opened is still the CLI's here: closing
+  // the window cancels it.
+  private approvalCli = this.approval
+    ? cliOpenedFor(this.approval).cli
+    : undefined;
 
   private get cliOutcome() {
     let { cli } = this.outcome;
