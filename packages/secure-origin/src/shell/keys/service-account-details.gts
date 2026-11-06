@@ -14,23 +14,27 @@ interface Signature {
   Args: { key: UserKey };
 }
 
-const EMAIL = 'Service account';
-const SUBJECT = 'Acts as';
-const SCOPES = 'Scopes';
-
-// Each row's value is drawn by the template, by its key.
-const ROWS = [EMAIL, SUBJECT, SCOPES].map((key) => ({ key, value: '' }));
+// One row per detail; `field` says which value the row draws.
+const ROWS: {
+  key: string;
+  value: string;
+  field: 'email' | 'subject' | 'scopes';
+}[] = [
+  { key: 'Service account', value: '', field: 'email' },
+  { key: 'Acts as', value: '', field: 'subject' },
+  { key: 'Scopes', value: '', field: 'scopes' },
+];
 
 const ServiceAccountDetails: TemplateOnlyComponent<Signature> = <template>
   {{#if @key.serviceAccount}}
     <KeyValue class='details' @items={{ROWS}} data-test-service-account-details>
       <:value as |row|>
-        {{#if (eq row.key EMAIL)}}
+        {{#if (eq row.field 'email')}}
           <span
             class='code'
             data-test-service-account-detail='email'
           >{{@key.serviceAccount.email}}</span>
-        {{else if (eq row.key SUBJECT)}}
+        {{else if (eq row.field 'subject')}}
           <span data-test-service-account-detail='subject'>
             {{#if @key.serviceAccount.subject}}
               <span class='code'>{{@key.serviceAccount.subject}}</span>
