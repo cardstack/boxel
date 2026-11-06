@@ -1,11 +1,17 @@
 import { module, test } from 'qunit';
 
-import type { CodeRef, Query } from '@cardstack/runtime-common';
+import {
+  assertQuery,
+  InvalidQueryError,
+  type CodeRef,
+  type Query,
+} from '@cardstack/runtime-common';
 
 import { pruneEmptyQueryParts } from '@cardstack/host/utils/search/prune-empty-query';
 
+const listingModule = '@cardstack/catalog/catalog-app/listing/listing';
 const listing = {
-  module: '@cardstack/catalog/catalog-app/listing/listing',
+  module: listingModule,
   name: 'Listing',
 } as unknown as CodeRef;
 
@@ -71,6 +77,92 @@ module('Unit | prune-empty-query', function () {
       },
       sort: [{ by: 'cardTitle' }],
     });
+  });
+
+  test('keeps a part of the wrong shape for validation to refuse', function (assert) {
+    // Not left unfilled: dropping one of these would widen the search, often
+    // to everything, without an error.
+    let cases: [unknown, unknown][] = [
+      ['invoice', 'invoice'],
+      [
+        { every: { eq: { title: 'Invoice' } } },
+        { every: { eq: { title: 'Invoice' } } },
+      ],
+      [{ any: ['invoice', 'bill'] }, { any: ['invoice', 'bill'] }],
+      [{ type: 'Invoice' }, { type: 'Invoice' }],
+      [{ on: 'Spec' }, { on: 'Spec' }],
+      [
+        { type: { module: listingModule, name: '' } },
+        { type: { module: listingModule, name: '' } },
+      ],
+      [
+        { on: listing, matches: ['invoice', 'bill'] },
+        { on: listing, matches: ['invoice', 'bill'] },
+      ],
+      [
+        { every: [{ on: listing }, 'invoice'] },
+        { every: [{ type: listing }, 'invoice'] },
+      ],
+      [
+        { on: 'Spec', matches: 'invoice' },
+        { on: 'Spec', matches: 'invoice' },
+      ],
+      [
+        { on: listing, matches: 'invoice', not: 'draft' },
+        { on: listing, matches: 'invoice', not: 'draft' },
+      ],
+      [{ not: 'draft' }, { not: 'draft' }],
+    ];
+    for (let [filter, expected] of cases) {
+      let pruned = pruneEmptyQueryParts({ filter } as unknown as Query);
+      assert.deepEqual(
+        pruned.filter,
+        expected as Query['filter'],
+        `kept ${JSON.stringify(filter)}`,
+      );
+      assert.throws(
+        () => assertQuery(pruned),
+        InvalidQueryError,
+        `validation refuses ${JSON.stringify(filter)}`,
+      );
+    }
+
+    let sorted = pruneEmptyQueryParts({
+      sort: [{ by: 'cardTitle', on: 'Spec' }],
+    } as unknown as Query);
+    assert.deepEqual(
+      sorted.sort,
+      [{ by: 'cardTitle', on: 'Spec' }] as unknown as Query['sort'],
+      'kept a sort anchor given by name',
+    );
+    assert.throws(
+      () => assertQuery(sorted),
+      InvalidQueryError,
+      'validation refuses a sort anchor given by name',
+    );
+  });
+
+  test('still drops a part with nothing in it', function (assert) {
+    assert.deepEqual(
+      pruneEmptyQueryParts({
+        filter: {
+          matches: ['', ' '],
+          every: '',
+          not: '',
+          type: { module: '', name: '' },
+          on: { module: ' ' },
+        },
+        sort: [{ by: 'cardTitle', on: '' }],
+      } as unknown as Query),
+      { sort: [{ by: 'cardTitle' }] } as unknown as Query,
+    );
+    assert.deepEqual(
+      pruneEmptyQueryParts({
+        filter: { on: listing, type: null, matches: '' },
+      } as unknown as Query),
+      { filter: { type: listing } } as unknown as Query,
+      'a filter left with a blank type beside its card type is a type filter',
+    );
   });
 
   test('drops the anchor from a relevance sort', function (assert) {
