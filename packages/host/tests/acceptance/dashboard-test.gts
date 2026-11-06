@@ -92,6 +92,14 @@ function markPublishable(url: string) {
 
 const PUBLISH_MODAL = '[data-test-publish-realm-modal]';
 
+// A closing modal's focus trap hands focus back after a timeout that
+// settled() doesn't track, so this waits for it to land.
+async function waitForFocusOn(selector: string) {
+  await waitUntil(() => document.activeElement === find(selector), {
+    timeoutMessage: `focus never moved to ${selector}`,
+  });
+}
+
 // Records window.open calls instead of opening windows, until restored.
 function stubWindowOpen() {
   let original = window.open;
@@ -995,13 +1003,40 @@ module('Acceptance | dashboard', function (hooks) {
           await waitFor(PUBLISH_MODAL);
 
           assert.dom(PUBLISH_MODAL).containsText(path, `${name}'s dialog`);
+          assert
+            .dom(PUBLISH_MODAL)
+            .hasAttribute('aria-label', `Publish ${name}`);
           assert.dom('[data-test-dashboard]').exists('the dashboard stays');
 
           await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
           assert.dom(PUBLISH_MODAL).doesNotExist();
+          await waitForFocusOn(
+            `${tile(name)} [data-test-workspace-menu-trigger]`,
+          );
           assert
             .dom(`${tile(name)} [data-test-workspace-menu-trigger]`)
             .isFocused('focus goes back to the menu that opened it');
+        }
+      });
+
+      test("a workspace's publish dialog opens again after another workspace's has been open", async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await waitFor(tile('Workspace B'));
+        markPublishable(realmURL);
+        markPublishable(ownedRealmURL);
+        await settled();
+
+        for (let [name, path] of [
+          ['Workspace A', 'workspace-a/'],
+          ['Workspace B', 'workspace-b/'],
+          ['Workspace A', 'workspace-a/'],
+        ]) {
+          await openMenu(name);
+          await click('[data-test-boxel-menu-item-text="Publish"]');
+          await waitFor(PUBLISH_MODAL);
+          assert.dom(PUBLISH_MODAL).containsText(path, `${name}'s dialog`);
+          await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
+          assert.dom(PUBLISH_MODAL).doesNotExist();
         }
       });
 
@@ -1015,15 +1050,18 @@ module('Acceptance | dashboard', function (hooks) {
         await click('[data-test-boxel-menu-item-text="Publish"]');
         await waitFor(PUBLISH_MODAL);
 
-        assert.true(
-          find(PUBLISH_MODAL)!.contains(document.activeElement),
-          'focus moves into the dialog',
+        await waitUntil(
+          () => find(PUBLISH_MODAL)?.contains(document.activeElement),
+          { timeoutMessage: 'focus never moved into the dialog' },
         );
 
         await pressKey('Escape');
 
         assert.dom(PUBLISH_MODAL).doesNotExist();
         assert.dom('[data-test-dashboard]').exists();
+        await waitForFocusOn(
+          `${tile('Workspace B')} [data-test-workspace-menu-trigger]`,
+        );
         assert
           .dom(`${tile('Workspace B')} [data-test-workspace-menu-trigger]`)
           .isFocused();
@@ -3360,7 +3398,22 @@ module('Acceptance | dashboard', function (hooks) {
           .doesNotExist('a done step does not say what publishing needs');
       });
 
-      test('with no workspace to publish, the publish step says why instead of offering a button', async function (assert) {
+      test('owning only workspaces that cannot be published, the publish step says so instead of offering a button', async function (assert) {
+        await visitAsNewUser();
+        await openSteps();
+
+        assert.dom('[data-test-get-started-action="publish"]').doesNotExist();
+        assert
+          .dom('[data-test-get-started-publish-unavailable]')
+          .hasText(
+            'None of your workspaces can be published. Create a new one to publish it.',
+          );
+      });
+
+      test('owning no workspace, the publish step says publishing needs one', async function (assert) {
+        mockMatrixUtils.setRealmPermissions({
+          [realmURL]: ['read', 'write'],
+        });
         await visitAsNewUser();
         await openSteps();
 
@@ -3395,7 +3448,86 @@ module('Acceptance | dashboard', function (hooks) {
 
           await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
           assert.dom(PUBLISH_MODAL).doesNotExist();
+          await waitForFocusOn(PUBLISH_ACTION);
           assert.dom(PUBLISH_ACTION).isFocused('focus goes back to the button');
+        });
+
+        test("a publish started from a workspace's menu shows its error when Get started opens the same workspace", async function (assert) {
+          let publishDeferred = new Deferred<void>();
+          let realmServer = getService('realm-server') as any;
+          realmServer.publishRealm = async () => {
+            await publishDeferred.promise;
+            throw new Error('The domain refused the publish');
+          };
+          realmServer.waitForRealmReady = async () => {};
+          await visitAsNewUser();
+          markPublishable(ownedRealmURL);
+          await settled();
+
+          let tile =
+            '[data-test-workspace-list] [data-test-workspace="Workspace B"]';
+          await click(`${tile} [data-test-workspace-menu-trigger]`);
+          await click('[data-test-boxel-menu-item-text="Publish"]');
+          await waitFor(PUBLISH_MODAL);
+          await click(`${PUBLISH_MODAL} [data-test-default-domain-checkbox]`);
+          await click(`${PUBLISH_MODAL} [data-test-publish-button]`);
+          await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
+          assert.dom(PUBLISH_MODAL).doesNotExist();
+
+          publishDeferred.fulfill();
+          let realmService = getService('realm') as RealmService;
+          await waitUntil(() => !realmService.isPublishing(ownedRealmURL), {
+            timeoutMessage: 'the publish never finished',
+          });
+
+          await openSteps();
+          await click(PUBLISH_ACTION);
+          await waitFor(PUBLISH_MODAL);
+
+          assert
+            .dom(`${PUBLISH_MODAL} [data-test-domain-publish-error]`)
+            .containsText('The domain refused the publish');
+        });
+
+        test('publishing the last step returns focus to a workspace when the dialog closes', async function (assert) {
+          await visitAsNewUser();
+          (getService('recent-cards-service') as any).add(`${realmURL}index`);
+          await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+            agent: 'claude',
+            agentSetup: { claude: 1 },
+          });
+          markPublishable(ownedRealmURL);
+          await settled();
+          await openSteps();
+          await waitFor(PUBLISH_ACTION);
+
+          await click(PUBLISH_ACTION);
+          await waitFor(PUBLISH_MODAL);
+          markHosted(ownedRealmURL);
+          await settled();
+          assert
+            .dom(GET_STARTED)
+            .doesNotExist('every step is done, so the steps are gone');
+
+          await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
+
+          assert.dom(PUBLISH_MODAL).doesNotExist();
+          await waitUntil(
+            () => document.activeElement?.closest('[data-test-workspace]'),
+            { timeoutMessage: 'focus never returned to a workspace' },
+          );
+          assert.ok(
+            document.activeElement?.closest('[data-test-workspace]'),
+            'focus is on a workspace, not the page',
+          );
+
+          // Finishing every step saves the dismissal; let it land, so
+          // nothing is left running past the test.
+          let matrixService = getService('matrix-service') as MatrixService;
+          await waitUntil(
+            () => matrixService.dashboardState.onboardingDismissed,
+            { timeoutMessage: 'the dismissal was never saved' },
+          );
         });
 
         test('the publish step keeps its button once a workspace is published', async function (assert) {
@@ -3472,6 +3604,7 @@ module('Acceptance | dashboard', function (hooks) {
           assert.dom(PUBLISH_MODAL).containsText('workspace-a/');
 
           await click(`${PUBLISH_MODAL} [data-test-close-modal]`);
+          await waitForFocusOn(PUBLISH_ACTION);
           assert.dom(PUBLISH_ACTION).isFocused('focus goes back to the button');
         });
       });

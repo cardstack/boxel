@@ -8,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 import Globe from '@cardstack/boxel-icons/globe';
 import Refresh from '@cardstack/boxel-icons/refresh';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { modifier } from 'ember-modifier';
 
 import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
@@ -15,10 +16,12 @@ import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
 import PublishRealmDialog from '@cardstack/host/components/operator-mode/publish-realm-dialog';
+import { ifConnected } from '@cardstack/host/lib/modal-focus-trap';
 
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmPublishingService from '@cardstack/host/services/realm-publishing';
 import type StoreService from '@cardstack/host/services/store';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
@@ -39,13 +42,29 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
   @service declare private hostModeService: HostModeService;
+  @service declare private realmPublishing: RealmPublishingService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
   @tracked isOpenSitePopoverOpen = false;
 
+  // The publish button, which becomes a "Publishing…" button while a publish
+  // runs, so focus goes back to whichever is on screen when the dialog closes.
+  private publishButton: HTMLElement | undefined;
+  private capturePublishButton = modifier((element: HTMLElement) => {
+    this.publishButton = element;
+  });
+  private publishReturnFocus = () => ifConnected(this.publishButton);
+
+  private get publishActions() {
+    return this.realmPublishing.actionsFor(this.realmURL);
+  }
+
   @action
   openPublishRealmModal() {
+    // A popover left open by an earlier publish doesn't come back with this
+    // one.
+    this.isPublishingRealmPopoverOpen = false;
     this.isPublishRealmModalOpen = true;
   }
 
@@ -72,6 +91,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return this.realm.isPublishing(this.realmURL);
   }
 
+  // Shown on request while a publish runs, and gone with the publish.
+  get showsPublishingRealmPopover() {
+    return this.isPublishingRealmPopoverOpen && this.isPublishing;
+  }
+
   get hasPublishedSites() {
     return this.hostModeService.publishedRealmURLs.length > 0;
   }
@@ -86,11 +110,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
   get defaultPublishedRealmURL(): string | undefined {
     return this.hostModeService.defaultPublishedRealmURL;
-  }
-
-  @action
-  closePublishingRealmPopover() {
-    this.isPublishingRealmPopoverOpen = false;
   }
 
   get defaultPublishedSiteURL(): string | undefined {
@@ -144,6 +163,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               @size='tall'
               class='publish-realm-button publishing'
               {{on 'click' this.togglePublishingRealmPopover}}
+              {{this.capturePublishButton}}
               data-test-publish-realm-button
             >
               <Refresh width='22' height='22' class='publish-icon' />
@@ -155,6 +175,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               @size='tall'
               class='publish-realm-button'
               {{on 'click' this.openPublishRealmModal}}
+              {{this.capturePublishButton}}
               data-test-publish-realm-button
             >
               <PublishSiteIcon width='22' height='22' class='publish-icon' />
@@ -164,7 +185,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
             </BoxelButton>
           {{/if}}
           <PublishingRealmPopover
-            @isOpen={{this.isPublishingRealmPopoverOpen}}
+            @isOpen={{this.showsPublishingRealmPopover}}
           />
         </div>
         {{#if this.hasPublishedSites}}
@@ -216,9 +237,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
     <PublishRealmDialog
       @realmURL={{this.realmURL}}
+      @actions={{this.publishActions}}
       @isOpen={{this.isPublishRealmModalOpen}}
       @onClose={{this.closePublishRealmModal}}
-      @onPublished={{this.closePublishingRealmPopover}}
+      @returnFocusTarget={{this.publishReturnFocus}}
     />
 
     <style scoped>

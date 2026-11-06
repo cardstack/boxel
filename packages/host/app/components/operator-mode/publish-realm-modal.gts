@@ -41,7 +41,10 @@ import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
-import { publishedRealmURLsFromInfo } from '@cardstack/host/lib/utils';
+import {
+  lastPublishedTimestampFromInfo,
+  publishedRealmURLsFromInfo,
+} from '@cardstack/host/lib/utils';
 
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -462,19 +465,11 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.args.realmURL ?? this.hostModeService.realmURL;
   }
 
-  private get lastPublishedAt(): Record<string, unknown> {
-    let { lastPublishedAt } = this.realm.info(this.currentRealmURL);
-    return lastPublishedAt && typeof lastPublishedAt === 'object'
-      ? (lastPublishedAt as Record<string, unknown>)
-      : {};
-  }
-
-  private lastPublishedTimestamp(publishedRealmURL: string): number | null {
-    if (!(publishedRealmURL in this.lastPublishedAt)) {
-      return null;
-    }
-    let publishedAt = Number(this.lastPublishedAt[publishedRealmURL] ?? 0);
-    return Number.isFinite(publishedAt) ? publishedAt : 0;
+  private lastPublishedTimestamp(publishedRealmURL: string) {
+    return lastPublishedTimestampFromInfo(
+      this.realm.info(this.currentRealmURL),
+      publishedRealmURL,
+    );
   }
 
   private isPublished(publishedRealmURL: string) {

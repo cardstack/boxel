@@ -536,13 +536,14 @@ export default class Workspace extends Component<Signature> {
           }}
         />
       {{/if}}
-      {{#if this.workspace.publishModalRendered}}
+      {{#if this.workspace.showPublishModal}}
         <ToElsewhere
           @named='modal-elsewhere'
           @send={{component
             PublishRealmDialog
             realmURL=this.workspace.realmURL
-            isOpen=this.workspace.showPublishModal
+            actions=this.workspace.publishActions
+            isOpen=true
             onClose=this.workspace.closePublishModal
             returnFocusTarget=this.workspace.returnFocusTarget
           }}
