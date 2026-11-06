@@ -21,5 +21,9 @@ module(basename(import.meta.filename), function () {
     test('the same value gets the same ref every time it is indexed', async function (assert) {
       await runSharedTest(searchDocSpillTests, assert, {});
     });
+
+    test('a doc still over the target after its leaves spill sends whole lists', async function (assert) {
+      await runSharedTest(searchDocSpillTests, assert, {});
+    });
   });
 });

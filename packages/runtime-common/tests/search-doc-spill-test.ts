@@ -134,6 +134,44 @@ const tests = Object.freeze({
     }))!;
     assert.notStrictEqual(other.rows[0].ref, first.rows[0].ref);
   },
+
+  'a doc still over the target after its leaves spill sends whole lists':
+    async (assert) => {
+      let talk = {
+        cardTitle: 'a long talk',
+        hnScore: 7,
+        tags: ['a', 'b'],
+        segments: Array.from({ length: 30 }, (_, i) => ({
+          start: i * 60,
+          end: i * 60 + 60,
+          concept: `concept ${i}`,
+          text: `segment ${i} says something short`,
+          embedding: vector,
+        })),
+      };
+      let { searchDoc, rows } = (await spillSearchDoc(talk, key))!;
+      assert.true(isSpillMarker(searchDoc.segments), 'the list spilled whole');
+      assert.deepEqual(searchDoc.tags, ['a', 'b'], 'a small list stays');
+      assert.strictEqual(searchDoc.hnScore, 7);
+      assert.deepEqual(
+        rows.map((r) => r.fieldPath),
+        ['segments'],
+        'the leaf rows inside the list are gone',
+      );
+      assert.deepEqual(
+        rows[0].value,
+        talk.segments,
+        'the row holds the original list, with no markers inside',
+      );
+      assert.true(
+        JSON.stringify(searchDoc).length <= 2000,
+        `the promoted doc fits (${JSON.stringify(searchDoc).length} bytes)`,
+      );
+      assert.deepEqual(
+        unspillSearchDoc(searchDoc, new Map(rows.map((r) => [r.ref, r.value]))),
+        talk,
+      );
+    },
 } as SharedTests<{}>);
 
 export default tests;

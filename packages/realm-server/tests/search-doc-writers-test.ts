@@ -24,7 +24,10 @@ const ALLOWED = new Map<string, string>([
 
 // A SQL assignment to the column: `search_doc =` followed by an SQL-looking
 // right-hand side (a function, a placeholder, EXCLUDED, a literal, a cast).
-const SQL_WRITE = /\bsearch_doc\s*=\s*(?:[A-Za-z_]+\s*\(|\$\d|EXCLUDED\b|'|\()/;
+// A JavaScript property write (`row.search_doc = …`) is not SQL, so a
+// preceding `.` excludes the match.
+const SQL_WRITE =
+  /(?<![.\w])search_doc\s*=\s*(?:[A-Za-z_]+\s*\(|\$\d|EXCLUDED\b|'|\()/;
 
 module(basename(import.meta.filename), function () {
   test('only the index writer writes search_doc in SQL', function (assert) {

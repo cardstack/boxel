@@ -198,14 +198,58 @@ export async function spillSearchDoc(
   let promoted = visit(searchDoc, [], () => {
     throw new Error('a search doc root cannot spill');
   }) as Record<string, unknown>;
-  if (pending.length === 0) {
-    return undefined;
-  }
   let rows: SpillRow[] = [];
   for (let { fieldPath, ordinal, kind, value, place } of pending) {
     let ref = await spillRef(key.url, key.type, fieldPath, ordinal);
     place({ [SPILL_MARKER_KEY]: kind, ref });
     rows.push({ ref, fieldPath, ordinal, kind, value });
+  }
+
+  // A doc can still be over the target once its large leaves are gone: a
+  // list of many small items (a transcript's segments, each keeping its
+  // start, end and concept beside the markers for its text and vector) adds
+  // up. Then whole root-level lists spill, largest first, until the doc fits.
+  // A list spills as its original value, so the markers inside it, and their
+  // rows, go. Only lists: every plural path resolves a marker at its root (in
+  // `jsonb_tree`), while a singular path steps through objects with `->`, so
+  // an object stays inline.
+  let size = () => JSON.stringify(promoted).length;
+  if (size() > SEARCH_DOC_INLINE_TARGET) {
+    let lists = Object.keys(promoted)
+      .filter(
+        (rootKey) =>
+          !neverSpills(rootKey) &&
+          Array.isArray(promoted[rootKey]) &&
+          Array.isArray(searchDoc[rootKey]),
+      )
+      .sort(
+        (a, b) =>
+          JSON.stringify(promoted[b]).length -
+          JSON.stringify(promoted[a]).length,
+      );
+    for (let rootKey of lists) {
+      if (size() <= SEARCH_DOC_INLINE_TARGET) {
+        break;
+      }
+      rows = rows.filter(
+        (row) =>
+          row.fieldPath !== rootKey && !row.fieldPath.startsWith(`${rootKey}.`),
+      );
+      let ordinal = ordinals.get(rootKey) ?? 0;
+      ordinals.set(rootKey, ordinal + 1);
+      let ref = await spillRef(key.url, key.type, rootKey, ordinal);
+      promoted[rootKey] = { [SPILL_MARKER_KEY]: 'value', ref };
+      rows.push({
+        ref,
+        fieldPath: rootKey,
+        ordinal,
+        kind: 'value',
+        value: searchDoc[rootKey],
+      });
+    }
+  }
+  if (rows.length === 0) {
+    return undefined;
   }
   return { searchDoc: promoted, rows };
 }
