@@ -441,6 +441,27 @@ module(basename(import.meta.filename), function (hooks) {
       );
   }
 
+  async function withCapturedIncrementalIndexEvents<T>(
+    run: () => Promise<T>,
+  ): Promise<{ result: T; events: IncrementalIndexEventContent[] }> {
+    let events: IncrementalIndexEventContent[] = [];
+    let originalBroadcast = realmAdapter.broadcastRealmEvent;
+    let broadcast = originalBroadcast.bind(realmAdapter);
+    realmAdapter.broadcastRealmEvent = async (event, ...args) => {
+      if (event.eventName === 'index' && event.indexType === 'incremental') {
+        events.push(event);
+      }
+      return await broadcast(event, ...args);
+    };
+    try {
+      let result = await run();
+      await realm.incrementalIndexing();
+      return { result, events };
+    } finally {
+      realmAdapter.broadcastRealmEvent = originalBroadcast;
+    }
+  }
+
   // The realm events a batch is answerable for: the incremental index event it
   // broadcasts, and the file-change event naming a path it touched. Filtering
   // by path rather than counting everything keeps the assertion about this
@@ -2167,25 +2188,29 @@ module(basename(import.meta.filename), function (hooks) {
 
   test("an update replaces a file's content and moves its version", async function (assert) {
     let jobsBefore = await indexJobIds();
-    let since = Date.now();
-
-    let [before] = await commit([
-      {
-        op: 'update',
-        href: `${testRealmHref}release-notes.md`,
-        content: '#\n',
-      },
-    ]);
-    let [result] = await commit(
-      [
+    let {
+      result: [before, result],
+      events: seenEvents,
+    } = await withCapturedIncrementalIndexEvents(async () => {
+      let [before] = await commit([
         {
           op: 'update',
           href: `${testRealmHref}release-notes.md`,
-          content: '# Release notes\n\n- shipped\n- rolled forward\n',
+          content: '#\n',
         },
-      ],
-      'file-update',
-    );
+      ]);
+      let [result] = await commit(
+        [
+          {
+            op: 'update',
+            href: `${testRealmHref}release-notes.md`,
+            content: '# Release notes\n\n- shipped\n- rolled forward\n',
+          },
+        ],
+        'file-update',
+      );
+      return [before, result] as const;
+    });
 
     assert.strictEqual(
       readFileSync(realmFile('release-notes.md'), 'utf8'),
@@ -2217,26 +2242,9 @@ module(basename(import.meta.filename), function (hooks) {
       2,
       `each of the two batches enqueues one index job (got ${newJobs.length})`,
     );
-    let seenEvents: IncrementalIndexEventContent[] = [];
     let namesFileUpdate = eventNames('file-update');
-    let eventDetails = () =>
-      seenEvents.map(({ clientRequestId, coalescedWrites, invalidations }) => ({
-        clientRequestId,
-        coalescedWrites,
-        invalidations,
-      }));
-    await waitUntil(
-      async () => {
-        seenEvents = await incrementalIndexEventsSince(since);
-        return seenEvents.some(namesFileUpdate);
-      },
-      {
-        timeoutMessage: () =>
-          `file-update was not found in an incremental index event; observed events: ${JSON.stringify(eventDetails())}`,
-      },
-    );
     assert.strictEqual(
-      (await incrementalIndexEventsSince(since)).filter(namesFileUpdate).length,
+      seenEvents.filter(namesFileUpdate).length,
       1,
       'and the second broadcasts one index event',
     );
