@@ -24,7 +24,6 @@ import { join } from 'node:path';
 import {
   isAbsoluteIdentifier,
   resolveRRIReference,
-  rri,
 } from '@cardstack/runtime-common/realm-identifiers';
 
 import { loginWithPassword } from './matrix-api.ts';
@@ -155,7 +154,7 @@ function newSessionId(evaluationName: string) {
 }
 
 function cardModule(evaluation: Evaluation) {
-  return resolveRRIReference(evaluation.adoptsFrom.module, rri(evaluation.url));
+  return resolveRRIReference(evaluation.adoptsFrom.module, evaluation.url);
 }
 
 function fileLink(url: string) {
