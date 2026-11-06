@@ -35,6 +35,7 @@ const keyOf = (keys: UserKey[], id: string) =>
 
 const KeyPicker: TemplateOnlyComponent<Signature> = <template>
   <Field
+    @reserveMessage={{false}}
     @orientation='horizontal'
     @labelTag='span'
     @label='Key'

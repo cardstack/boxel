@@ -73,7 +73,7 @@ export default class KeyGrants extends Component<Signature> {
                     names the approvals listed above it. }}
                 <Disclosure
                   class='approvals'
-                  @size='xs'
+                  @size='s'
                   @open={{this.isExpanded grant}}
                   @onOpenChange={{fn this.toggle grant}}
                   @disabled={{this.isRemoving grant}}

@@ -15,7 +15,7 @@ An option's `description` is a line under its label saying what the choice means
 
 Hybrid controlled/uncontrolled, the kit-wide idiom. `@disabled` on the group and `disabled` on an option are OR'd, so you can grey the whole set or individual rows.
 
-The `name` attribute is generated once per component instance from `guidFor(this)`. That is the load-bearing detail: **it is what makes these native radios a real group**, which in turn is what gives the component its keyboard behaviour for free. Two RadioGroups on a page never collide.
+The `name` attribute is generated once per component instance from `guidFor(this)`. That is the load-bearing detail: **it is what makes these native radios a real group**, which in turn is what gives the component its keyboard behaviour for free. Two RadioGroups on a page never collide, unless they are given the same `@name`.
 
 Each row is `<label>` wrapping `<input type="radio">` plus text — the same `.pretui-choice` row as **Checkbox**, so the two align pixel-for-pixel in a mixed form.
 
@@ -44,7 +44,7 @@ Gaps:
 
 ## Theming
 
-`--pretui-control-rest` (→ `--field`), `--pretui-control-border` (→ `--input`), `--pretui-control-hover` (→ `--hover`), `--pretui-control-checked-border` (the checked edge, → `--primary` mixed with `--border`), `--ring` (focus), `--primary` (checked fill), `--text-ui-sm` and `--muted-foreground` (an option's description), `--card` (the dot), `--border` (mixed into the checked hairline), `--pretui-edge-highlight`, `--text-ui-md`.
+`--pretui-control-rest` (→ `--field`), `--pretui-control-border` (→ `--input`), `--pretui-control-hover` (→ `--hover`), `--pretui-control-checked-border` (the checked edge, → `--primary` mixed with `--border`), `--ring` (focus), `--pretui-radio-checked-fill` (the checked fill, → `--primary`; a theme whose `--primary` is too faint to mark the chosen radio at 3:1 sets an ink here), `--boxel-font-size-xs` and `--muted-foreground` (an option's description), `--card` (the dot), `--border` (mixed into the checked hairline), `--pretui-edge-highlight`, `--text-ui-md`.
 
 The 15px circle, 6px dot and 7px row gap are fixed. A theme that sets `--card` close to `--primary` erases the dot; define them as a contrasting pair, exactly as with Checkbox's `--primary` / `--primary-foreground`.
 

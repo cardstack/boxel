@@ -55,6 +55,7 @@ const chooseIndex = (onSelect: (index: number) => void, index: string) =>
 
 const ClientPicker: TemplateOnlyComponent<Signature> = <template>
   <Field
+    @reserveMessage={{false}}
     @orientation='horizontal'
     @labelTag='span'
     @label='Sign in with'

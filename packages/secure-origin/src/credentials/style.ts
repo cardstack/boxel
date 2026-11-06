@@ -42,7 +42,6 @@ const LOCAL_PROPERTIES = new Set([
   '--boxel-ui-label-letter-spacing',
   '--pretui-field-label-size',
   '--pretui-field-column-gap',
-  '--pretui-field-message-min-height',
 ]);
 
 export function applyStyle(

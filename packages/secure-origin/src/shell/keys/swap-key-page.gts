@@ -105,6 +105,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @reason={{this.opened.reason}}
             />
             <Field
+              @reserveMessage={{false}}
               @orientation='horizontal'
               @labelTag='span'
               @label='Shared key'
@@ -127,6 +128,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
             />
             {{#if this.keyAllowsAnonymous}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='People who aren’t signed in'
@@ -141,6 +143,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               </Field>
             {{else if this.keyRefusesAnonymous}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='People who aren’t signed in'

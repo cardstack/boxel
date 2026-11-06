@@ -239,6 +239,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             />
             {{#each this.choices as |choice|}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label={{slotLabel choice}}
@@ -466,6 +467,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               </div>
               {{#each this.budgetShares as |share|}}
                 <Field
+                  @reserveMessage={{false}}
                   @orientation='horizontal'
                   @labelTag='span'
                   @label='Daily budget for {{share.label}}'

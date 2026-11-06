@@ -34,6 +34,7 @@ const options = (choices: RadioChoice[]) =>
 
 const RadioChoices: TemplateOnlyComponent<Signature> = <template>
   <Field
+    @reserveMessage={{false}}
     @orientation='horizontal'
     @labelTag='span'
     @label={{@label}}

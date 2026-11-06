@@ -44,6 +44,13 @@ export interface FieldSignature {
      * block's third param.
      */
     labelTag?: 'label' | 'span';
+    /**
+     * `false` keeps no line under the control for a message, for a control
+     * that shows its own errors: the message line is drawn only while there
+     * is something to say. The status region then arrives with its first
+     * status, which a screen reader can miss.
+     */
+    reserveMessage?: boolean;
   };
   Blocks: {
     /** the control. Second param is the id of the message line, for
@@ -87,6 +94,9 @@ export class Field extends Component<FieldSignature> {
   // undefined without a label, so no control points at an id nothing has
   get yieldedLabelId() {
     return this.args.label ? this.labelId : undefined;
+  }
+  get showsMessageLine() {
+    return this.args.reserveMessage !== false || Boolean(this.messageText);
   }
   get labelIsSpan() {
     return this.args.labelTag === 'span';
@@ -183,6 +193,7 @@ export class Field extends Component<FieldSignature> {
         {{else}}
           {{yield this.controlId this.messageId this.yieldedLabelId}}
         {{/if}}
+        {{#if this.showsMessageLine}}
         <div class='pretui-fieldmsg' id={{this.messageId}}>
           {{! always rendered, so a status's first message is announced too;
               a live region added with its text can go unheard }}
@@ -203,6 +214,7 @@ export class Field extends Component<FieldSignature> {
             />
           {{/if}}
         </div>
+        {{/if}}
       </div>
     </div>
     <style scoped>
@@ -311,10 +323,7 @@ export class Field extends Component<FieldSignature> {
         /* the column's width, not the message's, so a long one wraps */
         .pretui-fieldmsg {
           justify-self: stretch;
-          min-height: var(
-            --pretui-field-message-min-height,
-            var(--pretui-cue-line-height, 1rem)
-          );
+          min-height: var(--pretui-cue-line-height, 1rem);
         }
         /* the invalid dress is Input's: a --destructive-ink edge (the fill
            hue misses a field boundary's 3:1) and no tint, through --input,

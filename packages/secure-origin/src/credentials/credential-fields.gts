@@ -149,52 +149,58 @@ export default class CredentialFields extends Component<Signature> {
       {{#each this.fields key='name' as |entry|}}
         {{#if (this.isLayout 'settings')}}
           <PretField
+            @reserveMessage={{false}}
             @orientation='horizontal'
             @label={{entry.field.label}}
             class='profile-field password-settings-field'
             as |controlId _messageId labelId|
           >
-            <BoxelInput
-              @id={{controlId}}
-              @type={{entry.field.type}}
-              @autocomplete={{entry.field.autocomplete}}
-              @placeholder={{entry.field.placeholder}}
-              @value={{entry.value}}
-              @state={{this.state entry.error}}
-              @errorMessage={{entry.error}}
-              @onInput={{this.input entry.name}}
-              @onBlur={{this.blur entry.name}}
-              @onChange={{this.change entry.name}}
-              name={{entry.field.inputName}}
-              aria-labelledby={{labelId}}
-              aria-label={{entry.field.accessibleName}}
-              {{on 'keydown' this.keydown}}
-              {{testAttribute entry.field.testId}}
-            />
+            <div class='control'>
+              <BoxelInput
+                @id={{controlId}}
+                @type={{entry.field.type}}
+                @autocomplete={{entry.field.autocomplete}}
+                @placeholder={{entry.field.placeholder}}
+                @value={{entry.value}}
+                @state={{this.state entry.error}}
+                @errorMessage={{entry.error}}
+                @onInput={{this.input entry.name}}
+                @onBlur={{this.blur entry.name}}
+                @onChange={{this.change entry.name}}
+                name={{entry.field.inputName}}
+                aria-labelledby={{labelId}}
+                aria-label={{entry.field.accessibleName}}
+                {{on 'keydown' this.keydown}}
+                {{testAttribute entry.field.testId}}
+              />
+            </div>
           </PretField>
         {{else}}
           <PretField
+            @reserveMessage={{false}}
             @label={{entry.field.label}}
             class='profile-field'
             as |controlId _messageId labelId|
           >
-            <BoxelInput
-              @id={{controlId}}
-              @type={{entry.field.type}}
-              @autocomplete={{entry.field.autocomplete}}
-              @placeholder={{entry.field.placeholder}}
-              @value={{entry.value}}
-              @state={{this.state entry.error}}
-              @errorMessage={{entry.error}}
-              @onInput={{this.input entry.name}}
-              @onBlur={{this.blur entry.name}}
-              @onChange={{this.change entry.name}}
-              name={{entry.field.inputName}}
-              aria-labelledby={{labelId}}
-              aria-label={{entry.field.accessibleName}}
-              {{on 'keydown' this.keydown}}
-              {{testAttribute entry.field.testId}}
-            />
+            <div class='control'>
+              <BoxelInput
+                @id={{controlId}}
+                @type={{entry.field.type}}
+                @autocomplete={{entry.field.autocomplete}}
+                @placeholder={{entry.field.placeholder}}
+                @value={{entry.value}}
+                @state={{this.state entry.error}}
+                @errorMessage={{entry.error}}
+                @onInput={{this.input entry.name}}
+                @onBlur={{this.blur entry.name}}
+                @onChange={{this.change entry.name}}
+                name={{entry.field.inputName}}
+                aria-labelledby={{labelId}}
+                aria-label={{entry.field.accessibleName}}
+                {{on 'keydown' this.keydown}}
+                {{testAttribute entry.field.testId}}
+              />
+            </div>
           </PretField>
         {{/if}}
       {{/each}}
@@ -278,8 +284,7 @@ export default class CredentialFields extends Component<Signature> {
       }
 
       /* Labelled as the app labels its own fields, which the page's styles
-         say. The input shows its own error, so no line is kept for a
-         message. */
+         say. */
       .profile-field {
         --boxel-ui-label-font-size: var(
           --boxel-label-font-size,
@@ -288,7 +293,6 @@ export default class CredentialFields extends Component<Signature> {
         --boxel-ui-label-font-weight: var(--boxel-label-font-weight, 500);
         --boxel-ui-label-line-height: var(--boxel-label-line-height, 1.1);
         --boxel-ui-label-letter-spacing: var(--boxel-lsp-xs);
-        --pretui-field-message-min-height: 0;
         justify-items: stretch;
       }
       .password-settings-field {
@@ -297,6 +301,12 @@ export default class CredentialFields extends Component<Signature> {
           minmax(8rem, 25%)
         );
         --pretui-field-column-gap: 0;
+      }
+
+      /* Room for the input's focus outline and invalid ring inside the
+         frame, as the app's FieldContainer keeps around its own inputs. */
+      .control {
+        padding: var(--boxel-outline-width);
       }
 
       /* The settings modal's and the change-email modal's fields show an

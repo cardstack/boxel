@@ -94,6 +94,7 @@ interface Signature {
 
 const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
   <Field
+    @reserveMessage={{false}}
     @orientation='horizontal'
     @label='People who aren’t signed in'
     @icon={{Users}}
@@ -117,6 +118,7 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
   </Field>
   {{#if @anonymous}}
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @labelTag='span'
       @label='Daily anonymous cap (optional)'
@@ -143,6 +145,7 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         cap.</span>
     </Field>
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @labelTag='span'
       @label='Monthly anonymous cap (optional)'

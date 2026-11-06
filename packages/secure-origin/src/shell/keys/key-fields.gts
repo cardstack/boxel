@@ -30,6 +30,7 @@ interface Signature {
 const KeyFields: TemplateOnlyComponent<Signature> = <template>
   {{#if @onName}}
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @label='Name'
       @icon={{Tag}}
@@ -52,6 +53,7 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
   {{yield to='beforeValue'}}
   {{#if @onValue}}
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @label={{if @valueLabel @valueLabel 'Key'}}
       @icon={{KeyRound}}

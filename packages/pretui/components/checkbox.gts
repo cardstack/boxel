@@ -128,6 +128,16 @@ export class Checkbox extends Component<CheckboxSignature> {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
         }
+        /* forced colors drop the painted edge and tick, so the platform's
+           checkbox, drawn in the system colors, stands in there */
+        @media (forced-colors: active) {
+          .pretui-checkbox {
+            appearance: auto;
+          }
+          .pretui-checkbox:checked::before {
+            content: none;
+          }
+        }
       }
     </style>
   </template>

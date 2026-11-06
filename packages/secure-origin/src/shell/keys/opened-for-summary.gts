@@ -25,6 +25,7 @@ interface Signature {
 
 const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
   <Field
+    @reserveMessage={{false}}
     @orientation='horizontal'
     @labelTag='span'
     @label='For'
@@ -63,6 +64,7 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
   </Field>
   {{#if @context.operation.destination}}
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @labelTag='span'
       @label='This call sends it to'
@@ -79,6 +81,7 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
   {{/if}}
   {{#if @reason}}
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @labelTag='span'
       @label='Why it’s needed'

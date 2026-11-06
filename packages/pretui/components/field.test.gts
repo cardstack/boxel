@@ -65,4 +65,24 @@ module('Pretui | components/field', function (hooks) {
     );
     assert.dom('[data-test-control]').doesNotHaveAttribute('aria-labelledby');
   });
+
+  test('@reserveMessage={{false}} keeps no message line until there is a message', async function (assert) {
+    await render(
+      <template>
+        <Field @label='Name' @reserveMessage={{false}} as |controlId|>
+          <input id={{controlId}} />
+        </Field>
+      </template>,
+    );
+    assert.dom('.pretui-fieldmsg').doesNotExist('no line kept with nothing to say');
+
+    await render(
+      <template>
+        <Field @label='Name' @reserveMessage={{false}} @error='Required' as |controlId|>
+          <input id={{controlId}} />
+        </Field>
+      </template>,
+    );
+    assert.dom('.pretui-fieldmsg').includesText('Required', 'an error still shows');
+  });
 });

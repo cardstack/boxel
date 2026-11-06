@@ -165,6 +165,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
             {{/if}}
             {{#if this.choosing.key}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='Key'
@@ -183,6 +184,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
             {{/if}}
             {{#unless this.choosing.context}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='Workspace'
@@ -199,6 +201,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               </Field>
             {{/unless}}
             <Field
+              @reserveMessage={{false}}
               @orientation='horizontal'
               @label='Shared as'
               @icon={{Tag}}
@@ -220,6 +223,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               {{! Asked of the workspace just chosen: which reading applies. }}
             {{else if this.keyAllowsAnonymous}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='People who aren’t signed in'
@@ -232,6 +236,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               </Field>
             {{else if this.keyRefusesAnonymous}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='People who aren’t signed in'

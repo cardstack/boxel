@@ -108,6 +108,7 @@ export default class OAuthClientFields extends Component<Signature> {
     />
     {{#if this.peopleSignIn}}
       <Field
+        @reserveMessage={{false}}
         @orientation='horizontal'
         @label='Sign-in page'
         @icon={{Globe}}
@@ -134,6 +135,7 @@ export default class OAuthClientFields extends Component<Signature> {
       <CallbackAddress />
     {{/if}}
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @label='Token address'
       @icon={{Globe}}
@@ -157,6 +159,7 @@ export default class OAuthClientFields extends Component<Signature> {
       </div>
     </Field>
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @label='Permissions'
       @icon={{RectangleEllipsis}}
@@ -181,6 +184,7 @@ export default class OAuthClientFields extends Component<Signature> {
       </div>
     </Field>
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @label='Used for'
       @icon={{LayoutGrid}}
@@ -299,6 +303,7 @@ function callbackAddress(): string {
 
 const CallbackAddress: TemplateOnlyComponent<{ Args: {} }> = <template>
   <Field
+    @reserveMessage={{false}}
     @orientation='horizontal'
     @labelTag='span'
     @label='Address to give the site'

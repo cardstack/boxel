@@ -42,7 +42,7 @@ Honest gaps:
 - **`@disabled` uses the native attribute**, removing the control from the tab order — so a disabled checkbox cannot be discovered or read by a keyboard user scanning the form. Spectrum and Web Awesome behave the same way, so this is conventional, but `aria-disabled` would be kinder in a long form.
 - **`opacity: 0.45` for disabled** will fail text contrast against most themes' backgrounds.
 - **Focus-visible paints its own ring**: `outline: 2px solid var(--ring)` with a 2px offset, since `appearance: none` discards the UA ring.
-- The `clip-path` tick has no `forced-colors` treatment, so in Windows High Contrast mode the checked state may render as an empty box.
+- Under forced colors (Windows High Contrast) the platform's checkbox, drawn in the system colors, stands in for the painted face, so the checked state still shows.
 
 ## Theming
 

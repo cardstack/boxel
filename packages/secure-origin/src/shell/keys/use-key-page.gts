@@ -95,6 +95,7 @@ class UseKey extends Component<{
           </:intro>
           <:default>
             <Field
+              @reserveMessage={{false}}
               @orientation='horizontal'
               @labelTag='span'
               @label='Key'
@@ -104,6 +105,7 @@ class UseKey extends Component<{
             </Field>
             {{#if this.choosing.share}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='Workspace'
@@ -123,6 +125,7 @@ class UseKey extends Component<{
               </Field>
             {{else}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='Workspace'
@@ -140,6 +143,7 @@ class UseKey extends Component<{
             {{/if}}
             {{#if this.form.realm}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='Card'

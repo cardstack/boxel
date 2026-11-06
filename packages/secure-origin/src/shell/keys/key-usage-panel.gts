@@ -97,7 +97,10 @@ export default class KeyUsagePanel extends Component<Signature> {
       .disclosure {
         row-gap: var(--boxel-sp-xs);
       }
+      /* In the panel's text size, not the smaller one the disclosure sets
+         for its trigger. */
       .panel-body {
+        font-size: var(--boxel-font-size-sm);
         display: grid;
         gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp-sm);

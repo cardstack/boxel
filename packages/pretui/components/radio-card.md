@@ -45,6 +45,7 @@ What that buys, without any script: **the platform keyboard model.** Tab lands o
 
 - **Focus stays visible.** The input is positioned off the card at 1px with zero opacity — it is in the tab order and in the accessibility tree — and the card paints the focus ring itself through `:has(.pretui-optioncard-input:focus-visible)`.
 - **The accessible name of each radio is the card's text**: title, description and meta, in that order, because all of it is inside the label. A long description makes a long announcement; that is the caller's to keep short.
+- **Forced colors keep the choice visible.** They drop the ring and halo, so a chosen card also carries a transparent outline inset 2px, which forced colors repaint in the system's color.
 - **The mark is `aria-hidden`.** It repeats the checked state visually and contributes nothing to the tree.
 - **`data-selected` is a stamp, not a role.** Assistive tech reads the radio's own checked state.
 - **A media block's content is inside the label**, so an icon with a text alternative becomes part of the radio's name. Pass `aria-hidden` on decorative icons.

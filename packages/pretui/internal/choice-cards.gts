@@ -120,6 +120,11 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
           0 0 0 1px var(--oc-tone),
           0 0 0 4px color-mix(in oklch, var(--oc-tone) 12%, transparent),
           var(--oc-shadow);
+        /* Forced colors drop the box shadows; this outline, unseen
+           otherwise, is repainted there, so the chosen card still stands
+           out. The focus outline below is more specific and wins. */
+        outline: 2px solid transparent;
+        outline-offset: -2px;
       }
       .pretui-optioncard:has(.pretui-optioncard-input:focus-visible) {
         outline: 2px solid var(--ring);

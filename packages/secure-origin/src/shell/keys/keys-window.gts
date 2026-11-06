@@ -188,8 +188,9 @@ export default class KeysWindow extends Component<Signature> {
          --boxel-outline, take the primary ink (4.95:1) there. Pret UI's
          checkboxes and radio buttons are edged in the muted foreground
          unchosen, which marks them clearly where the theme's input edge is
-         too faint, and in the primary ink chosen, around the teal fill; a
-         chosen radio tile is ringed in the primary ink too. The bar keeps
+         too faint, and in the primary ink chosen, around a checkbox's teal
+         fill; a chosen radio is filled with the primary ink, under its white
+         dot, and a chosen radio tile is ringed in it. The bar keeps
          the teal, which reads on the purple. */
       .body {
         --ring: var(--primary-ink);
@@ -198,6 +199,7 @@ export default class KeysWindow extends Component<Signature> {
           var(--boxel-outline-color);
         --pretui-control-border: var(--muted-foreground);
         --pretui-control-checked-border: var(--primary-ink);
+        --pretui-radio-checked-fill: var(--primary-ink);
         --pretui-choice-card-tone: var(--primary-ink);
         /* Pret UI's controls set their text in the panel's sizes. */
         --text-ui-md: var(--boxel-font-size-sm);

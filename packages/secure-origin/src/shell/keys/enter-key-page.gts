@@ -198,6 +198,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
             {{/if}}
             {{#if this.onlyKind}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='Kind'
@@ -260,6 +261,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                   <:beforeValue>
                     {{#if this.isOAuthClient}}
                       <Field
+                        @reserveMessage={{false}}
                         @orientation='horizontal'
                         @label='Client ID'
                         @icon={{RectangleEllipsis}}

@@ -784,6 +784,104 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("a radio on the key panel draws its own face, and a chosen one's fill meets 3:1", async function (assert) {
+    // The shell declares a dark color scheme, under which the browser's own
+    // radio paints an unchosen one as a dark disc on the white panel, so Pret
+    // UI's RadioGroup draws every state itself. A radio is drawn under the
+    // panel, with the scoping attribute its rules carry, and read as the
+    // browser resolves it there.
+    await page.goto(`${secureOrigin}/secure/keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    let { background, colorScheme, unchosen, chosen } = await page.evaluate(
+      () => {
+        let panel = document.querySelector('[data-test-keys-panel]')!;
+        let canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        let context = canvas.getContext('2d', { willReadFrequently: true })!;
+        let backgroundColor = getComputedStyle(panel).backgroundColor;
+        let toRGB = (color: string) => {
+          context.fillStyle = backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+        };
+        let scope: string | undefined;
+        let visit = (rules: CSSRuleList) => {
+          for (let rule of rules) {
+            if (rule instanceof CSSGroupingRule) {
+              visit(rule.cssRules);
+            } else if (
+              rule instanceof CSSStyleRule &&
+              /^\.pretui-radio\[data-scopedcss-[\w-]+\]$/.test(
+                rule.selectorText,
+              )
+            ) {
+              scope = /\[(data-scopedcss-[\w-]+)\]/.exec(rule.selectorText)![1];
+            }
+          }
+        };
+        for (let sheet of document.styleSheets) {
+          visit(sheet.cssRules);
+        }
+        if (!scope) {
+          return {
+            background: [],
+            colorScheme: '',
+            unchosen: undefined,
+            chosen: undefined,
+          };
+        }
+        let draw = (checked: boolean) => {
+          let radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.className = 'pretui-radio';
+          radio.setAttribute(scope!, '');
+          radio.checked = checked;
+          panel.append(radio);
+          let style = getComputedStyle(radio);
+          let drawn = {
+            appearance: style.appearance,
+            fill: toRGB(style.backgroundColor),
+          };
+          radio.remove();
+          return drawn;
+        };
+        return {
+          background: toRGB(backgroundColor),
+          // The scheme the page declares to the browser, which paints its own
+          // controls under it.
+          colorScheme:
+            document
+              .querySelector('meta[name="color-scheme"]')
+              ?.getAttribute('content') ?? '',
+          unchosen: draw(false),
+          chosen: draw(true),
+        };
+      },
+    );
+
+    assert.ok(unchosen, "the shell's stylesheets draw Pret UI's radio");
+    assert.ok(chosen, 'and a chosen one');
+    assert.ok(
+      /dark/.test(colorScheme),
+      `the shell declares a dark color scheme (${colorScheme})`,
+    );
+    assert.strictEqual(
+      unchosen!.appearance,
+      'none',
+      'an unchosen radio is drawn by the page, not the browser',
+    );
+    assert.strictEqual(chosen!.appearance, 'none', 'so is a chosen one');
+    let ratio = contrast(chosen!.fill, background);
+    assert.ok(
+      ratio >= 3,
+      `a chosen radio's fill: rgb(${chosen!.fill.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+    );
+  });
+
   test('focus rings and the checkbox and radio indicators on the key panel meet 3:1', async function (assert) {
     // Every stylesheet the shell ships is on the signed-out key page, so this
     // reads every outline a `:focus` or `:focus-visible` rule draws, each
@@ -860,6 +958,7 @@ module(basename(import.meta.filename), function (hooks) {
           for (let property of [
             '--pretui-control-border',
             '--pretui-control-checked-border',
+            '--pretui-radio-checked-fill',
             '--pretui-choice-card-tone',
           ]) {
             let edge = style.getPropertyValue(property);
@@ -908,6 +1007,7 @@ module(basename(import.meta.filename), function (hooks) {
     for (let property of [
       '--pretui-control-border',
       '--pretui-control-checked-border',
+      '--pretui-radio-checked-fill',
       '--pretui-choice-card-tone',
     ]) {
       assert.ok(

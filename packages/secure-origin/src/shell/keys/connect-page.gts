@@ -113,6 +113,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{/if}}
             {{#if this.choosing.connection}}
               <Field
+                @reserveMessage={{false}}
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='Connection'
@@ -131,6 +132,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
               />
               {{#unless this.choosing.connection}}
                 <Field
+                  @reserveMessage={{false}}
                   @orientation='horizontal'
                   @label='Name'
                   @icon={{Tag}}

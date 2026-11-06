@@ -56,6 +56,7 @@ export default class ServiceAccountFields extends Component<Signature> {
       {{/if}}
     {{/if}}
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @labelTag='span'
       @label='Key file'
@@ -99,6 +100,7 @@ export default class ServiceAccountFields extends Component<Signature> {
       </div>
     </Field>
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @label='Act as'
       @icon={{Tag}}
@@ -121,6 +123,7 @@ export default class ServiceAccountFields extends Component<Signature> {
       </div>
     </Field>
     <Field
+      @reserveMessage={{false}}
       @orientation='horizontal'
       @label='Scopes'
       @icon={{Globe}}

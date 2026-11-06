@@ -121,7 +121,7 @@ export class RadioGroup extends Component<RadioGroupSignature> {
           flex: none;
         }
         .pretui-radio:checked {
-          background: var(--primary);
+          background: var(--pretui-radio-checked-fill, var(--primary));
           box-shadow: 0 0 0 1px
               var(
                 --pretui-control-checked-border,
@@ -165,9 +165,9 @@ export class RadioGroup extends Component<RadioGroupSignature> {
           min-inline-size: 0;
         }
         .pretui-radio-description {
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
-          overflow-wrap: anywhere;
+          overflow-wrap: break-word;
         }
         /* forced colors drop the painted face, so the platform's radio,
            drawn in the system colors, stands in there */

@@ -18,6 +18,7 @@ interface Signature {
 
 const AuthFormField: TemplateOnlyComponent<Signature> = <template>
   <Field
+    @reserveMessage={{false}}
     @label={{@label}}
     @labelTag={{@labelTag}}
     class='auth-form-field'
@@ -28,9 +29,7 @@ const AuthFormField: TemplateOnlyComponent<Signature> = <template>
   </Field>
 
   <style scoped>
-    /* The control shows its own error, so no line is kept for a message. */
     .auth-form-field {
-      --pretui-field-message-min-height: 0;
       margin-top: var(--boxel-sp);
       justify-items: stretch;
     }

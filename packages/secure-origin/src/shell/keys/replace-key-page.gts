@@ -164,6 +164,7 @@ class SlotPanel extends Component<{
       {{/if}}
       {{#if @replaced}}
         <Field
+          @reserveMessage={{false}}
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
@@ -180,6 +181,7 @@ class SlotPanel extends Component<{
         </Field>
       {{else if this.replacing}}
         <Field
+          @reserveMessage={{false}}
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
@@ -251,6 +253,7 @@ class SlotPanel extends Component<{
         </form>
       {{else if this.reconnecting}}
         <Field
+          @reserveMessage={{false}}
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
@@ -281,6 +284,7 @@ class SlotPanel extends Component<{
         </div>
       {{else if this.accepted}}
         <Field
+          @reserveMessage={{false}}
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
@@ -295,6 +299,7 @@ class SlotPanel extends Component<{
         </Field>
       {{else if this.someoneElses}}
         <Field
+          @reserveMessage={{false}}
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
@@ -330,6 +335,7 @@ class SlotPanel extends Component<{
         </Field>
       {{else}}
         <Field
+          @reserveMessage={{false}}
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
