@@ -149,9 +149,9 @@ export default class HostModeStackItem extends Component<Signature> {
     </div>
 
     <style scoped>
-      /* The top card's entrance. It ends at the card's own transform and
-         opacity, so it needs no fill mode and leaves nothing behind once it
-         has played. */
+      /* A card's entrance. It ends at the card's own transform and opacity,
+         so it needs no fill mode and leaves nothing behind once it has
+         played. */
       @keyframes scaleIn {
         from {
           transform: scale(0.1);
@@ -169,6 +169,14 @@ export default class HostModeStackItem extends Component<Signature> {
         padding-top: var(--boxel-sp-2xl);
         z-index: 0;
         pointer-events: none;
+        /* A card scales in as its box appears: when it is inserted, and when
+           the narrow layout shows a card it had hidden. A card that was
+           already showing is not re-entered when the card over it closes.
+           The animation reacts to the rendered DOM alone (ADR 007 §1.1): the
+           component keeps no animation state, and the markup is the same
+           wherever it renders, including in tests, where the animation
+           simply plays. */
+        animation: scaleIn 0.2s;
       }
 
       .host-mode-stack-item:not(.buried) {
@@ -182,12 +190,7 @@ export default class HostModeStackItem extends Component<Signature> {
         /* The top card fills its item; otherwise it keeps its 50rem default
            and is clipped when the item is narrower. */
         --host-mode-card-width: 100%;
-        /* A card scales in whenever it becomes the top card: as it opens,
-           and again as the card over it closes. The animation reacts to the
-           card's place in the stack alone (ADR 007 §1.1): the component
-           keeps no animation state, and the markup is the same wherever it
-           renders, including in tests, where the animation simply plays. */
-        animation: scaleIn 0.2s;
+        /* The card a closing card uncovers slides to its new offset. */
         transition: margin-top var(--boxel-transition);
       }
 
@@ -213,8 +216,8 @@ export default class HostModeStackItem extends Component<Signature> {
         display: none;
       }
 
-      /* reduced motion: a card fades in where it stands, and the cards
-         under it keep their places rather than sliding */
+      /* reduced motion: a card fades in where it stands, and a card the
+         closing card uncovers takes its new offset without sliding */
       @keyframes stackItemFadeIn {
         from {
           opacity: 0;
@@ -222,8 +225,11 @@ export default class HostModeStackItem extends Component<Signature> {
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .host-mode-stack-item:not(.buried) {
+        .host-mode-stack-item {
           animation-name: stackItemFadeIn;
+        }
+
+        .host-mode-stack-item:not(.buried) {
           transition: none;
         }
       }
