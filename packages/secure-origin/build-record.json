@@ -51,7 +51,7 @@
       ]
     },
     "app-origins.js": {
-      "bytes": 6332,
+      "bytes": 6830,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -62,8 +62,14 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/input.gts",
-          "sha256": "db1da646d177000663f00258045d748d7ebe403405b1ef1766c674ce16dc8af4",
-          "size": 2818
+          "sha256": "dabb9c9d8e69f2cb62f7e1eaeffd0c6c667413b9340b394b3a71b20f7a78cc89",
+          "size": 2914
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/described-by.ts",
+          "sha256": "ef6e3b86ec85ba3e528052e2abc44449588427374f520cf6c9e41d743f9755a4",
+          "size": 671
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -80,7 +86,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "internal/keep-style.gts",
-          "sha256": "292fc60ef41874c1b0326227c715528d0acf124cc255e0841a62e6d43e31ef67",
+          "sha256": "d7fe34d8277650d88bb3ba36e06baa2c129e706c36885bd75c0c39cd293d25ea",
           "size": 2122
         },
         {
@@ -115,7 +121,7 @@
       "bytes": 1233
     },
     "credentials.js": {
-      "bytes": 12674,
+      "bytes": 12676,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -732,55 +738,11 @@
       ]
     },
     "shared.css": {
-      "bytes": 40455,
+      "bytes": 10670,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/button/6c7dbd1683.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/icon-button/cd9c7937ab.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/3414112d42.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/accessories/68bba714fe.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/accessories/6ca717a623.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/input/95f9b29188.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/loading-indicator/803b34d81d.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/07eefebab2.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/26399f7c1f.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/743ac815ce.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/b595555c27.css"
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/cb67b6256e.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -793,73 +755,13 @@
       ]
     },
     "shared.js": {
-      "bytes": 471143,
+      "bytes": 313969,
       "modules": [
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/check.js",
-          "sha256": "aec2a56eef69c23d11f1a1577d2f40edb5522e01ad0dd0d9e07e4177dd1d3a4c",
-          "size": 778
-        },
-        {
-          "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/loader.js",
-          "sha256": "fed7b09fd36871df6aab79af3143254b2ab0ee5c0da769eb1143294006c131a9",
-          "size": 869
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/button/index.gts",
-          "sha256": "59fb31250cb570a50add5f2d400f9dc276fe2f00d9d9b58198d4be5f0a951abf",
-          "size": 2409
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/icon-button/index.gts",
-          "sha256": "ac6918137e14d08516bdd40f3c51d41e2fd2fda1d490616b70e4fde1184c74bd",
-          "size": 1548
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/accessories/index.gts",
-          "sha256": "da7548c11d08ced5b6066ac60db866e7d6356932e2574a2893a017d6ef943172",
-          "size": 3255
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/controls/index.gts",
-          "sha256": "f1ddd53d3984b7c3a2a447a0b54c97324711f269e703066fbed00a5e8de03596",
-          "size": 1124
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/input-group/index.gts",
-          "sha256": "e43e8032f90620df134dc6bd80c2e26ab63a427ef95f527ff6a79ca59d63b157",
-          "size": 4384
-        },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/input/index.gts",
-          "sha256": "656c3a823fd8f98b6918fcd671f64ed73b3521e6267a80f77d3a5b123f049962",
-          "size": 6302
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/loading-indicator/index.gts",
-          "sha256": "39e0fadc34cb44397106231a36443ee3000d67ded27aceca61234cac7c004ced",
-          "size": 821
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/index.gts",
-          "sha256": "71fad1c3f5a268a3c8b4518e3ed2842da979063d98d354e242412566c521a416",
-          "size": 8421
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/components/select/trigger.gts",
-          "sha256": "c4f0c380157b1cbb9c46c3b9d414642ef9bec04f6db304cb2be0e972d7b3f47c",
-          "size": 2562
+          "sha256": "fc555d4ff8ddaa5311b96e511a702cf67d475bfcc146ebc5b8fc5db131492607",
+          "size": 6260
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -870,7 +772,7 @@
         {
           "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/helpers/element.ts",
-          "sha256": "756e3294b6cb2584750e6defa1ba2ee1ddd43ea0f3d80c01e9fa3be427a064cc",
+          "sha256": "c87b38f1a1ca946c3f4d39f227791c2f23fa4c4018b2b299f2700429fa6a6ecf",
           "size": 328
         },
         {
@@ -887,21 +789,9 @@
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/helpers/sanitize-html.ts",
-          "sha256": "c9c85faf46138ec34d51612f05a0516f6264a2c93ebf0d756fc7e2aa5dd9f208",
-          "size": 735
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/helpers/truth-helpers.ts",
           "sha256": "8107c76549c6f34a62a5a941bf4b468a6cf675edc0d123556f28fc460eff498e",
-          "size": 483
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/icons/caret-down.gts",
-          "sha256": "8b516db8829e35aa46c3fccb0cf0e551d34f5ed329d578f4d4f3064f2738e94d",
-          "size": 691
+          "size": 479
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -931,13 +821,7 @@
           "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/icons/success-bordered.gts",
           "sha256": "1810eb678084004f7de89591e045f5eb1e44889aa0165ff85a7c66e1c2af2b7e",
-          "size": 1057
-        },
-        {
-          "package": "@cardstack/boxel-ui@0.0.0",
-          "module": "src/modifiers/set-css-var.ts",
-          "sha256": "306659fdfdb4a62c48869118e5d0c53bab9348e0adcef70c51199629bbce5fb8",
-          "size": 399
+          "size": 1053
         },
         {
           "package": "@cardstack/secure-origin",
@@ -965,11 +849,6 @@
           "size": 771
         },
         {
-          "package": "@embroider/macros@1.21.1",
-          "module": "src/addon/es-compat2.js",
-          "size": 292
-        },
-        {
           "package": "@glimmer/component@2.1.1",
           "module": "dist/index.js",
           "size": 2377
@@ -985,309 +864,14 @@
           "size": 1815
         },
         {
-          "package": "dompurify@3.4.10",
-          "module": "dist/purify.es.mjs",
-          "size": 55872
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/components/basic-dropdown-content.js",
-          "size": 16684
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/components/basic-dropdown-trigger.js",
-          "size": 3361
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/components/basic-dropdown.js",
-          "size": 10663
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/config.js",
-          "size": 278
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/modifiers/basic-dropdown-trigger.js",
-          "size": 6024
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/utils/calculate-position.js",
-          "size": 7943
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/utils/has-moved.js",
-          "size": 692
-        },
-        {
-          "package": "ember-basic-dropdown@9.0.0",
-          "module": "dist/utils/scroll-helpers.js",
-          "size": 3924
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/async-arrow-runtime.js",
-          "size": 636
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/cancelable-promise-helpers.js",
-          "size": 1975
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/ember-environment.js",
-          "size": 668
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/environment.js",
-          "size": 733
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/generator-state.js",
-          "size": 1073
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/bounded-policy.js",
-          "size": 357
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/drop-policy.js",
-          "size": 672
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/enqueued-policy.js",
-          "size": 595
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/execution-states.js",
-          "size": 487
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/keep-latest-policy.js",
-          "size": 970
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/restartable-policy.js",
-          "size": 740
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/policies/unbounded-policy.js",
-          "size": 443
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/refresh.js",
-          "size": 2630
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/scheduler.js",
-          "size": 1156
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/state-tracker/null-state-tracker.js",
-          "size": 387
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/state-tracker/null-state.js",
-          "size": 357
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/state-tracker/state-tracker.js",
-          "size": 930
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/scheduler/state-tracker/state.js",
-          "size": 1335
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-factory.js",
-          "size": 3620
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-instance/base.js",
-          "size": 1566
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-instance/cancelation.js",
-          "size": 721
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-instance/executor.js",
-          "size": 7924
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task-instance/initial-state.js",
-          "size": 413
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task/default-state.js",
-          "size": 467
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task/task.js",
-          "size": 2266
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/task/taskable.js",
-          "size": 1537
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/external/yieldables.js",
-          "size": 2291
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/scheduler/ember-scheduler.js",
-          "size": 332
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/task-factory.js",
-          "size": 996
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/task-instance.js",
-          "size": 2041
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/task.js",
-          "size": 1229
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/taskable-mixin.js",
-          "size": 761
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/tracked-state.js",
-          "size": 1212
-        },
-        {
-          "package": "ember-concurrency@5.2.0",
-          "module": "dist/-private/utils.js",
-          "size": 585
-        },
-        {
-          "package": "ember-element-helper@0.8.8",
-          "module": "dist/helpers/element.js",
-          "size": 1982
-        },
-        {
           "package": "ember-modifier@4.3.0",
           "module": "dist/index.js",
           "size": 2300
         },
         {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select.js",
-          "size": 30312
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/before-options.js",
-          "size": 2935
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/input.js",
-          "size": 5406
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/label.js",
-          "size": 1393
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/no-matches-message.js",
-          "size": 1107
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/options.js",
-          "size": 7302
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/placeholder.js",
-          "size": 1068
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/power-select-group.js",
-          "size": 1115
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/search-message.js",
-          "size": 1028
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/components/power-select/trigger.js",
-          "size": 8593
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/helpers/ember-power-select-is-equal.js",
-          "size": 542
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/helpers/ember-power-select-is-group.js",
-          "size": 323
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/helpers/ember-power-select-is-selected-present.js",
-          "size": 370
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/utils/equal.js",
-          "size": 453
-        },
-        {
-          "package": "ember-power-select@9.0.2",
-          "module": "dist/utils/group-utils.js",
-          "size": 12915
-        },
-        {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/deprecations/index.js",
-          "size": 1771
+          "size": 1767
         },
         {
           "package": "ember-source@6.10.1",
@@ -1342,7 +926,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/string/index.js",
-          "size": 1406
+          "size": 1404
         },
         {
           "package": "ember-source@6.10.1",
@@ -1427,7 +1011,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/debug/container-debug-adapter.js",
-          "size": 1037
+          "size": 1035
         },
         {
           "package": "ember-source@6.10.1",
@@ -1482,7 +1066,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/helper/index.js",
-          "size": 341
+          "size": 339
         },
         {
           "package": "ember-source@6.10.1",
@@ -1652,7 +1236,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/manager/index.js",
-          "size": 13921
+          "size": 13917
         },
         {
           "package": "ember-source@6.10.1",
@@ -1767,7 +1351,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/index-DaCZcoCY.js",
-          "size": 70128
+          "size": 70116
         },
         {
           "package": "ember-source@6.10.1",
@@ -1812,7 +1396,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/rsvp-ziM3qQyS.js",
-          "size": 23062
+          "size": 22966
         },
         {
           "package": "ember-source@6.10.1",
@@ -1822,7 +1406,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/setup-registry-DktVPnKH.js",
-          "size": 1130
+          "size": 1126
         },
         {
           "package": "ember-source@6.10.1",
@@ -1833,41 +1417,6 @@
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/unrecognized-url-error-Csk7hcJF.js",
           "size": 8939
-        },
-        {
-          "package": "ember-style-modifier@4.6.0",
-          "module": "dist/modifiers/style.js",
-          "size": 1585
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/and.js",
-          "size": 358
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/eq.js",
-          "size": 200
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/not-eq.js",
-          "size": 207
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/not.js",
-          "size": 231
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/helpers/or.js",
-          "size": 355
-        },
-        {
-          "package": "ember-truth-helpers@5.0.0",
-          "module": "dist/utils/truth-convert.js",
-          "size": 396
         },
         {
           "package": "lodash-es@4.18.1",
@@ -1887,17 +1436,17 @@
         {
           "package": "lodash-es@4.18.1",
           "module": "_baseGetTag.js",
-          "size": 439
+          "size": 437
         },
         {
           "package": "lodash-es@4.18.1",
           "module": "_baseIsNative.js",
-          "size": 704
+          "size": 702
         },
         {
           "package": "lodash-es@4.18.1",
           "module": "_baseToString.js",
-          "size": 572
+          "size": 566
         },
         {
           "package": "lodash-es@4.18.1",
@@ -2057,7 +1606,7 @@
         {
           "package": "lodash-es@4.18.1",
           "module": "_objectToString.js",
-          "size": 240
+          "size": 238
         },
         {
           "package": "lodash-es@4.18.1",
@@ -2102,12 +1651,12 @@
         {
           "package": "lodash-es@4.18.1",
           "module": "isFunction.js",
-          "size": 421
+          "size": 419
         },
         {
           "package": "lodash-es@4.18.1",
           "module": "isObject.js",
-          "size": 224
+          "size": 222
         },
         {
           "package": "lodash-es@4.18.1",
@@ -2132,8 +1681,52 @@
       ]
     },
     "shell.css": {
-      "bytes": 80927,
+      "bytes": 110569,
       "sources": [
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/button/6c7dbd1683.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/icon-button/cd9c7937ab.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/3414112d42.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/accessories/68bba714fe.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/accessories/6ca717a623.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/loading-indicator/803b34d81d.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/07eefebab2.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/26399f7c1f.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/743ac815ce.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/919ea60df0.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/b595555c27.css"
+        },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/223e7fdb74.css"
@@ -2248,10 +1841,6 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/03381d8e00.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/0cc1d52451.css"
         },
         {
@@ -2269,6 +1858,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/280551eb4d.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/2830ece10f.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2312,6 +1905,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/7bec823ea5.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/80e5dcd242.css"
         },
         {
@@ -2321,10 +1918,6 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/a0b3760b6c.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/a896ab8779.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2380,6 +1973,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/edffc4fb81.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/ef42dcf82f.css"
         },
         {
@@ -2425,36 +2022,114 @@
       ]
     },
     "shell.js": {
-      "bytes": 363531,
+      "bytes": 522177,
       "modules": [
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/check.js",
+          "sha256": "aec2a56eef69c23d11f1a1577d2f40edb5522e01ad0dd0d9e07e4177dd1d3a4c",
+          "size": 778
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/loader.js",
+          "sha256": "fed7b09fd36871df6aab79af3143254b2ab0ee5c0da769eb1143294006c131a9",
+          "size": 869
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/button/index.gts",
+          "sha256": "59fb31250cb570a50add5f2d400f9dc276fe2f00d9d9b58198d4be5f0a951abf",
+          "size": 2409
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/icon-button/index.gts",
+          "sha256": "ac6918137e14d08516bdd40f3c51d41e2fd2fda1d490616b70e4fde1184c74bd",
+          "size": 1548
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/accessories/index.gts",
+          "sha256": "da7548c11d08ced5b6066ac60db866e7d6356932e2574a2893a017d6ef943172",
+          "size": 3255
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/controls/index.gts",
+          "sha256": "f1ddd53d3984b7c3a2a447a0b54c97324711f269e703066fbed00a5e8de03596",
+          "size": 1128
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/index.gts",
+          "sha256": "17fb71f998cb065a9f7c9863f6ff9443874241aaa50ef97f2d344ed6b9bfab43",
+          "size": 4532
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/loading-indicator/index.gts",
+          "sha256": "39e0fadc34cb44397106231a36443ee3000d67ded27aceca61234cac7c004ced",
+          "size": 821
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/index.gts",
+          "sha256": "4824d7ca0ef7c5d6b7fa383925ad8f9a3d8085fd10b41a66cf6783b0228304a8",
+          "size": 8421
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/trigger.gts",
+          "sha256": "c4f0c380157b1cbb9c46c3b9d414642ef9bec04f6db304cb2be0e972d7b3f47c",
+          "size": 2566
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/helpers/sanitize-html.ts",
+          "sha256": "c9c85faf46138ec34d51612f05a0516f6264a2c93ebf0d756fc7e2aa5dd9f208",
+          "size": 735
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/icons/caret-down.gts",
+          "sha256": "8b516db8829e35aa46c3fccb0cf0e551d34f5ed329d578f4d4f3064f2738e94d",
+          "size": 691
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/modifiers/set-css-var.ts",
+          "sha256": "a526e4e2aa474e8c98a919405fe21fcf8d03fedd5144fa7e31f96c30f335a7bc",
+          "size": 570
+        },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/input-group.gts",
-          "sha256": "8566c3df0f21b8ece3e456068d804549d38853328ad10e8ae6856f521ca713e4",
-          "size": 3666
+          "sha256": "5db85bb7e2714288f294d0a3827fa9de0f65f5f13856bf33aa251cf9f99f5e00",
+          "size": 3868
         },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/select.gts",
           "sha256": "789f84dd6912cba183b4a8a2d5f7151b67cadacc2ae03839c9cf1fd65dc8a5f6",
-          "size": 8130
+          "size": 8128
         },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/textarea.gts",
-          "sha256": "e14fbbdd194f70d811c8dfe282074a32da14bb1bfc116176a64e8fbbec55286a",
-          "size": 2201
+          "sha256": "8aa70b293ab1c31b652ba9681ec085c3436c45307a7529474900cac35c535283",
+          "size": 2299
         },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "internal/overlay.gts",
           "sha256": "61c5c24a130fb19da5d0c0e4b12926d2cc6112eb1088d0dee34d7cb99adbef6e",
-          "size": 2497
+          "size": 2493
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/auth-button.gts",
-          "size": 619
+          "size": 621
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2469,17 +2144,17 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/auth-heading.gts",
-          "size": 494
+          "size": 496
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/busy-message.gts",
-          "size": 682
+          "size": 684
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/button.gts",
-          "size": 1775
+          "size": 1781
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2494,7 +2169,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/error-display.gts",
-          "size": 3405
+          "size": 3409
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2589,7 +2264,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/loading-indicator.gts",
-          "size": 1171
+          "size": 1173
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2614,27 +2289,27 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/modifiers/autofocus.ts",
-          "size": 137
+          "size": 139
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/modifiers/fit-content.ts",
-          "size": 864
+          "size": 866
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/password-reset.gts",
-          "size": 6855
+          "size": 6857
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/register.gts",
-          "size": 9784
+          "size": 9577
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/sign-in.gts",
-          "size": 3954
+          "size": 3956
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2679,7 +2354,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/anonymous-use-fields.gts",
-          "size": 4608
+          "size": 4610
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2694,27 +2369,27 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 35496
+          "size": 35508
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/breadcrumbs.gts",
-          "size": 1848
+          "size": 1850
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/client-picker.gts",
-          "size": 3405
+          "size": 3407
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/connect-page.gts",
-          "size": 10226
+          "size": 10234
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/connected-page.gts",
-          "size": 9201
+          "size": 9211
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2729,7 +2404,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/done-page.gts",
-          "size": 904
+          "size": 906
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2739,67 +2414,67 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/enter-key-page.gts",
-          "size": 20030
+          "size": 20040
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-fields.gts",
-          "size": 1462
+          "size": 1464
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-grants.gts",
-          "size": 6739
+          "size": 6749
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-limit-notices.gts",
-          "size": 5577
+          "size": 5579
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 26550
+          "size": 26558
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-picker.gts",
-          "size": 2113
+          "size": 2117
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-policy-notices.gts",
-          "size": 6905
+          "size": 6907
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-tile.gts",
-          "size": 2125
+          "size": 2129
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-usage-panel.gts",
-          "size": 4438
+          "size": 4444
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-use.gts",
-          "size": 9475
+          "size": 9481
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/keys-window.gts",
-          "size": 5390
+          "size": 5394
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/limits-form.gts",
-          "size": 8498
+          "size": 8504
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/load-failed.gts",
-          "size": 1166
+          "size": 1168
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2809,12 +2484,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/oauth-client-fields.gts",
-          "size": 10474
+          "size": 10480
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/oauth-key-status.gts",
-          "size": 4216
+          "size": 4220
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2829,12 +2504,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/radio-choices.gts",
-          "size": 1875
+          "size": 1877
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/replace-key-page.gts",
-          "size": 19325
+          "size": 19335
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2849,7 +2524,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/service-account-fields.gts",
-          "size": 6837
+          "size": 6841
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2859,17 +2534,17 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 15644
+          "size": 15227
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-limits-page.gts",
-          "size": 8953
+          "size": 8959
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 12024
+          "size": 12030
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2879,12 +2554,17 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/usage-summary.gts",
-          "size": 11898
+          "size": 11902
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/use-key-page.gts",
-          "size": 10912
+          "size": 10497
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/workspace-picker.gts",
+          "size": 944
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2899,7 +2579,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/new-password-fields.gts",
-          "size": 2102
+          "size": 2104
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2914,12 +2594,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/forgot-password.gts",
-          "size": 2471
+          "size": 2473
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/pages.gts",
-          "size": 1094
+          "size": 1098
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2929,17 +2609,17 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/password-reset/reset-password.gts",
-          "size": 2755
+          "size": 2757
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/register/pages.gts",
-          "size": 814
+          "size": 816
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/register/register.gts",
-          "size": 9979
+          "size": 9983
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2959,17 +2639,17 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/cli-auth-page.gts",
-          "size": 3681
+          "size": 3683
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/cli-handoff.gts",
-          "size": 1853
+          "size": 1855
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/cli-sign-in-page.gts",
-          "size": 1776
+          "size": 1778
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2979,7 +2659,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/google-callback.gts",
-          "size": 3369
+          "size": 3371
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2994,22 +2674,22 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-in-form.gts",
-          "size": 5273
+          "size": 5279
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-in-page.gts",
-          "size": 1534
+          "size": 1536
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-out-page.gts",
-          "size": 893
+          "size": 895
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/signed-in.gts",
-          "size": 5025
+          "size": 5027
         },
         {
           "package": "@cardstack/secure-origin",
@@ -3042,6 +2722,306 @@
           "size": 204
         },
         {
+          "package": "@embroider/macros@1.21.1",
+          "module": "src/addon/es-compat2.js",
+          "size": 292
+        },
+        {
+          "package": "dompurify@3.4.10",
+          "module": "dist/purify.es.mjs",
+          "size": 55878
+        },
+        {
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/components/basic-dropdown-content.js",
+          "size": 16676
+        },
+        {
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/components/basic-dropdown-trigger.js",
+          "size": 3363
+        },
+        {
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/components/basic-dropdown.js",
+          "size": 10665
+        },
+        {
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/config.js",
+          "size": 278
+        },
+        {
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/modifiers/basic-dropdown-trigger.js",
+          "size": 6022
+        },
+        {
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/utils/calculate-position.js",
+          "size": 7943
+        },
+        {
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/utils/has-moved.js",
+          "size": 692
+        },
+        {
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/utils/scroll-helpers.js",
+          "size": 3924
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/async-arrow-runtime.js",
+          "size": 636
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/cancelable-promise-helpers.js",
+          "size": 1973
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/ember-environment.js",
+          "size": 666
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/environment.js",
+          "size": 733
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/generator-state.js",
+          "size": 1073
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/bounded-policy.js",
+          "size": 357
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/drop-policy.js",
+          "size": 672
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/enqueued-policy.js",
+          "size": 595
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/execution-states.js",
+          "size": 487
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/keep-latest-policy.js",
+          "size": 970
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/restartable-policy.js",
+          "size": 740
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/unbounded-policy.js",
+          "size": 443
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/refresh.js",
+          "size": 2630
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/scheduler.js",
+          "size": 1156
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/state-tracker/null-state-tracker.js",
+          "size": 387
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/state-tracker/null-state.js",
+          "size": 357
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/state-tracker/state-tracker.js",
+          "size": 930
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/state-tracker/state.js",
+          "size": 1335
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-factory.js",
+          "size": 3620
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-instance/base.js",
+          "size": 1566
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-instance/cancelation.js",
+          "size": 721
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-instance/executor.js",
+          "size": 7924
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-instance/initial-state.js",
+          "size": 413
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task/default-state.js",
+          "size": 467
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task/task.js",
+          "size": 2266
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task/taskable.js",
+          "size": 1537
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/yieldables.js",
+          "size": 2291
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/scheduler/ember-scheduler.js",
+          "size": 332
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/task-factory.js",
+          "size": 992
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/task-instance.js",
+          "size": 2041
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/task.js",
+          "size": 1229
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/taskable-mixin.js",
+          "size": 761
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/tracked-state.js",
+          "size": 1212
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/utils.js",
+          "size": 585
+        },
+        {
+          "package": "ember-element-helper@0.8.8",
+          "module": "dist/helpers/element.js",
+          "size": 1974
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select.js",
+          "size": 30300
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/before-options.js",
+          "size": 2935
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/input.js",
+          "size": 5400
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/label.js",
+          "size": 1395
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/no-matches-message.js",
+          "size": 1109
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/options.js",
+          "size": 7302
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/placeholder.js",
+          "size": 1070
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/power-select-group.js",
+          "size": 1117
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/search-message.js",
+          "size": 1030
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/trigger.js",
+          "size": 8589
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/helpers/ember-power-select-is-equal.js",
+          "size": 542
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/helpers/ember-power-select-is-group.js",
+          "size": 323
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/helpers/ember-power-select-is-selected-present.js",
+          "size": 370
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/utils/equal.js",
+          "size": 453
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/utils/group-utils.js",
+          "size": 12915
+        },
+        {
           "package": "ember-provide-consume-context@0.8.0",
           "module": "dist/index.js",
           "size": 399
@@ -3050,6 +3030,41 @@
           "package": "ember-provide-consume-context@0.8.0",
           "module": "dist/utils-8e9180ab.js",
           "size": 1068
+        },
+        {
+          "package": "ember-style-modifier@4.6.0",
+          "module": "dist/modifiers/style.js",
+          "size": 1583
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/and.js",
+          "size": 358
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/eq.js",
+          "size": 200
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/not-eq.js",
+          "size": 207
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/not.js",
+          "size": 231
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/or.js",
+          "size": 355
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/utils/truth-convert.js",
+          "size": 394
         }
       ]
     }

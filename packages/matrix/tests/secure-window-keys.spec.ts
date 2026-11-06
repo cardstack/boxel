@@ -487,13 +487,7 @@ test.describe('the secure window’s key pages', () => {
       keys,
       'share a key from your keys: choosing the workspace',
     );
-    await keys
-      .locator('.pretui-select-dropdown [role="option"]', {
-        has: keys.locator('[data-test-pretui-select-option]', {
-          hasText: new RegExp(`^${realmName}$`),
-        }),
-      })
-      .click();
+    await keys.getByRole('option', { name: realmName, exact: true }).click();
     await keys.locator('[data-test-share-label]').fill('Weather for everyone');
     await snapshot(testInfo, keys, 'share a key from your keys');
     await keys.locator('[data-test-share-key-save]').click();

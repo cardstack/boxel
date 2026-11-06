@@ -1457,6 +1457,38 @@ module('Integration | approve pages', function (hooks) {
     );
   });
 
+  test('with no workspace the user can read, the use page says so in place of the picker', async function (assert) {
+    serve({
+      'GET _user-keys': () =>
+        json(200, {
+          data: [
+            {
+              type: 'user-key',
+              id: 'key-gh',
+              attributes: {
+                name: 'GitHub token',
+                kind: 'static',
+                state: 'active',
+                createdAt: '2026-10-01T12:00:00.000Z',
+                updatedAt: '2026-10-01T12:00:00.000Z',
+                grants: [],
+                usedWith: [],
+                sharedInto: [],
+              },
+            },
+          ],
+        }),
+      'GET _secure-window/realms': () => json(200, { data: [] }),
+    });
+    visitShell('keys/key-gh/use');
+    await render(<template><UseKeyPage @keyId='key-gh' /></template>);
+    await waitFor('[data-test-workspace-dropdown-no-results]');
+    assert
+      .dom('[data-test-workspace-dropdown-no-results]')
+      .hasText('You don’t have access to any workspace to use this key in.');
+    assert.dom('[data-test-workspace-dropdown]').doesNotExist();
+  });
+
   test('a workspace with no card this key works for says so about this key', async function (assert) {
     serve({
       'GET _user-keys': () =>
