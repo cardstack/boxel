@@ -325,7 +325,7 @@ export default class InputGroup extends Component<Signature> {
         border-color: var(--destructive, var(--boxel-error-100));
       }
 
-      .boxel-input-group--disabled ~ .error-message,
+      .boxel-input-group--disabled ~ .error-live > .error-message,
       .boxel-input-group--disabled ~ .helper-text {
         display: none;
       }
