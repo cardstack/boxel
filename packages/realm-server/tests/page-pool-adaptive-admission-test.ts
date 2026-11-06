@@ -76,14 +76,14 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
-  // A fixed pool of 8 tabs with 4 tabs per realm, which leaves room for 3
-  // file renders of one realm at a time.
-  function makePool(): PagePool {
+  // A fixed pool of 8 tabs. With 4 tabs per realm (the default) it admits 3
+  // file renders of one realm at a time; with 5 it admits 4.
+  function makePool(tabMax = 4): PagePool {
     let saved = POOL_SIZING_ENV_KEYS.map((key) => [key, process.env[key]]);
     for (let key of POOL_SIZING_ENV_KEYS) {
       delete process.env[key];
     }
-    process.env.PRERENDER_AFFINITY_TAB_MAX = '4';
+    process.env.PRERENDER_AFFINITY_TAB_MAX = String(tabMax);
     try {
       let pool = new PagePool({
         maxPages: 8,
@@ -126,6 +126,32 @@ module(basename(import.meta.filename), function (hooks) {
     return admitted;
   }
 
+  // Reports how a render that holds `lease` ended.
+  function report(
+    pool: PagePool,
+    realm: string,
+    lease: { fileAdmissionGeneration?: number },
+    outcome: 'in-time' | 'timed-out',
+  ) {
+    pool.recordVisitOutcome(
+      keyFor(realm),
+      outcome,
+      lease.fileAdmissionGeneration!,
+    );
+  }
+
+  // One visit of the realm, admitted under its current cap, that ends with
+  // `outcome`.
+  async function visit(
+    pool: PagePool,
+    realm: string,
+    outcome: 'in-time' | 'timed-out',
+  ) {
+    let lease = await pool.getPage(keyFor(realm), 'file');
+    report(pool, realm, lease, outcome);
+    lease.release();
+  }
+
   test("a timed-out visit halves its realm's file admission, and visits in time bring it back", async function (assert) {
     let pool = makePool();
     await pool.warmStandbys();
@@ -135,7 +161,7 @@ module(basename(import.meta.filename), function (hooks) {
       'a realm starts with its full cap',
     );
 
-    pool.recordVisitOutcome(keyFor(REALM_A), 'timed-out');
+    await visit(pool, REALM_A, 'timed-out');
     assert.strictEqual(
       await admittedAtOnce(pool, REALM_A),
       1,
@@ -147,30 +173,30 @@ module(basename(import.meta.filename), function (hooks) {
       'another realm keeps its full cap',
     );
 
-    pool.recordVisitOutcome(keyFor(REALM_A), 'in-time');
-    pool.recordVisitOutcome(keyFor(REALM_A), 'in-time');
+    await visit(pool, REALM_A, 'in-time');
+    await visit(pool, REALM_A, 'in-time');
     assert.strictEqual(
       await admittedAtOnce(pool, REALM_A),
       1,
       'two visits in time are not enough to raise the cap',
     );
-    pool.recordVisitOutcome(keyFor(REALM_A), 'in-time');
+    await visit(pool, REALM_A, 'in-time');
     assert.strictEqual(
       await admittedAtOnce(pool, REALM_A),
       2,
       'the third visit in time raises the cap by one',
     );
 
-    pool.recordVisitOutcome(keyFor(REALM_A), 'in-time');
-    pool.recordVisitOutcome(keyFor(REALM_A), 'timed-out');
-    pool.recordVisitOutcome(keyFor(REALM_A), 'in-time');
-    pool.recordVisitOutcome(keyFor(REALM_A), 'in-time');
+    await visit(pool, REALM_A, 'in-time');
+    await visit(pool, REALM_A, 'timed-out');
+    await visit(pool, REALM_A, 'in-time');
+    await visit(pool, REALM_A, 'in-time');
     assert.strictEqual(
       await admittedAtOnce(pool, REALM_A),
       1,
       'a timeout starts the count of visits in time again',
     );
-    pool.recordVisitOutcome(keyFor(REALM_A), 'in-time');
+    await visit(pool, REALM_A, 'in-time');
     assert.strictEqual(
       await admittedAtOnce(pool, REALM_A),
       2,
@@ -178,7 +204,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     for (let i = 0; i < 6; i++) {
-      pool.recordVisitOutcome(keyFor(REALM_A), 'in-time');
+      await visit(pool, REALM_A, 'in-time');
     }
     assert.strictEqual(
       await admittedAtOnce(pool, REALM_A),
@@ -193,7 +219,7 @@ module(basename(import.meta.filename), function (hooks) {
     let held = await Promise.all(
       Array.from({ length: 3 }, () => pool.getPage(keyFor(REALM_A), 'file')),
     );
-    pool.recordVisitOutcome(keyFor(REALM_A), 'timed-out');
+    report(pool, REALM_A, held[0]!, 'timed-out');
 
     let nextAdmitted = false;
     let next = pool.getPage(keyFor(REALM_A), 'file').then((lease) => {
@@ -211,5 +237,50 @@ module(basename(import.meta.filename), function (hooks) {
     held[2]!.release();
     (await next).release();
     assert.true(nextAdmitted, 'it is admitted once the last render ends');
+  });
+
+  test('renders in flight that time out together halve the cap once', async function (assert) {
+    let pool = makePool(5);
+    await pool.warmStandbys();
+    let held = await Promise.all(
+      Array.from({ length: 4 }, () => pool.getPage(keyFor(REALM_A), 'file')),
+    );
+    for (let lease of held) {
+      report(pool, REALM_A, lease, 'timed-out');
+      lease.release();
+    }
+    assert.strictEqual(
+      await admittedAtOnce(pool, REALM_A, 5),
+      2,
+      'the cap went from 4 to 2, not on down to 1',
+    );
+  });
+
+  test('renders admitted before the cap went down do not count toward raising it', async function (assert) {
+    let pool = makePool(5);
+    await pool.warmStandbys();
+    let held = await Promise.all(
+      Array.from({ length: 4 }, () => pool.getPage(keyFor(REALM_A), 'file')),
+    );
+    report(pool, REALM_A, held[0]!, 'timed-out');
+    held[0]!.release();
+    for (let lease of held.slice(1)) {
+      report(pool, REALM_A, lease, 'in-time');
+      lease.release();
+    }
+    assert.strictEqual(
+      await admittedAtOnce(pool, REALM_A, 5),
+      2,
+      'the cap stays at 2',
+    );
+
+    for (let i = 0; i < 3; i++) {
+      await visit(pool, REALM_A, 'in-time');
+    }
+    assert.strictEqual(
+      await admittedAtOnce(pool, REALM_A, 5),
+      3,
+      'three visits admitted under the lower cap raise it',
+    );
   });
 });

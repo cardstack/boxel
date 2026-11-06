@@ -150,6 +150,18 @@ export function renderActorFor(auth: string): string | null {
   return session.kind === 'user' ? session.user : null;
 }
 
+// A render timeout's diagnostics say whether the tab was still answering when
+// the render timer fired. A tab that wasn't is pegged by the card it renders,
+// or its browser is; a render that timed out on a responsive tab was waiting
+// on something, usually a fetch.
+function tabStoppedAnswering(err: RenderError): boolean {
+  let diagnostics = err.diagnostics;
+  return (
+    diagnostics?.mainThreadResponsive === false ||
+    diagnostics?.cdpSessionAttachTimedOut === true
+  );
+}
+
 // Searches the error, and the errors nested in it, since the failed import is
 // usually the cause of whatever the render reports on top.
 function failedHostChunkImportIn(
@@ -1303,14 +1315,21 @@ export class RenderRunner {
       } passes=${VISIT_PASS_ORDER.filter((p) => requested[p]).join(',')}`,
     );
 
-    const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(
-        affinityKey,
-        auth,
-        'file',
-        signal,
-        priority,
-      );
+    const {
+      page,
+      reused,
+      launchMs,
+      waits,
+      pageId,
+      fileAdmissionGeneration,
+      release,
+    } = await this.#getPageForAffinity(
+      affinityKey,
+      auth,
+      'file',
+      signal,
+      priority,
+    );
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -1321,9 +1340,15 @@ export class RenderRunner {
     };
     this.#pagePool.resetConsoleErrors(pageId);
     onTabAcquired?.({ pageId: pageId ?? 'unknown' });
+    // Whether a step timed out on a tab that had stopped answering.
+    let timedOutOnWedgedTab = false;
     const markTimeout = (err?: RenderError) => {
-      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
-        poolInfo.timedOut = true;
+      if (err?.error?.title !== 'Render timeout') {
+        return;
+      }
+      poolInfo.timedOut = true;
+      if (tabStoppedAnswering(err)) {
+        timedOutOnWedgedTab = true;
       }
     };
 
@@ -2581,11 +2606,24 @@ export class RenderRunner {
     } finally {
       // Before `release()`, so the slot this visit frees is handed out under
       // the realm's new cap. A visit that threw was cancelled or failed
-      // before it rendered, which says nothing about how loaded the realm is.
-      if (poolInfo.timedOut) {
-        this.#pagePool.recordVisitOutcome(affinityKey, 'timed-out');
-      } else if (!threw) {
-        this.#pagePool.recordVisitOutcome(affinityKey, 'in-time');
+      // before it rendered, and a tab that stopped answering was pegged by
+      // the card it rendered. Neither says how loaded the realm server is.
+      if (fileAdmissionGeneration !== undefined) {
+        if (poolInfo.timedOut) {
+          if (!timedOutOnWedgedTab) {
+            this.#pagePool.recordVisitOutcome(
+              affinityKey,
+              'timed-out',
+              fileAdmissionGeneration,
+            );
+          }
+        } else if (!threw) {
+          this.#pagePool.recordVisitOutcome(
+            affinityKey,
+            'in-time',
+            fileAdmissionGeneration,
+          );
+        }
       }
       // An evicted tab never renders again, so its stash goes with it. Skip
       // the evaluate there: eviction is how a render timeout ends, and a tab
@@ -3080,15 +3118,14 @@ export class RenderRunner {
     return true;
   }
 
-  // A timeout's diagnostics say whether the tab was still answering when the
-  // render timer fired. Only a tab that wasn't is worth reporting: a render
-  // that timed out waiting on a fetch left a healthy renderer behind.
+  // Only a tab that stopped answering is worth reporting: a render that timed
+  // out waiting on a fetch left a healthy renderer behind.
   #reportUnresponsiveTab(affinityKey: string, err: RenderError) {
-    let diagnostics = err.diagnostics;
-    let browserUnresponsive = diagnostics?.cdpSessionAttachTimedOut === true;
-    if (diagnostics?.mainThreadResponsive !== false && !browserUnresponsive) {
+    if (!tabStoppedAnswering(err)) {
       return;
     }
+    let browserUnresponsive =
+      err.diagnostics?.cdpSessionAttachTimedOut === true;
     try {
       this.#onUnresponsiveTab?.({ affinityKey, browserUnresponsive });
     } catch (e) {
