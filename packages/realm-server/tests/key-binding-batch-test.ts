@@ -24,6 +24,7 @@ import {
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { listOwnSharedRealms, shareKey } from '../lib/key-shares.ts';
+import { addOAuthClient } from '../lib/oauth.ts';
 import { pipelineAdmission } from '../lib/key-bindings.ts';
 import { withinSlotLimit, type BatchGroup } from '../lib/key-binding-batch.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
@@ -278,6 +279,7 @@ module(basename(import.meta.filename), function (hooks) {
     slot: string;
     key: string;
     keyKind?: string;
+    kinds: string[];
     status: string;
     fingerprint: string;
     snapshot: Record<string, string | null>;
@@ -299,8 +301,8 @@ module(basename(import.meta.filename), function (hooks) {
       destination: { href: string; host: string; registrableDomain: string };
       operations: Operation[];
     }[];
-    keys: { id: string; name: string; covers: string[] }[];
-    shares: { id: string; label: string; covers: string[] }[];
+    keys: { id: string; name: string; covers: string[]; serves: string[] }[];
+    shares: { id: string; label: string; covers: string[]; serves: string[] }[];
   }
 
   async function batch(
@@ -610,6 +612,158 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('each key says which destinations of the batch its credential is good at, and each slot which kinds of key it takes', async function (assert) {
+    await addKey(OWNER, 'pasted');
+    let robot = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'vendor robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'robot',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'hostless robot',
+      value: 'hostless-secret',
+      oauth: {
+        clientId: 'hostless',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    let signIn = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'other app',
+      value: 'app-secret',
+      oauth: {
+        clientId: 'app',
+        authorizeUrl: `${OTHER_HOST}/authorize`,
+        tokenUrl: `${OTHER_HOST}/token`,
+        apiHosts: [`${OTHER_HOST}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    // A connection made through the sign-in app, stored as signing in
+    // stores one.
+    let connection = '3f9a1c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b';
+    await dbAdapter.execute(
+      `INSERT INTO user_keys
+         SELECT (jsonb_populate_record(k, jsonb_build_object('id', $1::text, 'name', 'other account', 'kind', 'oauth-connection'))).*
+           FROM user_keys k WHERE k.id = $2`,
+      { bind: [connection, robot.id] },
+    );
+    await dbAdapter.execute(
+      `INSERT INTO oauth_connections (key_id, client_kind, client_key_id, token_kind, client_id, token_url)
+         VALUES ($1, 'own', $2, 'refresh', 'app', $3)`,
+      { bind: [connection, signIn.id, `${OTHER_HOST}/token`] },
+    );
+
+    let found = await batchOf(OWNER, onType(INBOX));
+    let destinationOf = (operation: string) =>
+      found.groups.find((g) => g.operations.some((o) => o.name === operation))!
+        .destination.href;
+    let vendor = destinationOf('listPRs');
+    let other = destinationOf('elsewhere');
+    let kindsOf = (operation: string) =>
+      operationsIn(found).find((o) => o.name === operation)!.slots[0]!.kinds;
+    assert.deepEqual(
+      [kindsOf('listPRs'), kindsOf('elsewhere')],
+      [
+        ['static', 'oauth'],
+        ['static', 'oauth'],
+      ],
+      'a bearer token outside Google is a pasted key or an OAuth token',
+    );
+    let serves = Object.fromEntries(
+      found.keys.map((k) => [k.name, [...k.serves].sort()]),
+    );
+    assert.deepEqual(
+      serves['pasted'],
+      [...found.groups.map((g) => g.destination.href)].sort(),
+      'a pasted key is taken wherever it is sent',
+    );
+    assert.deepEqual(
+      serves['hostless robot'],
+      serves['pasted'],
+      'a client that names no API hosts is not held to any',
+    );
+    assert.ok(serves['vendor robot']!.includes(vendor));
+    assert.notOk(
+      serves['vendor robot']!.includes(other),
+      "an OAuth client's tokens are good only at its API hosts",
+    );
+    assert.deepEqual(
+      serves['other account'],
+      [other],
+      "a connection's tokens are good only at its client's API hosts",
+    );
+    assert.notOk(
+      'other app' in serves,
+      'a client people only sign in through is never offered',
+    );
+  });
+
+  test('a share of an OAuth client people only sign in through is not offered for a share slot', async function (assert) {
+    let signIn = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'vendor app',
+      value: 'app-secret',
+      oauth: {
+        clientId: 'app',
+        authorizeUrl: `${VENDOR}/authorize`,
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    let robot = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'other robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'robot',
+        grantType: 'client_credentials',
+        tokenUrl: `${OTHER_HOST}/token`,
+        apiHosts: [`${OTHER_HOST}/`],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    for (let [key, label] of [
+      [signIn, 'sign in here'],
+      [robot, 'other robot'],
+    ] as const) {
+      await shareKey(dbAdapter, {
+        owner: WRITER,
+        keyId: key.id,
+        realm: realmURL.href,
+        label,
+        ticket: await ticket(WRITER, 'share', {
+          keyId: key.id,
+          realm: realmURL,
+        }),
+      });
+    }
+    let found = await batchOf(WRITER, onType(INBOX));
+    let destinationOf = (operation: string) =>
+      found.groups.find((g) => g.operations.some((o) => o.name === operation))!
+        .destination.href;
+    assert.deepEqual(
+      found.shares.map((s) => [s.label, s.serves]),
+      [['other robot', [destinationOf('elsewhere')]]],
+      "the sign-in app's share is left out, and the robot's tokens are good only at its API host",
+    );
+    assert.notOk(
+      found.shares[0]!.serves.includes(destinationOf('shared')),
+      'so it is not good at the destination the share slot is sent to',
+    );
+  });
+
   test('a second card calling the same host reuses the grant and is a batch of its own', async function (assert) {
     let key = await addKey();
     await approveFrom(
@@ -817,6 +971,7 @@ module(basename(import.meta.filename), function (hooks) {
       slots: Array.from({ length: slots }, (_, i) => ({
         slot: `apiKey:s${i}`,
         key: 'apiKey' as const,
+        kinds: ['static' as const],
         status: 'new' as const,
         snapshot:
           {} as BatchGroup['operations'][number]['slots'][number]['snapshot'],

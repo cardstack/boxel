@@ -10,6 +10,8 @@ import {
 } from '@cardstack/runtime-common';
 import {
   destinationCovers,
+  slotKeyKinds,
+  type CallApiKeyKind,
   type CallApiSlot,
   type OperationCallApi,
   type OperationDefinition,
@@ -32,6 +34,13 @@ import {
   type SecureWindowTarget,
 } from './secure-window.ts';
 import { limitsOf } from './key-limit-settings.ts';
+import {
+  apiHostList,
+  apiHostsOfKeySql,
+  apiHostsServe,
+  arrayColumn,
+  sendableKeySql,
+} from './oauth.ts';
 import { normalizeGrantDestination } from './user-key-grants.ts';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 
@@ -80,6 +89,9 @@ export interface BatchSlot {
   // The kind of key its declaration says fills it; only a key of that kind
   // may be approved for it.
   keyKind?: CallApiSlot['keyKind'];
+  // The kinds of key that can fill it: its declared kind, or every kind its
+  // request can take (`slotKeyKinds`).
+  kinds: CallApiKeyKind[];
   status: BatchSlotStatus;
   snapshot: BindingSnapshot;
   fingerprint: string;
@@ -116,13 +128,15 @@ export interface BatchGroup {
 }
 
 // A key of the caller's that a `{{userKey}}` slot can take, with the batch's
-// destinations its grants already cover.
+// destinations its grants already cover, and those its credential is good
+// at.
 export interface BatchKey {
   id: string;
   name: string;
   kind: UserKeyKind;
   state: string;
   covers: string[];
+  serves: string[];
 }
 
 // A share of the caller's in the realm, for an `{{apiKey}}` slot, with
@@ -137,6 +151,8 @@ export interface BatchShare {
   keyName: string;
   keyKind: UserKeyKind;
   covers: string[];
+  // The batch's destinations its key's credential is good at.
+  serves: string[];
   interactive: boolean;
   dailyBudget: number;
   anonymous: boolean;
@@ -292,6 +308,7 @@ export async function approvalBatch(
         slot: token,
         key: slot.key,
         ...(slot.keyKind ? { keyKind: slot.keyKind } : {}),
+        kinds: slotKeyKinds(slot, request),
         status,
         snapshot,
         fingerprint,
@@ -348,6 +365,8 @@ export async function approvalBatch(
   let destinations = sorted.map((g) => g.destination.href);
   let coveredBy = (grants: string[]) =>
     destinations.filter((d) => grants.some((g) => destinationCovers(g, d)));
+  let servedBy = (apiHosts: string[] | null) =>
+    destinations.filter((d) => apiHostsServe(apiHosts, d));
 
   let needsUserKey = sorted.some((g) =>
     g.operations.some((o) => o.slots.some((s) => s.key === 'userKey')),
@@ -368,15 +387,19 @@ export async function approvalBatch(
     remaining,
     remainingPipelinesOnly,
     keys: needsUserKey
-      ? (await slotKeys(dbAdapter, user)).map(({ grants, ...key }) => ({
-          ...key,
-          covers: coveredBy(grants),
-        }))
+      ? (await slotKeys(dbAdapter, user)).map(
+          ({ grants, apiHosts, ...key }) => ({
+            ...key,
+            covers: coveredBy(grants),
+            serves: servedBy(apiHosts),
+          }),
+        )
       : [],
     shares: needsShare
-      ? ownShares.map(({ grants, ...share }) => ({
+      ? ownShares.map(({ grants, apiHosts, ...share }) => ({
           ...share,
           covers: coveredBy(grants),
+          serves: servedBy(apiHosts),
         }))
       : [],
   };
@@ -562,21 +585,26 @@ async function bindingRows(
 }
 
 // The caller's keys a `{{userKey}}` slot can take, by name, each with its
-// grants' destinations. An OAuth client that only signs people in is never
-// granted a destination, so it is left out.
+// grants' destinations and, for an OAuth key, its client's API hosts. An
+// OAuth client that only signs people in is never granted a destination, so
+// it is left out.
 async function slotKeys(
   dbAdapter: DBAdapter,
   user: string,
-): Promise<(Omit<BatchKey, 'covers'> & { grants: string[] })[]> {
+): Promise<
+  (Omit<BatchKey, 'covers' | 'serves'> & {
+    grants: string[];
+    apiHosts: string[] | null;
+  })[]
+> {
   let rows = await query(dbAdapter, [
-    `SELECT k.id, k.name, k.kind, k.state,
+    `SELECT k.id, k.name, k.kind, k.state, ${apiHostsOfKeySql('k.id')} AS api_hosts,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM user_keys k
-       LEFT JOIN oauth_clients c ON c.key_id = k.id
        LEFT JOIN user_key_grants g ON g.key_id = k.id
       WHERE k.owner = `,
     param(user),
-    ` AND (k.kind <> 'oauth-client' OR c.grant_type = 'client_credentials')
+    ` AND ${sendableKeySql('k.id')}
       GROUP BY k.id, k.name, k.kind, k.state
       ORDER BY k.name`,
   ]);
@@ -585,19 +613,28 @@ async function slotKeys(
     name: row.name as string,
     kind: row.kind as UserKeyKind,
     state: row.state as string,
-    grants: grantList(row.grants),
+    grants: arrayColumn(row.grants),
+    apiHosts: apiHostList(row.api_hosts),
   }));
 }
 
 // The caller's active shares in the realm, by label, each with its key's
-// grants' destinations.
+// grants' destinations and, for an OAuth key, its client's API hosts. A
+// share of an OAuth client that only signs people in is how teammates
+// connect their own accounts, never a credential a request sends, so it is
+// left out.
 async function sharesIn(
   dbAdapter: DBAdapter,
   realmURL: string,
   user: string,
-): Promise<(Omit<BatchShare, 'covers'> & { grants: string[] })[]> {
+): Promise<
+  (Omit<BatchShare, 'covers' | 'serves'> & {
+    grants: string[];
+    apiHosts: string[] | null;
+  })[]
+> {
   let rows = await query(dbAdapter, [
-    `SELECT s.id, s.label, s.key_id, k.name AS key_name, k.kind AS key_kind, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap,
+    `SELECT s.id, s.label, s.key_id, k.name AS key_name, k.kind AS key_kind, ${apiHostsOfKeySql('s.key_id')} AS api_hosts, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap,
             EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive) AS interactive,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
@@ -608,6 +645,7 @@ async function sharesIn(
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
+        AND ${sendableKeySql('s.key_id')}
       GROUP BY s.id, s.label, s.key_id, k.name, k.kind, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap
       ORDER BY s.label`,
   ]);
@@ -617,7 +655,8 @@ async function sharesIn(
     keyId: row.key_id as string,
     keyName: row.key_name as string,
     keyKind: row.key_kind as UserKeyKind,
-    grants: grantList(row.grants),
+    grants: arrayColumn(row.grants),
+    apiHosts: apiHostList(row.api_hosts),
     interactive: Boolean(row.interactive),
     dailyBudget: limitsOf(row).dailyBudget,
     anonymous: Boolean(row.anonymous),
@@ -628,19 +667,4 @@ async function sharesIn(
         ? null
         : Number(row.anonymous_monthly_cap),
   }));
-}
-
-// An aggregated array column, as the adapter returns it: an array, or
-// Postgres' text form of one.
-function grantList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value as string[];
-  }
-  if (typeof value === 'string') {
-    let inner = value.replace(/^\{|\}$/g, '');
-    return inner === ''
-      ? []
-      : inner.split(',').map((item) => item.replace(/^"|"$/g, ''));
-  }
-  return [];
 }
