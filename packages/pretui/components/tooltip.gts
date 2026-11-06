@@ -150,9 +150,15 @@ export class Tooltip extends Component<TooltipSignature> {
         el.style.left = `${p.left}px`;
       };
       place();
+      // New @content, or a trigger that changes size, moves the bubble's
+      // center while it stays open.
+      let sizes = new ResizeObserver(place);
+      sizes.observe(el);
+      sizes.observe(anchor);
       window.addEventListener('scroll', place, { capture: true, passive: true });
       window.addEventListener('resize', place);
       return () => {
+        sizes.disconnect();
         window.removeEventListener('scroll', place, true);
         window.removeEventListener('resize', place);
       };
