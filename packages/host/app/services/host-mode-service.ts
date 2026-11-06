@@ -12,6 +12,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
+import {
+  lastPublishedTimestampFromInfo,
+  publishedRealmURLsFromInfo,
+} from '@cardstack/host/lib/utils';
 
 const DEFAULT_HEAD_HTML = '<title>Boxel</title>';
 
@@ -218,25 +222,14 @@ export default class HostModeService extends Service {
     return this.operatorModeStateService.hostModePrimaryCard ?? undefined;
   }
 
-  get publishedRealmMetadata() {
+  // Most recently published first.
+  get publishedRealmMetadata(): PublishedRealmMetadata[] {
     let realmInfo = this.operatorModeStateService.currentRealmInfo;
-    if (
-      !realmInfo?.lastPublishedAt ||
-      typeof realmInfo.lastPublishedAt !== 'object'
-    ) {
-      return [];
-    }
-
-    return Object.entries(realmInfo.lastPublishedAt)
-      .map(
-        ([url, publishedAt]) =>
-          ({
-            urlString: url,
-            publishedAt: this.parsePublishedAt(publishedAt),
-            currentCardUrlString: this.fullURL(url),
-          }) as PublishedRealmMetadata,
-      )
-      .sort((a, b) => b.publishedAt - a.publishedAt);
+    return publishedRealmURLsFromInfo(realmInfo).map((url) => ({
+      urlString: url,
+      publishedAt: lastPublishedTimestampFromInfo(realmInfo, url) ?? 0,
+      currentCardUrlString: this.fullURL(url),
+    }));
   }
 
   get publishedRealmURLs() {
@@ -272,17 +265,6 @@ export default class HostModeService extends Service {
     }
 
     return fullURL;
-  }
-
-  lastPublishedTimestamp(url: string) {
-    let metadata = this.publishedRealmMetadata.find(
-      (entry) => entry.urlString === url,
-    );
-    return metadata ? metadata.publishedAt : null;
-  }
-
-  isPublished(url: string) {
-    return this.lastPublishedTimestamp(url) !== null;
   }
 
   async updateHeadTemplate(cardURL?: string | null) {
@@ -458,11 +440,6 @@ export default class HostModeService extends Service {
     let end: Element | null = head.querySelector('[data-boxel-head-end]');
 
     return start && end ? [start, end] : null;
-  }
-
-  private parsePublishedAt(value: unknown) {
-    let publishedAt = Number(value ?? 0);
-    return Number.isFinite(publishedAt) ? publishedAt : 0;
   }
 }
 

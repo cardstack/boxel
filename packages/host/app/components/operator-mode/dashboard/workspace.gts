@@ -2,7 +2,6 @@ import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -26,6 +25,7 @@ import { Star, StarFilled } from '@cardstack/boxel-ui/icons';
 
 import type { RealmIdentifier } from '@cardstack/runtime-common';
 
+import PublishRealmDialog from '@cardstack/host/components/operator-mode/publish-realm-dialog';
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import { urlDisplayText } from '@cardstack/host/lib/realm-utils';
 import {
@@ -33,7 +33,6 @@ import {
   formatUpdatedTime,
 } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
-import type NetworkService from '@cardstack/host/services/network';
 
 import {
   ArchiveWorkspaceModal,
@@ -533,6 +532,19 @@ export default class Workspace extends Component<Signature> {
             isArchiving=this.workspace.archiveWorkspaceTask.isRunning
             onConfirm=(perform this.workspace.archiveWorkspaceTask)
             onClose=this.workspace.closeArchiveModal
+            returnFocusTarget=this.workspace.returnFocusTarget
+          }}
+        />
+      {{/if}}
+      {{#if this.workspace.showPublishModal}}
+        <ToElsewhere
+          @named='modal-elsewhere'
+          @send={{component
+            PublishRealmDialog
+            realmURL=this.workspace.realmURL
+            actions=this.workspace.publishActions
+            isOpen=true
+            onClose=this.workspace.closePublishModal
             returnFocusTarget=this.workspace.returnFocusTarget
           }}
         />
@@ -1226,8 +1238,6 @@ export default class Workspace extends Component<Signature> {
     </style>
   </template>
 
-  @service declare private network: NetworkService;
-
   @tracked private isHostDropdownOpen = false;
 
   private workspace = new WorkspaceActions(
@@ -1240,8 +1250,7 @@ export default class Workspace extends Component<Signature> {
     this.args.variant === 'desk'
       ? {
           realm: this.args.realmIdentifier,
-          realmURL: this.network.virtualNetwork.toURL(this.args.realmIdentifier)
-            .href,
+          realmURL: this.workspace.realmURL,
         }
       : undefined,
   );

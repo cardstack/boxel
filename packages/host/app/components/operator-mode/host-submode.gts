@@ -8,24 +8,21 @@ import { tracked } from '@glimmer/tracking';
 import Globe from '@cardstack/boxel-icons/globe';
 import Refresh from '@cardstack/boxel-icons/refresh';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-
-import { restartableTask } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 
 import { BoxelButton, Tooltip } from '@cardstack/boxel-ui/components';
 import { PublishSiteIcon } from '@cardstack/boxel-ui/icons';
 
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
-import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
+import PublishRealmDialog from '@cardstack/host/components/operator-mode/publish-realm-dialog';
+import { ifConnected } from '@cardstack/host/lib/modal-focus-trap';
 
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmPublishingService from '@cardstack/host/services/realm-publishing';
 import type StoreService from '@cardstack/host/services/store';
-import type ToolService from '@cardstack/host/services/tool-service';
-import PublishRealmTool from '@cardstack/host/tools/publish-realm';
-import UnpublishRealmTool from '@cardstack/host/tools/unpublish-realm';
 
 import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
@@ -33,7 +30,6 @@ import HostModeContent from '../host-mode/content';
 
 import SubmodeLayout from './submode-layout';
 
-import type { PublishError } from './publish-realm-modal';
 import type { ViewCardFn } from '@cardstack/base/card-api';
 
 interface HostSubmodeSignature {
@@ -46,14 +42,29 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
   @service declare private hostModeService: HostModeService;
-  @service declare private toolService: ToolService;
+  @service declare private realmPublishing: RealmPublishingService;
 
   @tracked isPublishRealmModalOpen = false;
   @tracked isPublishingRealmPopoverOpen = false;
   @tracked isOpenSitePopoverOpen = false;
 
+  // The publish button, which becomes a "Publishing…" button while a publish
+  // runs, so focus goes back to whichever is on screen when the dialog closes.
+  private publishButton: HTMLElement | undefined;
+  private capturePublishButton = modifier((element: HTMLElement) => {
+    this.publishButton = element;
+  });
+  private publishReturnFocus = () => ifConnected(this.publishButton);
+
+  private get publishActions() {
+    return this.realmPublishing.actionsFor(this.realmURL);
+  }
+
   @action
   openPublishRealmModal() {
+    // A popover left open by an earlier publish doesn't come back with this
+    // one.
+    this.isPublishingRealmPopoverOpen = false;
     this.isPublishRealmModalOpen = true;
   }
 
@@ -80,6 +91,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return this.realm.isPublishing(this.realmURL);
   }
 
+  // Shown on request while a publish runs, and gone with the publish.
+  get showsPublishingRealmPopover() {
+    return this.isPublishingRealmPopoverOpen && this.isPublishing;
+  }
+
   get hasPublishedSites() {
     return this.hostModeService.publishedRealmURLs.length > 0;
   }
@@ -95,59 +111,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   get defaultPublishedRealmURL(): string | undefined {
     return this.hostModeService.defaultPublishedRealmURL;
   }
-
-  handlePublishTask = restartableTask(async (publishedRealmURLs: string[]) => {
-    // Publish through the same command exposed to boxel-cli so the UI and
-    // headless callers share one path. The modal already enforces the
-    // publishability gate, so force past the command's redundant re-check.
-    let command = new PublishRealmTool(this.toolService.toolContext);
-    let result = await command.execute({
-      realmURL: this.realmURL,
-      publishedRealmURLs,
-      force: true,
-    });
-
-    const errors = new Map<string, string>();
-    for (let target of result.results) {
-      if (target.status === 'error' || target.status === 'published-pending') {
-        errors.set(
-          target.publishedRealmURL,
-          target.error || 'Failed to publish to this domain',
-        );
-      }
-    }
-
-    if (errors.size > 0) {
-      const error = new Error(
-        'Failed to publish to some domains',
-      ) as PublishError;
-      error.urlErrors = errors;
-      throw error;
-    }
-
-    this.isPublishingRealmPopoverOpen = false;
-  });
-
-  @action
-  handlePublish(publishedRealmURLs: string[]) {
-    let promise = this.handlePublishTask.perform(publishedRealmURLs);
-    // Catch the error so it doesn't bubble
-    // to the browser (so error reporters like Bugsnag will see it).
-    // TODO: remove this after this issue (https://github.com/machty/ember-concurrency/issues/40)
-    // is resolved.
-    promise.catch((_error) => {});
-  }
-
-  get handlePublishError(): PublishError | null {
-    return this.handlePublishTask.last?.error as PublishError | null;
-  }
-
-  handleUnpublish = restartableTask(async (publishedRealmURL: string) => {
-    // Unpublish through the same command exposed to boxel-cli so the UI and
-    // headless callers share one path.
-    let command = new UnpublishRealmTool(this.toolService.toolContext);
-    await command.execute({ realmURL: this.realmURL, publishedRealmURL });
-  });
 
   get defaultPublishedSiteURL(): string | undefined {
     return this.hostModeService.defaultPublishedSiteURL;
@@ -200,6 +163,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               @size='tall'
               class='publish-realm-button publishing'
               {{on 'click' this.togglePublishingRealmPopover}}
+              {{this.capturePublishButton}}
               data-test-publish-realm-button
             >
               <Refresh width='22' height='22' class='publish-icon' />
@@ -211,6 +175,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               @size='tall'
               class='publish-realm-button'
               {{on 'click' this.openPublishRealmModal}}
+              {{this.capturePublishButton}}
               data-test-publish-realm-button
             >
               <PublishSiteIcon width='22' height='22' class='publish-icon' />
@@ -220,7 +185,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
             </BoxelButton>
           {{/if}}
           <PublishingRealmPopover
-            @isOpen={{this.isPublishingRealmPopoverOpen}}
+            @isOpen={{this.showsPublishingRealmPopover}}
           />
         </div>
         {{#if this.hasPublishedSites}}
@@ -270,12 +235,12 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       </:default>
     </SubmodeLayout>
 
-    <PublishRealmModal
+    <PublishRealmDialog
+      @realmURL={{this.realmURL}}
+      @actions={{this.publishActions}}
       @isOpen={{this.isPublishRealmModalOpen}}
       @onClose={{this.closePublishRealmModal}}
-      @handlePublish={{this.handlePublish}}
-      @publishError={{this.handlePublishError}}
-      @handleUnpublish={{perform this.handleUnpublish}}
+      @returnFocusTarget={{this.publishReturnFocus}}
     />
 
     <style scoped>

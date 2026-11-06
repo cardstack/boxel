@@ -74,11 +74,32 @@ export function publishedRealmURLsFromInfo(
   if (!lastPublishedAt || typeof lastPublishedAt !== 'object') {
     return [];
   }
-  return Object.entries(lastPublishedAt as Record<string, unknown>)
-    .sort(([, leftPublishedAt], [, rightPublishedAt]) => {
-      return Number(rightPublishedAt) - Number(leftPublishedAt);
-    })
-    .map(([publishedRealmURL]) => publishedRealmURL);
+  let publishedAt = (url: string) =>
+    lastPublishedTimestampFromInfo(info, url) ?? 0;
+  return Object.keys(lastPublishedAt).sort(
+    (left, right) => publishedAt(right) - publishedAt(left),
+  );
+}
+
+// When `publishedRealmURL` was last published, from its source realm's
+// info: `null` when it isn't published there, `0` when the time doesn't
+// parse.
+export function lastPublishedTimestampFromInfo(
+  info: { lastPublishedAt?: unknown } | undefined,
+  publishedRealmURL: string,
+): number | null {
+  let lastPublishedAt = info?.lastPublishedAt;
+  if (
+    !lastPublishedAt ||
+    typeof lastPublishedAt !== 'object' ||
+    !(publishedRealmURL in lastPublishedAt)
+  ) {
+    return null;
+  }
+  let publishedAt = Number(
+    (lastPublishedAt as Record<string, unknown>)[publishedRealmURL] ?? 0,
+  );
+  return Number.isFinite(publishedAt) ? publishedAt : 0;
 }
 
 export function urlForRealmLookup(card: CardDef) {

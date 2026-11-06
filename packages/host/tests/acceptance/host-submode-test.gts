@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  find,
   settled,
   triggerEvent,
   waitFor,
@@ -962,6 +963,42 @@ module('Acceptance | host submode', function (hooks) {
         getService('realm-server').allocateUnlistedPath = async (
           sourceRealmURL: string,
         ) => ({ sourceRealmURL, slug: 'defaultunlistedab' });
+      });
+
+      test('closing the publish dialog returns focus to the publish button, after it turns to Publishing', async function (assert) {
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+        await waitUntil(() =>
+          find('[data-test-publish-realm-button]')?.textContent?.includes(
+            'Publishing…',
+          ),
+        );
+
+        await click('[data-test-publish-realm-modal] [data-test-close-modal]');
+
+        // The focus trap hands focus back after a timeout that settled()
+        // doesn't track.
+        await waitUntil(
+          () =>
+            document.activeElement === find('[data-test-publish-realm-button]'),
+          { timeoutMessage: 'focus never returned to the publish button' },
+        );
+        assert.dom('[data-test-publish-realm-button]').isFocused();
+
+        // Let the publish finish, so nothing is left running past the test.
+        publishDeferred.fulfill();
+        await waitUntil(
+          () =>
+            !find('[data-test-publish-realm-button]')?.textContent?.includes(
+              'Publishing…',
+            ),
+        );
       });
 
       test('can publish realm', async function (assert) {
