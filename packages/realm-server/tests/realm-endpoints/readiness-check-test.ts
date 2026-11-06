@@ -340,7 +340,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             attributes: { title: `Card ${i}` },
             meta: {
               adoptsFrom: {
-                module: rri('https://cardstack.com/base/card-api'),
+                module: rri('@cardstack/base/card-api'),
                 name: 'CardDef',
               },
             },
