@@ -182,6 +182,21 @@ interface SelectSearchSignature {
   Element: HTMLDivElement;
 }
 
+// Gives the list the marker's scope attribute: the list renders outside any
+// template of this module, so without it this module's scoped rules for the
+// list wouldn't reach it.
+const scopeList = modifier((marker: HTMLElement) => {
+  let list = marker.closest('.ember-power-select-dropdown');
+  if (!list) {
+    return;
+  }
+  for (let { name } of [...marker.attributes]) {
+    if (name.startsWith('data-scopedcss-')) {
+      list.setAttribute(name, '');
+    }
+  }
+});
+
 class SelectSearch extends Component<SelectSearchSignature> {
   handleInput = (e: Event) => {
     this.args.onInput(e);
@@ -205,6 +220,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
   });
 
   <template>
+    <span class='pretui-selectlist-scope' hidden {{scopeList}}></span>
     {{#if @searchEnabled}}
       <div
         class='ember-power-select-search pretui-selectsearch'
@@ -248,6 +264,36 @@ class SelectSearch extends Component<SelectSearchSignature> {
     {{/if}}
     <style scoped>
       @layer PretComponent {
+        /* The list renders in the wormhole, outside Select's subtree, and
+           BoxelSelect has no knobs for its type or row metrics. This
+           template renders inside the list, and its marker gives the list
+           this template's scope attribute, so these are plain scoped rules,
+           which every compiler of this module keeps, the realm's included.
+           The options take the trigger's type, inline padding and height. */
+        .pretui-select-dropdown.ember-power-select-dropdown {
+          /* the trigger's padding and default height, restated: the wrapper's
+             knobs do not reach the wormhole */
+          --_select-px: 0.625rem;
+          --_select-h: var(--boxel-form-control-height-sm);
+          /* the list matches the trigger's width as a floor, never a ceiling:
+             a trigger sized to a short value must not clip the other labels */
+          min-width: max-content;
+        }
+        /* the trigger's type, copied onto the list on each open */
+        .pretui-select-dropdown :deep(.boxel-select-option-item) {
+          font-size: var(--pretui-select-list-font-size);
+          line-height: var(--pretui-select-list-line-height);
+          letter-spacing: var(--boxel-lsp-xs);
+          min-height: var(--_select-h);
+          padding-block: 0;
+          padding-inline: var(--_select-px);
+        }
+        /* the options' rows grow on touch screens, as Autocomplete's do */
+        @media (pointer: coarse) {
+          .pretui-select-dropdown :deep(.boxel-select-option-item) {
+            padding-block: 0.6em;
+          }
+        }
         .pretui-selectsearch {
           position: relative;
         }
@@ -335,13 +381,6 @@ export class Select extends Component<SelectSignature> {
       );
       if (!trigger || !list) {
         return;
-      }
-      // This template's scope attribute, so its scoped rules for the list
-      // reach it in the wormhole.
-      for (let { name } of [...(this.wrap?.attributes ?? [])]) {
-        if (name.startsWith('data-scopedcss-')) {
-          list.setAttribute(name, '');
-        }
       }
       let style = getComputedStyle(trigger);
       for (let name of [
@@ -588,36 +627,6 @@ export class Select extends Component<SelectSignature> {
         .pretui-select-meta {
           margin-inline-start: var(--boxel-sp-2xs);
           opacity: 0.7;
-        }
-        /* The dropdown renders in the wormhole, outside this component's
-           subtree, and BoxelSelect has no knobs for its type or row metrics.
-           Each open gives the list this template's scope attribute
-           (matchListType), so these are plain scoped rules, which every
-           compiler of this module keeps, the realm's included. The options
-           take the trigger's type, inline padding and height. */
-        .pretui-select-dropdown.ember-power-select-dropdown {
-          /* the trigger's padding and default height, restated: the wrapper's
-             knobs do not reach the wormhole */
-          --_select-px: 0.625rem;
-          --_select-h: var(--boxel-form-control-height-sm);
-          /* the list matches the trigger's width as a floor, never a ceiling:
-             a trigger sized to a short value must not clip the other labels */
-          min-width: max-content;
-        }
-        /* the trigger's type, copied onto the list on each open */
-        .pretui-select-dropdown :deep(.boxel-select-option-item) {
-          font-size: var(--pretui-select-list-font-size);
-          line-height: var(--pretui-select-list-line-height);
-          letter-spacing: var(--boxel-lsp-xs);
-          min-height: var(--_select-h);
-          padding-block: 0;
-          padding-inline: var(--_select-px);
-        }
-        /* the options' rows grow on touch screens, as Autocomplete's do */
-        @media (pointer: coarse) {
-          .pretui-select-dropdown :deep(.boxel-select-option-item) {
-            padding-block: 0.6em;
-          }
         }
       }
     </style>
