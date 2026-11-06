@@ -4,20 +4,19 @@ on:
   push:
     branches: [main]
   pull_request:
-    # Observability has its own lint workflow (observability-diff.yml's
-    # `lint` job) that runs the full lint script — including the prettier
-    # YAML check. Skipping ci-lint on observability-only PRs avoids ~5 min
-    # of unrelated lint work; coverage on observability changes lives in
-    # the dedicated workflow. Deny-list rather than allow-list so adding
-    # a new package automatically gets linted (the inverse failure mode —
-    # silently skipping lint for a new package — is worse).
-    paths-ignore:
-      - "packages/observability/**"
+  # The merge queue runs Lint on the commit that would land: the queued pull
+  # request merged onto main and onto every pull request ahead of it. Two pull
+  # requests can each pass Lint on their own base and still fail it together,
+  # as when one trims the secure origin's import allowlist and another starts
+  # reaching a package the trim removed. Lint is a required check, so main
+  # takes only a merge whose merged result passes it.
+  merge_group:
   # Motion Bump (motion-bump.yml) dispatches this on the branches it opens,
   # whose pull requests start no pull_request workflows.
   workflow_dispatch:
 
 # Pull requests: a new push cancels the run in progress for the same branch.
+# A merge group's run has a group of its own, so no push cancels it.
 # Pushes to main share one group but never cancel a run in progress: GitHub
 # keeps at most one running and one pending run per group, and a newer pending
 # run replaces the older one. A burst of merges therefore runs the commit in
@@ -36,8 +35,39 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Observability has its own lint (observability-diff.yml's `Lint
+  # Observability` job), so a pull request that touches nothing else skips
+  # Lint here. The skip is decided in a job rather than with `paths-ignore`:
+  # Lint is a required check, and a workflow a path filter never starts leaves
+  # its required check pending forever, while a skipped job passes it. The
+  # filter is a deny-list, so a new package is linted without a change here.
+  # Only pull requests are filtered; a merge group, a push to main and a hand
+  # run always lint everything.
+  changes:
+    name: Check whether Lint applies
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      lint: ${{ steps.filter.outputs.lint }}
+    steps:
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            lint:
+              - '**'
+              - '!packages/observability/**'
+
   lint:
     name: Lint
+    needs: changes
+    # Runs unless the filter ran and found only observability changes. When
+    # the filter didn't run (any event but a pull request) or failed, Lint
+    # runs: a failed filter must not skip a required check, which would pass
+    # it.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.lint == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:

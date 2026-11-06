@@ -33,14 +33,16 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint
+    # Named apart from ci-lint.yaml's `Lint`, which is a required check, so
+    # this job's result can never stand in for it.
+    name: Lint Observability
     runs-on: ubuntu-latest
 
     # No fork guard: this job needs no AWS credentials or write tokens,
-    # so it's safe on PRs from forks. It exists because ci-lint.yaml's
-    # `paths-ignore` skips the main lint workflow on observability-only
-    # PRs, so this is the dedicated lint coverage for the package
-    # (shellcheck + jq + prettier + manifest/secret regression checks).
+    # so it's safe on PRs from forks. It exists because ci-lint.yaml skips
+    # its Lint job on observability-only PRs, so this is the dedicated lint
+    # coverage for the package (shellcheck + jq + prettier +
+    # manifest/secret regression checks).
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # `init` installs pnpm — required by lint.sh's prettier --check step.
