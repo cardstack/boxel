@@ -466,4 +466,155 @@ module(basename(import.meta.filename), function () {
       );
     });
   });
+
+  module('virtual-network retries in environment mode', function (hooks) {
+    let savedBoxelEnvironment: string | undefined;
+    let hadEnvironment: boolean;
+    let savedEnvironment: unknown;
+
+    hooks.beforeEach(function () {
+      savedBoxelEnvironment = process.env.BOXEL_ENVIRONMENT;
+      hadEnvironment = '__environment' in globalThis;
+      savedEnvironment = (globalThis as any).__environment;
+      // This suite runs with `__environment === 'test'`, which turns on
+      // retries of its own. Environment-mode workers don't set it.
+      delete (globalThis as any).__environment;
+    });
+
+    hooks.afterEach(function () {
+      if (savedBoxelEnvironment === undefined) {
+        delete process.env.BOXEL_ENVIRONMENT;
+      } else {
+        process.env.BOXEL_ENVIRONMENT = savedBoxelEnvironment;
+      }
+      if (hadEnvironment) {
+        (globalThis as any).__environment = savedEnvironment;
+      } else {
+        delete (globalThis as any).__environment;
+      }
+    });
+
+    // Maps the base realm the way an environment-mode worker does, onto a
+    // native fetch that fails once the way undici does when the proxy drops
+    // the connection, then answers.
+    function networkThatFailsOnce() {
+      let requested: string[] = [];
+      let nativeFetch = (async (input: RequestInfo | URL) => {
+        let url = input instanceof Request ? input.url : String(input);
+        requested.push(url);
+        if (requested.length === 1) {
+          throw new TypeError('fetch failed');
+        }
+        // A native fetch's response carries the URL it fetched.
+        let response = new Response('{}', { status: 200 });
+        Object.defineProperty(response, 'url', {
+          value: url,
+          configurable: true,
+        });
+        return response;
+      }) as typeof globalThis.fetch;
+      let virtualNetwork = new VirtualNetwork(nativeFetch, {
+        scheduleFetchTimer: (callback) => setImmediate(callback),
+      });
+      virtualNetwork.addURLMapping(
+        new URL('https://cardstack.com/base/'),
+        new URL('https://realm-server.slug.localhost/base/'),
+      );
+      return { virtualNetwork, requested };
+    }
+
+    test('a GET whose URL maps to a .localhost host is retried at the real URL', async function (assert) {
+      process.env.BOXEL_ENVIRONMENT = 'slug';
+      let { virtualNetwork, requested } = networkThatFailsOnce();
+
+      let response = await virtualNetwork.fetch(
+        'https://cardstack.com/base/_mtimes',
+      );
+
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        response.url,
+        'https://cardstack.com/base/_mtimes',
+        'the caller still sees the virtual URL',
+      );
+      assert.deepEqual(requested, [
+        'https://realm-server.slug.localhost/base/_mtimes',
+        'https://realm-server.slug.localhost/base/_mtimes',
+      ]);
+    });
+
+    test('outside environment mode the same GET fails on its first attempt', async function (assert) {
+      delete process.env.BOXEL_ENVIRONMENT;
+      let { virtualNetwork, requested } = networkThatFailsOnce();
+
+      await assert.rejects(
+        virtualNetwork.fetch('https://cardstack.com/base/_mtimes'),
+        /fetch failed/,
+      );
+      assert.strictEqual(requested.length, 1);
+    });
+
+    test('a QUERY whose URL maps to a .localhost host is retried at the real URL', async function (assert) {
+      process.env.BOXEL_ENVIRONMENT = 'slug';
+      let { virtualNetwork, requested } = networkThatFailsOnce();
+
+      let response = await virtualNetwork.fetch(
+        'https://cardstack.com/base/_info',
+        { method: 'QUERY' },
+      );
+
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(requested, [
+        'https://realm-server.slug.localhost/base/_info',
+        'https://realm-server.slug.localhost/base/_info',
+      ]);
+    });
+
+    test('a POST whose URL maps to a .localhost host is not retried', async function (assert) {
+      process.env.BOXEL_ENVIRONMENT = 'slug';
+      let { virtualNetwork, requested } = networkThatFailsOnce();
+
+      await assert.rejects(
+        virtualNetwork.fetch('https://cardstack.com/base/', {
+          method: 'POST',
+          body: '{}',
+        }),
+        /fetch failed/,
+      );
+      assert.deepEqual(requested, [
+        'https://realm-server.slug.localhost/base/',
+      ]);
+    });
+
+    test('a GET its caller aborted is not retried, whatever the abort reason', async function (assert) {
+      process.env.BOXEL_ENVIRONMENT = 'slug';
+      let caller = new AbortController();
+      let stall = new Error('no progress while awaiting the headers');
+      stall.name = 'ReaderStallError';
+      let requested: string[] = [];
+      let nativeFetch = (async (input: RequestInfo | URL) => {
+        let request = input as Request;
+        requested.push(request.url);
+        // The caller gives up while the request is in flight, with a reason
+        // of its own, and the native fetch rejects with that reason.
+        caller.abort(stall);
+        throw request.signal.reason;
+      }) as typeof globalThis.fetch;
+      let virtualNetwork = new VirtualNetwork(nativeFetch, {
+        scheduleFetchTimer: (callback) => setImmediate(callback),
+      });
+      virtualNetwork.addURLMapping(
+        new URL('https://cardstack.com/base/'),
+        new URL('https://realm-server.slug.localhost/base/'),
+      );
+
+      await assert.rejects(
+        virtualNetwork.fetch('https://cardstack.com/base/_mtimes', {
+          signal: caller.signal,
+        }),
+        (error: Error) => error === stall,
+      );
+      assert.strictEqual(requested.length, 1);
+    });
+  });
 });

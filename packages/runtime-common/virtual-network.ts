@@ -963,8 +963,25 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
+    let url = new URL(request.url);
+    // Asked only after a fetch throws, so one that succeeds never pays for
+    // resolving the mapping.
+    let isRetryable = () => {
+      // Once the caller has aborted, every attempt rejects with its abort
+      // reason, which needn't be named `AbortError` (see withRetries).
+      if (request.signal.aborted) {
+        return false;
+      }
+      let realHref = this.resolveURLMapping(request.url, 'virtual-to-real');
+      return shouldRetryFetch(url, {
+        realURL: realHref === undefined ? undefined : new URL(realHref),
+        method: request.method,
+      });
+    };
+
     return withRetries(
-      new URL(request.url),
+      url,
+      isRetryable,
       this.fetchHeaderTimeoutMs,
       this.scheduleFetchTimer,
       (attemptSignal?: AbortSignal) => {
@@ -1142,8 +1159,8 @@ function joinUnderTarget(target: string, rest: string): string {
 // observed losing localhost:4201/base/* fetches for multi-second stretches
 // (TCP/process scheduling glitches), so the prior 5-attempt cap was tight
 // enough that a single transient stall would surface as a test timeout.
-// Gated on `__environment === 'test'` via shouldRetryFetch, so production
-// behaviour is unaffected.
+// shouldRetryFetch limits retries to the test environment and env mode, so
+// production behavior is unaffected.
 const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
@@ -1204,25 +1221,46 @@ function mergeAbortSignals(
   return controller.signal;
 }
 
-export function shouldRetryFetch(url: URL): boolean {
-  // Env-mode services live at `<service>.<slug>.localhost` and are
-  // reached through a local Traefik. The realm-server worker fetches
-  // its own realm's `_mtimes` via this hostname on boot, and if Traefik
-  // hasn't picked up the dynamic route file yet the first attempt fails
-  // with ECONNRESET. Without a retry, that single failure rejects the
-  // from-scratch-index job and leaves the realm mounted but unindexed.
+// Methods a mapped env-mode fetch is retried for (see shouldRetryFetch): the
+// reads. A realm refuses a QUERY that carries a write.
+const retryableMappedMethods = new Set(['GET', 'HEAD', 'QUERY']);
+
+// Whether a fetch that throws is retried (see withRetries). `url` is the URL
+// the fetch was made with. `realURL` is where the virtual network sends it,
+// when a URL mapping applies, and `method` is the request's method.
+export function shouldRetryFetch(
+  url: URL,
+  opts?: { realURL?: URL; method?: string },
+): boolean {
+  // Env-mode services live at `<service>.<slug>.localhost` and are reached
+  // through a local Traefik, which drops connections while it restarts. A
+  // worker's boot index fetches its realm's `_mtimes` through it, and a single
+  // failed fetch there rejects the from-scratch-index job and leaves the realm
+  // mounted but unindexed.
+  //
+  // So in env mode a fetch whose own host is `.localhost` is retried, and so
+  // is a fetch whose URL maps to a `.localhost` host, as the base realm's
+  // virtual `https://cardstack.com/base/` does. A fetch to a `.localhost` URL
+  // is retried whatever its method, so a write the server already received can
+  // be sent again. The mapped case is limited to reads (GET, HEAD and QUERY),
+  // so it never does that.
+  //
   // Gate on `BOXEL_ENVIRONMENT` rather than the `__environment === 'test'`
   // global below: worker processes don't set that global (only `main.ts`
   // does), and the standard-mode realm-server tests do set it — those
   // tests POST to `testuser.localhost:4445` and rely on no-retry
   // behavior for their publish/unpublish flows, so we must scope this
   // retry to env-mode runs only.
-  if (
-    typeof process !== 'undefined' &&
-    process.env?.BOXEL_ENVIRONMENT &&
-    url.hostname.endsWith('.localhost')
-  ) {
-    return true;
+  if (typeof process !== 'undefined' && process.env?.BOXEL_ENVIRONMENT) {
+    if (url.hostname.endsWith('.localhost')) {
+      return true;
+    }
+    if (
+      opts?.realURL?.hostname.endsWith('.localhost') &&
+      retryableMappedMethods.has(opts.method ?? '')
+    ) {
+      return true;
+    }
   }
 
   if ((globalThis as any).__environment !== 'test') {
@@ -1258,6 +1296,7 @@ export function shouldRetryFetch(url: URL): boolean {
 
 async function withRetries(
   url: URL,
+  isRetryable: () => boolean,
   timeoutMs: number,
   scheduleTimer: (callback: () => void, ms: number) => unknown,
   fetchFn: (attemptSignal?: AbortSignal) => ReturnType<typeof globalThis.fetch>,
@@ -1294,8 +1333,9 @@ async function withRetries(
       if (err?.name === 'AbortError') {
         throw err;
       }
-      if (!shouldRetryFetch(url) || ++attempt > maxAttempts) {
-        if (shouldRetryFetch(url) && attempt > maxAttempts) {
+      let retryable = isRetryable();
+      if (!retryable || ++attempt > maxAttempts) {
+        if (retryable && attempt > maxAttempts) {
           // Final-exhaustion log: distinct from the per-attempt warning so
           // CI output can be grepped for the actual cap being hit.
           console.error(
