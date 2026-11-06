@@ -1430,6 +1430,12 @@ module('Integration | approve pages', function (hooks) {
       '?access=read',
       'the workspaces the user may approve in',
     );
+    assert.deepEqual(
+      requests.find((r) => r.path === '_secure-window/cards')?.body.data
+        .attributes,
+      { realm: REALM, key: 'key-gh' },
+      'the cards there that this key can fill',
+    );
     assert
       .dom('[data-test-use-key-card="Inbox"] input')
       .isChecked('the one card there is chosen');
@@ -1449,6 +1455,51 @@ module('Integration | approve pages', function (hooks) {
       },
       'the approve page is opened for the card type in that workspace, with this key, and its trail leads back here',
     );
+  });
+
+  test('a workspace with no card this key works for says so about this key', async function (assert) {
+    serve({
+      'GET _user-keys': () =>
+        json(200, {
+          data: [
+            {
+              type: 'user-key',
+              id: 'key-sa',
+              attributes: {
+                name: 'Service account',
+                kind: 'google-service-account',
+                state: 'active',
+                createdAt: '2026-10-01T12:00:00.000Z',
+                updatedAt: '2026-10-01T12:00:00.000Z',
+                grants: [],
+                usedWith: [],
+                sharedInto: [],
+              },
+            },
+          ],
+        }),
+      'GET _secure-window/realms': () =>
+        json(200, {
+          data: [
+            {
+              type: 'secure-window-realm',
+              id: REALM,
+              attributes: { name: 'Team Workspace' },
+            },
+          ],
+        }),
+      'POST _secure-window/cards': () => json(200, { data: [] }),
+    });
+    visitShell('keys/key-sa/use');
+    await render(<template><UseKeyPage @keyId='key-sa' /></template>);
+    await waitFor('[data-test-use-key-no-cards]');
+    assert
+      .dom('[data-test-use-key-no-cards]')
+      .hasText(
+        'No card in this workspace makes a request this key works for.',
+        'the empty list is about this key, not every key of the user’s',
+      );
+    assert.dom('[data-test-use-key-next]').isDisabled();
   });
 
   test('opened from a key, the approve page starts on that key and goes back to the key page', async function (assert) {
@@ -2176,8 +2227,8 @@ module('Integration | approve pages', function (hooks) {
     assert.deepEqual(
       requests.find((r) => r.path === '_secure-window/cards')?.body.data
         .attributes,
-      { realm: REALM, slot: 'apiKey' },
-      'the cards that send the workspace’s key',
+      { realm: REALM, slot: 'apiKey', key: 'key-gh' },
+      'the cards that send the workspace’s key, which the shared key can fill',
     );
     await click('[data-test-use-key-next]');
     let url = new URL(navigations[0]!.url!, window.location.href);
