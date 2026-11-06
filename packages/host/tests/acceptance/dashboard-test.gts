@@ -72,23 +72,22 @@ function markHosted(
   });
 }
 
-// The realm server marks a workspace publishable; a published copy isn't.
-// Its info says so too, so a reload of the info keeps it.
-function markPublishable(url: string) {
+// Changes a workspace's info as the realm reports it, so a reload of the
+// info keeps the change.
+function overrideRealmInfo(url: string, change: Record<string, unknown>) {
   let realm = getTestRealmRegistry().get(url)?.realm;
   if (!realm) {
     throw new Error(`no test realm at ${url}`);
   }
   let getRealmInfo = realm.getRealmInfo.bind(realm);
-  realm.getRealmInfo = async () => ({
-    ...(await getRealmInfo()),
-    publishable: true,
-  });
+  realm.getRealmInfo = async () => ({ ...(await getRealmInfo()), ...change });
   let realmResource = (getService('realm') as any).realms.get(url);
-  realmResource.info = new TrackedObject({
-    ...realmResource.info,
-    publishable: true,
-  });
+  realmResource.info = new TrackedObject({ ...realmResource.info, ...change });
+}
+
+// The realm server marks a workspace publishable; a published copy isn't.
+function markPublishable(url: string) {
+  overrideRealmInfo(url, { publishable: true });
 }
 
 const PUBLISH_MODAL = '[data-test-publish-realm-modal]';
@@ -3356,6 +3355,9 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(stepDone('open-card'), 'true');
         assert.strictEqual(stepDone('publish'), 'true');
         assert.strictEqual(stepDone('ask-ai'), 'false');
+        assert
+          .dom('[data-test-get-started-publish-unavailable]')
+          .doesNotExist('a done step does not say what publishing needs');
       });
 
       test('with no workspace to publish, the publish step says why instead of offering a button', async function (assert) {
@@ -3396,6 +3398,42 @@ module('Acceptance | dashboard', function (hooks) {
           assert.dom(PUBLISH_ACTION).isFocused('focus goes back to the button');
         });
 
+        test('the publish step keeps its button once a workspace is published', async function (assert) {
+          await visitAsNewUser();
+          markPublishable(ownedRealmURL);
+          markHosted(ownedRealmURL);
+          await settled();
+          await openSteps();
+          await waitFor(PUBLISH_ACTION);
+
+          assert.strictEqual(stepDone('publish'), 'true');
+
+          await click(PUBLISH_ACTION);
+          await waitFor(PUBLISH_MODAL);
+
+          assert.dom(PUBLISH_MODAL).containsText('workspace-b/');
+        });
+
+        test('workspaces that share a name are told apart by their address in the menu', async function (assert) {
+          await visitAsNewUser();
+          markPublishable(realmURL);
+          markPublishable(ownedRealmURL);
+          overrideRealmInfo(realmURL, { name: 'Workspace B' });
+          let now = Date.now();
+          markUpdated(realmURL, new Date(now - 60_000));
+          markUpdated(ownedRealmURL, new Date(now));
+          await settled();
+          await openSteps();
+          await waitFor(PUBLISH_ACTION);
+
+          await click(PUBLISH_ACTION);
+
+          assert.deepEqual(
+            findAll(MENU_ITEMS).map((item) => item.textContent?.trim()),
+            ['Workspace B (workspace-b)', 'Workspace B (workspace-a)'],
+          );
+        });
+
         test('with several workspaces to publish, the publish step asks which, most recently updated first', async function (assert) {
           await visitAsNewUser();
           let now = Date.now();
@@ -3410,8 +3448,19 @@ module('Acceptance | dashboard', function (hooks) {
           await openSteps();
           await waitFor(PUBLISH_ACTION);
 
+          assert
+            .dom(`${PUBLISH_ACTION} [data-test-get-started-publish-chevron]`)
+            .hasAttribute('data-test-get-started-publish-chevron', 'down');
+
           await click(PUBLISH_ACTION);
 
+          assert
+            .dom(`${PUBLISH_ACTION} [data-test-get-started-publish-chevron]`)
+            .hasAttribute(
+              'data-test-get-started-publish-chevron',
+              'up',
+              'the chevron turns up while the menu is open',
+            );
           assert.deepEqual(
             findAll(MENU_ITEMS).map((item) => item.textContent?.trim()),
             ['Workspace B', 'Workspace A'],

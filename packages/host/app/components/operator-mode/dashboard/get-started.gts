@@ -19,7 +19,7 @@ import { didCancel, dropTask, task, timeout } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { modifier } from 'ember-modifier';
 
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { logger, type RealmIdentifier } from '@cardstack/runtime-common';
 
@@ -385,11 +385,25 @@ export default class GetStarted extends Component<Signature> {
     return rest.length === 0 ? only : undefined;
   }
 
+  // Workspaces that share a name are told apart by the last segment of
+  // their address.
   private get publishMenuItems(): MenuEntry[] {
-    return this.workspacesToPublish.map((url) => ({
-      label: this.realm.info(url).name,
-      onSelect: () => this.openPublishDialog(url),
-    }));
+    let names = this.workspacesToPublish.map(
+      (url) => this.realm.info(url).name,
+    );
+    return this.workspacesToPublish.map((url, index) => {
+      let name = names[index];
+      let isRepeated = names.filter((other) => other === name).length > 1;
+      return {
+        label: isRepeated ? `${name} (${this.addressSegment(url)})` : name,
+        onSelect: () => this.openPublishDialog(url),
+      };
+    });
+  }
+
+  private addressSegment(url: RealmIdentifier) {
+    let { pathname } = this.network.virtualNetwork.toURL(url);
+    return pathname.split('/').filter(Boolean).at(-1) ?? pathname;
   }
 
   private capturePublishButton = modifier((element: HTMLElement) => {
@@ -506,7 +520,66 @@ export default class GetStarted extends Component<Signature> {
                     </span>
                     <span class='step-hint'>{{step.hint}}</span>
                   </span>
-                  {{#unless step.done}}
+                  {{! Publishing again stays a step away once one workspace
+                      is on the web. }}
+                  {{#if (eq step.id 'publish')}}
+                    {{#if this.isOwnershipKnown}}
+                      {{#if this.onlyWorkspaceToPublish}}
+                        <Button
+                          class='step-action'
+                          @appearance='outlined'
+                          @size='s'
+                          {{on
+                            'click'
+                            (fn
+                              this.openPublishDialog this.onlyWorkspaceToPublish
+                            )
+                          }}
+                          {{this.capturePublishButton}}
+                          data-test-get-started-action={{step.id}}
+                        >Publish a workspace</Button>
+                      {{else if this.workspacesToPublish.length}}
+                        <Menu
+                          class='step-action'
+                          @items={{this.publishMenuItems}}
+                          @label='Workspaces to publish'
+                        >
+                          <:trigger as |isMenuOpen toggle|>
+                            <Button
+                              @appearance='outlined'
+                              @size='s'
+                              {{on 'click' toggle}}
+                              {{this.capturePublishButton}}
+                              data-test-get-started-action={{step.id}}
+                            >Publish a workspace
+                              {{#if isMenuOpen}}
+                                <ChevronUp
+                                  width='14'
+                                  height='14'
+                                  aria-hidden='true'
+                                  data-test-get-started-publish-chevron='up'
+                                />
+                              {{else}}
+                                <ChevronDown
+                                  width='14'
+                                  height='14'
+                                  aria-hidden='true'
+                                  data-test-get-started-publish-chevron='down'
+                                />
+                              {{/if}}</Button>
+                          </:trigger>
+                        </Menu>
+                      {{else if (not step.done)}}
+                        <p
+                          class='step-action step-note'
+                          data-test-get-started-publish-unavailable
+                        >Publishing needs a workspace you own. Create one to
+                          publish it.</p>
+                      {{/if}}
+                    {{else}}
+                      <span hidden {{this.checkOwnership}}></span>
+                    {{/if}}
+                  {{else if (not step.done)}}
                     {{#if (eq step.id 'open-card')}}
                       {{#if this.realmServer.userRealmIdentifiers.length}}
                         <Button
@@ -533,51 +606,8 @@ export default class GetStarted extends Component<Signature> {
                         {{on 'click' @showAgents}}
                         data-test-get-started-action={{step.id}}
                       >Set up an agent</Button>
-                    {{else if (eq step.id 'publish')}}
-                      {{#if this.isOwnershipKnown}}
-                        {{#if this.onlyWorkspaceToPublish}}
-                          <Button
-                            class='step-action'
-                            @appearance='outlined'
-                            @size='s'
-                            {{on
-                              'click'
-                              (fn
-                                this.openPublishDialog
-                                this.onlyWorkspaceToPublish
-                              )
-                            }}
-                            {{this.capturePublishButton}}
-                            data-test-get-started-action={{step.id}}
-                          >Publish a workspace</Button>
-                        {{else if this.workspacesToPublish.length}}
-                          <Menu
-                            class='step-action'
-                            @items={{this.publishMenuItems}}
-                            @label='Workspaces to publish'
-                          >
-                            <:trigger as |_open toggle|>
-                              <Button
-                                @appearance='outlined'
-                                @size='s'
-                                {{on 'click' toggle}}
-                                {{this.capturePublishButton}}
-                                data-test-get-started-action={{step.id}}
-                              >Publish a workspace</Button>
-                            </:trigger>
-                          </Menu>
-                        {{else}}
-                          <p
-                            class='step-action step-note'
-                            data-test-get-started-publish-unavailable
-                          >Publishing needs a workspace you own. Create one to
-                            publish it.</p>
-                        {{/if}}
-                      {{else}}
-                        <span hidden {{this.checkOwnership}}></span>
-                      {{/if}}
                     {{/if}}
-                  {{/unless}}
+                  {{/if}}
                 </li>
               {{/each}}
             </ol>
