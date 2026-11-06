@@ -1821,6 +1821,8 @@ export async function runTestRealmServer({
   linkShapePolicy,
   secureOriginURL,
   googleSignIn,
+  oauthProvider,
+  oauthTestResources,
   cardDocumentCache,
   published,
   history,
@@ -1855,6 +1857,13 @@ export async function runTestRealmServer({
   // Gives the server a secure origin (see `lib/secure-origin.ts`).
   secureOriginURL?: URL;
   googleSignIn?: ConstructorParameters<typeof RealmServer>[0]['googleSignIn'];
+  // Turns on the OAuth provider (see `lib/oauth-provider/`); needs
+  // `secureOriginURL` too.
+  oauthProvider?: ConstructorParameters<typeof RealmServer>[0]['oauthProvider'];
+  // Resources added to the provider's registry for this test.
+  oauthTestResources?: ConstructorParameters<
+    typeof RealmServer
+  >[0]['__testOnlyOAuthResources'];
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
@@ -1952,6 +1961,10 @@ export async function runTestRealmServer({
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(secureOriginURL ? { secureOriginURL } : {}),
     ...(googleSignIn ? { googleSignIn } : {}),
+    ...(oauthProvider ? { oauthProvider } : {}),
+    ...(oauthTestResources
+      ? { __testOnlyOAuthResources: oauthTestResources }
+      : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),
