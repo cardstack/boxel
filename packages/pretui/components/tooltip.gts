@@ -135,6 +135,9 @@ export class Tooltip extends Component<TooltipSignature> {
     ) => {
       let anchor = el.parentElement;
       if (!shown || !anchor) {
+        // data-side is the side the tip prefers until it opens, then the
+        // side it opened on, which a flip can change.
+        el.dataset['side'] = side;
         if (el.matches(':popover-open')) el.hidePopover();
         return;
       }
@@ -160,6 +163,7 @@ export class Tooltip extends Component<TooltipSignature> {
         );
         el.style.top = `${p.top}px`;
         el.style.left = `${p.left}px`;
+        el.dataset['side'] = p.side;
       };
       place();
       // Placed again when the bubble or its trigger changes size, as with new
@@ -186,9 +190,12 @@ export class Tooltip extends Component<TooltipSignature> {
         el.style.visibility = this.inView ? '' : 'hidden';
       });
       clip.observe(anchor);
-      // Only a scroll that can move the trigger moves the bubble.
+      // Only a scroll that can move the trigger moves the bubble. The target
+      // isn't checked with `instanceof Node`, which is false in some hosts
+      // (the realm test harness among them).
       let onScroll = (e: Event) => {
-        if (e.target instanceof Node && !e.target.contains(anchor)) return;
+        let target = e.target as Node | null;
+        if (target?.contains && !target.contains(anchor)) return;
         place();
       };
       window.addEventListener('scroll', onScroll, {
@@ -218,15 +225,11 @@ export class Tooltip extends Component<TooltipSignature> {
     this.pressed = true;
     this.focused = false;
   };
-  onFocusIn = (e: Event) => {
-    // Keyboard focus arriving from outside starts fresh, even when no
-    // focusout cleared an earlier dismissal (as when the trigger moved in
-    // the DOM). A click's focus doesn't, so it never undoes an Escape.
-    let from = (e as FocusEvent).relatedTarget;
-    let wrapper = e.currentTarget as Node;
-    if (!this.pressed && !(from instanceof Node && wrapper.contains(from))) {
-      this.dismissed = false;
-    }
+  onFocusIn = () => {
+    // Keyboard focus starts fresh, even when no focusout cleared an earlier
+    // dismissal (as when the trigger moved in the DOM). A click's focus
+    // doesn't, so it never undoes an Escape.
+    if (!this.pressed) this.dismissed = false;
     this.focused = !this.pressed;
     this.pressed = false;
   };
@@ -263,7 +266,6 @@ export class Tooltip extends Component<TooltipSignature> {
         id={{this.tipId}}
         class='pretui-tooltip'
         popover='manual'
-        data-side={{this.side}}
         data-open={{if this.shown 'true'}}
         {{this.showTip this.shown this.side}}
         data-test-pretui-tooltip-bubble

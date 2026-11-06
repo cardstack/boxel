@@ -194,7 +194,9 @@ export function positionPopup(
           : a.top + a.height / 2 - h / 2;
     top = Math.min(Math.max(top, GUTTER), Math.max(vh - h - GUTTER, GUTTER));
   }
-  return { top, left };
+  // `side` is the one it placed on: the opposite of the placement's when
+  // that side had no room.
+  return { top, left, side };
 }
 
 // Positions the popup against its anchor and keeps it placed across scroll/
