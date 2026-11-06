@@ -107,6 +107,8 @@ import {
 import {
   applyServerSearchPageBound,
   assembledLinkResourceBudget,
+  prerenderLinkHopLimit,
+  prerenderLinkResourceBudget,
 } from './search-bounds.ts';
 import {
   capturesMetaFromManifest,
@@ -230,14 +232,14 @@ type Options = {
   // promptly instead of running every layer to completion. Threaded like
   // `timings`; absent for everything except a bounded live search.
   signal?: AbortSignal;
-  // Exempts this assembly from the assembled-resource budget
-  // (SERVER_MAX_ASSEMBLED_LINK_RESOURCES). Set by the realm-server on its own
-  // during-prerender traffic, which is deliberately unbounded: a render reads
-  // the closure it is given, so a truncated one would be baked into prerendered
-  // HTML and served from the cache long after the request that produced it.
-  // Every other caller is bounded, including one added later that does not know
-  // this option exists — which is the point of expressing the exemption rather
-  // than the bound.
+  // Moves this assembly from the live assembled-resource budget
+  // (SERVER_MAX_ASSEMBLED_LINK_RESOURCES) to the render bounds
+  // (PRERENDER_MAX_LINK_RESOURCES and PRERENDER_LINK_HOPS, see
+  // search-bounds.ts). Set by the realm-server on its own during-prerender
+  // traffic. A render was once unbounded, so a closure would never be clipped
+  // into cached HTML; in a densely linked realm that assembled the whole graph
+  // per render and took the server down, so a render is now bounded too, more
+  // generously than a live read. A clipped link renders lazily, not wrongly.
   skipLinkAssemblyBudget?: boolean;
   // Fires when the assembled-resource budget stopped the walk short of a
   // closure. Reported from inside the walk because the caller cannot infer it:
@@ -1943,9 +1945,15 @@ export class RealmIndexQueryEngine {
     // carry anyway. Keyed on the resolved link URL, which is the one spelling
     // step 2 always computes; a seed recorded only under some other equivalent
     // form costs one slot it needn't have, which is the harmless direction.
+    // A render's own reads (`skipLinkAssemblyBudget`, set during prerender)
+    // take the render bounds: a larger resource budget and a hop limit
+    // (see `prerenderLinkResourceBudget`). Never unbounded.
     let budget = opts?.skipLinkAssemblyBudget
-      ? Infinity
+      ? prerenderLinkResourceBudget()
       : assembledLinkResourceBudget();
+    let hopLimit = opts?.skipLinkAssemblyBudget
+      ? prerenderLinkHopLimit()
+      : Infinity;
     let committed = 0;
     let truncated = false;
     let decided = new Set<string>(omitSet);
@@ -2224,6 +2232,13 @@ export class RealmIndexQueryEngine {
           // the assembly. A target already ruled on falls through: it has been
           // paid for, and its relationship still needs the rewrite below.
           if (!decided.has(linkURL.href)) {
+            // A link from layer `currentLayerIndex` reaches depth
+            // `currentLayerIndex + 1`; past the hop limit it stays a named,
+            // not-loaded link, like an over-budget one.
+            if (currentLayerIndex + 1 > hopLimit) {
+              truncated = true;
+              continue;
+            }
             if (committed >= budget) {
               // Out of budget. The relationship is left exactly as it stands:
               // a stored link carries `links.self` and no `data`, while a
@@ -2555,7 +2570,7 @@ export class RealmIndexQueryEngine {
       // it — and the only place the ceiling that applied is recorded, since the
       // document carries the fact of the truncation rather than the number.
       this.#log.warn(
-        `[loadLinks ${invocationId}] assembled-resource budget of ${budget} reached for realm=${realmURL.href} roots=${rootResources.length}; included[] carries ${included.length} of a larger closure and the response reports it truncated`,
+        `[loadLinks ${invocationId}] ${opts?.skipLinkAssemblyBudget ? `render bounds (${budget} resources, ${hopLimit} hops)` : `assembled-resource budget of ${budget}`} reached for realm=${realmURL.href} roots=${rootResources.length}; included[] carries ${included.length} of a larger closure and the response reports it truncated`,
       );
       opts?.onLinkClosureTruncated?.();
     }

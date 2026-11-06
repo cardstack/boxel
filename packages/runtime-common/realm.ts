@@ -52,6 +52,8 @@ import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
   applyServerSearchPageBound,
   assembledLinkResourceBudget,
+  prerenderLinkHopLimit,
+  prerenderLinkResourceBudget,
   isItemLegSearch,
   runWithSearchTimeBudget,
   SearchBoundError,
@@ -1376,6 +1378,13 @@ const CARD_JSON_ETAG_VARIANT = 'card-srcver';
 // revision — so the value belongs in the validator rather than in the memory of
 // whoever edits it. One number for the process, so it fragments no cache: every
 // response at a given build and setting shares it.
+// A render's link closure is bounded by the render bounds (see
+// `prerenderLinkResourceBudget`), so a body assembled for a render is named by
+// them: retuning either changes which renders are clipped, and so the body.
+function renderBoundsTag(): string {
+  return `lbr${prerenderLinkResourceBudget()}h${prerenderLinkHopLimit()}`;
+}
+
 function cardJsonEtagVariant(): string {
   return `${CARD_JSON_ETAG_VARIANT}-lb${assembledLinkResourceBudget()}`;
 }
@@ -1874,7 +1883,7 @@ function buildCardJsonEtag(
   if (shape !== 'full') {
     variant = `${CARD_JSON_ETAG_VARIANT}-${shape}`;
   } else if (unboundedAssembly) {
-    variant = `${CARD_JSON_ETAG_VARIANT}-lb-off`;
+    variant = `${CARD_JSON_ETAG_VARIANT}-${renderBoundsTag()}`;
   } else {
     variant = cardJsonEtagVariant();
   }
@@ -1983,7 +1992,7 @@ function buildEntryHtmlEtag(
   // which is also what keeps it from sharing a validator with the bounded shape.
   if (doc.data.relationships.item && !resolveLinksOnly) {
     base = unboundedAssembly
-      ? `${base}:lb-off`
+      ? `${base}:${renderBoundsTag()}`
       : `${base}:lb${assembledLinkResourceBudget()}`;
   }
   // The withheld formats this request selects. For a healthy card the body
@@ -14940,12 +14949,12 @@ export class Realm {
       skipQueryBackedExpansion: duringPrerender,
       resolveLinksOnly:
         this.#decideLinkShape(request, 'single-row')?.mode === 'links-only',
-      // The assembled-resource budget bounds live reads. This branch exempts a
-      // read carrying the during-prerender marker, for the same reason the
-      // prerendered-HTML leg is exempt from the page and time bounds: what a
-      // render assembles is baked into cached HTML, so a ceiling that clipped
-      // it would serve a short closure from cache long after the pressure that
-      // justified it had passed.
+      // The assembled-resource budget bounds live reads. A read carrying the
+      // during-prerender marker takes the render bounds instead (a larger
+      // budget and a hop limit, see `prerenderLinkResourceBudget`): what a
+      // render assembles is baked into cached HTML, so its bound is generous,
+      // but never absent, since an unbounded render of a densely linked card
+      // assembled the realm's whole graph.
       //
       // It is defensive rather than load-bearing. No caller attaches that
       // marker to a card+json request, so the exemption a render relies on is

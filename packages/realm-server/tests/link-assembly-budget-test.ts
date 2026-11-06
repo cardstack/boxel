@@ -7,6 +7,7 @@ import {
   SupportedMimeType,
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
+  setPrerenderLinkBoundsForTests,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
@@ -209,6 +210,7 @@ module(basename(import.meta.filename), function () {
 
     hooks.afterEach(function () {
       resetSearchBoundsForTests();
+      setPrerenderLinkBoundsForTests(undefined);
     });
 
     function cardPath(name: string) {
@@ -458,11 +460,11 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a render reads its whole closure — the budget is for live traffic', async function (assert) {
+    test('a render is not held to the live budget: a closure within the render bounds arrives whole', async function (assert) {
       // What a prerender assembles is rendered into HTML that is cached and
-      // served long after this request, and the cached copy carries no way to
-      // say it was short. So the exemption is not an optimization: a clipped
-      // render would be a wrong answer with no way to notice.
+      // served long after this request, so a render gets bounds of its own,
+      // far more generous than a live read's (2,000 resources, 2 hops by
+      // default). This fixture's closure, targets and their children, fits.
       setSearchBoundsForTests({ maxAssembledLinkResources: 2 });
 
       let live = await request
@@ -492,6 +494,42 @@ module(basename(import.meta.filename), function () {
         duringPrerender.body.meta?.linkClosureTruncated,
         'and reports nothing, having been clipped by nothing',
       );
+    });
+
+    test('a render is clipped at its own resource budget, and says so', async function (assert) {
+      // An unbounded render of a densely linked card once assembled a realm's
+      // whole graph per card and took the server down.
+      setPrerenderLinkBoundsForTests({ maxResources: 3 });
+      let response = await request
+        .get(cardPath('consumer-1'))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('x-boxel-during-prerender', '1');
+      assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
+      assert.strictEqual(
+        linkResourceIds(response.body.included).length,
+        3,
+        'the render carries what its budget allows',
+      );
+      assert.true(
+        Boolean(response.body.meta?.linkClosureTruncated),
+        'and the document says the closure was clipped',
+      );
+    });
+
+    test('a render stops at its hop limit', async function (assert) {
+      setPrerenderLinkBoundsForTests({ hops: 1 });
+      let response = await request
+        .get(cardPath('consumer-1'))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('x-boxel-during-prerender', '1');
+      assert.strictEqual(response.status, 200, `HTTP 200: ${response.text}`);
+      let ids = linkResourceIds(response.body.included);
+      assert.strictEqual(ids.length, TARGET_COUNT, 'the targets, one hop out');
+      assert.true(
+        ids.every((id) => /\/target-\d+$/.test(id)),
+        'and none of their children, two hops out',
+      );
+      assert.true(Boolean(response.body.meta?.linkClosureTruncated));
     });
 
     test('retuning the budget rotates the validator', async function (assert) {

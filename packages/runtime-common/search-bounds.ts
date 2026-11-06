@@ -82,6 +82,8 @@ const DEFAULT_QUERY_FIELD_SEARCH_CONCURRENCY_CAP = 2;
 const DEFAULT_SERVER_MAX_IN_FLIGHT_SEARCHES = 30;
 const DEFAULT_SEARCH_ADMISSION_WAIT_MS = 1_000;
 const DEFAULT_SERVER_MAX_ASSEMBLED_LINK_RESOURCES = 1_000;
+const DEFAULT_PRERENDER_MAX_LINK_RESOURCES = 2_000;
+const DEFAULT_PRERENDER_LINK_HOPS = 2;
 
 const MIN_PAGE_SIZE = 1;
 const MIN_REALMS = 1;
@@ -551,6 +553,47 @@ export function resetSearchBoundsForTests(): void {
 // thousand-card graph.
 export function assembledLinkResourceBudget(): number {
   return maxAssembledLinkResources;
+}
+
+// The link-assembly bounds for a render's own reads (during prerender). A
+// render was once exempt from every bound, so a card in a densely linked graph
+// (OnTube's concepts link concepts, videos and domains, which link back)
+// assembled the realm's whole connected closure for one render: ~8k resources
+// and several megabytes per card, which drove the indexing worker to its heap
+// ceiling and the machine into swap, and with it the realm server. A render
+// reads its card's own fields and, in a template that shows linked cards,
+// those cards' fields and their links: two hops. Past either bound the closure
+// is clipped and the clip logged; a clipped link is a not-loaded value that a
+// template fetches on demand, so the cost of a clip is a lazier render, never
+// a wrong one.
+export const PRERENDER_MAX_LINK_RESOURCES = parsePositiveInt(
+  env.PRERENDER_MAX_LINK_RESOURCES,
+  DEFAULT_PRERENDER_MAX_LINK_RESOURCES,
+  MIN_ASSEMBLED_LINK_RESOURCES,
+);
+export const PRERENDER_LINK_HOPS = parsePositiveInt(
+  env.PRERENDER_LINK_HOPS,
+  DEFAULT_PRERENDER_LINK_HOPS,
+  1,
+);
+let prerenderMaxLinkResources = PRERENDER_MAX_LINK_RESOURCES;
+let prerenderLinkHops = PRERENDER_LINK_HOPS;
+
+export function prerenderLinkResourceBudget(): number {
+  return prerenderMaxLinkResources;
+}
+
+export function prerenderLinkHopLimit(): number {
+  return prerenderLinkHops;
+}
+
+// For tests: lower the render bounds to a handful, or restore them.
+export function setPrerenderLinkBoundsForTests(
+  bounds: { maxResources?: number; hops?: number } | undefined,
+) {
+  prerenderMaxLinkResources =
+    bounds?.maxResources ?? PRERENDER_MAX_LINK_RESOURCES;
+  prerenderLinkHops = bounds?.hops ?? PRERENDER_LINK_HOPS;
 }
 
 // The item leg (`fields[entry]` includes "item" / "item.<field>") is the live
