@@ -7,10 +7,10 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Tag from '../../components/icons/tag.gts';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import Tag from '@cardstack/boxel-icons/tag';
 import BoxelInput from '../../components/input.gts';
-import { autofocus } from '../../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface Signature {
   Args: {
@@ -43,7 +43,7 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         @onInput={{@onName}}
         name='key-name'
         data-test-key-name
-        {{autofocus}}
+        {{focusWhen true}}
       />
     </FieldContainer>
   {{/if}}
@@ -64,7 +64,7 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         name='key-value'
         spellcheck='false'
         data-test-key-value
-        {{autofocus (if @onName false true)}}
+        {{focusWhen (if @onName false true)}}
       />
     </FieldContainer>
   {{/if}}

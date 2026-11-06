@@ -28,9 +28,9 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import { getKey, replaceKey, windowContext } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 
 import {
   failureMessage,
@@ -38,7 +38,7 @@ import {
   loadFailure,
   type LoadFailure,
 } from './context.ts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 import { pageTitle, withWayBack } from './trail.ts';
@@ -232,7 +232,7 @@ class SlotPanel extends Component<{
           <div class='slot-actions'>
             <Button
               type='submit'
-              @kind='primary'
+              @variant='primary'
               @disabled={{this.submitDisabled}}
               @loading={{this.form.saving}}
               data-test-replace-key-save
@@ -259,7 +259,7 @@ class SlotPanel extends Component<{
         </FieldContainer>
         <div class='slot-actions'>
           <Button
-            @kind='primary'
+            @variant='primary'
             {{on 'click' this.reconnect}}
             data-test-replace-key-reconnect
           >Reconnect</Button>

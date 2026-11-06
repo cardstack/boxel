@@ -5,7 +5,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import Radio from '../../src/components/radio.gts';
-import { eq } from '../../src/helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 
 // The component tests load no theme, so the panel's role tokens are set
 // here, on a light surface under the dark color scheme the shell declares.

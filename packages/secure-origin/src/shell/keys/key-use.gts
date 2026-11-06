@@ -26,11 +26,11 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
-import Button from '../../components/button.gts';
-import Globe from '../../components/icons/globe.gts';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import Users from '../../components/icons/users.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { Button } from '@cardstack/pretui/components/button';
+import Globe from '@cardstack/boxel-icons/globe';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import Users from '@cardstack/boxel-icons/users';
+import { eq } from '@cardstack/pretui/helpers';
 
 import { anonymousUseSummary } from './anonymous-use-fields.gts';
 import type { ListedKey, SharedWorkspace } from './context.ts';
@@ -151,16 +151,16 @@ export default class KeyUse extends Component<Signature> {
                       <div class='confirm-actions'>
                         <Button
                           type='button'
-                          @kind='secondary'
-                          @size='extra-small'
+                          @variant='secondary'
+                          @size='xs'
                           @disabled={{this.saving}}
                           data-test-key-unshare-cancel
                           {{on 'click' this.cancel}}
                         >Cancel</Button>
                         <Button
                           type='button'
-                          @kind='destructive'
-                          @size='extra-small'
+                          @variant='destructive'
+                          @size='xs'
                           @loading={{this.saving}}
                           data-test-key-unshare-confirm-button
                           {{on 'click' (fn this.unshare workspace)}}
@@ -171,8 +171,8 @@ export default class KeyUse extends Component<Signature> {
                     <Button
                       class='unshare'
                       type='button'
-                      @kind='secondary'
-                      @size='extra-small'
+                      @variant='secondary'
+                      @size='xs'
                       aria-label='Unshare {{@key.name}} from {{workspaceTitle
                         workspace
                       }}'
@@ -192,8 +192,8 @@ export default class KeyUse extends Component<Signature> {
                       {{#if @onApproveShare}}
                         <Button
                           type='button'
-                          @kind='secondary'
-                          @size='extra-small'
+                          @variant='secondary'
+                          @size='xs'
                           aria-label='Approve for a card: “{{share.label}}” in {{workspaceTitle
                             workspace
                           }}'
@@ -223,8 +223,8 @@ export default class KeyUse extends Component<Signature> {
             </p>
             <Button
               type='button'
-              @kind='secondary'
-              @size='extra-small'
+              @variant='secondary'
+              @size='xs'
               aria-label='Change whether people who aren’t signed in can use {{@key.name}}'
               data-test-key-anonymous-use-change
               {{on 'click' (fn @onChangeAnonymousUse @key)}}

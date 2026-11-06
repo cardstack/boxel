@@ -8,9 +8,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from '../../components/field-container.gts';
-import Globe from '../../components/icons/globe.gts';
-import MessageSquare from '../../components/icons/message-square.gts';
-import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
+import Globe from '@cardstack/boxel-icons/globe';
+import MessageSquare from '@cardstack/boxel-icons/message-square';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 
 import type { WindowContext } from './context.ts';
 import Destination from './destination.gts';

@@ -53,12 +53,12 @@ import {
   type KeyPolicyNotice,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import RefreshCw from '../../components/icons/refresh-cw.gts';
-import ShareIcon from '../../components/icons/share-2.gts';
-import Trash from '../../components/icons/trash-2.gts';
+import { Button } from '@cardstack/pretui/components/button';
+import RefreshCw from '@cardstack/boxel-icons/refresh-cw';
+import ShareIcon from '@cardstack/boxel-icons/share-2';
+import Trash from '@cardstack/boxel-icons/trash-2';
 import IconPlus from '../../components/icons/icon-plus.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
 import { keySharePath, keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
@@ -177,8 +177,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           {{#unless (eq key.kind 'oauth-connection')}}
                             <Button
                               class='action'
-                              @kind='secondary'
-                              @size='extra-small'
+                              @variant='secondary'
+                              @size='xs'
                               aria-describedby='key-name-{{key.id}}'
                               data-test-key-share
                               {{on 'click' (fn this.share key)}}
@@ -188,8 +188,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                               />Share with Workspace</Button>
                             <Button
                               class='action'
-                              @kind='secondary'
-                              @size='extra-small'
+                              @variant='secondary'
+                              @size='xs'
                               aria-describedby='key-name-{{key.id}}'
                               data-test-key-replace
                               {{on 'click' (fn this.startReplace key)}}
@@ -201,8 +201,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           {{#if (this.usableWithCard key)}}
                             <Button
                               class='action'
-                              @kind='secondary'
-                              @size='extra-small'
+                              @variant='secondary'
+                              @size='xs'
                               aria-describedby='key-name-{{key.id}}'
                               data-test-key-use
                               {{on 'click' (fn this.useWithCard key)}}
@@ -250,14 +250,14 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           <div class='panel-actions'>
                             <Button
                               type='button'
-                              @kind='secondary'
-                              @size='small'
+                              @variant='secondary'
+                              @size='s'
                               {{on 'click' this.cancel}}
                             >Cancel</Button>
                             <Button
                               type='submit'
-                              @kind='primary'
-                              @size='small'
+                              @variant='primary'
+                              @size='s'
                               @disabled={{this.replaceDisabled}}
                               @loading={{this.form.saving}}
                               data-test-key-replace-save
@@ -285,14 +285,14 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           <div class='panel-actions'>
                             <Button
                               type='button'
-                              @kind='secondary'
-                              @size='small'
+                              @variant='secondary'
+                              @size='s'
                               {{on 'click' this.cancel}}
                             >Cancel</Button>
                             <Button
                               type='submit'
-                              @kind='primary'
-                              @size='small'
+                              @variant='primary'
+                              @size='s'
                               @disabled={{this.anonymousUseDisabled}}
                               @loading={{this.form.saving}}
                               data-test-key-anonymous-use-save
@@ -331,14 +331,14 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           <div class='panel-actions'>
                             <Button
                               type='button'
-                              @kind='secondary'
-                              @size='small'
+                              @variant='secondary'
+                              @size='s'
                               {{on 'click' this.cancel}}
                             >Cancel</Button>
                             <Button
                               type='button'
-                              @kind='destructive'
-                              @size='small'
+                              @variant='destructive'
+                              @size='s'
                               @disabled={{this.loadingShares}}
                               @loading={{this.form.saving}}
                               data-test-key-delete-confirm-button
@@ -369,9 +369,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
             <div class='add-actions'>
               <Button
                 class='add-new'
-                @kind='secondary'
-                @size='tall'
-                @rectangular={{true}}
+                @variant='secondary'
+                @size='l'
                 data-test-key-page-add
                 {{on 'click' this.add}}
               ><IconPlus
@@ -382,9 +381,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                 />Add a key</Button>
               <Button
                 class='add-new'
-                @kind='secondary'
-                @size='tall'
-                @rectangular={{true}}
+                @variant='secondary'
+                @size='l'
                 data-test-key-page-connect
                 {{on 'click' this.connect}}
               ><IconPlus

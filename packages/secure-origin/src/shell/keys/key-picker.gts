@@ -8,11 +8,11 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import RadioTile from '../../components/radio-tile.gts';
-import { eq, gt } from '../../helpers/truth-helpers.ts';
+import { eq, gt } from '@cardstack/pretui/helpers';
 
 import type { UserKey } from './context.ts';
 import KeyTile from './key-tile.gts';
@@ -55,7 +55,7 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
         <Button
           class='go-to-keys'
           type='button'
-          @kind='secondary'
+          @variant='secondary'
           data-test-key-picker-go-to-keys
           {{on 'click' @onGoToKeys}}
         >Go to your keys</Button>

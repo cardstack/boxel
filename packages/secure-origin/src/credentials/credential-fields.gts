@@ -1,10 +1,11 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
+import { modifier } from 'ember-modifier';
+
 import FieldContainer from '../components/field-container.gts';
 import BoxelInput from '../components/input.gts';
 import cn from '../helpers/cn.ts';
-import { modifier, testAttribute } from '../modifiers/modifier.ts';
 import type { CredentialFrame } from '../security/credentials.js';
 import type { Changes } from './changes.ts';
 
@@ -43,11 +44,26 @@ interface FieldView {
 
 // The frame reports the height of the fields whenever their layout changes
 // it.
-const observeSize = modifier((element: HTMLElement, frame: CredentialFrame) => {
-  let observer = new ResizeObserver(() => frame.sendSize());
-  observer.observe(element);
-  return () => observer.disconnect();
-});
+const observeSize = modifier(
+  (element: HTMLElement, [frame]: [CredentialFrame]) => {
+    let observer = new ResizeObserver(() => frame.sendSize());
+    observer.observe(element);
+    return () => observer.disconnect();
+  },
+);
+
+// Gives the element a `data-test-<name>` attribute, for a name a template
+// can't spell out itself because it comes from data.
+const testAttribute = modifier(
+  (element: Element, [name]: [string | undefined]) => {
+    if (!name) {
+      return;
+    }
+    let attribute = `data-test-${name}`;
+    element.setAttribute(attribute, '');
+    return () => element.removeAttribute(attribute);
+  },
+);
 
 export default class CredentialFields extends Component<Signature> {
   private get frame() {

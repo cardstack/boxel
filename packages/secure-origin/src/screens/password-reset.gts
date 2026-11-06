@@ -13,7 +13,7 @@ import AuthButton from '../components/auth-button.gts';
 import AuthFormField from '../components/auth-form-field.gts';
 import BoxelInput from '../components/input.gts';
 import optional from '../helpers/optional.ts';
-import { autofocus } from '../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface ForgotPasswordFormSignature {
   Args: {
@@ -54,7 +54,7 @@ export const ForgotPasswordForm: TemplateOnlyComponent<ForgotPasswordFormSignatu
           @state={{if @emailError 'invalid' 'initial'}}
           @value={{@email}}
           @onInput={{@onEmailInput}}
-          {{autofocus (if @autofocus true false)}}
+          {{focusWhen (if @autofocus true false)}}
         />
       </AuthFormField>
       <div class='button-wrapper'>

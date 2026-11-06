@@ -9,9 +9,9 @@
 // is, whose chosen fill then shows through.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import KeyRound from '../../components/icons/key-round.gts';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import cn from '../../helpers/cn.ts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 
 import type { UserKey } from './context.ts';
 

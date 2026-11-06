@@ -6,7 +6,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import FieldContainer from '../../components/field-container.gts';
 import Radio from '../../components/radio.gts';
 import type { IconComponent } from '../../components/icons/types.ts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 
 export interface RadioChoice {
   value: string;

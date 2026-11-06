@@ -7,9 +7,9 @@ import { fn } from '@ember/helper';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from '../../components/field-container.gts';
-import Globe from '../../components/icons/globe.gts';
+import Globe from '@cardstack/boxel-icons/globe';
 import RadioTile from '../../components/radio-tile.gts';
-import { eq, gt } from '../../helpers/truth-helpers.ts';
+import { eq, gt } from '@cardstack/pretui/helpers';
 
 import { scopesOf, type ConnectableClient } from './context.ts';
 

@@ -10,9 +10,9 @@ import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import DisclosureToggle from '../../components/disclosure-toggle.gts';
-import { not } from '../../helpers/truth-helpers.ts';
+import { not } from '@cardstack/pretui/helpers';
 import {
   keyUsage,
   setKeyLimits,
@@ -66,8 +66,8 @@ export default class KeyUsagePanel extends Component<Signature> {
           This key’s usage couldn’t be loaded:
           {{this.failed.message}}
           <Button
-            @kind='text-only'
-            @size='extra-small'
+            @variant='ghost'
+            @size='xs'
             data-test-key-usage-retry
             {{on 'click' this.load}}
           >Try again</Button>

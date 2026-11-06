@@ -9,8 +9,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import Checkbox from '../../components/checkbox.gts';
 import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Users from '../../components/icons/users.gts';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import Users from '@cardstack/boxel-icons/users';
 import BoxelInput from '../../components/input.gts';
 
 import { anonymousCapsPhrase, type AnonymousCaps } from './anonymous-caps.ts';

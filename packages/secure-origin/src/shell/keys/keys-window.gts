@@ -36,7 +36,7 @@ import {
 } from '../../security/session.js';
 import type { Session } from '../../security/session.js';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import BoxelIcon from '../../components/icons/boxel-icon.gts';
 import IconX from '../../components/icons/icon-x.gts';
 import { handToCli } from '../../security/cli-handoff.js';
@@ -96,8 +96,8 @@ export default class KeysWindow extends Component<Signature> {
         <span class='bar-title' data-test-keys-window-title>{{@title}}</span>
         <Button
           class='close'
-          @kind='text-only'
-          @size='small'
+          @variant='ghost'
+          @size='s'
           aria-label='Close'
           data-test-keys-close
           {{on 'click' this.close}}
@@ -128,7 +128,7 @@ export default class KeysWindow extends Component<Signature> {
               then open your keys from there.</:intro>
             <:actions>
               <Button
-                @kind='primary'
+                @variant='primary'
                 data-test-keys-signed-out-close
                 {{on 'click' this.close}}
               >Close this window</Button>
@@ -175,8 +175,7 @@ export default class KeysWindow extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
       .close {
-        --boxel-button-text-color: var(--boxel-light);
-        gap: var(--boxel-sp-4xs);
+        color: var(--boxel-light);
       }
       .close-icon {
         --icon-color: var(--boxel-light);

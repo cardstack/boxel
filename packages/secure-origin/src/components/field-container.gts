@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { uniqueId } from '@ember/helper';
 
 import cn from '../helpers/cn.ts';
-import { eq, not } from '../helpers/truth-helpers.ts';
+import { eq, not } from '@cardstack/pretui/helpers';
 import type { IconComponent } from './icons/types.ts';
 import Label from './label.gts';
 
