@@ -46,18 +46,20 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
     }
     let kind = slot.key;
     // One choice fills the slot in every operation of the batch, so it offers
-    // only the keys of the kind each of them declares.
-    let declared = new Set(
-      allSlots(batch)
-        .filter((s) => s.slot === slot.slot && s.keyKind)
-        .map((s) => s.keyKind!),
-    );
-    let fits = (keyKind: string) =>
-      [...declared].every((d) => slotKindOfKey(keyKind) === d);
+    // only the keys that can fill each of them: of a kind every one of them
+    // takes, and good at every destination the slot is sent to.
+    let slots = allSlots(batch).filter((s) => s.slot === slot.slot);
+    let destinations = destinationsOfSlot(batch, slot.slot);
+    let fits = (keyKind: string, serves: string[] | undefined) =>
+      slots.every((s) => {
+        let kinds = kindsOfSlot(s);
+        return kinds === undefined || kinds.includes(slotKindOfKey(keyKind));
+      }) &&
+      (serves === undefined || destinations.every((d) => serves.includes(d)));
     let options: SlotOption[] =
       kind === 'userKey'
         ? batch.keys
-            .filter((key) => fits(key.kind))
+            .filter((key) => fits(key.kind, key.serves))
             .map(({ id, name, covers, state }) => ({
               id,
               name,
@@ -65,7 +67,7 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
               ...(state === 'rejected' ? { rejected: true } : {}),
             }))
         : batch.shares
-            .filter((share) => fits(share.keyKind))
+            .filter((share) => fits(share.keyKind, share.serves))
             .map(({ id, label, keyName, covers }) => ({
               id,
               name: label,
@@ -90,6 +92,12 @@ function slotKindOfKey(keyKind: string): string {
   return keyKind === 'oauth-connection' || keyKind === 'oauth-client'
     ? 'oauth'
     : keyKind;
+}
+
+// The kinds of key that can fill a slot: those the realm server names, else
+// the declared one. Undefined when neither is known: any key is offered.
+function kindsOfSlot(slot: BatchSlot): string[] | undefined {
+  return slot.kinds ?? (slot.keyKind ? [slot.keyKind] : undefined);
 }
 
 function allSlots(batch: ApprovalBatch): BatchSlot[] {

@@ -1,12 +1,14 @@
 import {
-  keyFitsSlot,
   param,
   query,
+  slotKindOfKey,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anonymous-actor';
 import {
   destinationCovers,
+  slotKeyKinds,
+  type CallApiKeyKind,
   type CallApiReadinessLookup,
   type CallApiSlot,
   type KeyReadiness,
@@ -18,6 +20,12 @@ import {
   type SlotCheck,
 } from './key-bindings.ts';
 import { limitReadiness } from './key-limits.ts';
+import {
+  apiHostList,
+  apiHostsOfKeySql,
+  apiHostsServe,
+  sendableKeySql,
+} from './oauth.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
@@ -119,37 +127,34 @@ export async function keyReadiness(
     { ...lookup, caller, instance, mode: 'interactive' },
     { probeIntervalMs },
   );
-  // Read once per kind of key a slot declares, and only where a slot has no
-  // binding to fill it: a slot that declares its kind is filled only by a
-  // key of that kind (`keyKind`), so only those count.
+  // Read once per set of kinds a slot takes, and only where a slot has no
+  // binding to fill it. Only a key the approve page would offer for the slot
+  // counts (`fitsSlot`).
   let covering = new Map<string, Promise<boolean>>();
   let callerCovers = (slot: CallApiSlot) => {
-    let kind = slot.keyKind ?? '';
-    if (!covering.has(kind)) {
+    let kinds = slotKeyKinds(slot, lookup.request);
+    let memo = kinds.join(',');
+    if (!covering.has(memo)) {
       covering.set(
-        kind,
-        callerHasCoveringGrant(dbAdapter, lookup, caller, slot.keyKind),
+        memo,
+        callerHasCoveringGrant(dbAdapter, lookup, caller, kinds),
       );
     }
-    return covering.get(kind)!;
+    return covering.get(memo)!;
   };
   let sharing = new Map<string, Promise<boolean>>();
   let callerShares = (slot: CallApiSlot) => {
-    let kind = slot.keyKind ?? '';
-    if (!sharing.has(kind)) {
+    let kinds = slotKeyKinds(slot, lookup.request);
+    let memo = kinds.join(',');
+    if (!sharing.has(memo)) {
       sharing.set(
-        kind,
+        memo,
         lookup.caller
-          ? callerHasActiveShare(
-              dbAdapter,
-              lookup.realmURL,
-              lookup.caller,
-              slot.keyKind,
-            )
+          ? callerHasActiveShare(dbAdapter, lookup, lookup.caller, kinds)
           : Promise.resolve(false),
       );
     }
-    return sharing.get(kind)!;
+    return sharing.get(memo)!;
   };
   let answers: KeyReadiness[] = [];
   for (let check of checks) {
@@ -214,44 +219,60 @@ async function userKeyReadiness(
   }
 }
 
-// Whether any of the caller's keys of the kind the slot declares, if it
-// declares one, may already be sent where the operation sends, by the rule
-// sending applies (`destinationCovers`).
+// Whether a key the approve page would offer for a slot that takes `kinds`
+// (`slotKeyKinds`): one of those kinds, whose credential is good where the
+// operation sends (`apiHostsServe`), as `slotChoices` decides on the page.
+function fitsSlot(
+  row: Record<string, unknown>,
+  kinds: CallApiKeyKind[],
+  destination: string,
+): boolean {
+  let kind = slotKindOfKey(row.kind as string);
+  return (
+    kind !== undefined &&
+    kinds.includes(kind) &&
+    apiHostsServe(apiHostList(row.api_hosts), destination)
+  );
+}
+
+// Whether any of the caller's keys that fit the slot (`fitsSlot`) may already
+// be sent where the operation sends, by the rule sending applies
+// (`destinationCovers`).
 async function callerHasCoveringGrant(
   dbAdapter: DBAdapter,
   lookup: CallApiReadinessLookup,
   caller: string,
-  keyKind: CallApiSlot['keyKind'],
+  kinds: CallApiKeyKind[],
 ): Promise<boolean> {
   let rows = await query(dbAdapter, [
-    `SELECT g.destination, k.kind FROM user_key_grants g JOIN user_keys k ON k.id = g.key_id WHERE g.owner = `,
+    `SELECT g.destination, k.kind, ${apiHostsOfKeySql('k.id')} AS api_hosts FROM user_key_grants g JOIN user_keys k ON k.id = g.key_id WHERE g.owner = `,
     param(caller),
   ]);
   return rows.some(
-    ({ destination, kind }) =>
-      keyFitsSlot(kind as string, keyKind) &&
-      destinationCovers(destination as string, lookup.request.destination),
+    (row) =>
+      fitsSlot(row, kinds, lookup.request.destination) &&
+      destinationCovers(row.destination as string, lookup.request.destination),
   );
 }
 
 // Whether the caller has an active share in the realm that the approve page
-// offers for an `{{apiKey}}` slot: one whose key is of the kind the slot
-// declares, if it declares one, whatever its grants cover, since approving
-// one writes the grant it lacks.
+// offers for an `{{apiKey}}` slot: one whose key a request can send
+// (`sendableKeySql`) and fits the slot (`fitsSlot`), whatever its grants
+// cover, since approving one writes the grant it lacks.
 async function callerHasActiveShare(
   dbAdapter: DBAdapter,
-  realmURL: string,
+  lookup: CallApiReadinessLookup,
   caller: string,
-  keyKind: CallApiSlot['keyKind'],
+  kinds: CallApiKeyKind[],
 ): Promise<boolean> {
   let rows = await query(dbAdapter, [
-    `SELECT k.kind FROM key_shares s JOIN user_keys k ON k.id = s.key_id WHERE s.realm_url = `,
-    param(realmURL),
+    `SELECT k.kind, ${apiHostsOfKeySql('s.key_id')} AS api_hosts FROM key_shares s JOIN user_keys k ON k.id = s.key_id WHERE s.realm_url = `,
+    param(lookup.realmURL),
     ` AND s.owner = `,
     param(caller),
-    ` AND s.state = 'active'`,
+    ` AND s.state = 'active' AND ${sendableKeySql('s.key_id')}`,
   ]);
-  return rows.some(({ kind }) => keyFitsSlot(kind as string, keyKind));
+  return rows.some((row) => fitsSlot(row, kinds, lookup.request.destination));
 }
 
 // An `{{apiKey}}` slot is filled from the realm's share, for every caller. Only

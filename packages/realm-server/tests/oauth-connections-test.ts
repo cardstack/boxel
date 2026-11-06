@@ -853,6 +853,21 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a client that names no API hosts is offered for any destination', async function (assert) {
+    await addClient(TEAMMATE, { apiHosts: [] }, 'hostless app');
+    let offered = await request
+      .get('/_oauth/clients')
+      .query({ destination: `${OTHER_HOST}/api/` })
+      .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`);
+    assert.deepEqual(
+      offered.body.data
+        .filter((c: any) => c.attributes.kind === 'own')
+        .map((c: any) => c.attributes.label),
+      ['hostless app'],
+      'it is held to no API hosts, as its connections are not when sent',
+    );
+  });
+
   test('a sign-in finishes only for the person who started it', async function (assert) {
     // Someone starts a sign-in and gets another person to approve it at the
     // vendor: the code comes back to the other person's window.

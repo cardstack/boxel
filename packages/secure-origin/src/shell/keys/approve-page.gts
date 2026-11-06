@@ -272,6 +272,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     <p class='empty' data-test-approve-no-keys>
                       {{#if (eq choice.kind 'userKey')}}
                         You have no key to use here yet.
+                      {{else if this.hasShares}}
+                        None of your keys shared with this workspace can be used
+                        here.
                       {{else}}
                         You have no key shared with this workspace yet.
                       {{/if}}
@@ -882,6 +885,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return this.choosing ? remainingFor(this.choosing.batch, this.form.use) : 0;
   }
 
+  // Whether the user has any share in the workspace, whether or not a slot
+  // can take it.
+  private get hasShares() {
+    return (this.batch?.shares.length ?? 0) > 0;
+  }
+
   private get choices(): SlotChoice[] {
     return this.batch ? slotChoices(this.batch) : [];
   }
@@ -1012,7 +1021,30 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private chooseUse = (value: string) => {
     this.form.use = value as ApprovalUse;
     this.form.error = undefined;
+    this.keepOfferedChoices();
   };
+
+  // A key stays chosen for a slot only while the slot offers it. The batch
+  // shown for one use holds different operations than for the other, and so
+  // can offer different keys; a key no longer offered gives way to the one
+  // the slot would start on.
+  private keepOfferedChoices() {
+    let batch = this.batch;
+    if (!batch) {
+      return;
+    }
+    let chosen = { ...this.form.chosen };
+    for (let choice of slotChoices(batch)) {
+      if (!choice.options.some((o) => o.id === chosen[choice.slot])) {
+        chosen[choice.slot] = initialChoice(
+          batch,
+          choice,
+          choice.kind === 'userKey' ? this.opened.key : this.opened.share,
+        );
+      }
+    }
+    this.form.chosen = chosen;
+  }
 
   private newGrantsAt = (destination: string) =>
     this.newGrants.filter((g) => g.destination === destination);
