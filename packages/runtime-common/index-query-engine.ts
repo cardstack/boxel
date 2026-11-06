@@ -1767,7 +1767,7 @@ export class IndexQueryEngine {
     if ('eq' in filter) {
       return this.eqCondition(filter, on, typeConditionRef, polarity);
     } else if ('in' in filter) {
-      return this.inCondition(filter, on, typeConditionRef);
+      return this.inCondition(filter, on, typeConditionRef, polarity);
     } else if ('contains' in filter) {
       return this.containsCondition(filter, on, typeConditionRef);
     } else if ('not' in filter) {
@@ -1961,12 +1961,18 @@ export class IndexQueryEngine {
     filter: InFilter,
     on: CodeRef,
     typeConditionRef?: CodeRef,
+    polarity: FilterPolarity = 'positive',
   ): CardExpression {
     let typeRef = typeConditionRef;
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.in).map(([key, values]) => {
-        return this.fieldInFilter(key, values as JSONTypes.Value[], on);
+        return this.fieldInFilter(
+          key,
+          values as JSONTypes.Value[],
+          on,
+          polarity,
+        );
       }),
     ]);
   }
@@ -2818,6 +2824,7 @@ export class IndexQueryEngine {
     key: string,
     values: JSONTypes.Value[],
     onRef: CodeRef,
+    polarity: FilterPolarity = 'positive',
   ): CardExpression {
     if (values.length === 0) {
       // Empty set matches nothing
@@ -2831,7 +2838,35 @@ export class IndexQueryEngine {
 
     let conditions: CardExpression[] = [];
 
-    if (nonNullValues.length > 0) {
+    if (nonNullValues.length > 0 && polarity === 'positive') {
+      // Like a positive `eq`, a positive `in` on a singular path is served by
+      // the GIN `search_doc` index: one `@>` containment per value, OR'd, so
+      // Postgres plans a BitmapOr of index scans. The `->> IN (...)` form
+      // below extracts per row, which no index covers, so it scans every row
+      // of the type. A plural path keeps the json_tree machinery. At negated
+      // polarity we keep extraction, whose NULL-on-absent-path semantics
+      // `@>` cannot reproduce under `NOT` (see `fieldEqFilter`).
+      let query = fieldQuery(key, onRef, false, 'filter');
+      let inList: CardExpression = [];
+      let containments: CardExpression = [];
+      nonNullValues.forEach((v, i) => {
+        if (i > 0) {
+          inList.push(',');
+          containments.push('OR');
+        }
+        inList.push(fieldValue(key, [param(v)], onRef, 'filter'));
+        containments.push(jsonContainsQuery(key, onRef, [param(v)]));
+      });
+      conditions.push([
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: ['(', ...containments, ')'],
+          pluralValue: [query, 'IN', '(', ...inList, ')'],
+          errorHint: 'filter',
+        }),
+      ]);
+    } else if (nonNullValues.length > 0) {
       let query = fieldQuery(key, onRef, false, 'filter');
       let inList: CardExpression = [];
       nonNullValues.forEach((v, i) => {
