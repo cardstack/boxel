@@ -150,6 +150,13 @@ export default defineConfig([
     rules: {
       // require relative imports use full extensions
       'import/extensions': ['error', 'always', { ignorePackages: true }],
+      // package.json declares only stylesheets (and tests) as side effects,
+      // so a bundler drops a module imported only for its effect. Nothing in
+      // src may rely on one.
+      'import/no-unassigned-import': [
+        'error',
+        { allow: ['**/*.css', 'ember-source/types'] },
+      ],
     },
   },
   {
