@@ -4063,7 +4063,7 @@ module('Integration | key pages', function (hooks) {
     function crumbs() {
       return [
         ...document.querySelectorAll(
-          '[data-test-breadcrumbs] > :not([data-test-pretui-breadcrumb-sep])',
+          '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item] > :not([data-test-pretui-breadcrumb-sep])',
         ),
       ].map((crumb) => crumb.textContent!.trim());
     }
@@ -4090,9 +4090,11 @@ module('Integration | key pages', function (hooks) {
         .hasAttribute('aria-current', 'page');
       assert.dom('[data-test-keys-heading]').hasText('Your keys');
       assert
-        .dom('[data-test-breadcrumbs] a:nth-of-type(1)')
+        .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a')
         .hasAttribute('href', `/secure/${share}`);
-      await click('[data-test-breadcrumbs] a:nth-of-type(1)');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/${share}` },
       ]);
@@ -4109,7 +4111,9 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-enter-key-form]');
       assert.deepEqual(crumbs(), ['Approve', 'Add key']);
       assert.dom('[data-test-keys-heading]').hasText('Add key');
-      await click('[data-test-breadcrumbs] a:nth-of-type(1)');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/${approve}` },
       ]);
@@ -4161,8 +4165,12 @@ module('Integration | key pages', function (hooks) {
         'Approve',
         'Add key',
       ]);
-      await click('[data-test-breadcrumbs] a:nth-of-type(1)');
-      await click('[data-test-breadcrumbs] a:nth-of-type(2)');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="1"] a',
+      );
       assert.deepEqual(navigations, [
         { how: 'replace', url: '/secure/keys' },
         { how: 'replace', url: `/secure/${use}` },
@@ -4185,7 +4193,7 @@ module('Integration | key pages', function (hooks) {
       let lines = new Set(
         [
           ...nav.querySelectorAll(
-            ':scope > :not([data-test-pretui-breadcrumb-sep])',
+            '[data-test-pretui-breadcrumb-item] > :not([data-test-pretui-breadcrumb-sep])',
           ),
         ].map((crumb) => Math.round(crumb.getBoundingClientRect().top)),
       );
@@ -4201,7 +4209,9 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       assert.deepEqual(crumbs(), ['Your keys', 'Add key']);
-      await click('[data-test-breadcrumbs] a:nth-of-type(1)');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
     });
 
@@ -4215,8 +4225,12 @@ module('Integration | key pages', function (hooks) {
         await render(EnterKeyPage);
         await waitFor('[data-test-enter-key-form]');
         assert.deepEqual(crumbs(), ['Share key', 'Your keys', 'Add key']);
-        await click('[data-test-breadcrumbs] a:nth-of-type(2)');
-        await click('[data-test-breadcrumbs] a:nth-of-type(1)');
+        await click(
+          '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="1"] a',
+        );
+        await click(
+          '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+        );
         assert.deepEqual(navigations, [
           { how: 'back', url: `/secure/${keys}` },
           { how: 'replace', url: `/secure/${share}` },

@@ -11,8 +11,9 @@ export interface CrumbSpec {
 export interface BreadcrumbSignature<T extends CrumbSpec = CrumbSpec> {
   Args: {
     items: T[];
-    // Called when a linked crumb is clicked, with its item and the click. The
-    // link follows its `href` unless the handler calls `preventDefault()`.
+    // Called on a plain click of a linked crumb, with its item and the click.
+    // The link follows its `href` unless the handler calls `preventDefault()`.
+    // A modified or non-primary click is left to the browser.
     onSelect?: (item: T, event: MouseEvent) => void;
   };
   Element: HTMLElement;
@@ -20,32 +21,55 @@ export interface BreadcrumbSignature<T extends CrumbSpec = CrumbSpec> {
 
 export class Breadcrumb<T extends CrumbSpec = CrumbSpec> extends Component<BreadcrumbSignature<T>> {
   isLast = (index: number) => index === this.args.items.length - 1;
-  select = (item: T, event: MouseEvent) => this.args.onSelect?.(item, event);
+  select = (item: T, event: MouseEvent) => {
+    // A Cmd/Ctrl-, Shift- or Alt-click opens the link in a new tab or window,
+    // which is the browser's to do.
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    this.args.onSelect?.(item, event);
+  };
   <template>
     <nav class='pretui-breadcrumb' aria-label='Breadcrumb' data-test-pretui-breadcrumb ...attributes>
-      {{#each @items as |item index|}}
-        {{#if index}}<span class='sep' aria-hidden='true' data-test-pretui-breadcrumb-sep>/</span>{{/if}}
-        {{#if (this.isLast index)}}
-          <b aria-current='page'>{{item.label}}</b>
-        {{else if item.href}}
-          <a href={{item.href}} {{on 'click' (fn this.select item)}}>{{item.label}}</a>
-        {{else}}
-          <span>{{item.label}}</span>
-        {{/if}}
-      {{/each}}
+      <ol>
+        {{#each @items as |item index|}}
+          <li data-test-pretui-breadcrumb-item={{index}}>
+            {{#if index}}<span class='sep' aria-hidden='true' data-test-pretui-breadcrumb-sep>/</span>{{/if}}
+            {{#if (this.isLast index)}}
+              <b aria-current='page'>{{item.label}}</b>
+            {{else if item.href}}
+              <a href={{item.href}} {{on 'click' (fn this.select item)}}>{{item.label}}</a>
+            {{else}}
+              <span>{{item.label}}</span>
+            {{/if}}
+          </li>
+        {{/each}}
+      </ol>
     </nav>
     <style scoped>
       @layer PretComponent {
-        /* A trail longer than its container wraps onto more lines, and a
-           label longer than a line breaks within itself. */
         .pretui-breadcrumb {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground);
+        }
+        /* A trail longer than its container wraps onto more lines, each crumb
+           keeping the separator before it, and a label longer than a line
+           breaks within itself. */
+        .pretui-breadcrumb ol {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
           gap: var(--boxel-sp-4xs) var(--boxel-sp-2xs);
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground);
+          margin: 0;
+          padding: 0;
+          list-style: none;
           overflow-wrap: anywhere;
+        }
+        .pretui-breadcrumb li {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-2xs);
+          min-width: 0;
         }
         .pretui-breadcrumb b {
           color: var(--foreground);
@@ -53,11 +77,11 @@ export class Breadcrumb<T extends CrumbSpec = CrumbSpec> extends Component<Bread
         }
         .pretui-breadcrumb a {
           color: inherit;
-          text-decoration: none;
-        }
-        .pretui-breadcrumb a:hover {
           text-decoration: underline;
           text-underline-offset: 2px;
+        }
+        .pretui-breadcrumb a:hover {
+          text-decoration-thickness: 2px;
         }
         .sep {
           color: var(--subtle-foreground);

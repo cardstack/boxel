@@ -112,6 +112,7 @@ export default class KeysWindow extends Component<Signature> {
         {{#if this.hasTrail}}
           <Breadcrumb
             class='trail'
+            data-theme='dark'
             @items={{this.crumbs}}
             @onSelect={{this.goBack}}
             data-test-breadcrumbs
@@ -188,12 +189,9 @@ export default class KeysWindow extends Component<Signature> {
         --boxel-button-text-color: var(--boxel-light);
         gap: var(--boxel-sp-4xs);
       }
-      /* The trail is light on the purple: the page it is on in white, the
-         pages above it a step dimmer, and the separators dimmer again. */
+      /* The trail sits on the purple, so it takes the dark theme's inks, as
+         AuthContainer does on the same background. */
       .trail {
-        --foreground: var(--boxel-light);
-        --muted-foreground: var(--boxel-300);
-        --subtle-foreground: var(--boxel-450);
         padding: 0 var(--boxel-sp) var(--boxel-sp-xs);
       }
       .close-icon {

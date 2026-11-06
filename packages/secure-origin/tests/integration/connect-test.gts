@@ -515,7 +515,7 @@ module('Integration | connecting an account', function (hooks) {
         assert.deepEqual(
           [
             ...document.querySelectorAll(
-              '[data-test-breadcrumbs] > :not([data-test-pretui-breadcrumb-sep])',
+              '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item] > :not([data-test-pretui-breadcrumb-sep])',
             ),
           ].map((crumb) => crumb.textContent!.trim()),
           ['Share key', 'Your keys', 'Connect'],
@@ -541,12 +541,14 @@ module('Integration | connecting an account', function (hooks) {
       await waitFor('[data-test-connect-form]');
       assert.dom('[data-test-breadcrumbs] [aria-current]').hasText('Reconnect');
       assert
-        .dom('[data-test-breadcrumbs] a:nth-of-type(1)')
+        .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a')
         .hasText('Replace key');
       assert
         .dom('[data-test-connect-back]')
         .doesNotExist('the trail is the way back');
-      await click('[data-test-breadcrumbs] a:nth-of-type(1)');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/${replace}` },
       ]);
@@ -566,7 +568,7 @@ module('Integration | connecting an account', function (hooks) {
       assert.deepEqual(
         [
           ...document.querySelectorAll(
-            '[data-test-breadcrumbs] > :not([data-test-pretui-breadcrumb-sep])',
+            '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item] > :not([data-test-pretui-breadcrumb-sep])',
           ),
         ].map((crumb) => crumb.textContent!.trim()),
         ['Swap key', 'Your keys', 'Reconnect'],
