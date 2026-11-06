@@ -14,37 +14,16 @@ import { Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 import type { RealmIdentifier } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import { modalFocusTrapOptions } from '@cardstack/host/lib/modal-focus-trap';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 // The tile's Delete, Archive and Duplicate modals. The tile sends them to the
 // operator-mode modal outlet, so they render outside the dashboard's size
 // container, which would otherwise trap their fixed positioning.
-
-interface ModalFocusArgs {
-  onClose: () => void;
-  returnFocusTarget?: () => HTMLElement | undefined;
-}
-
-// Focus opens on the element marked `data-modal-initial-focus` (Cancel), or
-// on the modal itself when none is, stays in the modal, and goes back to the
-// tile on close. Escape closes the modal. The confirm button turns busy
-// rather than being replaced while its task runs, so it keeps focus.
-export function modalFocusTrapOptions(dialogId: string, args: ModalFocusArgs) {
-  return {
-    initialFocus: () =>
-      document.querySelector<HTMLElement>(
-        `#${dialogId} [data-modal-initial-focus]`,
-      ) ?? `#${dialogId}`,
-    fallbackFocus: `#${dialogId}`,
-    allowOutsideClick: true,
-    escapeDeactivates: () => {
-      args.onClose();
-      return false;
-    },
-    setReturnFocus: (previous: HTMLElement | SVGElement) =>
-      args.returnFocusTarget?.() ?? previous,
-  };
-}
+//
+// Each opens with focus on Cancel and hands it back to the tile on close.
+// The confirm button turns busy rather than being replaced while its task
+// runs, so it keeps focus.
 
 interface DeleteWorkspaceModalSignature {
   Args: {

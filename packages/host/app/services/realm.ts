@@ -1267,6 +1267,12 @@ export default class RealmService extends Service {
     return this.knownRealm(url)?.isRealmOwner ?? false;
   };
 
+  // The realm server publishes a realm only for its owner, and only one
+  // marked publishable; a published copy isn't.
+  canPublish = (url: string): boolean => {
+    return this.isRealmOwner(url) && this.info(url).publishable === true;
+  };
+
   url = (url: string): string | undefined => {
     return this.knownRealm(url)?.url;
   };

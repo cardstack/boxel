@@ -24,6 +24,12 @@ import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { logger, type RealmIdentifier } from '@cardstack/runtime-common';
 
 import PublishRealmDialog from '@cardstack/host/components/operator-mode/publish-realm-dialog';
+import { ifConnected } from '@cardstack/host/lib/modal-focus-trap';
+import { realmIdentifierSegments } from '@cardstack/host/lib/realm-utils';
+import {
+  ancestorsOf,
+  nearestWorkspaceTarget,
+} from '@cardstack/host/lib/workspace-actions';
 import { isHostedRealm } from '@cardstack/host/lib/workspace-list';
 import { NEW_SESSION_NAME } from '@cardstack/host/services/ai-assistant-panel-service';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
@@ -31,10 +37,12 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmPublishingService from '@cardstack/host/services/realm-publishing';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import { AGENT_KINDS, usesCodingAgent } from './agent-kinds';
+import { sortByUpdatedAtDesc } from './workspace-layout';
 
 import type { MenuEntry } from '@cardstack/pretui/internal/menu';
 
@@ -101,6 +109,7 @@ export default class GetStarted extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private realmPublishing: RealmPublishingService;
   @service declare private recentCardsService: RecentCardsService;
 
   // The open list and the dismissed note each hold only for the dismissal
@@ -112,11 +121,15 @@ export default class GetStarted extends Component<Signature> {
   // Just dismissed: a note stands in for the list, with Undo.
   @tracked private dismissedIn: number | undefined;
   private dismissalChanges = new ChangeCounter<boolean>();
-  // The workspace the publish dialog is for. It stays rendered once opened,
-  // as it does in host mode, so a publish it started still reports its result.
-  @tracked private publishRealmURL: string | undefined;
   @tracked private isPublishDialogOpen = false;
+  // The workspace the publish dialog was last opened for. Kept after it
+  // closes, since the modal outlet removes the dialog a render later and it
+  // renders once more meanwhile.
+  @tracked private publishRealmURL: string | undefined;
   private publishButton: HTMLElement | undefined;
+  // The button's ancestors when the dialog opened: publishing the last step
+  // removes the steps, button included, while the dialog is still open.
+  private publishButtonAncestors: HTMLElement[] = [];
   // Dismiss or Undo held focus and is gone, so the control that
   // replaces it takes it.
   private focusNext: 'undo' | 'dismiss' | undefined;
@@ -344,38 +357,26 @@ export default class GetStarted extends Component<Signature> {
     }
   }
 
-  private get publishableRealms() {
-    return this.realmServer.userRealmIdentifiers.filter(
-      (url) => this.realm.info(url).publishable === true,
-    );
-  }
-
-  // Ownership comes from a workspace's session. The dashboard opens one only
-  // for the workspaces it shows, so this opens the rest; for those already
-  // open, logging in again does nothing.
-  private ownershipTask = dropTask(async () => {
-    await Promise.allSettled(
-      this.publishableRealms.map((url) => this.realm.login(url)),
-    );
-  });
-
-  private checkOwnership = modifier(() => {
-    this.ownershipTask.perform();
-  });
-
-  private get isOwnershipKnown() {
-    return Boolean(this.ownershipTask.last?.isFinished);
-  }
-
-  // The workspaces the user can publish, most recently updated first: the
-  // ones they own that are marked publishable.
+  // The workspaces the user can publish, most recently updated first.
+  // Read several times a render.
+  @cached
   private get workspacesToPublish() {
-    let candidates = this.publishableRealms.filter((url) =>
-      this.realm.isRealmOwner(url),
+    return sortByUpdatedAtDesc(
+      this.realmServer.userRealmIdentifiers.filter((url) =>
+        this.realm.canPublish(url),
+      ),
+      this.realm.info,
     );
-    let updatedAt = (url: string) =>
-      Date.parse(this.realm.info(url).updatedAt ?? '') || 0;
-    return candidates.sort((a, b) => updatedAt(b) - updatedAt(a));
+  }
+
+  // Why there's nothing to publish. A workspace made before workspaces were
+  // marked publishable isn't, so owning one isn't enough.
+  private get publishUnavailableNote() {
+    return this.realmServer.userRealmIdentifiers.some((url) =>
+      this.realm.isRealmOwner(url),
+    )
+      ? 'None of your workspaces can be published. Create a new one to publish it.'
+      : 'Publishing needs a workspace you own. Create one to publish it.';
   }
 
   // With one workspace to publish the button opens its dialog; with more,
@@ -395,22 +396,25 @@ export default class GetStarted extends Component<Signature> {
       let name = names[index];
       let isRepeated = names.filter((other) => other === name).length > 1;
       return {
-        label: isRepeated ? `${name} (${this.addressSegment(url)})` : name,
+        label: isRepeated
+          ? `${name} (${realmIdentifierSegments(url).at(-1) ?? url})`
+          : name,
         onSelect: () => this.openPublishDialog(url),
       };
     });
   }
 
-  private addressSegment(url: RealmIdentifier) {
-    let { pathname } = this.network.virtualNetwork.toURL(url);
-    return pathname.split('/').filter(Boolean).at(-1) ?? pathname;
-  }
-
   private capturePublishButton = modifier((element: HTMLElement) => {
     this.publishButton = element;
+    return () => {
+      if (this.publishButton === element) {
+        this.publishButton = undefined;
+      }
+    };
   });
 
   @action private openPublishDialog(workspace: RealmIdentifier) {
+    this.publishButtonAncestors = ancestorsOf(this.publishButton);
     this.publishRealmURL = this.network.virtualNetwork.toURL(workspace).href;
     this.isPublishDialogOpen = true;
   }
@@ -419,16 +423,23 @@ export default class GetStarted extends Component<Signature> {
     this.isPublishDialogOpen = false;
   }
 
-  // Once publishing ticks the step its button is gone, and focus goes back
-  // to where it was.
-  private publishReturnFocus = () =>
-    this.publishButton?.isConnected ? this.publishButton : undefined;
-
-  // One entry, keyed by URL, so a dialog opened for another workspace is a
-  // new one rather than the last one pointed elsewhere.
-  private get publishDialogURLs() {
-    return this.publishRealmURL ? [this.publishRealmURL] : [];
+  private get publishDialog() {
+    let realmURL = this.publishRealmURL;
+    return realmURL
+      ? { realmURL, actions: this.realmPublishing.actionsFor(realmURL) }
+      : undefined;
   }
+
+  // Back to the button, or to a workspace on the dashboard once publishing
+  // has finished the last step and the steps are gone. The dialog asks once,
+  // as it closes, so the removed steps aren't held after that.
+  private publishReturnFocus = () => {
+    let target =
+      ifConnected(this.publishButton) ??
+      nearestWorkspaceTarget(this.publishButtonAncestors);
+    this.publishButtonAncestors = [];
+    return target;
+  };
 
   @action private async askBoxelAi() {
     await this.aiAssistantPanelService.openNewSession();
@@ -519,68 +530,68 @@ export default class GetStarted extends Component<Signature> {
                       {{/if}}
                     </span>
                     <span class='step-hint'>{{step.hint}}</span>
+                    {{#if (eq step.id 'publish')}}
+                      {{#unless step.done}}
+                        {{#unless this.workspacesToPublish.length}}
+                          <span
+                            class='step-note'
+                            data-test-get-started-publish-unavailable
+                          >{{this.publishUnavailableNote}}</span>
+                        {{/unless}}
+                      {{/unless}}
+                    {{/if}}
                   </span>
                   {{! Publishing again stays a step away once one workspace
                       is on the web. }}
                   {{#if (eq step.id 'publish')}}
-                    {{#if this.isOwnershipKnown}}
-                      {{#if this.onlyWorkspaceToPublish}}
-                        <Button
-                          class='step-action'
-                          @appearance='outlined'
-                          @size='s'
-                          {{on
-                            'click'
-                            (fn
-                              this.openPublishDialog this.onlyWorkspaceToPublish
-                            )
-                          }}
-                          {{this.capturePublishButton}}
-                          data-test-get-started-action={{step.id}}
-                        >Publish a workspace</Button>
-                      {{else if this.workspacesToPublish.length}}
-                        <Menu
-                          class='step-action'
-                          @items={{this.publishMenuItems}}
-                          @label='Workspaces to publish'
-                          @align='end'
-                        >
-                          <:trigger as |isMenuOpen toggle|>
-                            <Button
-                              @appearance='outlined'
-                              @size='s'
-                              {{on 'click' toggle}}
-                              {{this.capturePublishButton}}
-                              data-test-get-started-action={{step.id}}
-                            >Publish a workspace
-                              {{#if isMenuOpen}}
-                                <ChevronUp
-                                  width='14'
-                                  height='14'
-                                  class='publish-chevron'
-                                  aria-hidden='true'
-                                  data-test-get-started-publish-chevron='up'
-                                />
-                              {{else}}
-                                <ChevronDown
-                                  width='14'
-                                  height='14'
-                                  class='publish-chevron'
-                                  aria-hidden='true'
-                                  data-test-get-started-publish-chevron='down'
-                                />
-                              {{/if}}</Button>
-                          </:trigger>
-                        </Menu>
-                      {{else if (not step.done)}}
-                        <p
-                          class='step-action step-note'
-                          data-test-get-started-publish-unavailable
-                        >Publishing needs a workspace you own. Create one to
-                          publish it.</p>
-                      {{/if}}
-                    {{else}}
-                      <span hidden {{this.checkOwnership}}></span>
+                    {{#if this.onlyWorkspaceToPublish}}
+                      <Button
+                        class='step-action'
+                        @appearance='outlined'
+                        @size='s'
+                        {{on
+                          'click'
+                          (fn
+                            this.openPublishDialog this.onlyWorkspaceToPublish
+                          )
+                        }}
+                        {{this.capturePublishButton}}
+                        data-test-get-started-action={{step.id}}
+                      >Publish a workspace</Button>
+                    {{else if this.workspacesToPublish.length}}
+                      <Menu
+                        class='step-action'
+                        @items={{this.publishMenuItems}}
+                        @label='Workspaces to publish'
+                        @align='end'
+                      >
+                        <:trigger as |isMenuOpen toggle|>
+                          <Button
+                            @appearance='outlined'
+                            @size='s'
+                            {{on 'click' toggle}}
+                            {{this.capturePublishButton}}
+                            data-test-get-started-action={{step.id}}
+                          >Publish a workspace
+                            {{#if isMenuOpen}}
+                              <ChevronUp
+                                width='14'
+                                height='14'
+                                class='publish-chevron'
+                                aria-hidden='true'
+                                data-test-get-started-publish-chevron='up'
+                              />
+                            {{else}}
+                              <ChevronDown
+                                width='14'
+                                height='14'
+                                class='publish-chevron'
+                                aria-hidden='true'
+                                data-test-get-started-publish-chevron='down'
+                              />
+                            {{/if}}</Button>
+                        </:trigger>
+                      </Menu>
                     {{/if}}
                   {{else if (not step.done)}}
                     {{#if (eq step.id 'open-card')}}
@@ -638,18 +649,21 @@ export default class GetStarted extends Component<Signature> {
     {{/if}}
     {{! Sent out of the dashboard so its size container can't trap this
         fixed-position modal. }}
-    {{#each this.publishDialogURLs key='@identity' as |url|}}
-      <ToElsewhere
-        @named='modal-elsewhere'
-        @send={{component
-          PublishRealmDialog
-          realmURL=url
-          isOpen=this.isPublishDialogOpen
-          onClose=this.closePublishDialog
-          returnFocusTarget=this.publishReturnFocus
-        }}
-      />
-    {{/each}}
+    {{#if this.isPublishDialogOpen}}
+      {{#if this.publishDialog}}
+        <ToElsewhere
+          @named='modal-elsewhere'
+          @send={{component
+            PublishRealmDialog
+            realmURL=this.publishDialog.realmURL
+            actions=this.publishDialog.actions
+            isOpen=true
+            onClose=this.closePublishDialog
+            returnFocusTarget=this.publishReturnFocus
+          }}
+        />
+      {{/if}}
+    {{/if}}
 
     <style scoped>
       .get-started {
@@ -739,9 +753,6 @@ export default class GetStarted extends Component<Signature> {
       .step-note {
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
-      }
-      .step-note {
-        margin: 0;
       }
       /* Keeps its size when the label runs short of room. */
       .publish-chevron {

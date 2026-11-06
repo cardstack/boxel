@@ -42,6 +42,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmPublishingService from '@cardstack/host/services/realm-publishing';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
@@ -51,6 +52,35 @@ const log = logger('workspace-actions');
 export type TileStat = { label: string; count: number };
 
 export const WORKSPACE_TILE_TARGET = '[data-workspace-tile] [data-nav-index]';
+
+// Where focus goes once the control that had it is gone: the first workspace
+// in the nearest of `containers` still on the page that holds one, or else
+// the first dashboard item there. New Workspace comes last, so Enter doesn't
+// create a workspace. `containers` runs from the nearest outward.
+export function nearestWorkspaceTarget(
+  containers: HTMLElement[],
+): HTMLElement | undefined {
+  for (let selector of [WORKSPACE_TILE_TARGET, '[data-nav-index]']) {
+    for (let container of containers) {
+      let target = container.isConnected
+        ? container.querySelector<HTMLElement>(selector)
+        : null;
+      if (target) {
+        return target;
+      }
+    }
+  }
+  return undefined;
+}
+
+// The element's ancestors, nearest first.
+export function ancestorsOf(element: HTMLElement | undefined): HTMLElement[] {
+  let ancestors: HTMLElement[] = [];
+  for (let el = element?.parentElement; el; el = el.parentElement) {
+    ancestors.push(el);
+  }
+  return ancestors;
+}
 
 // The state and actions of one workspace as the dashboard shows it: its
 // options menu, the publish, delete, archive, duplicate and re-index flows
@@ -68,6 +98,7 @@ export class WorkspaceActions {
   @service declare private recentFilesService: RecentFilesService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private realmPublishing: RealmPublishingService;
 
   @tracked showDeleteModal = false;
   @tracked deleteError: string | undefined;
@@ -82,9 +113,6 @@ export class WorkspaceActions {
     | undefined;
   @tracked reindexError: string | undefined;
   @tracked showPublishModal = false;
-  // Once opened, the publish dialog stays rendered while closed, as it does
-  // in host mode, so a publish it started still reports its result.
-  @tracked publishModalRendered = false;
 
   #getRealmIdentifier: () => RealmIdentifier;
 
@@ -155,13 +183,9 @@ export class WorkspaceActions {
       this.focusContext = undefined;
       return;
     }
-    let ancestors: HTMLElement[] = [];
-    for (let el = list.parentElement; el; el = el.parentElement) {
-      ancestors.push(el);
-    }
     this.focusContext = {
       list,
-      ancestors,
+      ancestors: ancestorsOf(list),
       position: this.workspaceTargets(list).findIndex((target) =>
         this.tileElement?.contains(target),
       ),
@@ -170,8 +194,7 @@ export class WorkspaceActions {
 
   // Focus goes back to the menu trigger. Once the workspace is gone it goes
   // to the one that took its place in the list, or else the last one left in
-  // it, or else the nearest one outside it. New Workspace comes last, so
-  // Enter doesn't create a workspace.
+  // it, or else the nearest one outside it.
   returnFocusTarget = (): HTMLElement | undefined => {
     if (this.menuTrigger?.isConnected) {
       return this.menuTrigger;
@@ -187,23 +210,7 @@ export class WorkspaceActions {
         return target;
       }
     }
-    for (let ancestor of ancestors) {
-      let target = ancestor.isConnected
-        ? ancestor.querySelector<HTMLElement>(WORKSPACE_TILE_TARGET)
-        : null;
-      if (target) {
-        return target;
-      }
-    }
-    for (let container of [list, ...ancestors]) {
-      let target = container.isConnected
-        ? container.querySelector<HTMLElement>('[data-nav-index]')
-        : null;
-      if (target) {
-        return target;
-      }
-    }
-    return undefined;
+    return nearestWorkspaceTarget([list, ...ancestors]);
   };
 
   @cached
@@ -391,10 +398,12 @@ export class WorkspaceActions {
     return this.realm.isRealmOwner(this.realmIdentifier);
   }
 
-  // The realm server publishes only for the realm's owner, and only a realm
-  // marked publishable; a published copy isn't.
+  get publishActions() {
+    return this.realmPublishing.actionsFor(this.realmURL);
+  }
+
   get canPublish() {
-    return this.isRealmOwner && this.realmInfo.publishable === true;
+    return this.realm.canPublish(this.realmIdentifier);
   }
 
   private get canDuplicateWorkspace() {
@@ -430,7 +439,6 @@ export class WorkspaceActions {
       return;
     }
     this.rememberFocusContext();
-    this.publishModalRendered = true;
     this.showPublishModal = true;
   }
 
