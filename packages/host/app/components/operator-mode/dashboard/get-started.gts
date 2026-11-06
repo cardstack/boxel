@@ -543,6 +543,7 @@ export default class GetStarted extends Component<Signature> {
                           class='step-action'
                           @items={{this.publishMenuItems}}
                           @label='Workspaces to publish'
+                          @align='end'
                         >
                           <:trigger as |isMenuOpen toggle|>
                             <Button
@@ -556,6 +557,7 @@ export default class GetStarted extends Component<Signature> {
                                 <ChevronUp
                                   width='14'
                                   height='14'
+                                  class='publish-chevron'
                                   aria-hidden='true'
                                   data-test-get-started-publish-chevron='up'
                                 />
@@ -563,6 +565,7 @@ export default class GetStarted extends Component<Signature> {
                                 <ChevronDown
                                   width='14'
                                   height='14'
+                                  class='publish-chevron'
                                   aria-hidden='true'
                                   data-test-get-started-publish-chevron='down'
                                 />
@@ -740,6 +743,10 @@ export default class GetStarted extends Component<Signature> {
       .step-note {
         margin: 0;
       }
+      /* Keeps its size when the label runs short of room. */
+      .publish-chevron {
+        flex: none;
+      }
       .get-started-dismissed {
         display: flex;
         flex-wrap: wrap;
@@ -793,9 +800,12 @@ export default class GetStarted extends Component<Signature> {
         .get-started-step {
           grid-template-columns: var(--_get-started-tick-size) minmax(0, 1fr);
         }
+        /* The action takes the whole row, tick column included: the text
+           column alone is narrower than a labeled button. It stays at the
+           row's end, as in the wide layout. */
         .step-action {
-          grid-column: 2;
-          justify-self: start;
+          grid-column: 1 / -1;
+          justify-self: end;
         }
       }
     </style>
