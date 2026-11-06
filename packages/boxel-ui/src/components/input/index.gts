@@ -64,10 +64,6 @@ export interface Signature {
   Args: {
     autocomplete?: string;
     bottomTreatment?: InputBottomTreatment;
-    // The id (or space-separated ids) of elements that describe the input,
-    // such as a note under it. They are read with the error message and the
-    // helper text, when those show.
-    describedBy?: string;
     disabled?: boolean;
     errorMessage?: string;
     helperText?: string;
@@ -160,7 +156,6 @@ export default class BoxelInput extends Component<Signature> {
   // is read with the field either way.
   private get describedBy() {
     let ids = [
-      this.args.describedBy,
       this.shouldShowErrorMessage ? `error-message-${this.guid}` : undefined,
       this.args.helperText ? `helper-text-${this.guid}` : undefined,
     ].filter(Boolean);
