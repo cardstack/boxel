@@ -29,7 +29,9 @@ export const FieldDress: TemplateOnlyComponent<FieldDressSignature> =
         .pretui-inputwrap {
           position: relative;
           width: 100%;
-          font-size: var(--boxel-font-size-xs);
+          /* --pretui-field-font-size: opt-in type-size knob, set beside
+             --pretui-field-h where a page wants full-size fields */
+          font-size: var(--pretui-field-font-size, var(--boxel-font-size-xs));
           letter-spacing: var(--boxel-lsp-xs);
           --background: var(--field);
           --border: var(--input);

@@ -452,7 +452,10 @@ export class Select extends Component<SelectSignature> {
           /* Select's 0.625rem text inset, less the trigger's 1px border */
           --boxel-select-trigger-padding: 0 calc(0.625rem - 1px);
           --boxel-select-trigger-gap: var(--boxel-sp-2xs);
-          --boxel-select-trigger-font-size: var(--boxel-font-size-xs);
+          --boxel-select-trigger-font-size: var(
+            --pretui-field-font-size,
+            var(--boxel-font-size-xs)
+          );
           --boxel-select-trigger-line-height: var(--boxel-line-height-xs);
           --boxel-select-trigger-letter-spacing: var(--boxel-lsp-xs);
           /* the options' type follows the trigger's */
