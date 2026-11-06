@@ -54,7 +54,9 @@ export class Breadcrumb<T extends CrumbSpec = CrumbSpec> extends Component<Bread
         }
         /* A trail longer than its container wraps onto more lines, each crumb
            keeping the separator before it, and a label longer than a line
-           breaks within itself. */
+           breaks within itself. `break-word` rather than `anywhere`, so the
+           trail is never narrower than its longest word when its slot sizes
+           to its content. */
         .pretui-breadcrumb ol {
           display: flex;
           flex-wrap: wrap;
@@ -63,12 +65,17 @@ export class Breadcrumb<T extends CrumbSpec = CrumbSpec> extends Component<Bread
           margin: 0;
           padding: 0;
           list-style: none;
-          overflow-wrap: anywhere;
+          overflow-wrap: break-word;
         }
         .pretui-breadcrumb li {
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-2xs);
+          min-width: 0;
+        }
+        /* A label may shrink below its content's width, so a long one can
+           break within its line. */
+        .pretui-breadcrumb li > :not(.sep) {
           min-width: 0;
         }
         .pretui-breadcrumb b {

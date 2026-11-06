@@ -3987,11 +3987,11 @@
       ]
     },
     "shell.css": {
-      "bytes": 81882,
+      "bytes": 81967,
       "sources": [
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "components/3ecdb4ccc0.css"
+          "module": "components/e67bd21f1d.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4285,7 +4285,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/breadcrumb.gts",
-          "sha256": "2a542806cc8fbade0279ead8bef9bea125a2b8c8da78f947ecf0b290f28ba3cb",
+          "sha256": "ecb88d6094f7283860b53485aba30780c5bd7b3220724e4ad1656b11b87da6b7",
           "size": 2212
         },
         {

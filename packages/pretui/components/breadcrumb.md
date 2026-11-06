@@ -32,7 +32,7 @@ Where it is behind: no overflow collapsing. Web Awesome and SLDS both collapse l
 
 ## Accessibility
 
-Governing pattern: APG **Breadcrumb**. All three bullets are met.
+Governing pattern: APG **Breadcrumb**. Its three bullets are met (the first three below), and so are three more.
 
 - **Navigation landmark: yes.** The root is a `<nav aria-label="Breadcrumb">`, correctly labeled and correctly distinguished from other navs.
 - **Keyboard: nothing to do**, and correctly nothing is done — links are ordinary tab stops.
