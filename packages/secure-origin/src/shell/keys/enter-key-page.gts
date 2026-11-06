@@ -37,7 +37,9 @@
 // page, at `keys/add`, it goes back there once the key is added, rather than
 // closing the window. Reached from the approve page's "Add a new key"
 // (`then=approve` or `then=review-changes` beside what that page was opened
-// for), it goes back to that page with the new key chosen.
+// for), it goes back to that page with the new key chosen. A connected
+// account it sends on to `connect` comes back to that page the same way,
+// once the user has signed in at the service (`approval-return.ts`).
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -58,9 +60,10 @@ import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
-import { pageURL, shellPath } from '../urls.js';
+import { pageURL } from '../urls.js';
 
 import AnonymousUseFields, { anonymousCapOf } from './anonymous-use-fields.gts';
+import { approvalPageAfter, approvalPageThen } from './approval-return.ts';
 import {
   failureMessage,
   isSignedOut,
@@ -80,7 +83,7 @@ import OAuthClientFields, {
   type OAuthClientForm,
 } from './oauth-client-fields.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { addressAbove, keyPageURL, pageTitle } from './trail.ts';
+import { keyPageURL, pageTitle } from './trail.ts';
 import {
   cliOpenedFor,
   contextRequest,
@@ -494,12 +497,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   private back = () => navigation.back(keyPageURL());
 
   // The `connect` page, opened for the same card and operation: a connected
-  // account is made by signing in there, not entered here.
+  // account is made by signing in there, not entered here. Reached from an
+  // approve page, it goes back there once the account is connected.
   private get connectURL() {
-    let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    fragment.delete('then');
-    fragment.delete('after');
-    return `${pageURL('connect')}#${fragment}`;
+    return `${pageURL('connect')}${window.location.hash}`;
   }
 
   private goToConnect = () => navigation.assign(this.connectURL);
@@ -771,41 +772,6 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       this.form.saving = false;
     }
   };
-}
-
-// The approve page this one was reached from (`then=approve` or
-// `then=review-changes`), if any.
-function approvalPageThen(): 'approve' | 'review-changes' | undefined {
-  let then = new URLSearchParams(window.location.hash.replace(/^#/, '')).get(
-    'then',
-  );
-  return then === 'approve' || then === 'review-changes' ? then : undefined;
-}
-
-// The approve page this one was opened from, to go back to once `keyId` is
-// added, with what it was opened for and the new key chosen: the page above
-// this one in its trail, as it was, or else rebuilt from this page's own
-// fragment.
-function approvalPageAfter(keyId: string): string | undefined {
-  let then = approvalPageThen();
-  if (!then) {
-    return undefined;
-  }
-  let above = addressAbove();
-  if (above !== undefined && above.split('#')[0] === then) {
-    let aboveFragment = new URLSearchParams(above.split('#')[1] ?? '');
-    aboveFragment.set('key', keyId);
-    return `${shellPath()}${then}#${aboveFragment}`;
-  }
-  let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  fragment.delete('then');
-  // The approve page goes back to the key page it was reached from.
-  if (fragment.get('after') === 'keys') {
-    fragment.set('then', 'keys');
-  }
-  fragment.delete('after');
-  fragment.set('key', keyId);
-  return `${pageURL(then)}#${fragment}`;
 }
 
 export default class EnterKeyPage extends Component<{

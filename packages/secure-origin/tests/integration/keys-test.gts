@@ -2479,7 +2479,11 @@ module('Integration | key pages', function (hooks) {
       let fragment = new URLSearchParams(url.hash.slice(1));
       assert.strictEqual(fragment.get('card'), CARD);
       assert.strictEqual(fragment.get('operation'), 'values');
-      assert.strictEqual(fragment.get('then'), null);
+      assert.strictEqual(
+        fragment.get('then'),
+        'approve',
+        'the connect page goes back to the approval too',
+      );
     });
 
     test('opened for an operation that takes several kinds, offers only those', async function (assert) {
