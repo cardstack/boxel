@@ -4651,6 +4651,24 @@ export class Realm {
         'triggers',
         `SELECT tgname, tgrelid::regclass::text AS tbl FROM pg_trigger WHERE tgname LIKE '%markdown_tsv%'`,
       );
+      if (reqURL.searchParams.has('spill')) {
+        await run(
+          'spill rows by realm',
+          `SELECT realm_url, count(*) AS rows, count(DISTINCT url) AS urls, sum(pg_column_size(value)) AS bytes FROM boxel_index_spill GROUP BY realm_url ORDER BY rows DESC`,
+        );
+        await run(
+          'pending spill columns',
+          `SELECT count(*) AS pending, count(spilled_search_doc) AS spilled FROM boxel_index_pending`,
+        );
+        await run(
+          'stored search_doc size by spill state (developer/ontube instances)',
+          `SELECT (search_doc::text LIKE '%"$spilled"%') AS spilled, count(*) AS rows, round(avg(pg_column_size(search_doc))) AS avg_stored, max(pg_column_size(search_doc)) AS max_stored, round(avg(length(search_doc::text))) AS avg_json FROM boxel_index WHERE realm_url LIKE '%/developer/ontube/' AND type = 'instance' GROUP BY 1`,
+        );
+        await run(
+          'worker env flag',
+          `SELECT current_setting('application_name', true) AS app`,
+        );
+      }
       return new Response(out.join('\n'), {
         status: 200,
         headers: { 'content-type': 'text/plain; charset=utf-8' },
@@ -4658,7 +4676,7 @@ export class Realm {
     }
     let captured: { sql: string; opts: any }[] = [];
     adapter.execute = (sql: string, opts?: any) => {
-      if (/^\s*SELECT/i.test(sql)) {
+      if (/^\s*(SELECT|WITH)/i.test(sql)) {
         captured.push({ sql, opts });
       }
       return original(sql, opts);
