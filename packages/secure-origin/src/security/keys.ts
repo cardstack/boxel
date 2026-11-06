@@ -814,9 +814,6 @@ export interface BatchKey {
   kind: string;
   state: string;
   covers: string[];
-  // The batch's destinations its credential is good at: for an OAuth
-  // connection or client, those its client's API hosts cover.
-  serves?: string[];
 }
 // A share also says whether any of its bindings allows interactive use yet,
 // and the daily budget in force: a share's first interactive approval names
@@ -828,7 +825,6 @@ export interface BatchShare {
   keyName: string;
   keyKind: string;
   covers: string[];
-  serves?: string[];
   interactive: boolean;
   dailyBudget: number;
   // Whether the share's key lets people who aren't signed in use it, and the
@@ -855,6 +851,11 @@ export interface ApprovalBatch {
   remainingPipelinesOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
+  // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
+  // one) that can fill each slot token in every operation of the batch that
+  // sends it, as the realm server decides, by use: for `pipelines`, without
+  // the operations approved for pipelines only. The page offers only these.
+  fillers: Record<'interactive' | 'pipelines', Record<string, string[]>>;
 }
 
 export async function approvalBatch(

@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
-import { rri, slotKindOfKey } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import {
   realmSecretSeed,
@@ -301,8 +301,9 @@ module(basename(import.meta.filename), function (hooks) {
       destination: { href: string; host: string; registrableDomain: string };
       operations: Operation[];
     }[];
-    keys: { id: string; name: string; covers: string[]; serves: string[] }[];
-    shares: { id: string; label: string; covers: string[]; serves: string[] }[];
+    keys: { id: string; name: string; covers: string[] }[];
+    shares: { id: string; label: string; covers: string[] }[];
+    fillers: Record<'interactive' | 'pipelines', Record<string, string[]>>;
   }
 
   async function batch(
@@ -612,8 +613,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('each key says which destinations of the batch its credential is good at, and each slot which kinds of key it takes', async function (assert) {
-    await addKey(OWNER, 'pasted');
+  test('each slot names the keys that fill it in every operation sending it, and which kinds of key it takes', async function (assert) {
+    let pasted = await addKey(OWNER, 'pasted');
     let robot = await addOAuthClient(dbAdapter, keyring, {
       owner: OWNER,
       name: 'vendor robot',
@@ -680,32 +681,46 @@ module(basename(import.meta.filename), function (hooks) {
       ],
       'a bearer token outside Google is a pasted key or an OAuth token',
     );
-    let serves = Object.fromEntries(
-      found.keys.map((k) => [k.name, [...k.serves].sort()]),
-    );
+    // The names of the keys that fill the user's-key slot for `use`.
+    let names = (batch: Batch, use: 'interactive' | 'pipelines') =>
+      (batch.fillers[use]['userKey'] ?? [])
+        .map((id) => batch.keys.find((k) => k.id === id)!.name)
+        .sort();
     assert.deepEqual(
-      serves['pasted'],
-      [...found.groups.map((g) => g.destination.href)].sort(),
-      'a pasted key is taken wherever it is sent',
-    );
-    assert.deepEqual(
-      serves['hostless robot'],
-      serves['pasted'],
-      'a client that names no API hosts is not held to any',
-    );
-    assert.ok(serves['vendor robot']!.includes(vendor));
-    assert.notOk(
-      serves['vendor robot']!.includes(other),
-      "an OAuth client's tokens are good only at its API hosts",
-    );
-    assert.deepEqual(
-      serves['other account'],
-      [other],
-      "a connection's tokens are good only at its client's API hosts",
+      names(found, 'interactive'),
+      ['hostless robot', 'pasted'],
+      `the user's-key slot is sent to ${vendor} and ${other}: a pasted key and a client that names no API hosts fill it at both, and neither an OAuth client nor a connection whose client reaches only one of them does`,
     );
     assert.notOk(
-      'other app' in serves,
+      found.keys.some((k) => k.name === 'other app'),
       'a client people only sign in through is never offered',
+    );
+    assert.deepEqual(
+      found.fillers.pipelines,
+      found.fillers.interactive,
+      'with nothing approved for pipelines only, both uses offer the same keys',
+    );
+
+    // Approved for pipelines only, the call to the other host is left out of
+    // what pipelines approve, so the slot is then sent only to the vendor.
+    let approved = await approveFrom(OWNER, found, ['elsewhere'], () => ({
+      keyId: pasted.id,
+    }));
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    let both = await batchOf(OWNER, onType(INBOX), { interactive: true });
+    assert.strictEqual(
+      operationsIn(both).find((o) => o.name === 'elsewhere')!.status,
+      'pipelines-only',
+    );
+    assert.deepEqual(
+      names(both, 'interactive'),
+      ['hostless robot', 'pasted'],
+      'for interactive use every operation sending the slot counts',
+    );
+    assert.deepEqual(
+      names(both, 'pipelines'),
+      ['hostless robot', 'pasted', 'vendor robot'],
+      "for pipelines only, an OAuth client fills it where its API hosts reach the vendor alone; a connection whose client reaches only the other host doesn't",
     );
   });
 
@@ -754,13 +769,18 @@ module(basename(import.meta.filename), function (hooks) {
       found.groups.find((g) => g.operations.some((o) => o.name === operation))!
         .destination.href;
     assert.deepEqual(
-      found.shares.map((s) => [s.label, s.serves]),
-      [['other robot', [destinationOf('elsewhere')]]],
-      "the sign-in app's share is left out, and the robot's tokens are good only at its API host",
+      found.shares.map((s) => s.label),
+      ['other robot'],
+      "the sign-in app's share is left out",
     );
     assert.notOk(
-      found.shares[0]!.serves.includes(destinationOf('shared')),
-      'so it is not good at the destination the share slot is sent to',
+      destinationOf('shared').startsWith(OTHER_HOST),
+      'the share slot is sent to the vendor',
+    );
+    assert.deepEqual(
+      found.fillers.interactive['apiKey'],
+      [],
+      "so the robot, whose tokens are good only at the other host, doesn't fill it",
     );
   });
 
@@ -1370,37 +1390,11 @@ module(basename(import.meta.filename), function (hooks) {
       'a client people only sign in through is never sent',
     );
     // The list agrees with the approve page: a card is listed for a key
-    // exactly when the card's batch offers that key for one of its slots,
-    // as the approve page reads the batch (`slotChoices`): of a kind every
-    // operation sending the slot takes, serving every destination it is
-    // sent to.
+    // exactly when the card's batch names that key as filling one of its
+    // slots, the keys the page offers for interactive use.
     let offeredIn = async (type: typeof INBOX) => {
       let found = await batchOf(OWNER, onType(type));
-      let tokens = new Set(
-        operationsIn(found).flatMap((o) =>
-          o.slots.filter((s) => s.key === 'userKey').map((s) => s.slot),
-        ),
-      );
-      return new Set(
-        (found.keys as (Batch['keys'][number] & { kind: string })[])
-          .filter((key) => {
-            let kind = slotKindOfKey(key.kind);
-            return [...tokens].some((token) =>
-              found.groups.every((g) =>
-                g.operations.every((o) =>
-                  o.slots.every(
-                    (s) =>
-                      s.slot !== token ||
-                      (kind !== undefined &&
-                        s.kinds.includes(kind) &&
-                        key.serves.includes(g.destination.href)),
-                  ),
-                ),
-              ),
-            );
-          })
-          .map((key) => key.id),
-      );
+      return new Set(Object.values(found.fillers.interactive).flat());
     };
     let offered = {
       Inbox: await offeredIn(INBOX),

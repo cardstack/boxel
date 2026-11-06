@@ -892,7 +892,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   }
 
   private get choices(): SlotChoice[] {
-    return this.batch ? slotChoices(this.batch) : [];
+    return this.batch ? slotChoices(this.batch, this.form.use) : [];
   }
 
   private get newGrants(): NewGrant[] {
@@ -1034,7 +1034,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       return;
     }
     let chosen = { ...this.form.chosen };
-    for (let choice of slotChoices(batch)) {
+    for (let choice of slotChoices(batch, this.form.use)) {
       if (!choice.options.some((o) => o.id === chosen[choice.slot])) {
         chosen[choice.slot] = initialChoice(
           batch,
@@ -1153,7 +1153,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         this.args.api.tellCliDone();
         return;
       }
-      let choices = slotChoices(batch);
+      // Chosen for the whole batch: a key that fills a slot for interactive
+      // use fills it for pipelines too, where fewer operations send it.
+      let choices = slotChoices(batch, 'interactive');
       this.form.chosen = Object.fromEntries(
         choices.map((c) => {
           let kept = keep?.chosen[c.slot];

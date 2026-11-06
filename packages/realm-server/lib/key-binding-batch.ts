@@ -37,10 +37,10 @@ import { limitsOf } from './key-limit-settings.ts';
 import {
   apiHostList,
   apiHostsOfKeySql,
-  apiHostsServe,
   arrayColumn,
   sendableKeySql,
 } from './oauth.ts';
+import { keyFillsSlot, type SlotSend } from './slot-fill.ts';
 import { normalizeGrantDestination } from './user-key-grants.ts';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 
@@ -72,8 +72,9 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // each slot's request and fingerprint, the snapshot it was last approved with
 // (for a changed slot, so the window can diff the two field by field), the
 // caller's keys a slot can take and the shares of theirs in the realm, each
-// with the destinations in the batch its grants already cover. Nothing of any
-// key's value is read.
+// with the destinations in the batch its grants already cover, and for each
+// slot the ones that can fill it (`keyFillsSlot`). Nothing of any key's value
+// is read.
 
 const log = logger('realm:key-bindings');
 
@@ -128,15 +129,13 @@ export interface BatchGroup {
 }
 
 // A key of the caller's that a `{{userKey}}` slot can take, with the batch's
-// destinations its grants already cover, and those its credential is good
-// at.
+// destinations its grants already cover.
 export interface BatchKey {
   id: string;
   name: string;
   kind: UserKeyKind;
   state: string;
   covers: string[];
-  serves: string[];
 }
 
 // A share of the caller's in the realm, for an `{{apiKey}}` slot, with
@@ -151,8 +150,6 @@ export interface BatchShare {
   keyName: string;
   keyKind: UserKeyKind;
   covers: string[];
-  // The batch's destinations its key's credential is good at.
-  serves: string[];
   interactive: boolean;
   dailyBudget: number;
   anonymous: boolean;
@@ -175,7 +172,19 @@ export interface ApprovalBatch {
   remainingPipelinesOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
+  // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
+  // one) that can fill each slot token, in every operation of the batch that
+  // sends it (`keyFillsSlot`), by use. One choice fills a slot token for the
+  // whole batch, so these are the only ones the window offers for it. For
+  // `pipelines`, an operation approved for pipelines only is left out, as the
+  // window leaves it out of what it approves for pipelines, so a slot it
+  // sends to one more destination can take more keys.
+  fillers: Record<BatchUse, Record<string, string[]>>;
 }
+
+// Where the requests a batch approves run: from any card a reader opens, or
+// only from pipelines.
+export type BatchUse = 'interactive' | 'pipelines';
 
 export interface ApprovalBatchRequest {
   target: SecureWindowTarget;
@@ -273,6 +282,9 @@ export async function approvalBatch(
   let ownShares = await sharesIn(dbAdapter, realmURL.href, user);
 
   let groups = new Map<string, BatchGroup>();
+  // How each slot of the batch is sent, for deciding which keys fill it once
+  // the batch is cut to what one confirmation holds.
+  let sendOf = new Map<BatchSlot, SlotSend>();
   for (let [name, operation] of Object.entries(definition.operations ?? {})) {
     if (!approvable(operation)) {
       continue;
@@ -304,7 +316,7 @@ export async function approvalBatch(
       if (!status || (review && status !== 'changed')) {
         continue;
       }
-      slots.push({
+      let batchSlot: BatchSlot = {
         slot: token,
         key: slot.key,
         ...(slot.keyKind ? { keyKind: slot.keyKind } : {}),
@@ -322,7 +334,9 @@ export async function approvalBatch(
               },
             }
           : {}),
-      });
+      };
+      slots.push(batchSlot);
+      sendOf.set(batchSlot, { slot, callApi: request });
     }
     if (slots.length === 0) {
       continue;
@@ -365,15 +379,54 @@ export async function approvalBatch(
   let destinations = sorted.map((g) => g.destination.href);
   let coveredBy = (grants: string[]) =>
     destinations.filter((d) => grants.some((g) => destinationCovers(g, d)));
-  let servedBy = (apiHosts: string[] | null) =>
-    destinations.filter((d) => apiHostsServe(apiHosts, d));
-
-  let needsUserKey = sorted.some((g) =>
-    g.operations.some((o) => o.slots.some((s) => s.key === 'userKey')),
+  // How each slot token is sent, by the operations of the batch `include`
+  // keeps.
+  let sendsOf = (include: (operation: BatchOperation) => boolean) => {
+    let found = new Map<string, { key: BatchSlot['key']; sends: SlotSend[] }>();
+    for (let group of sorted) {
+      for (let operation of group.operations.filter(include)) {
+        for (let slot of operation.slots) {
+          let entry = found.get(slot.slot) ?? { key: slot.key, sends: [] };
+          entry.sends.push(sendOf.get(slot)!);
+          found.set(slot.slot, entry);
+        }
+      }
+    }
+    return found;
+  };
+  let slotSends: Record<BatchUse, ReturnType<typeof sendsOf>> = {
+    interactive: sendsOf(() => true),
+    pipelines: sendsOf((o) => o.status !== 'pipelines-only'),
+  };
+  let needsUserKey = [...slotSends.interactive.values()].some(
+    (s) => s.key === 'userKey',
   );
-  let needsShare = sorted.some((g) =>
-    g.operations.some((o) => o.slots.some((s) => s.key !== 'userKey')),
+  let needsShare = [...slotSends.interactive.values()].some(
+    (s) => s.key !== 'userKey',
   );
+  let keys = needsUserKey ? await slotKeys(dbAdapter, user) : [];
+  let shares = needsShare ? ownShares : [];
+  let fillersOf = (sends: ReturnType<typeof sendsOf>) =>
+    Object.fromEntries(
+      [...sends].map(([token, { key, sends }]) => [
+        token,
+        key === 'userKey'
+          ? keys
+              .filter(({ kind, apiHosts }) =>
+                keyFillsSlot({ kind, apiHosts }, sends),
+              )
+              .map(({ id }) => id)
+          : shares
+              .filter(({ keyKind, apiHosts }) =>
+                keyFillsSlot({ kind: keyKind, apiHosts }, sends),
+              )
+              .map(({ id }) => id),
+      ]),
+    );
+  let fillers: Record<BatchUse, Record<string, string[]>> = {
+    interactive: fillersOf(slotSends.interactive),
+    pipelines: fillersOf(slotSends.pipelines),
+  };
   return {
     realm: { url: realm.url, name: realmName },
     card: {
@@ -386,22 +439,15 @@ export async function approvalBatch(
     groups: sorted,
     remaining,
     remainingPipelinesOnly,
-    keys: needsUserKey
-      ? (await slotKeys(dbAdapter, user)).map(
-          ({ grants, apiHosts, ...key }) => ({
-            ...key,
-            covers: coveredBy(grants),
-            serves: servedBy(apiHosts),
-          }),
-        )
-      : [],
-    shares: needsShare
-      ? ownShares.map(({ grants, apiHosts, ...share }) => ({
-          ...share,
-          covers: coveredBy(grants),
-          serves: servedBy(apiHosts),
-        }))
-      : [],
+    keys: keys.map(({ grants, apiHosts: _apiHosts, ...key }) => ({
+      ...key,
+      covers: coveredBy(grants),
+    })),
+    shares: shares.map(({ grants, apiHosts: _apiHosts, ...share }) => ({
+      ...share,
+      covers: coveredBy(grants),
+    })),
+    fillers,
   };
 }
 
@@ -592,7 +638,7 @@ async function slotKeys(
   dbAdapter: DBAdapter,
   user: string,
 ): Promise<
-  (Omit<BatchKey, 'covers' | 'serves'> & {
+  (Omit<BatchKey, 'covers'> & {
     grants: string[];
     apiHosts: string[] | null;
   })[]
@@ -628,7 +674,7 @@ async function sharesIn(
   realmURL: string,
   user: string,
 ): Promise<
-  (Omit<BatchShare, 'covers' | 'serves'> & {
+  (Omit<BatchShare, 'covers'> & {
     grants: string[];
     apiHosts: string[] | null;
   })[]
