@@ -4,7 +4,7 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { click, render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Breadcrumb } from './breadcrumb';
 import type { CrumbSpec } from './breadcrumb';
@@ -71,5 +71,29 @@ module('Pretui | components/breadcrumb', function (hooks) {
       'a lone crumb with an href is still the current page, not a link',
     );
     assert.strictEqual(all('[data-test-pretui-breadcrumb-sep]').length, 0);
+  });
+
+  test('Breadcrumb hands a clicked crumb, as given, to @onSelect, which can take the navigation over', async function (assert) {
+    interface Place extends CrumbSpec {
+      id: string;
+    }
+    const ITEMS: Place[] = [
+      { label: 'Realm', href: '#realm', id: 'realm' },
+      { label: 'Suppliers', href: '#suppliers', id: 'suppliers' },
+      { label: 'Wuyi Origins', href: '#wuyi', id: 'wuyi' },
+    ];
+    let selected: string[] = [];
+    const onSelect = (item: Place, event: MouseEvent) => {
+      selected.push(item.id);
+      event.preventDefault();
+    };
+    let before = window.location.hash;
+    await render(<template><Breadcrumb @items={{ITEMS}} @onSelect={{onSelect}} /></template>);
+    let links = all('[data-test-pretui-breadcrumb] a');
+    await click(links[1]!);
+    await click(links[0]!);
+    assert.deepEqual(selected, ['suppliers', 'realm'], 'each click names its own crumb, with the fields the caller gave it');
+    assert.strictEqual(window.location.hash, before, 'a handler that prevents the click keeps the link from being followed');
+    assert.dom('[data-test-pretui-breadcrumb] b').hasText('Wuyi Origins', 'the current place is still not a link, so it never selects');
   });
 });

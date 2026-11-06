@@ -513,9 +513,11 @@ module('Integration | connecting an account', function (hooks) {
         await render(ConnectPage);
         await waitFor('[data-test-connect-form]');
         assert.deepEqual(
-          [...document.querySelectorAll('[data-test-breadcrumbs] li')].map(
-            (li) => li.textContent!.replace('›', '').trim(),
-          ),
+          [
+            ...document.querySelectorAll(
+              '[data-test-breadcrumbs] > :not([data-test-pretui-breadcrumb-sep])',
+            ),
+          ].map((crumb) => crumb.textContent!.trim()),
           ['Share key', 'Your keys', 'Connect'],
         );
         assert
@@ -537,12 +539,14 @@ module('Integration | connecting an account', function (hooks) {
       );
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      assert.dom('[data-test-breadcrumbs] li:last-child').hasText('Reconnect');
-      assert.dom('[data-test-breadcrumb="0"]').hasText('Replace key');
+      assert.dom('[data-test-breadcrumbs] [aria-current]').hasText('Reconnect');
+      assert
+        .dom('[data-test-breadcrumbs] a:nth-of-type(1)')
+        .hasText('Replace key');
       assert
         .dom('[data-test-connect-back]')
         .doesNotExist('the trail is the way back');
-      await click('[data-test-breadcrumb="0"]');
+      await click('[data-test-breadcrumbs] a:nth-of-type(1)');
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/${replace}` },
       ]);
@@ -560,9 +564,11 @@ module('Integration | connecting an account', function (hooks) {
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
       assert.deepEqual(
-        [...document.querySelectorAll('[data-test-breadcrumbs] li')].map((li) =>
-          li.textContent!.replace('›', '').trim(),
-        ),
+        [
+          ...document.querySelectorAll(
+            '[data-test-breadcrumbs] > :not([data-test-pretui-breadcrumb-sep])',
+          ),
+        ].map((crumb) => crumb.textContent!.trim()),
         ['Swap key', 'Your keys', 'Reconnect'],
       );
       await click('[data-test-connect-back]');
