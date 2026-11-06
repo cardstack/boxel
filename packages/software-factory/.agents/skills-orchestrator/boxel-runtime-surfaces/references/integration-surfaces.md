@@ -168,13 +168,21 @@ Imported per file
 Controls: `Button`, `IconButton`, `ButtonGroup`, `Input`, `Textarea`,
 `Select`, `MultiSelect`, `RadioGroup`, `Checkbox`, `Switch`, `DatePicker`,
 `SegmentedControl`, `Tabs`. Display: `Chip`, `Avatar`, `Badge`, `Skeleton`,
-`Table`, `DataGrid`, `Stat`, `Chart`. Overlays: `Dialog` (`AlertDialog` for a
-destructive confirmation), `Drawer`, `Popover`, `Tooltip`, `Menu`, `Toast`.
-Structure: `Card`, `Field`, `Accordion`, `Grid`, `Masonry`, `Feed`,
-`AppShell`, `DashboardGrid`, `SplitPanes`, `CopyFit` (the fitted render of a
-card: badge, strip, tile and card sub-formats chosen by container query),
-`Board` (kanban). Colour: `ColorPalette`, `ColorPicker`. Each has a write-up
-at `packages/pretui/components/<name>.md`.
+`Table`, `DataGrid`, `Stat`, `Chart`. Formatting: `FormatDate`,
+`FormatNumber` (currency, percent and units), `RelativeTime`, `FormatBytes`.
+Overlays: `Dialog` (`AlertDialog` for a destructive confirmation), `Drawer`,
+`Popover`, `Tooltip`, `Menu` (items are plain `{ label, onSelect }` entries),
+`Toast`. Structure: `Card`, `Field`, `Accordion`, `Grid`, `Masonry`, `Feed`,
+`AppShell`, `DashboardGrid`, `SplitPanes`, `CopyFit` (a record tile for a
+`Grid` or a result list; it sets its own size container, so it is not a
+fitted template's root), `Board` (kanban). Colour: `ColorPalette`,
+`ColorPicker`. Each has a write-up at `packages/pretui/components/<name>.md`.
+
+Format values for display with the formatting components. Their args are
+`Intl` options, not boxel-ui's format strings, so read each contract. For a
+string built in JS, `formatBytes(value, options).text` from
+`/components/format-bytes` formats a file size; the boxel-ui formatters below
+cover the rest.
 
 Use `Board` for lane-based drag/drop boards instead of hand-rolled DOM drag
 code. Persist placements by stable card id + column key + sort order, map to
@@ -198,14 +206,16 @@ set the catalog uses. Pret UI has no icon set of its own.
 ### Still on `@cardstack/boxel-ui`
 
 What Pret UI has no counterpart for yet; each moves when one lands.
-`/components`: `CardContainer`, `FilterList`, and the kanban placement types
-and helpers above.
-`/helpers`: `cn` (class names), `cssVar`, `optional`, `pick`; the formatters
-`formatDateTime`, `formatNumber`, `formatCurrency`, `formatRelativeTime`,
-`formatDuration`, `formatCountdown`, `formatFileSize`, `formatList`,
-`formatNames`, `formatOrdinal`, `formatPeriod`, `formatAge`,
-`currencyFormat` (legacy), `dayjsFormat` (deprecated); `markdownEscape`;
-`MenuItem`, `MenuItemOptions`.
+`/components`: `CardContainer`, `FittedCard` (the slot layout for a card's
+fitted template; it queries the host's `fitted-card` container), `FilterList`,
+and the kanban placement types and helpers above.
+`/helpers`: `cn` (class names), `cssVar`, `optional`, `pick`;
+`markdownEscape`; `MenuItemOptions` (the return type of a card's
+`[getMenuItems]`); the formatters `formatDuration`, `formatCountdown`,
+`formatList`, `formatNames`, `formatOrdinal`, `formatPeriod` and `formatAge`;
+`formatDateTime`, `formatNumber`, `formatCurrency` and `formatRelativeTime`
+for strings built in JS (templates use the formatting components above);
+`currencyFormat` (legacy) and `dayjsFormat` (deprecated).
 
 ---
 

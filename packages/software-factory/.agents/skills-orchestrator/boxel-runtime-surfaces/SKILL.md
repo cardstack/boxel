@@ -53,19 +53,24 @@ reindexing controls, catalog/listing operations, and more.
 - `/components/<name>` — one module per component, imported per file
   (`import { Button } from '@cardstack/pretui/components/button'`):
   `Button`, `Chip`, `Avatar`, `Input`, `Select`, `Field`, `Dialog`, `Drawer`,
-  `Toast`, `Tabs`, `Grid`, `CopyFit` (the fitted render of a card), `Board`
-  (drag/drop kanban), and more. Each has a write-up at
-  `packages/pretui/components/<name>.md`.
+  `Toast`, `Tabs`, `Grid`, `Board` (drag/drop kanban), and more. Each has a
+  write-up at `packages/pretui/components/<name>.md`.
+- Templates format values with components: `FormatDate`, `FormatNumber`
+  (currency and percent too), `RelativeTime`, `FormatBytes`. `formatBytes()`
+  from `/components/format-bytes` returns a file size as a string for JS.
 - `/helpers` — logic helpers (`eq`, `gt`, `and`, `or`, `add`, …) and
   `element` (dynamic tag).
 - Icons come from `@cardstack/boxel-icons/<name>`
   (`import CheckIcon from '@cardstack/boxel-icons/check'`).
 - Still from `@cardstack/boxel-ui`, because Pret UI has no counterpart yet
-  (each moves when one lands): `/components` `CardContainer`, `FilterList`,
-  and the kanban placement types and helpers `Board` takes
-  (`KanbanColumnConfig`, `KanbanPlacement`, `autoPlaceKanban`, …);
-  `/helpers` `cn`, the formatters (`formatDateTime`, `formatNumber`,
-  `formatCurrency`, `formatRelativeTime`, …) and `markdownEscape`.
+  (each moves when one lands): `/components` `CardContainer`, `FittedCard`
+  (the slot layout for a card's fitted template), `FilterList`, and the kanban
+  placement types and helpers `Board` takes (`KanbanColumnConfig`,
+  `KanbanPlacement`, `autoPlaceKanban`, …); `/helpers` `cn`,
+  `markdownEscape`, `MenuItemOptions` (the return type of a card's
+  `[getMenuItems]`), and the formatters for strings built in JS
+  (`formatDateTime`, `formatNumber`, `formatCurrency`, `formatRelativeTime`,
+  …).
 
 ### 5. CardContext — `@context` in templates
 
