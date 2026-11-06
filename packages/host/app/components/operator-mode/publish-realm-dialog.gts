@@ -1,9 +1,13 @@
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
+
+import { modalFocusTrapOptions } from '@cardstack/host/components/operator-mode/dashboard-modals/workspace-modals';
 
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
 import type ToolService from '@cardstack/host/services/tool-service';
@@ -18,15 +22,24 @@ interface Signature {
     realmURL: string;
     isOpen: boolean;
     onClose: () => void;
+    // Where focus goes when the dialog closes, when not back to where it was.
+    returnFocusTarget?: () => HTMLElement | undefined;
     // Called once every chosen domain has published.
     onPublished?: () => void;
   };
 }
 
 // The publish dialog for one workspace, with the publish and unpublish
-// commands it runs.
+// commands it runs. Focus moves into it on open, stays in it, and Escape
+// closes it.
 export default class PublishRealmDialog extends Component<Signature> {
   @service declare private toolService: ToolService;
+
+  private dialogId = guidFor(this);
+
+  private get focusTrapOptions() {
+    return modalFocusTrapOptions(this.dialogId, this.args);
+  }
 
   private publishTask = restartableTask(
     async (publishedRealmURLs: string[]) => {
@@ -90,6 +103,10 @@ export default class PublishRealmDialog extends Component<Signature> {
       @handlePublish={{this.publish}}
       @publishError={{this.publishError}}
       @handleUnpublish={{perform this.unpublishTask}}
+      aria-label='Publish workspace'
+      id={{this.dialogId}}
+      tabindex='-1'
+      {{focusTrap focusTrapOptions=this.focusTrapOptions}}
     />
   </template>
 }
