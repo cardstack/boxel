@@ -72,6 +72,20 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   until it gets one; holding it to a share its own tenant's outer holders
 //   have used up would deadlock that tenant.
 //
+// - Work that will hold its connection while it checks out more — a
+//   `withConnection` callback, which pins one connection for a transaction
+//   or a lock and issues further queries through the adapter — is granted
+//   only while fewer than `holderLimit` such holds are outstanding (the
+//   limit less a reserve, a quarter of it and at least one). The nested
+//   exemption above cannot by itself keep a holder from deadlocking: it only
+//   jumps the queue for a connection that frees, and when every connection
+//   is a holder waiting on a nested checkout, none ever frees. Holding the
+//   reserve back from holders leaves connections for nested work and for
+//   plain statements, which give their connection back without waiting on
+//   anything, so a holder's nested checkout is always granted in the end. A
+//   holder that is itself nested is exempt, as other nested work is: its
+//   enclosing hold already counts.
+//
 // Oversubscription is judged on demand — connections granted plus
 // acquisitions waiting — rather than on connections in use, because holding a
 // tenant to its share is what empties the pool: judged on use, the share
@@ -90,7 +104,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export class ConnectionScheduler {
   #limit: number;
   #tenantShare: number;
+  #holderLimit: number;
   #inUse = 0;
+  // Connections granted to work that holds them while checking out more.
+  #holders = 0;
   // Connections each key holds, for lowest-held-first ordering.
   #held = new Map<TenantKey, number>();
   // The part of `#held` a key's share is judged on: everything but ordered
@@ -102,9 +119,20 @@ export class ConnectionScheduler {
   #arrivals = 0;
   #unsubscribe: () => void;
 
-  constructor(opts: { limit: number; tenantShare: number }) {
+  constructor(opts: {
+    limit: number;
+    tenantShare: number;
+    // How many connections holders may not take between them. Defaults to a
+    // quarter of the limit, at least one. Holders always get at least one.
+    holderReserve?: number;
+  }) {
     this.#limit = normalizeCount(opts.limit);
     this.#tenantShare = normalizeCount(opts.tenantShare);
+    let reserve =
+      opts.holderReserve === undefined
+        ? Math.max(1, Math.ceil(this.#limit / 4))
+        : Math.max(0, Math.floor(opts.holderReserve) || 0);
+    this.#holderLimit = Math.max(1, this.#limit - reserve);
     // A tenant whose last scope closes may leave another tenant's waiters
     // eligible; nothing else would wake them.
     this.#unsubscribe = onScopeClosed(() => this.#drain());
@@ -118,9 +146,20 @@ export class ConnectionScheduler {
     return this.#tenantShare;
   }
 
+  // How many connections work that holds one while checking out more may
+  // have between them (see the policy).
+  get holderLimit(): number {
+    return this.#holderLimit;
+  }
+
   // Connections currently granted.
   get inUse(): number {
     return this.#inUse;
+  }
+
+  // Connections currently granted to holders.
+  get holders(): number {
+    return this.#holders;
   }
 
   // Acquisitions waiting for a connection, whether for want of a free one or
@@ -143,10 +182,16 @@ export class ConnectionScheduler {
 
   // Resolves with a release once this caller may check out a connection. The
   // tenant and nesting are read from the async context the call is made in.
-  acquire(): Promise<() => void> {
+  // `holding` says the caller will keep the connection while it checks out
+  // more (see the policy).
+  acquire(opts?: { holding?: boolean }): Promise<() => void> {
     let scope = scopeStorage.getStore();
     let key: TenantKey = scope?.tenant ?? UNTAGGED;
     let nested = holdsConnection(scope?.holding);
+    // A nested holder's enclosing hold already counts against the holder
+    // limit, and it is needed for that hold to finish, so it is not capped.
+    let holder = opts?.holding === true;
+    let capped = holder && !nested;
     // Shared and ordered work are both ordered as their tenant but never held
     // to its share, so both wait in the queue the share does not apply to.
     let ordered = scope?.ordered === true;
@@ -154,14 +199,17 @@ export class ConnectionScheduler {
     // This arrival counts toward the demand it is judged against.
     if (
       this.#inUse < this.#limit &&
+      (!capped || this.#holders < this.#holderLimit) &&
       (nested || shared || this.#eligible(key, 1))
     ) {
-      return Promise.resolve(this.#grant(key, ordered));
+      return Promise.resolve(this.#grant(key, ordered, holder));
     }
     return new Promise((resolve) => {
       let waiter: Waiter = {
         key,
         ordered,
+        holder,
+        capped,
         arrival: this.#arrivals++,
         resolve,
       };
@@ -200,8 +248,11 @@ export class ConnectionScheduler {
     return !anotherTenantOpen(key);
   }
 
-  #grant(key: TenantKey, ordered: boolean): () => void {
+  #grant(key: TenantKey, ordered: boolean, holder: boolean): () => void {
     this.#inUse++;
+    if (holder) {
+      this.#holders++;
+    }
     increment(this.#held, key);
     if (!ordered) {
       increment(this.#heldTowardShare, key);
@@ -213,6 +264,9 @@ export class ConnectionScheduler {
       }
       released = true;
       this.#inUse--;
+      if (holder) {
+        this.#holders--;
+      }
       decrement(this.#held, key);
       if (!ordered) {
         decrement(this.#heldTowardShare, key);
@@ -228,8 +282,18 @@ export class ConnectionScheduler {
         return;
       }
       this.#waiting--;
-      next.resolve(this.#grant(next.key, next.ordered));
+      next.resolve(this.#grant(next.key, next.ordered, next.holder));
     }
+  }
+
+  // The first waiter in `list` a free connection may go to now: past any
+  // capped holder while holders are at their limit, so a plain statement or
+  // a non-holding checkout queued behind one is not stuck there.
+  #firstGrantable(list: Waiter[]): number {
+    if (this.#holders < this.#holderLimit) {
+      return list.length ? 0 : -1;
+    }
+    return list.findIndex((waiter) => !waiter.capped);
   }
 
   // The next waiter of the tenant holding the fewest connections among those
@@ -239,18 +303,27 @@ export class ConnectionScheduler {
   // tenant is not held to its share.
   #takeNextTenantWaiter(): Waiter | undefined {
     let best:
-      | { key: TenantKey; queues: TenantQueues; from: Waiter[]; held: number }
+      | {
+          key: TenantKey;
+          queues: TenantQueues;
+          from: Waiter[];
+          index: number;
+          held: number;
+        }
       | undefined;
     for (let [key, queues] of this.#queues) {
-      let from: Waiter[] | undefined = queues.shared.length
-        ? queues.shared
-        : undefined;
+      let sharedIndex = this.#firstGrantable(queues.shared);
+      let from: Waiter[] | undefined =
+        sharedIndex >= 0 ? queues.shared : undefined;
+      let index = sharedIndex;
+      let cappedIndex = this.#firstGrantable(queues.capped);
       if (
-        queues.capped.length &&
-        (!from || queues.capped[0].arrival < from[0].arrival) &&
+        cappedIndex >= 0 &&
+        (!from || queues.capped[cappedIndex].arrival < from[index].arrival) &&
         this.#eligible(key)
       ) {
         from = queues.capped;
+        index = cappedIndex;
       }
       if (!from) {
         continue;
@@ -259,15 +332,16 @@ export class ConnectionScheduler {
       if (
         !best ||
         held < best.held ||
-        (held === best.held && from[0].arrival < best.from[0].arrival)
+        (held === best.held &&
+          from[index].arrival < best.from[best.index].arrival)
       ) {
-        best = { key, queues, from, held };
+        best = { key, queues, from, index, held };
       }
     }
     if (!best) {
       return undefined;
     }
-    let waiter = best.from.shift()!;
+    let [waiter] = best.from.splice(best.index, 1);
     if (best.queues.capped.length === 0 && best.queues.shared.length === 0) {
       this.#queues.delete(best.key);
     }
@@ -396,6 +470,10 @@ function holdsConnection(marker: HoldMarker | undefined): boolean {
 interface Waiter {
   key: TenantKey;
   ordered: boolean;
+  // Will hold its connection while checking out more.
+  holder: boolean;
+  // A holder not nested in another hold, so held to the holder limit.
+  capped: boolean;
   arrival: number;
   resolve: (release: () => void) => void;
 }
