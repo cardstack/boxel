@@ -33,6 +33,9 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
+import { Alert } from '@cardstack/pretui/components/alert';
+import { EmptyState } from '@cardstack/pretui/components/empty-state';
+
 import {
   deleteKey,
   listBindings,
@@ -120,9 +123,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
           Cards can send a key only to the places you approve for it.</:intro>
         <:default>
           {{#if this.state.error}}
-            <div class='keys-error' role='alert' data-test-keys-error>
-              {{this.state.error}}
-            </div>
+            <Alert @tone='danger' role='alert'>
+              <span data-test-keys-error>{{this.state.error}}</span>
+            </Alert>
           {{/if}}
           {{#if this.state.loading}}
             <BusyMessage @title='Loading…' />
@@ -361,8 +364,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                 {{/each}}
               </ul>
             {{else}}
-              <p class='empty' data-test-key-list-empty>You haven’t added any
-                keys.</p>
+              <EmptyState
+                @size='s'
+                @title='You haven’t added any keys.'
+                data-test-key-list-empty
+              />
             {{/if}}
             <div class='add-actions'>
               <Button
@@ -396,12 +402,6 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     {{/if}}
 
     <style scoped>
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
-      }
       .list {
         list-style: none;
         margin: 0;
@@ -471,12 +471,6 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       .share-realm {
         color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
-      }
-      .empty {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        color: var(--muted-foreground);
       }
       .add-actions {
         display: flex;
