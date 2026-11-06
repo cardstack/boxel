@@ -106,6 +106,8 @@ const credentialHeaders = new Set([
   'set-cookie',
   'x-boxel-worker-request-signature',
   'x-boxel-delegation-signature',
+  // Grafana's ID token for the user behind an operator action.
+  'x-grafana-id',
 ]);
 
 const credentialHeaderName = /signature|token|secret|api-?key/i;

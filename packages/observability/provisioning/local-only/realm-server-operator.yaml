@@ -1,0 +1,25 @@
+# LOCAL ONLY — bind-mounted into the Grafana container at
+# /etc/grafana/provisioning/datasources/realm-server-operator.yaml by
+# observability/docker-compose.yml, masking the canonical file in
+# provisioning/datasources/realm-server-operator.yaml.
+#
+# The dev realm server listens on https://localhost:4201 with a mkcert
+# certificate. Grafana reaches it from the container as host.docker.internal,
+# which that certificate doesn't name, so this copy skips TLS verification.
+# The credential is the dev realm server's default GRAFANA_SECRET.
+apiVersion: 1
+datasources:
+  - name: realm-server-operator
+    uid: realm-server-operator
+    type: zipkin
+    access: proxy
+    url: https://host.docker.internal:4201/
+    isDefault: false
+    editable: false
+    jsonData:
+      tlsSkipVerify: true
+      httpHeaderName1: Authorization
+      httpHeaderName2: X-Boxel-Grafana-Proxy
+    secureJsonData:
+      httpHeaderValue1: "Bearer shhh! it's a secret"
+      httpHeaderValue2: "true"

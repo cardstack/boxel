@@ -68,12 +68,13 @@ if [[ "$env_name" != "local" ]]; then
     BOXEL_DB_USER
     BOXEL_DB_PASSWORD
     SYNAPSE_PROMETHEUS_URL
-    # Per-env realm-server base URL substituted into dashboards' realm_server
-    # constant template variable — CS-10923
+    # Per-env realm-server base URL: substituted into dashboards' realm_server
+    # constant template variable, and the URL of the realm-server-operator
+    # datasource — CS-10923
     REALM_SERVER_URL
-    # Realm-server shared secret substituted into dashboards' grafana_secret
-    # constant template variable — CS-10929. Used as `Authorization: Bearer
-    # ${grafana_secret}` by the operator-action button panels.
+    # Realm-server shared secret. The realm-server-operator datasource holds
+    # it in secureJsonData and attaches it to the operator-action calls it
+    # proxies; no dashboard carries it.
     GRAFANA_SECRET
     # CloudWatch log group + owning AWS account substituted into the
     # worker-status-group alert rules at push time — CS-11107. The same
@@ -99,10 +100,6 @@ cfg="$(./scripts/render-config.sh "$env_name")"
 # `templating.list[].query` for matching constant variables. Currently
 # substitutes:
 #   __REALM_SERVER_URL__  → REALM_SERVER_URL  (CS-10923)
-#   REPLACE_AT_APPLY_TIME → GRAFANA_SECRET    (CS-10929; used as
-#                                              `Authorization: Bearer
-#                                              ${grafana_secret}` in
-#                                              operator-action button panels)
 #   __ENV__               → env_name          (local|staging|production;
 #                                              used in CloudWatch
 #                                              dimension values like
@@ -115,20 +112,9 @@ cp -R ./grafanactl/resources/. "$rendered/"
 case "$env_name" in
   local)
     realm_server_url="${REALM_SERVER_URL:-https://localhost:4201/}"
-    # Matches the dev default in packages/software-factory/src/harness/shared.ts
-    # and the matrix test harness, so local Grafana buttons authenticate
-    # against a freshly started realm-server with no extra env config.
-    # Set in two steps because the dev default contains an apostrophe — fragile
-    # inside `${VAR:-default}` when wrapped in double quotes.
-    if [[ -n "${GRAFANA_SECRET:-}" ]]; then
-      grafana_secret="$GRAFANA_SECRET"
-    else
-      grafana_secret="shhh! it's a secret"
-    fi
     ;;
   *)
     realm_server_url="$REALM_SERVER_URL"
-    grafana_secret="$GRAFANA_SECRET"
     ;;
 esac
 
@@ -142,11 +128,10 @@ while IFS= read -r -d '' f; do
   # leaving the script to continue with an unrendered file. Run as two
   # separate statements so a jq error fails the script.
   #
-  # Both substitutions are GUARDED by the placeholder string in `.query` so
+  # Each substitution is GUARDED by the placeholder string in `.query` so
   # this is a no-op for any other constant template variable that happens to
-  # share a name. Lint enforces grafana_secret == REPLACE_AT_APPLY_TIME on
-  # committed JSON, so the guard never spuriously skips a real secret.
-  jq --arg url "$realm_server_url" --arg secret "$grafana_secret" --arg envname "$env_name" '
+  # share a name.
+  jq --arg url "$realm_server_url" --arg envname "$env_name" '
     walk(
       if type == "object"
          and .name? == "realm_server"
@@ -155,13 +140,6 @@ while IFS= read -r -d '' f; do
       then
         .query = $url
         | (if .current then .current.value = $url | .current.text = $url else . end)
-      elif type == "object"
-         and .name? == "grafana_secret"
-         and .type? == "constant"
-         and .query? == "REPLACE_AT_APPLY_TIME"
-      then
-        .query = $secret
-        | (if .current then .current.value = $secret | .current.text = $secret else . end)
       elif type == "object"
          and .name? == "env"
          and .type? == "constant"
