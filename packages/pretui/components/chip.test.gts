@@ -6,6 +6,8 @@ import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Chip } from './chip';
 import { StatusChip } from './status-chip';
+import { statusHue } from '../internal/ink';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function chip(): HTMLElement {
   return document.querySelector('[data-test-pretui-chip]') as HTMLElement;
@@ -79,5 +81,20 @@ module('Pretui | components/chip', function (hooks) {
       .dom('[data-test-pretui-status-chip]')
       .hasAttribute('data-appearance', 'soft');
     assert.dom('[data-test-pretui-chip-dot]').doesNotExist();
+  });
+
+  test('Chip and StatusChip set the hue through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <Chip @label='draft' @hue='var(--chart-2)' />
+          <StatusChip @value='Active' />
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    let [plain, status] = [...document.querySelectorAll<HTMLElement>('[data-test-pretui-chip]')];
+    assert.strictEqual(plain.style.getPropertyValue('--pretui-chip-hue'), 'var(--chart-2)');
+    assert.strictEqual(status.style.getPropertyValue('--pretui-chip-hue'), statusHue('Active'));
   });
 });

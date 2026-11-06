@@ -15,6 +15,9 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TOC } from '@ember/component/template-only';
 
+import { Alert } from '@cardstack/pretui/components/alert';
+import { StatusChip } from '@cardstack/pretui/components/status-chip';
+
 import Button from '../../components/button.gts';
 import type { KeyPolicyNotice } from '../../security/keys.ts';
 
@@ -117,7 +120,12 @@ const KeyPolicyNotices: TOC<Signature> = <template>
         data-test-key-policy-requests
       >
         <h2 id='key-policy-requests-heading'>
-          <span class='badge'>Action needed</span>
+          <StatusChip
+            @value='Action needed'
+            @tone='warning'
+            @appearance='soft'
+            @dot={{false}}
+          />
           {{#if (isOne requests)}}
             A workspace is asking to let people who aren’t signed in use one of
             your keys
@@ -129,37 +137,38 @@ const KeyPolicyNotices: TOC<Signature> = <template>
         <ul>
           {{#each requests key='notice.id' as |request|}}
             <li
-              class='request'
               data-test-key-policy-notice={{request.notice.label}}
               data-test-key-policy-notice-reason='visitors-wanted'
             >
-              <p class='summary'>
-                <strong>{{addressOf request.notice.realm}}</strong>
-                wants people who aren’t signed in to use your key
-                <strong>“{{request.notice.label}}”</strong>
-                ({{request.key.name}}).
-              </p>
-              <p class='explain'>
-                They are refused until you allow it. Allowing it lets anyone who
-                opens that workspace’s cards make these calls with your key, up
-                to the daily cap you set.
-              </p>
-              <Operations @notice={{request.notice}} />
-              <div class='actions'>
-                <Button
-                  @kind='primary'
-                  @size='small'
-                  data-test-key-policy-notice-allow
-                  {{on 'click' (fn @onAllow request.key)}}
-                >Allow anonymous use…</Button>
-                <Button
-                  @kind='secondary'
-                  @size='small'
-                  @loading={{isDeclining @declining request.notice.id}}
-                  data-test-key-policy-notice-decline
-                  {{on 'click' (fn @onDecline request.notice)}}
-                >Decline</Button>
-              </div>
+              <Alert @tone='warning' role='note'>
+                <p class='summary'>
+                  <strong>{{addressOf request.notice.realm}}</strong>
+                  wants people who aren’t signed in to use your key
+                  <strong>“{{request.notice.label}}”</strong>
+                  ({{request.key.name}}).
+                </p>
+                <p class='explain'>
+                  They are refused until you allow it. Allowing it lets anyone
+                  who opens that workspace’s cards make these calls with your
+                  key, up to the daily cap you set.
+                </p>
+                <Operations @notice={{request.notice}} />
+                <div class='actions'>
+                  <Button
+                    @kind='primary'
+                    @size='small'
+                    data-test-key-policy-notice-allow
+                    {{on 'click' (fn @onAllow request.key)}}
+                  >Allow anonymous use…</Button>
+                  <Button
+                    @kind='secondary'
+                    @size='small'
+                    @loading={{isDeclining @declining request.notice.id}}
+                    data-test-key-policy-notice-decline
+                    {{on 'click' (fn @onDecline request.notice)}}
+                  >Decline</Button>
+                </div>
+              </Alert>
             </li>
           {{/each}}
         </ul>
@@ -214,24 +223,6 @@ const KeyPolicyNotices: TOC<Signature> = <template>
     }
     p {
       margin: 0;
-    }
-    .badge {
-      padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-      border-radius: var(--boxel-border-radius-sm);
-      background-color: var(--warning);
-      color: var(--warning-foreground);
-      font-size: var(--boxel-font-size-xs);
-      line-height: var(--boxel-line-height-xs);
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .request {
-      padding: var(--boxel-sp-sm);
-      border: 1px solid var(--warning);
-      border-left-width: 4px;
-      border-radius: var(--boxel-border-radius);
-      background-color: color-mix(in oklab, var(--warning) 10%, var(--card));
     }
     .summary {
       line-height: var(--boxel-line-height-sm);
