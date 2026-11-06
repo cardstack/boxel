@@ -1450,7 +1450,7 @@ export function combineSearchEntryResults(
   // `meta._nearSimilarity` (in the sort's direction, entries without a score
   // last) instead of leaving them in realm order.
   rankBy?: {
-    key: '_nearSimilarity' | '_blendScore';
+    key: '_nearSimilarity' | '_blendScore' | '_matchRelevance';
     direction: 'asc' | 'desc';
   },
 ): EntryCollectionDocument {
@@ -1639,9 +1639,18 @@ export async function searchEntryRealms(
     primarySort && (isBlendSort(primarySort) || isRelevanceSort(primarySort))
       ? // A `_relevance` sort compiles to a blend in each realm's engine.
         { key: '_blendScore', direction: primarySort.direction ?? 'desc' }
-      : primarySort && isNearSort(primarySort)
-        ? { key: '_nearSimilarity', direction: primarySort.direction ?? 'desc' }
-        : undefined,
+      : primarySort && primarySort.by === MATCH_RELEVANCE_SORT_KEY
+        ? // Text relevance (with type-ahead tiers) compares across realms.
+          {
+            key: '_matchRelevance',
+            direction: primarySort.direction ?? 'desc',
+          }
+        : primarySort && isNearSort(primarySort)
+          ? {
+              key: '_nearSimilarity',
+              direction: primarySort.direction ?? 'desc',
+            }
+          : undefined,
   );
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);

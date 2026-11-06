@@ -20,7 +20,10 @@ import {
   specRef,
 } from '@cardstack/runtime-common';
 
-import type { SortOption } from '@cardstack/host/components/search/constants';
+import {
+  SORT_OPTIONS,
+  type SortOption,
+} from '@cardstack/host/components/search/constants';
 
 import { isSearchKeyEmpty, isURLSearchKey } from './url';
 
@@ -116,10 +119,35 @@ function buildTitleTermFilters(searchTerm: string): Filter[] {
 // longer/natural-language queries tap markdown content via `matches`. `_title`
 // is the synthetic key stamped on both card and file rows (a card's title, a
 // file's name), so the term matches files by name too.
+//
+// `typeahead` adds word-prefix matching on titles, alternative names and type
+// names, in any order ("kle mart" finds "Martin Kleppmann"), through its own
+// small index; under the Relevance sort its title tiers put the closest title
+// first. All of it is exact: typo tolerance is a UI's opt-in, never the
+// pane's default.
 function buildSearchTermFilter(searchTerm: string): Filter {
   return {
-    any: [{ matches: searchTerm }, ...buildTitleTermFilters(searchTerm)],
+    any: [
+      { typeahead: searchTerm },
+      { matches: searchTerm },
+      ...buildTitleTermFilters(searchTerm),
+    ],
   };
+}
+
+// The sort a query uses: the chosen one, except that relevance needs a search
+// term, so without one the A-Z order stands in.
+export function sortForTerm(
+  activeSort: SortOption,
+  term: string | undefined,
+): SortOption['sort'] {
+  let ranksByRelevance = activeSort.sort.some(
+    (s) => (s as { by?: string }).by === '_matchRelevance',
+  );
+  if (ranksByRelevance && !term) {
+    return SORT_OPTIONS.find((o) => o.displayName === 'A-Z')?.sort ?? [];
+  }
+  return activeSort.sort;
 }
 
 // Search spans card and file rows in one query. Kind selection is a wire-level
@@ -263,7 +291,7 @@ export function buildSearchQuery(
   );
   return {
     filter: filters.length === 1 ? filters[0] : { every: filters },
-    sort: activeSort.sort,
+    sort: sortForTerm(activeSort, searchTerm),
   };
 }
 
@@ -289,8 +317,10 @@ export function buildRecentsQuery(
   const typeFilter = buildTypeFilter(selectedTypeIds);
   const term = searchTerm?.trim() || undefined;
   // `_title` plus the legacy `cardTitle` fallback — see `buildTitleTermFilters`.
+  // Type-ahead (titles, alternative names, type names; word prefixes) is
+  // still title-like, so it joins the title substring match.
   const termFilter: Filter | undefined = term
-    ? { any: buildTitleTermFilters(term) }
+    ? { any: [{ typeahead: term }, ...buildTitleTermFilters(term)] }
     : undefined;
   let filters: Filter[];
   if (baseFilter) {
@@ -316,6 +346,6 @@ export function buildRecentsQuery(
   );
   return {
     filter: filters.length === 1 ? filters[0] : { every: filters },
-    sort: activeSort.sort,
+    sort: sortForTerm(activeSort, term),
   };
 }

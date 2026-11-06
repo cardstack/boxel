@@ -53,6 +53,8 @@
    relationship_deps BLOB,
    search_tsv,
    pattern_text TEXT,
+   rank_tsv,
+   search_title TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

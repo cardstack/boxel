@@ -10,7 +10,10 @@ import {
   type Sort,
 } from '@cardstack/runtime-common';
 
-import type { SortOption } from '@cardstack/host/components/search/constants';
+import {
+  SORT_OPTIONS,
+  type SortOption,
+} from '@cardstack/host/components/search/constants';
 
 import {
   buildRecentsQuery,
@@ -37,6 +40,26 @@ function titleBranches(term: string): Filter[] {
 
 module('Unit | search/query-builder', function () {
   module('buildSearchQuery', function () {
+    test('the Relevance sort ranks a term by relevance, and stands in A-Z without one', function (assert) {
+      let relevance = SORT_OPTIONS.find((o) => o.displayName === 'Relevance')!;
+      let az = SORT_OPTIONS.find((o) => o.displayName === 'A-Z')!;
+      assert.strictEqual(
+        SORT_OPTIONS[0],
+        relevance,
+        'Relevance is the default',
+      );
+      assert.deepEqual(
+        buildSearchQuery('mango', relevance).sort,
+        relevance.sort,
+      );
+      assert.deepEqual(buildSearchQuery('', relevance).sort, az.sort);
+      assert.deepEqual(buildRecentsQuery(undefined, relevance).sort, az.sort);
+      assert.deepEqual(
+        buildRecentsQuery('mango', relevance).sort,
+        relevance.sort,
+      );
+    });
+
     test('empty search key with no baseFilter combines not-spec with the card-json dedup', function (assert) {
       let query = buildSearchQuery('', SORT_AZ);
       assert.deepEqual(query, {
@@ -52,7 +75,11 @@ module('Unit | search/query-builder', function () {
           every: [
             { not: { type: specRef } },
             {
-              any: [{ matches: 'xylophone' }, ...titleBranches('xylophone')],
+              any: [
+                { typeahead: 'xylophone' },
+                { matches: 'xylophone' },
+                ...titleBranches('xylophone'),
+              ],
             },
             DEDUP_FILTER,
           ],
@@ -96,7 +123,11 @@ module('Unit | search/query-builder', function () {
           every: [
             baseFilter,
             {
-              any: [{ matches: 'puppy' }, ...titleBranches('puppy')],
+              any: [
+                { typeahead: 'puppy' },
+                { matches: 'puppy' },
+                ...titleBranches('puppy'),
+              ],
             },
           ],
         },
@@ -115,7 +146,11 @@ module('Unit | search/query-builder', function () {
           every: [
             baseFilter,
             {
-              any: [{ matches: 'mango' }, ...titleBranches('mango')],
+              any: [
+                { typeahead: 'mango' },
+                { matches: 'mango' },
+                ...titleBranches('mango'),
+              ],
             },
             DEDUP_FILTER,
           ],
@@ -165,7 +200,11 @@ module('Unit | search/query-builder', function () {
             { not: { type: specRef } },
             { type: authorRef },
             {
-              any: [{ matches: 'droid' }, ...titleBranches('droid')],
+              any: [
+                { typeahead: 'droid' },
+                { matches: 'droid' },
+                ...titleBranches('droid'),
+              ],
             },
           ],
         },
@@ -212,13 +251,13 @@ module('Unit | search/query-builder', function () {
       });
     });
 
-    test('a term filters recents by title substring only (no full-text matches)', function (assert) {
+    test('a term filters recents by type-ahead and title substring only (no full-text matches)', function (assert) {
       let query = buildRecentsQuery('mango', SORT_AZ);
       assert.deepEqual(query, {
         filter: {
           every: [
             { not: { type: specRef } },
-            { any: titleBranches('mango') },
+            { any: [{ typeahead: 'mango' }, ...titleBranches('mango')] },
             DEDUP_FILTER,
           ],
         },

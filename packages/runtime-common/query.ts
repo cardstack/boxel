@@ -434,7 +434,10 @@ export type MatchTerm = Pick<
   | 'typos'
   | 'typoQuery'
   | 'typoPartial'
->;
+> & {
+  // A type-ahead term (`{ typeahead }`), which ranks by title tier.
+  typeahead?: boolean;
+};
 
 // The type-ahead split of a `prefix` query: the finished words, and the
 // unfinished last word as letters and digits only (so it can be spliced into
@@ -523,6 +526,19 @@ export function collectPositiveMatchTerms(
               ? { typoQuery: filter.typoQuery }
               : {}),
             ...(filter.typoPartial ? { typoPartial: filter.typoPartial } : {}),
+          },
+        ]
+      : [];
+  }
+  if ('typeahead' in filter && typeof filter.typeahead === 'string') {
+    return polarity === 'positive' && filter.typeahead.trim() !== ''
+      ? [
+          {
+            matches: filter.typeahead,
+            typeahead: true,
+            ...(filter.typoQuery !== undefined
+              ? { typoQuery: filter.typoQuery }
+              : {}),
           },
         ]
       : [];

@@ -3076,21 +3076,42 @@ export class IndexQueryEngine {
     allMatches: MatchTerm[],
     staged: boolean,
   ): CardExpression {
-    // Terms scoped to a passage list score the card's best passage; the
-    // others score its markdown. A card's relevance is the better of the two.
+    // Terms scoped to a passage list score the card's best passage;
+    // type-ahead terms score by title tier (see `#typeAheadRelevance`); the
+    // others score the card's rank vector. A card's relevance is the best.
     let passageTerms = allMatches.filter((m) => m.within);
-    let matches = allMatches.filter((m) => !m.within);
-    if (matches.length === 0) {
-      return ['MAX(', ...this.#passageRelevance(passageTerms), ')'];
-    }
+    let typeAheadTerms = allMatches.filter((m) => m.typeahead);
+    let matches = allMatches.filter((m) => !m.within && !m.typeahead);
+    let parts: CardExpression[] = [];
     if (passageTerms.length > 0) {
-      return [
-        'GREATEST(',
-        ...this.matchRelevanceScore(matches, staged),
-        ', MAX(',
-        ...this.#passageRelevance(passageTerms),
-        '))',
-      ];
+      parts.push(['MAX(', ...this.#passageRelevance(passageTerms), ')']);
+    }
+    if (typeAheadTerms.length > 0) {
+      parts.push([
+        'MAX(',
+        ...this.#typeAheadRelevance(typeAheadTerms, staged),
+        ')',
+      ]);
+    }
+    if (matches.length === 0 || parts.length > 0) {
+      if (matches.length > 0) {
+        parts.push(this.matchRelevanceScore(matches, staged));
+      }
+      if (parts.length === 0) {
+        return ['0'];
+      }
+      if (parts.length === 1) {
+        return parts[0];
+      }
+      let out: CardExpression = ['GREATEST('];
+      parts.forEach((part, i) => {
+        if (i > 0) {
+          out.push(',');
+        }
+        out.push(...part);
+      });
+      out.push(')');
+      return out;
     }
     let pgTsQuery: Expression = [];
     matches.forEach((m, i) => {
@@ -3113,25 +3134,92 @@ export class IndexQueryEngine {
     return [
       'MAX(',
       dbExpression({
-        // A card ranks by its fields' role-weighted words, so the same word
-        // ranks higher in a title than in body text. A card whose fields
-        // don't hold the words (it matched on its rendered page alone, e.g.
-        // a transcript) ranks by its page, at a tenth: below every field
-        // match, like body text. COALESCE evaluates lazily, so the page's
-        // vector, often the larger, is read only for those cards; ranking
-        // the two vectors concatenated copied both for every match (a pane
-        // search over 5,000 talks spent ~1 s there).
+        // A card ranks by its small, inline rank vector (titles, names and
+        // aliases; summaries, keywords, labels and type names; the start of
+        // plain and body text), so ranking any number of matches reads no
+        // out-of-line value, however large the cards are. A card without
+        // one yet (indexed before it existed) ranks lowest. Matching reads
+        // the full vectors; ranking never reads the rendered page.
         pg: [
-          `COALESCE(NULLIF(ts_rank_cd(${searchTextVector('i', staged)}, `,
+          `ts_rank_cd(COALESCE(${rankVector('i', staged)}, ''::tsvector), `,
           ...pgTsQuery,
-          `, 32), 0), ts_rank_cd(COALESCE(${markdownVector('ph', staged)}, ''::tsvector), `,
-          ...pgTsQuery,
-          `, 32) * 0.1)`,
+          `, 32)`,
         ],
         sqlite: [`CASE WHEN (`, ...sqliteLike, `) THEN 1 ELSE 0 END`],
       }),
       `)`,
     ];
+  }
+
+  // A type-ahead term's relevance for one row: a tier from the row's inline
+  // title (3 when the title is what was typed, 2 when it starts with it, 1
+  // when every typed word prefixes a title word, 0 when the row matched
+  // through its alternative names or type words), plus its rank vector's
+  // score for the typed words as a fraction. The tiers outrank any text
+  // score, so title hits lead and content can't push them down.
+  #typeAheadRelevance(terms: MatchTerm[], staged: boolean): CardExpression {
+    let title = staged
+      ? `lower(i.search_doc ->> '${CARD_TITLE_KEY}')`
+      : 'i.search_title';
+    let scores: CardExpression[] = [];
+    for (let term of terms) {
+      let typed = typeAheadWords(term.matches).join(' ');
+      if (!typed) {
+        continue;
+      }
+      let tsquery: Expression | undefined = term.typoQuery
+        ? [`to_tsquery('simple',`, param(term.typoQuery), `)`]
+        : typeAheadTsQuery(term.matches);
+      scores.push([
+        dbExpression({
+          pg: [
+            `(CASE WHEN ${title} =`,
+            param(typed),
+            `THEN 3 WHEN ${title} LIKE`,
+            param(`${escapeSqliteLikePattern(typed)}%`),
+            `THEN 2`,
+            ...(tsquery
+              ? [
+                  `WHEN to_tsvector('simple', coalesce(${title}, '')) @@`,
+                  ...tsquery,
+                  `THEN 1`,
+                ]
+              : []),
+            `ELSE 0 END`,
+            ...(tsquery
+              ? [
+                  `+ ts_rank_cd(COALESCE(${rankVector('i', staged)}, ''::tsvector),`,
+                  ...tsquery,
+                  `, 32)`,
+                ]
+              : []),
+            `)`,
+          ],
+          sqlite: [
+            `(CASE WHEN lower(i.search_doc ->> '${CARD_TITLE_KEY}') =`,
+            param(typed),
+            `THEN 3 WHEN lower(i.search_doc ->> '${CARD_TITLE_KEY}') LIKE`,
+            param(`${escapeSqliteLikePattern(typed)}%`),
+            `ESCAPE '\\' THEN 2 ELSE 1 END)`,
+          ],
+        }),
+      ]);
+    }
+    if (scores.length === 0) {
+      return ['0'];
+    }
+    if (scores.length === 1) {
+      return scores[0];
+    }
+    let out: CardExpression = ['GREATEST('];
+    scores.forEach((score, i) => {
+      if (i > 0) {
+        out.push(',');
+      }
+      out.push(...score);
+    });
+    out.push(')');
+    return out;
   }
 
   // An `any` whose every branch an index answers on its own — a full-text
@@ -4905,6 +4993,14 @@ function searchTextVector(alias: string, staged: boolean): string {
   return staged
     ? `search_text_vector(${alias}.search_doc -> '${SEARCH_TEXT_KEY}')`
     : `${alias}.search_tsv`;
+}
+
+// A card's small, inline rank vector (the `add-boxel-index-rank-vector`
+// migration); staged rows build it inline from their `_searchText`.
+function rankVector(alias: string, staged: boolean): string {
+  return staged
+    ? `search_rank_vector(${alias}.search_doc -> '${SEARCH_TEXT_KEY}')`
+    : `${alias}.rank_tsv`;
 }
 
 function prerenderedTableFromOpts(opts: WIPOptions | undefined) {

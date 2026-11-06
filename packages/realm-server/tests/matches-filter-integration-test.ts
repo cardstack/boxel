@@ -66,7 +66,7 @@ async function seedRow(
   },
 ) {
   await query(dbAdapter, [
-    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, search_tsv)`,
+    `INSERT INTO boxel_index (url, file_alias, realm_url, generation, type, pristine_doc, search_doc, deps, types, is_deleted, has_error, indexed_at, search_tsv, rank_tsv, search_title)`,
     `VALUES (`,
     param(url),
     `,`,
@@ -98,6 +98,18 @@ async function seedRow(
     `::text IS NULL THEN NULL ELSE setweight(to_tsvector('english',`,
     param(fieldText),
     `), 'C') END`,
+    // The rank vector: the title at A, the field text's start at C.
+    `, setweight(to_tsvector('english', coalesce(`,
+    param(String(searchDoc._title ?? '')),
+    `::text, '')), 'A') || setweight(to_tsvector('english', left(coalesce(`,
+    param(fieldText),
+    `::text, ''), 600)), 'C')`,
+    `,`,
+    param(
+      typeof searchDoc._title === 'string'
+        ? searchDoc._title.toLowerCase()
+        : null,
+    ),
     `)`,
   ]);
   // The full-text `matches` predicate reads the rendering half of the row:
@@ -551,6 +563,36 @@ module(basename(import.meta.filename), function () {
         ).sort(),
         [`${testRealmURL}chrome.json`, `${testRealmURL}concurrency.json`],
         'a whole word still matches the page',
+      );
+    });
+
+    test('type-ahead ranks by title: exact, then starts-with, then word prefix, then the rest', async function (assert) {
+      let row = (name: string, title: string, typeahead: string) =>
+        seedRow(dbAdapter, {
+          url: `${testRealmURL}${name}.json`,
+          markdown: title,
+          searchDoc: { _title: title, _typeahead: typeahead },
+        });
+      await row('learning', 'Learning Rust', 'Learning Rust');
+      await row('production', 'Rust in Production', 'Rust in Production');
+      await row('exact', 'Rust', 'Rust');
+      await row('alias', 'Ferris the Crab', 'Ferris the Crab\nRust mascot');
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { typeahead: 'rust' },
+          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+        }),
+        [
+          `${testRealmURL}exact.json`,
+          `${testRealmURL}production.json`,
+          `${testRealmURL}learning.json`,
+          `${testRealmURL}alias.json`,
+        ],
+      );
+      assert.deepEqual(
+        await relevanceUrls({ filter: { typeahead: 'rust in' } }),
+        [`${testRealmURL}production.json`],
+        'every word must match',
       );
     });
 

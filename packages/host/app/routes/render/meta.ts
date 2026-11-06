@@ -310,8 +310,20 @@ export default class RenderMetaRoute extends Route<Model> {
     // stored doc. Computing it also takes the fields declared
     // `search: false` out of the doc.
     if (typeof api.searchTextOf === 'function') {
-      let searchText = api.searchTextOf(Klass, searchDoc);
-      if (searchText) {
+      let searchText = api.searchTextOf(Klass, searchDoc) ?? {};
+      // The card's type names (its own and its ancestors', short of the
+      // generic roots) are words of the card too: "alice employee" finds the
+      // Employee titled Alice though "employee" is nowhere in its data. They
+      // weigh like a summary, and join the type-ahead text, below the title
+      // in type-ahead ranking (which reads the title alone).
+      let typeWords = typeWordsOf(displayNames);
+      if (typeWords) {
+        searchText.B = [typeWords, searchText.B].filter(Boolean).join('\n');
+        searchDoc._typeahead = [searchDoc._typeahead, typeWords]
+          .filter(Boolean)
+          .join('\n');
+      }
+      if (Object.keys(searchText).length > 0) {
         searchDoc[SEARCH_TEXT_KEY] = searchText;
       }
     }
@@ -629,4 +641,14 @@ function passageFieldsOf(
         (field?.card as { isPassageField?: boolean })?.isPassageField,
     )
     .map(([name]) => name);
+}
+
+// The display names of a card's type and its ancestors, one per line, short
+// of the roots every card shares (they would match every card).
+const GENERIC_TYPE_NAMES = new Set(['Card', 'Base', 'Field', 'File']);
+function typeWordsOf(displayNames: string[]): string | undefined {
+  let names = [...new Set(displayNames)].filter(
+    (name) => name && !GENERIC_TYPE_NAMES.has(name),
+  );
+  return names.length > 0 ? names.join('\n') : undefined;
 }

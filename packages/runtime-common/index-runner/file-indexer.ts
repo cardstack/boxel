@@ -19,7 +19,8 @@ import {
 import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
 import { uniqueDeps } from './dependency-collections.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
-import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
+import { CARD_INSTANCE_FILE_KEY, TYPE_AHEAD_KEY } from '../search-doc-keys.ts';
+import { SEARCH_TEXT_KEY } from '../search-intent.ts';
 
 export interface FileIndexerOptions {
   path: LocalPath;
@@ -196,6 +197,15 @@ export async function performFileIndexing({
     ...(extractResult.searchDoc ?? {}),
     ...(isCardInstance ? { [CARD_INSTANCE_FILE_KEY]: true } : {}),
     _title: name,
+    // A file's name is its title for search intent too
+    // (docs/search-intent.md): its words, split at the punctuation a file
+    // name joins them with ("intensive-notes.md" is "intensive notes md"),
+    // are its type-ahead text and its top-weight field words, so type-ahead
+    // and typo-tolerant search find files by name as they find cards by
+    // title.
+    // Its type names ("Markdown", "PDF") are its words too, as a card's are
+    // (see the render's `typeWordsOf`).
+    ...searchWordsOfFile(name, extractResult.displayNames ?? []),
     // Stamp `id` (the file's own URL) so a file row is addressable by
     // `eq: { id }` the same way a card instance row is — `FileDef` already
     // declares an `id` field, the search_doc just never carried it. Placed
@@ -281,4 +291,34 @@ export async function performFileIndexing({
   });
 
   return 'indexed';
+}
+
+// A file name's words: runs of letters and digits, space-separated.
+function nameWords(name: string | undefined): string | undefined {
+  let words = (name ?? '').match(/[\p{L}\p{N}]+/gu);
+  return words && words.length > 0 ? words.join(' ') : undefined;
+}
+
+const GENERIC_FILE_TYPE_NAMES = new Set(['File', 'Base', 'Card', 'Field']);
+
+// A file's type-ahead text and search text: its name's words as its title,
+// its type names (short of the generic roots) at summary weight.
+function searchWordsOfFile(
+  name: string | undefined,
+  displayNames: string[],
+): Record<string, unknown> {
+  let title = nameWords(name);
+  let types = [...new Set(displayNames)]
+    .filter((n) => n && !GENERIC_FILE_TYPE_NAMES.has(n))
+    .join('\n');
+  if (!title && !types) {
+    return {};
+  }
+  return {
+    [TYPE_AHEAD_KEY]: [title, types].filter(Boolean).join('\n'),
+    [SEARCH_TEXT_KEY]: {
+      ...(title ? { A: title } : {}),
+      ...(types ? { B: types } : {}),
+    },
+  };
 }

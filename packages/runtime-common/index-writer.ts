@@ -77,7 +77,7 @@ import {
   spillSearchDoc,
 } from './search-doc-spill.ts';
 import { SEARCH_TEXT_KEY } from './search-intent.ts';
-import { TYPE_AHEAD_KEY } from './search-doc-keys.ts';
+import { CARD_TITLE_KEY, TYPE_AHEAD_KEY } from './search-doc-keys.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -3435,10 +3435,14 @@ export class Batch {
       // `_searchText` (see `applyBatchUpdates`); staging has no such column.
       search_tsv: _remove6,
       pattern_text: _remove7,
+      rank_tsv: _remove8,
+      search_title: _remove9,
       ...productionVersion
     } = entry as typeof entry & {
       search_tsv?: unknown;
       pattern_text?: unknown;
+      rank_tsv?: unknown;
+      search_title?: unknown;
     };
     return {
       ...productionVersion,
@@ -3815,7 +3819,9 @@ export class Batch {
             // A row staged without the render's `_searchText` (an error row
             // carrying its last good doc forward, or a render from before
             // search intent) keeps the vector it has.
-            name === 'search_tsv' || name === 'pattern_text'
+            name === 'search_tsv' ||
+            name === 'pattern_text' ||
+            name === 'rank_tsv'
               ? [
                   `${name}=CASE WHEN EXCLUDED.search_tsv IS NULL THEN boxel_index.${name} ELSE EXCLUDED.${name} END`,
                 ]
@@ -4109,24 +4115,36 @@ export class Batch {
             [
               `(COALESCE(spilled_search_doc, search_doc) - '${SEARCH_TEXT_KEY}') AS search_doc`,
             ]
-          : column === 'pattern_text'
-            ? // The row's pattern-field values, one per line, from the
-              // render's `_searchText` (see `add-typo-words-and-pattern-text`).
+          : column === 'rank_tsv'
+            ? // The row's small, inline ranking vector (see the
+              // `add-boxel-index-rank-vector` migration).
               [
                 this.#dbAdapter.kind === 'pg'
-                  ? `search_doc -> '${SEARCH_TEXT_KEY}' ->> 'patterns' AS pattern_text`
-                  : 'NULL AS pattern_text',
+                  ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_rank_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS rank_tsv`
+                  : 'NULL AS rank_tsv',
               ]
-            : column === 'search_tsv'
-              ? // The row's role-weighted full-text vector, built from the
-                // render's `_searchText` (see the `add-boxel-index-search-tsv`
-                // migration). Staging has no such column.
-                [
-                  this.#dbAdapter.kind === 'pg'
-                    ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_text_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS search_tsv`
-                    : 'NULL AS search_tsv',
-                ]
-              : [column],
+            : column === 'search_title'
+              ? // The row's display title, lowercased, inline for type-ahead
+                // ranking.
+                [`lower(search_doc ->> '${CARD_TITLE_KEY}') AS search_title`]
+              : column === 'pattern_text'
+                ? // The row's pattern-field values, one per line, from the
+                  // render's `_searchText` (see `add-typo-words-and-pattern-text`).
+                  [
+                    this.#dbAdapter.kind === 'pg'
+                      ? `search_doc -> '${SEARCH_TEXT_KEY}' ->> 'patterns' AS pattern_text`
+                      : 'NULL AS pattern_text',
+                  ]
+                : column === 'search_tsv'
+                  ? // The row's role-weighted full-text vector, built from the
+                    // render's `_searchText` (see the `add-boxel-index-search-tsv`
+                    // migration). Staging has no such column.
+                    [
+                      this.#dbAdapter.kind === 'pg'
+                        ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_text_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS search_tsv`
+                        : 'NULL AS search_tsv',
+                    ]
+                  : [column],
     );
   }
 

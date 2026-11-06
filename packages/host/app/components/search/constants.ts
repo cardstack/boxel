@@ -46,7 +46,21 @@ export const SECTION_SHOW_MORE_INCREMENT = 5;
  * server; realm and recents sections both apply it server-side via
  * prerendered search. URL card lookup has no sort (single card).
  */
+// Best match first: type-ahead title tiers (the title is what was typed,
+// starts with it, has every typed word as a word prefix), then exact
+// full-text relevance on the card's rank vector; the most recently changed
+// breaks ties. It needs a search term, so with none the A-Z order stands in
+// (see `sortForTerm` in query-builder.ts).
+export const RELEVANCE_SORT_OPTION: SortOption = {
+  displayName: 'Relevance',
+  sort: [
+    { by: '_matchRelevance', direction: 'desc' },
+    { by: 'lastModified', direction: 'desc' },
+  ],
+};
+
 export const SORT_OPTIONS: SortOption[] = [
+  RELEVANCE_SORT_OPTION,
   {
     displayName: 'A-Z',
     sort: [

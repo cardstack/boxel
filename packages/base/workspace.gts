@@ -125,6 +125,26 @@ const RAIL_PANE_MARGIN_REM = 3;
 const RAIL_MIN_WIDTH = `${RAIL_MIN_WIDTH_REM}rem`;
 const RAIL_MAX_WIDTH = `${RAIL_MAX_WIDTH_REM}rem`;
 
+// Best match first: type-ahead title tiers, then full-text relevance, then
+// the most recently changed (docs/search-intent.md).
+const RELEVANCE_SORT = [
+  { by: '_matchRelevance', direction: 'desc' },
+  { by: 'lastModified', direction: 'desc' },
+];
+
+// A card search term: type-ahead (word prefixes of titles, alternative names
+// and type names, in any order) or a title substring, and with `fullText`
+// the card's words too. Exact: typo tolerance is opt-in, never here.
+function cardTermFilter(term: string, opts: { fullText?: boolean } = {}) {
+  return {
+    any: [
+      { on: baseCardRef, typeahead: term },
+      ...(opts.fullText ? [{ on: baseCardRef, matches: term }] : []),
+      { on: baseCardRef, contains: { cardTitle: term } },
+    ],
+  };
+}
+
 function remToPx(rem: number): number {
   let rootSize = parseFloat(
     getComputedStyle(document.documentElement).fontSize,
@@ -2905,9 +2925,12 @@ class Isolated extends Component<typeof Workspace> {
     }
     // CLI-verified shape: `contains` only matches when paired with a
     // `type` clause, and `on` goes inside each predicate.
+    // Type-ahead: word prefixes of titles, alternative names and type names,
+    // in any order, through their own index; the title substring catches
+    // fragments inside a word. Exact, never typo-tolerant.
     let clauses: unknown[] = [
       { type: baseCardRef },
-      { on: baseCardRef, contains: { cardTitle: term } },
+      cardTermFilter(term),
       ...excludeSelfReferentialCards(baseCardRef),
     ];
     if (this.args.model.searchIncludesSystem !== true) {
@@ -2919,7 +2942,9 @@ class Isolated extends Component<typeof Workspace> {
     let instances = await this.searchRealm({
       // Use the bounded realm-local search path.
       filter: { every: clauses },
-      sort: [{ by: 'lastModified', direction: 'desc' }],
+      // Closest title first (type-ahead tiers), then the most recently
+      // changed.
+      sort: RELEVANCE_SORT,
     } as Query);
     let hits = (instances ?? []).filter(
       (i) => isCardInstance(i) && i.id,
@@ -2963,7 +2988,7 @@ class Isolated extends Component<typeof Workspace> {
         filter: {
           every: [
             { type: baseCardRef },
-            { on: baseCardRef, contains: { cardTitle: term } },
+            cardTermFilter(term, { fullText: true }),
             ...excludeSelfReferentialCards(baseCardRef),
           ],
         },
@@ -3305,11 +3330,7 @@ class Isolated extends Component<typeof Workspace> {
       this.activeFilter !== this.searchFilter
     ) {
       filter = {
-        every: [
-          filter,
-          { type: baseCardRef },
-          { on: baseCardRef, contains: { cardTitle: term } },
-        ],
+        every: [filter, { type: baseCardRef }, cardTermFilter(term)],
       } as Query['filter'];
     }
     return filter;
@@ -3322,7 +3343,7 @@ class Isolated extends Component<typeof Workspace> {
     return {
       ...this.activeFilter.query,
       filter: this.libraryFilter,
-      sort: this.activeSort?.sort,
+      sort: this.librarySort,
       // Bound the unified Library search on the server, one page at a time.
       page: {
         size: this.libraryPageSize,
@@ -3349,8 +3370,15 @@ class Isolated extends Component<typeof Workspace> {
   private get libraryPageKey(): string {
     return JSON.stringify({
       filter: this.libraryFilter,
-      sort: this.activeSort?.sort,
+      sort: this.librarySort,
     });
+  }
+
+  // A search ranks by relevance; the rail's sort picker governs the rest.
+  private get librarySort(): Query['sort'] {
+    return this.activeFilter === this.searchFilter
+      ? (RELEVANCE_SORT as Query['sort'])
+      : this.activeSort?.sort;
   }
 
   private get currentLibraryPage(): number {
