@@ -9,6 +9,8 @@ import { emit, firstDefined } from '../pretui-primitives';
 export interface RadioOption {
   value: string;
   label: string;
+  /** a line under the label saying what the choice means */
+  description?: string;
   disabled?: boolean;
 }
 
@@ -20,6 +22,10 @@ export interface RadioGroupSignature {
     value?: string;
     defaultValue?: string;
     disabled?: boolean;
+    /** the group's accessible name when no label element points at it */
+    label?: string;
+    /** the form field the radios submit under; a generated name groups them otherwise */
+    name?: string;
     onValueChange?: (value: string) => void;
     /** aliases */
     onChange?: (value: string) => void;
@@ -30,7 +36,10 @@ export interface RadioGroupSignature {
 
 export class RadioGroup extends Component<RadioGroupSignature> {
   @tracked internal = this.args.defaultValue;
-  name = `${guidFor(this)}-rg`;
+  generatedName = `${guidFor(this)}-rg`;
+  get name() {
+    return this.args.name ?? this.generatedName;
+  }
   get options(): RadioOption[] {
     return firstDefined(this.args.options, this.args.items) ?? [];
   }
@@ -49,9 +58,19 @@ export class RadioGroup extends Component<RadioGroupSignature> {
   isOn = (option: RadioOption) => this.value === option.value;
   isDisabled = (option: RadioOption) => this.groupDisabled || option.disabled;
   <template>
-    <div role='radiogroup' class='pretui-radiogroup' data-test-pretui-radio-group ...attributes>
+    <div
+      role='radiogroup'
+      class='pretui-radiogroup'
+      aria-label={{@label}}
+      data-test-pretui-radio-group
+      ...attributes
+    >
       {{#each this.options as |option|}}
-        <label class='pretui-choice'>
+        <label
+          class='pretui-choice'
+          data-has-description={{if option.description 'true'}}
+          data-test-pretui-radio-option={{option.value}}
+        >
           <input
             type='radio'
             class='pretui-radio'
@@ -61,7 +80,17 @@ export class RadioGroup extends Component<RadioGroupSignature> {
             disabled={{this.isDisabled option}}
             {{on 'change' (fn this.pick option)}}
           />
-          {{option.label}}
+          {{#if option.description}}
+            <span class='pretui-radio-text'>
+              <span class='pretui-radio-label'>{{option.label}}</span>
+              <span
+                class='pretui-radio-description'
+                data-test-pretui-radio-description
+              >{{option.description}}</span>
+            </span>
+          {{else}}
+            {{option.label}}
+          {{/if}}
         </label>
       {{/each}}
     </div>
@@ -87,14 +116,20 @@ export class RadioGroup extends Component<RadioGroupSignature> {
           border-radius: 50%;
           background: var(--pretui-control-rest, var(--field, var(--boxel-light)));
           box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
+          transition: background var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
           cursor: pointer;
           display: inline-grid;
           place-content: center;
           flex: none;
         }
         .pretui-radio:checked {
-          background: var(--primary);
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 70%, var(--border)),
+          background: var(--pretui-radio-checked-fill, var(--primary));
+          box-shadow: 0 0 0 1px
+              var(
+                --pretui-control-checked-border,
+                color-mix(in oklch, var(--primary) 70%, var(--border))
+              ),
             var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
         }
         .pretui-radio:checked::before {
@@ -108,9 +143,44 @@ export class RadioGroup extends Component<RadioGroupSignature> {
           background: var(--card);
           box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
         }
+        .pretui-radio:hover:not(:checked):not(:disabled) {
+          background: var(--pretui-control-hover, var(--hover));
+        }
         .pretui-radio:disabled {
           opacity: 0.45;
           cursor: default;
+        }
+        /* appearance: none discards the UA focus ring with the native look */
+        .pretui-radio:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        /* with a description, the radio sits on the label's first line */
+        .pretui-choice[data-has-description] {
+          align-items: flex-start;
+        }
+        .pretui-choice[data-has-description] .pretui-radio {
+          margin-block-start: calc((1lh - 15px) / 2);
+        }
+        .pretui-radio-text {
+          display: grid;
+          gap: 0.125rem;
+          min-inline-size: 0;
+        }
+        .pretui-radio-description {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground);
+          overflow-wrap: break-word;
+        }
+        /* forced colors drop the painted face, so the platform's radio,
+           drawn in the system colors, stands in there */
+        @media (forced-colors: active) {
+          .pretui-radio {
+            appearance: auto;
+          }
+          .pretui-radio:checked::before {
+            content: none;
+          }
         }
       }
     </style>

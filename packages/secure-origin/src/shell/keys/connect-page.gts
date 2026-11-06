@@ -33,8 +33,8 @@ import {
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
+import { Field } from '@cardstack/pretui/components/field';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '../../components/icons/tag.gts';
 import { Input } from '@cardstack/pretui/components/input';
 import { navigation } from '../navigation.js';
@@ -112,14 +112,16 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
               />
             {{/if}}
             {{#if this.choosing.connection}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Connection'
                 @icon={{KeyRound}}
                 data-test-connect-connection
               >
                 <KeyTile @key={{this.choosing.connection}} />
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.choosing.clients.length}}
               <ClientPicker
@@ -129,22 +131,25 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
                 @realmName={{this.choosing.context.realm.name}}
               />
               {{#unless this.choosing.connection}}
-                <FieldContainer
-                  @tag='label'
+                <Field
+                  @reserveMessage={{false}}
+                  @orientation='horizontal'
                   @label='Name'
                   @icon={{Tag}}
                   data-test-connect-field='name'
+                  as |controlId|
                 >
                   <Input
+                    @controlId={{controlId}}
                     @type='text'
                     autocomplete='off'
-                    placeholder='A name you’ll recognize, such as “Work GitHub”'
+                    @placeholder='A name you’ll recognize, such as “Work GitHub”'
                     @value={{this.form.name}}
                     @onInput={{this.setName}}
                     name='connection-name'
                     data-test-connect-name
                   />
-                </FieldContainer>
+                </Field>
               {{/unless}}
             {{else}}
               <div class='no-clients' data-test-connect-no-clients>

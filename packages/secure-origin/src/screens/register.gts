@@ -78,9 +78,10 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
         <AuthFormField
           @label='Your Name'
           data-test-secure-field='name'
-          as |labelId|
+          as |labelId controlId|
         >
           <Input
+            @controlId={{controlId}}
             aria-labelledby={{labelId}}
             data-test-name-field
             name='name'
@@ -97,9 +98,10 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
         <AuthFormField
           @label='Email'
           data-test-secure-field='email'
-          as |labelId|
+          as |labelId controlId|
         >
           <Input
+            @controlId={{controlId}}
             aria-labelledby={{labelId}}
             data-test-email-field
             name='email'
@@ -113,6 +115,7 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
           />
         </AuthFormField>
         <AuthFormField
+          @labelTag='span'
           @label='Username'
           data-test-secure-field='username'
           as |labelId|
@@ -251,9 +254,10 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
       <AuthFormField
         @label='Your invite code'
         data-test-secure-field='token'
-        as |labelId|
+        as |labelId controlId|
       >
         <Input
+          @controlId={{controlId}}
           aria-labelledby={{labelId}}
           data-test-token-field
           name='invite-code'

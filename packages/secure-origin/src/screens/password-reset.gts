@@ -42,9 +42,10 @@ export const ForgotPasswordForm: TemplateOnlyComponent<ForgotPasswordFormSignatu
       <AuthFormField
         @label='Email Address'
         data-test-secure-field='email'
-        as |labelId|
+        as |labelId controlId|
       >
         <Input
+          @controlId={{controlId}}
           aria-labelledby={{labelId}}
           data-test-email-field
           name='email'

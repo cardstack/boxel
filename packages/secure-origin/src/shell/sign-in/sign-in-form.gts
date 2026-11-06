@@ -57,11 +57,13 @@ const Fields: TemplateOnlyComponent<{
   <AuthFormField
     @label='Email Address or Username'
     data-test-secure-field='username'
+    as |_labelId controlId|
   >
     <Input
+      @controlId={{controlId}}
       @type='text'
       autocomplete='username'
-      placeholder='Your email address'
+      @placeholder='Your email address'
       @value={{@username}}
       @onInput={{@onUsername}}
       name='username'
@@ -69,11 +71,16 @@ const Fields: TemplateOnlyComponent<{
       {{autofocus @focusUsername}}
     />
   </AuthFormField>
-  <AuthFormField @label='Password' data-test-secure-field='password'>
+  <AuthFormField
+    @label='Password'
+    data-test-secure-field='password'
+    as |_labelId controlId|
+  >
     <Input
+      @controlId={{controlId}}
       @type='password'
       autocomplete='current-password'
-      placeholder='Your password'
+      @placeholder='Your password'
       @value={{@password}}
       @onInput={{@onPassword}}
       name='password'

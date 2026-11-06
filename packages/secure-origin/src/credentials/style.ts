@@ -36,9 +36,12 @@ const LOCAL_PROPERTIES = new Set([
   '--icon-space',
   '--_icon-full-length',
   '--icon-color',
-  '--boxel-field-label-align',
-  '--boxel-field-label-padding-top',
-  '--boxel-label-letter-spacing',
+  '--boxel-ui-label-font-size',
+  '--boxel-ui-label-font-weight',
+  '--boxel-ui-label-line-height',
+  '--boxel-ui-label-letter-spacing',
+  '--pretui-field-label-size',
+  '--pretui-field-column-gap',
 ]);
 
 export function applyStyle(

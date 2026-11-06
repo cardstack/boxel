@@ -23,7 +23,7 @@ import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 // The built pages are also where the theme's tokens resolve, so this is where
 // the error and muted text colours are checked against WCAG AA contrast, and
 // the key panel's focus rings and choice indicators (the chosen radio tile's
-// ring, a checkbox's edge, a radio's accent) against WCAG's 3:1 for a non-text
+// ring, a checkbox's and a radio's edge) against WCAG's 3:1 for a non-text
 // indicator.
 
 const KEY_ID = '0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c';
@@ -814,15 +814,16 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("the chosen radio tile's ring meets WCAG's 3:1 against the key panel, and a hovered tile's is thinner", async function (assert) {
-    // The radio tile's rules ship with the shell, so the signed-out key page
-    // holds them, under the panel whose theme and background the tiles sit
-    // on.
+  test("the chosen radio tile's ring meets WCAG's 3:1 against the key panel, and a hovered tile isn't ringed", async function (assert) {
+    // Pret UI's RadioCard ships with the shell, so the signed-out key page
+    // holds its rules. A tile is drawn under the panel, with the scoping
+    // attribute its rules carry, chosen, and its ring read as the browser
+    // resolves it there.
     await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
     });
     await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
-    let { background, rings } = await page.evaluate(() => {
+    let { background, chosen, hoverRings } = await page.evaluate(() => {
       let panel = document.querySelector('[data-test-keys-panel]')!;
       let canvas = document.createElement('canvas');
       canvas.width = canvas.height = 1;
@@ -835,22 +836,8 @@ module(basename(import.meta.filename), function (hooks) {
         context.fillRect(0, 0, 1, 1);
         return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
       };
-      // A ring is a box shadow with no offset or blur: its spread is its
-      // width, and its colour is resolved under the panel's theme.
-      let ring = (boxShadow: string) => {
-        let probe = document.createElement('span');
-        probe.style.setProperty('box-shadow', boxShadow);
-        panel.append(probe);
-        let computed = getComputedStyle(probe).boxShadow;
-        probe.remove();
-        let [, color, spread] =
-          /^(\w+\([^)]*\)) 0px 0px 0px (\d+(?:\.\d+)?)px$/.exec(computed) ?? [];
-        return color
-          ? { rgb: toRGB(color), width: Number(spread) }
-          : { rgb: [], width: 0 };
-      };
-      let rings: Record<string, ReturnType<typeof ring> & { rule: string }> =
-        {};
+      let scope: string | undefined;
+      let hoverRings: string[] = [];
       let visit = (rules: CSSRuleList) => {
         for (let rule of rules) {
           if (rule instanceof CSSGroupingRule) {
@@ -860,37 +847,153 @@ module(basename(import.meta.filename), function (hooks) {
           if (!(rule instanceof CSSStyleRule)) {
             continue;
           }
-          let state =
-            /^\.radio-tile(?:\[[^\]]+\])*(:hover|:has\(input:checked\))$/.exec(
-              rule.selectorText,
-            )?.[1];
-          let boxShadow = rule.style.getPropertyValue('box-shadow');
-          if (state && boxShadow) {
-            rings[state === ':hover' ? 'hover' : 'chosen'] = {
-              rule: `${rule.selectorText} { box-shadow: ${boxShadow} }`,
-              ...ring(boxShadow),
-            };
+          let selector = rule.selectorText;
+          if (/^\.pretui-optioncard\[data-scopedcss-[\w-]+\]$/.test(selector)) {
+            scope = /\[(data-scopedcss-[\w-]+)\]/.exec(selector)![1];
+          }
+          if (
+            /^\.pretui-optioncard(\[[^\]]+\])*:hover$/.test(selector) &&
+            rule.style.getPropertyValue('box-shadow')
+          ) {
+            hoverRings.push(selector);
           }
         }
       };
       for (let sheet of document.styleSheets) {
         visit(sheet.cssRules);
       }
-      return { background: toRGB(backgroundColor), rings };
+      if (!scope) {
+        return { background: [], chosen: undefined, hoverRings };
+      }
+      let tile = document.createElement('label');
+      tile.className = 'pretui-optioncard';
+      tile.setAttribute(scope, '');
+      tile.dataset.selected = 'true';
+      panel.append(tile);
+      // The first shadow is the ring: no offset or blur, its spread its width.
+      let [, color, spread] =
+        /^(\w+\([^)]*\)) 0px 0px 0px (\d+(?:\.\d+)?)px/.exec(
+          getComputedStyle(tile).boxShadow,
+        ) ?? [];
+      tile.remove();
+      return {
+        background: toRGB(backgroundColor),
+        chosen: color
+          ? { rgb: toRGB(color), width: Number(spread) }
+          : undefined,
+        hoverRings,
+      };
     });
 
-    let { chosen, hover } = rings;
     assert.ok(chosen, "the shell's stylesheets ring a chosen radio tile");
-    assert.ok(hover, "the shell's stylesheets ring a hovered radio tile");
-    let ratio = contrast(chosen.rgb, background);
+    assert.ok(chosen!.width > 0, `the ring is drawn (${chosen!.width}px)`);
+    let ratio = contrast(chosen!.rgb, background);
     assert.ok(
       ratio >= 3,
-      `${chosen.rule}: rgb(${chosen.rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+      `the chosen tile's ring: rgb(${chosen!.rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
     );
-    assert.ok(hover.width > 0, `a hovered tile is ringed (${hover.width}px)`);
+    assert.deepEqual(
+      hoverRings,
+      [],
+      'a hovered tile is filled, never ringed, so it never reads as chosen',
+    );
+  });
+
+  test("a radio on the key panel draws its own face, and a chosen one's fill meets 3:1", async function (assert) {
+    // The shell declares a dark color scheme, under which the browser's own
+    // radio paints an unchosen one as a dark disc on the white panel, so Pret
+    // UI's RadioGroup draws every state itself. A radio is drawn under the
+    // panel, with the scoping attribute its rules carry, and read as the
+    // browser resolves it there.
+    await page.goto(`${secureOrigin}/secure/keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    let { background, colorScheme, unchosen, chosen } = await page.evaluate(
+      () => {
+        let panel = document.querySelector('[data-test-keys-panel]')!;
+        let canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        let context = canvas.getContext('2d', { willReadFrequently: true })!;
+        let backgroundColor = getComputedStyle(panel).backgroundColor;
+        let toRGB = (color: string) => {
+          context.fillStyle = backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+        };
+        let scope: string | undefined;
+        let visit = (rules: CSSRuleList) => {
+          for (let rule of rules) {
+            if (rule instanceof CSSGroupingRule) {
+              visit(rule.cssRules);
+            } else if (
+              rule instanceof CSSStyleRule &&
+              /^\.pretui-radio\[data-scopedcss-[\w-]+\]$/.test(
+                rule.selectorText,
+              )
+            ) {
+              scope = /\[(data-scopedcss-[\w-]+)\]/.exec(rule.selectorText)![1];
+            }
+          }
+        };
+        for (let sheet of document.styleSheets) {
+          visit(sheet.cssRules);
+        }
+        if (!scope) {
+          return {
+            background: [],
+            colorScheme: '',
+            unchosen: undefined,
+            chosen: undefined,
+          };
+        }
+        let draw = (checked: boolean) => {
+          let radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.className = 'pretui-radio';
+          radio.setAttribute(scope!, '');
+          radio.checked = checked;
+          panel.append(radio);
+          let style = getComputedStyle(radio);
+          let drawn = {
+            appearance: style.appearance,
+            fill: toRGB(style.backgroundColor),
+          };
+          radio.remove();
+          return drawn;
+        };
+        return {
+          background: toRGB(backgroundColor),
+          // The scheme the page declares to the browser, which paints its own
+          // controls under it.
+          colorScheme:
+            document
+              .querySelector('meta[name="color-scheme"]')
+              ?.getAttribute('content') ?? '',
+          unchosen: draw(false),
+          chosen: draw(true),
+        };
+      },
+    );
+
+    assert.ok(unchosen, "the shell's stylesheets draw Pret UI's radio");
+    assert.ok(chosen, 'and a chosen one');
     assert.ok(
-      hover.width < chosen.width,
-      `a hovered tile's ring (${hover.width}px) is thinner than a chosen one's (${chosen.width}px)`,
+      /dark/.test(colorScheme),
+      `the shell declares a dark color scheme (${colorScheme})`,
+    );
+    assert.strictEqual(
+      unchosen!.appearance,
+      'none',
+      'an unchosen radio is drawn by the page, not the browser',
+    );
+    assert.strictEqual(chosen!.appearance, 'none', 'so is a chosen one');
+    let ratio = contrast(chosen!.fill, background);
+    assert.ok(
+      ratio >= 3,
+      `a chosen radio's fill: rgb(${chosen!.fill.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
     );
   });
 
@@ -934,6 +1037,12 @@ module(basename(import.meta.filename), function (hooks) {
         return color === SENTINEL ? undefined : toRGB(color);
       };
       let indicators: { label: string; rgb: number[] | undefined }[] = [];
+      // A CSS-wide keyword paints no colour of its own: the property takes
+      // its inherited or initial value, which the rules that set it are
+      // measured for. A rule like `all: unset` reports one for every
+      // property it resets.
+      let paintsNothing = (value: string) =>
+        /^(unset|initial|inherit|revert|revert-layer)$/.test(value.trim());
       let visit = (rules: CSSRuleList) => {
         for (let rule of rules) {
           if (rule instanceof CSSGroupingRule) {
@@ -955,7 +1064,11 @@ module(basename(import.meta.filename), function (hooks) {
               let value = style.getPropertyValue(property);
               // An outline drawn transparent on purpose shows nothing to
               // measure.
-              if (value && !/transparent|none|rgba\([^)]*,\s*0\)/.test(value)) {
+              if (
+                value &&
+                !paintsNothing(value) &&
+                !/transparent|none|rgba\([^)]*,\s*0\)/.test(value)
+              ) {
                 indicators.push({
                   label: `${selector} { ${property}: ${value} }`,
                   rgb: paints(property, value, 'outline-color'),
@@ -963,17 +1076,18 @@ module(basename(import.meta.filename), function (hooks) {
               }
             }
           }
-          // An unticked checkbox is drawn by its edge alone, and a ticked one
-          // keeps an edge around its fill. An unchosen radio is drawn by its
-          // edge alone too, and a chosen one by an edge and dot of one colour.
+          // An unticked checkbox and an unchosen radio are drawn by their edge
+          // alone, and a ticked or chosen one keeps an edge around its fill;
+          // a chosen radio tile is ringed in its tone. Pret UI draws each from
+          // the token the panel sets.
           for (let property of [
-            '--checkbox-border-color',
-            '--checkbox-checked-border-color',
-            '--radio-border-color',
-            '--radio-checked-color',
+            '--pretui-control-border',
+            '--pretui-control-checked-border',
+            '--pretui-radio-checked-fill',
+            '--pretui-choice-card-tone',
           ]) {
             let edge = style.getPropertyValue(property);
-            if (edge) {
+            if (edge && !paintsNothing(edge)) {
               indicators.push({
                 label: `${selector} { ${property}: ${edge} }`,
                 rgb: paints('color', edge, 'color'),
@@ -981,7 +1095,7 @@ module(basename(import.meta.filename), function (hooks) {
             }
           }
           let accent = style.getPropertyValue('accent-color');
-          if (accent) {
+          if (accent && !paintsNothing(accent)) {
             indicators.push({
               label: `${selector} { accent-color: ${accent} }`,
               rgb: paints('color', accent, 'color'),
@@ -996,31 +1110,36 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     assert.ok(
-      indicators.some(({ label }) => label.includes('.radio-tile')),
+      indicators.some(({ label }) => label.includes('.pretui-optioncard')),
       "the radio tile's focus ring is among them",
     );
     assert.ok(
-      indicators.some(({ label }) => label.includes('--checkbox-border-color')),
-      "the checkbox's edge is among them",
+      indicators.some(({ label }) =>
+        /^\.pretui-radio(\[[^\]]+\])*:focus/.test(label),
+      ),
+      "the radio's focus ring is among them",
     );
     assert.ok(
       indicators.some(({ label }) =>
-        label.includes('--checkbox-checked-border-color'),
+        /^\.pretui-checkbox(\[[^\]]+\])*:focus/.test(label),
       ),
-      "a ticked checkbox's edge is among them",
+      "the checkbox's focus ring is among them",
     );
     assert.ok(
       indicators.some(({ label }) => /^a:focus /.test(label)),
       'the global link focus outline is among them',
     );
-    assert.ok(
-      indicators.some(({ label }) => label.includes('--radio-border-color')),
-      "the radio's edge is among them",
-    );
-    assert.ok(
-      indicators.some(({ label }) => label.includes('--radio-checked-color')),
-      "a chosen radio's edge and dot are among them",
-    );
+    for (let property of [
+      '--pretui-control-border',
+      '--pretui-control-checked-border',
+      '--pretui-radio-checked-fill',
+      '--pretui-choice-card-tone',
+    ]) {
+      assert.ok(
+        indicators.some(({ label }) => label.includes(property)),
+        `${property} is among them`,
+      );
+    }
     for (let { label, rgb } of indicators) {
       if (!rgb) {
         assert.ok(false, `${label}: the colour doesn't resolve on the panel`);

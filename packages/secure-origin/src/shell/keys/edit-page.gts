@@ -52,7 +52,10 @@ const EditPage: TemplateOnlyComponent<Signature> = <template>
       color: var(--muted-foreground);
       overflow-wrap: anywhere;
     }
+    /* Each row's label in the panel's text size. */
     .fields {
+      --boxel-ui-label-font-size: var(--boxel-font-size-sm);
+      --boxel-ui-label-line-height: var(--boxel-line-height-sm);
       display: grid;
       gap: var(--boxel-sp-lg);
       padding: var(--boxel-sp-xl);
