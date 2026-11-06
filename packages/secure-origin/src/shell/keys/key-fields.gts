@@ -6,7 +6,7 @@
 // in its own fields, so for one only the name is drawn here.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 import KeyRound from '../../components/icons/key-round.gts';
 import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
@@ -29,13 +29,16 @@ interface Signature {
 
 const KeyFields: TemplateOnlyComponent<Signature> = <template>
   {{#if @onName}}
-    <FieldContainer
-      @tag='label'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Name'
       @icon={{Tag}}
       data-test-key-field='name'
+      as |controlId|
     >
       <BoxelInput
+        @id={{controlId}}
         @type='text'
         @autocomplete='off'
         @placeholder='A name you’ll recognize, such as “Weather service”'
@@ -45,17 +48,20 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         data-test-key-name
         {{autofocus}}
       />
-    </FieldContainer>
+    </Field>
   {{/if}}
   {{yield to='beforeValue'}}
   {{#if @onValue}}
-    <FieldContainer
-      @tag='label'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label={{if @valueLabel @valueLabel 'Key'}}
       @icon={{KeyRound}}
       data-test-key-field='value'
+      as |controlId|
     >
       <BoxelInput
+        @id={{controlId}}
         @type='password'
         @autocomplete='off'
         @placeholder={{if @valueLabel 'Paste the secret' 'Paste the key'}}
@@ -66,7 +72,7 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         data-test-key-value
         {{autofocus (if @onName false true)}}
       />
-    </FieldContainer>
+    </Field>
   {{/if}}
 </template>;
 
