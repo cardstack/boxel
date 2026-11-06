@@ -1,18 +1,20 @@
 // Pretui — keepStyle: a component's own custom properties alongside a
 // caller's `style`.
 //
-// Glimmer merges only `class` across `...attributes`. A caller's `style`
-// replaces the component's whole `style` attribute, so a component that paints
-// from per-instance custom properties (a hue, a size) loses them. This
-// modifier writes each property as a single declaration on top of whatever
-// style the element ends up with, and a `MutationObserver` writes it again
-// when the caller's style changes later. The caller's own declarations are
-// kept. The modifier installs in the same render that writes the attribute, so
-// nothing paints in between. A component may also render the same
-// properties in a `style` attribute of its own; one the secure origin ships
-// renders none, as its policy refuses them, and relies on this modifier
-// alone: an argument change runs it again, which puts the caller's values back
-// and then writes the new ones.
+// A component that paints from per-instance values (a hue, a size) writes
+// them with this modifier, through the CSSOM, and binds no `style` attribute
+// of its own. A strict Content Security Policy, such as the secure origin's,
+// refuses `style` attributes but not CSSOM writes, so the component renders
+// the same under it.
+//
+// Glimmer merges only `class` across `...attributes`, so a caller's `style`
+// would replace a component's own `style` attribute anyway. This modifier
+// writes each property as a single declaration on top of whatever style the
+// element ends up with, and a `MutationObserver` writes it again when the
+// caller's style changes later. The caller's own declarations are kept. The
+// modifier installs in the same render that creates the element, so nothing
+// paints in between. An argument change reruns it: the teardown puts back
+// what the caller's style had, and the new values are written over that.
 //
 // Each property has a strength:
 //

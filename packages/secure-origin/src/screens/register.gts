@@ -9,6 +9,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
+import { Cue } from '@cardstack/pretui/components/cue';
+import { Spinner } from '@cardstack/pretui/components/spinner';
+
 import AuthButton from '../components/auth-button.gts';
 import AuthFormField from '../components/auth-form-field.gts';
 import AuthHeading from '../components/auth-heading.gts';
@@ -17,8 +20,6 @@ import {
   InputGroup,
   type InputGroupState,
 } from '@cardstack/pretui/components/input-group';
-import LoadingIndicator from '../components/loading-indicator.gts';
-import ValidationHint from '../components/validation-hint.gts';
 import { autofocus } from '../modifiers/autofocus.ts';
 
 interface RegisterFormSignature {
@@ -147,7 +148,12 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
             </:after>
           </InputGroup>
           {{#if @usernameAvailable}}
-            <ValidationHint data-test-username-available>name available</ValidationHint>
+            <Cue
+              @tone='success'
+              @text='name available'
+              class='validation-hint'
+              data-test-username-available
+            />
           {{/if}}
         </AuthFormField>
         {{yield}}
@@ -180,6 +186,10 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
     <style scoped>
       .registration-page {
         display: contents;
+      }
+      .validation-hint {
+        display: flex;
+        margin-top: var(--boxel-sp-2xs);
       }
       .registration-page[hidden] {
         display: none;
@@ -350,7 +360,7 @@ export const CreatingAccount: TemplateOnlyComponent = <template>
     <span class='loading-title' data-test-email-validation-complete>Email
       validation complete</span>
     <p class='loading-message'>Please wait as we set up your account.</p>
-    <LoadingIndicator class='loading-spinner' />
+    <Spinner @size={{20}} class='loading-spinner' aria-hidden='true' />
   </div>
   <style scoped>
     .centered-loading {
@@ -371,8 +381,7 @@ export const CreatingAccount: TemplateOnlyComponent = <template>
       font: 500 var(--boxel-font-sm);
     }
     .loading-spinner {
-      --boxel-loading-indicator-size: var(--boxel-icon-md);
-      --loading-indicator-color: var(--boxel-highlight);
+      color: var(--boxel-highlight);
       margin-top: var(--boxel-sp-xs);
     }
   </style>
