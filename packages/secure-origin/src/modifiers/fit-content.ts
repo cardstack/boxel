@@ -8,7 +8,10 @@ import { modifier } from 'ember-modifier';
 // to. The height is set through the CSSOM, which the secure origin's style
 // policy allows.
 export const fitContent = modifier(
-  (element: HTMLTextAreaElement, _positional: [string | null | undefined]) => {
+  (element: HTMLTextAreaElement, positional: [string | null | undefined]) => {
+    // Read so that a change to the value runs the modifier again: a
+    // function-based modifier tracks only the arguments it reads.
+    void positional[0];
     if (
       getComputedStyle(element).getPropertyValue('field-sizing') === 'content'
     ) {

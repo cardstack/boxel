@@ -938,7 +938,11 @@ module('Integration | connecting an account', function (hooks) {
       assert.dom('[data-test-connected-keys]').doesNotExist();
       assert
         .dom('[data-test-connected-approval]')
-        .hasClass(/primary/, 'going back to the approval leads');
+        .hasAttribute(
+          'data-tone',
+          'primary',
+          'going back to the approval leads',
+        );
       await click('[data-test-connected-approval]');
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/approve#${APPROVAL}` },

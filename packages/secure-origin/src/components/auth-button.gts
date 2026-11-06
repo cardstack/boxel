@@ -1,8 +1,10 @@
 // AuthButton: Pret UI's Button, full width and as tall as a touch target, as
-// every button on the sign-in screens is. It keeps the sign-in screens' own
-// treatment over Pret UI's: a pill, the heavier type, no shadow, and
-// boxel-ui's colours for each variant. A link that looks like a button is
-// drawn by giving it `@href`.
+// every button on the sign-in screens is. It paints from the theme's
+// `--boxel-button-*` variables, which the sign-in screens' themes set, over
+// Pret UI's own treatment, so the screens keep their look: a pill, the
+// heavier type, no shadow, and the theme's colours for each variant and for
+// a disabled button. A link that looks like a button is drawn by giving it
+// `@href`.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { Button } from '@cardstack/pretui/components/button';
@@ -21,20 +23,14 @@ interface Signature {
   Blocks: { default: [] };
 }
 
-// Primary is Pret UI's filled primary. Secondary is filled too, in the
-// theme's secondary colours (set below). Default is Pret UI's outline, on
-// the page's background.
+// Pret UI's nearest variant, which carries the hover and focus treatment.
 function pretVariant(variant: AuthButtonVariant | undefined): ButtonVariant {
-  return variant === 'default' || variant === undefined ? 'outline' : 'primary';
-}
-
-function isSecondary(variant: AuthButtonVariant | undefined): boolean {
-  return variant === 'secondary';
+  return variant === 'primary' ? 'primary' : 'outline';
 }
 
 const AuthButton: TemplateOnlyComponent<Signature> = <template>
   <Button
-    class='auth-btn {{if (isSecondary @variant) "auth-btn-secondary"}}'
+    class='auth-btn auth-btn-{{if @variant @variant "default"}}'
     @variant={{pretVariant @variant}}
     @href={{@href}}
     @disabled={{@disabled}}
@@ -47,25 +43,70 @@ const AuthButton: TemplateOnlyComponent<Signature> = <template>
     .auth-btn {
       --pretui-button-h: var(--boxel-button-touch);
       --pretui-button-px: var(--boxel-sp-lg);
-      --pretui-button-radius: 100px;
-      --pretui-button-secondary-bg: var(--background);
-      --pretui-btn-elevation: none;
+      --pretui-button-radius: var(--boxel-button-border-radius, 100px);
       width: 100%;
       padding-block: var(--boxel-sp-xs);
+      border: var(--auth-btn-border);
+      background-color: var(--auth-btn-bg);
+      color: var(--auth-btn-fg);
+      box-shadow: none;
       font: 600 var(--boxel-font);
       font-family: inherit;
       letter-spacing: var(--boxel-lsp-xs);
     }
-    .auth-btn-secondary {
-      --pretui-button-bg: var(--secondary);
-      --pretui-button-fg: var(--secondary-foreground);
-      --pretui-btn-accent-hover: var(--secondary);
-      border-color: var(--secondary);
+    .auth-btn-default {
+      --auth-btn-bg: var(--boxel-button-default-background, var(--background));
+      --auth-btn-fg: var(--boxel-button-default-foreground, var(--foreground));
+      --auth-btn-border: 1px solid
+        var(--boxel-button-default-border, var(--border));
     }
-    /* A busy button keeps its colours, as boxel-ui's loading state does. */
-    .auth-btn:disabled,
+    .auth-btn-default:not(:disabled):hover {
+      --auth-btn-bg: var(
+        --boxel-button-default-active-background,
+        var(--accent)
+      );
+      --auth-btn-fg: var(
+        --boxel-button-default-active-foreground,
+        var(--accent-foreground)
+      );
+      --auth-btn-border: 1px solid
+        var(--boxel-button-default-active-border, var(--border));
+    }
+    .auth-btn-primary {
+      --auth-btn-bg: var(--boxel-button-primary-background, var(--primary));
+      --auth-btn-fg: var(
+        --boxel-button-primary-foreground,
+        var(--primary-foreground)
+      );
+      --auth-btn-border: 1px solid transparent;
+    }
+    .auth-btn-secondary {
+      --auth-btn-bg: var(--boxel-button-secondary-background, var(--secondary));
+      --auth-btn-fg: var(
+        --boxel-button-secondary-foreground,
+        var(--secondary-foreground)
+      );
+      --auth-btn-border: 1px solid
+        var(--boxel-button-secondary-border, var(--secondary));
+    }
+    .auth-btn-primary:not(:disabled):hover,
+    .auth-btn-secondary:not(:disabled):hover {
+      background-color: color-mix(
+        in oklab,
+        var(--auth-btn-bg) 90%,
+        transparent
+      );
+    }
+    /* A busy button keeps its colours. */
+    .auth-btn:disabled:not([data-state='busy']),
     a.auth-btn[aria-disabled='true'] {
-      opacity: 0.5;
+      border: var(--boxel-button-disabled-border, var(--auth-btn-border));
+      background-color: var(
+        --boxel-button-disabled-background,
+        var(--auth-btn-bg)
+      );
+      color: var(--boxel-button-disabled-foreground, var(--auth-btn-fg));
+      opacity: var(--boxel-button-disabled-opacity, 0.5);
     }
     .auth-btn[data-state='busy'] {
       opacity: 1;

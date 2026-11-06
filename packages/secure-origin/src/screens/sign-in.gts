@@ -147,13 +147,18 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     .register-link {
       min-height: 0;
       padding-block: 0;
+      border: 0;
       font: inherit;
       letter-spacing: inherit;
     }
     .forgot-password {
       --host-outline-offset: 2px;
-      --pretui-button-fg: var(--muted-foreground);
+      --pretui-button-fg: var(
+        --boxel-button-link-muted-foreground,
+        var(--muted-foreground)
+      );
       font: var(--boxel-font-xs);
+      line-height: inherit;
       margin-top: var(--boxel-sp-4xs);
       margin-bottom: var(--boxel-sp-lg);
       margin-inline-start: auto;
@@ -205,7 +210,10 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     }
     .register-link {
       --host-outline-offset: 2px;
-      --pretui-button-fg: var(--primary);
+      --pretui-button-fg: var(
+        --boxel-button-link-primary-foreground,
+        var(--primary)
+      );
     }
   </style>
 </template>;
