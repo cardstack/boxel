@@ -299,6 +299,8 @@ export const coerceTypes = Object.freeze({
   error_doc: 'JSON',
   render_error_doc: 'JSON',
   search_doc: 'JSON',
+  spilled_search_doc: 'JSON',
+  spill_rows: 'JSON',
   embedded_html: 'JSON',
   fitted_html: 'JSON',
   display_names: 'JSON',

@@ -441,7 +441,7 @@ export async function fetchRealmsNamingPolicy(
       AND config.realm_url = realms.realm_url
       AND config.type = 'instance'
      WHERE (config.is_deleted = FALSE OR config.is_deleted IS NULL)
-       AND COALESCE(config.search_doc->>'policy', config.pristine_doc->'attributes'->>'policy', '') ~ '[^[:space:]]'
+       AND COALESCE(spill_text(config.search_doc->'policy'), config.pristine_doc->'attributes'->>'policy', '') ~ '[^[:space:]]'
        AND realms.realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
        AND realms.realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)`,
   ])) as { realm_url: string }[];

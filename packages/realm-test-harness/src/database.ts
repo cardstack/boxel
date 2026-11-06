@@ -424,6 +424,17 @@ export async function rewriteClonedRealmServerUrls(
           [fromURL, toURL],
         );
 
+        // Spilled search-doc values (ADR 021). Markers resolve by `ref`
+        // alone, so the refs stay as they are; the next index of a card
+        // replaces its rows under refs minted from the new URL.
+        await client.query(
+          `UPDATE boxel_index_spill
+           SET url = replace(url, $1, $2),
+               realm_url = replace(realm_url, $1, $2),
+               value = replace(value::text, $1, $2)::jsonb`,
+          [fromURL, toURL],
+        );
+
         await client.query(
           `UPDATE realm_generations
            SET realm_url = replace(realm_url, $1, $2)`,

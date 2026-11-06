@@ -116,6 +116,10 @@ import {
 import type { FileMetaResource } from './resource-types.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RequestTimings } from './request-timings.ts';
+import {
+  restoreSpilledSearchDocs,
+  SEARCH_DOC_INLINE_STRING_MAX,
+} from './search-doc-spill.ts';
 
 // A filter path resolves in the schema but crosses a `linksTo`/`linksToMany`
 // hop whose target is not in the search doc, so the query would silently match
@@ -456,6 +460,21 @@ const DEFAULT_FILTER_CONTEXT: FilterContext = {
 // its own (see the `add-search-doc-title-trigram-indexes` migration): a row's
 // display title, as the search sheet matches it.
 const TRIGRAM_INDEXED_TITLE_KEYS = [CARD_TITLE_KEY, 'cardTitle'] as const;
+
+// Field serializers whose values never spill out of the search doc (ADR 021
+// §1.1): numbers, booleans, dates, and short fixed-form strings. A filter or
+// sort on one reads `search_doc` directly; any other leaf reads through
+// `spill_text`. The title keys above never spill either (`search-doc-spill.ts`).
+const NEVER_SPILLED_SERIALIZERS: ReadonlySet<string> = new Set([
+  'number',
+  'big-integer',
+  'boolean',
+  'date',
+  'datetime',
+  'email',
+  'phone',
+  'ethereum-address',
+]);
 
 export const generalSortFields: Record<string, string> = {
   lastModified: 'i.last_modified',
@@ -1078,6 +1097,7 @@ export class IndexQueryEngine {
         realm_url: string | null;
         captures: CaptureManifest | null;
       }[];
+      await restoreSpilledSearchDocs(this.#dbAdapter, rows);
       for (let row of rows) {
         if (!row.url) {
           continue;
@@ -1435,9 +1455,10 @@ export class IndexQueryEngine {
         ') AS distinct_entries',
       ];
 
-      let facetQueries = (facets ?? []).map((facet) =>
-        this.#facetQuery(facet, opts, everyCondition),
-      );
+      let facetQueries = () =>
+        (facets ?? []).map((facet) =>
+          this.#facetQuery(facet, opts, everyCondition),
+        );
       let results: Record<string, unknown>[];
       let totalResults: Record<string, unknown>[];
       let facetResults: unknown[];
@@ -1446,38 +1467,77 @@ export class IndexQueryEngine {
         // pass evaluates the filter once and returns only each match's key, its
         // sort values and the synthetic sort columns, ordered and limited to
         // the page, with the match count taken in the same pass by a window
-        // function (evaluated over every group, before the LIMIT). The wide
-        // pass reads the projection's large columns (`pristine_doc`, the HTML
-        // maps) for the page's rows alone, by key, without the filter.
+        // function (evaluated over every group, before the LIMIT). On Postgres
+        // it counts the facets in the same statement too, from the same match
+        // set. The wide pass reads the projection's large columns
+        // (`pristine_doc`, the HTML maps) for the page's rows alone, by key,
+        // without the filter.
         //
         // In one pass the projection's `ANY_VALUE(...)` columns are aggregated
         // for every match before the sort keeps a page, so a 24-row shelf over
-        // 6,000 matches detoasted 6,000 documents; and the separate COUNT
-        // query evaluated the whole filter a second time.
-        let keyQuery: CardExpression = [
-          'SELECT i.url AS url, i.type AS type, COUNT(*) OVER () AS __page_total',
-          ...relevanceColumn,
-          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
-          ...nearJoins,
-          tableValuedFunctionsPlaceholder,
-          'WHERE',
-          ...everyCondition,
-          'GROUP BY i.url, i.type',
-          ...this.orderExpression(sort),
-          ...limitClause,
-        ];
+        // 6,000 matches detoasted 6,000 documents; and the COUNT query and each
+        // facet's query evaluated the whole filter again.
         let keys: Record<string, unknown>[];
-        [keys, ...facetResults] = await Promise.all([
-          this.#queryCards(keyQuery, opts.timings),
-          ...facetQueries.map((q) => this.#queryCards(q, opts.timings)),
-        ]);
+        let pgFacets = this.#dbAdapter.kind === 'pg';
+        if (pgFacets) {
+          keys = await this.#queryCards(
+            this.#narrowPassWithFacets({
+              opts,
+              sort,
+              facets: facets ?? [],
+              relevanceColumn,
+              nearJoins,
+              everyCondition,
+              limitClause,
+            }),
+            opts.timings,
+          );
+          facetResults = [];
+        } else {
+          let keyQuery: CardExpression = [
+            'SELECT i.url AS url, i.type AS type, COUNT(*) OVER () AS __page_total',
+            ...relevanceColumn,
+            `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+            ...nearJoins,
+            tableValuedFunctionsPlaceholder,
+            'WHERE',
+            ...everyCondition,
+            'GROUP BY i.url, i.type',
+            ...this.orderExpression(sort),
+            ...limitClause,
+          ];
+          [keys, ...facetResults] = await Promise.all([
+            this.#queryCards(keyQuery, opts.timings),
+            ...facetQueries().map((q) => this.#queryCards(q, opts.timings)),
+          ]);
+        }
         if (keys.length > 0) {
           totalResults = [{ total: keys[0].__page_total }];
+          if (pgFacets) {
+            facetResults = facetCountsFromColumn(
+              keys[0].__facets,
+              (facets ?? []).length,
+            );
+          }
         } else if ((page.number ?? 0) === 0) {
+          // No match: no count, and every facet is empty.
           totalResults = [{ total: 0 }];
+          if (pgFacets) {
+            facetResults = (facets ?? []).map(() => []);
+          }
         } else {
-          // A page past the last match has no row to carry the count.
-          totalResults = await this.#queryCards(queryCount, opts.timings);
+          // A page past the last match has no row to carry the count (or, on
+          // Postgres, the facets), so they come from their own queries.
+          let fallbacks = await Promise.all([
+            this.#queryCards(queryCount, opts.timings),
+            ...(pgFacets
+              ? facetQueries().map((q) => this.#queryCards(q, opts.timings))
+              : []),
+          ]);
+          totalResults = fallbacks[0];
+          if (pgFacets) {
+            facetResults = fallbacks.slice(1);
+          }
         }
         results =
           keys.length > 0
@@ -1489,12 +1549,15 @@ export class IndexQueryEngine {
               )
             : [];
       } else {
-        [results, totalResults, ...facetResults] = await Promise.all([
+        // Unpaged: every match is a row, so the rows are the count.
+        [results, ...facetResults] = await Promise.all([
           this.#queryCards(query, opts.timings),
-          this.#queryCards(queryCount, opts.timings),
-          ...facetQueries.map((q) => this.#queryCards(q, opts.timings)),
+          ...facetQueries().map((q) => this.#queryCards(q, opts.timings)),
         ]);
+        totalResults = [{ total: results.length }];
       }
+      // A projection that returns `search_doc` (file rows) returns it whole.
+      await restoreSpilledSearchDocs(this.#dbAdapter, results);
 
       let passageTerms = collectPositiveMatchTerms(filter).filter(
         (m) => m.within,
@@ -1588,15 +1651,106 @@ export class IndexQueryEngine {
         continue;
       }
       let { __page_type: _type, ...columns } = row;
-      let {
-        url: _url,
-        type: _keyType,
-        __page_total: _total,
-        ...synthetic
-      } = key;
+      // The key row's own columns are the synthetic sort columns, plus the
+      // narrow pass's bookkeeping, which stays behind: its key, the total, the
+      // facets, the per-facet values, and the sort keys it ordered by.
+      let synthetic = Object.fromEntries(
+        Object.entries(key).filter(
+          ([name]) =>
+            name !== 'url' &&
+            name !== 'type' &&
+            !name.startsWith('__') &&
+            !/^_sort_\d+$/.test(name),
+        ),
+      );
       page.push({ ...columns, ...synthetic });
     }
     return page;
+  }
+
+  // The narrow pass on Postgres, with the page's facets counted in the same
+  // statement. The match set is one materialized CTE: the filter runs once,
+  // and the same scan reads each requested facet's value from the row it is
+  // already on (`spill_unmark`, so a spilled value counts too). The outer
+  // query orders and limits the page and carries the total and every facet's
+  // counts as columns, computed once over the whole set. Each facet keeps the
+  // semantics of `#facetQuery`: a match counts once per distinct value it
+  // holds, a list contributes each element, nulls are left out, and the
+  // largest counts come first, ties by value.
+  #narrowPassWithFacets({
+    opts,
+    sort,
+    facets,
+    relevanceColumn,
+    nearJoins,
+    everyCondition,
+    limitClause,
+  }: {
+    opts: QueryOptions;
+    sort: Sort | undefined;
+    facets: Facet[];
+    relevanceColumn: CardExpression;
+    nearJoins: CardExpression;
+    everyCondition: CardExpression;
+    limitClause: string[];
+  }): CardExpression {
+    let { innerSortColumns, outerOrderBy } = this.#wrappedOrderExpression(sort);
+    let facetColumns: CardExpression = [];
+    facets.forEach((facet, index) => {
+      facetColumns.push(
+        ', ANY_VALUE(spill_unmark(i.search_doc #>',
+        param(
+          `{${facet.by
+            .split('.')
+            .map((p) => `"${p}"`)
+            .join(',')}}`,
+        ),
+        `::text[])) AS __facet_${index}`,
+      );
+    });
+    let facetCounts: CardExpression = [];
+    if (facets.length > 0) {
+      let values = facets
+        .map((_, index) => `(${index}, m.__facet_${index})`)
+        .join(', ');
+      let sizes = facets
+        .map(
+          (facet, index) =>
+            `WHEN ${index} THEN ${Number(facet.size ?? DEFAULT_FACET_SIZE)}`,
+        )
+        .join(' ');
+      facetCounts = [
+        ', (SELECT jsonb_object_agg(fc.facet, fc.counts) FROM (',
+        "SELECT x.facet, jsonb_agg(jsonb_build_object('value', x.value, 'count', x.count) ORDER BY x.count DESC, x.value) AS counts FROM (",
+        'SELECT c.facet, c.value, c.count, ROW_NUMBER() OVER (PARTITION BY c.facet ORDER BY c.count DESC, c.value) AS rn FROM (',
+        'SELECT d.facet, e.value, COUNT(*) AS count FROM m',
+        `CROSS JOIN LATERAL (VALUES ${values}) AS d(facet, v)`,
+        `CROSS JOIN LATERAL (SELECT DISTINCT t.value FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(d.v) = 'array' THEN d.v ELSE jsonb_build_array(d.v) END) AS t(value)) AS e`,
+        'WHERE e.value IS NOT NULL',
+        'GROUP BY d.facet, e.value',
+        `) AS c) AS x WHERE x.rn <= CASE x.facet ${sizes} END`,
+        'GROUP BY x.facet) AS fc) AS __facets',
+      ];
+    }
+    return [
+      'WITH m AS MATERIALIZED (',
+      'SELECT i.url AS url, i.type AS type',
+      ...relevanceColumn,
+      ...innerSortColumns,
+      ...facetColumns,
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      ...nearJoins,
+      tableValuedFunctionsPlaceholder,
+      'WHERE',
+      ...everyCondition,
+      'GROUP BY i.url, i.type',
+      ')',
+      'SELECT m.*, COUNT(*) OVER () AS __page_total',
+      ...facetCounts,
+      'FROM m',
+      ...outerOrderBy,
+      ...limitClause,
+    ];
   }
 
   // Projection-parametrized instance search. `_search` builds the shared query
@@ -2684,9 +2838,10 @@ export class IndexQueryEngine {
         pg: [
           'SELECT fv.value AS value, COUNT(*) AS count FROM (',
           'SELECT DISTINCT f.url, f.type, fv0.value FROM (',
-          'SELECT DISTINCT i.url, i.type, i.search_doc #>',
+          // `spill_unmark` resolves a spilled value (a long list, say).
+          'SELECT DISTINCT i.url, i.type, spill_unmark(i.search_doc #>',
           param(`{${path.map((p) => `"${p}"`).join(',')}}`),
-          '::text[] AS v',
+          '::text[]) AS v',
         ],
         sqlite: [
           'SELECT fv.value AS value, COUNT(*) AS count FROM (',
@@ -3295,6 +3450,11 @@ export class IndexQueryEngine {
     // collapse into a single function)
     let rootPluralPath: string | undefined;
     let isNumericField = false;
+    // Whether the leaf can hold a spilled value (ADR 021): read through
+    // `spill_text`, which resolves a marker and is `->>` otherwise. Numbers,
+    // booleans and dates never spill, so they keep the raw extraction their
+    // casts and indexes expect.
+    let readsSpill = false;
 
     let exp = await this.walkFilterFieldPath(
       definition,
@@ -3322,7 +3482,10 @@ export class IndexQueryEngine {
           isNumericField =
             field.serializerName === 'number' ||
             field.serializerName === 'big-integer';
-          return [...expression, '->>', param(fieldName)];
+          readsSpill =
+            this.#dbAdapter.kind === 'pg' &&
+            !NEVER_SPILLED_SERIALIZERS.has(field.serializerName ?? '');
+          return [...expression, readsSpill ? '->' : '->>', param(fieldName)];
         }
         return expression;
       },
@@ -3380,6 +3543,8 @@ export class IndexQueryEngine {
           ...exp,
           dbExpression({ pg: ')::numeric', sqlite: '' }),
         ];
+      } else if (readsSpill) {
+        exp = ['spill_text(search_doc', ...exp, ')'];
       } else {
         exp = ['search_doc', ...exp];
       }
@@ -3444,7 +3609,16 @@ export class IndexQueryEngine {
     let isNumericLeaf =
       leafField.serializerName === 'number' ||
       leafField.serializerName === 'big-integer';
-    if (isParam(leaf) && typeof leaf.param === 'string' && !isNumericLeaf) {
+    if (
+      isParam(leaf) &&
+      typeof leaf.param === 'string' &&
+      !isNumericLeaf &&
+      // A value longer than the inline limit may be spilled, which a
+      // containment can't see, so it compares through `spill_text` instead. A
+      // shorter one is always inline (ADR 021 §1.1).
+      (this.#dbAdapter.kind !== 'pg' ||
+        leaf.param.length <= SEARCH_DOC_INLINE_STRING_MAX)
+    ) {
       return [
         {
           kind: 'json-contains',
@@ -3735,6 +3909,25 @@ function tableFromOpts(opts: WIPOptions | undefined) {
 // The prerendered_html rows paired with the boxel_index rows `tableFromOpts`
 // selects: the same pass's staged HTML rows for a staged read, the production
 // table otherwise.
+// The facet counts `#narrowPassWithFacets` carries in its `__facets` column
+// (an object keyed by the facet's position), as the per-facet rows of
+// `#facetQuery`. A facet with no counted value is an empty list.
+function facetCountsFromColumn(
+  column: unknown,
+  facetCount: number,
+): { value: unknown; count: unknown }[][] {
+  let byIndex =
+    column && typeof column === 'object'
+      ? (column as Record<string, { value: unknown; count: unknown }[]>)
+      : typeof column === 'string'
+        ? (JSON.parse(column) as Record<
+            string,
+            { value: unknown; count: unknown }[]
+          >)
+        : {};
+  return Array.from({ length: facetCount }, (_, index) => byIndex[index] ?? []);
+}
+
 // A card's full-text vector, as `matches` and relevance read it. Production
 // rows carry it in `markdown_tsv`, which the index writer computes as it
 // promotes a pass (see `promotePrerenderedHtmlPending`); a pass's staged rows

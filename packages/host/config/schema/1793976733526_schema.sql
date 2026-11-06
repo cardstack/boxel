@@ -79,6 +79,8 @@
    job_id INTEGER,
    staging_id TEXT NOT NULL,
    relationship_deps BLOB,
+   spilled_search_doc BLOB,
+   spill_rows BLOB,
    PRIMARY KEY ( realm_url, staging_id, url, type ) 
 );
 

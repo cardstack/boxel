@@ -101,7 +101,7 @@ async function lookupRealmByBranchName(
       `WHERE type = 'instance'`,
       `AND (is_deleted = FALSE OR is_deleted IS NULL)`,
       `AND url LIKE '%/PrCard/%'`,
-      `AND search_doc->>'branchName' =`,
+      `AND spill_text(search_doc->'branchName') =`,
       param(branchName),
       `ORDER BY indexed_at DESC`,
       `LIMIT 1`,

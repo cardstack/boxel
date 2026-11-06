@@ -71,6 +71,11 @@ import {
   systemInitiatedIndexPriority,
 } from './jobs/indexing.ts';
 import { queueClaimOf, withoutQueueClaim } from './jobs/queue-claim.ts';
+import {
+  restoreSpilledSearchDocs,
+  searchDocSpillEnabled,
+  spillSearchDoc,
+} from './search-doc-spill.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -85,6 +90,9 @@ export class IndexWriter {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
+      // Spill large search-doc values on promotion (ADR 021). Postgres only;
+      // defaults to `searchDocSpillEnabled()`.
+      spillSearchDocs?: boolean;
     },
   ) {
     let batch = new Batch(
@@ -716,6 +724,10 @@ export class Batch {
   // (in `updateEntry`, with tombstones mirrored in `tombstoneEntries`).
   // Defaults to `dbAdapter.kind === 'pg'`.
   #splitPrerenderHtml: boolean;
+  // Whether this batch stages each row's spilled search doc and spill rows
+  // (ADR 021). Promotion reads them whenever they are present, so a batch that
+  // doesn't spill still promotes rows an earlier attempt spilled correctly.
+  #spillSearchDocs: boolean;
   // When true, this batch is the `prerender_html` job's batch: it writes only
   // the `prerendered_html` channel (not `boxel_index`), stamps each row with
   // the generation of the live index row it renders (see
@@ -805,6 +817,9 @@ export class Batch {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
+      // Spill large search-doc values on promotion (ADR 021). Postgres only;
+      // defaults to `searchDocSpillEnabled()`.
+      spillSearchDocs?: boolean;
     },
   ) {
     this.realmURL = realmURL;
@@ -814,6 +829,9 @@ export class Batch {
     this.#splitPrerenderHtml =
       opts?.splitPrerenderHtml ?? dbAdapter.kind === 'pg';
     this.#prerenderHtmlOnly = opts?.prerenderHtmlOnly ?? false;
+    this.#spillSearchDocs =
+      dbAdapter.kind === 'pg' &&
+      (opts?.spillSearchDocs ?? searchDocSpillEnabled());
     this.#stagingId =
       jobInfo && jobInfo.jobId > 0
         ? jobStagingId(jobInfo.jobId, jobInfo.reservationId)
@@ -1920,8 +1938,20 @@ export class Batch {
     // display_names, diagnostics, error_doc) in one place, including rendered
     // card content that can carry a split emoji surrogate or a stray NUL folded
     // in from an upstream resolver.
+    let sanitized = sanitizeForJsonb(preparedEntry) as Record<string, unknown>;
+    if (this.#spillSearchDocs) {
+      // Spill the sanitized doc, so the spilled values are the bytes that get
+      // stored. Both columns are always written, so a row restaged within one
+      // staging never keeps a stale spill.
+      let spilled = await spillSearchDoc(
+        sanitized.search_doc as Record<string, unknown> | null,
+        { url: href, type: String(sanitized.type) },
+      );
+      sanitized.spilled_search_doc = spilled?.searchDoc ?? null;
+      sanitized.spill_rows = spilled?.rows ?? null;
+    }
     return {
-      preparedEntry: sanitizeForJsonb(preparedEntry) as Record<string, unknown>,
+      preparedEntry: sanitized,
       htmlEntry: prerenderedHtmlEntryFrom(entry, diagnostics),
     };
   }
@@ -3370,6 +3400,10 @@ export class Batch {
     if (!entry) {
       return undefined;
     }
+    // An error row carries this doc forward into the pass, which spills it
+    // again and replaces its spill rows, so it must hold the values, not
+    // markers to rows the swap is about to replace (ADR 021 §1.4).
+    await restoreSpilledSearchDocs(this.#dbAdapter, [entry]);
 
     let {
       indexed_at: _remove1,
@@ -3758,6 +3792,7 @@ export class Batch {
       });
       await this.#syncVectorIndex();
       await this.#syncPassageIndex();
+      await this.#syncSpillIndex();
 
       // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
       // split-mode index pass — in which case HTML flows only through the
@@ -3777,13 +3812,51 @@ export class Batch {
     await this.stampRenderOnlyEntries();
   }
 
-  // Re-derives `boxel_index_vectors` for every URL this pass invalidated,
-  // from the search docs it just promoted: the URL's old vector rows go, and
-  // each vector its new search doc carries (see `collectSearchDocVectors`) is
-  // written back. A tombstoned URL keeps none. Runs inside the swap
-  // transaction, so a `near` sort never sees a card's new row with its old
-  // vectors. A no-op where the database has no vector table (SQLite, or a
-  // Postgres without pgvector).
+  // The URLs of `chunk` this pass staged a row or tombstone for. Only those
+  // move in the swap, so only their derived rows (vectors, passages, spilled
+  // values) are replaced; any other URL keeps what it had.
+  #stagedInChunk(chunk: string[]): Expression {
+    return [
+      'url IN',
+      ...addExplicitParens(separatedByCommas(chunk.map((url) => [param(url)]))),
+      'AND url IN (SELECT sp.url FROM boxel_index_pending AS sp WHERE sp.realm_url =',
+      param(this.realmURL.href),
+      'AND sp.staging_id =',
+      param(this.#stagingId),
+      ')',
+    ] as Expression;
+  }
+
+  // The full search docs this pass staged for `chunk`'s live rows, matching
+  // `filter`. Derived tables are built from these, never from the promoted
+  // doc, which may hold spill markers in place of the values (ADR 021 §1.4).
+  async #stagedSearchDocs(
+    chunk: string[],
+    filter: string,
+  ): Promise<Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[]> {
+    return (await this.#query([
+      'SELECT url, type, search_doc FROM boxel_index_pending WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['staging_id =', param(this.#stagingId)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(chunk.map((url) => [param(url)])),
+          ),
+        ],
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        [filter],
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[];
+  }
+
+  // Re-derives `boxel_index_vectors` for every URL this pass staged: the
+  // URL's old vector rows go, and each vector its new search doc carries (see
+  // `collectSearchDocVectors`) is written back. A tombstoned URL keeps none.
+  // Runs inside the swap transaction, so a `near` sort never sees a card's new
+  // row with its old vectors. A no-op where the database has no vector table
+  // (SQLite, or a Postgres without pgvector).
   async #syncVectorIndex() {
     if (!(await hasVectorIndex(this.#dbAdapter))) {
       return;
@@ -3792,28 +3865,17 @@ export class Batch {
     const CHUNK = 500;
     for (let start = 0; start < urls.length; start += CHUNK) {
       let chunk = urls.slice(start, start + CHUNK);
-      let urlList = addExplicitParens(
-        separatedByCommas(chunk.map((url) => [param(url)])),
-      );
       await this.#query([
         'DELETE FROM boxel_index_vectors WHERE',
         ...every([
           ['realm_url =', param(this.realmURL.href)],
-          ['url IN', ...urlList],
+          this.#stagedInChunk(chunk),
         ]),
       ] as Expression);
-      let rows = (await this.#query([
-        'SELECT url, type, search_doc FROM boxel_index WHERE',
-        ...every([
-          ['realm_url =', param(this.realmURL.href)],
-          ['url IN', ...urlList],
-          any([['is_deleted = false'], ['is_deleted IS NULL']]),
-          [`search_doc::text LIKE '%"vec:[%'`],
-        ]),
-      ] as Expression)) as Pick<
-        BoxelIndexTable,
-        'url' | 'type' | 'search_doc'
-      >[];
+      let rows = await this.#stagedSearchDocs(
+        chunk,
+        `search_doc::text LIKE '%"vec:[%'`,
+      );
       let values: Expression[] = [];
       for (let row of rows) {
         for (let vector of collectSearchDocVectors(row.search_doc)) {
@@ -3845,7 +3907,7 @@ export class Batch {
     }
   }
 
-  // Re-derives `boxel_index_passages` for every URL this pass invalidated, the
+  // Re-derives `boxel_index_passages` for every URL this pass staged, the
   // same way `#syncVectorIndex` re-derives vectors: the URL's old passage rows
   // go, and each passage its new search doc carries (see
   // `collectSearchDocPassages`) is written back with its english tsvector.
@@ -3860,28 +3922,17 @@ export class Batch {
     const CHUNK = 500;
     for (let start = 0; start < urls.length; start += CHUNK) {
       let chunk = urls.slice(start, start + CHUNK);
-      let urlList = addExplicitParens(
-        separatedByCommas(chunk.map((url) => [param(url)])),
-      );
       await this.#query([
         'DELETE FROM boxel_index_passages WHERE',
         ...every([
           ['realm_url =', param(this.realmURL.href)],
-          ['url IN', ...urlList],
+          this.#stagedInChunk(chunk),
         ]),
       ] as Expression);
-      let rows = (await this.#query([
-        'SELECT url, type, search_doc FROM boxel_index WHERE',
-        ...every([
-          ['realm_url =', param(this.realmURL.href)],
-          ['url IN', ...urlList],
-          any([['is_deleted = false'], ['is_deleted IS NULL']]),
-          [`search_doc ? '_passages'`],
-        ]),
-      ] as Expression)) as Pick<
-        BoxelIndexTable,
-        'url' | 'type' | 'search_doc'
-      >[];
+      let rows = await this.#stagedSearchDocs(
+        chunk,
+        `search_doc ? '_passages'`,
+      );
       let values: Expression[] = [];
       for (let row of rows) {
         for (let passage of collectSearchDocPassages(row.search_doc)) {
@@ -3917,6 +3968,50 @@ export class Batch {
     }
   }
 
+  // Replaces `boxel_index_spill` for every URL this pass staged with the
+  // values its rows spilled (ADR 021 §1.3, §1.4): the promoted doc's markers
+  // and these rows come from one staging, published in one transaction. A
+  // tombstoned URL, or a row that spilled nothing, keeps none. Set-based, so
+  // the values never pass through the writer again. Postgres only.
+  async #syncSpillIndex() {
+    if (this.#dbAdapter.kind !== 'pg') {
+      return;
+    }
+    let urls = [...this.#invalidations];
+    const CHUNK = 500;
+    for (let start = 0; start < urls.length; start += CHUNK) {
+      let chunk = urls.slice(start, start + CHUNK);
+      await this.#query([
+        'DELETE FROM boxel_index_spill WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          this.#stagedInChunk(chunk),
+        ]),
+      ] as Expression);
+      await this.#query([
+        'INSERT INTO boxel_index_spill (ref, realm_url, url, type, field_path, ordinal, value)',
+        "SELECT r ->> 'ref', p.realm_url, p.url, p.type, r ->> 'fieldPath', CAST(r ->> 'ordinal' AS INTEGER), r -> 'value'",
+        'FROM boxel_index_pending AS p CROSS JOIN LATERAL jsonb_array_elements(p.spill_rows) AS r',
+        'WHERE',
+        ...every([
+          ['p.realm_url =', param(this.realmURL.href)],
+          ['p.staging_id =', param(this.#stagingId)],
+          [
+            'p.url IN',
+            ...addExplicitParens(
+              separatedByCommas(chunk.map((url) => [param(url)])),
+            ),
+          ],
+          any([['p.is_deleted = false'], ['p.is_deleted IS NULL']]),
+          ["jsonb_typeof(p.spill_rows) = 'array'"],
+        ]),
+        'ON CONFLICT ON CONSTRAINT boxel_index_spill_pkey DO UPDATE SET',
+        'realm_url = EXCLUDED.realm_url, url = EXCLUDED.url, type = EXCLUDED.type,',
+        'field_path = EXCLUDED.field_path, ordinal = EXCLUDED.ordinal, value = EXCLUDED.value',
+      ] as Expression);
+    }
+  }
+
   // The swap's SELECT list: every column as staged, except `generation`,
   // which takes this commit's. The pending rows carry the provisional
   // generation the pass anticipated at setup, which a peer that committed
@@ -3929,7 +4024,10 @@ export class Batch {
             param(this.commitGeneration),
             'AS INTEGER) AS generation',
           ] as Expression)
-        : [column],
+        : column === 'search_doc' && this.#dbAdapter.kind === 'pg'
+          ? // A row staged with a spill promotes its spilled form (ADR 021).
+            ['COALESCE(spilled_search_doc, search_doc) AS search_doc']
+          : [column],
     );
   }
 
