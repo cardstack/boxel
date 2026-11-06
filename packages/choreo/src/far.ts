@@ -199,8 +199,14 @@ function runBarrier() {
  * A block after the scroller's content that reaches the bottom of its view.
  * Only a scroller laid out in normal flow takes one: there a last block
  * moves nothing above it, where a flex or grid container might align,
- * stretch or wrap its other children around it. A scroller at the top
- * cannot be clamped, so it needs none.
+ * stretch or wrap its other children around it. A scroller whose own size
+ * follows its content, such as a flex item that grows, would change size
+ * with the block in, so a strut that moves the scroller's box is taken out
+ * again and that scroller is not held. A stylesheet that picks the
+ * scroller's children by their place among siblings (`:last-child`,
+ * `:nth-last-child()`, `:only-child`) sees the strut as the last child while
+ * it stands, and the real last child measures without such a rule. A
+ * scroller at the top cannot be clamped, so it needs none.
  */
 function strut(scroller: HTMLElement): HTMLElement | undefined {
   if (scroller.scrollTop <= 0) {
@@ -210,10 +216,18 @@ function strut(scroller: HTMLElement): HTMLElement | undefined {
   if (display !== 'block' && display !== 'flow-root') {
     return undefined;
   }
+  const { clientWidth, clientHeight } = scroller;
   const el = document.createElement('div');
   el.setAttribute('aria-hidden', 'true');
-  el.style.cssText = `display:block;block-size:${scroller.scrollTop + scroller.clientHeight}px;margin:0;padding:0;border:0;visibility:hidden;pointer-events:none`;
+  el.style.cssText = `display:block;height:${scroller.scrollTop + clientHeight}px;margin:0;padding:0;border:0;visibility:hidden;pointer-events:none`;
   scroller.appendChild(el);
+  if (
+    scroller.clientHeight !== clientHeight ||
+    scroller.clientWidth !== clientWidth
+  ) {
+    el.remove();
+    return undefined;
+  }
   return el;
 }
 

@@ -104,7 +104,7 @@ Two blocks of a transcript MUST NOT be drawn over each other in any frame. That 
 
 ### 1.21. Measuring doesn't move the scroll
 
-The render-pass barrier MUST NOT leave a scroller at a different scroll position because its regions measured. While they put their runs at rest to measure, and until the runs stand again, it MUST hold each block-flow scroller's scroll height to at least the bottom of its view, so that the browser clamps nothing.
+The render-pass barrier MUST NOT leave a scroller at a different scroll position because its regions measured. While they put their runs at rest to measure, and until the runs stand again, it MUST hold the scroll height of the nearest scroller above each region in the pass to at least the bottom of its view, so that the browser clamps nothing. It MUST hold a scroller only where doing so moves nothing the regions measure: a scroller laid out in normal flow (block or flow-root) whose own box keeps its size.
 
 ## 2. Rationale
 
@@ -143,6 +143,7 @@ The motion layer had been animating these shrinks. That made them smoother, not 
 - **A fixed delay before motion starts.** Rejected: the history doesn't arrive on a timer, and whatever lands after the delay plays as arrivals.
 - **Holding every block at the tallest height it reached.** Rejected: it fixed the shrink, and left uneven gaps under every finished row.
 - **Putting the scroll back after the runs stand.** Rejected: the regions would still measure at the clamped scroll, and a new run compiled from that measurement starts from where the clamp put things, so the scroll has nowhere to go back to.
+- **A strut in every scroller, whatever its display.** Rejected: in a flex or grid container an extra last child can be aligned, stretched or wrapped around, and the regions would measure a layout that isn't the one they run in. The same holds for a scroller whose own size follows its content.
 - **Ignoring an upward scroll that comes with no input** (ADR 012 §1.2). Rejected: it hides the clamp from one scroll owner, while every region still measures at a scroll the reader didn't choose.
 - **Fading arrivals during a follow.** Rejected: a second pass mid-arrival drops the fade and the arrival shows at full opacity over its neighbor.
 
