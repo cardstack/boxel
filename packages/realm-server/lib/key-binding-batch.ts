@@ -10,8 +10,6 @@ import {
 } from '@cardstack/runtime-common';
 import {
   destinationCovers,
-  slotKeyKinds,
-  type CallApiKeyKind,
   type CallApiSlot,
   type OperationCallApi,
   type OperationDefinition,
@@ -87,12 +85,6 @@ export interface BatchSlot {
   // The token the slot is written as: `userKey`, `apiKey`, `apiKey:<name>`.
   slot: string;
   key: CallApiSlot['key'];
-  // The kind of key its declaration says fills it; only a key of that kind
-  // may be approved for it.
-  keyKind?: CallApiSlot['keyKind'];
-  // The kinds of key that can fill it: its declared kind, or every kind its
-  // request can take (`slotKeyKinds`).
-  kinds: CallApiKeyKind[];
   status: BatchSlotStatus;
   snapshot: BindingSnapshot;
   fingerprint: string;
@@ -319,8 +311,6 @@ export async function approvalBatch(
       let batchSlot: BatchSlot = {
         slot: token,
         key: slot.key,
-        ...(slot.keyKind ? { keyKind: slot.keyKind } : {}),
-        kinds: slotKeyKinds(slot, request),
         status,
         snapshot,
         fingerprint,

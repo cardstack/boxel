@@ -278,8 +278,6 @@ module(basename(import.meta.filename), function (hooks) {
   interface Slot {
     slot: string;
     key: string;
-    keyKind?: string;
-    kinds: string[];
     status: string;
     fingerprint: string;
     snapshot: Record<string, string | null>;
@@ -581,9 +579,13 @@ module(basename(import.meta.filename), function (hooks) {
     let review = await batchOf(OWNER, onType(INBOX), { review: true });
     let operations = operationsIn(review);
     assert.deepEqual(
-      operations.map((o) => [o.name, o.status, o.slots[0]!.keyKind]),
-      [['listPRs', 'changed', 'google-service-account']],
-      'the slot is reviewed, saying what kind of key it takes',
+      operations.map((o) => [o.name, o.status]),
+      [['listPRs', 'changed']],
+      'the slot is reviewed',
+    );
+    assert.notOk(
+      review.fillers.interactive['userKey']!.includes(key.id),
+      'and the pasted key is not offered for a slot that takes a service account',
     );
 
     let refused = await approveFrom(OWNER, review, ['listPRs'], () => ({
@@ -598,9 +600,14 @@ module(basename(import.meta.filename), function (hooks) {
     await realm.indexing();
     let again = await batchOf(OWNER, onType(INBOX), { review: true });
     assert.deepEqual(
-      operationsIn(again).map((o) => [o.name, o.slots[0]!.keyKind]),
-      [['listPRs', 'static']],
+      operationsIn(again).map((o) => o.name),
+      ['listPRs'],
       'a binding asked to be approved again stays so until it is',
+    );
+    assert.deepEqual(
+      again.fillers.interactive['userKey'],
+      [key.id],
+      'and the pasted key is offered for it again',
     );
     let reapproved = await approveFrom(OWNER, again, ['listPRs'], () => ({
       keyId: key.id,
@@ -613,7 +620,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('each slot names the keys that fill it in every operation sending it, and which kinds of key it takes', async function (assert) {
+  test('each slot names the keys that fill it in every operation sending it', async function (assert) {
     let pasted = await addKey(OWNER, 'pasted');
     let robot = await addOAuthClient(dbAdapter, keyring, {
       owner: OWNER,
@@ -671,16 +678,6 @@ module(basename(import.meta.filename), function (hooks) {
         .destination.href;
     let vendor = destinationOf('listPRs');
     let other = destinationOf('elsewhere');
-    let kindsOf = (operation: string) =>
-      operationsIn(found).find((o) => o.name === operation)!.slots[0]!.kinds;
-    assert.deepEqual(
-      [kindsOf('listPRs'), kindsOf('elsewhere')],
-      [
-        ['static', 'oauth'],
-        ['static', 'oauth'],
-      ],
-      'a bearer token outside Google is a pasted key or an OAuth token',
-    );
     // The names of the keys that fill the user's-key slot for `use`.
     let names = (batch: Batch, use: 'interactive' | 'pipelines') =>
       (batch.fillers[use]['userKey'] ?? [])
@@ -991,7 +988,6 @@ module(basename(import.meta.filename), function (hooks) {
       slots: Array.from({ length: slots }, (_, i) => ({
         slot: `apiKey:s${i}`,
         key: 'apiKey' as const,
-        kinds: ['static' as const],
         status: 'new' as const,
         snapshot:
           {} as BatchGroup['operations'][number]['slots'][number]['snapshot'],
