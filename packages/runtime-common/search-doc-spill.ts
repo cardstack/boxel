@@ -68,7 +68,9 @@ export function searchDocSpillEnabled(): boolean {
   let env = (
     globalThis as { process?: { env?: Record<string, string | undefined> } }
   ).process?.env;
-  return env?.BOXEL_SPILL_SEARCH_DOCS === 'true';
+  // ENV-ONLY (73d): on unless explicitly off, because the Studio runtime
+  // launcher passes its own environment to workers.
+  return env?.BOXEL_SPILL_SEARCH_DOCS !== 'false';
 }
 
 // For tests: force spilling on or off, or `undefined` to follow the
