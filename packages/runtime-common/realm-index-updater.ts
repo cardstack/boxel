@@ -136,6 +136,14 @@ type IncrementalPass = PendingPass & {
   jobType: 'incremental-index';
   initiatedBy?: string;
   affectsStaging?: boolean;
+  // The files the pass was enqueued for, so a read-your-writes wait can be
+  // limited to the cards a write actually touched (see `ownPassesForRead`).
+  changedURLs?: Set<string>;
+  // Once a read has waited out its budget on this pass, the pass gives its
+  // writer's later reads nothing more to wait for: they would only park for
+  // the same budget again, and the index event that follows the swap
+  // refreshes the client either way. Set by the first read that waits.
+  readHoldUntil?: number;
 };
 
 export class RealmIndexUpdater {
@@ -385,6 +393,46 @@ export class RealmIndexUpdater {
   // system-originated jobs are pending: those jobs can only make the caller's
   // read fresher-than-requested, never wrong, because the production index
   // rows stay live (and consistent) until the pass's swap lands.
+  // The read-your-writes slice for one read: `user`'s own pending passes that
+  // can change what a read of `url` returns, and the deadline the read may
+  // wait until. A pass qualifies when it wrote the card itself (its `.json`
+  // or extension-less URL) or changed a module or the realm config
+  // (`affectsStaging`), which can change how every instance serializes; a
+  // pass that only wrote other cards can't make this read stale. Each pass
+  // grants its writer's reads one shared budget (`readHoldUntil`), so a pass
+  // that fans out to thousands of cards costs its writer at most one budget
+  // of waiting, not one per read. Returns undefined when nothing qualifies.
+  ownPassesForRead(
+    user: string,
+    url: string,
+    budgetMs: number,
+    now = Date.now(),
+  ): { pending: Promise<void>; deadline: number } | undefined {
+    let canonical = url.replace(/\.json$/, '');
+    let qualifying = [...this.#incrementalIndexingDeferreds.entries()].filter(
+      ([, pass]) =>
+        pass.initiatedBy === user &&
+        (pass.readHoldUntil === undefined || pass.readHoldUntil > now) &&
+        (pass.affectsStaging ||
+          pass.changedURLs?.has(canonical) ||
+          pass.changedURLs?.has(`${canonical}.json`)),
+    );
+    if (qualifying.length === 0) {
+      return undefined;
+    }
+    let deadline = 0;
+    for (let [, pass] of qualifying) {
+      pass.readHoldUntil ??= now + budgetMs;
+      deadline = Math.max(deadline, pass.readHoldUntil);
+    }
+    return {
+      pending: Promise.all(qualifying.map(([d]) => d.promise)).then(
+        () => undefined,
+      ),
+      deadline,
+    };
+  }
+
   incrementalIndexingInitiatedBy(user: string): Promise<void> | undefined {
     let pending = [...this.#incrementalIndexingDeferreds.entries()]
       .filter(([, { initiatedBy }]) => initiatedBy === user)
@@ -603,6 +651,7 @@ export class RealmIndexUpdater {
       fileCount: changes.length,
       firstFile: changes[0]?.url.href,
       initiatedBy: opts?.initiatedBy ?? undefined,
+      changedURLs: new Set(changes.map(({ url }) => url.href)),
       // A removal counts the same as a write: a module that is gone changes
       // what resolves just as surely as one whose bytes moved.
       affectsStaging: changes.some(

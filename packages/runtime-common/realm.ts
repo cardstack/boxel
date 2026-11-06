@@ -15034,24 +15034,32 @@ export class Realm {
     }
     let requester = requestContext.authenticatedUser;
     let pending: Promise<void> | undefined;
+    let deadline: number;
     let scope: 'own' | 'all';
+    let waitStartedAt = Date.now();
     if (requester !== undefined) {
-      pending =
-        this.#realmIndexUpdater.incrementalIndexingInitiatedBy(requester);
-      if (!pending) {
+      // Named the way the write paths name a changed file: the realm's own
+      // URL for the path, without query string or alias.
+      let readURL = this.paths.fileURL(this.paths.local(new URL(request.url)));
+      let own = this.#realmIndexUpdater.ownPassesForRead(
+        requester,
+        readURL.href,
+        this.#readIndexDrainBudgetMs,
+        waitStartedAt,
+      );
+      if (!own) {
         emit('info', 'skipped-not-writer');
         return;
       }
+      pending = own.pending;
+      deadline = own.deadline;
       scope = 'own';
     } else {
       pending = anyPending;
+      deadline = waitStartedAt + this.#readIndexDrainBudgetMs;
       scope = 'all';
     }
-    let waitStartedAt = Date.now();
-    let settled = await settledBy(
-      pending,
-      waitStartedAt + this.#readIndexDrainBudgetMs,
-    );
+    let settled = await settledBy(pending, deadline);
     let fragment =
       ` scope=${scope} waitMs=${Date.now() - waitStartedAt}` +
       (requester !== undefined ? ` user=${requester}` : '');
