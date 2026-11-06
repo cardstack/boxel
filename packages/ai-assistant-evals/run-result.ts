@@ -1,3 +1,5 @@
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-identifiers';
+
 import type { RoomAnalysis } from './room-analysis.ts';
 
 // The shape of one run's JSON in the results directory, and the grade read
@@ -21,7 +23,7 @@ export interface RunResult {
   realmUrl: string | undefined;
   verdict: Verdict;
   reasons: string[];
-  cardRendered: string | undefined;
+  cardRendered: RealmResourceIdentifier | undefined;
   renderedIn: 'stack' | 'preview' | undefined;
   // The whole run, login and workspace setup included.
   durationSeconds: number;
@@ -32,15 +34,15 @@ export interface RunResult {
   prompts: string[];
   // How many of the prompts were sent before the run ended.
   promptsSent: number;
-  evalCardUrl: string | undefined;
+  evalCardUrl: RealmResourceIdentifier | undefined;
   sessionId: string | undefined;
   // Cards and files copied into the workspace before the first prompt.
-  initialCards: string[];
-  initialFiles: string[];
+  initialCards: RealmResourceIdentifier[];
+  initialFiles: RealmResourceIdentifier[];
   // The cards the evaluation expects the assistant to change, and those of
   // them whose file differs from the seed when the run ends.
-  expectedChangedCards: string[];
-  changedCards: string[];
+  expectedChangedCards: RealmResourceIdentifier[];
+  changedCards: RealmResourceIdentifier[];
   // Source URLs of the skill files the room had enabled.
   skillsUsed: string[];
   // Skill features enabled in the room before the first prompt

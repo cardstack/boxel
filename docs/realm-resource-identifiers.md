@@ -145,9 +145,10 @@ the path math, and the result is converted back to whichever prefix matches. A
 reference that resolves outside every mapped realm comes back in URL form.
 
 There is also a VirtualNetwork-free resolver, `resolveRRIReference` in
-`packages/runtime-common/url.ts`, which does the same path math using a
-synthetic origin instead of a real mapping. Serialization uses it, because
-identifiers arriving there are already canonical and only need joining — see
+`packages/runtime-common/realm-identifiers.ts`, which does the same path math
+using a synthetic origin instead of a real mapping. Serialization uses it,
+because identifiers arriving there are already canonical and only need joining
+— see
 [Resolution belongs at the network boundary](#resolution-belongs-at-the-network-boundary).
 
 ## Converting between forms
