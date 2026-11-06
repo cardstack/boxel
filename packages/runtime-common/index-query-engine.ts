@@ -2789,10 +2789,18 @@ export class IndexQueryEngine {
               // recomputes every row there too. Keyed on the join's own primary
               // key, it selects exactly the rows the inline form would, and the
               // subquery never yields NULL, so it negates cleanly under `not`.
+              //
+              // `OFFSET 0` fences the subquery so Postgres keeps it a hashed
+              // SubPlan. Without it the planner flattens the IN into a join
+              // and picks the driving side from its estimate of the term; for
+              // a term it guesses is common ("compiler") it drives from every
+              // typed row and recomputes that row's tsvector as a filter on a
+              // primary-key probe (6,449 talks × 0.8 ms = 1.7 s, once for the
+              // page and again for the count).
               pg: [
                 `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
                 ...matchTsQuery(filter),
-                `)`,
+                `OFFSET 0)`,
               ],
               sqlite: [
                 `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
