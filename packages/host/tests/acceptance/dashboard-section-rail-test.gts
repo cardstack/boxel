@@ -12,7 +12,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { visitOperatorMode } from '../helpers';
 import {
@@ -21,6 +20,7 @@ import {
   markHosted,
   railOrder,
   setupDashboardTest,
+  operatorModeState,
 } from '../helpers/dashboard';
 
 module('Acceptance | dashboard section rail', function (hooks) {
@@ -49,9 +49,7 @@ module('Acceptance | dashboard section rail', function (hooks) {
   }
 
   function openCardIds() {
-    return (
-      getService('operator-mode-state-service') as OperatorModeStateService
-    ).getOpenCardIds();
+    return operatorModeState().getOpenCardIds();
   }
 
   test('lists the sections that register, and marks the one being read', async function (assert) {
@@ -141,8 +139,7 @@ module('Acceptance | dashboard section rail', function (hooks) {
 
     assert.dom('[data-test-dashboard]').doesNotExist();
     assert.strictEqual(
-      (getService('operator-mode-state-service') as OperatorModeStateService)
-        .realmURL,
+      operatorModeState().realmURL,
       realmURL,
       'Workspace A is the open workspace',
     );
@@ -173,8 +170,7 @@ module('Acceptance | dashboard section rail', function (hooks) {
 
     assert.dom('[data-test-dashboard]').doesNotExist();
     assert.strictEqual(
-      (getService('operator-mode-state-service') as OperatorModeStateService)
-        .realmURL,
+      operatorModeState().realmURL,
       realmURL,
       'Workspace A is the open workspace',
     );

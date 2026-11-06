@@ -16,7 +16,6 @@ import { module, test } from 'qunit';
 import { TrackedObject } from 'tracked-built-ins';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -33,6 +32,7 @@ import {
   sectionOrder,
   railOrder,
   setupDashboardTest,
+  operatorModeState,
 } from '../helpers/dashboard';
 import { stubWindowOpen } from '../helpers/window-open';
 
@@ -382,9 +382,7 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
       await pressKey('Enter');
 
       assert.dom('[data-test-dashboard]').doesNotExist();
-      let operatorModeStateService = getService(
-        'operator-mode-state-service',
-      ) as OperatorModeStateService;
+      let operatorModeStateService = operatorModeState();
       assert.strictEqual(
         (getService('realm') as any).info(operatorModeStateService.realmURL)
           .name,
@@ -423,11 +421,7 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
       await click(target);
 
       assert.dom('[data-test-dashboard]').doesNotExist();
-      assert.strictEqual(
-        (getService('operator-mode-state-service') as OperatorModeStateService)
-          .realmURL,
-        urlFor(rowName),
-      );
+      assert.strictEqual(operatorModeState().realmURL, urlFor(rowName));
     });
 
     test("a hosted row's globe opens the same site menu as a tile's chin", async function (assert) {
@@ -450,7 +444,7 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
         .hasAttribute('aria-label', 'Hosted at newer.example.com');
       assert.dom(menuItems).doesNotExist('the menu starts closed');
 
-      let windowOpen = stubWindowOpen();
+      let windowOpen = stubWindowOpen(window);
       try {
         await click(`${row} [data-test-host-trigger]`);
 

@@ -10,7 +10,7 @@ export type WindowOpenCall = {
 // `window` reaches only code that imports the mock, and setupWindowMock resets
 // it after each test. A stub on the global `window` also reaches code that
 // calls the global `window.open` directly, and lasts until `restore`.
-export function stubWindowOpen(win: Pick<Window, 'open'> = window) {
+export function stubWindowOpen(win: Pick<Window, 'open'>) {
   let original = win.open;
   let calls: WindowOpenCall[] = [];
   let popups: { opener: unknown }[] = [];

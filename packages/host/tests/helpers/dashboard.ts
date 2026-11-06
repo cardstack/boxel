@@ -103,6 +103,7 @@ export interface DashboardRealmFixture {
 }
 
 export interface DashboardTestOptions {
+  // Replaces the default config instead of merging into it.
   matrix?: MockMatrixConfig;
   realms?: DashboardRealmFixture[];
   authEndpoints?: boolean;

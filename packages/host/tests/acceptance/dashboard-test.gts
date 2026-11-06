@@ -15,7 +15,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   setupAcceptanceTestRealm,
@@ -200,8 +199,7 @@ module('Acceptance | dashboard', function (hooks) {
 
     assert.dom('[data-test-dashboard]').doesNotExist();
     assert.strictEqual(
-      (getService('operator-mode-state-service') as OperatorModeStateService)
-        .realmURL,
+      operatorModeState().realmURL,
       realmURL,
       'Workspace A is the open workspace',
     );
@@ -296,8 +294,7 @@ module('Acceptance | dashboard', function (hooks) {
 
     assert.dom('[data-test-dashboard]').doesNotExist();
     assert.strictEqual(
-      (getService('operator-mode-state-service') as OperatorModeStateService)
-        .realmURL,
+      operatorModeState().realmURL,
       realmURL,
       'Workspace A is the open workspace',
     );
@@ -371,7 +368,7 @@ module('Acceptance | dashboard', function (hooks) {
     assert.dom(`${tile} [data-test-host-trigger]`).exists();
     assert.dom(menuItems).doesNotExist('the menu starts closed');
 
-    let windowOpen = stubWindowOpen();
+    let windowOpen = stubWindowOpen(window);
     try {
       await click(`${tile} [data-test-host-trigger]`);
 
@@ -447,7 +444,7 @@ module('Acceptance | dashboard', function (hooks) {
       `the +N (${moreHeight}px) is no taller than the link (${linkHeight}px)`,
     );
 
-    let windowOpen = stubWindowOpen();
+    let windowOpen = stubWindowOpen(window);
     try {
       await click(`${desk} [data-test-desk-host-more]`);
 

@@ -23,7 +23,6 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
@@ -32,7 +31,11 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { pressKey, setupDashboardTest } from '../helpers/dashboard';
+import {
+  pressKey,
+  setupDashboardTest,
+  operatorModeState,
+} from '../helpers/dashboard';
 
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
@@ -920,8 +923,7 @@ module('Acceptance | dashboard workspace', function (hooks) {
         .dom('[data-test-dashboard]')
         .exists('Enter from the star does not open a workspace');
       assert.true(
-        (getService('operator-mode-state-service') as OperatorModeStateService)
-          .workspaceChooserOpened,
+        operatorModeState().workspaceChooserOpened,
         'the dashboard stays open',
       );
     });
