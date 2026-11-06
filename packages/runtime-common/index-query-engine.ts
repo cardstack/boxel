@@ -2737,7 +2737,9 @@ export class IndexQueryEngine {
     typeConditionRef: CodeRef | undefined,
     context: FilterContext,
   ): CardExpression {
-    let words = typeAheadWords(filter.typeahead);
+    let words = typeAheadWords(filter.typeahead).filter(
+      (w) => !TYPE_AHEAD_STOP_WORDS.has(w),
+    );
     let query = typeAheadTsQuery(filter.typeahead);
     let predicate: CardExpression = !query
       ? ['FALSE']
@@ -3810,14 +3812,56 @@ const TYPE_AHEAD_TSVECTOR = (alias: string) =>
 // Every word of a type-ahead query as a prefix (`word:*`), ANDed. The words
 // are letters and digits only, so they carry no tsquery syntax. Undefined when
 // the query has no words.
+// Words too common to narrow a type-ahead: dropped when other words remain,
+// and a query made only of them matches nothing (13k of 36k OnTube cards hold
+// "the"; counting and ranking them took ~220 ms for a list of eight).
+const TYPE_AHEAD_STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'that',
+  'this',
+  'are',
+  'was',
+  'not',
+  'but',
+  'you',
+  'all',
+  'can',
+  'has',
+  'have',
+  'its',
+  'our',
+  'out',
+  'into',
+]);
+
+// The tsquery for a type-ahead: every word must start some word of the card's
+// short names. A word shorter than MIN_PREFIX_LETTERS is a prefix of a large
+// share of the index (one letter matched 11k-24k of 36k OnTube cards at
+// 200-450 ms), so it matches as a whole word unless a longer word is there to
+// narrow the match first ("steve jo" keeps "jo" a prefix). Returns undefined
+// when nothing is left to match.
 function typeAheadTsQuery(text: string): Expression | undefined {
   let words = typeAheadWords(text);
-  if (words.length === 0) {
+  let meaningful = words.filter((w) => !TYPE_AHEAD_STOP_WORDS.has(w));
+  if (meaningful.length === 0) {
     return undefined;
   }
+  let narrowed = meaningful.some((w) => [...w].length >= MIN_PREFIX_LETTERS);
   return [
     `to_tsquery('simple',`,
-    param(words.map((word) => `${word}:*`).join(' & ')),
+    param(
+      meaningful
+        .map((word) =>
+          narrowed || [...word].length >= MIN_PREFIX_LETTERS
+            ? `${word}:*`
+            : word,
+        )
+        .join(' & '),
+    ),
     `)`,
   ];
 }

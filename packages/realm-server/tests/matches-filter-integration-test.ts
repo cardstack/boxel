@@ -668,6 +668,11 @@ module(basename(import.meta.filename), function () {
         markdown: 'Martin Kleppmann',
         searchDoc: { _typeahead: 'Martin Kleppmann' },
       });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}go.json`,
+        markdown: 'The Go programming language',
+        searchDoc: { _typeahead: 'Go' },
+      });
     };
     let typeAheadUrls = async (typeahead: string) =>
       (await relevanceUrls({ filter: { typeahead } })).sort();
@@ -690,9 +695,39 @@ module(basename(import.meta.filename), function () {
         'each line of the text counts (a synonym)',
       );
       assert.deepEqual(
-        await typeAheadUrls('M'),
+        await typeAheadUrls('MAR'),
         [`${testRealmURL}kleppmann.json`],
-        'one letter is a prefix too, and case is ignored',
+        'three letters are a prefix, and case is ignored',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('M'),
+        [],
+        'one letter on its own matches only a whole word',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('Go'),
+        [`${testRealmURL}go.json`],
+        'a short name still matches whole',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('G'),
+        [],
+        'but not as a one-letter prefix',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('kleppmann m'),
+        [`${testRealmURL}kleppmann.json`],
+        'beside a longer word a short word stays a prefix',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('the data'),
+        [`${testRealmURL}crdt.json`],
+        'a stop word is dropped when other words remain',
+      );
+      assert.deepEqual(
+        await typeAheadUrls('the'),
+        [],
+        'a query of only stop words matches nothing',
       );
       assert.deepEqual(
         await typeAheadUrls('martin crdt'),
@@ -724,7 +759,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         (await relevanceUrls({ filter: { not: { typeahead: 'kleppm' } } }))
           .length,
-        5,
+        6,
         'negated, it keeps every other row',
       );
     });
