@@ -56,9 +56,11 @@ test('boxel-icons is built when it has no build, or its stamp no longer matches 
 });
 
 // CI's cache of boxel-icons' build is keyed on two `hashFiles` calls, one
-// over boxel-icons' own inputs and one over the dependency fetch's. They
-// have to name the inputs the stamp hashes, or CI restores a build made
-// from inputs the stamp would call stale.
+// over boxel-icons' own inputs and one over the dependency fetch's. A build
+// CI restores carries no stamp, so nothing checks it against its inputs
+// after the restore: the key has to name every input that changes the
+// build, or CI keeps restoring a build that differs from the one the stamp
+// and the realm-server image would make.
 test("CI's boxel-icons cache key names the inputs the stamp hashes", () => {
   let action = readFileSync(
     join(REPO_ROOT, '.github', 'actions', 'restore-icons-cache', 'action.yml'),
@@ -77,4 +79,31 @@ test("CI's boxel-icons cache key names the inputs the stamp hashes", () => {
     patterns(ICONS_ROOT, ICON_INPUTS, 'packages/boxel-icons/'),
     patterns(REPO_ROOT, DEPENDENCY_INPUTS, ''),
   ]);
+});
+
+// The realm-server image builds boxel-icons on top of its dependency fetch:
+// the files the base stage copies in before `pnpm fetch`, and those the
+// boxel-icons stage copies from the repository's root. Those are the
+// dependency inputs the stamp and CI's key hash. The stage also copies the
+// manifests of the workspace packages boxel-icons depends on; their
+// dependencies reach the build through the lockfile.
+test("the realm-server image's boxel-icons stage rebuilds on the dependency inputs the stamp hashes", () => {
+  let lines = readFileSync(
+    join(REPO_ROOT, 'packages', 'realm-server', 'realm-server.Dockerfile'),
+    'utf8',
+  ).split('\n');
+  let fetch = lines.findIndex((line) => /^RUN .*\bpnpm fetch\b/.test(line));
+  let stage = lines.findIndex((line) =>
+    /^FROM base AS boxel-icons\b/.test(line),
+  );
+  let stageEnd = lines.findIndex(
+    (line, index) => index > stage && line.startsWith('FROM '),
+  );
+  assert.ok(fetch > 0 && stage > fetch && stageEnd > stage);
+  let sources = [...lines.slice(0, fetch), ...lines.slice(stage, stageEnd)]
+    .filter((line) => line.startsWith('COPY ') && !line.includes('--from'))
+    .flatMap((line) => line.split(/\s+/).slice(1, -1))
+    .filter((source) => !source.startsWith('packages/'))
+    .map((source) => source.replace(/\/$/, ''));
+  assert.deepEqual([...sources].sort(), [...DEPENDENCY_INPUTS].sort());
 });
