@@ -2599,25 +2599,45 @@ export class IndexQueryEngine {
       if (!node.typos || node.matches.trim() === '') {
         return filter;
       }
-      let words = typeAheadWords(node.matches);
-      if (words.length === 0) {
+      // With `prefix`, the last word is still being typed: it matches as a
+      // prefix exactly as without `typos` (see `matchTsQuery`), and takes
+      // corrections only once it is long enough to stand for a whole word.
+      // A short partial would otherwise be "corrected" to a host of short
+      // words and match nearly everything.
+      let { words: finishedText, partial } = node.prefix
+        ? splitTypeAheadQuery(node.matches)
+        : { words: node.matches, partial: undefined };
+      let finished = typeAheadWords(finishedText);
+      let partialWords =
+        partial && [...partial].length >= MIN_TYPO_PARTIAL_LETTERS
+          ? [partial]
+          : [];
+      if (finished.length === 0 && partialWords.length === 0) {
         return filter;
       }
-      let corrections = await this.#typoCorrectionsFor(words, realmURL);
-      let unfinished =
-        node.prefix && !/\s$/.test(node.matches) ? words.length - 1 : -1;
-      let typoQuery = words
-        .map((word, index) => {
-          let alternatives = [word, ...(corrections.get(word) ?? [])]
-            .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
-            .filter(Boolean);
-          if (index === unfinished) {
-            alternatives.push(`${alternatives[0]}:*`);
-          }
-          return `(${[...new Set(alternatives)].join(' | ')})`;
-        })
+      let corrections = await this.#typoCorrectionsFor(
+        [...finished, ...partialWords],
+        realmURL,
+      );
+      let alternativesOf = (word: string) =>
+        [...new Set([word, ...(corrections.get(word) ?? [])])]
+          .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+          .filter(Boolean);
+      let typoQuery = finished
+        .map((word) => `(${alternativesOf(word).join(' | ')})`)
         .join(' & ');
-      return { ...node, typoQuery } as Filter;
+      let typoPartial =
+        partialWords.length > 0
+          ? (corrections.get(partialWords[0]) ?? [])
+              .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+              .filter(Boolean)
+              .join(' | ')
+          : '';
+      return {
+        ...node,
+        typoQuery,
+        ...(typoPartial ? { typoPartial } : {}),
+      } as Filter;
     }
     if ('typeahead' in node) {
       if (!node.typos) {
@@ -2629,7 +2649,13 @@ export class IndexQueryEngine {
       if (words.length === 0) {
         return filter;
       }
-      let corrections = await this.#typoCorrectionsFor(words, realmURL);
+      // Every type-ahead word matches as a prefix, so any of them may still
+      // be being typed: only words long enough to stand for a whole word take
+      // corrections.
+      let corrections = await this.#typoCorrectionsFor(
+        words.filter((w) => [...w].length >= MIN_TYPO_PARTIAL_LETTERS),
+        realmURL,
+      );
       // As `typeAheadTsQuery`: a word of three letters or more matches as a
       // prefix (so does a shorter one once another word narrows). Each word
       // also matches its corrections whole, so a fully typed misspelling
@@ -5045,8 +5071,15 @@ const MIN_PREFIX_LETTERS = 3;
 // How many matching passages a search reports per card and field.
 const PASSAGES_PER_CARD = 5;
 
+// A word still being typed takes typo corrections only from this many
+// letters (`#resolveTypos`); shorter, it matches as a prefix alone.
+const MIN_TYPO_PARTIAL_LETTERS = 5;
+
 function matchTsQuery(term: MatchTerm): Expression {
-  if (term.typoQuery) {
+  let typoPartial: Expression = term.typoPartial
+    ? [`|| to_tsquery('english',`, param(term.typoPartial), `)`]
+    : [];
+  if (term.typoQuery !== undefined && !term.prefix) {
     // The words widened to their corrections (`#resolveTypos`).
     return [`to_tsquery('english',`, param(term.typoQuery), `)`];
   }
@@ -5062,6 +5095,9 @@ function matchTsQuery(term: MatchTerm): Expression {
     partial === undefined ||
     ([...partial].length < MIN_PREFIX_LETTERS && words.trim() === '')
   ) {
+    if (term.typoQuery) {
+      return [`to_tsquery('english',`, param(term.typoQuery), `)`];
+    }
     return [`websearch_to_tsquery('english',`, param(term.matches), `)`];
   }
   let negated = /(^|\s)-$/.test(words);
@@ -5083,13 +5119,20 @@ function matchTsQuery(term: MatchTerm): Expression {
       `)`,
     );
   }
-  let partialQuery: Expression = [negated ? '!!(' : '(', ...alternatives, ')'];
+  let partialQuery: Expression = [
+    negated ? '!!(' : '(',
+    ...alternatives,
+    ...typoPartial,
+    ')',
+  ];
   if (words.trim() === '') {
     return partialQuery;
   }
   return [
-    `(websearch_to_tsquery('english',`,
-    param(words),
+    term.typoQuery
+      ? `(to_tsquery('english',`
+      : `(websearch_to_tsquery('english',`,
+    param(term.typoQuery || words),
     `) &&`,
     ...partialQuery,
     `)`,

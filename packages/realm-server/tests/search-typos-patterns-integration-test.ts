@@ -339,6 +339,41 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a word still being typed takes corrections only from five letters', async function (assert) {
+    for (let partial of ['k', 'kl', 'kle', 'klep']) {
+      assert.deepEqual(
+        await ids({
+          filter: { on, matches: partial, prefix: true, typos: true },
+        }),
+        await ids({ filter: { on, matches: partial, prefix: true } }),
+        `"${partial}" matches exactly as without typos`,
+      );
+      assert.deepEqual(
+        await ids({ filter: { on, typeahead: partial, typos: true } }),
+        await ids({ filter: { on, typeahead: partial } }),
+        `type-ahead "${partial}" matches exactly as without typos`,
+      );
+    }
+    assert.deepEqual(
+      await ids({
+        filter: { on, matches: 'kleppman', prefix: true, typos: true },
+      }),
+      ['crdt.json'],
+      'a long partial is corrected as well as prefix-matched',
+    );
+    assert.deepEqual(
+      await ids({
+        filter: { on, matches: 'martn klepp', prefix: true, typos: true },
+      }),
+      ['crdt.json'],
+      'a finished word is corrected; a short partial stays a prefix',
+    );
+    assert.deepEqual(
+      await ids({ filter: { on, typeahead: 'concurency', typos: true } }),
+      ['go.json'],
+    );
+  });
+
   test('typo budget and edit distance', function (assert) {
     assert.strictEqual(typoBudget('rob'), 0, 'under four letters: none');
     assert.strictEqual(typoBudget('kleppman'), 2, 'eight letters: two');

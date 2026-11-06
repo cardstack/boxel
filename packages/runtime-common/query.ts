@@ -366,9 +366,11 @@ export interface MatchesFilter extends TypedFilter {
   // matches the closest words of the realm's fields declared `typos: true`.
   // Postgres only; SQLite matches the words as typed.
   typos?: boolean;
-  // Set by the engine, never on the wire: the term's words widened to their
-  // corrections, as tsquery text.
+  // Set by the engine, never on the wire: the term's finished words widened
+  // to their corrections, as tsquery text, and with `prefix` the corrections
+  // of a long enough word still being typed.
   typoQuery?: string;
+  typoPartial?: string;
 }
 
 // A glob over a field's whole value, ignoring case: `*` is any run of
@@ -421,7 +423,13 @@ export function isTypeAheadFilter(filter: Filter): filter is TypeAheadFilter {
 // One positive `matches` term, as a `_matchRelevance` sort scores it.
 export type MatchTerm = Pick<
   MatchesFilter,
-  'matches' | 'prefix' | 'within' | 'scope' | 'typos' | 'typoQuery'
+  | 'matches'
+  | 'prefix'
+  | 'within'
+  | 'scope'
+  | 'typos'
+  | 'typoQuery'
+  | 'typoPartial'
 >;
 
 // The type-ahead split of a `prefix` query: the finished words, and the
@@ -507,7 +515,10 @@ export function collectPositiveMatchTerms(
             ...(filter.within ? { within: filter.within } : {}),
             ...(filter.scope ? { scope: filter.scope } : {}),
             ...(filter.typos ? { typos: true } : {}),
-            ...(filter.typoQuery ? { typoQuery: filter.typoQuery } : {}),
+            ...(filter.typoQuery !== undefined
+              ? { typoQuery: filter.typoQuery }
+              : {}),
+            ...(filter.typoPartial ? { typoPartial: filter.typoPartial } : {}),
           },
         ]
       : [];
@@ -1296,10 +1307,12 @@ function assertMatchesFilter(
       `${pointer.concat('typos').join('/') || '/'}: typos must be a boolean`,
     );
   }
-  if ('typoQuery' in filter) {
-    throw new InvalidQueryError(
-      `${pointer.concat('typoQuery').join('/') || '/'}: typoQuery is set by the engine`,
-    );
+  for (let internal of ['typoQuery', 'typoPartial']) {
+    if (internal in filter) {
+      throw new InvalidQueryError(
+        `${pointer.concat(internal).join('/') || '/'}: ${internal} is set by the engine`,
+      );
+    }
   }
   if ('scope' in filter && filter.scope !== 'title') {
     throw new InvalidQueryError(
