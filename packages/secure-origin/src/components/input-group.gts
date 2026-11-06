@@ -9,7 +9,7 @@ import { and, bool, eq, or } from '../helpers/truth-helpers.ts';
 import FailureBordered from './icons/failure-bordered.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import type { IconComponent } from './icons/types.ts';
-import LoadingIndicator from './loading-indicator.gts';
+import { Spinner } from '@cardstack/pretui/components/spinner';
 
 // boxel-ui's InputGroup: an input in a bordered row with text before and
 // after it, such as a username between its `@` and its server name. Only the
@@ -165,7 +165,7 @@ export default class InputGroup extends Component<Signature> {
             </div>
           {{else if (eq @state 'loading')}}
             <div class={{cn 'validation-icon-container' @state}}>
-              <LoadingIndicator />
+              <Spinner @size={{20}} aria-hidden='true' />
             </div>
           {{/if}}
         </div>

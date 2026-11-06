@@ -46,6 +46,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
+import { restoreExternalFields } from '@cardstack/runtime-common/ai/external-fields';
 import {
   type AppBoxelDashboardContent,
   type DashboardAgent,
@@ -3511,6 +3512,9 @@ export default class MatrixService extends Service {
       }
     }
 
+    // An event too large for Matrix carries some fields in Matrix media; they
+    // are put back before anything reads the event.
+    await this.restoreExternalFields(event);
     await this.addRoomEvent(event, oldEventId);
 
     // Drop the persisted pending entry only once matrix-js-sdk has finalized
@@ -3536,6 +3540,31 @@ export default class MatrixService extends Service {
       event.content?.isStreamingFinished
     ) {
       this.toolService.queueEventForToolProcessing(event);
+    }
+  }
+
+  private async restoreExternalFields(event: TempEvent) {
+    let errors = await restoreExternalFields(event.content, async (mxcUrl) => {
+      let url = this.client.mxcUrlToHttp(
+        mxcUrl,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+      if (!url) {
+        throw new Error(`no download URL for ${mxcUrl}`);
+      }
+      let response = await this.fetchMatrixHostedFile(url);
+      if (!response.ok) {
+        throw new Error(`download failed with status ${response.status}`);
+      }
+      return await response.text();
+    });
+    for (let error of errors) {
+      console.error(`event ${event.event_id}: ${error}`);
     }
   }
 

@@ -8,6 +8,7 @@ import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { KeyValue } from './key-value';
 import type { KeyValueItem } from './key-value';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;
@@ -166,5 +167,17 @@ module('Pretui | components/key-value', function (hooks) {
       Array.from(q('[data-test-pretui-kv]').children).map((c) => c.tagName),
       ['DT', 'DD', 'DT', 'DD'],
     );
+  });
+
+  test('renders no style attribute', async function (assert) {
+    let items: KeyValueItem[] = [
+      { key: 'Kind', value: 'API key' },
+      { key: 'Used with', value: 'github.com' },
+    ];
+    let writes = await styleAttributeWrites(() =>
+      render(<template><KeyValue @items={{items}} @labelStyle='eyebrow' /></template>),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.dom('[data-test-pretui-kv] dt').exists({ count: 2 });
   });
 });
