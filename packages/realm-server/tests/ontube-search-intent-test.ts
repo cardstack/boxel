@@ -1,7 +1,12 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { rri, type Query, type Realm } from '@cardstack/runtime-common';
+import {
+  rri,
+  type Query,
+  type Realm,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupPermissionedRealmCached,
@@ -168,8 +173,11 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    let moment = () => ({ module: `${realmHref}moment`, name: 'Moment' });
-    let idOf = (name: string) => `${realmHref}Moment/${name}`;
+    let moment = (): ResolvedCodeRef => ({
+      module: rri(`${realmHref}moment`),
+      name: 'Moment',
+    });
+    let idOf = (name: string) => rri(`${realmHref}Moment/${name}`);
 
     async function search(query: Query) {
       return await searchCardsForTest(testRealm.realmIndexQueryEngine, query);
@@ -209,11 +217,13 @@ module(basename(import.meta.filename), function () {
         `SELECT word FROM boxel_index_words WHERE realm_url = $1 ORDER BY word`,
         { bind: [realmHref] },
       )) as { word: string }[];
-      assert.deepEqual(
-        words.map((w) => w.word),
-        ['bernhardt', 'gary', 'hickey', 'kleppmann', 'martin', 'rich'],
-        "the word list holds the speakers' words",
-      );
+      let listed = words.map((w) => w.word);
+      for (let word of ['kleppmann', 'hickey', 'bernhardt']) {
+        assert.true(listed.includes(word), `a speaker's word: ${word}`);
+      }
+      for (let word of ['crdts', 'simple', 'database']) {
+        assert.true(listed.includes(word), `a title's word: ${word}`);
+      }
     });
 
     // "CRDTs", not "crdt": Postgres's English stemmer keeps "crdts" whole, so

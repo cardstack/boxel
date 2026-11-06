@@ -232,7 +232,12 @@ module(basename(import.meta.filename), function (hooks) {
         },
         lastModified: Date.now(),
         resourceCreatedAt: Date.now(),
-        searchData: { ...data, [SEARCH_TEXT_KEY]: searchTextFor(data) },
+        searchData: {
+          ...data,
+          [SEARCH_TEXT_KEY]: searchTextFor(data),
+          // What the render stamps for type-ahead: the card's title.
+          _typeahead: data.title,
+        },
         markdown: `# ${data.title}\n\n${data.speaker}\n\n${data.text}`,
         deps: new Set(),
         displayNames: ['Talk'],
@@ -253,25 +258,44 @@ module(basename(import.meta.filename), function (hooks) {
     return cards.map((card) => String(card.id).split('/').pop()).sort();
   }
 
-  test("the word list holds the typo fields' words", async function (assert) {
+  test("the word list holds the typo fields' and titles' words", async function (assert) {
     let rows = (await adapter.execute(
       `SELECT word FROM boxel_index_words WHERE realm_url = $1 ORDER BY word`,
       { bind: [testRealm] },
     )) as { word: string }[];
+    let words = rows.map((r) => r.word);
+    for (let word of ['kleppmann', 'matsakis', 'cryptocurrency', 'club']) {
+      assert.true(words.includes(word), `a typos field's word: ${word}`);
+    }
+    for (let word of ['ownership', 'practice', 'ledgers', 'patterns']) {
+      assert.true(words.includes(word), `a title's word: ${word}`);
+    }
+    assert.false(
+      words.includes('in'),
+      'words under three letters are left out',
+    );
+  });
+
+  test('typeahead with typos: a misspelt title word still suggests the card', async function (assert) {
     assert.deepEqual(
-      rows.map((r) => r.word),
-      [
-        'club',
-        'concurrency',
-        'cryptocurrency',
-        'kit',
-        'kleppmann',
-        'martin',
-        'matsakis',
-        'niko',
-        'pike',
-        'rob',
-      ],
+      await ids({ filter: { on, typeahead: 'ownrship' } }),
+      [],
+      'without the flag a misspelling suggests nothing',
+    );
+    assert.deepEqual(
+      await ids({ filter: { on, typeahead: 'ownrship', typos: true } }),
+      ['rust.json'],
+      'a fully typed misspelling is corrected',
+    );
+    assert.deepEqual(
+      await ids({ filter: { on, typeahead: 'ownrship in prac', typos: true } }),
+      ['rust.json'],
+      'the last word still matches as a prefix',
+    );
+    assert.deepEqual(
+      await ids({ filter: { on, typeahead: 'concurency', typos: true } }),
+      ['go.json'],
+      'concurrency patterns, and not the cryptocurrency card',
     );
   });
 

@@ -2603,35 +2603,7 @@ export class IndexQueryEngine {
       if (words.length === 0) {
         return filter;
       }
-      // Candidates by trigram similarity (the word list's GIN index), for
-      // each word the list doesn't already hold; `typoCorrections` keeps
-      // those within the word's edit budget.
-      let rows = (await this.#dbAdapter.execute(
-        `SELECT q.w AS word, c.word AS correction
-           FROM unnest($1::text[]) AS q(w)
-           CROSS JOIN LATERAL (
-             SELECT bw.word FROM boxel_index_words AS bw
-              WHERE bw.realm_url = $2 AND char_length(q.w) > 3
-                AND bw.word % q.w AND bw.word <> q.w
-                AND NOT EXISTS (
-                  SELECT 1 FROM boxel_index_words AS known
-                   WHERE known.realm_url = $2 AND known.word = q.w
-                )
-              ORDER BY similarity(bw.word, q.w) DESC, bw.word
-              LIMIT 10
-           ) AS c`,
-        { bind: [words, realmURL.href] },
-      )) as { word: string; correction: string }[];
-      let candidates = new Map<string, string[]>();
-      for (let { word, correction } of rows) {
-        candidates.set(word, [...(candidates.get(word) ?? []), correction]);
-      }
-      let corrections = new Map<string, string[]>(
-        [...candidates].map(([word, list]) => [
-          word,
-          typoCorrections(word, list),
-        ]),
-      );
+      let corrections = await this.#typoCorrectionsFor(words, realmURL);
       let unfinished =
         node.prefix && !/\s$/.test(node.matches) ? words.length - 1 : -1;
       let typoQuery = words
@@ -2642,6 +2614,38 @@ export class IndexQueryEngine {
           if (index === unfinished) {
             alternatives.push(`${alternatives[0]}:*`);
           }
+          return `(${[...new Set(alternatives)].join(' | ')})`;
+        })
+        .join(' & ');
+      return { ...node, typoQuery } as Filter;
+    }
+    if ('typeahead' in node) {
+      if (!node.typos) {
+        return filter;
+      }
+      let words = typeAheadWords(node.typeahead).filter(
+        (w) => !TYPE_AHEAD_STOP_WORDS.has(w),
+      );
+      if (words.length === 0) {
+        return filter;
+      }
+      let corrections = await this.#typoCorrectionsFor(words, realmURL);
+      // As `typeAheadTsQuery`: a word of three letters or more matches as a
+      // prefix (so does a shorter one once another word narrows). Each word
+      // also matches its corrections whole, so a fully typed misspelling
+      // ("conurency") finds the word it meant.
+      let narrowed = words.some((w) => [...w].length >= MIN_PREFIX_LETTERS);
+      let typoQuery = words
+        .map((word) => {
+          let clean = word.replace(/[^\p{L}\p{N}]/gu, '');
+          let alternatives = [
+            narrowed || [...clean].length >= MIN_PREFIX_LETTERS
+              ? `${clean}:*`
+              : clean,
+            ...(corrections.get(word) ?? [])
+              .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+              .filter(Boolean),
+          ];
           return `(${[...new Set(alternatives)].join(' | ')})`;
         })
         .join(' & ');
@@ -2665,6 +2669,42 @@ export class IndexQueryEngine {
       } as Filter;
     }
     return filter;
+  }
+
+  // Each word's corrections from the realm's word list: candidates by
+  // trigram similarity (the list's GIN index), for words the list doesn't
+  // already hold, kept when within the word's edit budget
+  // (`typoCorrections`).
+  async #typoCorrectionsFor(
+    words: string[],
+    realmURL: URL,
+  ): Promise<Map<string, string[]>> {
+    let rows = (await this.#dbAdapter.execute(
+      `SELECT q.w AS word, c.word AS correction
+         FROM unnest($1::text[]) AS q(w)
+         CROSS JOIN LATERAL (
+           SELECT bw.word FROM boxel_index_words AS bw
+            WHERE bw.realm_url = $2 AND char_length(q.w) > 3
+              AND bw.word % q.w AND bw.word <> q.w
+              AND NOT EXISTS (
+                SELECT 1 FROM boxel_index_words AS known
+                 WHERE known.realm_url = $2 AND known.word = q.w
+              )
+            ORDER BY similarity(bw.word, q.w) DESC, bw.word
+            LIMIT 10
+         ) AS c`,
+      { bind: [words, realmURL.href] },
+    )) as { word: string; correction: string }[];
+    let candidates = new Map<string, string[]>();
+    for (let { word, correction } of rows) {
+      candidates.set(word, [...(candidates.get(word) ?? []), correction]);
+    }
+    return new Map(
+      [...candidates].map(([word, list]) => [
+        word,
+        typoCorrections(word, list),
+      ]),
+    );
   }
 
   // A near filter: the card has a vector at the path of the target's
@@ -3107,7 +3147,9 @@ export class IndexQueryEngine {
         continue;
       }
       if (isTypeAheadFilter(branch)) {
-        let query = typeAheadTsQuery(branch.typeahead);
+        let query = branch.typoQuery
+          ? [`to_tsquery('simple',`, param(branch.typoQuery), `)`]
+          : typeAheadTsQuery(branch.typeahead);
         if (query) {
           selects.push([
             `SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ${TYPE_AHEAD_TSVECTOR('ti')} @@`,
@@ -3654,7 +3696,9 @@ export class IndexQueryEngine {
     let words = typeAheadWords(filter.typeahead).filter(
       (w) => !TYPE_AHEAD_STOP_WORDS.has(w),
     );
-    let query = typeAheadTsQuery(filter.typeahead);
+    let query = filter.typoQuery
+      ? [`to_tsquery('simple',`, param(filter.typoQuery), `)`]
+      : typeAheadTsQuery(filter.typeahead);
     let predicate: CardExpression = !query
       ? ['FALSE']
       : [

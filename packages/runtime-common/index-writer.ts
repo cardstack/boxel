@@ -77,6 +77,7 @@ import {
   spillSearchDoc,
 } from './search-doc-spill.ts';
 import { SEARCH_TEXT_KEY } from './search-intent.ts';
+import { TYPE_AHEAD_KEY } from './search-doc-keys.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -4050,7 +4051,8 @@ export class Batch {
     }
   }
 
-  // Adds the words of this pass's `typos` fields to the realm's word list
+  // Adds the words of this pass's `typos` fields, and of each card's
+  // type-ahead text (its title and alternative names), to the realm's word list
   // (see the `add-typo-words-and-pattern-text` migration): lowercased, split
   // on anything but letters and digits, three characters or more. A word
   // already listed stays as it is.
@@ -4065,7 +4067,7 @@ export class Batch {
       await this.#query([
         'INSERT INTO boxel_index_words (realm_url, word)',
         'SELECT DISTINCT p.realm_url, w.word',
-        `FROM boxel_index_pending AS p CROSS JOIN LATERAL regexp_split_to_table(lower(p.search_doc -> '${SEARCH_TEXT_KEY}' ->> 'typos'), '[^[:alnum:]]+') AS w(word)`,
+        `FROM boxel_index_pending AS p CROSS JOIN LATERAL regexp_split_to_table(lower(concat_ws(' ', p.search_doc -> '${SEARCH_TEXT_KEY}' ->> 'typos', p.search_doc ->> '${TYPE_AHEAD_KEY}')), '[^[:alnum:]]+') AS w(word)`,
         'WHERE',
         ...every([
           ['p.realm_url =', param(this.realmURL.href)],
@@ -4077,7 +4079,10 @@ export class Batch {
             ),
           ],
           any([['p.is_deleted = false'], ['p.is_deleted IS NULL']]),
-          [`p.search_doc -> '${SEARCH_TEXT_KEY}' ? 'typos'`],
+          any([
+            [`p.search_doc -> '${SEARCH_TEXT_KEY}' ? 'typos'`],
+            [`p.search_doc ? '${TYPE_AHEAD_KEY}'`],
+          ]),
           ['char_length(w.word) >= 3'],
         ]),
         'ON CONFLICT ON CONSTRAINT boxel_index_words_pkey DO NOTHING',

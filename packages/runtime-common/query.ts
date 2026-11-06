@@ -401,6 +401,12 @@ export interface PassageMatch {
 // it. A query with no letters or digits matches nothing.
 export interface TypeAheadFilter extends TypedFilter {
   typeahead: string;
+  // Each word also matches the closest words of the realm's word list (its
+  // cards' titles and alternative names, and fields declared `typos: true`),
+  // within the word's edit budget. Postgres only.
+  typos?: boolean;
+  // Set by the engine, never on the wire.
+  typoQuery?: string;
 }
 
 // The words of a type-ahead query: runs of letters and digits, lowercased.
@@ -1012,9 +1018,9 @@ function assertFilter(
       `${pointer.concat('prefix').join('/') || '/'}: prefix belongs beside matches`,
     );
   }
-  if ('typos' in filter && operator !== 'matches') {
+  if ('typos' in filter && operator !== 'matches' && operator !== 'typeahead') {
     throw new InvalidQueryError(
-      `${pointer.concat('typos').join('/') || '/'}: typos belongs beside matches`,
+      `${pointer.concat('typos').join('/') || '/'}: typos belongs beside matches or typeahead`,
     );
   }
   if ('scope' in filter && operator !== 'matches') {
@@ -1464,6 +1470,16 @@ function assertTypeAheadFilter(
   if (typeof filter?.typeahead !== 'string') {
     throw new InvalidQueryError(
       `${pointer.concat('typeahead').join('/') || '/'}: typeahead must be a string`,
+    );
+  }
+  if ('typos' in filter && typeof filter.typos !== 'boolean') {
+    throw new InvalidQueryError(
+      `${pointer.concat('typos').join('/') || '/'}: typos must be a boolean`,
+    );
+  }
+  if ('typoQuery' in filter) {
+    throw new InvalidQueryError(
+      `${pointer.concat('typoQuery').join('/') || '/'}: typoQuery is set by the engine`,
     );
   }
 }
