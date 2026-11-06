@@ -116,8 +116,9 @@ export function handleSecureWindowRealms(args: CreateRoutesArgs): Handler {
 // from that send the user's own key in a request, which the window offers to
 // approve one of the user's keys for, or with `slot: 'apiKey'` those that
 // send the realm's key, which it offers to approve one of the user's shares
-// there for. `attributes.{realm, slot?}`. Asked with the window's own
-// session.
+// there for. With `key`, one of the user's keys, only those that key can fill
+// (a share holds its key, so the share's key names it for `apiKey`).
+// `attributes.{realm, slot?, key?}`. Asked with the window's own session.
 export function handleSecureWindowCards(args: CreateRoutesArgs): Handler {
   let { dbAdapter, definitionLookup, virtualNetwork } = args;
   return keysHandler(async (ctxt) => {
@@ -150,6 +151,10 @@ export function handleSecureWindowCards(args: CreateRoutesArgs): Handler {
     if (slot !== 'userKey' && slot !== 'apiKey') {
       throw new UserKeyError(400, `the slot is 'userKey' or 'apiKey'`);
     }
+    let keyId = attributes.key;
+    if (keyId !== undefined && typeof keyId !== 'string') {
+      throw new UserKeyError(400, 'the key is a key id');
+    }
     let cards = await realmCardsWithRequests(
       {
         dbAdapter,
@@ -160,7 +165,7 @@ export function handleSecureWindowCards(args: CreateRoutesArgs): Handler {
       },
       user,
       realm!,
-      slot,
+      { slot, keyId },
     );
     await sendJSON(ctxt, 200, {
       data: cards.map((card) => ({
