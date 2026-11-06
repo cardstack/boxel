@@ -6,6 +6,27 @@ import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Chip } from './chip';
 import { StatusChip } from './status-chip';
+import { statusHue } from '../internal/ink';
+// Every `style` attribute written while `work` runs. Glimmer binds `style`
+// with `setAttribute`, which a strict Content Security Policy (the secure
+// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
+// through it and is allowed.
+async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
+  let writes: string[] = [];
+  let setAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+    if (name.toLowerCase() === 'style') {
+      writes.push(value);
+    }
+    return setAttribute.call(this, name, value);
+  };
+  try {
+    await work();
+  } finally {
+    Element.prototype.setAttribute = setAttribute;
+  }
+  return writes;
+}
 
 function chip(): HTMLElement {
   return document.querySelector('[data-test-pretui-chip]') as HTMLElement;
@@ -79,5 +100,20 @@ module('Pretui | components/chip', function (hooks) {
       .dom('[data-test-pretui-status-chip]')
       .hasAttribute('data-appearance', 'soft');
     assert.dom('[data-test-pretui-chip-dot]').doesNotExist();
+  });
+
+  test('Chip and StatusChip set the hue through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <Chip @label='draft' @hue='var(--chart-2)' />
+          <StatusChip @value='Active' />
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    let [plain, status] = [...document.querySelectorAll<HTMLElement>('[data-test-pretui-chip]')];
+    assert.strictEqual(plain.style.getPropertyValue('--pretui-chip-hue'), 'var(--chart-2)');
+    assert.strictEqual(status.style.getPropertyValue('--pretui-chip-hue'), statusHue('Active'));
   });
 });

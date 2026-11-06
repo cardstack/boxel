@@ -5,6 +5,27 @@ import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Indicator } from './indicator';
 
+// Every `style` attribute written while `work` runs. Glimmer binds `style`
+// with `setAttribute`, which a strict Content Security Policy (the secure
+// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
+// through it and is allowed.
+async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
+  let writes: string[] = [];
+  let setAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+    if (name.toLowerCase() === 'style') {
+      writes.push(value);
+    }
+    return setAttribute.call(this, name, value);
+  };
+  try {
+    await work();
+  } finally {
+    Element.prototype.setAttribute = setAttribute;
+  }
+  return writes;
+}
+
 module('Pretui | components/indicator', function (hooks) {
   setupCardTest(hooks);
 
@@ -40,5 +61,18 @@ module('Pretui | components/indicator', function (hooks) {
     let btn = document.querySelector('[data-test-pretui-indicator] button') as HTMLElement;
     let label = document.querySelector('[data-test-pretui-indicator-label]') as HTMLElement;
     assert.strictEqual(btn.getAttribute('aria-describedby'), label.id);
+  });
+
+  test('the tone is set through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <Indicator @label='Online'><span>Ana</span></Indicator>
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    let indicator = document.querySelector<HTMLElement>('[data-test-pretui-indicator]')!;
+    assert.strictEqual(indicator.style.getPropertyValue('--pretui-mark-hue'), 'var(--success)');
   });
 });

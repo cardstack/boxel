@@ -11,6 +11,27 @@ import { modifier } from 'ember-modifier';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Token } from './token';
 
+// Every `style` attribute written while `work` runs. Glimmer binds `style`
+// with `setAttribute`, which a strict Content Security Policy (the secure
+// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
+// through it and is allowed.
+async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
+  let writes: string[] = [];
+  let setAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+    if (name.toLowerCase() === 'style') {
+      writes.push(value);
+    }
+    return setAttribute.call(this, name, value);
+  };
+  try {
+    await work();
+  } finally {
+    Element.prototype.setAttribute = setAttribute;
+  }
+  return writes;
+}
+
 // Writes each named argument onto the element's inline style as a custom
 // property, the way a sibling modifier sharing the style attribute would.
 const setCssVar = modifier(
@@ -453,5 +474,13 @@ module('Pretui | components/token', function (hooks) {
     state.hue = undefined;
     await settled();
     assert.strictEqual(hue(el), 'var(--muted-foreground)', "neither @hue is mistaken for the caller's");
+  });
+
+  test('@hue is set through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(<template><Token @value='POL-7' @hue='var(--chart-3)' /></template>),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.strictEqual(q('[data-test-pretui-token]').style.getPropertyValue('--pretui-token-hue'), 'var(--chart-3)');
   });
 });

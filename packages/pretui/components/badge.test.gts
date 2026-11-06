@@ -6,6 +6,27 @@ import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Badge } from './badge';
 
+// Every `style` attribute written while `work` runs. Glimmer binds `style`
+// with `setAttribute`, which a strict Content Security Policy (the secure
+// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
+// through it and is allowed.
+async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
+  let writes: string[] = [];
+  let setAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+    if (name.toLowerCase() === 'style') {
+      writes.push(value);
+    }
+    return setAttribute.call(this, name, value);
+  };
+  try {
+    await work();
+  } finally {
+    Element.prototype.setAttribute = setAttribute;
+  }
+  return writes;
+}
+
 function mark(sel = ''): HTMLElement | null {
   return document.querySelector(`${sel} [data-test-pretui-badge-mark]`);
 }
@@ -91,5 +112,18 @@ module('Pretui | components/badge', function (hooks) {
     await render(<template><Badge @count={{0}} @label='unread'><button type='button'>Messages</button></Badge></template>);
     let btn = document.querySelector('[data-test-pretui-badge] button') as HTMLElement;
     assert.notOk(btn.hasAttribute('aria-describedby'));
+  });
+
+  test('the tone is set through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <Badge @count={{3}} @tone='info'><button type='button'>Inbox</button></Badge>
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    let badge = document.querySelector<HTMLElement>('[data-test-pretui-badge]')!;
+    assert.strictEqual(badge.style.getPropertyValue('--pretui-mark-hue'), 'var(--pretui-info)');
   });
 });

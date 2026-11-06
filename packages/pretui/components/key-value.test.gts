@@ -9,6 +9,27 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { KeyValue } from './key-value';
 import type { KeyValueItem } from './key-value';
 
+// Every `style` attribute written while `work` runs. Glimmer binds `style`
+// with `setAttribute`, which a strict Content Security Policy (the secure
+// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
+// through it and is allowed.
+async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
+  let writes: string[] = [];
+  let setAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+    if (name.toLowerCase() === 'style') {
+      writes.push(value);
+    }
+    return setAttribute.call(this, name, value);
+  };
+  try {
+    await work();
+  } finally {
+    Element.prototype.setAttribute = setAttribute;
+  }
+  return writes;
+}
+
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;
 }
@@ -166,5 +187,17 @@ module('Pretui | components/key-value', function (hooks) {
       Array.from(q('[data-test-pretui-kv]').children).map((c) => c.tagName),
       ['DT', 'DD', 'DT', 'DD'],
     );
+  });
+
+  test('renders no style attribute', async function (assert) {
+    let items: KeyValueItem[] = [
+      { key: 'Kind', value: 'API key' },
+      { key: 'Used with', value: 'github.com' },
+    ];
+    let writes = await styleAttributeWrites(() =>
+      render(<template><KeyValue @items={{items}} @labelStyle='eyebrow' /></template>),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.dom('[data-test-pretui-kv] dt').exists({ count: 2 });
   });
 });

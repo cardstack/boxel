@@ -10,6 +10,27 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { FieldError } from './field-error';
 import type { FormIssue } from '../internal/forms-core';
 
+// Every `style` attribute written while `work` runs. Glimmer binds `style`
+// with `setAttribute`, which a strict Content Security Policy (the secure
+// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
+// through it and is allowed.
+async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
+  let writes: string[] = [];
+  let setAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+    if (name.toLowerCase() === 'style') {
+      writes.push(value);
+    }
+    return setAttribute.call(this, name, value);
+  };
+  try {
+    await work();
+  } finally {
+    Element.prototype.setAttribute = setAttribute;
+  }
+  return writes;
+}
+
 const ERR: FormIssue = { targetPath: 'Total', severity: 'error', message: 'Total exceeds the budget.', ruleId: 'R-12' };
 const WARN: FormIssue = { targetPath: 'Total', severity: 'warning', message: 'Unusually high.' };
 const INFO: FormIssue = { targetPath: 'Total', severity: 'info', message: 'Rounded to the nearest unit.' };
@@ -79,5 +100,19 @@ module('Pretui | components/field-error', function (hooks) {
   test('asks for the rule id but renders nothing when the issue has none', async function (assert) {
     await render(<template><FieldError @issue={{WARN}} @showRuleId={{true}} /></template>);
     assert.notOk(el().querySelector('[data-test-pretui-token]'), 'no empty token');
+  });
+
+  test('renders no style attribute, its rule Token included', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <FieldError @issue={{ERR}} @showRuleId={{true}} />
+          <FieldError @issue={{WARN}} />
+          <FieldError @issue={{INFO}} />
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.strictEqual(all().length, 3);
   });
 });

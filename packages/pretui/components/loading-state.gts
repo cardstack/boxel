@@ -1,6 +1,6 @@
 // Pretui — LoadingState: a pixel-grid loader with a shimmer label and caller-supplied elapsed text.
 import Component from '@glimmer/component';
-import { htmlSafe } from '@ember/template';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
 
 export interface LoadingStateSignature {
   Args: {
@@ -17,8 +17,13 @@ export class LoadingState extends Component<LoadingStateSignature> {
   get label() {
     return this.args.label ?? 'Working';
   }
-  get pixels(): { style: ReturnType<typeof htmlSafe>; round: boolean }[] {
-    let variant = this.args.variant ?? 'drive';
+  get variant() {
+    return this.args.variant ?? 'drive';
+  }
+  // Each lit pixel's delay is written through the CSSOM rather than a
+  // `style` attribute, which a strict Content Security Policy refuses. The
+  // variant's duration and the unlit pixels come from the stylesheet.
+  get pixels(): { kept: KeptProperty[]; idle: boolean }[] {
     let chev = Array.from({ length: 9 }, (_, i) => {
       let r = Math.floor(i / 3);
       let c = i % 3;
@@ -29,23 +34,26 @@ export class LoadingState extends Component<LoadingStateSignature> {
       let k = order.indexOf(i);
       return k === -1 ? null : k * 110;
     });
-    let delays = variant === 'orbit' ? orbit : chev;
-    let dur = variant === 'orbit' ? 950 : 650;
-    let round = variant === 'dots';
+    let delays = this.variant === 'orbit' ? orbit : chev;
     return delays.map((d) => ({
-      round,
-      style: htmlSafe(
+      idle: d === null,
+      kept:
         d === null
-          ? 'opacity: .07; animation: none'
-          : `animation: pretui-pixel-on ${dur}ms ease-in-out ${d}ms infinite`,
-      ),
+          ? []
+          : [
+              {
+                property: '--pretui-pixel-delay',
+                value: `${d}ms`,
+                strength: 'arg',
+              },
+            ],
     }));
   }
   <template>
     <span class='pretui-loading' role='status' data-test-pretui-loading-state ...attributes>
-      <span aria-hidden='true' class='pretui-pixelgrid'>
+      <span aria-hidden='true' class='pretui-pixelgrid' data-variant={{this.variant}}>
         {{#each this.pixels as |p|}}
-          <span class='pretui-pixel' data-round={{if p.round 'true'}} style={{p.style}}></span>
+          <span class='pretui-pixel' data-idle={{if p.idle 'true'}} {{keepStyle p.kept}}></span>
         {{/each}}
       </span>
       <span class='pretui-shimmer-label'>{{this.label}}</span>
@@ -86,9 +94,17 @@ export class LoadingState extends Component<LoadingStateSignature> {
           background: var(--foreground);
           border-radius: 1px;
           opacity: 0.15;
+          animation: pretui-pixel-on 650ms ease-in-out var(--pretui-pixel-delay, 0ms) infinite;
         }
-        .pretui-pixel[data-round] {
+        .pretui-pixelgrid[data-variant='orbit'] .pretui-pixel {
+          animation-duration: 950ms;
+        }
+        .pretui-pixelgrid[data-variant='dots'] .pretui-pixel {
           border-radius: 50%;
+        }
+        .pretui-pixel[data-idle] {
+          opacity: 0.07;
+          animation: none;
         }
         .pretui-shimmer-label {
           font-size: var(--text-ui-md, 12.5px);
