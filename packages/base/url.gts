@@ -1,3 +1,4 @@
+import type { FieldSearchIntent } from '@cardstack/runtime-common';
 import { StringField, Component, field, CardDef, contains } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
@@ -6,6 +7,9 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 import { markdownLink } from './markdown-helpers';
 
 export default class UrlField extends StringField {
+  static searchDefaults: FieldSearchIntent | undefined = {
+    role: 'identifier',
+  };
   static icon = ExternalLink;
   static displayName = 'Url';
 

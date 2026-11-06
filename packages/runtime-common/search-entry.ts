@@ -1,6 +1,7 @@
 import {
   assertQuery,
   InvalidQueryError,
+  isRelevanceSort,
   type Filter,
   type Query,
   type Sort,
@@ -525,7 +526,12 @@ function translateSort(
         out.direction = v;
       } else if (key === 'near') {
         out.near = v;
-      } else if (key === 'weight' || key === 'method' || key === 'k') {
+      } else if (
+        key === 'weight' ||
+        key === 'weights' ||
+        key === 'method' ||
+        key === 'k'
+      ) {
         out[key] = v;
       } else if (key === 'of') {
         // a `_blend` sort's signals: sort entries in the same grammar
@@ -1552,8 +1558,9 @@ export async function searchEntryRealms(
   let combined = combineSearchEntryResults(
     docs,
     realms.length,
-    primarySort && isBlendSort(primarySort)
-      ? { key: '_blendScore', direction: primarySort.direction ?? 'desc' }
+    primarySort && (isBlendSort(primarySort) || isRelevanceSort(primarySort))
+      ? // A `_relevance` sort compiles to a blend in each realm's engine.
+        { key: '_blendScore', direction: primarySort.direction ?? 'desc' }
       : primarySort && isNearSort(primarySort)
         ? { key: '_nearSimilarity', direction: primarySort.direction ?? 'desc' }
         : undefined,

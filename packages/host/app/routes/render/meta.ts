@@ -24,6 +24,7 @@ import {
   type FusedIndexMeta,
   type PrerenderMetaDiagnostics,
   type RenderError,
+  SEARCH_TEXT_KEY,
 } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -302,6 +303,17 @@ export default class RenderMetaRoute extends Route<Model> {
     let typeAheadText = typeAheadTextOf(searchDoc);
     if (typeAheadText) {
       searchDoc._typeahead = typeAheadText;
+    }
+    // `_searchText` is the card's words grouped by the weight its fields'
+    // search roles give them (docs/search-intent.md). The index writer turns
+    // it into the row's weighted full-text vector and drops it from the
+    // stored doc. Computing it also takes the fields declared
+    // `search: false` out of the doc.
+    if (typeof api.searchTextOf === 'function') {
+      let searchText = api.searchTextOf(Klass, searchDoc);
+      if (searchText) {
+        searchDoc[SEARCH_TEXT_KEY] = searchText;
+      }
     }
 
     let searchDocFieldsMs = pruneTimingPaths(fieldsMs);

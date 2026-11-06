@@ -48,7 +48,19 @@ import type {
   BlendSortExpression,
   BlendComponent,
 } from './query.ts';
-import { DEFAULT_RRF_K } from './query.ts';
+import {
+  DEFAULT_RRF_K,
+  DEFAULT_RELEVANCE_WEIGHTS,
+  MAX_BLEND_COMPONENTS,
+  isRelevanceSort,
+  type RelevanceSignal,
+  type RelevanceSortExpression,
+} from './query.ts';
+import {
+  rankFieldsOf,
+  SEARCH_RANK_SIGNALS,
+  SEARCH_TEXT_KEY,
+} from './search-intent.ts';
 import { vectorDimensions, vectorToSqlLiteral } from './serializers/vector.ts';
 import {
   hasVectorIndex,
@@ -1291,6 +1303,7 @@ export class IndexQueryEngine {
     results: Partial<IndexRowWithHtml>[];
   }> {
     try {
+      sort = await this.#expandRelevanceSorts(sort, filter);
       let conditions: CardExpression[] = [
         ['i.realm_url = ', param(realmURL.href)],
         ['i.is_deleted = FALSE OR i.is_deleted IS NULL'],
@@ -1934,7 +1947,7 @@ export class IndexQueryEngine {
                     // intentionally not using field arity here--not sure what it
                     // means to sort via a plural field
                     'ANY_VALUE(',
-                    'on' in s
+                    'on' in s && s.on
                       ? fieldQuery(s.by, s.on, false, 'sort')
                       : this.generalFieldSortColumn(s.by),
                     ')',
@@ -2002,7 +2015,7 @@ export class IndexQueryEngine {
       let alias = `_sort_${i}`;
       innerSortColumns.push(
         ', ANY_VALUE(',
-        'on' in s
+        'on' in s && s.on
           ? fieldQuery(s.by, s.on, false, 'sort')
           : this.generalFieldSortColumn(s.by),
         `) AS ${alias}`,
@@ -2484,6 +2497,89 @@ export class IndexQueryEngine {
     ]);
   }
 
+  // Each `_relevance` sort, as the `_blend` it stands for: text relevance
+  // (when the filter has a positive `matches` term), each ranking signal the
+  // anchoring type declares (`rank: 'popularity'`, its `static searchDefaults.rank`),
+  // and, given `near`, the similarity of the type's vector field as the
+  // `meaning` signal. Weights default to `DEFAULT_RELEVANCE_WEIGHTS`; a zero
+  // weight drops a signal and a negative one inverts it.
+  async #expandRelevanceSorts(
+    sort: Sort | undefined,
+    filter: Filter | undefined,
+  ): Promise<Sort | undefined> {
+    if (!sort?.some((s) => isRelevanceSort(s))) {
+      return sort;
+    }
+    let expanded: Sort = [];
+    for (let s of sort) {
+      expanded.push(
+        isRelevanceSort(s) ? await this.#relevanceBlend(s, filter) : s,
+      );
+    }
+    return expanded;
+  }
+
+  async #relevanceBlend(
+    sort: RelevanceSortExpression,
+    filter: Filter | undefined,
+  ): Promise<BlendSortExpression> {
+    let weightOf = (signal: RelevanceSignal) =>
+      sort.weights?.[signal] ?? DEFAULT_RELEVANCE_WEIGHTS[signal];
+    let signal = (
+      weight: number,
+      entry: { by: string; on?: CodeRef; near?: NearSortTarget },
+    ): BlendComponent =>
+      ({
+        ...entry,
+        weight: Math.abs(weight),
+        direction: weight < 0 ? 'asc' : 'desc',
+      }) as BlendComponent;
+    let of: BlendComponent[] = [];
+    let text = weightOf('text');
+    if (text !== 0 && collectPositiveMatchTerms(filter).length > 0) {
+      of.push(signal(text, { by: MATCH_RELEVANCE_SORT_KEY }));
+    }
+    let on = sort.on ?? filterAnchor(filter);
+    if (on) {
+      let definition = await this.getDefinition(on);
+      let rankFields = rankFieldsOf(definition);
+      for (let name of SEARCH_RANK_SIGNALS) {
+        let field = rankFields[name]?.[0];
+        let weight = weightOf(name);
+        if (field && weight !== 0) {
+          of.push(signal(weight, { by: field, on }));
+        }
+      }
+      let meaning = weightOf('meaning');
+      if (sort.near != null && meaning !== 0) {
+        let vectorField = Object.entries(definition.fields).find(
+          ([, defId]) =>
+            definition.fieldDefs[defId]?.serializerName === 'vector',
+        )?.[0];
+        if (!vectorField) {
+          throw new InvalidQueryError(
+            `sort by "${RELEVANCE_SORT_KEY_NAME}" near a vector needs a type with a VectorField; ${JSON.stringify(on)} has none`,
+          );
+        }
+        of.push(signal(meaning, { by: vectorField, on, near: sort.near }));
+      }
+    } else if (sort.near != null) {
+      throw new InvalidQueryError(
+        `sort by "${RELEVANCE_SORT_KEY_NAME}" near a vector needs "on", the type whose vector field it compares`,
+      );
+    }
+    if (of.length === 0) {
+      throw new InvalidQueryError(
+        `sort by "${RELEVANCE_SORT_KEY_NAME}" has nothing to rank by: give the query a positive \`matches\` filter, or anchor it ("on") to a type that declares rank fields`,
+      );
+    }
+    return {
+      by: BLEND_SORT_KEY,
+      of: of.slice(0, MAX_BLEND_COMPONENTS),
+      direction: sort.direction ?? 'desc',
+    };
+  }
+
   // The projection column (and any vector joins) for each `_blend` sort:
   // reciprocal rank fusion, sum(weight / (k + rank)) over the signals a card
   // has a value for. Each signal's rank is a window over every grouped row
@@ -2721,8 +2817,12 @@ export class IndexQueryEngine {
     return [
       'MAX(',
       dbExpression({
+        // The markdown's words carry the lowest weight, D; the card's
+        // role-weighted vector adds each title, summary and plain-text word
+        // at the weight its field's role gives it, so the same word ranks
+        // higher in a title than in a transcript.
         pg: [
-          `ts_rank_cd(COALESCE(${markdownVector('ph', staged)}, ''::tsvector), `,
+          `ts_rank_cd(COALESCE(${markdownVector('ph', staged)}, ''::tsvector) || COALESCE(${searchTextVector('i', staged)}, ''::tsvector), `,
           ...pgTsQuery,
           `, 32)`,
         ],
@@ -2757,6 +2857,9 @@ export class IndexQueryEngine {
       if (isMatchesFilter(branch)) {
         if (branch.matches.trim() === '') {
           continue;
+        }
+        if (branch.scope) {
+          return undefined;
         }
         if (branch.within) {
           selects.push([
@@ -3059,6 +3162,12 @@ export class IndexQueryEngine {
         this.#passageMatchCondition(filter, filter.within),
       ]);
     }
+    if (filter.scope === 'title' && filter.matches.trim() !== '') {
+      return every([
+        ...(typeRef ? [this.typeCondition(typeRef)] : []),
+        this.#titleScopedMatchCondition(filter, context),
+      ]);
+    }
     let predicate: CardExpression =
       filter.matches.trim() === ''
         ? ['FALSE']
@@ -3103,6 +3212,37 @@ export class IndexQueryEngine {
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       predicate,
     ]);
+  }
+
+  // A `matches … scope: 'title'` term: the card's title, name and alias
+  // words, which its role-weighted vector holds at weight A. The vector's GIN
+  // index finds the rows holding the words anywhere, and `ts_filter` keeps
+  // those holding them at A. SQLite has no vector; it reads the type-ahead
+  // text, which holds the same names.
+  #titleScopedMatchCondition(
+    filter: MatchesFilter,
+    context: FilterContext,
+  ): CardExpression {
+    let vector = searchTextVector(
+      'ti',
+      context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable,
+    );
+    return [
+      dbExpression({
+        pg: [
+          `(i.url, i.realm_url, i.type) IN (SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ${vector} @@`,
+          ...matchTsQuery(filter),
+          `AND ts_filter(${vector}, '{a}') @@`,
+          ...matchTsQuery(filter),
+          `OFFSET 0)`,
+        ],
+        sqlite: [
+          `LOWER(coalesce(i.search_doc ->> '${TYPE_AHEAD_KEY}', '')) LIKE LOWER(`,
+          param(`%${escapeSqliteLikePattern(filter.matches)}%`),
+          `) ESCAPE '\\'`,
+        ],
+      }),
+    ];
   }
 
   private fieldEqFilter(
@@ -3937,6 +4077,43 @@ function markdownVector(alias: string, staged: boolean): string {
   return staged
     ? `to_tsvector('english', markdown_search_text(${alias}.markdown))`
     : `${alias}.markdown_tsv`;
+}
+
+const RELEVANCE_SORT_KEY_NAME = '_relevance';
+
+// The card type a filter is anchored on: its own `on` or `type`, or the first
+// anchor among the branches of a top-level `every`.
+function filterAnchor(filter: Filter | undefined): CodeRef | undefined {
+  if (!filter) {
+    return undefined;
+  }
+  if ('on' in filter && filter.on) {
+    return filter.on;
+  }
+  if ('type' in filter && filter.type) {
+    return filter.type;
+  }
+  if ('every' in filter) {
+    for (let branch of filter.every) {
+      let anchor = filterAnchor(branch);
+      if (anchor) {
+        return anchor;
+      }
+    }
+  }
+  return undefined;
+}
+
+// A card's role-weighted full-text vector (docs/search-intent.md): titles,
+// names and aliases at weight A down to body text at D. Production rows carry
+// it in `search_tsv`, which the index writer builds from the render's
+// `_searchText` as it promotes a pass; staged rows still hold `_searchText`
+// in their search doc, so a search over them builds it inline. A row indexed
+// before the column existed has none, and ranks by its markdown alone.
+function searchTextVector(alias: string, staged: boolean): string {
+  return staged
+    ? `search_text_vector(${alias}.search_doc -> '${SEARCH_TEXT_KEY}')`
+    : `${alias}.search_tsv`;
 }
 
 function prerenderedTableFromOpts(opts: WIPOptions | undefined) {

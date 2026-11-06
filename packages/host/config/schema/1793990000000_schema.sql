@@ -51,6 +51,7 @@
    host_shell_generation INTEGER,
    source_content_hash TEXT,
    relationship_deps BLOB,
+   search_tsv,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

@@ -76,6 +76,7 @@ import {
   searchDocSpillEnabled,
   spillSearchDoc,
 } from './search-doc-spill.ts';
+import { SEARCH_TEXT_KEY } from './search-intent.ts';
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -1939,14 +1940,32 @@ export class Batch {
     // card content that can carry a split emoji surrogate or a stray NUL folded
     // in from an upstream resolver.
     let sanitized = sanitizeForJsonb(preparedEntry) as Record<string, unknown>;
+    // The render's `_searchText` (docs/search-intent.md) is the source of the
+    // row's weighted full-text vector, which only Postgres has. Staging keeps
+    // it so promotion can build the vector (`#restampedColumns`); the
+    // promoted doc never holds it, so it neither spills nor counts toward the
+    // doc's size. SQLite has no use for it.
+    let searchDoc = sanitized.search_doc as Record<string, unknown> | null;
+    let docWithoutText = searchDoc;
+    if (
+      searchDoc &&
+      typeof searchDoc === 'object' &&
+      SEARCH_TEXT_KEY in searchDoc
+    ) {
+      let { [SEARCH_TEXT_KEY]: _searchText, ...rest } = searchDoc;
+      docWithoutText = rest;
+      if (this.#dbAdapter.kind !== 'pg') {
+        sanitized.search_doc = rest;
+      }
+    }
     if (this.#spillSearchDocs) {
       // Spill the sanitized doc, so the spilled values are the bytes that get
       // stored. Both columns are always written, so a row restaged within one
       // staging never keeps a stale spill.
-      let spilled = await spillSearchDoc(
-        sanitized.search_doc as Record<string, unknown> | null,
-        { url: href, type: String(sanitized.type) },
-      );
+      let spilled = await spillSearchDoc(docWithoutText, {
+        url: href,
+        type: String(sanitized.type),
+      });
       sanitized.spilled_search_doc = spilled?.searchDoc ?? null;
       sanitized.spill_rows = spilled?.rows ?? null;
     }
@@ -3411,8 +3430,11 @@ export class Batch {
       resource_created_at: _remove3,
       generation: _remove4,
       job_id: _remove5,
+      // Derived at promotion and kept there for a row that brings no
+      // `_searchText` (see `applyBatchUpdates`); staging has no such column.
+      search_tsv: _remove6,
       ...productionVersion
-    } = entry;
+    } = entry as typeof entry & { search_tsv?: unknown };
     return {
       ...productionVersion,
       last_modified: entry.last_modified ? parseInt(entry.last_modified) : null,
@@ -3783,7 +3805,18 @@ export class Batch {
           ],
         ]),
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
-        ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
+        ...separatedByCommas(
+          names.map((name) =>
+            // A row staged without the render's `_searchText` (an error row
+            // carrying its last good doc forward, or a render from before
+            // search intent) keeps the vector it has.
+            name === 'search_tsv'
+              ? [
+                  'search_tsv=COALESCE(EXCLUDED.search_tsv, boxel_index.search_tsv)',
+                ]
+              : [`${name}=EXCLUDED.${name}`],
+          ),
+        ),
       ] as Expression);
       await this.#applyStagedTombstones({
         table: 'boxel_index',
@@ -4025,9 +4058,22 @@ export class Batch {
             'AS INTEGER) AS generation',
           ] as Expression)
         : column === 'search_doc' && this.#dbAdapter.kind === 'pg'
-          ? // A row staged with a spill promotes its spilled form (ADR 021).
-            ['COALESCE(spilled_search_doc, search_doc) AS search_doc']
-          : [column],
+          ? // A row staged with a spill promotes its spilled form (ADR 021),
+            // and no row keeps the render's `_searchText`: it lives on as
+            // `search_tsv`.
+            [
+              `(COALESCE(spilled_search_doc, search_doc) - '${SEARCH_TEXT_KEY}') AS search_doc`,
+            ]
+          : column === 'search_tsv'
+            ? // The row's role-weighted full-text vector, built from the
+              // render's `_searchText` (see the `add-boxel-index-search-tsv`
+              // migration). Staging has no such column.
+              [
+                this.#dbAdapter.kind === 'pg'
+                  ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_text_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS search_tsv`
+                  : 'NULL AS search_tsv',
+              ]
+            : [column],
     );
   }
 

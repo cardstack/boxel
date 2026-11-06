@@ -10,6 +10,7 @@ import {
   rri,
   VirtualNetwork,
   type DefinitionLookup,
+  type Filter,
 } from '@cardstack/runtime-common';
 
 import { setupDB } from './helpers/index.ts';
@@ -538,7 +539,7 @@ module(basename(import.meta.filename), function () {
     });
 
     // The search sheet's term filter: full text OR either title key.
-    let sheetTermFilter = (term: string) => ({
+    let sheetTermFilter = (term: string): Filter => ({
       any: [
         { matches: term },
         { contains: { _title: term } },

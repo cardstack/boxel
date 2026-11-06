@@ -16,6 +16,7 @@ import {
   type RangeFilterValue,
   type RangeOperator,
   type Sort,
+  isRelevanceSort,
 } from './query.ts';
 import {
   isBlendSort,
@@ -91,7 +92,7 @@ const GENERAL_SORT_FIELDS = new Set(['lastModified', 'createdAt', 'cardURL']);
 // holds. A `_blend` sort ranks each signal over the server's whole match set,
 // which a client holding a subset cannot reproduce, so it defers to the server.
 export function isClientSortable(sort: Sort | undefined): boolean {
-  return !(sort ?? []).some((s) => isBlendSort(s));
+  return !(sort ?? []).some((s) => isBlendSort(s) || isRelevanceSort(s));
 }
 
 export function isClientEvaluable(filter: Filter): boolean {
@@ -734,7 +735,11 @@ function sortValue(
   // queries never reach this comparator (server results pass through
   // unsorted). If `matches` ever becomes client-evaluable, this needs a
   // relevance shim.
-  if (isMatchRelevanceSort(expression) || isBlendSort(expression)) {
+  if (
+    isMatchRelevanceSort(expression) ||
+    isBlendSort(expression) ||
+    isRelevanceSort(expression)
+  ) {
     return null;
   }
   // A near sort mirrors the server's cosine similarity, so a live query

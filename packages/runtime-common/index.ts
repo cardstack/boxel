@@ -2582,3 +2582,4 @@ export {
 } from './bot-command.ts';
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
+export * from './search-intent.ts';

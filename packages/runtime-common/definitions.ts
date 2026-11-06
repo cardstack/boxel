@@ -13,6 +13,11 @@ import type { FieldType, Searchable } from '@cardstack/base/card-api';
 import type { BaseDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { Query } from './query.ts';
+import {
+  cardSearchIntentOf,
+  type CardSearchIntent,
+  type FieldSearchOption,
+} from './search-intent.ts';
 
 export interface FieldDefinition {
   type: FieldType;
@@ -26,6 +31,9 @@ export interface FieldDefinition {
   // and definition-build validation — not a pre-resolved plan. Persisted as
   // plain JSON in `modules.definitions`; omitted when the field declares none.
   searchable?: Searchable;
+  // The field's own `search` option (docs/search-intent.md), as declared;
+  // omitted when it declares none. The query engine reads `rank` from it.
+  search?: FieldSearchOption;
 }
 
 // Which of the three `BaseDef` families a definition describes. A card has its
@@ -79,6 +87,18 @@ export interface Definition {
   // Omitted when the type declares no operations, which keeps the entry for
   // every other type unchanged.
   operations?: { [operationName: string]: OperationDefinition };
+  // The type's `static searchDefaults`, merged up its ancestry; omitted when
+  // no class in it declares one.
+  search?: CardSearchIntent;
+}
+
+// The `search` member a definition entry records for `def`.
+export function definitionSearchIntent(
+  def: typeof BaseDef,
+): CardSearchIntent | undefined {
+  return cardSearchIntentOf(
+    def as unknown as { searchDefaults?: CardSearchIntent },
+  );
 }
 
 // Stable JSON serialization for content-keyed interning. Keys sorted at
@@ -139,6 +159,9 @@ export function getFieldDefinitions(
           : undefined,
       query: queryDefinition,
       searchable: field.searchable,
+      ...(field.searchIntent !== undefined
+        ? { search: field.searchIntent }
+        : {}),
     };
     fields[fieldName] = intern(def);
   }

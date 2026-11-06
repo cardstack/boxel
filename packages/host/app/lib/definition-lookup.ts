@@ -1,5 +1,6 @@
 import {
   definitionDisplayName,
+  definitionSearchIntent,
   definitionKind,
   getFieldDefinitions,
   loadCardDef,
@@ -37,12 +38,14 @@ export function makeDefinitionLookup(
     try {
       let card = await loadCardDef(codeRef, { loader });
       let { fields, fieldDefs } = getFieldDefinitions(api, card);
+      let search = definitionSearchIntent(card);
       return {
         codeRef,
         fields,
         fieldDefs,
         type: definitionKind(card),
         displayName: definitionDisplayName(card),
+        ...(search ? { search } : {}),
       };
     } catch (err: any) {
       console.warn(

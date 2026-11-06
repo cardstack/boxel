@@ -16,6 +16,7 @@ import {
   CardError,
   Deferred,
   definitionDisplayName,
+  definitionSearchIntent,
   definitionKind,
   getFieldDefinitions,
   identifyCard,
@@ -585,6 +586,10 @@ async function makeDefinition(
       type: definitionKind(def),
       displayName: definitionDisplayName(def),
     };
+    let search = definitionSearchIntent(def);
+    if (search) {
+      definition.search = search;
+    }
     let operations = await captureOperations(
       def,
       definition,

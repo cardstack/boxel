@@ -1,3 +1,4 @@
+import type { FieldSearchIntent } from '@cardstack/runtime-common';
 import { action } from '@ember/object';
 import { StringField, Component } from './card-api';
 import {
@@ -33,6 +34,9 @@ class Edit extends Component<typeof EmailField> {
 }
 
 export default class EmailField extends StringField {
+  static searchDefaults: FieldSearchIntent | undefined = {
+    role: 'identifier',
+  };
   static icon = MailIcon;
   static displayName = 'Email';
   static [fieldSerializer] = 'email';

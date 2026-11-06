@@ -22,6 +22,7 @@ import {
   MAX_VECTOR_DIMENSIONS,
   type Vector,
 } from './serializers/vector.ts';
+import { SEARCH_RANK_SIGNALS, type SearchRankSignal } from './search-intent.ts';
 
 // `query.ts` is where callers reach for the grammar's error, so it stays
 // exported from here even though the class itself lives one module down.
@@ -177,15 +178,55 @@ type SortExpressionWithCodeRefWithInterpolations = {
   direction?: string;
   near?: NearSortTarget | string;
   weight?: number;
+  weights?: Partial<Record<RelevanceSignal, number>>;
   of?: SortExpressionWithCodeRefWithInterpolations[];
   method?: string;
   k?: number;
 };
 
+// Ranking by search intent (docs/search-intent.md): text relevance, weighted
+// by the matched fields' search roles, fused with the ranking signals the
+// type declares (`rank: 'popularity'` and the like) and, given `near`, the
+// similarity of the type's vector field as the `meaning` signal. The engine
+// compiles it to a `_blend` of those signals, so each result carries the
+// fused score in `meta._blendScore`. `on` names the type whose declarations
+// it reads; a search entry's root anchor supplies it.
+export const RELEVANCE_SORT_KEY = '_relevance';
+export const RELEVANCE_SIGNALS = [
+  'text',
+  ...SEARCH_RANK_SIGNALS,
+  'meaning',
+] as const;
+export type RelevanceSignal = 'text' | SearchRankSignal | 'meaning';
+// A signal's weight when the query names none: the words a reader typed
+// lead, and the card's own signals break ties among good matches.
+export const DEFAULT_RELEVANCE_WEIGHTS: Record<RelevanceSignal, number> = {
+  text: 1,
+  popularity: 0.5,
+  recency: 0.5,
+  quality: 0.5,
+  priority: 0.5,
+  meaning: 1,
+};
+export type RelevanceSortExpression = {
+  by: typeof RELEVANCE_SORT_KEY;
+  on?: CodeRef;
+  // Re-weights signals by name. 0 drops a signal; a negative weight inverts
+  // it (least popular first).
+  weights?: Partial<Record<RelevanceSignal, number>>;
+  near?: NearSortTarget;
+  direction?: 'asc' | 'desc';
+};
+
+export function isRelevanceSort(sort: object): sort is RelevanceSortExpression {
+  return (sort as { by?: unknown }).by === RELEVANCE_SORT_KEY;
+}
+
 type SortExpression =
   | SortExpressionWithoutCodeRef
   | SortExpressionWithCodeRef
-  | BlendSortExpression;
+  | BlendSortExpression
+  | RelevanceSortExpression;
 type SortExpressionWithInterpolations =
   | SortExpressionWithoutCodeRefWithInterpolations
   | SortExpressionWithCodeRefWithInterpolations;
@@ -262,6 +303,10 @@ export interface MatchesFilter extends TypedFilter {
   // ranks it by its best passage, and the search reports the passages that
   // matched (`meta.passages`). Names a top-level field, e.g. `segments`.
   within?: string;
+  // Only the card's title, name and alias roles (docs/search-intent.md). Not
+  // `in`, which is the membership operator: a node holding both would read as
+  // two operators.
+  scope?: 'title';
 }
 
 // One passage that matched a search's `matches … within` term (see PassageField).
@@ -293,7 +338,10 @@ export function isTypeAheadFilter(filter: Filter): filter is TypeAheadFilter {
 }
 
 // One positive `matches` term, as a `_matchRelevance` sort scores it.
-export type MatchTerm = Pick<MatchesFilter, 'matches' | 'prefix' | 'within'>;
+export type MatchTerm = Pick<
+  MatchesFilter,
+  'matches' | 'prefix' | 'within' | 'scope'
+>;
 
 // The type-ahead split of a `prefix` query: the finished words, and the
 // unfinished last word as letters and digits only (so it can be spliced into
@@ -376,6 +424,7 @@ export function collectPositiveMatchTerms(
             matches: filter.matches,
             ...(filter.prefix ? { prefix: true } : {}),
             ...(filter.within ? { within: filter.within } : {}),
+            ...(filter.scope ? { scope: filter.scope } : {}),
           },
         ]
       : [];
@@ -588,6 +637,11 @@ function assertSortExpression(
     }
   }
 
+  if (isRelevanceSort(sort)) {
+    assertRelevanceSort(sort, pointer);
+    return;
+  }
+
   if (isNearSort(sort)) {
     if (!('on' in sort)) {
       throw new InvalidQueryError(
@@ -623,6 +677,47 @@ function assertSortExpression(
   assertCardType(sort.on, pointer.concat('on'));
 }
 
+function assertRelevanceSort(sort: any, pointer: string[]) {
+  let where = pointer.join('/') || '/';
+  if ('on' in sort) {
+    assertCardType(sort.on, pointer.concat('on'));
+  }
+  if ('near' in sort && sort.near != null) {
+    assertNearTarget(sort.near, pointer.concat('near'));
+  }
+  if ('weights' in sort) {
+    let weights = sort.weights;
+    if (
+      typeof weights !== 'object' ||
+      weights == null ||
+      Array.isArray(weights)
+    ) {
+      throw new InvalidQueryError(
+        `${where}/weights: weights must be an object of signal weights`,
+      );
+    }
+    for (let [signal, weight] of Object.entries(weights)) {
+      if (!(RELEVANCE_SIGNALS as readonly string[]).includes(signal)) {
+        throw new InvalidQueryError(
+          `${where}/weights/${signal}: unknown signal (expected one of ${RELEVANCE_SIGNALS.join(', ')})`,
+        );
+      }
+      if (typeof weight !== 'number' || !Number.isFinite(weight)) {
+        throw new InvalidQueryError(
+          `${where}/weights/${signal}: a weight must be a finite number`,
+        );
+      }
+    }
+  }
+  for (let key of Object.keys(sort)) {
+    if (!['by', 'on', 'near', 'weights', 'direction'].includes(key)) {
+      throw new InvalidQueryError(
+        `${where}/${key}: a ${RELEVANCE_SORT_KEY} sort takes by, on, near, weights and direction`,
+      );
+    }
+  }
+}
+
 function assertBlendSort(sort: any, pointer: string[]) {
   let where = pointer.join('/') || '/';
   if (!Array.isArray(sort.of) || sort.of.length === 0) {
@@ -656,6 +751,11 @@ function assertBlendSort(sort: any, pointer: string[]) {
     if (component && isBlendSort(component)) {
       throw new InvalidQueryError(
         `${at.join('/')}: a ${BLEND_SORT_KEY} sort cannot contain another`,
+      );
+    }
+    if (component && isRelevanceSort(component)) {
+      throw new InvalidQueryError(
+        `${at.join('/')}: a ${BLEND_SORT_KEY} sort cannot contain a ${RELEVANCE_SORT_KEY} sort, which is itself a blend`,
       );
     }
     if (
@@ -802,6 +902,11 @@ function assertFilter(
   if ('prefix' in filter && operator !== 'matches') {
     throw new InvalidQueryError(
       `${pointer.concat('prefix').join('/') || '/'}: prefix belongs beside matches`,
+    );
+  }
+  if ('scope' in filter && operator !== 'matches') {
+    throw new InvalidQueryError(
+      `${pointer.concat('scope').join('/') || '/'}: scope belongs beside matches`,
     );
   }
   if (!operator) {
@@ -1065,6 +1170,16 @@ function assertMatchesFilter(
   if ('prefix' in filter && typeof filter.prefix !== 'boolean') {
     throw new InvalidQueryError(
       `${pointer.concat('prefix').join('/') || '/'}: prefix must be a boolean`,
+    );
+  }
+  if ('scope' in filter && filter.scope !== 'title') {
+    throw new InvalidQueryError(
+      `${pointer.concat('scope').join('/') || '/'}: scope must be "title"`,
+    );
+  }
+  if ('scope' in filter && 'within' in filter) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: a matches term takes scope or within, not both`,
     );
   }
 }

@@ -1,3 +1,4 @@
+import type { FieldSearchIntent } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 
@@ -94,6 +95,9 @@ class Edit extends Component<typeof PhoneNumberField> {
 }
 
 export default class PhoneNumberField extends FieldDef {
+  static searchDefaults: FieldSearchIntent | undefined = {
+    role: 'identifier',
+  };
   static displayName = 'Phone Number';
   static icon = PhoneIcon;
   static [primitive]: string;
