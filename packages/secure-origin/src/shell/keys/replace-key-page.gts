@@ -29,8 +29,8 @@ import { trackedObject } from '@ember/reactive/collections';
 import { getKey, replaceKey, windowContext } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
+import { Field } from '@cardstack/pretui/components/field';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 
 import {
   failureMessage,
@@ -163,7 +163,13 @@ class SlotPanel extends Component<{
         <h2 class='slot-name'>{{@view.slot}}</h2>
       {{/if}}
       {{#if @replaced}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p
             class='value'
             role='status'
@@ -172,9 +178,15 @@ class SlotPanel extends Component<{
             data-test-replace-key-replaced
           ><strong>{{this.keyName}}</strong>
             is replaced.</p>
-        </FieldContainer>
+        </Field>
       {{else if this.replacing}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='value'>
             <strong
               data-test-replace-key-name
@@ -209,7 +221,7 @@ class SlotPanel extends Component<{
               </span>
             {{/if}}
           </p>
-        </FieldContainer>
+        </Field>
         <form
           novalidate
           {{on 'submit' this.save}}
@@ -240,7 +252,13 @@ class SlotPanel extends Component<{
           </div>
         </form>
       {{else if this.reconnecting}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='value'>
             <strong
               data-test-replace-key-name
@@ -256,7 +274,7 @@ class SlotPanel extends Component<{
               </span>
             {{/if}}
           </p>
-        </FieldContainer>
+        </Field>
         <div class='slot-actions'>
           <Button
             @kind='primary'
@@ -265,16 +283,28 @@ class SlotPanel extends Component<{
           >Reconnect</Button>
         </div>
       {{else if this.accepted}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='message' data-test-replace-key-accepted>
             <strong>{{this.accepted.key.name}}</strong>
             still works:
             {{this.serviceName}}
             accepts it, so there’s nothing to replace.
           </p>
-        </FieldContainer>
+        </Field>
       {{else if this.someoneElses}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='message' data-test-replace-key-not-yours>
             {{#if this.someoneElses.suspended}}
               The workspace’s key{{this.quotedLabel}}
@@ -302,9 +332,15 @@ class SlotPanel extends Component<{
               {{/if}}
             {{/if}}
           </p>
-        </FieldContainer>
+        </Field>
       {{else}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='message' data-test-replace-key-unbound>
             {{#if this.unboundShared}}
               No key is shared into
@@ -315,7 +351,7 @@ class SlotPanel extends Component<{
               nothing to replace.
             {{/if}}
           </p>
-        </FieldContainer>
+        </Field>
       {{/if}}
     </section>
 

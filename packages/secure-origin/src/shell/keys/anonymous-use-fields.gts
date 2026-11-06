@@ -7,10 +7,10 @@
 // workspace the key is shared into.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import Checkbox from '../../components/checkbox.gts';
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Users from '../../components/icons/users.gts';
+import { Checkbox } from '@cardstack/pretui/components/checkbox';
+import { Field } from '@cardstack/pretui/components/field';
+
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import BoxelInput from '../../components/input.gts';
 
 import { anonymousCapsPhrase, type AnonymousCaps } from './anonymous-caps.ts';
@@ -92,31 +92,38 @@ interface Signature {
 }
 
 const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
-  <FieldContainer
-    @tag='label'
+  <Field
+    @reserveMessage={{false}}
+    @orientation='horizontal'
     @label='People who aren’t signed in'
-    @icon={{Users}}
+    @icon={{HatGlasses}}
     data-test-anonymous-use
+    as |controlId|
   >
-    <span class='agree'>
-      <Checkbox
-        @checked={{@anonymous}}
-        @onChange={{@onToggle}}
-        data-test-anonymous-use-input
-      />
+    {{! The checkbox's own label holds what ticking it says, so the box is
+        named by the row's label and that, and a click on either ticks it. }}
+    <Checkbox
+      class='agree'
+      @controlId={{controlId}}
+      @checked={{@anonymous}}
+      @onCheckedChange={{@onToggle}}
+      data-test-anonymous-use-input
+    >
       <span class='agree-text'>
         <span data-test-anonymous-use-agreement>{{@agreement}}</span>
         <span class='note' data-test-anonymous-use-note>{{@note}}</span>
       </span>
-    </span>
-  </FieldContainer>
+    </Checkbox>
+  </Field>
   {{#if @anonymous}}
-    <FieldContainer
-      @tag='div'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
+      @labelTag='span'
       @label='Daily anonymous cap (optional)'
-      @icon={{KeyRound}}
+      @icon={{HatGlasses}}
       data-test-anonymous-cap
-      as |labelId|
+      as |_controlId _messageId labelId|
     >
       <BoxelInput
         @type='text'
@@ -135,13 +142,15 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         who aren’t signed in can make with this key each day (UTC), all
         together, in every workspace it’s shared into. Leave it empty for no
         cap.</span>
-    </FieldContainer>
-    <FieldContainer
-      @tag='div'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
+      @labelTag='span'
       @label='Monthly anonymous cap (optional)'
-      @icon={{KeyRound}}
+      @icon={{HatGlasses}}
       data-test-anonymous-monthly-cap
-      as |labelId|
+      as |_controlId _messageId labelId|
     >
       <BoxelInput
         @type='text'
@@ -160,15 +169,13 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         people who aren’t signed in can make with this key each calendar month
         (UTC), all together, in every workspace it’s shared into. Leave it empty
         for no cap.</span>
-    </FieldContainer>
+    </Field>
   {{/if}}
 
   <style scoped>
     .agree {
-      display: flex;
       align-items: flex-start;
       gap: var(--boxel-sp-xs);
-      cursor: pointer;
     }
     .agree-text {
       display: grid;
