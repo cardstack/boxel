@@ -237,13 +237,20 @@ async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
 // its list, which renders in the dropdown's wormhole.
 const WORKSPACE_TRIGGER =
   '[data-test-workspace-dropdown] [data-test-pretui-select-trigger]';
-const WORKSPACE_OPTION = '.pretui-select-dropdown [role="option"]';
 const OPTION_META = '[data-test-pretui-select-option-meta]';
 
 // The options of the open workspace list, which renders outside the test's
-// root element.
+// root element: those of the listbox the open list's search field controls,
+// since a list just closed can still be leaving the page.
 function workspaceOptions(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(WORKSPACE_OPTION)];
+  let listbox = workspaceSearch()?.getAttribute('aria-controls');
+  return listbox
+    ? [
+        ...document.querySelectorAll<HTMLElement>(
+          `#${CSS.escape(listbox)} [role="option"]`,
+        ),
+      ]
+    : [];
 }
 
 // The option of the open workspace list named `name`.
@@ -260,11 +267,14 @@ function workspaceOption(name: string): HTMLElement {
   return option;
 }
 
-// The open workspace list's search field.
+// The open workspace list's search field: the last one, since a list just
+// closed can still be leaving the page.
 function workspaceSearch(): HTMLElement {
-  return document.querySelector<HTMLElement>(
-    '[data-test-pretui-select-search-input]',
-  )!;
+  return [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-test-pretui-select-search-input]',
+    ),
+  ].at(-1)!;
 }
 
 // The option the search field names as highlighted.
@@ -2775,7 +2785,9 @@ module('Integration | key pages', function (hooks) {
         .doesNotExist('a name of its own needs no address');
       assert.deepEqual(
         [
-          ...document.querySelectorAll(`${WORKSPACE_OPTION} ${OPTION_META}`),
+          ...workspaceOptions().flatMap((option) => [
+            ...option.querySelectorAll(OPTION_META),
+          ]),
         ].map((e) => e.textContent?.trim()),
         [OTHER, REALM].map((url) => url.replace('https://', '')),
       );

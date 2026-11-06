@@ -48,9 +48,31 @@ export const ALLOWED_PACKAGES = new Set([
   '@cardstack/pretui',
   '@cardstack/boxel-ui',
   '@cardstack/boxel-icons',
+  'ember-modifier',
+  'ember-provide-consume-context',
 
   // boxel-ui's run-time dependencies, as ADR 019 §1.3 names them.
   'classnames',
+  'dompurify',
+  'ember-basic-dropdown',
+  'ember-concurrency',
+  'ember-power-select',
+  'lodash-es',
+
+  // Packages the build reaches through the ones above that ADR 019 §1.3
+  // doesn't name, each reviewed here. They arrive with boxel-ui's input and
+  // select, which the pages' fields and pickers render.
+  //
+  // Embroider's run-time macros, which compiled addon code calls into, as it
+  // calls the build's runtime helpers.
+  '@embroider/macros',
+  // `ember-basic-dropdown`'s and `ember-power-select`'s helpers and
+  // modifier: the `eq`/`and`/`or` helpers, a dynamic `{{element}}`, and a
+  // modifier that sets style properties through the CSSOM
+  // (`element.style.setProperty`), which the policy allows.
+  'ember-truth-helpers',
+  'ember-element-helper',
+  'ember-style-modifier',
 ]);
 
 // Modules the bundler itself generates, which have no file on disk.
