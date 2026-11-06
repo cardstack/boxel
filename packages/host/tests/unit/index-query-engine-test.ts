@@ -302,6 +302,35 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test('a paged search reports the whole match count on every page, and past the last', async function (assert) {
+    let { mango, vangogh, paper } = testCards;
+    await setupIndex(dbAdapter, [mango, vangogh, paper]);
+    let realm = new URL(testRealmURL);
+    let pages = [];
+    for (let number of [0, 1, 2]) {
+      let { cards, meta } = await indexQueryEngine.searchCards(realm, {
+        page: { size: 2, number },
+      });
+      pages.push({ ids: cards.map((c) => c.id), total: meta.page.total });
+    }
+    assert.deepEqual(
+      pages.map((p) => p.total),
+      [3, 3, 3],
+      'the total counts every match, including on a page past the last',
+    );
+    assert.deepEqual(
+      pages.map((p) => p.ids.length),
+      [2, 1, 0],
+      'each page holds its slice',
+    );
+    let { cards: all } = await indexQueryEngine.searchCards(realm, {});
+    assert.deepEqual(
+      [...pages[0].ids, ...pages[1].ids],
+      all.map((c) => c.id),
+      'the pages, in order, are the unpaged result',
+    );
+  });
+
   test('can get all cards with empty filter', async function (assert) {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(dbAdapter, [mango, vangogh, paper]);

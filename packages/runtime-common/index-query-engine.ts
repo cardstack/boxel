@@ -1317,6 +1317,10 @@ export class IndexQueryEngine {
         ]);
       }
 
+      // Everything but the filter: the wide pass of a paged search reads its
+      // page's rows under these alone (see `#pageRows`).
+      let baseConditions = [...conditions];
+
       if (filter) {
         await this.#assertNearFilters(filter, baseCardRef);
         conditions.push(
@@ -1434,11 +1438,63 @@ export class IndexQueryEngine {
       let facetQueries = (facets ?? []).map((facet) =>
         this.#facetQuery(facet, opts, everyCondition),
       );
-      let [results, totalResults, ...facetResults] = await Promise.all([
-        this.#queryCards(query, opts.timings),
-        this.#queryCards(queryCount, opts.timings),
-        ...facetQueries.map((q) => this.#queryCards(q, opts.timings)),
-      ]);
+      let results: Record<string, unknown>[];
+      let totalResults: Record<string, unknown>[];
+      let facetResults: unknown[];
+      if (page && !conditionalLiveDoc) {
+        // A paged search runs as a narrow pass then a wide one. The narrow
+        // pass evaluates the filter once and returns only each match's key, its
+        // sort values and the synthetic sort columns, ordered and limited to
+        // the page, with the match count taken in the same pass by a window
+        // function (evaluated over every group, before the LIMIT). The wide
+        // pass reads the projection's large columns (`pristine_doc`, the HTML
+        // maps) for the page's rows alone, by key, without the filter.
+        //
+        // In one pass the projection's `ANY_VALUE(...)` columns are aggregated
+        // for every match before the sort keeps a page, so a 24-row shelf over
+        // 6,000 matches detoasted 6,000 documents; and the separate COUNT
+        // query evaluated the whole filter a second time.
+        let keyQuery: CardExpression = [
+          'SELECT i.url AS url, i.type AS type, COUNT(*) OVER () AS __page_total',
+          ...relevanceColumn,
+          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+          ...nearJoins,
+          tableValuedFunctionsPlaceholder,
+          'WHERE',
+          ...everyCondition,
+          'GROUP BY i.url, i.type',
+          ...this.orderExpression(sort),
+          ...limitClause,
+        ];
+        let keys: Record<string, unknown>[];
+        [keys, ...facetResults] = await Promise.all([
+          this.#queryCards(keyQuery, opts.timings),
+          ...facetQueries.map((q) => this.#queryCards(q, opts.timings)),
+        ]);
+        if (keys.length > 0) {
+          totalResults = [{ total: keys[0].__page_total }];
+        } else if ((page.number ?? 0) === 0) {
+          totalResults = [{ total: 0 }];
+        } else {
+          // A page past the last match has no row to carry the count.
+          totalResults = await this.#queryCards(queryCount, opts.timings);
+        }
+        results =
+          keys.length > 0
+            ? await this.#pageRows(
+                keys,
+                selectClauseExpression,
+                baseConditions,
+                opts,
+              )
+            : [];
+      } else {
+        [results, totalResults, ...facetResults] = await Promise.all([
+          this.#queryCards(query, opts.timings),
+          this.#queryCards(queryCount, opts.timings),
+          ...facetQueries.map((q) => this.#queryCards(q, opts.timings)),
+        ]);
+      }
 
       let passageTerms = collectPositiveMatchTerms(filter).filter(
         (m) => m.within,
@@ -1486,6 +1542,61 @@ export class IndexQueryEngine {
       }
       throw error;
     }
+  }
+
+  // The wide pass of a paged search: the projection for the rows the narrow
+  // pass chose, in its order, each carrying the synthetic columns
+  // (`_matchRelevance`, `_nearSimilarity`, `_blendScore`) the narrow pass
+  // computed over the whole match set. Those are not recomputed here: a blend
+  // ranks each signal across every match, so it cannot be recomputed over the
+  // page. The filter is not applied either; the rows are known to match it,
+  // and `baseConditions` keeps the realm, deletion and entry-kind rules. A row
+  // deleted between the passes is dropped from the page.
+  async #pageRows(
+    keys: Record<string, unknown>[],
+    selectClauseExpression: CardExpression,
+    baseConditions: CardExpression[],
+    opts: QueryOptions,
+  ): Promise<Record<string, unknown>[]> {
+    let urls = [...new Set(keys.map((key) => String(key.url)))];
+    let rows = (await this.#queryCards(
+      [
+        ...selectClauseExpression,
+        ', i.type AS __page_type',
+        `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+        'WHERE',
+        ...every([
+          ...baseConditions,
+          [
+            'i.url IN',
+            ...addExplicitParens(
+              separatedByCommas(urls.map((url) => [param(url)])),
+            ),
+          ],
+        ]),
+        'GROUP BY i.url, i.type',
+      ],
+      opts.timings,
+    )) as Record<string, unknown>[];
+    let byKey = new Map(
+      rows.map((row) => [`${row.__page_type} ${row.url}`, row]),
+    );
+    let page: Record<string, unknown>[] = [];
+    for (let key of keys) {
+      let row = byKey.get(`${key.type} ${key.url}`);
+      if (!row) {
+        continue;
+      }
+      let { __page_type: _type, ...columns } = row;
+      let {
+        url: _url,
+        type: _keyType,
+        __page_total: _total,
+        ...synthetic
+      } = key;
+      page.push({ ...columns, ...synthetic });
+    }
+    return page;
   }
 
   // Projection-parametrized instance search. `_search` builds the shared query
