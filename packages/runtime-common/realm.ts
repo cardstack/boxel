@@ -4604,6 +4604,13 @@ export class Realm {
           `ALTER TABLE prerendered_html_pending DROP COLUMN IF EXISTS markdown_tsv`,
         );
       }
+      if (reqURL.searchParams.has('removals')) {
+        // Studio envs never run the post-deploy migrations-removal job.
+        await run(
+          'drop old expression fts index (removal 1793936584289)',
+          `DROP INDEX CONCURRENTLY IF EXISTS prerendered_html_markdown_fts_idx`,
+        );
+      }
       if (reqURL.searchParams.has('repair')) {
         let total = 0;
         for (;;) {
