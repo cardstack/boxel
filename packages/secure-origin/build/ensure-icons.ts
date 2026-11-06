@@ -29,7 +29,7 @@ import { join, relative } from 'node:path';
 import { PACKAGE_ROOT } from './module-package.ts';
 
 export const ICONS_ROOT = join(PACKAGE_ROOT, '..', 'boxel-icons');
-const REPO_ROOT = join(PACKAGE_ROOT, '..', '..');
+export const REPO_ROOT = join(PACKAGE_ROOT, '..', '..');
 
 export const STAMP = join('dist', '.secure-origin-inputs');
 
@@ -46,7 +46,7 @@ const DECLARATIONS = 'declarations';
 
 // What boxel-icons' build is made from, relative to boxel-icons, and what
 // decides the tools that build it, relative to the repository.
-const ICON_INPUTS = [
+export const ICON_INPUTS = [
   'src',
   'unpublished-development-types',
   'package.json',
@@ -54,7 +54,7 @@ const ICON_INPUTS = [
   'tsconfig.json',
   'babel.config.json',
 ];
-const DEPENDENCY_INPUTS = [
+export const DEPENDENCY_INPUTS = [
   'package.json',
   'pnpm-lock.yaml',
   'pnpm-workspace.yaml',
