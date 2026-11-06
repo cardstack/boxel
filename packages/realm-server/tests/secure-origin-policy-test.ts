@@ -686,8 +686,8 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('error and muted text on the key pages meet WCAG AA contrast', async function (assert) {
-    // The key pages draw their errors on the key window's own panel, which
-    // has a theme and background of its own.
+    // The key pages draw their errors as Pret UI Alerts on the key window's
+    // own panel, which has a theme and background of its own.
     await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
     });
@@ -695,7 +695,10 @@ module(basename(import.meta.filename), function (hooks) {
     assertContrast(
       assert,
       'key pages',
-      await textColors('[data-test-keys-panel]', /^\.keys-error(\[[^\]]+\])?$/),
+      await textColors(
+        '[data-test-keys-panel]',
+        /^\.pretui-alert(\[[^\]]+\])?$/,
+      ),
     );
   });
 
@@ -955,6 +958,11 @@ module(basename(import.meta.filename), function (hooks) {
           // alone, and a ticked or chosen one keeps an edge around its fill;
           // a chosen radio tile is ringed in its tone. Pret UI draws each from
           // the token the panel sets.
+          // A CSS-wide keyword, such as an `all: unset` that strips a
+          // control bare, sets no colour of its own to measure.
+          let painted = (value: string) =>
+            Boolean(value) &&
+            !/^(unset|initial|inherit|revert|revert-layer)$/.test(value.trim());
           for (let property of [
             '--pretui-control-border',
             '--pretui-control-checked-border',
@@ -962,7 +970,7 @@ module(basename(import.meta.filename), function (hooks) {
             '--pretui-choice-card-tone',
           ]) {
             let edge = style.getPropertyValue(property);
-            if (edge) {
+            if (painted(edge)) {
               indicators.push({
                 label: `${selector} { ${property}: ${edge} }`,
                 rgb: paints('color', edge, 'color'),
@@ -970,7 +978,7 @@ module(basename(import.meta.filename), function (hooks) {
             }
           }
           let accent = style.getPropertyValue('accent-color');
-          if (accent) {
+          if (painted(accent)) {
             indicators.push({
               label: `${selector} { accent-color: ${accent} }`,
               rgb: paints('color', accent, 'color'),
