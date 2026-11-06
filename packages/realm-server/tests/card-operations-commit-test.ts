@@ -2213,14 +2213,36 @@ module(basename(import.meta.filename), function (hooks) {
       2,
       `each of the two batches enqueues one index job (got ${newJobs.length})`,
     );
-    await waitUntil(async () => {
-      let seen = await incrementalIndexEventsSince(since);
-      return seen.some((event) => event.clientRequestId === 'file-update');
-    });
+    let seenEvents: IncrementalIndexEventContent[] = [];
+    let eventNamesFileUpdate = (event: IncrementalIndexEventContent) =>
+      event.clientRequestId === 'file-update' ||
+      (event.coalescedWrites ?? []).some(
+        (write) => write.clientRequestId === 'file-update',
+      );
+    let eventDetails = () =>
+      seenEvents.map(({ clientRequestId, coalescedWrites, invalidations }) => ({
+        clientRequestId,
+        coalescedWrites,
+        invalidations,
+      }));
+    await waitUntil(
+      async () => {
+        seenEvents = await incrementalIndexEventsSince(since);
+        return seenEvents.some(eventNamesFileUpdate);
+      },
+      {
+        timeoutMessage: () => {
+          let details = JSON.stringify(eventDetails());
+          console.warn(
+            `file-update was not found in an incremental index event; observed events: ${details}`,
+          );
+          return `file-update was not found in an incremental index event; observed events: ${details}`;
+        },
+      },
+    );
     assert.strictEqual(
-      (await incrementalIndexEventsSince(since)).filter(
-        (event) => event.clientRequestId === 'file-update',
-      ).length,
+      (await incrementalIndexEventsSince(since)).filter(eventNamesFileUpdate)
+        .length,
       1,
       'and the second broadcasts one index event',
     );
