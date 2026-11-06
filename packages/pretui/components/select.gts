@@ -260,6 +260,27 @@ class SelectSearch extends Component<SelectSearchSignature> {
           translate: 0 -50%;
           pointer-events: none;
         }
+        /* the trigger's type, its 1px edge, and its 2px focus ring laid
+           over it */
+        .ember-power-select-search-input {
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+          min-height: var(--_select-h);
+          padding-block: 0;
+          border: 1px solid var(--border);
+        }
+        .ember-power-select-search-input:focus {
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
+        }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .ember-power-select-search-input {
+            font-size: var(--boxel-form-control-touch-font-size);
+            line-height: var(--boxel-form-control-line-height-sm);
+          }
+        }
         /* BoxelSelect's dropdown rules set the input's padding; this makes
            room for the icon */
         .pretui-selectsearch .ember-power-select-search-input {
@@ -314,6 +335,13 @@ export class Select extends Component<SelectSignature> {
       );
       if (!trigger || !list) {
         return;
+      }
+      // This template's scope attribute, so its scoped rules for the list
+      // reach it in the wormhole.
+      for (let { name } of [...(this.wrap?.attributes ?? [])]) {
+        if (name.startsWith('data-scopedcss-')) {
+          list.setAttribute(name, '');
+        }
       }
       let style = getComputedStyle(trigger);
       for (let name of [
@@ -562,11 +590,12 @@ export class Select extends Component<SelectSignature> {
           opacity: 0.7;
         }
         /* The dropdown renders in the wormhole, outside this component's
-           subtree, and BoxelSelect has no knobs for its type or row metrics,
-           so these rules name it by its class through :global(). The options
-           and the search box take the trigger's type, inline padding and
-           height. */
-        :global(.pretui-select-dropdown.ember-power-select-dropdown) {
+           subtree, and BoxelSelect has no knobs for its type or row metrics.
+           Each open gives the list this template's scope attribute
+           (matchListType), so these are plain scoped rules, which every
+           compiler of this module keeps, the realm's included. The options
+           take the trigger's type, inline padding and height. */
+        .pretui-select-dropdown.ember-power-select-dropdown {
           /* the trigger's padding and default height, restated: the wrapper's
              knobs do not reach the wormhole */
           --_select-px: 0.625rem;
@@ -575,38 +604,18 @@ export class Select extends Component<SelectSignature> {
              a trigger sized to a short value must not clip the other labels */
           min-width: max-content;
         }
-        :global(.pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item),
-        :global(.pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input) {
-          letter-spacing: var(--boxel-lsp-xs);
-        }
         /* the trigger's type, copied onto the list on each open */
-        :global(.pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item) {
+        .pretui-select-dropdown :deep(.boxel-select-option-item) {
           font-size: var(--pretui-select-list-font-size);
           line-height: var(--pretui-select-list-line-height);
+          letter-spacing: var(--boxel-lsp-xs);
           min-height: var(--_select-h);
           padding-block: 0;
           padding-inline: var(--_select-px);
         }
-        /* the trigger's 1px edge, and its 2px focus ring laid over it */
-        :global(.pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input) {
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--boxel-line-height-xs);
-          min-height: var(--_select-h);
-          padding-block: 0;
-          border: 1px solid var(--border);
-        }
-        :global(.pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input:focus) {
-          outline: 2px solid var(--ring);
-          outline-offset: -1px;
-        }
-        /* iOS zooms into inputs under 16px on focus; the options' rows
-           grow as Autocomplete's do */
+        /* the options' rows grow on touch screens, as Autocomplete's do */
         @media (pointer: coarse) {
-          :global(.pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input) {
-            font-size: var(--boxel-form-control-touch-font-size);
-            line-height: var(--boxel-form-control-line-height-sm);
-          }
-          :global(.pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item) {
+          .pretui-select-dropdown :deep(.boxel-select-option-item) {
             padding-block: 0.6em;
           }
         }
