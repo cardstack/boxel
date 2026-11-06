@@ -26,7 +26,6 @@ import {
   realmURL,
   clickScopeOption,
   markHosted,
-  stubWindowOpen,
   nameFromTip,
   descriptionOf,
   pressKey,
@@ -39,6 +38,7 @@ import {
   getRealmServerRoute,
   registerRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
+import { stubWindowOpen } from '../helpers/window-open';
 
 module('Acceptance | dashboard', function (hooks) {
   let mockMatrixUtils = setupDashboardTest(hooks);
@@ -384,7 +384,11 @@ module('Acceptance | dashboard', function (hooks) {
       await click(findAll(menuItems)[1]);
 
       assert.deepEqual(windowOpen.calls, [
-        ['https://older.example.com/', '_blank', 'noopener,noreferrer'],
+        {
+          url: 'https://older.example.com/',
+          target: '_blank',
+          features: 'noopener,noreferrer',
+        },
       ]);
     } finally {
       windowOpen.restore();
@@ -456,7 +460,11 @@ module('Acceptance | dashboard', function (hooks) {
       await click(findAll(menuItems)[0]);
 
       assert.deepEqual(windowOpen.calls, [
-        ['https://older.example.com/', '_blank', 'noopener,noreferrer'],
+        {
+          url: 'https://older.example.com/',
+          target: '_blank',
+          features: 'noopener,noreferrer',
+        },
       ]);
     } finally {
       windowOpen.restore();

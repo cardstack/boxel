@@ -21,6 +21,7 @@ import {
   unregisterRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
 import { setupApplicationTest } from '../helpers/setup';
+import { stubWindowOpen } from '../helpers/window-open';
 
 const ME = '@testuser:localhost';
 const OTHER_WRITER = '@example-writer:localhost';
@@ -334,17 +335,6 @@ function stubSharesAPI({ directWriter }: { directWriter: boolean }) {
   };
 }
 
-type OpenCall = { url: string; target?: string; features?: string };
-
-function stubWindowOpen() {
-  let calls: OpenCall[] = [];
-  window.open = ((url?: string | URL, target?: string, features?: string) => {
-    calls.push({ url: String(url), target, features });
-    return { opener: window as unknown };
-  }) as typeof window.open;
-  return calls;
-}
-
 function share(label: string) {
   return `[data-test-realm-key-share="${label}"]`;
 }
@@ -571,7 +561,7 @@ module('Acceptance | realm config | API Keys', function (hooks) {
     });
 
     test('Share one of my keys opens the secure window to share into this realm', async function (assert) {
-      let calls = stubWindowOpen();
+      let { calls } = stubWindowOpen(window);
       await visitConfig();
       await waitFor('[data-test-realm-api-keys-share]');
       await click('[data-test-realm-api-keys-share]');
@@ -593,7 +583,7 @@ module('Acceptance | realm config | API Keys', function (hooks) {
     });
 
     test('swapping a key in opens the secure window for that share', async function (assert) {
-      let calls = stubWindowOpen();
+      let { calls } = stubWindowOpen(window);
       await visitConfig();
       await waitFor(share('Maps'));
       await click(`${share('Maps')} [data-test-realm-key-share-swap]`);
@@ -676,7 +666,7 @@ module('Acceptance | realm config | API Keys', function (hooks) {
     });
 
     test('the owner of a share’s key edits its limits in the secure window', async function (assert) {
-      let calls = stubWindowOpen();
+      let { calls } = stubWindowOpen(window);
       await visitConfig();
       await waitFor(`${share('OpenAI')} [data-test-realm-key-share-usage]`);
       await click(`${share('OpenAI')} [data-test-realm-key-share-edit-limits]`);

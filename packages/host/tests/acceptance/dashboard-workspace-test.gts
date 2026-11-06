@@ -28,16 +28,12 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   setupAcceptanceTestRealm,
-  setupAuthEndpoints,
-  setupLocalIndexing,
   setupPublicReadableRealms,
-  setupRealmCacheTeardown,
-  setupUserSubscription,
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupMockMatrix } from '../helpers/mock-matrix';
-import { setupApplicationTest } from '../helpers/setup';
+import { pressKey, setupDashboardTest } from '../helpers/dashboard';
+
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
 const realmAURL = 'http://test-realm/testuser/workspace-a/';
@@ -95,52 +91,29 @@ function withIndexCounts(
   realmService.indexCountsByRealm.set(realmURL, counts);
 }
 
-async function pressKey(key: string) {
-  let target = document.activeElement;
-  if (!(target instanceof HTMLElement)) {
-    throw new Error('nothing has focus');
-  }
-  await triggerKeyEvent(target, 'keydown', key);
-}
-
 module('Acceptance | dashboard workspace', function (hooks) {
-  setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
-  setupRealmCacheTeardown(hooks);
-
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [realmAURL, realmBURL],
-  });
-
-  hooks.beforeEach(async function () {
-    setupUserSubscription();
-    setupAuthEndpoints();
-
-    let { realm } = await setupAcceptanceTestRealm({
-      realmURL: realmAURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+  let mockMatrixUtils = setupDashboardTest(hooks, {
+    matrix: {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [realmAURL, realmBURL],
+    },
+    realms: [
+      {
+        url: realmAURL,
+        name: 'Workspace A',
+        contents: { 'index.json': cardsGridIndex },
       },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
-        'index.json': cardsGridIndex,
+      {
+        url: realmBURL,
+        name: 'Workspace B',
+        contents: { 'index.json': cardsGridIndex },
       },
-    });
-
-    await setupAcceptanceTestRealm({
-      realmURL: realmBURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write', 'realm-owner'],
-      },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Workspace B' }),
-        'index.json': cardsGridIndex,
-      },
-    });
-    realmA = realm;
+    ],
+    onRealm(realm, url) {
+      if (url === realmAURL) {
+        realmA = realm;
+      }
+    },
   });
 
   test('Favorite in the options menu adds the workspace to Favorites', async function (assert) {

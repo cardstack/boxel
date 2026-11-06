@@ -28,13 +28,13 @@ import {
   realmURL,
   clickScopeOption,
   markHosted,
-  stubWindowOpen,
   descriptionOf,
   pressKey,
   sectionOrder,
   railOrder,
   setupDashboardTest,
 } from '../helpers/dashboard';
+import { stubWindowOpen } from '../helpers/window-open';
 
 // A write to a workspace is what moves its update time.
 function markUpdated(url: string, updatedAt: Date) {
@@ -463,7 +463,11 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
         await click(findAll(menuItems)[1]);
 
         assert.deepEqual(windowOpen.calls, [
-          ['https://older.example.com/', '_blank', 'noopener,noreferrer'],
+          {
+            url: 'https://older.example.com/',
+            target: '_blank',
+            features: 'noopener,noreferrer',
+          },
         ]);
       } finally {
         windowOpen.restore();
