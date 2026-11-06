@@ -17,6 +17,13 @@
 // each key is sent to for the first time. An operation's label never stands
 // in for a host. Unticking an operation leaves it unapproved.
 //
+// A key of the user's own and a key they share with the workspace are never
+// drawn alike. Each slot's row is labelled and iconed by whom its key serves,
+// and says so (`KeyAudience`): the user's own key serves only them, and
+// everyone else who uses the card chooses their own; a shared key serves
+// everyone who uses the card in the workspace. The intro and the done page
+// name the same.
+//
 // The user chooses, once for the batch, where the approved requests may run:
 // in the card's scheduled pipelines and also when a card is opened, in the
 // browser, the AI assistant or the CLI (offered first), or only in the
@@ -81,6 +88,8 @@ import { Field } from '@cardstack/pretui/components/field';
 import Globe from '../../components/icons/globe.gts';
 import BoxelInput from '../../components/input.gts';
 import KeyRound from '../../components/icons/key-round.gts';
+import User from '@cardstack/boxel-icons/user';
+import Users from '@cardstack/boxel-icons/users';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -92,6 +101,7 @@ import {
   approvalScope,
   approvedForOpenCards,
   batchFor,
+  chosenShares,
   confirmationsFor,
   firstInteractiveShares,
   initialChoice,
@@ -121,6 +131,7 @@ import {
 import type { WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
+import KeyAudience from './key-audience.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
@@ -139,6 +150,10 @@ type State =
       interactive: boolean;
       // Whether the approval serves people who aren't signed in too.
       anonymous?: boolean;
+      // Whether the approved calls send the user's own key, and the labels of
+      // the shares they send, for the user's calls and everyone's alike.
+      ownKey: boolean;
+      shares: string;
     };
 type ChoosingState = Extract<State, { name: 'choosing' }>;
 
@@ -147,13 +162,22 @@ interface ApproveArgs {
   review: boolean;
 }
 
+// A slot's row is labelled, and drawn with an icon, by whom the key chosen
+// for it serves: the user alone, or everyone in the workspace.
 function slotLabel(choice: SlotChoice): string {
   if (choice.kind === 'userKey') {
-    return 'Your key';
+    return 'Your own key';
   }
   let [, name] = choice.slot.split(':');
   return name ? `Shared key: ${name}` : 'Shared key';
 }
+
+const slotIcon = (choice: SlotChoice) =>
+  choice.kind === 'userKey' ? User : Users;
+
+// "A", "A and B", "A, B and C".
+const listPhrase = (items: string[]) =>
+  new Intl.ListFormat('en', { type: 'conjunction' }).format(items);
 
 // A slot's keys and shares as tiles to choose between, and the one a tile
 // stands for.
@@ -187,7 +211,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           can make
           <strong data-test-approve-done-count>{{this.done.count}}</strong>
           {{if (eq this.done.count 1) 'call' 'calls'}}
-          with your key
+          with
+          {{#if this.done.ownKey}}
+            your own key{{#if this.done.shares}} and{{/if}}
+          {{/if}}
+          {{#if this.done.shares}}
+            the key you share as
+            <strong data-test-approve-done-shares>{{this.done.shares}}</strong>
+          {{/if}}
           {{#if this.done.anonymous}}
             on its schedule and whenever anyone opens it,
             <strong data-test-approve-done-anonymous>including people who aren’t
@@ -196,6 +227,25 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             on its schedule and whenever it’s opened, without asking you again.
           {{else}}
             on its schedule, without asking you again.
+          {{/if}}
+          {{#if this.done.ownKey}}
+            <span
+              class='done-audience'
+              data-test-approve-done-audience='userKey'
+            >
+              Only your use of this card sends your own key. Everyone else who
+              uses it chooses a key of their own.
+            </span>
+          {{/if}}
+          {{#if this.done.shares}}
+            <span
+              class='done-audience'
+              data-test-approve-done-audience='apiKey'
+            >
+              Everyone who uses this card in
+              <strong>{{this.done.realm}}</strong>
+              makes these calls with the key you share.
+            </span>
           {{/if}}
         {{/if}}
       </DonePage>
@@ -207,7 +257,17 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               This card changed these calls since you approved them. Boxel won’t
               make them until you approve them again.
             {{else}}
-              This card calls another service with your key.
+              {{#if (eq this.keyAudience 'apiKey')}}
+                This card calls another service with a key you share with this
+                workspace, for everyone who uses the card there.
+              {{else if (eq this.keyAudience 'both')}}
+                This card calls another service with your own key, for you
+                alone, and with a key you share with this workspace, for
+                everyone who uses the card there.
+              {{else}}
+                This card calls another service with your own key, for you
+                alone.
+              {{/if}}
               {{#if (eq this.scope 'card')}}
                 You approve these calls once, for this card.
               {{else if (eq this.scope 'mixed')}}
@@ -243,11 +303,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 @orientation='horizontal'
                 @labelTag='span'
                 @label={{slotLabel choice}}
-                @icon={{KeyRound}}
+                @icon={{slotIcon choice}}
                 data-test-approve-slot={{choice.slot}}
+                data-test-approve-slot-kind={{choice.kind}}
                 as |_controlId _messageId labelId|
               >
                 <div class='picker'>
+                  <KeyAudience @kind={{choice.kind}} />
                   {{#if choice.options.length}}
                     <RadioCard
                       @name='slot-{{choice.slot}}'
@@ -271,8 +333,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                               key page first.</span>
                           {{/if}}
                           {{#if option.detail}}
-                            <span class='option-detail'>holds
-                              {{option.detail}}</span>
+                            <span
+                              class='option-detail'
+                              data-test-approve-share-key
+                            >Shares your key
+                              <strong>{{option.detail}}</strong></span>
                           {{/if}}
                           {{#if (gt option.covers.length 0)}}
                             <span
@@ -575,6 +640,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .option-name {
         font-weight: 600;
+      }
+      .option-detail strong {
+        font-weight: 600;
+        color: var(--foreground);
+      }
+      .done-audience {
+        display: block;
+        margin-top: var(--boxel-sp-xs);
       }
       .option-detail,
       .empty,
@@ -1095,6 +1168,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private showsDiff = (slot: BatchSlot) =>
     slot.status === 'changed' && requestChanges(slot).length > 0;
 
+  // Whom the batch's keys serve, which the intro says: the user alone (their
+  // own key), everyone in the workspace (a key they share there), or both.
+  private get keyAudience(): 'userKey' | 'apiKey' | 'both' {
+    let kinds = new Set(this.choices.map((c) => c.kind));
+    return kinds.size > 1 ? 'both' : kinds.has('apiKey') ? 'apiKey' : 'userKey';
+  }
+
   private hostsOf = (destinations: string[]) =>
     destinations.map((d) => new URL(d).host).join(', ');
 
@@ -1154,6 +1234,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           card: batch.card.name,
           realm: batch.realm.name,
           interactive: false,
+          ownKey: false,
+          shares: '',
         };
         this.args.api.visit.loaded();
         this.args.api.tellCliDone();
@@ -1274,6 +1356,16 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         realm: state.batch.realm.name,
         interactive,
         anonymous,
+        ownKey: this.tickedOperations.some((o) =>
+          o.slots.some((s) => s.key === 'userKey'),
+        ),
+        shares: listPhrase(
+          chosenShares(
+            state.batch,
+            this.tickedOperations,
+            this.form.chosen,
+          ).map((share) => share.label),
+        ),
       };
       if (!this.args.api.tellCliDone() && !this.fromKeyPage) {
         this.args.api.close();

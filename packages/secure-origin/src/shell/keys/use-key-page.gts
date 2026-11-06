@@ -10,6 +10,9 @@
 // sets that share up instead: the workspace is the share's, the cards are
 // those that send the workspace's key, and the approve page starts with the
 // share chosen.
+//
+// Either way it says whom the key will serve, as the approve page does: the
+// user alone for their own key, everyone in the workspace for a share.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -26,6 +29,8 @@ import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import KeyRound from '../../components/icons/key-round.gts';
+import User from '@cardstack/boxel-icons/user';
+import Users from '@cardstack/boxel-icons/users';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 import { navigation } from '../navigation.js';
@@ -42,6 +47,7 @@ import {
 } from './context.ts';
 import type { UserKey } from './context.ts';
 import EditPage from './edit-page.gts';
+import KeyAudience from './key-audience.gts';
 import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
@@ -90,7 +96,7 @@ class UseKey extends Component<{
               once.
             {{else}}
               Choose a workspace and a card there. Next you’ll see every call
-              the card makes with your key, and approve them once.
+              the card makes with your own key, and approve them once.
             {{/if}}
           </:intro>
           <:default>
@@ -102,6 +108,18 @@ class UseKey extends Component<{
               @icon={{KeyRound}}
             >
               <KeyTile @key={{this.choosing.key}} />
+            </Field>
+            <Field
+              @reserveMessage={{false}}
+              @orientation='horizontal'
+              @labelTag='span'
+              @label='Used for'
+              @icon={{if this.choosing.share Users User}}
+              data-test-use-key-audience
+            >
+              <KeyAudience
+                @kind={{if this.choosing.share 'apiKey' 'userKey'}}
+              />
             </Field>
             {{#if this.choosing.share}}
               <Field
