@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { movedModules } from '../build/build-record.ts';
 import { layersNamed, unorderedLayers } from '../build/layer-order.ts';
 import { runTimeStyleRefusals } from '../build/pret-ui-lint.ts';
-import { portableSource } from '../build/relative-module-names.ts';
+import {
+  portableSource,
+  stableTemplateIds,
+} from '../build/relative-module-names.ts';
 
 function record(modules: object[]): string {
   return JSON.stringify({
@@ -52,16 +56,46 @@ test('a moved hash names the module, and one only a record ships names how', () 
   assert.deepEqual(movedModules(before, before), []);
 });
 
-test("a prebuilt module's absolute moduleName is cut back to the repository's packages/", () => {
-  assert.equal(
-    portableSource(
-      '{ "moduleName": "/home/runner/work/boxel/boxel/packages/boxel-icons/src/icons/key-round.gts" }',
-    ),
-    '{ "moduleName": "packages/boxel-icons/src/icons/key-round.gts" }',
+test('one template compiled at two paths gives the same portable source', () => {
+  let { precompile } = createRequire(import.meta.url)(
+    'ember-source/dist/ember-template-compiler.js',
+  ) as {
+    precompile: (source: string, options: object) => string;
+  };
+  let compiled = (root: string) =>
+    precompile('<svg class="icon" ...attributes></svg>', {
+      moduleName: `${root}/packages/boxel-icons/src/icons/key-round.gts`,
+      strictMode: true,
+    });
+  let name =
+    'packages/boxel-icons/dist/@cardstack/boxel-icons/v1/icons/key-round.js';
+  let here = compiled('/home/someone/codez/boxel');
+  let there = compiled('/home/runner/work/boxel/boxel');
+  assert.notEqual(here, there, 'the compiler names the checkout');
+  assert.equal(portableSource(here, name), portableSource(there, name));
+  assert.match(
+    portableSource(here, name),
+    /"moduleName": ?"packages\/boxel-icons\/src\/icons\/key-round.gts"/,
   );
-  let relative =
-    '{ "moduleName": "packages/boxel-icons/src/icons/key-round.gts" }';
-  assert.equal(portableSource(relative), relative);
+});
+
+test("each template's id comes from its module's name and its place there", () => {
+  let module =
+    '{ id: "aaaaaaaa", block: "[]" } { "id": "bbbbbbbb", "block": "[]" }';
+  let ids = (code: string) =>
+    [...code.matchAll(/id"?: "([^"]+)"/g)].map(([, id]) => id);
+  let [first, second] = ids(stableTemplateIds(module, 'src/a.gts'));
+  assert.notEqual(first, second);
+  assert.deepEqual(ids(stableTemplateIds(module, 'src/a.gts')), [
+    first,
+    second,
+  ]);
+  assert.notDeepEqual(ids(stableTemplateIds(module, 'src/b.gts')), [
+    first,
+    second,
+  ]);
+  let notTemplate = '{ id: "aaaaaaaa", name: "x" }';
+  assert.equal(stableTemplateIds(notTemplate, 'src/a.gts'), notTemplate);
 });
 
 test('every layer a stylesheet names must be ordered by layers.css', () => {

@@ -726,9 +726,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       # The pages read boxel-icons from its build; `test:components` builds it
-      # when this misses.
+      # when this misses. It doesn't save on a miss: the key belongs to the
+      # build Lint makes and saves.
       - name: Restore boxel-icons build cache
         uses: ./.github/actions/restore-icons-cache
+        with:
+          save: "false"
       - name: Run test suite
         run: pnpm test:components
         working-directory: packages/secure-origin

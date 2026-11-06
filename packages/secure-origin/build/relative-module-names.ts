@@ -1,22 +1,27 @@
 // The template compiler names each component's template by its file's
-// absolute path, and records where a template's modifiers and helpers sit by
-// the same path. That would put the path the package was built from into the
-// pages the origin serves, and make the build, and so the build record,
-// differ from one checkout to the next. This names them from the package root
-// for the package's own modules, as the build record names modules, and from
-// the repository's root for every other module.
+// absolute path, records where a template's modifiers and helpers sit by the
+// same path, and derives each template's `id` from that name. That would put
+// the path the package was built from into the pages the origin serves, and
+// make the build, and so the build record, differ from one checkout to the
+// next. This names them from the package root for the package's own modules,
+// as the build record names modules, and from the repository's root for every
+// other module. It gives each template an `id` derived from that name instead,
+// and from the template's place in its module, so ids stay unique and are the
+// same in every checkout.
 //
 // boxel-icons is read from its own build, which names its templates by the
 // path of whichever checkout built it, so in a module from another package
 // of this repository a `moduleName` naming a file in the repository's
 // `packages/` is cut back to start there, wherever that was. A package
-// installed from the registry ships as it was published.
+// installed from the registry ships as it was published, but for its
+// templates' ids.
 //
 // An import specifier keeps its absolute path, which is how the build's
 // runtime helpers and an entry document's generated modules are imported. And
 // a chunk that still names the checkout fails the build, naming the modules
 // that do.
-import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { join, relative } from 'node:path';
 
 import type { Plugin } from 'vite';
 
@@ -26,12 +31,31 @@ export const REPO_ROOT = join(PACKAGE_ROOT, '..', '..');
 
 const BUILT_MODULE_NAME = /("moduleName"\s*:\s*")\/[^"]*?\/(packages\/[^"]+")/g;
 
-// `source` with each `moduleName` that names a file by an absolute path in a
-// repository's `packages/` cut back to start there. The build record hashes
-// a file read from another package's build in this form, so its hash is the
-// same in every checkout.
-export function portableSource(source: string): string {
-  return source.replace(BUILT_MODULE_NAME, '$1$2');
+// A compiled template's `id`, which always comes just before its `block`,
+// whether the keys are quoted (as the compiler writes them) or not.
+const TEMPLATE_ID =
+  /((?:"id"|\bid)\s*:\s*)(["'`])[A-Za-z0-9+/=_-]{8}\2(\s*,\s*(?:"block"|\bblock)\s*:)/g;
+
+// `code` with each compiled template's `id` derived from `name`, the module's
+// name as the build record gives it, and the template's place in the module.
+export function stableTemplateIds(code: string, name: string): string {
+  let index = 0;
+  return code.replace(TEMPLATE_ID, (_match, key, quote, rest) => {
+    let id = createHash('sha256')
+      .update(`${name}#${index++}`)
+      .digest('base64')
+      .slice(0, 8);
+    return `${key}${quote}${id}${quote}${rest}`;
+  });
+}
+
+// `source`, a file read from another package of this repository's build, in
+// the form that is the same in every checkout: each `moduleName` that names a
+// file by an absolute path in a repository's `packages/` cut back to start
+// there, and each template's `id` derived from `name`, as the build ships it.
+// The build record hashes such a file in this form.
+export function portableSource(source: string, name: string): string {
+  return stableTemplateIds(source.replace(BUILT_MODULE_NAME, '$1$2'), name);
 }
 
 function escapeRegExp(text: string): string {
@@ -61,15 +85,18 @@ export function relativeModuleNames(): Plugin {
       if (file.endsWith('.html')) {
         return null;
       }
+      let own = id.startsWith(ownPrefix);
       // This checkout's paths first, so the package's own modules are named
       // from the package; then whatever names another checkout.
       let portable = code.includes(repoPrefix)
-        ? code.replace(id.startsWith(ownPrefix) ? ownPaths : repoPaths, '')
+        ? code.replace(own ? ownPaths : repoPaths, '')
         : code;
       let found = modulePackage(file);
-      if (found.virtual === undefined && found.workspace) {
-        portable = portableSource(portable);
-      }
+      let name = relative(own ? PACKAGE_ROOT : REPO_ROOT, file);
+      portable =
+        found.virtual === undefined && found.workspace
+          ? portableSource(portable, name)
+          : stableTemplateIds(portable, name);
       return portable === code ? null : { code: portable, map: null };
     },
     generateBundle(_options, bundle) {

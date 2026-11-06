@@ -34,7 +34,7 @@ import type { Plugin, Rollup } from 'vite';
 
 import { modulePackage, PACKAGE_ROOT } from './module-package.ts';
 import { outputPrefix } from './probe.ts';
-import { portableSource } from './relative-module-names.ts';
+import { portableSource, REPO_ROOT } from './relative-module-names.ts';
 
 type Bundle = Rollup.OutputBundle;
 
@@ -324,7 +324,9 @@ function hashOf(file: string): { sha256?: string } {
   }
   return {
     sha256: createHash('sha256')
-      .update(portableSource(readFileSync(file, 'utf8')))
+      .update(
+        portableSource(readFileSync(file, 'utf8'), relative(REPO_ROOT, file)),
+      )
       .digest('hex'),
   };
 }

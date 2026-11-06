@@ -8,7 +8,7 @@
   "scripts": {
     "build": "node build/ensure-icons.ts && vite build",
     "build:if-stale": "node build/ensure-build.ts",
-    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint": "node build/ensure-icons.ts && concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:build": "node build/ensure-icons.ts && SECURE_ORIGIN_BUILD_RECORD=check vite build --outDir dist-lint --emptyOutDir && node build/ensure-build.ts --check dist-lint",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
@@ -17,7 +17,7 @@
     "lint:hbs:fix": "ember-template-lint . --no-error-on-unmatched-pattern --fix",
     "lint:pretui": "node build/pret-ui-lint.ts",
     "test": "pnpm test:unit && pnpm test:components",
-    "lint:types": "node build/type-check.ts",
+    "lint:types": "node build/ensure-icons.ts && node build/type-check.ts",
     "test:unit": "node --test 'tests/**/*.test.ts'",
     "test:components": "node build/ensure-icons.ts && NODE_ENV=development vite build --mode=development --outDir dist-tests && ember test --config-file testem.cjs --path dist-tests"
   },

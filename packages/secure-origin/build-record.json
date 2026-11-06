@@ -656,97 +656,97 @@
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/check.js",
-          "sha256": "d0949dd555987225638703dda34737c2a4e9ba449558c4307da758393ed73c30",
+          "sha256": "aec2a56eef69c23d11f1a1577d2f40edb5522e01ad0dd0d9e07e4177dd1d3a4c",
           "size": 782
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/chevron-down.js",
-          "sha256": "b2e0cb954aecf9ab708910d52c5a0d3eb2ff1c79ec2db2484edd02ea5e372bbc",
+          "sha256": "565d9dc3c16ac7057e5e4ff77acff22fa99b54913c4558b3160fca10c19913be",
           "size": 807
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/chevron-right.js",
-          "sha256": "21f4101d168d3743da8f3bca58f7d888653d5a5cd4b18c7a2a1bc94f775a078a",
+          "sha256": "f922a36ee50c4c15fe41934bf9196877bfb5df4369ca07efddf20047ca4c076a",
           "size": 814
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/chevron-up.js",
-          "sha256": "d02894f1179a77f6ebc5bd7d3cf316d7a465a7bf2698e992a5eb9f90c93bb797",
+          "sha256": "e5aff4ec29698871ba80ca2e6e7ce1ecc9d6fb9c6da1b64e5ffb1bc88d8044f9",
           "size": 801
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/copy.js",
-          "sha256": "d785f66f67a402e2b44bf465c79bb960c40abdab078ca847b3c1116d57e5033f",
+          "sha256": "7384be38e324ab03a7dfad01ec1920fb8de37eb9c86d978e2398e0c45948135d",
           "size": 957
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/dots-vertical.js",
-          "sha256": "ab3aaf85b259439c86f92629986c92376141c96ffb87fcbaa26d54539d38839b",
+          "sha256": "b7295490e9f3bcd279a6934c5d4202e7c8449dfe89fde8bdcb897bf0bf90e1f3",
           "size": 1016
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/eye-off.js",
-          "sha256": "6e716a3a2195c20eb177859150bd275f24954f1de5e914709640d49d9c43e533",
+          "sha256": "0b78dbe8b9e424c885629815edab8f9924af435bc9a325c3dd19d255bf03e631",
           "size": 1043
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/eye.js",
-          "sha256": "b42c05f8795488a196b0ffa9e7dfc35b289f141d63c66bd0321879c657329a18",
+          "sha256": "96f77f6d02339152abe5de0abf6b909361158523b2a2f20ed9e1f13222dac264",
           "size": 941
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/key-round.js",
-          "sha256": "4957d606d197b2f0a5a07cdb8188dc6e6a10da3470b4ff309d87551f1e464f07",
+          "sha256": "eb742fec42e69fc7fd0e18ddbce1904149dd5014115bb4389176f0ad5603b78a",
           "size": 1071
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/link-off.js",
-          "sha256": "5d04381638aff2184b0ab36fff5bed42d7c047da77e802fb55c33a90fe3167b0",
+          "sha256": "30582aa2dc0459cacafd578f9d4594edde5335cb2332f69350412cd74e147f21",
           "size": 1034
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/loader.js",
-          "sha256": "cce9bbebd5906f8a10c81f6b13a1877f01acb7dc5527e69382145f0ebd5c04b3",
+          "sha256": "fed7b09fd36871df6aab79af3143254b2ab0ee5c0da769eb1143294006c131a9",
           "size": 871
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/maximize.js",
-          "sha256": "8bce35d8f6fa4779317eaeedc8bb9648248241e87c1ea193bb1f2739f2ca9c69",
+          "sha256": "f9a6456c2cd143f52d815e1614327cdd0adcf1780fd843699161ec433714d512",
           "size": 873
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/plus.js",
-          "sha256": "3888ddb2b2fcad9239185b126a6e356d384f4ce5372993b3d22afa1b360d45ea",
+          "sha256": "d6f37acb4d158600e2c127c7c7f6bd8e1ec20db1f3c52084fd5d1502c752ef9c",
           "size": 781
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/square-kanban.js",
-          "sha256": "cba721b46682d604615f6ed42c830e50fe5b416b1ac7eaa5d6bacd0167aae36f",
+          "sha256": "e4c34ff11abe04dd7a6b699408ccfa384a8832d36663d12490ae597013c2f58e",
           "size": 936
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/trash-2.js",
-          "sha256": "e91887091fc8bf19495dbc0cdb482bdbe10a84683c6ed92336b0d6761ccc1418",
+          "sha256": "a2b0f594ea96315cc291b8b861c0e12d8224124951b038bd6e726441f16b3e28",
           "size": 876
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
           "module": "dist/@cardstack/boxel-icons/v1/icons/x.js",
-          "sha256": "54b74a1e4335611b371f7a40faeaf8cd8fc63a897d9280e03d547e7b2e0032f3",
+          "sha256": "28a68fc26b1d95e7631859116873c5537ba10a33ff39be3f2ab36d34e57e197a",
           "size": 771
         },
         {

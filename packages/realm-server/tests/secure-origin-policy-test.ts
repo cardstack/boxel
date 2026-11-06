@@ -440,7 +440,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.ok(true, "Pret UI's Accordion rendered its open item");
     assert.ok(
-      await page.$('[data-test-build-probe-icon].lucide-key-round'),
+      await page.$('svg[data-test-build-probe-icon]'),
       "boxel-icons' icon rendered",
     );
     assert.deepEqual(await violationsIn(page), [], 'no violation');
