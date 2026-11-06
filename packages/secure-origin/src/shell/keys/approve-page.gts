@@ -1153,30 +1153,30 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         this.args.api.tellCliDone();
         return;
       }
-      // Chosen for the whole batch: a key that fills a slot for interactive
-      // use fills it for pipelines too, where fewer operations send it.
-      let choices = slotChoices(batch, 'interactive');
-      this.form.chosen = Object.fromEntries(
-        choices.map((c) => {
-          let kept = keep?.chosen[c.slot];
-          return [
-            c.slot,
-            kept && c.options.some((o) => o.id === kept)
-              ? kept
-              : initialChoice(
-                  batch,
-                  c,
-                  c.kind === 'userKey' ? this.opened.key : this.opened.share,
-                ),
-          ];
-        }),
-      );
       if (!keep) {
         this.form.use = initialUse(batch, {
           cli: this.fromCli.cli !== undefined,
           cliInteractive: this.fromCli.interactive,
         });
       }
+      // Each slot starts on a key it offers for the use the choice starts
+      // on, or keeps the one the user chose while it still does.
+      let shown = batchFor(batch, this.form.use);
+      this.form.chosen = Object.fromEntries(
+        slotChoices(shown, this.form.use).map((c) => {
+          let kept = keep?.chosen[c.slot];
+          return [
+            c.slot,
+            kept && c.options.some((o) => o.id === kept)
+              ? kept
+              : initialChoice(
+                  shown,
+                  c,
+                  c.kind === 'userKey' ? this.opened.key : this.opened.share,
+                ),
+          ];
+        }),
+      );
       let keys = operations.map(operationKey);
       let named = this.fromCli.operations;
       // Opened for a share, only the operations that send the realm's key

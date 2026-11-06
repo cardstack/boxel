@@ -15,7 +15,7 @@ import {
 } from './key-bindings.ts';
 import { limitReadiness } from './key-limits.ts';
 import { apiHostList, apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
-import { keyFillsSlot } from './slot-fill.ts';
+import { keyOfferedForSlot } from './slot-fill.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
@@ -212,13 +212,13 @@ async function userKeyReadiness(
 
 // Whether the key a row reads (its `kind` and `api_hosts`) is one the approve
 // page would offer for the operation's `slot`: one that fills it
-// (`keyFillsSlot`), as the approval batch decides.
+// (`keyOfferedForSlot`), as the approval batch decides.
 function fitsSlot(
   row: Record<string, unknown>,
   lookup: CallApiReadinessLookup,
   slot: CallApiSlot,
 ): boolean {
-  return keyFillsSlot(
+  return keyOfferedForSlot(
     { kind: row.kind as string, apiHosts: apiHostList(row.api_hosts) },
     [{ slot, callApi: lookup.request }],
   );

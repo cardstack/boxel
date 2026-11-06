@@ -40,7 +40,7 @@ import {
   arrayColumn,
   sendableKeySql,
 } from './oauth.ts';
-import { keyFillsSlot, type SlotSend } from './slot-fill.ts';
+import { keyOfferedForSlot, type SlotSend } from './slot-fill.ts';
 import { normalizeGrantDestination } from './user-key-grants.ts';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 
@@ -73,7 +73,7 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // (for a changed slot, so the window can diff the two field by field), the
 // caller's keys a slot can take and the shares of theirs in the realm, each
 // with the destinations in the batch its grants already cover, and for each
-// slot the ones that can fill it (`keyFillsSlot`). Nothing of any key's value
+// slot the ones that can fill it (`keyOfferedForSlot`). Nothing of any key's value
 // is read.
 
 const log = logger('realm:key-bindings');
@@ -174,7 +174,7 @@ export interface ApprovalBatch {
   shares: BatchShare[];
   // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
   // one) that can fill each slot token, in every operation of the batch that
-  // sends it (`keyFillsSlot`), by use. One choice fills a slot token for the
+  // sends it (`keyOfferedForSlot`), by use. One choice fills a slot token for the
   // whole batch, so these are the only ones the window offers for it. For
   // `pipelines`, an operation approved for pipelines only is left out, as the
   // window leaves it out of what it approves for pipelines, so a slot it
@@ -396,6 +396,8 @@ export async function approvalBatch(
   };
   let slotSends: Record<BatchUse, ReturnType<typeof sendsOf>> = {
     interactive: sendsOf(() => true),
+    // The operations the window approves for pipelines (`batchFor` in the
+    // secure origin's `approval-batch.ts`).
     pipelines: sendsOf((o) => o.status !== 'pipelines-only'),
   };
   let needsUserKey = [...slotSends.interactive.values()].some(
@@ -413,12 +415,12 @@ export async function approvalBatch(
         key === 'userKey'
           ? keys
               .filter(({ kind, apiHosts }) =>
-                keyFillsSlot({ kind, apiHosts }, sends),
+                keyOfferedForSlot({ kind, apiHosts }, sends),
               )
               .map(({ id }) => id)
           : shares
               .filter(({ keyKind, apiHosts }) =>
-                keyFillsSlot({ kind: keyKind, apiHosts }, sends),
+                keyOfferedForSlot({ kind: keyKind, apiHosts }, sends),
               )
               .map(({ id }) => id),
       ]),

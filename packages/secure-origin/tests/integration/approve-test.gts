@@ -982,6 +982,63 @@ module('Integration | approve pages', function (hooks) {
       .isChecked('the key the slot starts on is chosen in its place');
   });
 
+  test('a page that starts on pipelines only starts each slot on a key pipelines offer', async function (assert) {
+    let mixed = batch({
+      keys: [
+        {
+          id: 'key-api-only',
+          name: 'GitHub API account',
+          kind: 'oauth-connection',
+          state: 'active',
+          covers: [],
+        },
+      ],
+      // The account reaches only the GraphQL API: it fills the slot for
+      // pipelines, which leave the upload out, and not for interactive use.
+      fillers: {
+        interactive: { userKey: [] },
+        pipelines: { userKey: ['key-api-only'] },
+      },
+    });
+    let [, uploads] = mixed.groups as { operations: any[] }[];
+    uploads!.operations = uploads!.operations.map((o) => ({
+      ...o,
+      status: 'pipelines-only',
+      slots: o.slots.map((slot: object) => ({
+        ...slot,
+        status: 'pipelines-only',
+        approved: {
+          snapshot: snapshot('null', UPLOADS),
+          keyId: 'key-gh',
+          shareId: null,
+          interactive: false,
+        },
+      })),
+    }));
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: withFillers(mixed) },
+        }),
+    });
+    visitShell(
+      `approve#${new URLSearchParams({
+        card: CARD,
+        cli_port: '51234',
+        cli_state: 'c'.repeat(32),
+      })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-radio-choice="pipelines"] input')
+      .isChecked('the CLI asked for pipelines only');
+    assert
+      .dom('[data-test-approve-key="GitHub API account"] input')
+      .isChecked('the only key pipelines offer starts chosen');
+    assert.dom('[data-test-approve-save]').isEnabled();
+  });
+
   test('a share slot offers only the shares the realm server names as filling it', async function (assert) {
     let shared = batch({
       groups: [

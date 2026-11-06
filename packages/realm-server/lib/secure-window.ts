@@ -31,7 +31,7 @@ import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permi
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 import { isUUID } from './named-users.ts';
 import { apiHostList, apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
-import { keyFillsSlot, type SlotSend } from './slot-fill.ts';
+import { keyOfferedForSlot, type SlotSend } from './slot-fill.ts';
 import {
   bindingType,
   canonicalInstance,
@@ -602,7 +602,7 @@ const MAX_LISTED_TYPES = 200;
 //
 // Asked for one of the user's keys (`keyId`), only the cards that key can be
 // approved for are listed: those with a slot the key fills in every operation
-// sending it (`keyFillsSlot`), the rule the approval batch names the keys it
+// sending it (`keyOfferedForSlot`), the rule the approval batch names the keys it
 // offers for a slot by. A key that no request can send, such as an OAuth
 // client people only sign in through, fills nothing.
 export async function realmCardsWithRequests(
@@ -744,7 +744,7 @@ export async function realmCardsWithRequests(
     }
     let sendsKey = [...sentBy.values()].some(
       ({ open, sends }) =>
-        open && (key === undefined || keyFillsSlot(key, sends)),
+        open && (key === undefined || keyOfferedForSlot(key, sends)),
     );
     if (sendsKey) {
       found.push({

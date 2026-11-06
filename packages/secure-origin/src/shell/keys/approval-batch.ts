@@ -51,7 +51,7 @@ export function slotChoices(
     let kind = slot.key;
     // One choice fills the slot in every operation of the batch, so it offers
     // only the keys the realm server names as filling each of them.
-    let fillers = new Set(batch.fillers[use][slot.slot] ?? []);
+    let fillers = new Set(batch.fillers?.[use]?.[slot.slot] ?? []);
     let options: SlotOption[] =
       kind === 'userKey'
         ? batch.keys
@@ -324,7 +324,8 @@ export const INTERACTIVE_CONFIRMATION = {
 
 // The batch as the page shows it for `use`. An operation approved for
 // pipelines only needs approving only for interactive use, so for pipelines
-// it is left out.
+// it is left out. The realm server leaves out the same operations when it
+// names what fills each slot for pipelines (`fillers.pipelines`).
 export function batchFor(
   batch: ApprovalBatch,
   use: ApprovalUse,
