@@ -4,7 +4,7 @@ name: PR preview realm (reusable)
 # wanting per-PR previews) call to create/update/delete a published
 # realm tied to a pull request. Two jobs:
 #   deploy  - on pull_request open/synchronize/reopened
-#   cleanup - on pull_request closed
+#   cleanup - on pull_request closed, or when the caller sets unpublish
 #
 # Caller passes the per-repo realm-server, matrix, and published-realm
 # coordinates; this workflow handles boxel-cli profile setup, create-
@@ -60,9 +60,10 @@ on:
         default: ""
       fail-on-deploy-error:
         description: |
-          Whether a failed install, sign-in, create, push or publish fails
-          this job. When false the failure is still reported in the sticky
-          comment, and the check stays green.
+          Whether a failed install, sign-in, create, push, publish or
+          unpublish fails this job. When false the check stays green: a
+          failed deploy is reported in the sticky comment, and a failed
+          cleanup leaves the comment unchanged, so the next run retries it.
         type: boolean
         default: true
       unpublish:
@@ -213,6 +214,18 @@ jobs:
           echo "Pushing content to ${SOURCE_REALM_URL}"
           boxel realm push "$SOURCE_DIR" "${SOURCE_REALM_URL}" --delete
 
+      - name: Compute comment fields
+        if: ${{ !cancelled() }}
+        id: stamp
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          {
+            echo "now=$(date -u '+%Y-%m-%d %H:%M:%S')"
+            echo "short_sha=${HEAD_SHA::7}"
+            echo "published_url=${{ inputs.published-realm-base }}/${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}/"
+          } >> "$GITHUB_OUTPUT"
+
       # Said before publishing, so a run cancelled mid-publish still leaves a
       # comment that tells a later run there may be a preview to unpublish.
       - name: Say the preview is publishing
@@ -224,7 +237,7 @@ jobs:
           message: |
             ## Preview Realm - Publishing
 
-            The preview realm for commit `${{ github.event.pull_request.head.sha }}` is being published.
+            The preview realm for commit `${{ steps.stamp.outputs.short_sha }}` is being published.
 
       - name: Publish preview realm
         id: publish
@@ -250,16 +263,6 @@ jobs:
           fi
           boxel realm publish "${SOURCE_REALM_URL}" "${PUBLISHED_REALM_URL}" \
             "${TIMEOUT_ARGS[@]}"
-
-      - name: Compute comment fields
-        if: ${{ !cancelled() }}
-        id: stamp
-        run: |
-          {
-            echo "now=$(date -u '+%Y-%m-%d %H:%M:%S')"
-            echo "short_sha=${GITHUB_SHA::7}"
-            echo "published_url=${{ inputs.published-realm-base }}/${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}/"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Comment on PR with preview URL
         if: steps.publish.outcome == 'success'
