@@ -141,6 +141,8 @@ import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
 import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-network';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
+import type Provider from 'oidc-provider';
+import { registerOAuthProviderRoutes } from './lib/oauth-provider/serve.ts';
 import {
   handleAddUserKey,
   handleDeleteUserKey,
@@ -267,6 +269,9 @@ export type CreateRoutesArgs = {
   // The Google client the secure window signs in with. Unset, the secure
   // window offers only a password.
   googleSignIn?: GoogleSignInConfig;
+  // Boxel's OAuth provider (see `lib/oauth-provider/`). Unset, the provider
+  // is off and none of its routes are served.
+  oauthProvider?: Provider;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -290,6 +295,10 @@ export function createRoutes(args: CreateRoutesArgs) {
     realmsRootPath: args.realmsRootPath,
     reconciler: args.reconciler,
   };
+
+  if (args.oauthProvider) {
+    registerOAuthProviderRoutes(router, args.oauthProvider);
+  }
 
   router.get(
     '/',

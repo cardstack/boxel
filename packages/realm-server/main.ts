@@ -2,6 +2,7 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
+import { readOAuthProviderConfig } from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -462,6 +463,13 @@ const secureOriginURL =
     : isEnvironmentMode()
       ? `${serviceURL(secureServiceName)}/secure`
       : `https://localhost:${secureListenerPort}/secure`);
+
+// Boxel's OAuth provider, on only where BOXEL_OAUTH_PROVIDER_ENABLED=true.
+// Read before anything starts, so a missing or malformed configuration stops
+// the server at boot instead of at the first OAuth request.
+const oauthProvider = readOAuthProviderConfig(process.env, {
+  secureOriginURL,
+});
 
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
@@ -979,6 +987,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
+    ...(oauthProvider ? { oauthProvider } : {}),
   });
 
   const secureHttpServer =
