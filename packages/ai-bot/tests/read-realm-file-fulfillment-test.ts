@@ -366,6 +366,40 @@ module('fulfillReadRealmFileCalls', () => {
     );
   });
 
+  test("a skill file's relative links reach the model absolute, other files' as stored", async () => {
+    let { client } = fakeClient();
+    let notesUrl = 'https://localhost:4201/user/jane/notes.md';
+    let body = 'See [the rules](references/rules.md) and [home](../index.md).';
+    let fetch = (async () =>
+      new Response(body, {
+        status: 200,
+      })) as unknown as typeof globalThis.fetch;
+    let uploaded: string[] = [];
+
+    await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: [FILE_URL, notesUrl] })],
+      baseDeps(client, {
+        fetch,
+        uploadText: async (content: string) => {
+          uploaded.push(content);
+          return `https://localhost/media/${uploaded.length}`;
+        },
+      }),
+    );
+
+    assert.true(
+      uploaded.includes(
+        'See [the rules](https://localhost:4201/user/jane/skills/trip-planner/references/rules.md) and [home](https://localhost:4201/user/jane/skills/index.md).',
+      ),
+      'the SKILL.md is uploaded with links resolved against its own URL',
+    );
+    assert.true(
+      uploaded.includes(body),
+      'a markdown file that is not part of a skill is uploaded unchanged',
+    );
+    assert.strictEqual(uploaded.length, 2);
+  });
+
   test('a partial read attaches what succeeded and names what failed', async () => {
     let { client, sent } = fakeClient();
     let missingUrl = 'https://localhost:4201/user/jane/missing.md';

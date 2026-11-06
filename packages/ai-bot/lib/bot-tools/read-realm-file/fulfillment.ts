@@ -7,6 +7,10 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+import {
+  absolutizeSkillLinks,
+  isSkillFileUrl,
+} from '@cardstack/runtime-common/ai';
 import type { MatrixClient } from 'matrix-js-sdk';
 import {
   executeReadRealmFile,
@@ -147,9 +151,16 @@ async function readAndUpload(
   if (!result.ok) {
     return { url, error: result.error };
   }
+  // A skill's links are authored relative to the file, as an attached skill's
+  // are, and get the same treatment: each one becomes a URL the model can pass
+  // back to this tool unchanged. Other files are uploaded as stored, so a model
+  // that reads a user's markdown and writes it back keeps its links as they were.
+  let content = isSkillFileUrl(url)
+    ? absolutizeSkillLinks(result.content, url)
+    : result.content;
   let fileUrl: string;
   try {
-    fileUrl = await upload(result.content, READ_FILE_CONTENT_TYPE);
+    fileUrl = await upload(content, READ_FILE_CONTENT_TYPE);
   } catch (e: any) {
     log.error(`readRealmFile: upload failed for ${url}: ${e?.message ?? e}`);
     return { url, error: `could not store ${url} for reading` };
@@ -168,7 +179,7 @@ async function readAndUpload(
       url: fileUrl,
       name: fileLabelFromIdentifier(url) ?? url,
       contentType: READ_FILE_CONTENT_TYPE,
-      contentSize: Buffer.byteLength(result.content),
+      contentSize: Buffer.byteLength(content),
     },
     ...(discoveredTools.length ? { discoveredTools } : {}),
     ...(degradedToolsNote ? { degradedToolsNote } : {}),
