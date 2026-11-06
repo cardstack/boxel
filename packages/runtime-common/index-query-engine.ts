@@ -432,9 +432,11 @@ export interface QueryResultsMeta {
 // it — which, for a plain GIN expression index, aborts the whole index build.
 // Some instances carry multi-megabyte markdown (base64 image data embedded by
 // image cards), so the raw column can't be indexed. prerendered_html's markdown
-// GIN index is built on `to_tsvector('english', markdown_search_text(markdown))`,
-// so the query predicate below must call the same function or the planner
-// won't use it.
+// GIN index is built on `to_tsvector('english', markdown_search_text(markdown))`.
+// That vector is stored in `prerendered_html.markdown_tsv` (kept current by a
+// trigger, migration 1793936584288) and GIN-indexed there, so `matches` and
+// relevance read the column: a phrase recheck, a rank, or a key-probe filter
+// is a detoast rather than a regex over up to 400 KB of markdown.
 // What a filter compiles inside: whether it sits under an `any` (where a
 // condition that leans on the prerendered_html join is planned per row), and
 // which prerendered_html table a subquery reads (the staged one for a staged
@@ -2439,7 +2441,7 @@ export class IndexQueryEngine {
       'MAX(',
       dbExpression({
         pg: [
-          `ts_rank_cd(to_tsvector('english', markdown_search_text(ph.markdown)), `,
+          `ts_rank_cd(COALESCE(ph.markdown_tsv, ''::tsvector), `,
           ...pgTsQuery,
           `, 32)`,
         ],
@@ -2485,7 +2487,7 @@ export class IndexQueryEngine {
           continue;
         }
         selects.push([
-          `SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
+          `SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown_tsv @@`,
           ...matchTsQuery(branch),
         ]);
         continue;
@@ -2802,7 +2804,7 @@ export class IndexQueryEngine {
               // "type system"), while the unfenced plan rechecks only the
               // typed rows.
               pg: [
-                `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@`,
+                `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown_tsv @@`,
                 ...matchTsQuery(filter),
                 filter.matches.includes('"') ? `)` : `OFFSET 0)`,
               ],

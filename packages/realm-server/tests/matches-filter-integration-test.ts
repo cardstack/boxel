@@ -162,6 +162,38 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(cards.length, 1, 'one card returned');
     });
 
+    test('the stored markdown_tsv follows markdown on insert, update and clear', async function (assert) {
+      let url = `${testRealmURL}tsv-sync.json`;
+      await seedRow(dbAdapter, { url, markdown: 'a talk about lighthouses' });
+      let tsvOf = async () =>
+        (
+          await dbAdapter.execute(
+            `SELECT markdown_tsv::text AS tsv FROM prerendered_html WHERE url = $1`,
+            { bind: [url] },
+          )
+        )[0]?.tsv as string | null;
+      assert.ok(
+        (await tsvOf())?.includes('lighthous'),
+        'an insert computes the vector',
+      );
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET markdown = 'notes on harbours' WHERE url = $1`,
+        { bind: [url] },
+      );
+      let updated = await tsvOf();
+      assert.ok(updated?.includes('harbour'), 'an update recomputes it');
+      assert.notOk(updated?.includes('lighthous'), 'the old words are gone');
+      await dbAdapter.execute(
+        `UPDATE prerendered_html SET markdown = NULL WHERE url = $1`,
+        { bind: [url] },
+      );
+      assert.strictEqual(await tsvOf(), null, 'clearing markdown clears it');
+      let { meta } = await engine.searchCards(new URL(testRealmURL), {
+        filter: { matches: '"notes on harbours"' },
+      });
+      assert.strictEqual(meta.page.total, 0, 'a cleared row matches nothing');
+    });
+
     test('rejects a multi-operator filter at the engine, not just the wire', async function (assert) {
       // The wire surfaces reject this through `assertQuery`, but a query-backed
       // field is indexed straight through `searchCards` with no `assertQuery` in
@@ -1017,9 +1049,9 @@ module(basename(import.meta.filename), function () {
         dbAdapter.execute = originalExecute;
       }
 
-      let guard = `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM prerendered_html AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown))`;
+      let guard = `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM prerendered_html AS phm WHERE phm.markdown_tsv @@`;
       let matchesSql = executed.filter((sql) =>
-        sql.includes('markdown_search_text(phm.markdown)'),
+        sql.includes('phm.markdown_tsv'),
       );
       assert.ok(
         matchesSql.length > 0,

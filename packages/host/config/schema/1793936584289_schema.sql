@@ -162,6 +162,7 @@
    rendered_at,
    diagnostics BLOB,
    captures BLOB,
+   markdown_tsv,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 
@@ -186,6 +187,7 @@
    captures BLOB,
    job_id INTEGER,
    staging_id TEXT NOT NULL,
+   markdown_tsv,
    PRIMARY KEY ( realm_url, staging_id, url, type ) 
 );
 
