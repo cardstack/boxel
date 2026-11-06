@@ -8,10 +8,11 @@
 // style the element ends up with, and a `MutationObserver` writes it again
 // when the caller's style changes later. The caller's own declarations are
 // kept. The modifier installs in the same render that writes the attribute, so
-// nothing paints in between. The component still renders the same properties
-// in its own `style` attribute: with no caller `style`, that attribute is what
-// an argument change rewrites. With a caller `style`, it is not rendered at
-// all.
+// nothing paints in between. A component may also render the same
+// properties in a `style` attribute of its own; one the secure origin ships
+// renders none, as its policy refuses them, and relies on this modifier
+// alone: an argument change runs it again, which puts the caller's values back
+// and then writes the new ones.
 //
 // Each property has a strength:
 //

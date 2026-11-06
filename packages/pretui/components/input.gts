@@ -5,6 +5,7 @@ import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { TYPED_PROPERTIES, typedProperties } from '../internal/extras';
 import { FieldDress } from '../internal/field-dress';
+import { alsoDescribedBy } from '../internal/described-by';
 import { keepStyle, type KeptProperty } from '../internal/keep-style';
 import { SEARCH_START_INSET, SearchGlyph } from '../internal/search-glyph';
 
@@ -121,10 +122,16 @@ export class Input extends Component<InputSignature> {
           @readonly={{this.readonly}}
           @state={{this.state}}
           @errorMessage={{unless this.disabled @errorMessage}}
-          @describedBy={{@describedBy}}
           @helperText={{this.helperText}}
           @required={{this.required}}
           @onInput={{this.handleInput}}
+          {{alsoDescribedBy
+            @describedBy
+            this.invalid
+            @errorMessage
+            this.helperText
+            this.disabled
+          }}
           {{keepStyle this.inputProperties}}
           ...attributes
         />

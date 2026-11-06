@@ -4,6 +4,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { FieldDress } from '../internal/field-dress';
+import { alsoDescribedBy } from '../internal/described-by';
 import { keepStyle, type KeptProperty } from '../internal/keep-style';
 
 export interface TextareaSignature {
@@ -86,10 +87,16 @@ export class Textarea extends Component<TextareaSignature> {
         @readonly={{this.readonly}}
         @state={{this.state}}
         @errorMessage={{unless this.disabled @errorMessage}}
-        @describedBy={{@describedBy}}
         @helperText={{this.helperText}}
         @required={{this.required}}
         @onInput={{this.handleInput}}
+        {{alsoDescribedBy
+          @describedBy
+          this.invalid
+          @errorMessage
+          this.helperText
+          this.disabled
+        }}
         {{keepStyle TEXTAREA_METRICS}}
         ...attributes
       />

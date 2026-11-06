@@ -101,6 +101,9 @@ export interface InputGroupControls {
 }
 export interface InputGroupApi {
   elementId: string;
+  /** the id of the group's error row while it shows one, for a control the
+   * caller supplies to name as its error message and description */
+  errorMessageId?: string;
 }
 
 function asAccessories(a: unknown): InputGroupAccessories {
@@ -163,6 +166,15 @@ export class InputGroup extends Component<InputGroupSignature> {
   get state(): InputGroupState | undefined {
     return this.args.state ?? (this.invalid ? 'invalid' : undefined);
   }
+  // The group's api for the caller's own controls: boxel-ui's, plus the id
+  // of the error row the group draws under its element id.
+  api = (group: { elementId: string }): InputGroupApi => ({
+    elementId: group.elementId,
+    errorMessageId:
+      this.state === 'invalid' && this.args.errorMessage
+        ? `error-message-${group.elementId}`
+        : undefined,
+  });
   handleInput = (value: string) => {
     emit(
       [this.args.onInput, this.args.onChange, this.args.onValueChange],
@@ -196,7 +208,7 @@ export class InputGroup extends Component<InputGroupSignature> {
             {{yield
               (asControls Controls)
               (asAccessories Accessories)
-              group
+              (this.api group)
             }}
           </:default>
           <:after as |Accessories group|>

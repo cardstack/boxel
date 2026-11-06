@@ -14,7 +14,7 @@ A control fused with accessories — a prefix, a suffix, a button, a select — 
 <:start>   <:end>
 ```
 
-**There are two modes and the block you use selects them.** With no default block, the component renders boxel-ui's built-in input and `<:start>`/`<:end>` wrap your content in an `Accessories.Text`. With a default block, **boxel skips its built-in input entirely** and you supply the controls yourself from the yielded `Controls` (`Input`, `Textarea`) and `Accessories` (`Button`, `IconButton`, `Select`, `Text`) hashes. That is a genuine mode switch, not a progressive enhancement, and mixing the two is the main way to get confused output.
+**There are two modes and the block you use selects them.** With no default block, the component renders boxel-ui's built-in input and `<:start>`/`<:end>` wrap your content in an `Accessories.Text`. With a default block, **boxel skips its built-in input entirely** and you supply the controls yourself from the yielded `Controls` (`Input`, `Textarea`) and `Accessories` (`Button`, `IconButton`, `Select`, `Text`) hashes. That is a genuine mode switch, not a progressive enhancement, and mixing the two is the main way to get confused output. The third block argument is the group's api: its `elementId`, and `errorMessageId`, the id of the error row while the group shows one, so a control you supply can name it in `aria-describedby` and `aria-errormessage` as the built-in input does.
 
 **`<:start>`/`<:end>` are sugar over `<:before>`/`<:after>`.** The short forms wrap in `Accessories.Text` for you; the long forms hand you the `Accessories` hash so you can place a Button or a Select. Use the short ones for static affixes and the long ones for anything interactive.
 
