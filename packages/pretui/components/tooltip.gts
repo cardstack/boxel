@@ -6,9 +6,10 @@ import { modifier } from 'ember-modifier';
 import { listen, listenDocumentCapture } from '../focus';
 import { positionPopup } from '../internal/overlay';
 
-// The trigger-to-bubble gap in px, for the measuring code; the bridge in CSS
-// spans the same distance as --_tip-gap.
-const TIP_GAP = 6;
+// The trigger-to-bubble gap. The show modifier places the bubble this far
+// out and sets --_tip-gap to it, so the bridge in CSS spans exactly the gap
+// at any root font size.
+const TIP_GAP_REM = 0.375;
 
 // The element a Tooltip describes. The trigger arrives as a caller block, so
 // the component finds it rather than receiving it — the first thing in the
@@ -81,6 +82,8 @@ export class Tooltip extends Component<TooltipSignature> {
   @tracked private focused = false;
   @tracked private dismissed = false;
   private pressed = false;
+  // False while the open tip is hidden because its trigger is out of view.
+  private inView = true;
   tipId = `${guidFor(this)}-tip`;
   get side() {
     return this.args.side ?? 'top';
@@ -130,13 +133,22 @@ export class Tooltip extends Component<TooltipSignature> {
       el: HTMLElement,
       [shown, side]: [boolean, 'top' | 'bottom' | 'left' | 'right'],
     ) => {
-      let open = el.matches(':popover-open');
       let anchor = el.parentElement;
       if (!shown || !anchor) {
-        if (open) el.hidePopover();
+        if (el.matches(':popover-open')) el.hidePopover();
         return;
       }
-      if (!open) el.showPopover();
+      if (!el.matches(':popover-open')) {
+        // A trigger is in view when it opens its tip; the observer below
+        // hides the bubble again if it isn't.
+        this.inView = true;
+        el.style.visibility = '';
+        el.showPopover();
+      }
+      el.style.setProperty('--_tip-gap', `${TIP_GAP_REM}rem`);
+      let gap =
+        TIP_GAP_REM *
+        parseFloat(getComputedStyle(document.documentElement).fontSize);
       let place = () => {
         let r = el.getBoundingClientRect();
         let p = positionPopup(
@@ -144,22 +156,50 @@ export class Tooltip extends Component<TooltipSignature> {
           r.width,
           r.height,
           side,
-          TIP_GAP,
+          gap,
         );
         el.style.top = `${p.top}px`;
         el.style.left = `${p.left}px`;
       };
       place();
-      // New @content, or a trigger that changes size, moves the bubble's
-      // center while it stays open.
-      let sizes = new ResizeObserver(place);
+      // Placed again when the bubble or its trigger changes size, as with new
+      // @content. Moving the trigger in the DOM closes the popover without an
+      // event and takes focus off the trigger, which not every browser
+      // reports; the bubble's size changes with it, and the tip then closes
+      // as if dismissed.
+      let sizes = new ResizeObserver(() => {
+        if (el.matches(':popover-open')) {
+          place();
+        } else {
+          this.focused = false;
+          this.dismissed = true;
+        }
+      });
       sizes.observe(el);
       sizes.observe(anchor);
-      window.addEventListener('scroll', place, { capture: true, passive: true });
+      // The top layer escapes the trigger's clipping containers, so the
+      // bubble hides itself while the trigger is scrolled or clipped away.
+      let clip = new IntersectionObserver((entries) => {
+        let entry = entries[entries.length - 1];
+        if (!entry) return;
+        this.inView = entry.isIntersecting;
+        el.style.visibility = this.inView ? '' : 'hidden';
+      });
+      clip.observe(anchor);
+      // Only a scroll that can move the trigger moves the bubble.
+      let onScroll = (e: Event) => {
+        if (e.target instanceof Node && !e.target.contains(anchor)) return;
+        place();
+      };
+      window.addEventListener('scroll', onScroll, {
+        capture: true,
+        passive: true,
+      });
       window.addEventListener('resize', place);
       return () => {
         sizes.disconnect();
-        window.removeEventListener('scroll', place, true);
+        clip.disconnect();
+        window.removeEventListener('scroll', onScroll, true);
         window.removeEventListener('resize', place);
       };
     },
@@ -178,7 +218,15 @@ export class Tooltip extends Component<TooltipSignature> {
     this.pressed = true;
     this.focused = false;
   };
-  onFocusIn = () => {
+  onFocusIn = (e: Event) => {
+    // Keyboard focus arriving from outside starts fresh, even when no
+    // focusout cleared an earlier dismissal (as when the trigger moved in
+    // the DOM). A click's focus doesn't, so it never undoes an Escape.
+    let from = (e as FocusEvent).relatedTarget;
+    let wrapper = e.currentTarget as Node;
+    if (!this.pressed && !(from instanceof Node && wrapper.contains(from))) {
+      this.dismissed = false;
+    }
     this.focused = !this.pressed;
     this.pressed = false;
   };
@@ -191,7 +239,8 @@ export class Tooltip extends Component<TooltipSignature> {
   // means exactly one thing — hide THIS tip — and never also closes the
   // dialog the trigger happens to live in.
   onKey = (e: Event) => {
-    if (!this.shown) return;
+    // A tip hidden with its out-of-view trigger leaves Escape to the page.
+    if (!this.shown || !this.inView) return;
     if ((e as KeyboardEvent).key !== 'Escape') return;
     e.stopPropagation();
     this.dismissed = true;
@@ -199,13 +248,13 @@ export class Tooltip extends Component<TooltipSignature> {
   <template>
     <span
       class='pretui-tipwrap'
-      data-test-pretui-tooltip
       {{this.describeTrigger this.tipId @labels}}
       {{listen 'mouseenter' this.onEnter}}
       {{listen 'mouseleave' this.onLeave}}
       {{listen 'mousedown' this.onPress}}
       {{listen 'focusin' this.onFocusIn}}
       {{listen 'focusout' this.onFocusOut}}
+      data-test-pretui-tooltip
       ...attributes
     >
       {{yield}}
@@ -217,6 +266,7 @@ export class Tooltip extends Component<TooltipSignature> {
         data-side={{this.side}}
         data-open={{if this.shown 'true'}}
         {{this.showTip this.shown this.side}}
+        data-test-pretui-tooltip-bubble
       >{{@content}}</span>
       {{#if this.shown}}
         <span
@@ -234,10 +284,9 @@ export class Tooltip extends Component<TooltipSignature> {
           display: none;
         }
         .pretui-tooltip {
-          /* the space between trigger and bubble, which the bridge spans */
-          --_tip-gap: 0.375rem;
           /* a manual popover: the top layer is above every z-index, and the
-             show modifier writes top and left */
+             show modifier writes top, left and --_tip-gap, the space the
+             bridge spans */
           position: fixed;
           inset: auto;
           margin: 0;
@@ -253,15 +302,27 @@ export class Tooltip extends Component<TooltipSignature> {
           white-space: nowrap;
           width: max-content;
           opacity: 0;
-          /* display and overlay hold the bubble in the top layer until the
-             fade-out ends */
-          transition:
-            opacity 120ms ease,
-            display 120ms allow-discrete,
-            overlay 120ms allow-discrete;
+          --_tip-fade: 120ms;
+          transition: opacity var(--_tip-fade) ease;
+        }
+        /* display and overlay hold the bubble in the top layer until the
+           fade-out ends. A browser that can't transition overlay would drop
+           it from the top layer as the fade began, so there it closes at
+           once. */
+        @supports (overlay: auto) {
+          .pretui-tooltip {
+            transition:
+              opacity var(--_tip-fade) ease,
+              display var(--_tip-fade) allow-discrete,
+              overlay var(--_tip-fade) allow-discrete;
+          }
         }
         .pretui-tooltip:popover-open {
           opacity: 1;
+        }
+        /* fading out, it no longer takes the pointer */
+        .pretui-tooltip:not(:popover-open) {
+          pointer-events: none;
         }
         @starting-style {
           .pretui-tooltip:popover-open {

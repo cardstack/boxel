@@ -77,7 +77,9 @@
 //                modal — so it is the only tier deliberately above `dialog`.
 //                Toaster's fixed region and SkipLink take it; a bare Toast is
 //                in flow and takes no tier, so whatever positions one owns
-//                its z-index.
+//                its z-index. A z-index can't rise above the top layer, so
+//                Dialog, Drawer, CommandPalette and an open Tooltip still
+//                paint over the Toaster.
 //
 // The numbers are gapped so a host can interleave its own chrome (a global
 // nav at 65, an assistant panel at 85) without editing Pretui.
