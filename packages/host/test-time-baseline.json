@@ -1,15 +1,6 @@
 {
   "main": [
     {
-      "run": 39823015093,
-      "at": "2026-10-22T17:28:37Z",
-      "minutes": 211.3,
-      "slowestShard": 16.1,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
       "run": 39851786564,
       "at": "2026-10-22T20:46:51Z",
       "minutes": 211.1,
@@ -359,36 +350,18 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": false
-    }
-  ],
-  "pullRequest": [
+    },
     {
-      "run": 41443083168,
-      "at": "2026-11-02T12:14:39Z",
-      "minutes": 186.1,
-      "slowestShard": 14.8,
+      "run": 42125992378,
+      "at": "2026-11-05T22:59:03Z",
+      "minutes": 230.2,
+      "slowestShard": 17.1,
       "shards": 16,
       "runsOn": true,
       "indexCache": false
-    },
-    {
-      "run": 41443211656,
-      "at": "2026-11-02T12:15:32Z",
-      "minutes": 144.1,
-      "slowestShard": 10.6,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": true
-    },
-    {
-      "run": 41446661260,
-      "at": "2026-11-02T12:40:46Z",
-      "minutes": 146.2,
-      "slowestShard": 10,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": true
-    },
+    }
+  ],
+  "pullRequest": [
     {
       "run": 41448654113,
       "at": "2026-11-02T12:55:42Z",
@@ -3022,6 +2995,33 @@
       "at": "2026-11-05T21:01:31Z",
       "minutes": 221.7,
       "slowestShard": 17.8,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
+    },
+    {
+      "run": 42117503537,
+      "at": "2026-11-05T21:59:07Z",
+      "minutes": 208.1,
+      "slowestShard": 17,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": true
+    },
+    {
+      "run": 42118832284,
+      "at": "2026-11-05T22:08:02Z",
+      "minutes": 159.6,
+      "slowestShard": 11.9,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": true
+    },
+    {
+      "run": 42125987919,
+      "at": "2026-11-05T22:59:01Z",
+      "minutes": 170.3,
+      "slowestShard": 13.9,
       "shards": 16,
       "runsOn": false,
       "indexCache": false

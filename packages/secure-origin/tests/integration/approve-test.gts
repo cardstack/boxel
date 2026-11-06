@@ -897,6 +897,303 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-approve-key="GitHub token"]').doesNotExist();
   });
 
+  test('a slot offers only keys of the kinds its request can take', async function (assert) {
+    let inferred = batch();
+    for (let group of inferred.groups as { operations: any[] }[]) {
+      for (let operation of group.operations) {
+        operation.slots = operation.slots.map((slot: object) => ({
+          ...slot,
+          kinds: ['static', 'oauth'],
+        }));
+      }
+    }
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: {
+              ...inferred,
+              keys: [
+                ...inferred.keys,
+                {
+                  id: 'key-sa',
+                  name: 'Sheets robot',
+                  kind: 'google-service-account',
+                  state: 'active',
+                  covers: [],
+                },
+              ],
+            },
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-approve-key]').exists({ count: 2 });
+    assert
+      .dom('[data-test-approve-key="Sheets robot"]')
+      .doesNotExist('a service account is not offered for GitHub');
+  });
+
+  test('an OAuth key is offered only where its client’s API hosts reach every destination the slot is sent to', async function (assert) {
+    let oauthKeys = batch({
+      keys: [
+        {
+          id: 'key-gh',
+          name: 'GitHub token',
+          kind: 'static',
+          state: 'active',
+          covers: [GRAPHQL],
+          serves: [GRAPHQL, UPLOADS],
+        },
+        {
+          id: 'key-github-account',
+          name: 'GitHub account',
+          kind: 'oauth-connection',
+          state: 'active',
+          covers: [],
+          serves: [GRAPHQL, UPLOADS],
+        },
+        {
+          id: 'key-api-only',
+          name: 'GitHub API account',
+          kind: 'oauth-connection',
+          state: 'active',
+          covers: [],
+          serves: [GRAPHQL],
+        },
+        {
+          id: 'key-google-account',
+          name: 'Google account',
+          kind: 'oauth-connection',
+          state: 'active',
+          covers: [],
+          serves: [],
+        },
+      ],
+    });
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: oauthKeys },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-approve-key]').exists({ count: 2 });
+    assert.dom('[data-test-approve-key="GitHub token"]').exists();
+    assert.dom('[data-test-approve-key="GitHub account"]').exists();
+    assert
+      .dom('[data-test-approve-key="GitHub API account"]')
+      .doesNotExist(
+        'one choice fills the slot at both destinations, and this account reaches only one',
+      );
+    assert
+      .dom('[data-test-approve-key="Google account"]')
+      .doesNotExist('an account for another service is not offered');
+  });
+
+  test('a key chosen for pipelines that interactive use no longer offers gives way to one it does', async function (assert) {
+    let mixed = batch({
+      keys: [
+        {
+          id: 'key-gh',
+          name: 'GitHub token',
+          kind: 'static',
+          state: 'active',
+          covers: [GRAPHQL],
+          serves: [GRAPHQL, UPLOADS],
+        },
+        {
+          id: 'key-api-only',
+          name: 'GitHub API account',
+          kind: 'oauth-connection',
+          state: 'active',
+          covers: [],
+          serves: [GRAPHQL],
+        },
+      ],
+    });
+    let [, uploads] = mixed.groups as { operations: any[] }[];
+    uploads!.operations = uploads!.operations.map((o) => ({
+      ...o,
+      status: 'pipelines-only',
+      slots: o.slots.map((slot: object) => ({
+        ...slot,
+        status: 'pipelines-only',
+        approved: {
+          snapshot: snapshot('null', UPLOADS),
+          keyId: 'key-gh',
+          shareId: null,
+          interactive: false,
+        },
+      })),
+    }));
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: mixed },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-approve-key="GitHub API account"]').doesNotExist();
+
+    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-approve-key="GitHub API account"] input');
+    assert
+      .dom('[data-test-approve-key="GitHub API account"] input')
+      .isChecked();
+
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-key="GitHub API account"]')
+      .doesNotExist('the upload it can’t reach is back in the batch');
+    assert
+      .dom('[data-test-approve-key="GitHub token"] input')
+      .isChecked('the key the slot starts on is chosen in its place');
+  });
+
+  test('a share is offered only where its key’s client reaches the destination', async function (assert) {
+    let shared = batch({
+      groups: [
+        {
+          destination: {
+            href: GRAPHQL,
+            host: 'api.github.com',
+            path: '/graphql/',
+            registrableDomain: 'github.com',
+          },
+          operations: [
+            {
+              ...operation('listPRs', 'List your open pull requests'),
+              slots: [
+                {
+                  slot: 'apiKey',
+                  key: 'apiKey',
+                  kinds: ['static', 'oauth'],
+                  status: 'new',
+                  snapshot: snapshot('{"query":"listPRs"}'),
+                  fingerprint: 'fp-listPRs',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      keys: [],
+      shares: [
+        {
+          id: 'share-bot',
+          label: 'GitHub bot',
+          keyId: 'key-bot',
+          keyName: 'GitHub bot client',
+          keyKind: 'oauth-client',
+          covers: [],
+          serves: [GRAPHQL],
+          interactive: false,
+          dailyBudget: 100,
+          anonymous: false,
+          anonymousDailyCap: null,
+          anonymousMonthlyCap: null,
+        },
+        {
+          id: 'share-slack',
+          label: 'Slack bot',
+          keyId: 'key-slack',
+          keyName: 'Slack bot client',
+          keyKind: 'oauth-client',
+          covers: [],
+          serves: [],
+          interactive: false,
+          dailyBudget: 100,
+          anonymous: false,
+          anonymousDailyCap: null,
+          anonymousMonthlyCap: null,
+        },
+      ],
+    });
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: shared },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-approve-key]').exists({ count: 1 });
+    assert
+      .dom('[data-test-approve-key="GitHub bot"] input')
+      .isChecked('the only share that fits starts chosen');
+    assert.dom('[data-test-approve-key="Slack bot"]').doesNotExist();
+  });
+
+  test('with shares in the workspace but none that fit, the page says none can be used here', async function (assert) {
+    let unfit = batch({
+      groups: [
+        {
+          destination: {
+            href: GRAPHQL,
+            host: 'api.github.com',
+            path: '/graphql/',
+            registrableDomain: 'github.com',
+          },
+          operations: [
+            {
+              ...operation('listPRs', 'List your open pull requests'),
+              slots: [
+                {
+                  slot: 'apiKey',
+                  key: 'apiKey',
+                  kinds: ['static', 'oauth'],
+                  status: 'new',
+                  snapshot: snapshot('{"query":"listPRs"}'),
+                  fingerprint: 'fp-listPRs',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      keys: [],
+      shares: [
+        {
+          id: 'share-slack',
+          label: 'Slack bot',
+          keyId: 'key-slack',
+          keyName: 'Slack bot client',
+          keyKind: 'oauth-client',
+          covers: [],
+          serves: [],
+          interactive: false,
+          dailyBudget: 100,
+          anonymous: false,
+          anonymousDailyCap: null,
+          anonymousMonthlyCap: null,
+        },
+      ],
+    });
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: unfit },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-no-keys]')
+      .hasText(
+        'None of your keys shared with this workspace can be used here.',
+      );
+  });
+
   test('a key the service rejected is offered, marked, and never chosen for the user', async function (assert) {
     serve({
       'POST _key-bindings/batch': () =>
