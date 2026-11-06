@@ -41,6 +41,10 @@ export interface ItemSignature {
     /** align the leading slot to the first line instead of the block centre
      * — right for a multi-line row, wrong for a single-line one */
     alignStart?: boolean;
+    /** wrap the title and description onto more lines rather than cutting
+     * them short with an ellipsis — for text whose end is what tells rows
+     * apart, such as an address */
+    wrap?: boolean;
     /* NOTE: the wrap at narrow widths is an unnamed container query, which
      * resolves against the nearest ANCESTOR container. Inside `<List>` that
      * is the row, which is already one. Standalone, give the box that holds
@@ -78,6 +82,7 @@ export class Item extends Component<ItemSignature> {
       data-test-pretui-item
       data-size={{this.size}}
       data-align={{this.align}}
+      data-wrap={{if @wrap 'true'}}
       ...attributes
     >
       {{#if (has-block 'leading')}}
@@ -160,6 +165,12 @@ export class Item extends Component<ItemSignature> {
           text-overflow: ellipsis;
           white-space: nowrap;
           font-weight: 500;
+        }
+        .pretui-item[data-wrap='true'] .pretui-item-title,
+        .pretui-item[data-wrap='true'] .pretui-item-desc {
+          overflow: visible;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .pretui-item-link {
           color: inherit;

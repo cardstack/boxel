@@ -97,9 +97,6 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
       font-size: inherit;
       letter-spacing: normal;
     }
-    .row :deep(.pretui-item-content) {
-      margin: 0;
-    }
     .row-icon {
       width: 0.875rem;
       height: 0.875rem;

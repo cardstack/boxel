@@ -337,7 +337,7 @@ module('Integration | key usage and limits', function (hooks) {
           'the detailed counts start closed',
         );
       assert
-        .dom('[data-test-key-usage-budget="day"]')
+        .dom('[data-test-key-usage-budget="day"] [role="progressbar"]')
         .hasAttribute('aria-valuenow', '12', 'the meter shows the day’s use')
         .hasAttribute('aria-valuetext', '12 of 2,400 calls');
       assert
@@ -384,6 +384,36 @@ module('Integration | key usage and limits', function (hooks) {
         ['How fast', 'How many'],
         'a personal key’s limits don’t speak of other people',
       );
+    });
+
+    test('draws a small budget as a bar, not as steps', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource(
+            'key-1',
+            usage({
+              budgets: {
+                day: { used: 3, budget: 10, resetsAt: '2026-11-03T00:00:00Z' },
+                month: {
+                  used: 3,
+                  budget: 300,
+                  resetsAt: '2026-12-01T00:00:00Z',
+                },
+              },
+            }),
+          ),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      await click(USAGE_TOGGLE);
+      await waitFor('[data-test-key-usage]');
+      assert
+        .dom('[data-test-key-usage-budget="day"] .pretui-progress-step')
+        .doesNotExist('a budget of ten calls is one bar');
+      assert
+        .dom('[data-test-key-usage-budget="day"] .pretui-progress-fill')
+        .exists();
     });
 
     test('names each destination a key may be sent to by host and path, each with its own flag', async function (assert) {

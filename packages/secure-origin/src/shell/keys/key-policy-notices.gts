@@ -194,11 +194,12 @@ const KeyPolicyNotices: TOC<Signature> = <template>
                 data-test-key-policy-notice={{notice.label}}
                 data-test-key-policy-notice-reason='visitors-use'
               >
-                <Item class='notice-item' @size='s'>
-                  <:title>People who aren’t signed in now use
-                    <strong>“{{notice.label}}”</strong>
-                    in
-                    {{addressOf notice.realm}}.</:title>
+                <Item class='notice-item' @size='s' @wrap={{true}}>
+                  <:title><span class='notice-text'>People who aren’t signed in
+                      now use
+                      <strong>“{{notice.label}}”</strong>
+                      in
+                      {{addressOf notice.realm}}.</span></:title>
                   <:default><Operations @notice={{notice}} /></:default>
                 </Item>
               </li>
@@ -265,9 +266,7 @@ const KeyPolicyNotices: TOC<Signature> = <template>
       font-size: var(--boxel-font-size-sm);
       letter-spacing: normal;
     }
-    .notice-item :deep(.pretui-item-title) {
-      white-space: normal;
-      overflow-wrap: anywhere;
+    .notice-text {
       font-weight: normal;
     }
   </style>

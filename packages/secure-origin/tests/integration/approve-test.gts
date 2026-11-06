@@ -1395,7 +1395,13 @@ module('Integration | approve pages', function (hooks) {
         'the list stays open while the removal is confirmed',
       );
 
+    assert
+      .dom('[data-test-key-grant-remove-cancel]')
+      .isFocused('the question takes focus from the Remove it replaces');
     await click('[data-test-key-grant-remove-cancel]');
+    assert
+      .dom(`${graphql} [data-test-key-grant-remove]`)
+      .isFocused('Cancel gives focus back to Remove');
     assert
       .dom(region)
       .hasAttribute(

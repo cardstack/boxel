@@ -6,7 +6,8 @@
 // service rejected it. Nothing here is a value or a request: only counts,
 // codes, statuses, destinations, sites and who called.
 //
-// Each budget is a Pret UI ProgressBar, the details sit behind a Pret UI
+// Each budget's meter is a Pret UI ProgressBar, held to a continuous bar so a
+// small budget never draws as steps. The details sit behind a Pret UI
 // Disclosure, and each group of counts is a KeyValue list with its counts at
 // the end of their column.
 import Component from '@glimmer/component';
@@ -174,36 +175,42 @@ export default class UsageSummary extends Component<Signature> {
   <template>
     <section class='usage' aria-label='Usage' data-test-key-usage ...attributes>
       <div class='meters'>
-        <ProgressBar
-          @label='Today'
-          @value={{@usage.budgets.day.used}}
-          @max={{@usage.budgets.day.budget}}
-          @count={{budgetText
-            @usage.budgets.day.used
-            @usage.budgets.day.budget
-          }}
-          @valueText={{budgetText
-            @usage.budgets.day.used
-            @usage.budgets.day.budget
-          }}
-          aria-label='Calls today'
-          data-test-key-usage-budget='day'
-        />
-        <ProgressBar
-          @label='This month'
-          @value={{@usage.budgets.month.used}}
-          @max={{@usage.budgets.month.budget}}
-          @count={{budgetText
-            @usage.budgets.month.used
-            @usage.budgets.month.budget
-          }}
-          @valueText={{budgetText
-            @usage.budgets.month.used
-            @usage.budgets.month.budget
-          }}
-          aria-label='Calls this month'
-          data-test-key-usage-budget='month'
-        />
+        <div class='meter' data-test-key-usage-budget='day'>
+          <span class='meter-label'>Today</span>
+          <span class='meter-value'><strong>{{count
+                @usage.budgets.day.used
+              }}</strong>
+            of
+            {{calls @usage.budgets.day.budget}}</span>
+          <ProgressBar
+            @value={{@usage.budgets.day.used}}
+            @max={{@usage.budgets.day.budget}}
+            @steps={{false}}
+            @valueText={{budgetText
+              @usage.budgets.day.used
+              @usage.budgets.day.budget
+            }}
+            aria-label='Calls today'
+          />
+        </div>
+        <div class='meter' data-test-key-usage-budget='month'>
+          <span class='meter-label'>This month</span>
+          <span class='meter-value'><strong>{{count
+                @usage.budgets.month.used
+              }}</strong>
+            of
+            {{calls @usage.budgets.month.budget}}</span>
+          <ProgressBar
+            @value={{@usage.budgets.month.used}}
+            @max={{@usage.budgets.month.budget}}
+            @steps={{false}}
+            @valueText={{budgetText
+              @usage.budgets.month.used
+              @usage.budgets.month.budget
+            }}
+            aria-label='Calls this month'
+          />
+        </div>
       </div>
       <p class='note' data-test-key-usage-last>
         {{#if @usage.lastUse}}
@@ -326,11 +333,15 @@ export default class UsageSummary extends Component<Signature> {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--boxel-sp-sm);
       }
-      /* A budget's reading in the summary's own type. */
-      .meters :deep(.pretui-progress-count) {
-        font-family: inherit;
-        font-size: var(--boxel-font-size-xs);
-        letter-spacing: normal;
+      .meter {
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+      }
+      .meter-label {
+        color: var(--muted-foreground);
+      }
+      .meter-value strong {
+        font-size: var(--boxel-font-size-sm);
       }
       .note {
         margin: 0;
@@ -377,8 +388,9 @@ export default class UsageSummary extends Component<Signature> {
       .destinations {
         grid-column: 1 / -1;
       }
+      /* A long destination wraps, and keeps its flag in view beside it. */
       .destinations .counts {
-        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-columns: minmax(0, max-content) 1fr;
       }
       .flag {
         color: var(--muted-foreground);

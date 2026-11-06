@@ -1199,8 +1199,14 @@ module('Integration | key pages', function (hooks) {
         .includesText(
           'Unshare from Team? Cards there stop using this key. It stays shared everywhere else.',
         );
+      assert
+        .dom(`${team} [data-test-key-unshare-cancel]`)
+        .isFocused('the question takes focus from the Unshare it replaces');
       await click(`${team} [data-test-key-unshare-cancel]`);
       assert.dom(`${team} [data-test-key-unshare-confirm]`).doesNotExist();
+      assert
+        .dom(`${team} [data-test-key-unshare]`)
+        .isFocused('Cancel gives focus back to Unshare');
       assert.false(
         requests.some((r) => r.method === 'DELETE'),
         'nothing is unshared until confirmed',

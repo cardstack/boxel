@@ -1,10 +1,10 @@
 // A key page laid out as a card is in its edit format: a muted header band with
 // the page's title and what it is for, then the page's fields on white, one
-// labelled row each in Pret UI's FormLayout, and the page's buttons under
-// them.
+// labelled row each, and the page's buttons under them. The rows are Pret UI
+// Fields; the panel lays them out with a plain grid, since Pret UI's
+// FormLayout would bring the form machinery it curries into the origin's
+// trusted code for no more than the gap between them.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-
-import { FormLayout } from '@cardstack/pretui/components/form-layout';
 
 interface Signature {
   Args: { heading: string };
@@ -21,9 +21,9 @@ const EditPage: TemplateOnlyComponent<Signature> = <template>
       {{/if}}
     </header>
     {{#if (has-block)}}
-      <FormLayout class='fields'>
+      <div class='fields'>
         {{yield}}
-      </FormLayout>
+      </div>
     {{/if}}
     {{#if (has-block 'actions')}}
       <footer class='actions'>{{yield to='actions'}}</footer>
@@ -59,7 +59,8 @@ const EditPage: TemplateOnlyComponent<Signature> = <template>
     .fields {
       --boxel-ui-label-font-size: var(--boxel-font-size-sm);
       --boxel-ui-label-line-height: var(--boxel-line-height-sm);
-      --pretui-formlayout-gap: var(--boxel-sp-lg);
+      display: grid;
+      gap: var(--boxel-sp-lg);
       padding: var(--boxel-sp-xl);
       background-color: var(--background);
     }

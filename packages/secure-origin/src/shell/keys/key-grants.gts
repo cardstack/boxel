@@ -6,7 +6,8 @@
 // approvals, holding the list open while it asks, since removing it revokes
 // every one, then hands the grant to `@onRemove`, which removes it and
 // answers whether it did, in a Pret UI Alert. A card that needs the key there
-// again asks for its approval again.
+// again asks for its approval again. The question takes the place of Remove,
+// so focus moves to its Cancel, and Cancel gives it back to Remove.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
@@ -15,6 +16,7 @@ import { trackedObject } from '@ember/reactive/collections';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 import Button from '../../components/button.gts';
 import cn from '../../helpers/cn.ts';
@@ -64,6 +66,7 @@ export default class KeyGrants extends Component<Signature> {
                   @size='extra-small'
                   aria-label='Remove {{hostAndPath grant.destination}}'
                   data-test-key-grant-remove
+                  {{focusWhen (eq this.state.returnFocus grant.id)}}
                   {{on 'click' (fn this.startRemove grant)}}
                 >Remove</Button>
               {{/unless}}
@@ -143,6 +146,7 @@ export default class KeyGrants extends Component<Signature> {
                       @kind='secondary'
                       @size='extra-small'
                       data-test-key-grant-remove-cancel
+                      {{focusWhen true}}
                       {{on 'click' this.cancel}}
                     >Cancel</Button>
                     <Button
@@ -215,6 +219,8 @@ export default class KeyGrants extends Component<Signature> {
   private state = trackedObject({
     removing: false,
     grant: undefined as string | undefined,
+    // The grant whose Remove takes focus back once its question is cancelled.
+    returnFocus: undefined as string | undefined,
     // The grants whose approvals the user opened; every grant starts closed.
     expanded: [] as string[],
   });
@@ -239,10 +245,12 @@ export default class KeyGrants extends Component<Signature> {
   };
 
   private startRemove = (grant: KeyGrant) => {
+    this.state.returnFocus = undefined;
     this.state.grant = grant.id;
   };
 
   private cancel = () => {
+    this.state.returnFocus = this.state.grant;
     this.state.grant = undefined;
   };
 

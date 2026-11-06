@@ -15,6 +15,8 @@
 // Each workspace can be unshared. Unshare asks first, saying what stops, and
 // then hands the key and the workspace to `@onUnshare`, which takes the key's shares
 // there out and answers whether it did. The key stays shared everywhere else.
+// The question takes the place of Unshare, so focus moves to its Cancel, and
+// Cancel gives it back to Unshare.
 //
 // An active share that no operation in its workspace is approved to send
 // says so, since until one is, no card there calls with it: the workspace's
@@ -32,6 +34,7 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Item } from '@cardstack/pretui/components/item';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 import Button from '../../components/button.gts';
 import Globe from '../../components/icons/globe.gts';
@@ -144,10 +147,16 @@ export default class KeyUse extends Component<Signature> {
                   class='workspace'
                   data-test-key-shared-into-workspace={{workspace.url}}
                 >
-                  <Item class='workspace-item' @size='s' @alignStart={{true}}>
-                    <:title><span data-test-workspace-name>{{workspaceTitle
-                          workspace
-                        }}</span></:title>
+                  <Item
+                    class='workspace-item'
+                    @size='s'
+                    @alignStart={{true}}
+                    @wrap={{true}}
+                  >
+                    <:title><span
+                        class='workspace-name'
+                        data-test-workspace-name
+                      >{{workspaceTitle workspace}}</span></:title>
                     <:description>
                       {{#if workspace.name}}
                         <span class='address' data-test-workspace-address>
@@ -168,6 +177,7 @@ export default class KeyUse extends Component<Signature> {
                             workspace
                           }}'
                           data-test-key-unshare
+                          {{focusWhen (eq this.returnFocus workspace.url)}}
                           {{on 'click' (fn this.ask workspace)}}
                         >Unshare</Button>
                       {{/unless}}
@@ -194,6 +204,7 @@ export default class KeyUse extends Component<Signature> {
                             @size='extra-small'
                             @disabled={{this.saving}}
                             data-test-key-unshare-cancel
+                            {{focusWhen true}}
                             {{on 'click' this.cancel}}
                           >Cancel</Button>
                           <Button
@@ -296,28 +307,21 @@ export default class KeyUse extends Component<Signature> {
         line-height: var(--boxel-line-height-xs);
       }
       /* Each row is set in the tile's small type, its icon on the first
-         line, and wraps rather than cutting its text short: the part of an
-         address that tells two workspaces apart may be at its end. */
+         line. A workspace's name and address wrap rather than being cut
+         short: the part of an address that tells two workspaces apart may be
+         at its end. */
       .use-row,
       .workspace-item {
         --pretui-item-gap: var(--boxel-sp-xs);
         font-size: inherit;
         letter-spacing: normal;
       }
-      .use-row :deep(.pretui-item-content) {
-        margin: 0;
-      }
-      .workspace-item :deep(.pretui-item-title),
-      .workspace-item :deep(.pretui-item-desc) {
-        white-space: normal;
-        overflow-wrap: anywhere;
-        font-size: inherit;
-      }
-      .workspace-item :deep(.pretui-item-title) {
+      .workspace-name {
         font-weight: 600;
       }
-      .workspace-item :deep(.pretui-item-desc) {
-        display: grid;
+      .address,
+      .labels {
+        display: block;
       }
       .use-icon {
         width: 0.875rem;
@@ -355,12 +359,18 @@ export default class KeyUse extends Component<Signature> {
     </style>
   </template>
 
-  // The workspace whose Unshare is waiting to be confirmed, and whether it is
-  // being unshared.
+  // The workspace whose Unshare is waiting to be confirmed, whether it is
+  // being unshared, and the workspace whose Unshare takes focus back once its
+  // question is cancelled.
   private state = trackedObject({
     confirming: undefined as string | undefined,
     saving: false,
+    returnFocus: undefined as string | undefined,
   });
+
+  private get returnFocus() {
+    return this.state.returnFocus;
+  }
 
   private get confirming() {
     return this.state.confirming;
@@ -371,10 +381,12 @@ export default class KeyUse extends Component<Signature> {
   }
 
   private ask = (workspace: SharedWorkspace) => {
+    this.state.returnFocus = undefined;
     this.state.confirming = workspace.url;
   };
 
   private cancel = () => {
+    this.state.returnFocus = this.state.confirming;
     this.state.confirming = undefined;
   };
 
