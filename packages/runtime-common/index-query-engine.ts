@@ -1820,12 +1820,47 @@ export class IndexQueryEngine {
     } else if (isNearFilter(filter)) {
       return this.nearCondition(filter, typeConditionRef);
     } else if ('every' in filter) {
-      return every([
-        ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-        ...filter.every.map((i) =>
-          this.filterCondition(i, on, polarity, context),
-        ),
-      ]);
+      // State each type's membership test once per conjunction. A sibling
+      // anchored on a type the AND already tests keeps that type for resolving
+      // its fields, but emits no second test: Postgres multiplies the two
+      // tests' selectivities, expects almost no rows, and then re-runs an
+      // indexed `in`/`matches` subquery per row instead of hashing it (a
+      // 20-value `in` beside a bare `{ on }` took 12 s against 70 ms alone).
+      // Dropping a repeated conjunct never changes what an AND selects.
+      let established = new Set<string>();
+      let parts: CardExpression[] = [];
+      if (typeConditionRef) {
+        established.add(stringify(typeConditionRef));
+        parts.push(this.typeCondition(typeConditionRef));
+      }
+      for (let child of filter.every) {
+        let childKeys = Object.keys(child);
+        let childOn = (child as { on?: CodeRef }).on;
+        let childType = (child as { type?: CodeRef }).type;
+        let pureRef =
+          childKeys.length === 1 ? (childOn ?? childType) : undefined;
+        if (pureRef) {
+          let key = stringify(pureRef);
+          if (established.has(key)) {
+            continue;
+          }
+          established.add(key);
+          parts.push(this.typeCondition(pureRef));
+          continue;
+        }
+        if (childOn && established.has(stringify(childOn))) {
+          let { on: _anchor, ...rest } = child as { on?: CodeRef } & Filter;
+          parts.push(
+            this.filterCondition(rest as Filter, childOn, polarity, context),
+          );
+          continue;
+        }
+        if (childOn) {
+          established.add(stringify(childOn));
+        }
+        parts.push(this.filterCondition(child, on, polarity, context));
+      }
+      return every(parts);
     } else if ('any' in filter) {
       let folded = foldSameKeyEqs(filter.any);
       if (folded) {
