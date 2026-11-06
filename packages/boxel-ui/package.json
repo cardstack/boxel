@@ -7,6 +7,9 @@
   ],
   "repository": "",
   "license": "MIT",
+  "sideEffects": [
+    "**/*.css"
+  ],
   "author": "",
   "directories": {
     "doc": "doc",
