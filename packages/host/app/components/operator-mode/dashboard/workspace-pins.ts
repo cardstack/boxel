@@ -1,6 +1,7 @@
 import { cached } from '@glimmer/tracking';
 
 import {
+  RealmPaths,
   relationshipEntries,
   resolveRRIReference,
   rri,
@@ -12,7 +13,6 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
-import { stripJsonSuffix } from '@cardstack/host/lib/live-search-type-gate';
 import { getSearchEntriesResource } from '@cardstack/host/resources/search-entries';
 
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -43,8 +43,9 @@ export class WorkspacePins {
       {
         refreshOn: (event) => {
           let target = getRealm();
-          return target ? indexCardChanged(event, target.realmURL) : false;
+          return target ? indexCardReindexed(event, target.realmURL) : false;
         },
+        refreshPromptly: true,
       },
     );
   }
@@ -62,27 +63,30 @@ export class WorkspacePins {
 function indexCardQuery(realm: string, realmURL: string): SearchEntryWireQuery {
   return {
     realms: [realm],
-    cardUrls: [new URL('index.json', realmURL).href],
+    cardUrls: [indexCardURL(realmURL)],
     scope: 'cards',
     fields: { entry: [`item.${PIN_FIELD}`] },
   };
 }
 
-// Pins only move when the index card is reindexed, or when the whole realm is.
-// Any other write to the realm leaves them as they are.
-function indexCardChanged(event: RealmEventContent, realmURL: string): boolean {
-  if (event.eventName !== 'index') {
+function indexCardURL(realmURL: string): string {
+  return new RealmPaths(new URL(realmURL)).fileURL('index.json').href;
+}
+
+// Pins can only move when the index card is reindexed: a write to it, which
+// also covers its other fields, or a reindex of the realm that rewrites it.
+// An edit to a pinned card re-renders the index card's HTML but doesn't
+// reindex it, so it isn't one of these.
+function indexCardReindexed(
+  event: RealmEventContent,
+  realmURL: string,
+): boolean {
+  if (event.eventName !== 'index' || event.indexType !== 'incremental') {
     return false;
   }
-  if (event.indexType === 'full') {
-    return true;
-  }
-  if (event.indexType !== 'incremental') {
-    return false;
-  }
-  let indexCard = stripJsonSuffix(new URL('index.json', realmURL).href);
+  let indexCard = trimJsonExtension(indexCardURL(realmURL));
   return (event.invalidations ?? []).some(
-    (url) => stripJsonSuffix(url) === indexCard,
+    (url) => trimJsonExtension(url) === indexCard,
   );
 }
 
