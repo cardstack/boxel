@@ -4008,7 +4008,7 @@ module('Integration | Store', function (hooks) {
 
   test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {
     assert.expect(2);
-    let url = `${testRealmURL}Person/live-update`;
+    let url = `${testRealmURL}Person/hassan`;
     let didSave = false;
     this.onSave(() => {
       didSave = true;
@@ -4023,11 +4023,11 @@ module('Integration | Store', function (hooks) {
     let events = interceptRealmEvents();
     try {
       await testRealm.write(
-        'Person/live-update.json',
+        'Person/hassan.json',
         JSON.stringify({
           data: {
             attributes: {
-              name: 'Example Person Updated',
+              name: 'Hassan updated',
             },
             meta: {
               adoptsFrom: {
@@ -4047,7 +4047,7 @@ module('Integration | Store', function (hooks) {
     await storeService.flushSaves();
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')
-      .containsText('Example Person Updated', 'card live updated');
+      .containsText('Hassan updated', 'card live updated');
     assert.false(didSave, 'indexing updates do not auto save instances');
   });
 
