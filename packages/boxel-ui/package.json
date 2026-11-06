@@ -8,7 +8,8 @@
   "repository": "",
   "license": "MIT",
   "sideEffects": [
-    "**/*.css"
+    "**/*.css",
+    "./tests/**"
   ],
   "author": "",
   "directories": {

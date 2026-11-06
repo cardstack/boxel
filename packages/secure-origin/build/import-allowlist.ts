@@ -28,12 +28,12 @@ import {
 // the origin's trusted code (ADR 019 §1.3). It never joins because a package
 // already on it, Pret UI or boxel-ui included, starts depending on it: the
 // build then fails, naming it. Beyond Ember, Glimmer and the build's runtime
-// helpers, the list names only the packages the build reaches. boxel-ui
-// declares only its stylesheets as side effects, so a Pret UI wrapper of a
-// boxel-ui component brings in that component's own imports, not everything
-// boxel-ui's `components` index re-exports. A page that starts using a
-// component whose imports reach a package ADR 019 §1.3 reviews adds that
-// package here in the same change.
+// helpers, the list names only the packages the build reaches. Of the
+// modules a page can reach, boxel-ui declares only its stylesheets as side
+// effects, so a Pret UI wrapper of a boxel-ui component brings in that
+// component's own imports, not everything boxel-ui's `components` index
+// re-exports. A page that starts using a component whose imports reach a
+// package ADR 019 §1.3 reviews adds that package here in the same change.
 export const ALLOWED_PACKAGES = new Set([
   'ember-source',
   '@glimmer/component',
@@ -42,8 +42,9 @@ export const ALLOWED_PACKAGES = new Set([
   '@babel/runtime',
   'decorator-transforms',
 
-  // Pret UI and what it imports at run time (ADR 019 §1.3). boxel-ui reaches
-  // the pages only through Pret UI: the package never imports it.
+  // Pret UI, and the packages of ADR 019 §1.3 the build reaches through it.
+  // boxel-ui reaches the pages only through Pret UI: the package never
+  // imports it.
   '@cardstack/pretui',
   '@cardstack/boxel-ui',
   '@cardstack/boxel-icons',
