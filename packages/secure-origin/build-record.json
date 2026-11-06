@@ -108,7 +108,7 @@
       ]
     },
     "probe/probe.css": {
-      "bytes": 174771,
+      "bytes": 174785,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -408,7 +408,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/probe/7c4c7571c8.css"
+          "module": "src/probe/358eea86a2.css"
         }
       ]
     },

@@ -22,7 +22,7 @@ import { Accordion } from '@cardstack/pretui/components/accordion';
   <style scoped>
     .probe {
       max-width: 30rem;
-      margin: 2rem auto;
+      margin: var(--boxel-sp-xl) auto;
     }
     .probe-icon {
       width: 1rem;

@@ -29,7 +29,9 @@ import { modulePackage, PACKAGE_ROOT } from './module-package.ts';
 
 export const REPO_ROOT = join(PACKAGE_ROOT, '..', '..');
 
-const BUILT_MODULE_NAME = /("moduleName"\s*:\s*")\/[^"]*?\/(packages\/[^"]+")/g;
+// Cut at the last `/packages/`, so a checkout whose own path has a `packages`
+// directory in it is cut where any other checkout's is.
+const BUILT_MODULE_NAME = /("moduleName"\s*:\s*")\/[^"]*\/(packages\/[^"]+")/g;
 
 // A compiled template's `id`, which always comes just before its `block`,
 // whether the keys are quoted (as the compiler writes them) or not.

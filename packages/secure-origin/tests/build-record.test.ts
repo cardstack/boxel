@@ -69,7 +69,8 @@ test('one template compiled at two paths gives the same portable source', () => 
     });
   let name =
     'packages/boxel-icons/dist/@cardstack/boxel-icons/v1/icons/key-round.js';
-  let here = compiled('/home/someone/codez/boxel');
+  // A checkout whose own path has a `packages` directory in it.
+  let here = compiled('/home/someone/packages/boxel');
   let there = compiled('/home/runner/work/boxel/boxel');
   assert.notEqual(here, there, 'the compiler names the checkout');
   assert.equal(portableSource(here, name), portableSource(there, name));
