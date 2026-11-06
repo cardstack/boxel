@@ -9,6 +9,7 @@ import {
   InvalidQueryError,
   VirtualNetwork,
   assertQuery,
+  combineSearchEntryResults,
   internalKeyFor,
   rri,
   type Definition,
@@ -360,6 +361,59 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(page.total, 5);
     assert.deepEqual(facets?.channel?.[0], { value: 'Strange Loop', count: 2 });
     assert.deepEqual(facets?.hnScore, [{ value: '30-*', count: 2 }]);
+  });
+
+  test('merging realms adds counts, keeps link labels and combines stats', function (assert) {
+    let doc = (facets: unknown, facetStats?: unknown) =>
+      ({ data: [], meta: { page: { total: 1 }, facets, facetStats } }) as never;
+    let combined = combineSearchEntryResults([
+      doc(
+        { concepts: [{ value: 'c1', count: 2, label: 'CRDT' }] },
+        {
+          hn: {
+            count: 2,
+            distinct: 2,
+            values: 2,
+            min: 1,
+            max: 5,
+            sum: 6,
+            avg: 3,
+          },
+        },
+      ),
+      doc(
+        {
+          concepts: [
+            { value: 'c1', count: 1, label: 'CRDT' },
+            { value: 'c2', count: 3, label: 'Event sourcing' },
+          ],
+        },
+        {
+          hn: {
+            count: 1,
+            distinct: 1,
+            values: 1,
+            min: 9,
+            max: 9,
+            sum: 9,
+            avg: 9,
+          },
+        },
+      ),
+    ]);
+    assert.deepEqual(combined.meta.facets?.concepts, [
+      { value: 'c1', count: 3, label: 'CRDT' },
+      { value: 'c2', count: 3, label: 'Event sourcing' },
+    ]);
+    assert.deepEqual(combined.meta.facetStats?.hn, {
+      count: 3,
+      distinct: 3,
+      values: 3,
+      min: 1,
+      max: 9,
+      sum: 15,
+      avg: 5,
+    });
   });
 
   test('the wire grammar checks the facet members', function (assert) {

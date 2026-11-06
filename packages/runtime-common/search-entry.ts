@@ -1473,6 +1473,12 @@ export function combineSearchEntryResults(
         let merged = new Map(
           (facets[by] ?? []).map((c) => [c.value, c.count] as const),
         );
+        // A link facet's values carry the linked card's title as `label`.
+        let labels = new Map(
+          [...(facets[by] ?? []), ...counts]
+            .filter((c) => c.label !== undefined)
+            .map((c) => [c.value, c.label!] as const),
+        );
         for (let { value, count } of counts) {
           merged.set(value, (merged.get(value) ?? 0) + count);
         }
@@ -1482,7 +1488,11 @@ export function combineSearchEntryResults(
         let order = doc.meta.facetStats?.[by]?.order;
         let isRanges =
           doc.meta.facetStats?.[by] !== undefined && order === undefined;
-        let entries = [...merged].map(([value, count]) => ({ value, count }));
+        let entries = [...merged].map(([value, count]) =>
+          labels.has(value)
+            ? { value, count, label: labels.get(value)! }
+            : { value, count },
+        );
         facets[by] = isRanges
           ? entries
           : order === 'value'
