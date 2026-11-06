@@ -72,8 +72,8 @@ import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedForShare } from './opened-for.ts';
-import { Select } from '@cardstack/pretui/components/select';
-import { addressOf, workspaceOptions } from './workspaces.ts';
+import WorkspacePicker from './workspace-picker.gts';
+import { addressOf } from './workspaces.ts';
 import { anonymousCapsClause } from './anonymous-caps.ts';
 
 interface Realm {
@@ -189,24 +189,13 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 data-test-realm-picker
                 as |labelId|
               >
-                {{#if this.form.realms.length}}
-                  <Select
-                    @options={{workspaceOptions this.form.realms}}
-                    @value={{this.form.realm}}
-                    @onValueChange={{this.selectRealm}}
-                    @placeholder='Select a workspace'
-                    @searchEnabled={{true}}
-                    @labelledBy={{labelId}}
-                    data-test-workspace-dropdown
-                  />
-                {{else}}
-                  <p
-                    class='no-workspaces'
-                    data-test-workspace-dropdown-no-results
-                  >
-                    You don’t edit any workspace you could share a key with.
-                  </p>
-                {{/if}}
+                <WorkspacePicker
+                  @workspaces={{this.form.realms}}
+                  @selected={{this.form.realm}}
+                  @onSelect={{this.selectRealm}}
+                  @labelId={{labelId}}
+                  @emptyMessage='You don’t edit any workspace you could share a key with.'
+                />
               </FieldContainer>
             {{/unless}}
             <FieldContainer
@@ -292,12 +281,6 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         display: flex;
         flex-direction: column;
         flex: 1;
-      }
-      .no-workspaces {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        color: var(--muted-foreground);
       }
       .busy {
         margin-top: var(--boxel-sp-xl);

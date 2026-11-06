@@ -11,7 +11,10 @@ interface Signature<T extends keyof HTMLElementTagNameMap> {
 // so a new one on each call would make the template tear down the element and
 // draw a new one whenever the helper runs again, even for the same tag: an
 // input being typed into would lose its focus and its caret.
-const elements = new Map<string, ComponentLike<Signature<keyof HTMLElementTagNameMap>>>();
+const elements = new Map<
+  string,
+  ComponentLike<Signature<keyof HTMLElementTagNameMap>>
+>();
 
 export default function element<T extends keyof HTMLElementTagNameMap>(
   tagName: T | undefined,
@@ -19,7 +22,9 @@ export default function element<T extends keyof HTMLElementTagNameMap>(
   let tag = (tagName ?? 'div') as string;
   let found = elements.get(tag);
   if (!found) {
-    found = class DynamicElement extends EmberComponent<Signature<keyof HTMLElementTagNameMap>> {
+    found = class DynamicElement extends EmberComponent<
+      Signature<keyof HTMLElementTagNameMap>
+    > {
       tagName = tag;
     };
     elements.set(tag, found);

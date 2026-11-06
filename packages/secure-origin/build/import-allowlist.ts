@@ -60,16 +60,17 @@ export const ALLOWED_PACKAGES = new Set([
   'lodash-es',
 
   // Packages the build reaches through the ones above, as ADR 019 §1.3
-  // names them. They arrive with Pret UI's select and the boxel-ui select it
-  // wraps, which the pages' pickers render.
+  // names them.
   //
-  // Embroider's run-time macros, which compiled addon code calls into, as it
-  // calls the build's runtime helpers.
+  // Embroider's run-time macros: `ember-provide-consume-context` calls
+  // `importSync` from them, and Pret UI's Select reaches it by consuming
+  // context.
   '@embroider/macros',
   // `ember-basic-dropdown`'s and `ember-power-select`'s helpers and
-  // modifier: the `eq`/`and`/`or` helpers, a dynamic `{{element}}`, and a
-  // modifier that sets style properties through the CSSOM
-  // (`element.style.setProperty`), which the policy allows.
+  // modifier, which arrive with boxel-ui's select: the `eq`/`and`/`or`
+  // helpers, a dynamic `{{element}}`, and a modifier that sets style
+  // properties through the CSSOM (`element.style.setProperty`), which the
+  // policy allows.
   'ember-truth-helpers',
   'ember-element-helper',
   'ember-style-modifier',

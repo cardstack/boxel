@@ -47,8 +47,8 @@ import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import { openedFor } from './opened-for.ts';
-import { Select } from '@cardstack/pretui/components/select';
-import { addressOf, workspaceOptions } from './workspaces.ts';
+import WorkspacePicker from './workspace-picker.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Card {
   module: string;
@@ -125,24 +125,13 @@ class UseKey extends Component<{
                 data-test-use-key-realm
                 as |labelId|
               >
-                {{#if this.form.realms.length}}
-                  <Select
-                    @options={{workspaceOptions this.form.realms}}
-                    @value={{this.form.realm}}
-                    @onValueChange={{this.selectRealm}}
-                    @placeholder='Select a workspace'
-                    @searchEnabled={{true}}
-                    @labelledBy={{labelId}}
-                    data-test-workspace-dropdown
-                  />
-                {{else}}
-                  <p
-                    class='no-workspaces'
-                    data-test-workspace-dropdown-no-results
-                  >
-                    You don’t edit any workspace you could share a key with.
-                  </p>
-                {{/if}}
+                <WorkspacePicker
+                  @workspaces={{this.form.realms}}
+                  @selected={{this.form.realm}}
+                  @onSelect={{this.selectRealm}}
+                  @labelId={{labelId}}
+                  @emptyMessage='You don’t have access to any workspace to use this key in.'
+                />
               </FieldContainer>
             {{/if}}
             {{#if this.form.realm}}
@@ -210,12 +199,6 @@ class UseKey extends Component<{
         display: flex;
         flex-direction: column;
         flex: 1;
-      }
-      .no-workspaces {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        color: var(--muted-foreground);
       }
       .busy {
         margin-top: var(--boxel-sp-xl);

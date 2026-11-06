@@ -465,7 +465,9 @@ export default class BoxelSelect<ItemT = any> extends Component<
           font-family: inherit;
         }
 
-        :global(.boxel-select__dropdown:not(.ember-basic-dropdown-content--above)) {
+        :global(
+          .boxel-select__dropdown:not(.ember-basic-dropdown-content--above)
+        ) {
           margin-top: 4px;
           margin-bottom: 0;
         }
@@ -495,12 +497,18 @@ export default class BoxelSelect<ItemT = any> extends Component<
           margin-bottom: 2px;
         }
 
-        :global(.boxel-select__dropdown .ember-power-select-option[aria-selected='true']) {
+        :global(
+          .boxel-select__dropdown
+            .ember-power-select-option[aria-selected='true']
+        ) {
           background-color: var(--dropdown-highlight-color);
           color: var(--dropdown-selected-text-color);
         }
 
-        :global(.boxel-select__dropdown .ember-power-select-option[aria-selected='true']:hover) {
+        :global(
+          .boxel-select__dropdown
+            .ember-power-select-option[aria-selected='true']:hover
+        ) {
           background-color: var(--dropdown-highlight-hover-color);
           color: var(--dropdown-selected-text-color);
         }
@@ -534,20 +542,26 @@ export default class BoxelSelect<ItemT = any> extends Component<
           box-sizing: border-box;
         }
 
-        :global(.boxel-select__dropdown .ember-power-select-search-input:focus) {
+        :global(
+          .boxel-select__dropdown .ember-power-select-search-input:focus
+        ) {
           border: 1px solid var(--dropdown-focus-border-color);
           box-shadow: 0 0 0 1px var(--dropdown-focus-border-color);
           outline: none;
         }
 
-        :global(.boxel-select__dropdown .ember-power-select-option--no-matches-message) {
+        :global(
+          .boxel-select__dropdown .ember-power-select-option--no-matches-message
+        ) {
           padding: var(--boxel-sp-sm);
           color: var(--dropdown-text-color);
           font-style: italic;
           text-align: center;
         }
 
-        :global(.boxel-select__dropdown .ember-power-select-option--loading-message) {
+        :global(
+          .boxel-select__dropdown .ember-power-select-option--loading-message
+        ) {
           padding: var(--boxel-sp-sm);
           color: var(--dropdown-text-color);
           text-align: center;

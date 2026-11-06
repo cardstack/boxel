@@ -2757,6 +2757,19 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
+    test('with no workspace the user writes, the share page says so in place of the picker', async function (assert) {
+      serve({
+        'GET _secure-window/realms': () => json(200, { data: [] }),
+      });
+      visitShell('keys/key-2/share');
+      await render(SharePage);
+      await waitFor('[data-test-workspace-dropdown-no-results]');
+      assert
+        .dom('[data-test-workspace-dropdown-no-results]')
+        .hasText('You don’t edit any workspace you could share a key with.');
+      assert.dom('[data-test-workspace-dropdown]').doesNotExist();
+    });
+
     test('two workspaces with the same name are told apart by their addresses', async function (assert) {
       const OTHER = 'https://realm-server.test/someone/another/';
       const DASHBOARD = 'https://realm-server.test/someone/dashboard/';

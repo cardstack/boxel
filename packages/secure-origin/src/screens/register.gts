@@ -65,19 +65,6 @@ function ariaInvalid(state: InputGroupState): 'true' | undefined {
   return state === 'invalid' ? 'true' : undefined;
 }
 
-// The id of the username's error row, while it shows one: the group draws the
-// row, under its own element id, and the input names it as its error message
-// and its description, so the error is read with the field.
-function usernameErrorId(
-  state: InputGroupState,
-  error: string | undefined,
-  elementId: string,
-): string | undefined {
-  return state === 'invalid' && error
-    ? `error-message-${elementId}`
-    : undefined;
-}
-
 export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
   <template>
     <div class='registration-page' hidden={{@hidden}} data-test-register-page>
@@ -144,16 +131,8 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
                 autocomplete='username'
                 aria-labelledby={{labelId}}
                 aria-invalid={{ariaInvalid @usernameState}}
-                aria-describedby={{usernameErrorId
-                  @usernameState
-                  @usernameError
-                  group.elementId
-                }}
-                aria-errormessage={{usernameErrorId
-                  @usernameState
-                  @usernameError
-                  group.elementId
-                }}
+                aria-describedby={{group.errorMessageId}}
+                aria-errormessage={{group.errorMessageId}}
                 @placeholder='Your username'
                 @value={{@username}}
                 @onInput={{@onUsernameInput}}
