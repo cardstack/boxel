@@ -20,6 +20,7 @@ import {
   type ServedRealm,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { SendEvent } from '@cardstack/runtime-common/send-event';
@@ -274,7 +275,12 @@ async function auditPolicyWrite(
     visible.set(
       realm,
       request.actor
-        ? await isDirectWriter(dbAdapter, new URL(realm), request.actor)
+        ? await isDirectWriter(
+            dbAdapter,
+            new URL(realm),
+            request.actor,
+            matrixServerNameFromEnv(),
+          )
         : false,
     );
   }
