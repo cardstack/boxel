@@ -51,7 +51,7 @@ What is right:
 Gaps and cautions:
 
 - **The wiring is yielded, not applied.** If `<:control>` ignores `ctx.describedBy` or `ctx.invalid`, nothing is wired and nothing warns. The component removes the _excuse_ for forgetting, not the possibility. A dev-mode assertion that the yielded `id` was consumed would close it.
-- **The help affordance is a Tooltip**, which inherits Tooltip's gaps — no Escape dismissal and `pointer-events: none`, both WCAG 1.4.13 failures. Because the help text is always in the DOM and referenced by id, the _semantic_ path is fine; the pointer path is not.
+- **The help affordance is a Tooltip**, which inherits Tooltip's remaining gaps (see `tooltip.md`).
 - `@labelHidden` keeps the label in the accessible tree, which is correct, but a visually hidden label plus a placeholder is still a WCAG 3.3.2 smell for sighted users.
 - `@static` produces no control at all, so `describedBy` describes nothing focusable — expected, but do not pass `@required` alongside it.
 - The `emptyText` default `'—'` is announced literally by some screen readers as "em dash"; consider a visually-hidden "not set" for record views.
