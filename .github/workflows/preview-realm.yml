@@ -213,6 +213,19 @@ jobs:
           echo "Pushing content to ${SOURCE_REALM_URL}"
           boxel realm push "$SOURCE_DIR" "${SOURCE_REALM_URL}" --delete
 
+      # Said before publishing, so a run cancelled mid-publish still leaves a
+      # comment that tells a later run there may be a preview to unpublish.
+      - name: Say the preview is publishing
+        if: steps.push.outcome == 'success'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: ${{ inputs.sticky-header }}
+          message: |
+            ## Preview Realm - Publishing
+
+            The preview realm for commit `${{ github.event.pull_request.head.sha }}` is being published.
+
       - name: Publish preview realm
         id: publish
         if: steps.push.outcome == 'success'
@@ -285,9 +298,14 @@ jobs:
           node-version: "24"
 
       - name: Install Boxel CLI
+        id: install
+        continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         run: npm install -g @cardstack/boxel-cli@${{ inputs.boxel-cli-version }}
 
       - name: Configure boxel profile
+        id: profile
+        if: steps.install.outcome == 'success'
+        continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           MATRIX_URL: ${{ inputs.matrix-url }}
           MATRIX_USERNAME: ${{ secrets.matrix-username }}
@@ -310,6 +328,9 @@ jobs:
             --realm-server-url "${REALM_SERVER}"
 
       - name: Unpublish preview realm
+        id: unpublish
+        if: steps.profile.outcome == 'success'
+        continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           PUBLISHED_BASE: ${{ inputs.published-realm-base }}
           REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
@@ -327,6 +348,7 @@ jobs:
         run: echo "now=$(date -u '+%Y-%m-%d %H:%M:%S')" >> "$GITHUB_OUTPUT"
 
       - name: Update PR comment
+        if: steps.unpublish.outcome == 'success'
         uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
         with:
           header: ${{ inputs.sticky-header }}
