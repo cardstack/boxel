@@ -6,6 +6,7 @@
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
+import { evaluationSeed } from './eval-seeds/index.ts';
 import {
   ensureTrailingSlash,
   waitForCard,
@@ -41,6 +42,10 @@ export interface Evaluation {
   // A conversation-only evaluation: the run passes when every prompt was sent
   // and nothing was written, with no card to render.
   expectsNoWrites: boolean;
+  // The seed script (eval-seeds/) whose cards the run starts from. Its
+  // contents are already listed in `initialFiles`, and its card lists merged
+  // into the fields above.
+  seedScript?: string;
   adoptsFrom: { module: string; name: string };
 }
 
@@ -107,13 +112,29 @@ export async function loadEvaluation(
       )
     : [];
   let id = doc.data.id ?? cardUrl;
+  let evaluationRealmUrl = ensureTrailingSlash(
+    doc.data.meta.realmURL ?? realmUrl,
+  );
   let initialCards = linkedIds(doc, 'initialCards', id);
   let initialFiles = linkedIds(doc, 'initialFiles', id);
+  let expectedChangedCards = linkedIds(doc, 'expectedChangedCards', id);
+  let promptCards = linkedIds(doc, 'promptCards', id);
+  let seedScript: string | undefined =
+    typeof attributes.seedScript === 'string' && attributes.seedScript.trim()
+      ? attributes.seedScript.trim()
+      : undefined;
+  if (seedScript) {
+    let seed = evaluationSeed(seedScript);
+    let realm = new RealmPaths(new URL(evaluationRealmUrl));
+    let urlOf = (path: string) => realm.fileURL(path).href;
+    initialFiles.push(...Object.keys(seed.contents).map(urlOf));
+    initialCards.push(...seed.initialCards.map(urlOf));
+    expectedChangedCards.push(...seed.expectedChangedCards.map(urlOf));
+    promptCards.push(...seed.promptCards.map(urlOf));
+  }
   // A card link may be spelled with its `.json` suffix, as `initialCards`
   // tolerates; the id without it is what the runner compares.
-  let expectedChangedCards = linkedIds(doc, 'expectedChangedCards', id).map(
-    cardIdOf,
-  );
+  expectedChangedCards = expectedChangedCards.map(cardIdOf);
   for (let card of expectedChangedCards) {
     if (
       !initialCards.some((seed) => cardIdOf(seed) === card) &&
@@ -124,7 +145,7 @@ export async function loadEvaluation(
       );
     }
   }
-  let promptCards = linkedIds(doc, 'promptCards', id).map(cardIdOf);
+  promptCards = promptCards.map(cardIdOf);
   for (let card of promptCards) {
     if (!initialCards.some((seed) => cardIdOf(seed) === card)) {
       throw new Error(
@@ -142,7 +163,7 @@ export async function loadEvaluation(
   }
   return {
     url: id,
-    realmUrl: ensureTrailingSlash(doc.data.meta.realmURL ?? realmUrl),
+    realmUrl: evaluationRealmUrl,
     name:
       attributes.cardInfo?.name ??
       attributes.cardTitle ??
@@ -167,6 +188,7 @@ export async function loadEvaluation(
         : undefined,
     pipelineApprovals,
     expectsNoWrites: attributes.expectsNoWrites === true,
+    seedScript,
     adoptsFrom: doc.data.meta.adoptsFrom,
   };
 }
@@ -227,16 +249,36 @@ export async function loadEvaluationBundle(
 ): Promise<EvaluationBundle> {
   let evaluation = await loadEvaluation(client, cardUrl);
   let files = new Map<string, BundledFile>();
+  // A seed script's cards come from the script, not the realm, which never
+  // holds them.
+  let seeded = new Map<string, Uint8Array>(
+    Object.entries(
+      evaluation.seedScript
+        ? evaluationSeed(evaluation.seedScript).contents
+        : {},
+    ).map(([path, doc]) => [
+      path,
+      new TextEncoder().encode(`${JSON.stringify(doc, null, 2)}\n`),
+    ]),
+  );
 
   let addFile = async (sourceUrl: string, isCard: boolean) => {
-    let { url, body } = await client.getSource(evaluation.realmUrl, sourceUrl);
+    let seededPath = localPath(sourceUrl, evaluation.realmUrl);
+    let seededBody = seeded.get(seededPath);
+    let { url, body } = seededBody
+      ? { url: sourceUrl, body: seededBody }
+      : await client.getSource(evaluation.realmUrl, sourceUrl);
     let path = localPath(url, evaluation.realmUrl);
-    if (!files.has(path)) {
+    let existing = files.get(path);
+    if (!existing) {
       files.set(path, {
         path,
         content: Buffer.from(body).toString('base64'),
         isCard,
       });
+    } else if (isCard) {
+      // Listed as a file first (a seed's cards all are), and opened as a card.
+      existing.isCard = true;
     }
     return { path, body };
   };
