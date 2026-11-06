@@ -3113,14 +3113,20 @@ export class IndexQueryEngine {
     return [
       'MAX(',
       dbExpression({
-        // The markdown's words carry the lowest weight, D; the card's
-        // role-weighted vector adds each title, summary and plain-text word
-        // at the weight its field's role gives it, so the same word ranks
-        // higher in a title than in a transcript.
+        // A card ranks by its fields' role-weighted words, so the same word
+        // ranks higher in a title than in body text. A card whose fields
+        // don't hold the words (it matched on its rendered page alone, e.g.
+        // a transcript) ranks by its page, at a tenth: below every field
+        // match, like body text. COALESCE evaluates lazily, so the page's
+        // vector, often the larger, is read only for those cards; ranking
+        // the two vectors concatenated copied both for every match (a pane
+        // search over 5,000 talks spent ~1 s there).
         pg: [
-          `ts_rank_cd(COALESCE(${markdownVector('ph', staged)}, ''::tsvector) || COALESCE(${searchTextVector('i', staged)}, ''::tsvector), `,
+          `COALESCE(NULLIF(ts_rank_cd(${searchTextVector('i', staged)}, `,
           ...pgTsQuery,
-          `, 32)`,
+          `, 32), 0), ts_rank_cd(COALESCE(${markdownVector('ph', staged)}, ''::tsvector), `,
+          ...pgTsQuery,
+          `, 32) * 0.1)`,
         ],
         sqlite: [`CASE WHEN (`, ...sqliteLike, `) THEN 1 ELSE 0 END`],
       }),
