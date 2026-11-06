@@ -82,7 +82,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
   }
 
   get finalSkillsRealm() {
-    return ensureTrailingSlash(this.skillsRealm);
+    return ensureTrailingSlash(this.skillsRealm) || SKILLS_REALM_PREFIX;
   }
 
   get activationPreview() {

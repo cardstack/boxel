@@ -671,8 +671,8 @@ export class Wiki extends CardDef {
         }
       }
 
-      // Fallback: by convention the page is in the nearest `Wiki` directory
-      // above this card's id, or in a `Wiki` directory beside this card's own
+      // Fallback: by convention the page is in the outermost `Wiki` directory
+      // in this card's id, or in a `Wiki` directory beside this card's own
       // directory when the id has none. Joined as a relative reference, so
       // the id keeps its form.
       try {
