@@ -9,9 +9,11 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
+import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
+
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import DisclosureToggle from '../../components/disclosure-toggle.gts';
 import { not } from '../../helpers/truth-helpers.ts';
 import {
   keyUsage,
@@ -51,51 +53,54 @@ export default class KeyUsagePanel extends Component<Signature> {
       data-usage-panel={{@key.id}}
       data-test-key-usage-panel
     >
-      <DisclosureToggle
-        class='toggle'
-        @expanded={{not this.isClosed}}
-        aria-describedby='key-name-{{@key.id}}'
-        data-usage-panel-toggle
+      <Disclosure
+        class='disclosure'
+        @size='s'
+        @open={{not this.isClosed}}
+        @onOpenChange={{this.toggle}}
         data-test-key-usage-toggle
-        {{on 'click' this.toggle}}
-      >Usage and limits</DisclosureToggle>
-      {{#if this.loading}}
-        <BusyMessage @title='Loading usage…' />
-      {{else if this.failed}}
-        <div class='failed' role='alert' data-test-key-usage-error>
-          This key’s usage couldn’t be loaded:
-          {{this.failed.message}}
-          <Button
-            @kind='text-only'
-            @size='extra-small'
-            data-test-key-usage-retry
-            {{on 'click' this.load}}
-          >Try again</Button>
-        </div>
-      {{else if this.open}}
-        <div class='panel-body' data-test-key-usage-body>
-          <UsageSummary @usage={{this.open.usage}} />
-          <div class='limits'>
-            <h4 class='heading'>Limits</h4>
-            <LimitsForm
-              @limits={{this.open.usage.limits}}
-              @onSave={{this.saveLimits}}
-            />
-          </div>
-        </div>
-      {{/if}}
+      >
+        <:trigger>Usage and limits<VisuallyHidden>
+            for
+            {{@key.name}}</VisuallyHidden></:trigger>
+        <:default>
+          {{#if this.loading}}
+            <BusyMessage @title='Loading usage…' />
+          {{else if this.failed}}
+            <div class='failed' role='alert' data-test-key-usage-error>
+              This key’s usage couldn’t be loaded:
+              {{this.failed.message}}
+              <Button
+                @kind='text-only'
+                @size='extra-small'
+                data-test-key-usage-retry
+                {{on 'click' this.load}}
+              >Try again</Button>
+            </div>
+          {{else if this.open}}
+            <div class='panel-body' data-test-key-usage-body>
+              <UsageSummary @usage={{this.open.usage}} />
+              <div class='limits'>
+                <h4 class='heading'>Limits</h4>
+                <LimitsForm
+                  @limits={{this.open.usage.limits}}
+                  @onSave={{this.saveLimits}}
+                />
+              </div>
+            </div>
+          {{/if}}
+        </:default>
+      </Disclosure>
     </div>
     <style scoped>
-      .usage-panel {
-        display: grid;
-        gap: var(--boxel-sp-xs);
+      /* The panel opens under its trigger with the panel's own gap. */
+      .disclosure {
+        row-gap: var(--boxel-sp-xs);
       }
-      .toggle {
-        justify-self: start;
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-      }
+      /* In the panel's text size, not the smaller one the disclosure sets
+         for its trigger. */
       .panel-body {
+        font-size: var(--boxel-font-size-sm);
         display: grid;
         gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp-sm);
@@ -135,15 +140,15 @@ export default class KeyUsagePanel extends Component<Signature> {
   }
 
   // Opens the panel, unless it is open or opening, and moves focus to its
-  // disclosure, which brings it into view. The disclosure is drawn whether
-  // the panel is open or not, so it can take focus at once.
+  // disclosure's button, which brings it into view. The button is drawn
+  // whether the panel is open or not, so it can take focus at once.
   private show = () => {
     if (this.isClosed || this.failed) {
       this.load();
     }
     document
       .querySelector<HTMLElement>(
-        `[data-usage-panel="${CSS.escape(this.args.key.id)}"] [data-usage-panel-toggle]`,
+        `[data-usage-panel="${CSS.escape(this.args.key.id)}"] button[aria-expanded]`,
       )
       ?.focus();
   };

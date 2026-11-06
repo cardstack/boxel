@@ -54,7 +54,7 @@ import {
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 import Tag from '../../components/icons/tag.gts';
 import { Input } from '@cardstack/pretui/components/input';
@@ -197,8 +197,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               />
             {{/if}}
             {{#if this.onlyKind}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Kind'
                 @icon={{Tag}}
                 data-test-only-kind={{this.onlyKind.value}}
@@ -210,7 +212,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                     <strong>{{this.onlyKind.label}}</strong>.</p>
                   <p class='only-kind-hint'>{{this.onlyKind.hint}}</p>
                 </div>
-              </FieldContainer>
+              </Field>
             {{else}}
               <RadioChoices
                 @label='Kind'
@@ -258,23 +260,26 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 >
                   <:beforeValue>
                     {{#if this.isOAuthClient}}
-                      <FieldContainer
-                        @tag='label'
+                      <Field
+                        @reserveMessage={{false}}
+                        @orientation='horizontal'
                         @label='Client ID'
                         @icon={{RectangleEllipsis}}
                         data-test-key-field='client-id'
+                        as |controlId|
                       >
                         <Input
+                          @controlId={{controlId}}
                           @type='text'
                           autocomplete='off'
-                          placeholder='The app’s Client ID, shown on the site'
+                          @placeholder='The app’s Client ID, shown on the site'
                           @value={{this.form.clientId}}
                           @onInput={{this.setClientId}}
                           name='client-id'
                           spellcheck='false'
                           data-test-oauth-client-id-input
                         />
-                      </FieldContainer>
+                      </Field>
                     {{/if}}
                   </:beforeValue>
                 </KeyFields>

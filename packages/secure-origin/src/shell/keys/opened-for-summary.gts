@@ -7,7 +7,7 @@
 // (or the card) gave, not as anything the server describes.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import FieldContainer from '../../components/field-container.gts';
+import { Field } from '@cardstack/pretui/components/field';
 import Globe from '../../components/icons/globe.gts';
 import MessageSquare from '../../components/icons/message-square.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
@@ -24,8 +24,10 @@ interface Signature {
 }
 
 const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
-  <FieldContainer
-    @tag='div'
+  <Field
+    @reserveMessage={{false}}
+    @orientation='horizontal'
+    @labelTag='span'
     @label='For'
     @icon={{RectangleEllipsis}}
     data-test-opened-for
@@ -59,9 +61,15 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
           @context.realm.url
         }}</span>
     </p>
-  </FieldContainer>
+  </Field>
   {{#if @context.operation.destination}}
-    <FieldContainer @tag='div' @label='This call sends it to' @icon={{Globe}}>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
+      @labelTag='span'
+      @label='This call sends it to'
+      @icon={{Globe}}
+    >
       <Destination
         @destination={{@context.operation.destination}}
         @method={{@context.operation.method}}
@@ -69,10 +77,16 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
         @realm={{@context.realm.name}}
         @realmURL={{@context.realm.url}}
       />
-    </FieldContainer>
+    </Field>
   {{/if}}
   {{#if @reason}}
-    <FieldContainer @tag='div' @label='Why it’s needed' @icon={{MessageSquare}}>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
+      @labelTag='span'
+      @label='Why it’s needed'
+      @icon={{MessageSquare}}
+    >
       <p class='value reason' data-test-opened-for-reason>
         “{{@reason}}”
         <span class='reason-label' data-test-opened-for-reason-by>Given by
@@ -80,7 +94,7 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
             >{{@context.operation.label}}</strong>
             when it opened this window{{else}}the card that opened this window{{/if}}.</span>
       </p>
-    </FieldContainer>
+    </Field>
   {{/if}}
 
   <style scoped>
