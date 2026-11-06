@@ -37,6 +37,7 @@ START_CATALOG=$(if [ "${SKIP_CATALOG:-}" = "true" ]; then echo ""; else echo "tr
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
+  BOXEL_SPILL_SEARCH_DOCS="${BOXEL_SPILL_SEARCH_DOCS:-true}" \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   PGPORT="${PGPORT}" \
   PGDATABASE="${PGDATABASE}" \
