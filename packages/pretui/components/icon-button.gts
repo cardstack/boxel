@@ -1,4 +1,4 @@
-// IconButton: a square Button whose face is an icon; the accessible name rides aria-label / title.
+// IconButton: a square Button whose face is an icon; the accessible name rides aria-label, a matching tooltip, or title.
 import Component from '@glimmer/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
@@ -17,11 +17,19 @@ export const ICON_SIZE = '1.25em';
 // Wraps the button in a Tooltip only when there is tip content, so a button
 // without one keeps its native title and gains no wrapper element.
 const MaybeTooltip: TemplateOnlyComponent<{
-  Args: { content?: string; side?: TooltipSignature['Args']['side'] };
+  Args: {
+    content?: string;
+    side?: TooltipSignature['Args']['side'];
+    labels?: boolean;
+  };
   Blocks: { default: [] };
 }> = <template>
   {{#if @content}}
-    <Tooltip @content={{@content}} @side={{@side}}>{{yield}}</Tooltip>
+    <Tooltip
+      @content={{@content}}
+      @side={{@side}}
+      @labels={{@labels}}
+    >{{yield}}</Tooltip>
   {{else}}
     {{yield}}
   {{/if}}
@@ -42,8 +50,8 @@ export interface IconButtonSignature {
     /** false drops the pressed tint, for a toggle whose icon already shows
      *  its state; aria-pressed and the forced-colors edge stay */
     pressedTint?: boolean;
-    /** shown in a Tooltip in place of the native title, and read as the
-     *  button's description; the name stays @label */
+    /** shown in a Tooltip in place of the native title. A tip that matches
+     *  @label names the button; any other tip describes it */
     tooltip?: string;
     /** the side the @tooltip opens on; top by default */
     tooltipSide?: TooltipSignature['Args']['side'];
@@ -74,6 +82,16 @@ export class IconButton extends Component<IconButtonSignature> {
     let { label, busyLabel, href } = this.args;
     return this.busy && busyLabel && !href ? `${label} ${busyLabel}` : label;
   }
+  // A tip that repeats the label names the button rather than describing it,
+  // so the text is read once. Not while @busyLabel joins the name: the tip's
+  // aria-labelledby would override aria-label and drop it.
+  get tooltipNames() {
+    let { tooltip, label } = this.args;
+    return Boolean(tooltip) && tooltip === label && this.accessibleName === label;
+  }
+  get ariaLabel() {
+    return this.tooltipNames ? undefined : this.accessibleName;
+  }
   get ariaPressed() {
     let { pressed, href } = this.args;
     return pressed === undefined || href ? undefined : String(pressed);
@@ -88,7 +106,11 @@ export class IconButton extends Component<IconButtonSignature> {
     return this.args.iconHeight ?? ICON_SIZE;
   }
   <template>
-    <MaybeTooltip @content={{@tooltip}} @side={{@tooltipSide}}><Button
+    <MaybeTooltip
+      @content={{@tooltip}}
+      @side={{@tooltipSide}}
+      @labels={{this.tooltipNames}}
+    ><Button
         @variant={{@variant}}
         @tone={{this.tone}}
         @appearance={{this.appearance}}
@@ -99,14 +121,14 @@ export class IconButton extends Component<IconButtonSignature> {
         @busy={{this.busy}}
         @busyLabel={{@busyLabel}}
         class='pretui-iconbtn'
-        aria-label={{this.accessibleName}}
+        aria-label={{this.ariaLabel}}
         aria-pressed={{this.ariaPressed}}
         data-pressed-tint={{this.pressedTint}}
         title={{unless @tooltip @label}}
         data-test-pretui-icon-button
         ...attributes
       >
-        {{! hidden because aria-label names the button; an icon with its own
+        {{! hidden because the label names the button; an icon with its own
           <title>, or a text glyph, would otherwise be read a second time }}
         <span
           class='pretui-iconbtn-glyph'

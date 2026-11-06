@@ -1,7 +1,8 @@
 // IconButton unit tests. No assertion touches a computed style: the host test
 // harness stamps the scoped-css attribute and delivers no stylesheet.
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { render, settled } from '@ember/test-helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { IconButton } from './icon-button';
@@ -184,6 +185,63 @@ module('Pretui | components/icon-button', function (hooks) {
       'the tip describes the button',
     );
     assert.strictEqual(tip.textContent?.trim(), 'Add to Favorites');
+  });
+
+  test('a @tooltip that matches @label names the button once instead of describing it', async function (assert) {
+    await render(
+      <template>
+        <IconButton @label='Choose Catalogs' @tooltip='Choose Catalogs' data-test-idle>⚙</IconButton>
+        <IconButton
+          @label='Choose Catalogs'
+          @tooltip='Choose Catalogs'
+          @busy={{true}}
+          @busyLabel='Saving'
+          data-test-busy
+        >⚙</IconButton>
+      </template>,
+    );
+    let idle = el('[data-test-idle]');
+    let tip = idle.parentElement?.querySelector('[role="tooltip"]') as HTMLElement;
+    assert.strictEqual(idle.getAttribute('aria-labelledby'), tip.id, 'the tip names the button');
+    assert.false(idle.hasAttribute('aria-label'), 'no aria-label for the tip to override');
+    assert.false(idle.hasAttribute('aria-describedby'), 'no description repeating the name');
+    assert.false(idle.hasAttribute('title'), 'only the Pret UI tooltip shows');
+
+    let busy = el('[data-test-busy]');
+    assert.strictEqual(busy.getAttribute('aria-label'), 'Choose Catalogs Saving', '@busyLabel stays in the name');
+    assert.false(busy.hasAttribute('aria-labelledby'), 'which an aria-labelledby would override');
+    assert.strictEqual(
+      busy.getAttribute('aria-describedby'),
+      busy.parentElement?.querySelector('[role="tooltip"]')?.id,
+      'the tip describes the button while busy',
+    );
+  });
+
+  test('a @tooltip that stops matching @label goes back to describing the button', async function (assert) {
+    class State {
+      @tracked tip = 'Copy';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <IconButton @label='Copy' @tooltip={{state.tip}}>⧉</IconButton>
+      </template>,
+    );
+    let btn = el();
+    let tipId = btn.parentElement?.querySelector('[role="tooltip"]')?.id;
+    assert.strictEqual(btn.getAttribute('aria-labelledby'), tipId, 'the matching tip names it');
+
+    state.tip = 'Copied';
+    await settled();
+    assert.false(btn.hasAttribute('aria-labelledby'), 'the new tip does not name it');
+    assert.strictEqual(btn.getAttribute('aria-label'), 'Copy', 'the name stays the label');
+    assert.strictEqual(btn.getAttribute('aria-describedby'), tipId, 'the new tip describes it');
+
+    state.tip = 'Copy';
+    await settled();
+    assert.strictEqual(btn.getAttribute('aria-labelledby'), tipId, 'a matching tip names it again');
+    assert.false(btn.hasAttribute('aria-label'), 'with no aria-label beside it');
+    assert.false(btn.hasAttribute('aria-describedby'), 'and no description');
   });
 
   test('@tooltipSide picks the side the tip opens on', async function (assert) {
