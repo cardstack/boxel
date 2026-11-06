@@ -5,13 +5,14 @@
 // it has until its count is opened. Removing a grant first lists those
 // approvals, holding the list open while it asks, since removing it revokes
 // every one, then hands the grant to `@onRemove`, which removes it and
-// answers whether it did. A card that needs the key there again asks for its
-// approval again.
+// answers whether it did, in a Pret UI Alert. A card that needs the key there
+// again asks for its approval again.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
+import { Alert } from '@cardstack/pretui/components/alert';
 import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 
@@ -106,45 +107,54 @@ export default class KeyGrants extends Component<Signature> {
               {{/if}}
             {{/let}}
             {{#if (this.isRemoving grant)}}
-              <div class='panel' role='alert' data-test-key-grant-remove-panel>
-                <p class='confirm'>
-                  {{#let (this.bindingsOf grant) as |bindings|}}
-                    {{#if (not @bindings)}}
-                      Removing this stops the key being sent to
-                      {{hostAndPath grant.destination}}
-                      and revokes every approval that sends it there.
-                    {{else if bindings.length}}
-                      Removing this stops the key being sent to
-                      {{hostAndPath grant.destination}}
-                      and revokes
-                      {{if
-                        (eq bindings.length 1)
-                        'the approval'
-                        'the approvals'
-                      }}
-                      above. A card that needs it there will ask you again.
-                    {{else}}
-                      Removing this stops the key being sent to
-                      {{hostAndPath grant.destination}}.
-                    {{/if}}
-                  {{/let}}
-                </p>
-                <div class='panel-actions'>
-                  <Button
-                    @kind='secondary'
-                    @size='extra-small'
-                    data-test-key-grant-remove-cancel
-                    {{on 'click' this.cancel}}
-                  >Cancel</Button>
-                  <Button
-                    @kind='destructive'
-                    @size='extra-small'
-                    @loading={{this.state.removing}}
-                    data-test-key-grant-remove-confirm
-                    {{on 'click' (fn this.remove grant)}}
-                  >Remove</Button>
-                </div>
-              </div>
+              <Alert
+                class='panel'
+                @tone='warning'
+                role='alert'
+                data-test-key-grant-remove-panel
+              >
+                <:default>
+                  <p class='confirm'>
+                    {{#let (this.bindingsOf grant) as |bindings|}}
+                      {{#if (not @bindings)}}
+                        Removing this stops the key being sent to
+                        {{hostAndPath grant.destination}}
+                        and revokes every approval that sends it there.
+                      {{else if bindings.length}}
+                        Removing this stops the key being sent to
+                        {{hostAndPath grant.destination}}
+                        and revokes
+                        {{if
+                          (eq bindings.length 1)
+                          'the approval'
+                          'the approvals'
+                        }}
+                        above. A card that needs it there will ask you again.
+                      {{else}}
+                        Removing this stops the key being sent to
+                        {{hostAndPath grant.destination}}.
+                      {{/if}}
+                    {{/let}}
+                  </p>
+                </:default>
+                <:action>
+                  <div class='panel-actions'>
+                    <Button
+                      @kind='secondary'
+                      @size='extra-small'
+                      data-test-key-grant-remove-cancel
+                      {{on 'click' this.cancel}}
+                    >Cancel</Button>
+                    <Button
+                      @kind='destructive'
+                      @size='extra-small'
+                      @loading={{this.state.removing}}
+                      data-test-key-grant-remove-confirm
+                      {{on 'click' (fn this.remove grant)}}
+                    >Remove</Button>
+                  </div>
+                </:action>
+              </Alert>
             {{/if}}
           </li>
         {{/each}}
@@ -190,9 +200,6 @@ export default class KeyGrants extends Component<Signature> {
       }
       .panel {
         margin-top: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        background-color: var(--muted);
       }
       .confirm {
         margin: 0;
@@ -201,7 +208,6 @@ export default class KeyGrants extends Component<Signature> {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
-        margin-top: var(--boxel-sp-xs);
       }
     </style>
   </template>

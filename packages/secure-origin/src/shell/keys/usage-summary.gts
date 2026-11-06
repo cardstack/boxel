@@ -5,7 +5,16 @@
 // service answered, and where the key may be sent, with any destination whose
 // service rejected it. Nothing here is a value or a request: only counts,
 // codes, statuses, destinations, sites and who called.
+//
+// Each budget is a Pret UI ProgressBar, the details sit behind a Pret UI
+// Disclosure, and each group of counts is a KeyValue list with its counts at
+// the end of their column.
 import Component from '@glimmer/component';
+
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
+import { KeyValue } from '@cardstack/pretui/components/key-value';
+import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
+import { StatusChip } from '@cardstack/pretui/components/status-chip';
 
 import { eq } from '../../helpers/truth-helpers.ts';
 import type { KeyUsage } from '../../security/keys.ts';
@@ -70,12 +79,6 @@ function when(iso: string): string {
   });
 }
 
-// A count past a budget lowered after it was spent fills the meter, and no
-// more.
-function capped(used: number, budget: number): number {
-  return Math.min(used, budget);
-}
-
 // Who called, by Matrix id. Someone the user isn't shown, since no
 // permission row in the realm names both of them, reads as someone else, and
 // in the list of callers all of them are counted together as others.
@@ -109,6 +112,57 @@ function fromPublishedSite(realms: KeyUsage['realms'] | undefined): boolean {
   return Boolean(realms?.some((entry) => entry.published));
 }
 
+// A budget's reading, as its meter shows and announces it.
+function budgetText(used: number, budget: number): string {
+  return `${count(used)} of ${calls(budget)}`;
+}
+
+// Each group's rows, as KeyValue lists them: what the count is of, and the
+// count, with what the row is about for the template to mark it by.
+function callerRows(usage: KeyUsage) {
+  return usage.topCallers.map((entry) => ({
+    key: callerText(entry.caller, entry.withheld),
+    value: count(entry.calls),
+    caller: entry.caller ?? undefined,
+  }));
+}
+
+function realmRows(usage: KeyUsage) {
+  return (usage.realms ?? []).map((entry) => ({
+    key: realmText(entry),
+    value: count(entry.calls),
+    realm: entry.realm,
+    published: entry.published ? 'true' : 'false',
+  }));
+}
+
+function refusalRows(usage: KeyUsage) {
+  return usage.refusals.map((entry) => ({
+    key: refusalText(entry.code),
+    value: count(entry.count),
+    code: entry.code,
+  }));
+}
+
+function outcomeRows(usage: KeyUsage) {
+  return usage.vendorOutcomes.map((entry) => ({
+    key: statusText(entry.status, entry.outcome),
+    value: count(entry.count),
+    status: String(entry.status),
+  }));
+}
+
+// A key has a grant per destination, and several can share a host, so each
+// is named by its host and path.
+function grantRows(usage: KeyUsage) {
+  return usage.grants.map((grant) => ({
+    key: hostAndPath(grant.destination),
+    value: '',
+    state: grant.state,
+    lastForbiddenAt: grant.lastForbiddenAt,
+  }));
+}
+
 function lastCallerText(caller: string | null, withheld?: boolean): string {
   if (withheld) {
     return 'someone else';
@@ -120,37 +174,36 @@ export default class UsageSummary extends Component<Signature> {
   <template>
     <section class='usage' aria-label='Usage' data-test-key-usage ...attributes>
       <div class='meters'>
-        <div class='meter' data-test-key-usage-budget='day'>
-          <span class='meter-label'>Today</span>
-          <span class='meter-value'><strong>{{count
-                @usage.budgets.day.used
-              }}</strong>
-            of
-            {{calls @usage.budgets.day.budget}}</span>
-          <progress
-            class='meter-bar'
-            max={{@usage.budgets.day.budget}}
-            value={{capped @usage.budgets.day.used @usage.budgets.day.budget}}
-            aria-label='Calls today'
-          ></progress>
-        </div>
-        <div class='meter' data-test-key-usage-budget='month'>
-          <span class='meter-label'>This month</span>
-          <span class='meter-value'><strong>{{count
-                @usage.budgets.month.used
-              }}</strong>
-            of
-            {{calls @usage.budgets.month.budget}}</span>
-          <progress
-            class='meter-bar'
-            max={{@usage.budgets.month.budget}}
-            value={{capped
-              @usage.budgets.month.used
-              @usage.budgets.month.budget
-            }}
-            aria-label='Calls this month'
-          ></progress>
-        </div>
+        <ProgressBar
+          @label='Today'
+          @value={{@usage.budgets.day.used}}
+          @max={{@usage.budgets.day.budget}}
+          @count={{budgetText
+            @usage.budgets.day.used
+            @usage.budgets.day.budget
+          }}
+          @valueText={{budgetText
+            @usage.budgets.day.used
+            @usage.budgets.day.budget
+          }}
+          aria-label='Calls today'
+          data-test-key-usage-budget='day'
+        />
+        <ProgressBar
+          @label='This month'
+          @value={{@usage.budgets.month.used}}
+          @max={{@usage.budgets.month.budget}}
+          @count={{budgetText
+            @usage.budgets.month.used
+            @usage.budgets.month.budget
+          }}
+          @valueText={{budgetText
+            @usage.budgets.month.used
+            @usage.budgets.month.budget
+          }}
+          aria-label='Calls this month'
+          data-test-key-usage-budget='month'
+        />
       </div>
       <p class='note' data-test-key-usage-last>
         {{#if @usage.lastUse}}
@@ -166,99 +219,100 @@ export default class UsageSummary extends Component<Signature> {
         Budgets count calls from cards, the AI assistant and the CLI, not
         scheduled runs.
       </p>
-      <details class='details' data-test-key-usage-details>
-        <summary class='details-summary'>Details this month</summary>
+      <Disclosure
+        class='details'
+        @size='s'
+        @label='Details this month'
+        data-test-key-usage-details
+      >
         <div class='detail-grid'>
           {{#if @usage.topCallers.length}}
             <div class='group' data-test-key-usage-callers>
               <h4 class='group-title'>Most calls</h4>
-              <ul class='counts'>
-                {{#each @usage.topCallers as |entry|}}
-                  <li data-test-key-usage-caller={{entry.caller}}>
-                    <span class='name'>{{callerText
-                        entry.caller
-                        entry.withheld
-                      }}</span>
-                    <span class='n'>{{count entry.calls}}</span>
-                  </li>
-                {{/each}}
-              </ul>
+              <KeyValue
+                class='counts'
+                @items={{callerRows @usage}}
+                @valueAlign='end'
+              >
+                <:value as |row|><span
+                    class='n'
+                    data-test-key-usage-caller={{row.caller}}
+                  >{{row.value}}</span></:value>
+              </KeyValue>
             </div>
           {{/if}}
           {{#if (fromPublishedSite @usage.realms)}}
             <div class='group' data-test-key-usage-realms>
               <h4 class='group-title'>Where it was used</h4>
-              <ul class='counts'>
-                {{#each @usage.realms as |entry|}}
-                  <li
-                    data-test-key-usage-realm={{entry.realm}}
-                    data-test-key-usage-realm-published={{if
-                      entry.published
-                      'true'
-                      'false'
-                    }}
-                  >
-                    <span class='name'>{{realmText entry}}</span>
-                    <span class='n'>{{count entry.calls}}</span>
-                  </li>
-                {{/each}}
-              </ul>
+              <KeyValue
+                class='counts'
+                @items={{realmRows @usage}}
+                @valueAlign='end'
+              >
+                <:value as |row|><span
+                    class='n'
+                    data-test-key-usage-realm={{row.realm}}
+                    data-test-key-usage-realm-published={{row.published}}
+                  >{{row.value}}</span></:value>
+              </KeyValue>
             </div>
           {{/if}}
           {{#if @usage.refusals.length}}
             <div class='group' data-test-key-usage-refusals>
               <h4 class='group-title'>Refused</h4>
-              <ul class='counts'>
-                {{#each @usage.refusals as |entry|}}
-                  <li data-test-key-usage-refusal={{entry.code}}>
-                    <span class='name'>{{refusalText entry.code}}</span>
-                    <span class='n'>{{count entry.count}}</span>
-                  </li>
-                {{/each}}
-              </ul>
+              <KeyValue
+                class='counts'
+                @items={{refusalRows @usage}}
+                @valueAlign='end'
+              >
+                <:value as |row|><span
+                    class='n'
+                    data-test-key-usage-refusal={{row.code}}
+                  >{{row.value}}</span></:value>
+              </KeyValue>
             </div>
           {{/if}}
           {{#if @usage.vendorOutcomes.length}}
             <div class='group' data-test-key-usage-outcomes>
               <h4 class='group-title'>Service answers</h4>
-              <ul class='counts'>
-                {{#each @usage.vendorOutcomes as |entry|}}
-                  <li data-test-key-usage-outcome={{entry.status}}>
-                    <span class='name'>{{statusText
-                        entry.status
-                        entry.outcome
-                      }}</span>
-                    <span class='n'>{{count entry.count}}</span>
-                  </li>
-                {{/each}}
-              </ul>
+              <KeyValue
+                class='counts'
+                @items={{outcomeRows @usage}}
+                @valueAlign='end'
+              >
+                <:value as |row|><span
+                    class='n'
+                    data-test-key-usage-outcome={{row.status}}
+                  >{{row.value}}</span></:value>
+              </KeyValue>
             </div>
           {{/if}}
           {{#if @usage.grants.length}}
             <div class='group destinations' data-test-key-usage-grants>
               <h4 class='group-title'>Sent to</h4>
-              <ul class='counts'>
-                {{#each @usage.grants as |grant|}}
-                  {{! A key has a grant per destination, and several can share
-                      a host, so each is named by its host and path. }}
-                  <li
-                    data-test-key-usage-grant={{hostAndPath grant.destination}}
-                    data-test-key-usage-grant-state={{grant.state}}
+              <KeyValue class='counts' @items={{grantRows @usage}}>
+                <:value as |row|><span
+                    class='flag'
+                    data-test-key-usage-grant={{row.key}}
+                    data-test-key-usage-grant-state={{row.state}}
                   >
-                    <span class='name'>{{hostAndPath grant.destination}}</span>
-                    {{#if (eq grant.state 'rejected')}}
-                      <span class='flag rejected'>Rejected</span>
-                    {{else if grant.lastForbiddenAt}}
-                      <span class='flag'>Last refused
-                        {{shortDate grant.lastForbiddenAt}}</span>
+                    {{#if (eq row.state 'rejected')}}
+                      <StatusChip
+                        @value='Rejected'
+                        @tone='danger'
+                        @appearance='soft'
+                        @dot={{false}}
+                      />
+                    {{else if row.lastForbiddenAt}}
+                      Last refused
+                      {{shortDate row.lastForbiddenAt}}
                     {{/if}}
-                  </li>
-                {{/each}}
-              </ul>
+                  </span></:value>
+              </KeyValue>
             </div>
           {{/if}}
         </div>
-      </details>
+      </Disclosure>
     </section>
     <style scoped>
       .usage {
@@ -272,41 +326,17 @@ export default class UsageSummary extends Component<Signature> {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--boxel-sp-sm);
       }
-      .meter {
-        display: grid;
-        gap: var(--boxel-sp-5xs);
-      }
-      .meter-label {
-        color: var(--muted-foreground);
-      }
-      .meter-value strong {
-        font-size: var(--boxel-font-size-sm);
-      }
-      .meter-bar {
-        width: 100%;
-        height: 6px;
-        appearance: none;
-        border: none;
-        border-radius: 3px;
-        overflow: hidden;
-        background: var(--muted, var(--boxel-200));
-      }
-      .meter-bar::-webkit-progress-bar {
-        background: var(--muted, var(--boxel-200));
-      }
-      .meter-bar::-webkit-progress-value {
-        background: var(--primary, var(--boxel-highlight));
-      }
-      .meter-bar::-moz-progress-bar {
-        background: var(--primary, var(--boxel-highlight));
+      /* A budget's reading in the summary's own type. */
+      .meters :deep(.pretui-progress-count) {
+        font-family: inherit;
+        font-size: var(--boxel-font-size-xs);
+        letter-spacing: normal;
       }
       .note {
         margin: 0;
         color: var(--muted-foreground);
       }
-      .details-summary {
-        cursor: pointer;
-        width: fit-content;
+      .details {
         font-weight: 600;
       }
       .detail-grid {
@@ -314,6 +344,7 @@ export default class UsageSummary extends Component<Signature> {
         grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
         gap: var(--boxel-sp-sm);
         margin-top: var(--boxel-sp-xs);
+        font-weight: normal;
       }
       .group {
         display: grid;
@@ -325,20 +356,15 @@ export default class UsageSummary extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
+      /* Each count's name in the list's own type, the count beside it. */
       .counts {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: var(--boxel-sp-5xs);
-      }
-      .counts li {
-        display: flex;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-      }
-      .name {
-        min-width: 0;
+        --pretui-kv-label-color: var(--foreground);
+        --pretui-kv-label-font-weight: normal;
+        --pretui-kv-label-font-size: var(--boxel-font-size-xs);
+        --pretui-kv-label-line-height: var(--boxel-line-height-xs);
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--boxel-sp-xs);
+        row-gap: var(--boxel-sp-5xs);
         overflow-wrap: anywhere;
       }
       .n {
@@ -351,17 +377,11 @@ export default class UsageSummary extends Component<Signature> {
       .destinations {
         grid-column: 1 / -1;
       }
-      .destinations li {
-        justify-content: flex-start;
-        flex-wrap: wrap;
+      .destinations .counts {
+        grid-template-columns: auto minmax(0, 1fr);
       }
       .flag {
-        flex-shrink: 0;
         color: var(--muted-foreground);
-      }
-      .flag.rejected {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-weight: 600;
       }
     </style>
   </template>

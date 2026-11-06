@@ -1228,8 +1228,12 @@
       ]
     },
     "shell.css": {
-      "bytes": 87596,
+      "bytes": 111403,
       "sources": [
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/1f591b670b.css"
+        },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/24df79f237.css"
@@ -1240,11 +1244,39 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
+          "module": "components/725fd8cd99.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/7c21381fd5.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
           "module": "components/7d74a5ae13.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
+          "module": "components/7d9559f090.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/8c063cf5bf.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/9027453d0b.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
           "module": "components/919ac9890d.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/a53092dbcd.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/b2d57ac1a3.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1261,6 +1293,22 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/e67bd21f1d.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/e8e8225775.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/ee74d86ad3.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/ef0316afb0.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/f106712ee4.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1293,10 +1341,6 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/d14a4de9d3.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/d1529afc86.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1360,19 +1404,19 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/0e3dcff1a9.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/1139af9600.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/15de45c8e8.css"
+          "module": "src/shell/keys/15fc03d644.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/21ff9c0a1c.css"
+          "module": "src/shell/keys/1e94133232.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/208a267baf.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1380,19 +1424,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/2642f509cc.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/2c38a1b574.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/301db0274e.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/319c6453ca.css"
+          "module": "src/shell/keys/36a414a9db.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1404,7 +1440,15 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/4d26177b8f.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/525c77723c.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/592aac4c27.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1412,11 +1456,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/5dd2bb4118.css"
+          "module": "src/shell/keys/5e99d8fe6c.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/5e99d8fe6c.css"
+          "module": "src/shell/keys/665a79064a.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1428,27 +1472,43 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/7444a22aa5.css"
+          "module": "src/shell/keys/72a73363d0.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/7bec823ea5.css"
+          "module": "src/shell/keys/7c65de0aa9.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/80e5dcd242.css"
+          "module": "src/shell/keys/7ed65a585b.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/968c816a26.css"
+          "module": "src/shell/keys/8534b74b21.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/98f83451d5.css"
+          "module": "src/shell/keys/9042e19054.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/abdaf1e89c.css"
+          "module": "src/shell/keys/94e36f9759.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/9c54323767.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/a4da6cd303.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/aaf7c74547.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/ae0fa46a5d.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1456,23 +1516,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/ba96588df2.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/cc4aca9eca.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/cd87ff06a7.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/ce9b09fe81.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/d04c36b5ba.css"
+          "module": "src/shell/keys/cff92bc523.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1480,7 +1528,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/e0e818f1ff.css"
+          "module": "src/shell/keys/e03c34cc64.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1492,11 +1540,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/f0e61f789d.css"
+          "module": "src/shell/keys/ece4d13c40.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/f3dfd6f83f.css"
+          "module": "src/shell/keys/f8cd2f5ae4.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1537,7 +1585,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 396834,
+      "bytes": 432784,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -1565,6 +1613,12 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
+          "module": "components/card.gts",
+          "sha256": "6d6c5b48e18f7ca358a3c72ba4220891185418d0a8edfcd358e98409c578179a",
+          "size": 6390
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
           "module": "components/checkbox.gts",
           "sha256": "52f53f58a1ace8ef4c416f1d5b4dd68e3b9035688e2c637529fa1e4a331e986e",
           "size": 1620
@@ -1580,6 +1634,60 @@
           "module": "components/collapsible.gts",
           "sha256": "edccca6db34ba8fffcd14fb44dcc2cf754ad26bdc33fa0fcf047cae4b4739522",
           "size": 2800
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/empty-state.gts",
+          "sha256": "9016728a4f4e7af5db1bb6b55db26013adbd7c0ac4b955476a958cb3f157668d",
+          "size": 2250
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/field-error.gts",
+          "sha256": "18c97148133e0c0669ee6213e0618cb21e174b41b5871c25e14e66fdb88098c4",
+          "size": 2095
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/form-field.gts",
+          "sha256": "842f7046d08c36f8ca1c3ad7b56f0825503004f101e0dca2148699048d7cbcf0",
+          "size": 9041
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/form-layout.gts",
+          "sha256": "fc175ff802de39b6a8131065db4f69b2a36cf42b966453a55c55d7dbd607ae35",
+          "size": 1332
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/form-section.gts",
+          "sha256": "dd6587f05a1f1be12c3e48128910edc5feae0b8f59f3820930067482f8379870",
+          "size": 6035
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/item.gts",
+          "sha256": "792bfcf9b0f45fea1f7d4486b56e5c463d513219718b7bc49fd5574dc4058fb1",
+          "size": 2498
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/key-value.gts",
+          "sha256": "aea66f0e7f5df67007338ea7096bee1ea3f9313977846f07e3f91f34cb7ea001",
+          "size": 2198
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/label.gts",
+          "sha256": "f8db550e9831a58d5709c8a6856183f0065699db1709727672c4597324c3af91",
+          "size": 1123
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/progress-bar.gts",
+          "sha256": "e681c35402689873c153ca05bff97180cfe717dae1fef79316367567abdf748d",
+          "size": 3327
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1607,9 +1715,27 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
+          "module": "components/token.gts",
+          "sha256": "f7ef5000777728a6e42841aef0ba63cb70e56056f7689dc7e557b27cb799a93e",
+          "size": 1012
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/tooltip.gts",
+          "sha256": "dc268b507b302aa7b7211d1aa5e2a581033485204ef9eb2c119dba65f650ff95",
+          "size": 3593
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
           "module": "components/visually-hidden.gts",
           "sha256": "dc1932369c671d8d88fb1fa8d224f73ec338bf1ea3cc6a542bc09eee27a01096",
           "size": 563
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "focus.gts",
+          "sha256": "792534e0358cb499098e75a272d2ff2b830c6da8209557223fda236a8bf81ac0",
+          "size": 1981
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1622,6 +1748,12 @@
           "module": "internal/feedback.gts",
           "sha256": "ffcc6c9168da263f1ec154578b8cccd87ac2a8353256e4fc4676aa9dafebbaec",
           "size": 202
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/forms-core.gts",
+          "sha256": "c5e4bf958afb15b83afd7b9c797eb67e06da76f044203e908ddc4d6b28bd3d88",
+          "size": 5749
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1639,7 +1771,7 @@
           "package": "@cardstack/pretui@0.0.0",
           "module": "internal/structure-layout.gts",
           "sha256": "9b042e2ae5b950c146ff41e504094edbb6af1d111f3ee38eb038b2259957fdee",
-          "size": 294
+          "size": 507
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1679,11 +1811,6 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/error-display.gts",
-          "size": 3405
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/icons/boxel-icon.gts",
           "size": 2020
         },
@@ -1696,11 +1823,6 @@
           "package": "@cardstack/secure-origin",
           "module": "src/components/icons/dropdown-arrow-down.gts",
           "size": 696
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/dropdown-arrow-up.gts",
-          "size": 691
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1860,7 +1982,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 35785
+          "size": 35891
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1870,7 +1992,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/connect-page.gts",
-          "size": 10346
+          "size": 10452
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1885,22 +2007,22 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/destination.gts",
-          "size": 2041
+          "size": 2082
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/done-page.gts",
-          "size": 904
+          "size": 1087
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/edit-page.gts",
-          "size": 1255
+          "size": 1311
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/enter-key-page.gts",
-          "size": 20151
+          "size": 20257
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1910,42 +2032,42 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-grants.gts",
-          "size": 6885
+          "size": 7024
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-limit-notices.gts",
-          "size": 5837
+          "size": 5971
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 26550
+          "size": 26672
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-picker.gts",
-          "size": 2451
+          "size": 2487
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-policy-notices.gts",
-          "size": 7189
+          "size": 7466
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-tile.gts",
-          "size": 2125
+          "size": 2304
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-usage-panel.gts",
-          "size": 4604
+          "size": 4790
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-use.gts",
-          "size": 9475
+          "size": 10237
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1960,7 +2082,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/load-failed.gts",
-          "size": 1166
+          "size": 2732
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1975,7 +2097,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/oauth-key-status.gts",
-          "size": 3951
+          "size": 4115
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1995,12 +2117,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/replace-key-page.gts",
-          "size": 19700
+          "size": 19805
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/service-account-details.gts",
-          "size": 2465
+          "size": 2093
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2020,7 +2142,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 15489
+          "size": 15595
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2030,7 +2152,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 12207
+          "size": 12313
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2040,12 +2162,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/usage-summary.gts",
-          "size": 11898
+          "size": 10091
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/use-key-page.gts",
-          "size": 10774
+          "size": 10880
         },
         {
           "package": "@cardstack/secure-origin",

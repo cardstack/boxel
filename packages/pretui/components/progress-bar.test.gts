@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { ProgressBar } from './progress-bar';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;
@@ -374,5 +375,16 @@ module('Pretui | components/progress-bar', function (hooks) {
   test('honours an explicit @steps against the count heuristic', async function (assert) {
     await render(<template><ProgressBar @value={{1}} @max={{4}} @steps={{true}} /></template>);
     assert.strictEqual(all('.pretui-progress-step').length, 4, 'stepped without a count');
+  });
+
+  test('sets the fill and the hue through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(<template><ProgressBar @value={{40}} @hue='var(--warning)' /></template>),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.strictEqual(bar().style.getPropertyValue('--pretui-progress-hue'), 'var(--warning)');
+    let fill = q('.pretui-progress-fill');
+    assert.strictEqual(fill.style.getPropertyValue('width'), '40%');
+    assert.strictEqual(fill.style.getPropertyValue('min-width'), '0.25rem');
   });
 });

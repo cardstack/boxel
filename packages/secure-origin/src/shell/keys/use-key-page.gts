@@ -25,6 +25,7 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
+import { Alert } from '@cardstack/pretui/components/alert';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
@@ -184,9 +185,9 @@ class UseKey extends Component<{
               </Field>
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
@@ -241,12 +242,6 @@ class UseKey extends Component<{
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
         color: var(--muted-foreground);
-      }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
       }
     </style>
   </template>

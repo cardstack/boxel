@@ -1,8 +1,10 @@
-// What a key page shows once its change is made: what was done, and a Close
-// button. The page also tries to close the window; one the user opened
-// themselves can't be closed by script, and stays on this.
+// What a key page shows once its change is made: what was done, as a Pret UI
+// success Alert, and a Close button. The page also tries to close the window;
+// one the user opened themselves can't be closed by script, and stays on this.
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import { Alert } from '@cardstack/pretui/components/alert';
 
 import Button from '../../components/button.gts';
 
@@ -19,7 +21,9 @@ interface Signature {
 const DonePage: TemplateOnlyComponent<Signature> = <template>
   <EditPage @heading={{@heading}} role='status' data-test-keys-done>
     <:default>
-      <p class='info'>{{yield}}</p>
+      <Alert @tone='success' role='none'>
+        <p class='info'>{{yield}}</p>
+      </Alert>
     </:default>
     <:actions>
       <Button

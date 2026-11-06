@@ -45,6 +45,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import Tag from '../../components/icons/tag.gts';
@@ -259,9 +260,9 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
               </Field>
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
@@ -303,12 +304,6 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
-      }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
       }
     </style>
   </template>

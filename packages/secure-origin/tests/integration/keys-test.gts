@@ -595,7 +595,9 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-error-message]')
         .hasText('Boxel couldn’t load this page.');
       assert.dom('[data-test-error-details]').doesNotExist();
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert.dom('[data-test-error-detail="Status"]').hasText('503');
       assert
         .dom('[data-test-error-detail="Message"]')
@@ -621,7 +623,9 @@ module('Integration | key pages', function (hooks) {
         .hasText(
           'Boxel couldn’t be reached. Check your connection and try again.',
         );
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert
         .dom('[data-test-error-detail="Error"]')
         .hasText('Boxel could not be reached.');
@@ -1479,9 +1483,9 @@ module('Integration | key pages', function (hooks) {
       let weather = '[data-test-key-row="Weather service"]';
       let team = `${weather} [data-test-key-shared-into-workspace="${REALM}"]`;
       assert
-        .dom(`${team} [data-test-key-share-unapproved="share-team-1"]`)
+        .dom(`${team} [data-test-key-share-unapproved="share-team-1"] p`)
         .hasText(
-          '“Weather” isn’t approved for any calls yet Approve for a card…',
+          '“Weather” isn’t approved for any calls yet',
           'one of a workspace’s several shares is named by its label',
         );
       assert
@@ -1495,10 +1499,10 @@ module('Integration | key pages', function (hooks) {
         .hasAria('label', 'Approve for a card: “Weather” in Team');
       assert
         .dom(
-          '[data-test-key-row="Maps"] [data-test-key-share-unapproved="share-maps"]',
+          '[data-test-key-row="Maps"] [data-test-key-share-unapproved="share-maps"] p',
         )
         .hasText(
-          'Not approved for any calls yet Approve for a card…',
+          'Not approved for any calls yet',
           'a workspace’s only share needs no label',
         );
 
@@ -1805,7 +1809,9 @@ module('Integration | key pages', function (hooks) {
           'This workspace, card or request doesn’t exist, or you don’t have access to it.',
         );
       assert.dom('[data-test-keys-retry]').doesNotExist();
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert.dom('[data-test-error-detail="Status"]').hasText('404');
       assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
     });
@@ -1866,7 +1872,9 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-error-message]')
         .hasText('You don’t have access to this.');
       assert.dom('[data-test-keys-retry]').doesNotExist();
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert.dom('[data-test-error-detail="Status"]').hasText('403');
     });
 
@@ -1882,7 +1890,9 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
       assert.dom('[data-test-keys-heading]').hasText('Add key');
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert.dom('[data-test-error-detail="Status"]').hasText('503');
       await click('[data-test-keys-retry]');
       await waitFor('[data-test-enter-key-form]');
@@ -3018,7 +3028,9 @@ module('Integration | key pages', function (hooks) {
           'This link doesn’t name a key or a workspace to share it with.',
         );
       assert.dom('[data-test-keys-retry]').doesNotExist();
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert
         .dom('[data-test-error-detail="Message"]')
         .hasText('This page names neither a key nor a workspace.');

@@ -30,6 +30,7 @@ import { getKey, replaceKey, windowContext } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
 import KeyRound from '../../components/icons/key-round.gts';
 
 import {
@@ -237,9 +238,9 @@ class SlotPanel extends Component<{
             <KeyFields @value={{this.form.value}} @onValue={{this.setValue}} />
           {{/if}}
           {{#if this.form.error}}
-            <div class='keys-error' role='alert' data-test-keys-error>
-              {{this.form.error}}
-            </div>
+            <Alert @tone='danger' role='alert'>
+              <span data-test-keys-error>{{this.form.error}}</span>
+            </Alert>
           {{/if}}
           <div class='slot-actions'>
             <Button
@@ -395,12 +396,6 @@ class SlotPanel extends Component<{
       .slot-actions {
         display: flex;
         justify-content: flex-end;
-      }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
       }
     </style>
   </template>

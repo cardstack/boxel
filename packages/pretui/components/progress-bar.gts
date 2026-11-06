@@ -1,7 +1,7 @@
 // Pretui — ProgressBar: quantitative progress along a track.
 import Component from '@glimmer/component';
-import { htmlSafe } from '@ember/template';
-import { hueStyle } from '../internal/ink';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
+import { cssValue } from '../pretui-css';
 
 export interface ProgressBarSignature {
   Args: {
@@ -58,8 +58,14 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   get countText() {
     return this.args.count ?? `${Math.round(this.pct)}%`;
   }
-  get fillStyle() {
-    return htmlSafe(`width: ${this.pct}%; min-width: ${this.pct > 0 ? '0.25rem' : 0}`);
+  // The fill's width is written through the CSSOM, as are the hue's, rather
+  // than in a `style` attribute, which a strict Content Security Policy
+  // refuses. Both are numbers the component formats itself.
+  get fillStyle(): KeptProperty[] {
+    return [
+      { property: 'width', value: `${this.pct}%`, strength: 'arg' },
+      { property: 'min-width', value: this.pct > 0 ? '0.25rem' : '0', strength: 'arg' },
+    ];
   }
   get stepList(): { on: boolean }[] {
     let out = [];
@@ -86,8 +92,10 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   get valueText() {
     return this.args.valueText ?? (this.stepped ? this.args.count : undefined);
   }
-  get style() {
-    return hueStyle('--pretui-progress-hue', this.args.hue);
+  // `@hue` is a caller string, so it goes through `cssValue`; a rejected one
+  // leaves the stylesheet's own fill colour.
+  get keptStyle(): KeptProperty[] {
+    return [{ property: '--pretui-progress-hue', value: cssValue(this.args.hue), strength: 'arg' }];
   }
   <template>
     <div
@@ -98,7 +106,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
       aria-valuenow={{this.valueNow}}
       aria-valuemax={{this.max}}
       aria-valuetext={{this.valueText}}
-      style={{this.style}}
+      {{keepStyle this.keptStyle}}
       data-test-pretui-progress
       ...attributes
     >
@@ -116,7 +124,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
         </div>
       {{else}}
         <div class='pretui-progress'>
-          <div class='pretui-progress-fill' style={{this.fillStyle}}></div>
+          <div class='pretui-progress-fill' {{keepStyle this.fillStyle}}></div>
         </div>
       {{/if}}
     </div>

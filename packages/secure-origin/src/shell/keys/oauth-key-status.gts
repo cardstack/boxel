@@ -4,12 +4,14 @@
 // owner fixes by signing in again (Reconnect), or an app that needs an
 // administrator, which its owner can't fix themselves. A client gives its
 // client id and who signs in through it, and says when the service has
-// refused its secret, which replacing the secret fixes.
+// refused its secret, which replacing the secret fixes. Each row is a Pret UI
+// Item led by its icon, as the tile's other rows are.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { Alert } from '@cardstack/pretui/components/alert';
+import { Item } from '@cardstack/pretui/components/item';
 
 import Button from '../../components/button.gts';
 import KeyRound from '../../components/icons/key-round.gts';
@@ -28,16 +30,18 @@ interface Signature {
 
 const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
   {{#if @key.oauth.connection}}
-    <div class='row' data-test-oauth-connection>
-      <KeyRound class='row-icon' aria-hidden='true' />
-      <p class='row-text' data-test-oauth-connection-client>Signs in with
-        {{#if @key.oauth.connection.client.label}}
-          <strong>{{@key.oauth.connection.client.label}}</strong>
-        {{else}}
-          an app that is no longer available
-        {{/if}}
-      </p>
-    </div>
+    <Item class='row' @size='s' @alignStart={{true}} data-test-oauth-connection>
+      <:leading><KeyRound class='row-icon' aria-hidden='true' /></:leading>
+      <:default>
+        <p class='row-text' data-test-oauth-connection-client>Signs in with
+          {{#if @key.oauth.connection.client.label}}
+            <strong>{{@key.oauth.connection.client.label}}</strong>
+          {{else}}
+            an app that is no longer available
+          {{/if}}
+        </p>
+      </:default>
+    </Item>
     {{#if (eq @key.oauth.connection.status 'rejected')}}
       <Alert @tone='danger' role='status' data-test-oauth-status='rejected'>
         <:default>Your sign-in expired or was cancelled on the site. Sign in
@@ -63,19 +67,24 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
         added the app.</Alert>
     {{/if}}
   {{else if @key.oauth.client}}
-    <div class='row' data-test-oauth-client>
-      <RectangleEllipsis class='row-icon' aria-hidden='true' />
-      <p class='row-text'>Client ID
-        <span
-          class='code'
-          data-test-oauth-client-id
-        >{{@key.oauth.client.clientId}}</span>
-        {{#if (eq @key.oauth.client.grantType 'client_credentials')}}
-          <span class='muted' data-test-oauth-client-grant>· Signs in as itself,
-            with no person’s account</span>
-        {{/if}}
-      </p>
-    </div>
+    <Item class='row' @size='s' @alignStart={{true}} data-test-oauth-client>
+      <:leading><RectangleEllipsis
+          class='row-icon'
+          aria-hidden='true'
+        /></:leading>
+      <:default>
+        <p class='row-text'>Client ID
+          <span
+            class='code'
+            data-test-oauth-client-id
+          >{{@key.oauth.client.clientId}}</span>
+          {{#if (eq @key.oauth.client.grantType 'client_credentials')}}
+            <span class='muted' data-test-oauth-client-grant>· Signs in as
+              itself, with no person’s account</span>
+          {{/if}}
+        </p>
+      </:default>
+    </Item>
     {{#if (eq @key.oauth.client.state 'broken')}}
       <Alert @tone='danger' role='status' data-test-oauth-status='broken'>The
         site refused this app’s secret. Replace it with the app’s current
@@ -84,10 +93,12 @@ const OAuthKeyStatus: TemplateOnlyComponent<Signature> = <template>
   {{/if}}
   <style scoped>
     .row {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      column-gap: var(--boxel-sp-xs);
-      align-items: start;
+      --pretui-item-gap: var(--boxel-sp-xs);
+      font-size: inherit;
+      letter-spacing: normal;
+    }
+    .row :deep(.pretui-item-content) {
+      margin: 0;
     }
     .row-icon {
       width: 0.875rem;

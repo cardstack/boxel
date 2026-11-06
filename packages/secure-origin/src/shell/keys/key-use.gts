@@ -21,10 +21,17 @@
 // cards keep asking each caller for a key of their own. Approve for a card
 // hands the share to `@onApproveShare`, which sets it up for one of the
 // workspace's cards.
+//
+// Each row is a Pret UI Item led by its icon, each workspace an Item with its
+// Unshare beside it, and the unapproved note and Unshare's question are Pret
+// UI Alerts carrying their buttons.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
+
+import { Alert } from '@cardstack/pretui/components/alert';
+import { Item } from '@cardstack/pretui/components/item';
 
 import Button from '../../components/button.gts';
 import Globe from '../../components/icons/globe.gts';
@@ -91,23 +98,35 @@ export default class KeyUse extends Component<Signature> {
   <template>
     <div class='key-use'>
       {{yield}}
-      <div class='use-row' data-test-key-used-with>
-        <Globe class='use-icon' aria-hidden='true' />
-        {{#if @key.usedWith.length}}
-          <p class='use-text'>Used with
-            {{#each @key.usedWith as |domain index|}}{{#if index}},
-              {{/if}}<span
-                class='domain'
-                data-test-key-used-with-domain
-              >{{domain}}</span>{{/each}}</p>
-        {{else}}
-          <p class='use-text none'>Not used with any site yet</p>
-        {{/if}}
-      </div>
-      <div class='use-row' data-test-key-shared-into>
-        <LayoutGrid class='use-icon' aria-hidden='true' />
-        {{#if @key.sharedInto.length}}
-          <div class='shared'>
+      <Item
+        class='use-row'
+        @size='s'
+        @alignStart={{true}}
+        data-test-key-used-with
+      >
+        <:leading><Globe class='use-icon' aria-hidden='true' /></:leading>
+        <:default>
+          {{#if @key.usedWith.length}}
+            <p class='use-text'>Used with
+              {{#each @key.usedWith as |domain index|}}{{#if index}},
+                {{/if}}<span
+                  class='domain'
+                  data-test-key-used-with-domain
+                >{{domain}}</span>{{/each}}</p>
+          {{else}}
+            <p class='use-text none'>Not used with any site yet</p>
+          {{/if}}
+        </:default>
+      </Item>
+      <Item
+        class='use-row'
+        @size='s'
+        @alignStart={{true}}
+        data-test-key-shared-into
+      >
+        <:leading><LayoutGrid class='use-icon' aria-hidden='true' /></:leading>
+        <:default>
+          {{#if @key.sharedInto.length}}
             <p
               class='use-text heading'
               id='key-shared-into-{{@key.id}}'
@@ -125,102 +144,134 @@ export default class KeyUse extends Component<Signature> {
                   class='workspace'
                   data-test-key-shared-into-workspace={{workspace.url}}
                 >
-                  <div class='workspace-text'>
-                    <span class='workspace-name' data-test-workspace-name>
-                      {{workspaceTitle workspace}}
-                    </span>
-                    {{#if workspace.name}}
-                      <span class='address' data-test-workspace-address>
-                        {{addressOf workspace.url}}
-                      </span>
-                    {{/if}}
-                    <span class='labels' data-test-workspace-labels>As
-                      {{labelsOf workspace}}</span>
-                  </div>
+                  <Item class='workspace-item' @size='s' @alignStart={{true}}>
+                    <:title><span data-test-workspace-name>{{workspaceTitle
+                          workspace
+                        }}</span></:title>
+                    <:description>
+                      {{#if workspace.name}}
+                        <span class='address' data-test-workspace-address>
+                          {{addressOf workspace.url}}
+                        </span>
+                      {{/if}}
+                      <span class='labels' data-test-workspace-labels>As
+                        {{labelsOf workspace}}</span>
+                    </:description>
+                    <:actions>
+                      {{#unless (eq this.confirming workspace.url)}}
+                        <Button
+                          class='unshare'
+                          type='button'
+                          @kind='secondary'
+                          @size='extra-small'
+                          aria-label='Unshare {{@key.name}} from {{workspaceTitle
+                            workspace
+                          }}'
+                          data-test-key-unshare
+                          {{on 'click' (fn this.ask workspace)}}
+                        >Unshare</Button>
+                      {{/unless}}
+                    </:actions>
+                  </Item>
                   {{#if (eq this.confirming workspace.url)}}
-                    <div
-                      class='confirm'
+                    <Alert
+                      @tone='warning'
                       role='group'
                       aria-label='Unshare from {{workspaceTitle workspace}}'
                       data-test-key-unshare-confirm
                     >
-                      <p class='confirm-text'>Unshare from
-                        <strong>{{workspaceTitle workspace}}</strong>? Cards
-                        there stop using this key. It stays shared everywhere
-                        else.</p>
-                      <div class='confirm-actions'>
-                        <Button
-                          type='button'
-                          @kind='secondary'
-                          @size='extra-small'
-                          @disabled={{this.saving}}
-                          data-test-key-unshare-cancel
-                          {{on 'click' this.cancel}}
-                        >Cancel</Button>
-                        <Button
-                          type='button'
-                          @kind='destructive'
-                          @size='extra-small'
-                          @loading={{this.saving}}
-                          data-test-key-unshare-confirm-button
-                          {{on 'click' (fn this.unshare workspace)}}
-                        >Unshare</Button>
-                      </div>
-                    </div>
-                  {{else}}
-                    <Button
-                      class='unshare'
-                      type='button'
-                      @kind='secondary'
-                      @size='extra-small'
-                      aria-label='Unshare {{@key.name}} from {{workspaceTitle
-                        workspace
-                      }}'
-                      data-test-key-unshare
-                      {{on 'click' (fn this.ask workspace)}}
-                    >Unshare</Button>
+                      <:default>
+                        <p class='use-text'>Unshare from
+                          <strong>{{workspaceTitle workspace}}</strong>? Cards
+                          there stop using this key. It stays shared everywhere
+                          else.</p>
+                      </:default>
+                      <:action>
+                        <div class='alert-actions'>
+                          <Button
+                            type='button'
+                            @kind='secondary'
+                            @size='extra-small'
+                            @disabled={{this.saving}}
+                            data-test-key-unshare-cancel
+                            {{on 'click' this.cancel}}
+                          >Cancel</Button>
+                          <Button
+                            type='button'
+                            @kind='destructive'
+                            @size='extra-small'
+                            @loading={{this.saving}}
+                            data-test-key-unshare-confirm-button
+                            {{on 'click' (fn this.unshare workspace)}}
+                          >Unshare</Button>
+                        </div>
+                      </:action>
+                    </Alert>
                   {{/if}}
                   {{#each (unapproved workspace) as |share|}}
-                    <div
-                      class='unapproved'
-                      data-test-key-share-unapproved={{share.id}}
-                    >
-                      <p class='unapproved-text'>{{unapprovedText
-                          workspace
-                          share
-                        }}</p>
-                      {{#if @onApproveShare}}
-                        <Button
-                          type='button'
-                          @kind='secondary'
-                          @size='extra-small'
-                          aria-label='Approve for a card: “{{share.label}}” in {{workspaceTitle
+                    {{#if @onApproveShare}}
+                      <Alert
+                        @tone='info'
+                        role='note'
+                        data-test-key-share-unapproved={{share.id}}
+                      >
+                        <:default>
+                          <p class='use-text'>{{unapprovedText
+                              workspace
+                              share
+                            }}</p>
+                        </:default>
+                        <:action>
+                          <Button
+                            type='button'
+                            @kind='secondary'
+                            @size='extra-small'
+                            aria-label='Approve for a card: “{{share.label}}” in {{workspaceTitle
+                              workspace
+                            }}'
+                            data-test-key-share-approve={{share.id}}
+                            {{on
+                              'click'
+                              (fn @onApproveShare @key workspace share)
+                            }}
+                          >Approve for a card…</Button>
+                        </:action>
+                      </Alert>
+                    {{else}}
+                      <Alert
+                        @tone='info'
+                        role='note'
+                        data-test-key-share-unapproved={{share.id}}
+                      >
+                        <p class='use-text'>{{unapprovedText
                             workspace
-                          }}'
-                          data-test-key-share-approve={{share.id}}
-                          {{on
-                            'click'
-                            (fn @onApproveShare @key workspace share)
-                          }}
-                        >Approve for a card…</Button>
-                      {{/if}}
-                    </div>
+                            share
+                          }}</p>
+                      </Alert>
+                    {{/if}}
                   {{/each}}
                 </li>
               {{/each}}
             </ul>
-          </div>
-        {{else}}
-          <p class='use-text none'>Not shared with any workspace</p>
-        {{/if}}
-      </div>
+          {{else}}
+            <p class='use-text none'>Not shared with any workspace</p>
+          {{/if}}
+        </:default>
+      </Item>
       {{#if @onChangeAnonymousUse}}
-        <div class='use-row' data-test-key-anonymous-use>
-          <Users class='use-icon' aria-hidden='true' />
-          <div class='anonymous'>
+        <Item
+          class='use-row'
+          @size='s'
+          @alignStart={{true}}
+          data-test-key-anonymous-use
+        >
+          <:leading><Users class='use-icon' aria-hidden='true' /></:leading>
+          <:default>
             <p class='use-text' data-test-key-anonymous-use-summary>
               {{anonymousUseSummary @key}}
             </p>
+          </:default>
+          <:actions>
             <Button
               type='button'
               @kind='secondary'
@@ -229,13 +280,14 @@ export default class KeyUse extends Component<Signature> {
               data-test-key-anonymous-use-change
               {{on 'click' (fn @onChangeAnonymousUse @key)}}
             >Change</Button>
-          </div>
-        </div>
+          </:actions>
+        </Item>
       {{/if}}
     </div>
 
     <style scoped>
       .key-use {
+        container-type: inline-size;
         display: grid;
         gap: var(--boxel-sp-xs);
         padding-top: var(--boxel-sp-xs);
@@ -243,11 +295,29 @@ export default class KeyUse extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
       }
-      .use-row {
+      /* Each row is set in the tile's small type, its icon on the first
+         line, and wraps rather than cutting its text short: the part of an
+         address that tells two workspaces apart may be at its end. */
+      .use-row,
+      .workspace-item {
+        --pretui-item-gap: var(--boxel-sp-xs);
+        font-size: inherit;
+        letter-spacing: normal;
+      }
+      .use-row :deep(.pretui-item-content) {
+        margin: 0;
+      }
+      .workspace-item :deep(.pretui-item-title),
+      .workspace-item :deep(.pretui-item-desc) {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        font-size: inherit;
+      }
+      .workspace-item :deep(.pretui-item-title) {
+        font-weight: 600;
+      }
+      .workspace-item :deep(.pretui-item-desc) {
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        column-gap: var(--boxel-sp-xs);
-        align-items: start;
       }
       .use-icon {
         width: 0.875rem;
@@ -263,15 +333,8 @@ export default class KeyUse extends Component<Signature> {
         color: var(--muted-foreground);
       }
       .domain,
-      .heading,
-      .workspace-name {
+      .heading {
         font-weight: 600;
-      }
-      .anonymous {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        column-gap: var(--boxel-sp-xs);
-        align-items: start;
       }
       .workspaces {
         list-style: none;
@@ -282,52 +345,9 @@ export default class KeyUse extends Component<Signature> {
       }
       .workspace {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        column-gap: var(--boxel-sp-xs);
         row-gap: var(--boxel-sp-4xs);
-        align-items: start;
       }
-      .workspace-text {
-        display: grid;
-        min-width: 0;
-      }
-      .workspace-name {
-        overflow-wrap: anywhere;
-      }
-      /* An address wraps rather than being cut short, since the part that
-         tells two workspaces apart may be at its end. */
-      .address,
-      .labels {
-        color: var(--muted-foreground);
-        overflow-wrap: anywhere;
-      }
-      .unapproved {
-        grid-column: 1 / -1;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        column-gap: var(--boxel-sp-xs);
-        align-items: center;
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        background-color: var(--muted);
-        color: var(--muted-foreground);
-      }
-      .unapproved-text {
-        margin: 0;
-        overflow-wrap: anywhere;
-      }
-      .confirm {
-        grid-column: 1 / -1;
-        display: grid;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        background-color: var(--muted);
-      }
-      .confirm-text {
-        margin: 0;
-      }
-      .confirm-actions {
+      .alert-actions {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-4xs);
