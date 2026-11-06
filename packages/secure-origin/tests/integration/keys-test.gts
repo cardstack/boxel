@@ -2634,6 +2634,19 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-share-key-key]').includesText('Maps');
       assert.dom('[data-test-key-picker]').doesNotExist('the key is chosen');
+      assert
+        .dom('[data-test-share-key-audience]')
+        .hasAttribute(
+          'data-test-key-audience-tone',
+          'info',
+          'the key being shared sits in the shared-key section',
+        );
+      assert
+        .dom('[data-test-share-key-audience] [data-test-key-audience-label]')
+        .hasText('Sharing your key');
+      assert
+        .dom('[data-test-share-key-audience] [data-test-key-audience-who]')
+        .includesText('Everyone in');
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       assert
         .dom('[data-test-share-label]')
@@ -2980,6 +2993,12 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-share-key-key-allows]');
       assert
+        .dom('[data-test-share-key-audience]')
+        .hasAttribute('data-test-key-audience-tone', 'warning');
+      assert
+        .dom('[data-test-share-key-audience] [data-test-key-audience-who]')
+        .hasText('Anyone, signed in or not');
+      assert
         .dom('[data-test-share-key-key-allows-text]')
         .hasText(
           'This key allows it. Sharing it here means they will use it.',
@@ -3113,6 +3132,21 @@ module('Integration | key pages', function (hooks) {
       await render(SwapKeyPage);
       await waitFor('[data-test-swap-key-form]');
       assert.dom('[data-test-swap-share-label]').hasText('Team weather');
+      assert
+        .dom('[data-test-swap-key-audience]')
+        .hasAttribute(
+          'data-test-key-audience-tone',
+          'info',
+          'the suspended share and the key that takes its place sit in the shared-key section',
+        );
+      assert
+        .dom('[data-test-swap-key-audience] [data-test-swap-share]')
+        .exists();
+      assert
+        .dom('[data-test-swap-key-audience] [data-test-key-audience-what]')
+        .hasText(
+          'The key you choose goes into this share, which keeps its label and the calls approved with it.',
+        );
       assert
         .dom('[data-test-swap-share]')
         .includesText('no longer has direct write access to this workspace');

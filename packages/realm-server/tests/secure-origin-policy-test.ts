@@ -997,6 +997,12 @@ module(basename(import.meta.filename), function (hooks) {
         return color === SENTINEL ? undefined : toRGB(color);
       };
       let indicators: { label: string; rgb: number[] | undefined }[] = [];
+      // A CSS-wide keyword paints no colour of its own: the property takes
+      // its inherited or initial value, which the rules that set it are
+      // measured for. A rule like `all: unset` reports one for every
+      // property it resets.
+      let paintsNothing = (value: string) =>
+        /^(unset|initial|inherit|revert|revert-layer)$/.test(value.trim());
       let visit = (rules: CSSRuleList) => {
         for (let rule of rules) {
           if (rule instanceof CSSGroupingRule) {
@@ -1018,7 +1024,11 @@ module(basename(import.meta.filename), function (hooks) {
               let value = style.getPropertyValue(property);
               // An outline drawn transparent on purpose shows nothing to
               // measure.
-              if (value && !/transparent|none|rgba\([^)]*,\s*0\)/.test(value)) {
+              if (
+                value &&
+                !paintsNothing(value) &&
+                !/transparent|none|rgba\([^)]*,\s*0\)/.test(value)
+              ) {
                 indicators.push({
                   label: `${selector} { ${property}: ${value} }`,
                   rgb: paints(property, value, 'outline-color'),
@@ -1030,11 +1040,6 @@ module(basename(import.meta.filename), function (hooks) {
           // alone, and a ticked or chosen one keeps an edge around its fill;
           // a chosen radio tile is ringed in its tone. Pret UI draws each from
           // the token the panel sets.
-          // A CSS-wide keyword, such as an `all: unset` that strips a
-          // control bare, sets no colour of its own to measure.
-          let painted = (value: string) =>
-            Boolean(value) &&
-            !/^(unset|initial|inherit|revert|revert-layer)$/.test(value.trim());
           for (let property of [
             '--pretui-control-border',
             '--pretui-control-checked-border',
@@ -1042,7 +1047,7 @@ module(basename(import.meta.filename), function (hooks) {
             '--pretui-choice-card-tone',
           ]) {
             let edge = style.getPropertyValue(property);
-            if (painted(edge)) {
+            if (edge && !paintsNothing(edge)) {
               indicators.push({
                 label: `${selector} { ${property}: ${edge} }`,
                 rgb: paints('color', edge, 'color'),
@@ -1050,7 +1055,7 @@ module(basename(import.meta.filename), function (hooks) {
             }
           }
           let accent = style.getPropertyValue('accent-color');
-          if (painted(accent)) {
+          if (accent && !paintsNothing(accent)) {
             indicators.push({
               label: `${selector} { accent-color: ${accent} }`,
               rgb: paints('color', accent, 'color'),

@@ -14,7 +14,7 @@ import { Alert } from '@cardstack/pretui/components/alert';
 import { Item } from '@cardstack/pretui/components/item';
 
 import Button from '../../components/button.gts';
-import KeyRound from '../../components/icons/key-round.gts';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
 import RefreshCw from '../../components/icons/refresh-cw.gts';
 import { eq } from '../../helpers/truth-helpers.ts';

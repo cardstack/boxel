@@ -1482,6 +1482,18 @@ module('Integration | approve pages', function (hooks) {
       'the cards there that this key can fill',
     );
     assert
+      .dom('[data-test-use-key]')
+      .includesText('every call the card makes with your own key');
+    assert
+      .dom('[data-test-use-key-audience][data-test-key-audience="userKey"]')
+      .includesText('Only you', 'the key serves only the user');
+    assert
+      .dom('[data-test-key-audience="apiKey"]')
+      .doesNotExist('nothing says it serves the workspace');
+    assert
+      .dom('[data-test-use-key-audience] [data-test-key-mark]')
+      .hasAttribute('data-test-key-mark', 'own');
+    assert
       .dom(
         '[data-test-pretui-choice-card]:has([data-test-use-key-card="Inbox"]) input',
       )
@@ -2226,6 +2238,352 @@ module('Integration | approve pages', function (hooks) {
       .isNotChecked('the call that sends the user’s own key does not');
   });
 
+  test('a key of the user’s own is drawn as serving only them, and the done page says so', async function (assert) {
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+
+    assert
+      .dom('[data-test-approve]')
+      .includesText(
+        'This card calls another service with your own key, for you alone.',
+      );
+    assert
+      .dom('[data-test-approve-slot="userKey"]')
+      .hasAttribute('data-test-approve-slot-kind', 'userKey')
+      .includesText('Your own key');
+    assert
+      .dom(
+        '[data-test-approve-slot="userKey"][data-test-key-audience="userKey"] [data-test-key-audience-who]',
+      )
+      .hasText('Only you');
+    assert
+      .dom('[data-test-approve-slot="userKey"]')
+      .hasAttribute(
+        'data-test-key-audience-tone',
+        'neutral',
+        'the user’s own key is a neutral section',
+      );
+    assert
+      .dom('[data-test-key-audience="userKey"]')
+      .includesText(
+        'Boxel uses this key for the card’s scheduled calls and whenever you use the card. Everyone else who uses it chooses a key of their own.',
+        'an interactive binding serves the scheduled calls too',
+      );
+    assert
+      .dom('[data-test-key-audience="apiKey"]')
+      .doesNotExist('nothing says the key serves the workspace');
+
+    await click('[data-test-approve-save]');
+    await waitFor('[data-test-keys-done]');
+    assert
+      .dom('[data-test-keys-done]')
+      .includesText('calls with your own key on its schedule');
+    assert
+      .dom('[data-test-approve-done-audience="userKey"]')
+      .hasText(
+        'Your own key is sent on the card’s scheduled calls and whenever you use the card. Everyone else who uses it chooses a key of their own.',
+      );
+    assert.dom('[data-test-approve-done-audience="apiKey"]').doesNotExist();
+    assert.dom('[data-test-approve-done-shares]').doesNotExist();
+  });
+
+  test('a key shared with the workspace is drawn as serving everyone there, and the done page names the share', async function (assert) {
+    serveShareBatch({ opensToAnonymous: false, share: { interactive: true } });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+
+    assert
+      .dom('[data-test-approve]')
+      .includesText(
+        'This card calls another service with a key you share with this workspace, for everyone who uses the card there.',
+      );
+    assert
+      .dom('[data-test-approve-slot="apiKey"]')
+      .hasAttribute('data-test-approve-slot-kind', 'apiKey')
+      .includesText('Shared key');
+    assert
+      .dom(
+        '[data-test-approve-slot="apiKey"][data-test-key-audience="apiKey"] [data-test-key-audience-who]',
+      )
+      .hasText('Everyone in Team Workspace');
+    assert
+      .dom('[data-test-approve-slot="apiKey"]')
+      .hasAttribute(
+        'data-test-key-audience-tone',
+        'info',
+        'a shared key is a section in the info tone',
+      );
+    assert
+      .dom('[data-test-key-audience="apiKey"]')
+      .includesText(
+        'Approving replaces any key chosen for these calls before.',
+      );
+    assert
+      .dom('[data-test-key-audience="userKey"]')
+      .doesNotExist('nothing says the key serves only the user');
+    assert
+      .dom(
+        '[data-test-approve-key="Team GitHub"] [data-test-approve-share-key]',
+      )
+      .hasText(
+        'Shares your key GitHub token',
+        'the share names the key it holds',
+      );
+
+    await click('[data-test-approve-save]');
+    await waitFor('[data-test-keys-done]');
+    assert
+      .dom('[data-test-approve-done-shares]')
+      .hasText('Team GitHub', 'the done page names the share');
+    assert
+      .dom('[data-test-keys-done]')
+      .includesText('calls with the key you share as Team GitHub');
+    assert.dom('[data-test-keys-done]').doesNotIncludeText('your own key');
+    assert
+      .dom('[data-test-approve-done-audience="apiKey"]')
+      .hasText(
+        'Everyone who uses this card in Team Workspace makes the calls that send the key you share, and they count against the share’s limits.',
+      );
+    assert.dom('[data-test-approve-done-audience="userKey"]').doesNotExist();
+  });
+
+  test('a batch sending both the user’s own key and a shared one says whom each serves', async function (assert) {
+    serveShareBatch({ opensToAnonymous: false, share: { interactive: true } });
+    let served = routes['POST _key-bindings/batch']!;
+    serve({
+      'POST _key-bindings/batch': async (request) => {
+        let answer = await served(request);
+        let attributes = (answer.body as any).data.attributes;
+        attributes.groups[0].operations.push(
+          operation('listPRs', 'List your open pull requests'),
+        );
+        attributes.keys = [
+          {
+            id: 'key-gh',
+            name: 'GitHub token',
+            kind: 'static',
+            state: 'active',
+            covers: [GRAPHQL],
+          },
+        ];
+        return answer;
+      },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+
+    assert
+      .dom('[data-test-approve]')
+      .includesText(
+        'This card calls another service with your own key, for you alone, and with a key you share with this workspace, for everyone who uses the card there.',
+      );
+    assert
+      .dom(
+        '[data-test-approve-slot="userKey"][data-test-key-audience="userKey"]',
+      )
+      .exists();
+    assert
+      .dom('[data-test-approve-slot="userKey"] [data-test-key-mark]')
+      .hasAttribute(
+        'data-test-key-mark',
+        'own',
+        'the user’s own keys are drawn as their own',
+      );
+    assert
+      .dom('[data-test-approve-slot="apiKey"] [data-test-key-mark]')
+      .hasAttribute(
+        'data-test-key-mark',
+        'shared',
+        'shares are drawn as shared',
+      );
+    assert
+      .dom('[data-test-approve-slot="apiKey"][data-test-key-audience="apiKey"]')
+      .exists();
+
+    await click('[data-test-approve-save]');
+    await waitFor('[data-test-keys-done]');
+    assert
+      .dom('[data-test-keys-done]')
+      .includesText(
+        'calls with your own key and the key you share as Team GitHub',
+      );
+    assert.dom('[data-test-approve-done-audience="userKey"]').exists();
+    assert.dom('[data-test-approve-done-audience="apiKey"]').exists();
+  });
+
+  test('approved for the schedule only, a key is said to serve the card’s scheduled calls, not whoever opens it', async function (assert) {
+    serveShareBatch({ opensToAnonymous: false, share: { interactive: true } });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-pretui-radio-option="pipelines"] input');
+
+    assert
+      .dom('[data-test-approve]')
+      .includesText(
+        'with a key you share with this workspace, for the card’s scheduled calls there.',
+      );
+    assert
+      .dom('[data-test-key-audience="apiKey"] [data-test-key-audience-who]')
+      .hasText('The card’s schedule in Team Workspace');
+    assert
+      .dom('[data-test-key-audience="apiKey"]')
+      .includesText(
+        'Opening the card doesn’t use it, and scheduled calls don’t count against the share’s limits.',
+      );
+
+    await click('[data-test-approve-save]');
+    await waitFor('[data-test-keys-done]');
+    assert
+      .dom('[data-test-approve-done-audience="apiKey"]')
+      .hasText(
+        'Only the card’s scheduled calls in Team Workspace send the key you share. Opening the card doesn’t use it.',
+      );
+  });
+
+  test('approved for the schedule only, the user’s own key is said to serve only the card’s scheduled calls', async function (assert) {
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-pretui-radio-option="pipelines"] input');
+    assert
+      .dom('[data-test-key-audience="userKey"]')
+      .includesText('Boxel uses this key only for the card’s scheduled calls');
+
+    await click('[data-test-approve-save]');
+    await waitFor('[data-test-keys-done]');
+    assert
+      .dom('[data-test-approve-done-audience="userKey"]')
+      .hasText(
+        'Only the card’s scheduled calls send your own key. Opening the card doesn’t use it.',
+      );
+  });
+
+  test('two shares chosen for two slots are named as keys on the done page', async function (assert) {
+    serveShareBatch({ opensToAnonymous: false, share: { interactive: true } });
+    let served = routes['POST _key-bindings/batch']!;
+    serve({
+      'POST _key-bindings/batch': async (request) => {
+        let answer = await served(request);
+        let attributes = (answer.body as any).data.attributes;
+        let [, second] = attributes.groups[0].operations;
+        second.slots = second.slots.map((s: any) => ({
+          ...s,
+          slot: 'apiKey:backup',
+        }));
+        attributes.shares = [
+          attributes.shares[0],
+          {
+            ...attributes.shares[0],
+            id: 'share-backup',
+            label: 'Backup GitHub',
+            covers: [],
+          },
+        ];
+        return answer;
+      },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    let nameOf = (selector: string) =>
+      (find(selector)!.getAttribute('aria-labelledby') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent?.trim())
+        .join(' ');
+    let groups = [
+      ...document.querySelectorAll(
+        '[data-test-approve-slot] [role="radiogroup"]',
+      ),
+    ].map((g) =>
+      (g.getAttribute('aria-labelledby') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent?.trim())
+        .join(' '),
+    );
+    assert.deepEqual(
+      groups,
+      [
+        'Shared key Everyone in Team Workspace',
+        'Shared key: backup Everyone in Team Workspace',
+      ],
+      'each slot’s choice is named by its kind and whom it serves, so two shared slots are told apart',
+    );
+    assert.strictEqual(
+      nameOf('[data-test-approve-slot="apiKey:backup"]'),
+      'Shared key: backup Everyone in Team Workspace',
+      'the section is named by its heading',
+    );
+    assert
+      .dom('[data-test-approve-slot="apiKey"] h2')
+      .exists('each section has a heading');
+    await click(
+      '[data-test-approve-slot="apiKey"] [data-test-pretui-choice-card]:has([data-test-approve-key="Team GitHub"]) input',
+    );
+    await click(
+      '[data-test-approve-slot="apiKey:backup"] [data-test-pretui-choice-card]:has([data-test-approve-key="Backup GitHub"]) input',
+    );
+
+    await click('[data-test-approve-save]');
+    await waitFor('[data-test-keys-done]');
+    assert
+      .dom('[data-test-keys-done]')
+      .includesText('with the keys you share as Team GitHub and Backup GitHub');
+    assert
+      .dom('[data-test-approve-done-audience="apiKey"]')
+      .hasText(
+        'Everyone who uses this card in Team Workspace makes the calls that send the keys you share, and they count against each share’s limits.',
+      );
+  });
+
+  test('the done page says what was approved, even if a choice changes while the approval is being saved', async function (assert) {
+    serveShareBatch({ opensToAnonymous: false, share: { interactive: true } });
+    let served = routes['POST _key-bindings/batch']!;
+    serve({
+      'POST _key-bindings/batch': async (request) => {
+        let answer = await served(request);
+        let attributes = (answer.body as any).data.attributes;
+        attributes.shares = [
+          attributes.shares[0],
+          { ...attributes.shares[0], id: 'share-other', label: 'Other GitHub' },
+        ];
+        return answer;
+      },
+    });
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    serve({
+      'POST _key-bindings': async () => {
+        await held;
+        return json(201, { data: [], meta: { batchId: 'b' } });
+      },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="Team GitHub"]) input',
+    );
+
+    let saving = click('[data-test-approve-save]');
+    await waitUntil(() => approvals().length === 1);
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="Other GitHub"]) input',
+    );
+    release();
+    await saving;
+    await waitFor('[data-test-keys-done]');
+    assert
+      .dom('[data-test-approve-done-shares]')
+      .hasText(
+        'Team GitHub',
+        'the share that was approved, not the one chosen after',
+      );
+  });
+
   test('a key’s share is set up for a card from the key’s use page, opened for that share', async function (assert) {
     serve({
       'GET _user-keys': () =>
@@ -2285,6 +2643,20 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-use-key]')
       .includesText('the key you shared as “Team GitHub”');
+    assert
+      .dom('[data-test-use-key-audience][data-test-key-audience="apiKey"]')
+      .includesText(
+        'Everyone in Team Workspace',
+        'the share serves everyone who uses the card in the workspace',
+      );
+    assert
+      .dom('[data-test-use-key-audience] [data-test-key-mark]')
+      .hasAttribute(
+        'data-test-key-mark',
+        'shared',
+        'the share’s key is drawn as shared',
+      );
+    assert.dom('[data-test-key-audience="userKey"]').doesNotExist();
     assert
       .dom('[data-test-use-key-share-realm]')
       .includesText('Team Workspace', 'the workspace is the share’s');
@@ -2382,10 +2754,26 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-key-audience="apiKey"] [data-test-key-audience-who]')
+      .hasText(
+        'Anyone, signed in or not',
+        'the slot says the share serves people who aren’t signed in too',
+      );
+    assert
+      .dom('[data-test-key-audience="apiKey"]')
+      .hasAttribute(
+        'data-test-key-audience-tone',
+        'warning',
+        'a share that serves people who aren’t signed in is a warning section',
+      );
     await click('[data-test-pretui-radio-option="pipelines"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
       .doesNotExist('a pipeline serves nobody who opens the card');
+    assert
+      .dom('[data-test-key-audience="apiKey"] [data-test-key-audience-who]')
+      .hasText('The card’s schedule in Team Workspace');
     await click('[data-test-pretui-radio-option="interactive"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
@@ -2418,6 +2806,9 @@ module('Integration | approve pages', function (hooks) {
       .doesNotExist(
         'the operation left ticked is one the policy keeps for signed-in people',
       );
+    assert
+      .dom('[data-test-key-audience="apiKey"] [data-test-key-audience-who]')
+      .hasText('Everyone in Team Workspace');
     assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
     await click('[data-test-approve-tick="listTeamPRs"]');
     await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');

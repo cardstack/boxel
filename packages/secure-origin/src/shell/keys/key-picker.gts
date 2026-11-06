@@ -9,7 +9,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
-import KeyRound from '../../components/icons/key-round.gts';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import { EmptyState } from '@cardstack/pretui/components/empty-state';
 

@@ -38,8 +38,8 @@ import { focusWhen } from '@cardstack/pretui/focus';
 
 import Button from '../../components/button.gts';
 import Globe from '../../components/icons/globe.gts';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import Users from '../../components/icons/users.gts';
+import Users from '@cardstack/boxel-icons/users';
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 import { anonymousUseSummary } from './anonymous-use-fields.gts';
@@ -127,7 +127,7 @@ export default class KeyUse extends Component<Signature> {
         @alignStart={{true}}
         data-test-key-shared-into
       >
-        <:leading><LayoutGrid class='use-icon' aria-hidden='true' /></:leading>
+        <:leading><Users class='use-icon' aria-hidden='true' /></:leading>
         <:default>
           {{#if @key.sharedInto.length}}
             <p
@@ -276,7 +276,10 @@ export default class KeyUse extends Component<Signature> {
           @alignStart={{true}}
           data-test-key-anonymous-use
         >
-          <:leading><Users class='use-icon' aria-hidden='true' /></:leading>
+          <:leading><HatGlasses
+              class='use-icon'
+              aria-hidden='true'
+            /></:leading>
           <:default>
             <p class='use-text' data-test-key-anonymous-use-summary>
               {{anonymousUseSummary @key}}

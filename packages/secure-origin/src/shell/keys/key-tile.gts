@@ -11,10 +11,10 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { Card } from '@cardstack/pretui/components/card';
 
-import KeyRound from '../../components/icons/key-round.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 import type { UserKey } from './context.ts';
+import KeyMark from './key-mark.gts';
 
 export function addedOn(iso: string): string {
   let date = new Date(iso);
@@ -42,7 +42,8 @@ export function kindLabel(kind: string): string | undefined {
 }
 
 interface Signature {
-  Args: { key: UserKey; framed?: boolean };
+  // `@shared` draws the key as shared with a workspace.
+  Args: { key: UserKey; framed?: boolean; shared?: boolean };
   Blocks: { default: [] };
   Element: HTMLElement;
 }
@@ -54,7 +55,7 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     <div class='key-grid'>
-      <span class='key-icon' aria-hidden='true'><KeyRound /></span>
+      <KeyMark @shared={{@shared}} />
       <div class='key-text'>
         <div
           id='key-name-{{@key.id}}'
@@ -89,21 +90,6 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
       column-gap: var(--boxel-sp-sm);
       row-gap: var(--boxel-sp-xs);
       min-height: calc(4rem - 2 * var(--boxel-sp-xs));
-    }
-    .key-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      width: 2.5rem;
-      height: 2.5rem;
-      border-radius: var(--boxel-border-radius-sm);
-      background-color: var(--muted);
-      color: var(--muted-foreground);
-    }
-    .key-icon :deep(svg) {
-      width: 1.25rem;
-      height: 1.25rem;
     }
     .key-text {
       min-width: 0;

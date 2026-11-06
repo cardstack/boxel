@@ -35,7 +35,7 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
 import { Alert } from '@cardstack/pretui/components/alert';
-import KeyRound from '../../components/icons/key-round.gts';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
