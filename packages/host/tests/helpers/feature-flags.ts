@@ -1,21 +1,24 @@
 import ENV from '@cardstack/host/config/environment';
 
 type FeatureFlag = keyof NonNullable<typeof ENV.featureFlags>;
+type Flags = Record<string, boolean | undefined>;
 
 // Turns a build-time feature flag on for every test in the module. The test
-// build starts with every flag off.
+// build starts with every flag off. Writes go through `Flags` so the helper
+// still compiles when no flag is declared.
 export function setupFeatureFlag(hooks: NestedHooks, flag: FeatureFlag) {
   let previous: boolean | undefined;
   hooks.beforeEach(function () {
-    ENV.featureFlags ??= {};
-    previous = ENV.featureFlags[flag];
-    ENV.featureFlags[flag] = true;
+    let flags = (ENV.featureFlags ??= {}) as Flags;
+    previous = flags[flag];
+    flags[flag] = true;
   });
   hooks.afterEach(function () {
+    let flags = ENV.featureFlags as Flags;
     if (previous === undefined) {
-      delete ENV.featureFlags![flag];
+      delete flags[flag];
     } else {
-      ENV.featureFlags![flag] = previous;
+      flags[flag] = previous;
     }
   });
 }
