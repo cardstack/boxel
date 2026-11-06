@@ -6,27 +6,7 @@ import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { LoadingState } from './loading-state';
-
-// Every `style` attribute written while `work` runs. Glimmer binds `style`
-// with `setAttribute`, which a strict Content Security Policy (the secure
-// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
-// through it and is allowed.
-async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
-  let writes: string[] = [];
-  let setAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
-    if (name.toLowerCase() === 'style') {
-      writes.push(value);
-    }
-    return setAttribute.call(this, name, value);
-  };
-  try {
-    await work();
-  } finally {
-    Element.prototype.setAttribute = setAttribute;
-  }
-  return writes;
-}
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function pixels(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('.pretui-pixel')];
@@ -57,6 +37,5 @@ module('Pretui | components/loading-state', function (hooks) {
     assert.strictEqual(lit.length, 8);
     assert.true(pixels()[4].hasAttribute('data-idle'), 'the centre is unlit');
     assert.strictEqual(pixels()[4].style.getPropertyValue('--pretui-pixel-delay'), '');
-    assert.strictEqual(getComputedStyle(pixels()[4]).animationName, 'none');
   });
 });

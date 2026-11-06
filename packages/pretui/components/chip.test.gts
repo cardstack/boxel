@@ -7,26 +7,7 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Chip } from './chip';
 import { StatusChip } from './status-chip';
 import { statusHue } from '../internal/ink';
-// Every `style` attribute written while `work` runs. Glimmer binds `style`
-// with `setAttribute`, which a strict Content Security Policy (the secure
-// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
-// through it and is allowed.
-async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
-  let writes: string[] = [];
-  let setAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
-    if (name.toLowerCase() === 'style') {
-      writes.push(value);
-    }
-    return setAttribute.call(this, name, value);
-  };
-  try {
-    await work();
-  } finally {
-    Element.prototype.setAttribute = setAttribute;
-  }
-  return writes;
-}
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function chip(): HTMLElement {
   return document.querySelector('[data-test-pretui-chip]') as HTMLElement;

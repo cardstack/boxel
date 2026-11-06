@@ -140,7 +140,7 @@ const KeyPolicyNotices: TOC<Signature> = <template>
               data-test-key-policy-notice={{request.notice.label}}
               data-test-key-policy-notice-reason='visitors-wanted'
             >
-              <Alert @tone='warning'>
+              <Alert @tone='warning' role='note'>
                 <p class='summary'>
                   <strong>{{addressOf request.notice.realm}}</strong>
                   wants people who aren’t signed in to use your key

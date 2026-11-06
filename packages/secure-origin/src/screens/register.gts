@@ -349,7 +349,7 @@ export const CreatingAccount: TemplateOnlyComponent = <template>
     <span class='loading-title' data-test-email-validation-complete>Email
       validation complete</span>
     <p class='loading-message'>Please wait as we set up your account.</p>
-    <Spinner @size={{20}} class='loading-spinner' />
+    <Spinner @size={{20}} class='loading-spinner' aria-hidden='true' />
   </div>
   <style scoped>
     .centered-loading {

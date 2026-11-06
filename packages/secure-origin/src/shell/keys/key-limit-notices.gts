@@ -80,7 +80,7 @@ const KeyLimitNotices: TOC<Signature> = <template>
               data-test-key-limit-notice={{notice.label}}
               data-test-key-limit-notice-threshold={{notice.threshold}}
             >
-              <Alert @tone={{if (reached notice) 'warning' 'info'}}>
+              <Alert @tone={{if (reached notice) 'warning' 'info'}} role='note'>
                 <p class='summary'>
                   <StatusChip
                     class='badge'

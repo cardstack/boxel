@@ -14,7 +14,7 @@ interface Signature {
 const BusyMessage: TemplateOnlyComponent<Signature> = <template>
   <div class='busy-message' role='status' ...attributes>
     <span class='busy-title'>{{@title}}</span>
-    <Spinner @size={{20}} class='busy-spinner' />
+    <Spinner @size={{20}} class='busy-spinner' aria-hidden='true' />
   </div>
 
   <style scoped>

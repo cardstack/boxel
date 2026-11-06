@@ -3987,7 +3987,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 85607,
+      "bytes": 85498,
       "sources": [
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -4035,15 +4035,15 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/components/d14a4de9d3.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/components/d1529afc86.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/d27b7c8d1f.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/e209c1b238.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4296,7 +4296,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 388511,
+      "bytes": 388739,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -4411,12 +4411,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/busy-message.gts",
-          "size": 687
+          "size": 717
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/button.gts",
-          "size": 1780
+          "size": 1965
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4526,7 +4526,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input-group.gts",
-          "size": 3921
+          "size": 3951
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4551,7 +4551,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/register.gts",
-          "size": 9136
+          "size": 9166
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4676,7 +4676,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-limit-notices.gts",
-          "size": 5814
+          "size": 5837
         },
         {
           "package": "@cardstack/secure-origin",
@@ -4691,7 +4691,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-policy-notices.gts",
-          "size": 7166
+          "size": 7189
         },
         {
           "package": "@cardstack/secure-origin",

@@ -59,6 +59,19 @@ function classes(
   ].join(' ');
 }
 
+// The loading spinner's size in pixels for each button size: boxel-ui's
+// `--boxel-icon-2xs` for an extra-small button, `--boxel-icon-sm` for a touch
+// one, and `--boxel-icon-xs` for the rest.
+function spinnerSize(size: ButtonSize | undefined): number {
+  if (size === 'extra-small') {
+    return 12;
+  }
+  if (size === 'touch') {
+    return 20;
+  }
+  return 16;
+}
+
 function isAnchor(as: string | undefined): boolean {
   return as === 'anchor';
 }
@@ -100,8 +113,9 @@ const Button: TemplateOnlyComponent<Signature> = <template>
       >
         {{#if @loading}}
           <Spinner
-            @size={{16}}
+            @size={{spinnerSize @size}}
             class='loading-indicator'
+            aria-hidden='true'
             data-test-boxel-button-loading-indicator
           />
         {{/if}}
@@ -358,7 +372,6 @@ const Button: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-button-min-height: var(--boxel-button-xs);
         --boxel-button-min-width: 5rem;
-        --boxel-button-loading-icon-size: var(--boxel-icon-2xs);
         --boxel-button-font: 500 var(--boxel-font-xs);
         --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }
@@ -397,7 +410,6 @@ const Button: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
         --boxel-button-min-height: var(--boxel-button-touch);
         --boxel-button-min-width: 5rem;
-        --boxel-button-loading-icon-size: var(--boxel-icon-sm);
         --boxel-button-font: 600 var(--boxel-font);
         --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       }

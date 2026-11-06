@@ -165,7 +165,7 @@ export default class InputGroup extends Component<Signature> {
             </div>
           {{else if (eq @state 'loading')}}
             <div class={{cn 'validation-icon-container' @state}}>
-              <Spinner @size={{20}} />
+              <Spinner @size={{20}} aria-hidden='true' />
             </div>
           {{/if}}
         </div>

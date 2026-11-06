@@ -3,31 +3,12 @@
 //
 // Run with `boxel test`.
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { render, settled } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Spinner } from './spinner';
-
-// Every `style` attribute written while `work` runs. Glimmer binds `style`
-// with `setAttribute`, which a strict Content Security Policy (the secure
-// origin's) refuses; a CSSOM write (`element.style.setProperty`) doesn't go
-// through it and is allowed.
-async function styleAttributeWrites(work: () => Promise<void>): Promise<string[]> {
-  let writes: string[] = [];
-  let setAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
-    if (name.toLowerCase() === 'style') {
-      writes.push(value);
-    }
-    return setAttribute.call(this, name, value);
-  };
-  try {
-    await work();
-  } finally {
-    Element.prototype.setAttribute = setAttribute;
-  }
-  return writes;
-}
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function spinners(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('[data-test-pretui-spinner]')];
@@ -57,6 +38,22 @@ module('Pretui | components/spinner', function (hooks) {
         ['20px', '20px'],
       ],
     );
+  });
+
+  test('a new @size reaches the element, and clearing it brings back the default', async function (assert) {
+    class State {
+      @tracked size: number | 'l' | undefined = 'l';
+    }
+    let state = new State();
+    await render(<template><Spinner @size={{state.size}} /></template>);
+    let [el] = spinners();
+    assert.strictEqual(el.style.width, '17px');
+    state.size = 24;
+    await settled();
+    assert.deepEqual([el.style.width, el.style.height], ['24px', '24px'], 'the new size');
+    state.size = undefined;
+    await settled();
+    assert.deepEqual([el.style.width, el.style.height], ['13px', '13px'], 'the default again');
   });
 
   test("a caller's size wins over the default, and @size wins over a caller's", async function (assert) {
