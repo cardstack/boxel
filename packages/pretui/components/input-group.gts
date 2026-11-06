@@ -269,7 +269,10 @@ export class InputGroup extends Component<InputGroupSignature> {
              border, so the knob is the height less both borders */
           --boxel-input-height: calc(var(--_group-h) - 2px);
           --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
-          --boxel-font-size-sm: var(--boxel-font-size-2xs);
+          --boxel-font-size-sm: var(
+            --pretui-field-message-font-size,
+            var(--boxel-font-size-2xs)
+          );
           /* a Button add-on's own 14px text overflows the height */
           --boxel-button-font: 700 var(--boxel-font-size-2xs) /
             var(--boxel-form-control-line-height-sm) var(--boxel-font-family);
