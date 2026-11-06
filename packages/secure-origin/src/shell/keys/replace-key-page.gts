@@ -30,8 +30,7 @@ import { getKey, replaceKey, windowContext } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
-import User from '@cardstack/boxel-icons/user';
-import Users from '@cardstack/boxel-icons/users';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 
 import {
   failureMessage,
@@ -169,7 +168,7 @@ class SlotPanel extends Component<{
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
-          @icon={{this.keyInUseIcon}}
+          @icon={{KeyRound}}
         >
           <p
             class='value'
@@ -186,7 +185,7 @@ class SlotPanel extends Component<{
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
-          @icon={{this.keyInUseIcon}}
+          @icon={{KeyRound}}
         >
           <p class='value'>
             <strong
@@ -258,7 +257,7 @@ class SlotPanel extends Component<{
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
-          @icon={{this.keyInUseIcon}}
+          @icon={{KeyRound}}
         >
           <p class='value'>
             <strong
@@ -289,7 +288,7 @@ class SlotPanel extends Component<{
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
-          @icon={{this.keyInUseIcon}}
+          @icon={{KeyRound}}
         >
           <p class='message' data-test-replace-key-accepted>
             <strong>{{this.accepted.key.name}}</strong>
@@ -304,7 +303,7 @@ class SlotPanel extends Component<{
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
-          @icon={{this.keyInUseIcon}}
+          @icon={{KeyRound}}
         >
           <p class='message' data-test-replace-key-not-yours>
             {{#if this.someoneElses.suspended}}
@@ -340,7 +339,7 @@ class SlotPanel extends Component<{
           @orientation='horizontal'
           @labelTag='span'
           @label='Key in use'
-          @icon={{this.keyInUseIcon}}
+          @icon={{KeyRound}}
         >
           <p class='message' data-test-replace-key-unbound>
             {{#if this.unboundShared}}
@@ -515,16 +514,6 @@ class SlotPanel extends Component<{
   }
   private get unboundShared() {
     return this.args.view.kind === 'unbound' && this.args.view.shared;
-  }
-
-  // The key in use is drawn as the key pages draw it everywhere: one person
-  // for the user's own key, a group for a key shared with the workspace.
-  private get keyInUseIcon() {
-    let shared =
-      this.someoneElses !== undefined ||
-      this.unboundShared ||
-      this.replacing?.shareLabel !== undefined;
-    return shared ? Users : User;
   }
 
   // Who rejected the key: the service the operation sends it to, by the name

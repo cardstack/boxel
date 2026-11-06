@@ -3,8 +3,9 @@
 // workspace never read alike. The section is a Pret UI Card: neutral for the
 // user's own key, the info tone for a shared key, and the warning tone for a
 // shared key that serves people who aren't signed in too. Its header is a
-// large person or group icon, what kind of key it is, and whom it serves; the
-// choice itself is the block.
+// large person or group icon and a heading of what kind of key it is and whom
+// it serves, which names the section; the choice itself is the block, and
+// names itself by the same two lines (`@headingId` and `@headingId`-kind).
 //
 // The user's own key (a `userKey` slot) serves only them: everyone else who
 // uses the card chooses a key of their own. A shared key (an `apiKey` slot)
@@ -12,17 +13,22 @@
 // has one such key per slot, so approving one replaces the one chosen before.
 //
 // What it serves follows when the calls run (`@use`). Approved for open cards
-// too, a share serves everyone who uses the card in the workspace, and their
-// calls count against the share's limits; where the realm's policy and the
-// share's key let people who aren't signed in make the calls (`@anonymous`),
-// it serves them as well. Approved for the schedule only, a key serves the
-// card's scheduled calls alone: opening the card doesn't use it, and those
-// calls count against no limits. With no `@use` (the use page, before the
-// choice is made) it says only whose calls the key is for.
+// too, a key also serves the card's scheduled calls (any active binding serves
+// a pipeline): the user's own key serves their scheduled calls and their use of
+// the card, and a share serves everyone who uses the card in the workspace,
+// their calls counting against the share's limits; where the realm's policy and
+// the share's key let people who aren't signed in make the calls
+// (`@anonymous`), it serves them as well. Approved for the schedule only, a key
+// serves the card's scheduled calls alone: opening the card doesn't use it,
+// and those calls count against no limits. With no `@use` (the use page,
+// before the choice is made) it says only whose calls the key is for. A page
+// that isn't approving a card's calls (sharing or swapping a key) says its own
+// `@line`, and `@headline` where whom the share serves isn't known there.
 import Component from '@glimmer/component';
 
 import User from '@cardstack/boxel-icons/user';
 import Users from '@cardstack/boxel-icons/users';
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { Card } from '@cardstack/pretui/components/card';
 
 interface Signature {
@@ -32,12 +38,11 @@ interface Signature {
     anonymous?: boolean;
     // The workspace's name, for a shared key.
     workspace?: string | null;
-    // The id the headline takes, so the choice inside can be named by it.
+    // The id the headline takes; the kind line takes it with `-kind`.
     headingId: string;
     // What kind of key the section is for ("Your own key", "Shared key: …").
     label: string;
-    // What the section says in place of its own line, for a page that isn't
-    // approving a card's calls (sharing or swapping a key).
+    headline?: string;
     line?: string;
   };
   Blocks: { default: [] };
@@ -50,6 +55,7 @@ export default class KeyAudience extends Component<Signature> {
       class='key-audience'
       @tone={{this.tone}}
       @appearance='filled-outlined'
+      aria-labelledby='{{this.kindId}} {{@headingId}}'
       data-test-key-audience={{@kind}}
       data-test-key-audience-tone={{this.tone}}
       ...attributes
@@ -57,19 +63,27 @@ export default class KeyAudience extends Component<Signature> {
       <:header>
         <div class='banner'>
           <span class='disc' aria-hidden='true'>
-            {{#if this.shared}}
+            {{#if this.visitors}}
+              <HatGlasses class='disc-icon' />
+            {{else if this.shared}}
               <Users class='disc-icon' />
             {{else}}
               <User class='disc-icon' />
             {{/if}}
           </span>
           <div class='words'>
-            <span class='eyebrow' data-test-key-audience-label>{{@label}}</span>
-            <span
-              class='headline'
-              id={{@headingId}}
-              data-test-key-audience-who
-            >{{this.headline}}</span>
+            <h2 class='heading'>
+              <span
+                class='eyebrow'
+                id={{this.kindId}}
+                data-test-key-audience-label
+              >{{@label}}</span>
+              <span
+                class='headline'
+                id={{@headingId}}
+                data-test-key-audience-who
+              >{{this.headline}}</span>
+            </h2>
             <span class='what' data-test-key-audience-what>{{this.line}}</span>
           </div>
         </div>
@@ -82,13 +96,23 @@ export default class KeyAudience extends Component<Signature> {
     <style scoped>
       .key-audience {
         --pretui-card-pad: var(--boxel-sp);
+        --key-audience-disc: var(--foreground);
+        --key-audience-disc-ink: var(--background);
       }
-      .key-audience[data-test-key-audience-tone='neutral'] {
+      .key-audience[data-tone='neutral'] {
         --pretui-card-bg: color-mix(
           in oklch,
           var(--foreground) 4%,
           var(--card)
         );
+      }
+      .key-audience[data-tone='info'] {
+        --key-audience-disc: var(--info);
+        --key-audience-disc-ink: var(--info-foreground);
+      }
+      .key-audience[data-tone='warning'] {
+        --key-audience-disc: var(--warning);
+        --key-audience-disc-ink: var(--warning-foreground);
       }
       .banner {
         display: flex;
@@ -102,8 +126,8 @@ export default class KeyAudience extends Component<Signature> {
         width: 2.5rem;
         height: 2.5rem;
         border-radius: 50%;
-        background-color: var(--pretui-tone, var(--muted-foreground));
-        color: var(--pretui-tone-on, var(--background));
+        background-color: var(--key-audience-disc);
+        color: var(--key-audience-disc-ink);
       }
       .disc-icon {
         width: 1.25rem;
@@ -114,6 +138,13 @@ export default class KeyAudience extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-5xs);
         min-width: 0;
+      }
+      .heading {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        margin: 0;
+        font: inherit;
       }
       .eyebrow {
         font-size: var(--boxel-font-size-xs);
@@ -127,7 +158,7 @@ export default class KeyAudience extends Component<Signature> {
         font-size: var(--boxel-font-size-med);
         line-height: var(--boxel-line-height-med);
         font-weight: 700;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
       }
       .what {
         font-size: var(--boxel-font-size-sm);
@@ -136,6 +167,10 @@ export default class KeyAudience extends Component<Signature> {
       }
     </style>
   </template>
+
+  get kindId() {
+    return `${this.args.headingId}-kind`;
+  }
 
   private get shared() {
     return this.args.kind === 'apiKey';
@@ -158,6 +193,9 @@ export default class KeyAudience extends Component<Signature> {
   }
 
   get headline() {
+    if (this.args.headline) {
+      return this.args.headline;
+    }
     if (!this.shared) {
       return 'Only you';
     }
@@ -179,19 +217,19 @@ export default class KeyAudience extends Component<Signature> {
         return 'Boxel uses this key only for the card’s scheduled calls you approve here. Opening the card doesn’t use it, and everyone else who uses the card chooses a key of their own.';
       }
       if (this.args.use === 'interactive') {
-        return 'Boxel uses this key only when you use the card. Everyone else who uses it chooses a key of their own.';
+        return 'Boxel uses this key for the card’s scheduled calls and whenever you use the card. Everyone else who uses it chooses a key of their own.';
       }
-      return 'Boxel uses this key only for your use of the card. Everyone else who uses it chooses a key of their own.';
+      return 'Boxel uses this key only for your calls. Everyone else who uses the card chooses a key of their own.';
     }
     if (this.pipelines) {
       return 'Boxel uses this key only for the card’s scheduled calls in this workspace. Opening the card doesn’t use it, and scheduled calls don’t count against the share’s limits. Approving replaces any key chosen for these calls before.';
     }
     if (this.visitors) {
-      return 'Boxel uses this key whenever anyone uses the card in this workspace, including people who aren’t signed in, and their calls count against the share’s limits. Approving replaces any key chosen for these calls before.';
+      return 'Boxel uses this key for the card’s scheduled calls and whenever anyone uses the card in this workspace, including people who aren’t signed in, and their calls count against the share’s limits. Approving replaces any key chosen for these calls before.';
     }
     if (this.args.use === 'interactive') {
-      return 'Boxel uses this key whenever anyone uses the card in this workspace, and their calls count against the share’s limits. Approving replaces any key chosen for these calls before.';
+      return 'Boxel uses this key for the card’s scheduled calls and whenever anyone uses the card in this workspace, and their calls count against the share’s limits. Approving replaces any key chosen for these calls before.';
     }
-    return 'Boxel uses this key for the card’s calls in this workspace, whoever makes them, in place of any key chosen for those calls before.';
+    return 'Boxel uses this key for the card’s calls in this workspace, whoever makes them.';
   }
 }

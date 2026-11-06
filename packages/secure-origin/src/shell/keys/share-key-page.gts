@@ -45,7 +45,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
-import User from '@cardstack/boxel-icons/user';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import Tag from '../../components/icons/tag.gts';
 import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
@@ -179,7 +179,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                   @orientation='horizontal'
                   @labelTag='span'
                   @label='Key'
-                  @icon={{User}}
+                  @icon={{KeyRound}}
                   data-test-share-key-key
                 >
                   <KeyTile @key={{this.choosing.key}} />

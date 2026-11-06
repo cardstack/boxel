@@ -21,7 +21,7 @@
 // drawn alike. Each slot is a tinted section of its own (`KeyAudience`),
 // headed by whom its key serves: the user alone (everyone else who uses the
 // card chooses their own), or everyone who uses the card in the workspace,
-// as "When calls run" and the share's key decide. Each tile carries a key
+// as "When calls run" and the share's key decide. Each tile carries a person
 // icon for the user's own key, a group icon for a share. The intro and the
 // done page name the same.
 //
@@ -88,8 +88,7 @@ import Warning from '../../components/icons/warning.gts';
 import { Field } from '@cardstack/pretui/components/field';
 import Globe from '../../components/icons/globe.gts';
 import BoxelInput from '../../components/input.gts';
-import User from '@cardstack/boxel-icons/user';
-import Users from '@cardstack/boxel-icons/users';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -132,6 +131,7 @@ import type { WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import KeyAudience from './key-audience.gts';
+import KeyMark from './key-mark.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
@@ -232,8 +232,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               data-test-approve-done-audience='userKey'
             >
               {{#if this.done.interactive}}
-                Only your use of this card sends your own key. Everyone else who
-                uses it chooses a key of their own.
+                Your own key is sent on the card’s scheduled calls and whenever
+                you use the card. Everyone else who uses it chooses a key of
+                their own.
               {{else}}
                 Only the card’s scheduled calls send your own key. Opening the
                 card doesn’t use it.
@@ -332,16 +333,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                       @options={{cardsOf choice.options}}
                       @value={{this.chosenIn choice.slot}}
                       @onValueChange={{fn this.choose choice.slot}}
-                      aria-labelledby='approve-slot-{{choice.slot}}'
+                      aria-labelledby='approve-slot-{{choice.slot}}-kind approve-slot-{{choice.slot}}'
                     >
                       <:media>
-                        <span class='option-media' data-kind={{choice.kind}}>
-                          {{#if (eq choice.kind 'apiKey')}}
-                            <Users class='option-icon' />
-                          {{else}}
-                            <User class='option-icon' />
-                          {{/if}}
-                        </span>
+                        <KeyMark @shared={{eq choice.kind 'apiKey'}} />
                       </:media>
                       <:default as |card|>
                         {{#let
@@ -565,7 +560,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   @orientation='horizontal'
                   @labelTag='span'
                   @label='Daily budget for {{share.label}}'
-                  @icon={{Users}}
+                  @icon={{KeyRound}}
                   data-test-approve-budget={{share.label}}
                   as |_controlId _messageId labelId|
                 >
@@ -669,27 +664,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .option-name {
         font-weight: 600;
-      }
-      .option-media {
-        display: grid;
-        place-items: center;
-        width: 2rem;
-        height: 2rem;
-        border-radius: var(--boxel-border-radius-sm);
-        background-color: var(--muted);
-        color: var(--foreground);
-      }
-      .option-media[data-kind='apiKey'] {
-        background-color: color-mix(
-          in oklch,
-          var(--pretui-info, var(--boxel-blue)) 18%,
-          var(--card)
-        );
-        color: var(--pretui-info-ink, var(--boxel-blue));
-      }
-      .option-icon {
-        width: 1.125rem;
-        height: 1.125rem;
       }
       .option-detail strong {
         font-weight: 600;

@@ -3125,6 +3125,11 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-swap-key-audience] [data-test-swap-share]')
         .exists();
       assert
+        .dom('[data-test-swap-key-audience] [data-test-key-audience-what]')
+        .hasText(
+          'The key you choose goes into this share, which keeps its label and the calls approved with it.',
+        );
+      assert
         .dom('[data-test-swap-share]')
         .includesText('no longer has direct write access to this workspace');
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');

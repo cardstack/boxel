@@ -1485,6 +1485,9 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-key-audience="apiKey"]')
       .doesNotExist('nothing says it serves the workspace');
     assert
+      .dom('[data-test-use-key-audience] [data-test-key-mark]')
+      .hasAttribute('data-test-key-mark', 'own');
+    assert
       .dom(
         '[data-test-pretui-choice-card]:has([data-test-use-key-card="Inbox"]) input',
       )
@@ -2257,7 +2260,10 @@ module('Integration | approve pages', function (hooks) {
       );
     assert
       .dom('[data-test-key-audience="userKey"]')
-      .includesText('Everyone else who uses it chooses a key of their own.');
+      .includesText(
+        'Boxel uses this key for the card’s scheduled calls and whenever you use the card. Everyone else who uses it chooses a key of their own.',
+        'an interactive binding serves the scheduled calls too',
+      );
     assert
       .dom('[data-test-key-audience="apiKey"]')
       .doesNotExist('nothing says the key serves the workspace');
@@ -2270,7 +2276,7 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-done-audience="userKey"]')
       .hasText(
-        'Only your use of this card sends your own key. Everyone else who uses it chooses a key of their own.',
+        'Your own key is sent on the card’s scheduled calls and whenever you use the card. Everyone else who uses it chooses a key of their own.',
       );
     assert.dom('[data-test-approve-done-audience="apiKey"]').doesNotExist();
     assert.dom('[data-test-approve-done-shares]').doesNotExist();
@@ -2374,6 +2380,20 @@ module('Integration | approve pages', function (hooks) {
       )
       .exists();
     assert
+      .dom('[data-test-approve-slot="userKey"] [data-test-key-mark]')
+      .hasAttribute(
+        'data-test-key-mark',
+        'own',
+        'the user’s own keys are drawn as their own',
+      );
+    assert
+      .dom('[data-test-approve-slot="apiKey"] [data-test-key-mark]')
+      .hasAttribute(
+        'data-test-key-mark',
+        'shared',
+        'shares are drawn as shared',
+      );
+    assert
       .dom('[data-test-approve-slot="apiKey"][data-test-key-audience="apiKey"]')
       .exists();
 
@@ -2463,6 +2483,37 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
+    let nameOf = (selector: string) =>
+      (find(selector)!.getAttribute('aria-labelledby') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent?.trim())
+        .join(' ');
+    let groups = [
+      ...document.querySelectorAll(
+        '[data-test-approve-slot] [role="radiogroup"]',
+      ),
+    ].map((g) =>
+      (g.getAttribute('aria-labelledby') ?? '')
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent?.trim())
+        .join(' '),
+    );
+    assert.deepEqual(
+      groups,
+      [
+        'Shared key Everyone in Team Workspace',
+        'Shared key: backup Everyone in Team Workspace',
+      ],
+      'each slot’s choice is named by its kind and whom it serves, so two shared slots are told apart',
+    );
+    assert.strictEqual(
+      nameOf('[data-test-approve-slot="apiKey:backup"]'),
+      'Shared key: backup Everyone in Team Workspace',
+      'the section is named by its heading',
+    );
+    assert
+      .dom('[data-test-approve-slot="apiKey"] h2')
+      .exists('each section has a heading');
     await click(
       '[data-test-approve-slot="apiKey"] [data-test-pretui-choice-card]:has([data-test-approve-key="Team GitHub"]) input',
     );
@@ -2591,6 +2642,13 @@ module('Integration | approve pages', function (hooks) {
       .includesText(
         'Everyone in Team Workspace',
         'the share serves everyone who uses the card in the workspace',
+      );
+    assert
+      .dom('[data-test-use-key-audience] [data-test-key-mark]')
+      .hasAttribute(
+        'data-test-key-mark',
+        'shared',
+        'the share’s key is drawn as shared',
       );
     assert.dom('[data-test-key-audience="userKey"]').doesNotExist();
     assert

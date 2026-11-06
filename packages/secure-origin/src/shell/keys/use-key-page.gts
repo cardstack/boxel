@@ -104,7 +104,10 @@ class UseKey extends Component<{
               @headingId='use-key-audience'
               data-test-use-key-audience
             >
-              <KeyTile @key={{this.choosing.key}} />
+              <KeyTile
+                @key={{this.choosing.key}}
+                @shared={{if this.choosing.share true false}}
+              />
             </KeyAudience>
             {{#if this.choosing.share}}
               <Field

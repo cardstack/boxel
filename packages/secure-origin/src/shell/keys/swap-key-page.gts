@@ -110,7 +110,8 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @label='Shared key'
               @workspace={{this.choosing.context.realm.name}}
               @anonymous={{this.keyAllowsAnonymous}}
-              @line='The key you choose takes this share’s place for everyone who uses it in the workspace, and their calls count against the share’s limits.'
+              @headline='Shared in {{this.choosing.context.realm.name}}'
+              @line='The key you choose goes into this share, which keeps its label and the calls approved with it.'
               @headingId='swap-key-audience'
               data-test-swap-key-audience
             >

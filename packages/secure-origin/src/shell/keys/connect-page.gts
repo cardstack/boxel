@@ -34,7 +34,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { Field } from '@cardstack/pretui/components/field';
-import User from '@cardstack/boxel-icons/user';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
@@ -117,7 +117,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
                 @orientation='horizontal'
                 @labelTag='span'
                 @label='Connection'
-                @icon={{User}}
+                @icon={{KeyRound}}
                 data-test-connect-connection
               >
                 <KeyTile @key={{this.choosing.connection}} />
