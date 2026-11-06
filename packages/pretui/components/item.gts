@@ -170,7 +170,7 @@ export class Item extends Component<ItemSignature> {
         .pretui-item[data-wrap='true'] .pretui-item-desc {
           overflow: visible;
           white-space: normal;
-          overflow-wrap: anywhere;
+          overflow-wrap: break-word;
         }
         .pretui-item-link {
           color: inherit;

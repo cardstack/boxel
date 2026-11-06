@@ -371,7 +371,7 @@ export default class UsageSummary extends Component<Signature> {
         grid-template-columns: minmax(0, 1fr) auto;
         column-gap: var(--boxel-sp-xs);
         row-gap: var(--boxel-sp-5xs);
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
       }
       .n {
         font-variant-numeric: tabular-nums;
