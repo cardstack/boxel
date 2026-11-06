@@ -26,7 +26,7 @@ import {
   type KeyUsage,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { navigation } from '../navigation.js';
 import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 import { keyUsePath } from '../pages.js';
@@ -94,7 +94,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         <:actions>
           {{#if this.returnsToKeys}}
             <Button
-              @kind='secondary'
+              @variant='secondary'
               data-test-share-limits-back
               {{on 'click' this.backToKeys}}
             >Back to your keys</Button>
@@ -121,8 +121,8 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
                 calls with this key until you approve it for one.</p>
               <Button
                 type='button'
-                @kind='secondary'
-                @size='extra-small'
+                @variant='secondary'
+                @size='xs'
                 data-test-share-limits-approve
                 {{on 'click' this.approveForCard}}
               >Approve for a card…</Button>
@@ -138,7 +138,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         <:actions>
           {{#if this.returnsToKeys}}
             <Button
-              @kind='secondary'
+              @variant='secondary'
               data-test-share-limits-back
               {{on 'click' this.backToKeys}}
             >Back to your keys</Button>
@@ -150,7 +150,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     {{#if this.backBelow}}
       <footer class='back'>
         <Button
-          @kind='secondary'
+          @variant='secondary'
           data-test-share-limits-back
           {{on 'click' this.backToKeys}}
         >Back to your keys</Button>

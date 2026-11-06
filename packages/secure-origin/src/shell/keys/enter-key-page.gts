@@ -53,12 +53,12 @@ import {
   type OAuthClientSettings,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { Field } from '@cardstack/pretui/components/field';
-import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
-import Tag from '../../components/icons/tag.gts';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
+import Tag from '@cardstack/boxel-icons/tag';
 import BoxelInput from '../../components/input.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
@@ -291,8 +291,8 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                     {{#if this.takesServiceAccount}}
                       <Button
                         type='button'
-                        @kind='secondary'
-                        @size='small'
+                        @variant='secondary'
+                        @size='s'
                         data-test-use-service-account
                         {{on 'click' this.usePastedKeyFile}}
                       >Use it as a Google service account</Button>
@@ -333,7 +333,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
             {{#if this.returnsToKeyPage}}
               <Button
                 type='button'
-                @kind='secondary'
+                @variant='secondary'
                 data-test-enter-key-back
                 {{on 'click' this.back}}
               >Cancel</Button>
@@ -341,14 +341,14 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
             {{#if this.connecting}}
               <Button
                 type='button'
-                @kind='primary'
+                @variant='primary'
                 data-test-go-to-connect
                 {{on 'click' this.goToConnect}}
               >Connect an account</Button>
             {{else}}
               <Button
                 type='submit'
-                @kind='primary'
+                @variant='primary'
                 @disabled={{this.submitDisabled}}
                 @loading={{this.form.saving}}
                 data-test-enter-key-save

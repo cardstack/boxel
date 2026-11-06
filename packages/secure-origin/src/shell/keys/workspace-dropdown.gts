@@ -15,8 +15,8 @@ import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
 import DropdownArrowDown from '../../components/icons/dropdown-arrow-down.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
-import { modifier } from '../../modifiers/modifier.ts';
+import { eq } from '@cardstack/pretui/helpers';
+import { modifier } from 'ember-modifier';
 
 export interface Workspace {
   url: string;
@@ -52,7 +52,7 @@ function tileOf(name: string): { letter: string; colour: number } {
 
 // Closes the list when a click lands outside the dropdown.
 const closeOnOutsideClick = modifier(
-  (element: HTMLElement, close: () => void) => {
+  (element: HTMLElement, [close]: [() => void]) => {
     let listener = (event: MouseEvent) => {
       if (!element.contains(event.target as Node)) {
         close();
@@ -69,17 +69,19 @@ const focusOnInsert = modifier((element: HTMLElement) => {
 
 // Hands the element to `keep`, so the dropdown can focus its trigger again.
 const keepElement = modifier(
-  (element: HTMLElement, keep: (element: HTMLElement) => void) => {
+  (element: HTMLElement, [keep]: [(element: HTMLElement) => void]) => {
     keep(element);
   },
 );
 
 // Keeps the highlighted option in view as the arrow keys move it.
-const scrollIntoViewWhen = modifier((element: HTMLElement, active: boolean) => {
-  if (active) {
-    element.scrollIntoView({ block: 'nearest' });
-  }
-});
+const scrollIntoViewWhen = modifier(
+  (element: HTMLElement, [active]: [boolean]) => {
+    if (active) {
+      element.scrollIntoView({ block: 'nearest' });
+    }
+  },
+);
 
 export default class WorkspaceDropdown extends Component<Signature> {
   <template>

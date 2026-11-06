@@ -15,9 +15,9 @@ import { trackedObject } from '@ember/reactive/collections';
 import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import cn from '../../helpers/cn.ts';
-import { eq, not } from '../../helpers/truth-helpers.ts';
+import { eq, not } from '@cardstack/pretui/helpers';
 
 import type { KeyBinding, KeyGrant, ListedKey } from '../../security/keys.ts';
 import { addressOf } from './workspace-dropdown.gts';
@@ -59,8 +59,8 @@ export default class KeyGrants extends Component<Signature> {
               {{/if}}
               {{#unless (this.isRemoving grant)}}
                 <Button
-                  @kind='text-only'
-                  @size='extra-small'
+                  @variant='ghost'
+                  @size='xs'
                   aria-label='Remove {{hostAndPath grant.destination}}'
                   data-test-key-grant-remove
                   {{on 'click' (fn this.startRemove grant)}}
@@ -131,14 +131,14 @@ export default class KeyGrants extends Component<Signature> {
                 </p>
                 <div class='panel-actions'>
                   <Button
-                    @kind='secondary'
-                    @size='extra-small'
+                    @variant='secondary'
+                    @size='xs'
                     data-test-key-grant-remove-cancel
                     {{on 'click' this.cancel}}
                   >Cancel</Button>
                   <Button
-                    @kind='destructive'
-                    @size='extra-small'
+                    @variant='destructive'
+                    @size='xs'
                     @loading={{this.state.removing}}
                     data-test-key-grant-remove-confirm
                     {{on 'click' (fn this.remove grant)}}

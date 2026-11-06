@@ -7,10 +7,10 @@ import { fn } from '@ember/helper';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { Field } from '@cardstack/pretui/components/field';
-import Globe from '../../components/icons/globe.gts';
+import Globe from '@cardstack/boxel-icons/globe';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 
-import { gt } from '../../helpers/truth-helpers.ts';
+import { gt } from '@cardstack/pretui/helpers';
 
 import { scopesOf, type ConnectableClient } from './context.ts';
 
