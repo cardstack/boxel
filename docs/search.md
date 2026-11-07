@@ -312,23 +312,18 @@ On the wire, `by` goes through `item.` (`collapse: 'item.variantGroup'`) and the
 
 ### Lists computed first (`let`)
 
-A query can name lists it computes before it runs, in the manner of a FLWOR `let`, and read them in its filter. Each binding is a query over the same realm (`from`: a filter, optionally a sort and a `page.size` of at most 1,000) and a search-doc path (`select`) whose values, across the rows that query finds, become the list. A list field contributes each of its values and a link its id. An `in` names the binding as `"$name"`, in the filter or inside a `_when` signal.
+A query can name lists it computes before it runs, in the manner of a FLWOR `let`, and read them in its filter. Each binding is a query over the same realm (`from`: a filter, optionally a sort and a `page.size` of at most 1,000) and a search-doc path (`select`) whose values, across the rows that query finds, become the list. A list field contributes each of its values and a link its id; a path through a link (`items.brand.name`) reads only what the link's `searchable` option puts in the search doc. An `in` names the binding as `"$name"`, in the filter or inside a `_when` signal.
 
 ```js
 let { data, meta } = await indexer.search({
   let: {
-    // the brands of the products this shopper saved
-    savedBrands: {
-      from: {
-        filter: {
-          on: wishlistRef,
-          eq: { id: 'https://my.realm/Wishlist/mine' },
-        },
-      },
-      select: 'items.brand.name',
+    // the brands of the products the shop rates 4.5 or better
+    topBrands: {
+      from: { filter: { on: productRef, range: { rating: { gte: 4.5 } } } },
+      select: 'brand.name',
     },
   },
-  filter: { on: productRef, in: { 'brand.name': '$savedBrands' } },
+  filter: { on: productRef, in: { 'brand.name': '$topBrands' } },
 });
 ```
 
