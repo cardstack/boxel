@@ -13,6 +13,7 @@ import {
   combineSearchEntryResults,
   internalKeyFor,
   parseSearchEntryQueryFromPayload,
+  policyScopedQuery,
   resolveRelativeDate,
   searchEntryWireQueryFromQuery,
   rri,
@@ -649,6 +650,221 @@ module(basename(import.meta.filename), function (hooks) {
           filter: { linkedFrom: { card: 'List/saved', field: 'items' } },
         } as any),
       /card must be an absolute card URL/,
+    );
+  });
+
+  async function addSavedList() {
+    let batch = await new IndexWriter(adapter).createBatch(
+      new URL(testRealm),
+      virtualNetwork,
+      undefined,
+      { splitPrerenderHtml: false },
+    );
+    let listURL = new URL(`${testRealm}List/saved.json`);
+    let id = (name: string) => `${testRealm}Talk/${name}`;
+    await batch.updateEntry(listURL, {
+      type: 'instance',
+      resource: {
+        id: rri(listURL.href),
+        type: 'card',
+        attributes: {},
+        meta: { adoptsFrom: { module: rri(`${testRealm}list`), name: 'List' } },
+      },
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: {
+        title: 'Saved',
+        items: [{ id: id('b') }, { id: id('f') }, { id: id('d') }],
+      },
+      markdown: 'Saved',
+      deps: new Set(),
+      displayNames: ['List'],
+      types: [],
+      isolatedHtml: '<div>saved</div>',
+    });
+    await batch.done();
+    return `${testRealm}List/saved`;
+  }
+
+  test("a let binding of one card's links runs as a join", async function (assert) {
+    let saved = await addSavedList();
+    let { titles, meta } = await search({
+      let: {
+        saved: { from: { filter: { eq: { id: saved } } }, select: 'items.id' },
+      },
+      filter: { every: [{ type: on }, { in: { id: '$saved' } }] },
+      sort: byScore,
+    });
+    assert.deepEqual(titles, ['d', 'b', 'f']);
+    assert.deepEqual(meta.lets, { saved: { strategy: 'join' } });
+  });
+
+  test('a let binding runs its query first and passes the values on', async function (assert) {
+    // The channels of talks scoring 40 or more, then every talk on them.
+    let { titles, meta } = await search({
+      let: {
+        hot: {
+          from: { filter: { on, range: { hnScore: { gte: 40 } } } },
+          select: 'channel',
+        },
+      },
+      filter: { every: [{ type: on }, { on, in: { channel: '$hot' } }] },
+      sort: byScore,
+    });
+    assert.deepEqual(titles, ['d', 'e']);
+    assert.deepEqual(meta.lets, { hot: { strategy: 'list', values: 1 } });
+
+    // A card's links read some other way than by id fall back to a list.
+    let saved = await addSavedList();
+    let listed = await search({
+      let: {
+        saved: {
+          from: { filter: { eq: { id: saved } } },
+          select: 'items.id',
+        },
+      },
+      filter: {
+        every: [
+          { type: on },
+          { not: { in: { id: '$saved' } } },
+          { on, range: { hnScore: { gte: 10 } } },
+        ],
+      },
+      sort: byScore,
+    });
+    assert.deepEqual(
+      listed.titles,
+      ['e', 'c', 'a'],
+      'negated, beside other filters',
+    );
+  });
+
+  test('a let binding reaches a _when signal, and an empty list matches nothing', async function (assert) {
+    let { titles } = await search({
+      let: {
+        loop: {
+          from: { filter: { on, eq: { channel: 'Strange Loop' } } },
+          select: 'channel',
+        },
+      },
+      filter: { type: on },
+      sort: [
+        {
+          by: '_blend',
+          of: [
+            { on, by: 'hnScore' },
+            { by: '_when', when: { on, in: { channel: '$loop' } }, weight: 3 },
+          ],
+        },
+      ],
+    });
+    assert.deepEqual(titles, ['b', 'c', 'a', 'd', 'e', 'f', 'g']);
+    let none = await search({
+      let: {
+        nobody: {
+          from: { filter: { on, eq: { channel: 'Nowhere' } } },
+          select: 'channel',
+        },
+      },
+      filter: { every: [{ type: on }, { on, in: { channel: '$nobody' } }] },
+    });
+    assert.deepEqual(none.titles, []);
+    assert.deepEqual(none.meta.lets, {
+      nobody: { strategy: 'list', values: 0 },
+    });
+  });
+
+  test('let bindings are checked, and travel the wire through item.', function (assert) {
+    let bad = (query: Record<string, unknown>, pattern: RegExp) =>
+      assert.throws(
+        () => assertQuery(query),
+        (err: unknown) =>
+          err instanceof InvalidQueryError && pattern.test(err.message),
+      );
+    bad({ filter: { in: { id: '$missing' } } }, /names no binding in let/);
+    bad({ let: { x: { select: 'a' } } }, /from must be a query/);
+    bad(
+      { let: { x: { from: { filter: { type: on } }, select: 'a b' } } },
+      /select must be a field path/,
+    );
+    bad(
+      {
+        let: {
+          x: {
+            from: { filter: { type: on }, page: { size: 5000 } },
+            select: 'a',
+          },
+        },
+      },
+      /page is \{ size \}/,
+    );
+    bad(
+      {
+        let: {
+          x: { from: { filter: { in: { id: '$y' } } }, select: 'a' },
+          y: { from: { filter: { type: on } }, select: 'a' },
+        },
+      },
+      /cannot use another binding/,
+    );
+    let parsed = parseSearchEntryQueryFromPayload({
+      let: {
+        hot: {
+          from: {
+            filter: { 'item.on': on, range: { 'item.hnScore': { gte: 40 } } },
+          },
+          select: 'item.channel',
+        },
+      },
+      filter: { 'item.on': on, in: { 'item.channel': '$hot' } },
+    });
+    assert.deepEqual(parsed.itemQuery.let, {
+      hot: {
+        from: { filter: { on, range: { hnScore: { gte: 40 } } } },
+        select: 'channel',
+      },
+    });
+    assert.deepEqual(parsed.itemQuery.filter, { on, in: { channel: '$hot' } });
+    let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
+    assert.strictEqual((wire.let as any).hot.select, 'item.channel');
+  });
+
+  test('under a policy, bindings and linkedFrom read only what the grants admit', function (assert) {
+    let grant = { on, eq: { channel: 'GOTO' } };
+    let scoped = policyScopedQuery(
+      parseSearchEntryQueryFromPayload({
+        let: {
+          hot: {
+            from: {
+              filter: { 'item.on': on, range: { 'item.hnScore': { gte: 40 } } },
+            },
+            select: 'item.channel',
+          },
+        },
+        filter: {
+          every: [
+            { 'item.on': on, in: { 'item.channel': '$hot' } },
+            { linkedFrom: { card: `${testRealm}List/saved`, field: 'items' } },
+          ],
+        },
+      }),
+      [grant],
+    );
+    let lets = scoped.itemQuery.let!;
+    assert.deepEqual(lets.hot.from.filter, {
+      every: [{ on, range: { hnScore: { gte: 40 } } }, { any: [grant] }],
+    });
+    assert.deepEqual(lets.__linkedFrom0, {
+      from: {
+        filter: {
+          every: [{ eq: { id: `${testRealm}List/saved` } }, { any: [grant] }],
+        },
+      },
+      select: 'items.id',
+    });
+    assert.notOk(
+      JSON.stringify(scoped.itemQuery.filter).includes('"linkedFrom":'),
+      'the direct join is gone',
     );
   });
 

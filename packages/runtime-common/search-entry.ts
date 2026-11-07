@@ -8,6 +8,7 @@ import {
   type Query,
   type Sort,
   type FacetCount,
+  type LetBinding,
   WHEN_SIGNAL_KEY,
 } from './query.ts';
 import {
@@ -114,6 +115,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'page',
   'facets',
   'collapse',
+  'let',
   'realms',
   'fields',
   'cardUrls',
@@ -715,6 +717,44 @@ function translateCollapse(collapse: unknown, rootAnchor: unknown): unknown {
   return out;
 }
 
+// `let` in the wire grammar: each binding's query is a wire query (field
+// paths through `item.`, its type as `item.on`), and `select` is a path
+// through `item.` too.
+function translateLets(lets: unknown): unknown {
+  if (typeof lets !== 'object' || lets == null || Array.isArray(lets)) {
+    return lets;
+  }
+  return Object.fromEntries(
+    Object.entries(lets as Record<string, any>).map(([name, b]) => {
+      if (typeof b !== 'object' || b == null) {
+        return [name, b];
+      }
+      let at = `let/${name}`;
+      let out: Record<string, unknown> = { ...b };
+      if (typeof b.select === 'string') {
+        out.select = stripItemPrefix(b.select, `${at}/select`);
+      }
+      if (b.from && typeof b.from === 'object') {
+        let from: Record<string, unknown> = { ...b.from };
+        if (b.from.filter !== undefined) {
+          from.filter = translateFilterNode(
+            b.from.filter,
+            `${at}/from/filter`,
+            {},
+          );
+        }
+        let anchor =
+          (from.filter as any)?.on ?? (from.filter as any)?.type ?? undefined;
+        if (b.from.sort !== undefined) {
+          from.sort = translateSort(b.from.sort, anchor, `${at}/from/sort`);
+        }
+        out.from = from;
+      }
+      return [name, out];
+    }),
+  );
+}
+
 export function parseSearchEntryQueryFromPayload(
   payload: unknown,
 ): SearchEntryQuery {
@@ -814,6 +854,9 @@ export function parseSearchEntryQueryFromPayload(
   }
   if (record.collapse !== undefined) {
     itemQuery.collapse = translateCollapse(record.collapse, rootAnchor);
+  }
+  if (record.let !== undefined) {
+    itemQuery.let = translateLets(record.let);
   }
   try {
     assertQuery(itemQuery);
@@ -920,11 +963,52 @@ export function policyScopedQuery(
       'a policy-scoped search needs at least one grant filter; with none, the search would run unscoped',
     );
   }
+  let lets: Record<string, LetBinding> = Object.fromEntries(
+    Object.entries(query.itemQuery.let ?? {}).map(([name, b]) => [
+      name,
+      {
+        ...b,
+        from: {
+          ...b.from,
+          filter: composePolicyScopedFilter(b.from.filter, grantFilters),
+        },
+      },
+    ]),
+  );
+  // `linkedFrom` reads its card's links directly, so under a policy it runs
+  // as a binding whose query the grants scope like any other.
+  let count = 0;
+  let rewrite = (node: Filter): Filter => {
+    if ('any' in node) return { ...node, any: node.any.map(rewrite) };
+    if ('every' in node) return { ...node, every: node.every.map(rewrite) };
+    if ('not' in node) return { ...node, not: rewrite(node.not) };
+    if ('linkedFrom' in node) {
+      let name = `__linkedFrom${count++}`;
+      lets[name] = {
+        from: {
+          filter: composePolicyScopedFilter(
+            { eq: { id: node.linkedFrom.card.replace(/\.json$/, '') } },
+            grantFilters,
+          ),
+        },
+        select: `${node.linkedFrom.field}.id`,
+      };
+      return {
+        ...(node.on ? { on: node.on } : {}),
+        in: { id: `$${name}` },
+      };
+    }
+    return node;
+  };
+  let callerFilter = query.itemQuery.filter
+    ? rewrite(query.itemQuery.filter)
+    : undefined;
   return {
     ...query,
     itemQuery: {
       ...query.itemQuery,
-      filter: composePolicyScopedFilter(query.itemQuery.filter, grantFilters),
+      filter: composePolicyScopedFilter(callerFilter, grantFilters),
+      ...(Object.keys(lets).length ? { let: lets } : {}),
     },
   };
 }
@@ -1371,6 +1455,18 @@ export interface SearchEntryWireQuery {
   page?: { number?: number; size: number; generation?: number };
   // field paths through `item.`, as in a sort
   facets?: (Facet & { by: string })[];
+  // named lists computed first (see `LetBinding`); paths through `item.`
+  let?: Record<
+    string,
+    {
+      from: {
+        filter?: SearchEntryWireFilter;
+        sort?: SearchEntryWireSortExpression[];
+        page?: { size: number };
+      };
+      select: string;
+    }
+  >;
   // one result per group; `by` through `item.` (see `Collapse`)
   collapse?: string | { by: string; 'item.on'?: CodeRef; keep?: number };
   fields?: { entry: string[] };
@@ -1462,6 +1558,25 @@ export function searchEntryWireQueryFromQuery(
       ...facet,
       by: `${ITEM_PREFIX}${facet.by}`,
     }));
+  }
+  if (query.let) {
+    wire.let = Object.fromEntries(
+      Object.entries(query.let).map(([name, b]) => [
+        name,
+        {
+          from: {
+            ...(b.from.filter
+              ? { filter: wireFilterFromFilter(b.from.filter) }
+              : {}),
+            ...(b.from.sort
+              ? { sort: (b.from.sort as Sort).map(wireSortFromSort) }
+              : {}),
+            ...(b.from.page ? { page: b.from.page } : {}),
+          },
+          select: `${ITEM_PREFIX}${b.select}`,
+        },
+      ]),
+    );
   }
   if (query.collapse) {
     let c = query.collapse;

@@ -141,11 +141,81 @@ export function collapseBy(
     : { by: collapse.by, on: collapse.on, keep: collapse.keep ?? 1 };
 }
 
+// Named lists a query computes first and uses in its filter, in the manner of
+// a FLWOR `let`: `{ let: { saved: { from: { filter }, select: 'items.id' } },
+// filter: { in: { id: '$saved' } } }`. `from` is a query over the same realm
+// (filter, sort and a page size of at most MAX_LET_ROWS); `select` is a
+// search-doc path whose values, across the rows it finds, become the list
+// (a list field contributes each value, a link its id). An `in` names the
+// binding as `"$name"`, in the filter or in a `_when` signal's filter.
+//
+// The engine joins when it can: a `from` that is one card by id, selecting
+// a link field's ids, read by an `in` on `id`, runs as `linkedFrom` inside
+// the same statement. Anything else runs `from` first and passes its values
+// (at most MAX_LET_VALUES) to the query. `meta.lets` reports which it did.
+export interface LetBinding {
+  from: { filter?: Filter; sort?: Sort; page?: { size: number } };
+  select: string;
+}
+export const MAX_LET_BINDINGS = 4;
+export const MAX_LET_ROWS = 1000;
+export const MAX_LET_VALUES = 1000;
+const LET_NAME = /^[A-Za-z_][\w]*$/;
+
+// The binding an `in` value names, or undefined for a plain list.
+export function letReference(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    value.startsWith('$') &&
+    LET_NAME.test(value.slice(1))
+    ? value.slice(1)
+    : undefined;
+}
+
+// Rewrites each `in` node that names a binding: `replace` gets the node's
+// field, the binding's name and the node, and returns the filter to run in
+// its place. Walks the filter and every `_when` signal's filter in a sort.
+export function mapLetReferences<T extends { filter?: Filter; sort?: Sort }>(
+  query: T,
+  replace: (field: string, name: string, node: InFilter) => Filter,
+): T {
+  let walk = (node: Filter): Filter => {
+    if (!node || typeof node !== 'object') return node;
+    if ('any' in node && Array.isArray(node.any))
+      return { ...node, any: node.any.map(walk) };
+    if ('every' in node && Array.isArray(node.every))
+      return { ...node, every: node.every.map(walk) };
+    if ('not' in node && node.not) return { ...node, not: walk(node.not) };
+    if ('in' in node && node.in && typeof node.in === 'object') {
+      let entries = Object.entries(node.in);
+      let ref = entries.length === 1 ? letReference(entries[0][1]) : undefined;
+      if (ref) return replace(entries[0][0], ref, node);
+    }
+    return node;
+  };
+  let out = { ...query };
+  if (query.filter) out.filter = walk(query.filter);
+  if (Array.isArray(query.sort))
+    out.sort = query.sort.map((s: any) =>
+      s && s.by === '_blend' && Array.isArray(s.of)
+        ? {
+            ...s,
+            of: s.of.map((c: any) =>
+              c && c.by === '_when' && c.when
+                ? { ...c, when: walk(c.when) }
+                : c,
+            ),
+          }
+        : s,
+    ) as Sort;
+  return out;
+}
+
 interface QueryCommon {
   filter?: Filter;
   sort?: Sort;
   facets?: Facet[];
   collapse?: Collapse;
+  let?: Record<string, LetBinding>;
   page?: {
     number?: number; // page.number is 0-based
     size: number;
@@ -717,6 +787,34 @@ export function assertQuery(
     );
   }
 
+  // Bindings first; then the rest of the query is checked with each
+  // `"$name"` stood in by an empty list, the shape it resolves to.
+  let declared = new Set<string>();
+  if ('let' in query) {
+    assertLetBindings(query.let, pointer.concat('let'));
+    declared = new Set(Object.keys(query.let));
+  }
+  if (query.filter || query.sort) {
+    let unknown: string[] = [];
+    let probe = mapLetReferences(
+      { filter: query.filter, sort: query.sort } as any,
+      (field, name, node) => {
+        if (!declared.has(name)) unknown.push(name);
+        return { ...node, in: { [field]: [] } };
+      },
+    );
+    if (unknown.length) {
+      throw new InvalidQueryError(
+        `${pointer.join('/') || '/'}: "$${unknown[0]}" names no binding in let`,
+      );
+    }
+    query = {
+      ...query,
+      ...(query.filter ? { filter: probe.filter } : {}),
+      ...(query.sort ? { sort: probe.sort } : {}),
+    };
+  }
+
   for (let [key, value] of Object.entries(query)) {
     switch (key) {
       case 'filter':
@@ -759,6 +857,8 @@ export function assertQuery(
       case 'collapse':
         assertCollapse(value, pointer.concat('collapse'));
         break;
+      case 'let':
+        break; // checked above
       case 'asData':
         if (typeof value !== 'boolean') {
           throw new InvalidQueryError(
@@ -1550,6 +1650,91 @@ function assertMatchesFilter(
 }
 
 const FACET_PATH = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
+
+function assertLetBindings(lets: any, pointer: string[]) {
+  let where = pointer.join('/') || '/';
+  if (typeof lets !== 'object' || lets == null || Array.isArray(lets)) {
+    throw new InvalidQueryError(`${where}: let must map names to bindings`);
+  }
+  let names = Object.keys(lets);
+  if (names.length === 0 || names.length > MAX_LET_BINDINGS) {
+    throw new InvalidQueryError(
+      `${where}: let takes 1 to ${MAX_LET_BINDINGS} bindings`,
+    );
+  }
+  for (let name of names) {
+    let at = pointer.concat(name);
+    let b = lets[name];
+    if (!LET_NAME.test(name)) {
+      throw new InvalidQueryError(
+        `${at.join('/')}: a binding's name is letters, digits and underscores`,
+      );
+    }
+    if (typeof b !== 'object' || b == null || Array.isArray(b)) {
+      throw new InvalidQueryError(
+        `${at.join('/')}: a binding is { from, select }`,
+      );
+    }
+    for (let key of Object.keys(b)) {
+      if (key !== 'from' && key !== 'select') {
+        throw new InvalidQueryError(
+          `${at.join('/')}: unknown binding member "${key}"`,
+        );
+      }
+    }
+    if (typeof b.select !== 'string' || !FACET_PATH.test(b.select)) {
+      throw new InvalidQueryError(
+        `${at.concat('select').join('/')}: select must be a field path, such as "items.id"`,
+      );
+    }
+    let from = b.from;
+    if (typeof from !== 'object' || from == null || Array.isArray(from)) {
+      throw new InvalidQueryError(
+        `${at.concat('from').join('/')}: from must be a query with a filter`,
+      );
+    }
+    for (let key of Object.keys(from)) {
+      if (!['filter', 'sort', 'page'].includes(key)) {
+        throw new InvalidQueryError(
+          `${at.concat('from').join('/')}: from takes filter, sort and page, not "${key}"`,
+        );
+      }
+    }
+    if (from.filter === undefined) {
+      throw new InvalidQueryError(
+        `${at.concat('from').join('/')}: from needs a filter`,
+      );
+    }
+    if (
+      from.page !== undefined &&
+      (typeof from.page !== 'object' ||
+        from.page == null ||
+        Object.keys(from.page).some((k) => k !== 'size') ||
+        !Number.isInteger(from.page.size) ||
+        from.page.size < 1 ||
+        from.page.size > MAX_LET_ROWS)
+    ) {
+      throw new InvalidQueryError(
+        `${at.concat('from', 'page').join('/')}: page is { size } from 1 to ${MAX_LET_ROWS}`,
+      );
+    }
+    let inner: any = {
+      filter: from.filter,
+      ...(from.sort ? { sort: from.sort } : {}),
+    };
+    let nested = false;
+    mapLetReferences(inner, (_f, _n, node) => {
+      nested = true;
+      return node;
+    });
+    if (nested) {
+      throw new InvalidQueryError(
+        `${at.concat('from').join('/')}: a binding's query cannot use another binding`,
+      );
+    }
+    assertQuery(inner, at.concat('from'));
+  }
+}
 
 function assertCollapse(
   collapse: any,

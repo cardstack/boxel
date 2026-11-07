@@ -1045,8 +1045,12 @@ export class SearchResource<
       return false;
     }
     // A collapsed query keeps each group's best match over the server's
-    // whole match set, which the client can't reproduce either.
-    if ((this.activeQuery as { collapse?: unknown } | undefined)?.collapse) {
+    // whole match set, and a `let` reads other cards first; the client can
+    // reproduce neither.
+    let active = this.activeQuery as
+      | { collapse?: unknown; let?: unknown }
+      | undefined;
+    if (active?.collapse || active?.let) {
       return false;
     }
     // The matcher needs the filter's refs in canonical form (the engine

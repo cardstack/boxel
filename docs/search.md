@@ -310,6 +310,35 @@ let { data, meta } = await indexer.search({
 
 On the wire, `by` goes through `item.` (`collapse: 'item.variantGroup'`) and the type is `item.on`. Live queries leave a collapsed query to the server, since the best of a group is chosen over the whole match set. Across realms each realm collapses its own results, so two realms may each return a card of the same group.
 
+### Lists computed first (`let`)
+
+A query can name lists it computes before it runs, in the manner of a FLWOR `let`, and read them in its filter. Each binding is a query over the same realm (`from`: a filter, optionally a sort and a `page.size` of at most 1,000) and a search-doc path (`select`) whose values, across the rows that query finds, become the list. A list field contributes each of its values and a link its id. An `in` names the binding as `"$name"`, in the filter or inside a `_when` signal.
+
+```js
+let { data, meta } = await indexer.search({
+  let: {
+    // the brands of the products this shopper saved
+    savedBrands: {
+      from: {
+        filter: {
+          on: wishlistRef,
+          eq: { id: 'https://my.realm/Wishlist/mine' },
+        },
+      },
+      select: 'items.brand.name',
+    },
+  },
+  filter: { on: productRef, in: { 'brand.name': '$savedBrands' } },
+});
+```
+
+The engine resolves each binding one of two ways and reports which in `meta.lets`:
+
+- **Join.** A binding whose `from` is one card by id and whose `select` is a link field's ids (`items.id`), read only by `in`s on `id`, runs as [`linkedFrom`](#filters) in the same statement: `{ "saved": { "strategy": "join" } }`.
+- **List.** Any other runs its query first, and its values (at most 1,000) stand in for each `"$name"`: `{ "hot": { "strategy": "list", "values": 12 } }`.
+
+A binding's query cannot use another binding, and a query takes at most 4. Bindings resolve within each realm a search reaches. Under a realm policy, the grants that scope the caller's query also scope every binding's query, and a `linkedFrom` runs as a binding, so a list never holds anything the caller couldn't search for. Live queries leave a query with bindings to the server. On the wire, `select` and the binding's field paths go through `item.`.
+
 ### Relative dates
 
 A `range` bound on a date field may be relative: `now`, optionally moved by whole units (`now-30d`, `now+1w`), optionally rounded down to the start of a unit in UTC (`now-30d/d`, `now/M`). The units are `s`, `m`, `h`, `d`, `w`, `M` (months) and `y`. A week starts on Monday. The bound is read when the query runs, so a saved search for "added this month" stays current. On a `DateField` or `DateTimeField` the bound is compared in the field's own format. Any other string is a literal bound.

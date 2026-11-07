@@ -105,6 +105,10 @@ import {
   isNearFilter,
   isReferenceFilterField,
   collapseBy,
+  mapLetReferences,
+  MAX_LET_ROWS,
+  MAX_LET_VALUES,
+  type LetBinding,
   isWhenSignal,
   isRelativeDate,
   resolveRelativeDate,
@@ -454,6 +458,9 @@ export interface QueryResultsMeta {
   // the total as unknown while this is set — publishing it claims a number over
   // the very rows whose absence made it unknowable.
   incomplete?: boolean;
+  // For a query with `let` bindings: how each was resolved. `join` ran in
+  // the same statement; `list` ran its query first and passed `values` on.
+  lets?: Record<string, { strategy: 'join' | 'list'; values?: number }>;
 }
 
 // A mapper for fields that can be sorted on but are not an attribute of a card
@@ -1309,7 +1316,7 @@ export class IndexQueryEngine {
   // loader that we should be using.
   private async _search(
     realmURL: URL,
-    { filter, sort, page, facets, collapse }: Query,
+    { filter, sort, page, facets, collapse, let: lets }: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' | 'all' = 'instance',
@@ -1324,6 +1331,16 @@ export class IndexQueryEngine {
     results: Partial<IndexRowWithHtml>[];
   }> {
     try {
+      let letMeta: QueryResultsMeta['lets'];
+      if (lets && Object.keys(lets).length) {
+        ({ filter, sort, letMeta } = await this.#resolveLets(
+          realmURL,
+          lets,
+          filter,
+          sort,
+          opts,
+        ));
+      }
       filter = await this.#resolveTypos(filter, realmURL);
       sort = await this.#expandRelevanceSorts(sort, filter);
       // A facet of plain values is counted with the page (one statement on
@@ -1751,6 +1768,7 @@ export class IndexQueryEngine {
               }
             : {}),
           ...(Object.keys(facetStats).length ? { facetStats } : {}),
+          ...(letMeta ? { lets: letMeta } : {}),
         },
       };
     } catch (error) {
@@ -1912,6 +1930,122 @@ export class IndexQueryEngine {
     ];
   }
 
+  // A query's `let` bindings, resolved before it is planned. A binding that
+  // names one card by id and selects a link field's ids, read only by `in`s
+  // on `id`, becomes `linkedFrom` and joins in the same statement. Any other
+  // runs its own query over this realm first, and its selected values stand
+  // in for each `"$name"`.
+  async #resolveLets(
+    realmURL: URL,
+    lets: Record<string, LetBinding>,
+    filter: Filter | undefined,
+    sort: Sort | undefined,
+    opts: QueryOptions,
+  ): Promise<{
+    filter: Filter | undefined;
+    sort: Sort | undefined;
+    letMeta: NonNullable<QueryResultsMeta['lets']>;
+  }> {
+    let letMeta: NonNullable<QueryResultsMeta['lets']> = {};
+    let readBy = new Map<string, Set<string>>();
+    mapLetReferences({ filter, sort }, (field, name, node) => {
+      let fields = readBy.get(name) ?? new Set<string>();
+      fields.add(field);
+      readBy.set(name, fields);
+      return node;
+    });
+    let resolved = new Map<
+      string,
+      { join: { card: string; field: string } } | { values: JSONTypes.Value[] }
+    >();
+    for (let [name, binding] of Object.entries(lets)) {
+      if (!readBy.has(name)) {
+        continue;
+      }
+      let join = joinableLet(binding);
+      if (join && [...readBy.get(name)!].every((field) => field === 'id')) {
+        resolved.set(name, { join });
+        letMeta[name] = { strategy: 'join' };
+        continue;
+      }
+      let values = await this.#letValues(realmURL, binding, opts);
+      resolved.set(name, { values });
+      letMeta[name] = { strategy: 'list', values: values.length };
+    }
+    let out = mapLetReferences({ filter, sort }, (field, name, node) => {
+      let r = resolved.get(name)!;
+      let on = node.on ? { on: node.on } : {};
+      return 'join' in r
+        ? ({ ...on, linkedFrom: r.join } as Filter)
+        : ({ ...on, in: { [field]: r.values } } as Filter);
+    });
+    return { filter: out.filter, sort: out.sort, letMeta };
+  }
+
+  // A binding's values: its query's rows over this realm, read at `select`
+  // in each row's search doc. A list contributes each value and a link its
+  // id; nulls are dropped and the values deduplicated.
+  async #letValues(
+    realmURL: URL,
+    binding: LetBinding,
+    opts: QueryOptions,
+  ): Promise<JSONTypes.Value[]> {
+    let { results } = await this._search(
+      realmURL,
+      {
+        filter: binding.from.filter,
+        sort: binding.from.sort,
+        page: {
+          size: Math.min(binding.from.page?.size ?? MAX_LET_ROWS, MAX_LET_ROWS),
+        },
+      },
+      { ...opts, cardUrls: undefined },
+      ['SELECT i.url AS url, ANY_VALUE(i.search_doc) AS search_doc'],
+      'instance',
+    );
+    let seen = new Set<string>();
+    let values: JSONTypes.Value[] = [];
+    let collect = (value: unknown, path: string[]) => {
+      if (value == null || values.length >= MAX_LET_VALUES) {
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((v) => collect(v, path));
+        return;
+      }
+      if (path.length > 0) {
+        if (typeof value === 'object') {
+          collect((value as Record<string, unknown>)[path[0]], path.slice(1));
+        }
+        return;
+      }
+      let leaf =
+        typeof value === 'object'
+          ? (value as Record<string, unknown>).id
+          : value;
+      if (leaf == null || typeof leaf === 'object') {
+        return;
+      }
+      let key = JSON.stringify(leaf);
+      if (!seen.has(key)) {
+        seen.add(key);
+        values.push(leaf as JSONTypes.Value);
+      }
+    };
+    for (let row of results) {
+      let doc = (row as { search_doc?: unknown }).search_doc;
+      if (typeof doc === 'string') {
+        try {
+          doc = JSON.parse(doc);
+        } catch {
+          continue;
+        }
+      }
+      collect(doc, binding.select.split('.'));
+    }
+    return values;
+  }
+
   // The narrow pass of a collapsed search: every match's key and sort
   // values, as in a paged search, plus its group's value at `collapse.by`.
   // Each group keeps its best `keep` rows by the query's order (a match with
@@ -1977,7 +2111,7 @@ export class IndexQueryEngine {
   // wrappers, each fixing one projection.
   async search(
     realmURL: URL,
-    { filter, sort, page, facets, collapse }: Query,
+    { filter, sort, page, facets, collapse, let: lets }: Query,
     opts: QueryOptions,
     projection: SearchProjection,
     // 'all' searches both `instance` and `file` rows in one query (kind is
@@ -2054,7 +2188,7 @@ export class IndexQueryEngine {
 
     return (await this._search(
       realmURL,
-      { filter, sort, page, facets, collapse },
+      { filter, sort, page, facets, collapse, let: lets },
       opts,
       selectClauseExpression,
       entryType,
@@ -2069,14 +2203,14 @@ export class IndexQueryEngine {
 
   async searchCards(
     realmURL: URL,
-    { filter, sort, page, facets, collapse }: Query,
+    { filter, sort, page, facets, collapse, let: lets }: Query,
     opts: QueryOptions = {},
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this.search(
       realmURL,
-      { filter, sort, page, facets, collapse },
+      { filter, sort, page, facets, collapse, let: lets },
       opts,
       { kind: 'dataOnly' },
     );
@@ -2090,12 +2224,12 @@ export class IndexQueryEngine {
 
   async searchFiles(
     realmURL: URL,
-    { filter, sort, page, facets, collapse }: Query,
+    { filter, sort, page, facets, collapse, let: lets }: Query,
     opts: QueryOptions = {},
   ): Promise<{ files: IndexedFile[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this._search(
       realmURL,
-      { filter, sort, page, facets, collapse },
+      { filter, sort, page, facets, collapse, let: lets },
       opts,
       [
         `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(ph.deps) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(ph.isolated_html) AS isolated_html, ANY_VALUE(ph.head_html) AS head_html, ANY_VALUE(ph.embedded_html) AS embedded_html, ANY_VALUE(ph.fitted_html) AS fitted_html, ANY_VALUE(ph.atom_html) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(ph.markdown) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(ph.generation) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
@@ -5281,6 +5415,31 @@ const RELEVANCE_SORT_KEY_NAME = '_relevance';
 // anchor among the branches of a top-level `every`.
 // A glob as a LIKE pattern: `*` is `%`, `?` is `_`, and LIKE's own
 // wildcards and escape are escaped.
+// A binding the engine can run as a join: one card named by id, selecting a
+// link field's ids (`items.id`). Its `linkedFrom` reads that card's links in
+// the same statement as the query that uses them.
+function joinableLet(
+  binding: LetBinding,
+): { card: string; field: string } | undefined {
+  if (binding.from.sort || !binding.select.endsWith('.id')) {
+    return undefined;
+  }
+  let node: any = binding.from.filter;
+  if (node && Array.isArray(node.every)) {
+    let rest = node.every.filter((n: any) => !isCardTypeFilter(n));
+    node = rest.length === 1 ? rest[0] : undefined;
+  }
+  if (!node || typeof node !== 'object') {
+    return undefined;
+  }
+  let keys = Object.keys(node).filter((k) => k !== 'on' && k !== 'type');
+  let id = keys.length === 1 && keys[0] === 'eq' ? node.eq?.id : undefined;
+  if (typeof id !== 'string' || Object.keys(node.eq).length !== 1) {
+    return undefined;
+  }
+  return { card: id, field: binding.select.slice(0, -'.id'.length) };
+}
+
 // A facet's `measure`, as the aggregate and the field it reads.
 function facetMeasureOf(
   facet: Facet,
