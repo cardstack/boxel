@@ -462,6 +462,9 @@ export interface QueryResultsMeta {
   // For a query with `let` bindings: how each was resolved. `join` ran in
   // the same statement; `list` ran its query first and passed `values` on.
   lets?: Record<string, { strategy: 'join' | 'list'; values?: number }>;
+  // Filled by the host's search resource, never by the engine: under
+  // `explain`, each result's `meta._explain` by card id.
+  explanations?: Record<string, ResultExplanation>;
 }
 
 // Per result row, under `explain`: the row's `_explain` column.

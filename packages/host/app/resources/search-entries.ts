@@ -42,6 +42,7 @@ import {
   type NamedQueryInvocation,
   type SearchEntryRendering,
   type SearchEntryWireQuery,
+  type ResultExplanation,
 } from '@cardstack/runtime-common';
 
 import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
@@ -668,7 +669,21 @@ export class SearchEntriesResource extends Resource<Args> {
           );
           this._entries.splice(0, this._entries.length, ...next);
           let realmTotals = this.realmTotalsFor(doc);
-          this._meta = realmTotals ? { ...doc.meta, realmTotals } : doc.meta;
+          // Under `explain`, each result's explanation, by card id, so a
+          // consumer reads it beside the entry without the entry changing.
+          let explanations = Object.fromEntries(
+            (doc.data ?? [])
+              .filter((r) => (r.meta as { _explain?: unknown })?._explain)
+              .map((r) => [
+                r.id,
+                (r.meta as { _explain: ResultExplanation })._explain,
+              ]),
+          );
+          this._meta = {
+            ...doc.meta,
+            ...(realmTotals ? { realmTotals } : {}),
+            ...(Object.keys(explanations).length ? { explanations } : {}),
+          };
           this._entriesQuery = query;
           this.hasCompletedFullRun = true;
         }
