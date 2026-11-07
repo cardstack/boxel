@@ -1,11 +1,14 @@
 // Where a key goes, wherever the window shows one: the registrable domain in
 // large type, which is who a person is dealing with, and beneath it what the
 // request does there in plain words, the full host and path, then the card
-// definition and realm, by name and address, the request comes from.
+// definition and realm, by name and address, the request comes from, on a
+// Pret UI Card.
 // Every part is the realm server's description of the operation's
 // declaration. An operation's label is the author's own words and never
 // stands in for the host.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import { Card } from '@cardstack/pretui/components/card';
 
 import type { DestinationDisplay } from '../../security/keys.ts';
 
@@ -23,7 +26,7 @@ interface Signature {
 }
 
 const Destination: TemplateOnlyComponent<Signature> = <template>
-  <div class='destination' data-test-destination>
+  <Card class='destination' data-test-destination>
     <div class='domain' data-test-destination-domain>
       {{@destination.registrableDomain}}
     </div>
@@ -45,14 +48,13 @@ const Destination: TemplateOnlyComponent<Signature> = <template>
       <span class='name' data-test-destination-realm>{{@realm}}</span>
       (<span data-test-destination-realm-address>{{addressOf @realmURL}}</span>)
     </div>
-  </div>
+  </Card>
 
   <style scoped>
     .destination {
-      padding: var(--boxel-sp-sm) var(--boxel-sp);
-      border-radius: var(--boxel-border-radius);
-      background-color: var(--card, var(--background));
-      box-shadow: 0 0 0 1px var(--border);
+      --pretui-card-pad: var(--boxel-sp-sm) var(--boxel-sp);
+      --pretui-card-radius: var(--boxel-border-radius);
+      font-size: var(--boxel-font-size-sm);
       overflow-wrap: anywhere;
     }
     .domain {

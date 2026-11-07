@@ -11,6 +11,7 @@ import { Button } from '@cardstack/pretui/components/button';
 import { Field } from '@cardstack/pretui/components/field';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
+import { EmptyState } from '@cardstack/pretui/components/empty-state';
 
 import { gt } from '@cardstack/pretui/helpers';
 
@@ -69,15 +70,20 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
           {{/let}}
         </RadioCard>
       {{else}}
-        <p class='empty' data-test-key-picker-empty>You haven’t added any keys
-          yet. Add one on your key page first, then share it from there.</p>
-        <Button
-          class='go-to-keys'
-          type='button'
-          @variant='secondary'
-          data-test-key-picker-go-to-keys
-          {{on 'click' @onGoToKeys}}
-        >Go to your keys</Button>
+        <EmptyState
+          @size='s'
+          @title='You haven’t added any keys yet.'
+          @message='Add one on your key page first, then share it from there.'
+          data-test-key-picker-empty
+        >
+          <:action><Button
+              class='go-to-keys'
+              type='button'
+              @variant='secondary'
+              data-test-key-picker-go-to-keys
+              {{on 'click' @onGoToKeys}}
+            >Go to your keys</Button></:action>
+        </EmptyState>
       {{/if}}
     </div>
   </Field>
@@ -89,12 +95,6 @@ const KeyPicker: TemplateOnlyComponent<Signature> = <template>
       min-width: 0;
     }
     .prompt {
-      margin: 0;
-      font-size: var(--boxel-font-size-sm);
-      line-height: var(--boxel-line-height-sm);
-      color: var(--muted-foreground);
-    }
-    .empty {
       margin: 0;
       font-size: var(--boxel-font-size-sm);
       line-height: var(--boxel-line-height-sm);

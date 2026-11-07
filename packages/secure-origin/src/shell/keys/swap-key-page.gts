@@ -23,6 +23,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import { Button } from '@cardstack/pretui/components/button';
 import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
 import Tag from '@cardstack/boxel-icons/tag';
 import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { navigation } from '../navigation.js';
@@ -177,9 +178,9 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               </Field>
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
@@ -239,12 +240,6 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
-      }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
       }
     </style>
   </template>
