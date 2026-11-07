@@ -233,6 +233,57 @@ async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   });
 }
 
+// The workspace picker is Pret UI's Select: its trigger, and the options of
+// its list, which renders in the dropdown's wormhole.
+const WORKSPACE_TRIGGER =
+  '[data-test-workspace-dropdown] [data-test-pretui-select-trigger]';
+const OPTION_META = '[data-test-pretui-select-option-meta]';
+
+// The options of the open workspace list, which renders outside the test's
+// root element: those of the listbox the open list's search field controls,
+// since a list just closed can still be leaving the page.
+function workspaceOptions(): HTMLElement[] {
+  let listbox = workspaceSearch()?.getAttribute('aria-controls');
+  return listbox
+    ? [
+        ...document.querySelectorAll<HTMLElement>(
+          `#${CSS.escape(listbox)} [role="option"]`,
+        ),
+      ]
+    : [];
+}
+
+// The option of the open workspace list named `name`.
+function workspaceOption(name: string): HTMLElement {
+  let option = workspaceOptions().find(
+    (o) =>
+      o
+        .querySelector('[data-test-pretui-select-option]')
+        ?.textContent?.trim() === name,
+  );
+  if (!option) {
+    throw new Error(`no workspace option named ${name}`);
+  }
+  return option;
+}
+
+// The open workspace list's search field: the last one, since a list just
+// closed can still be leaving the page.
+function workspaceSearch(): HTMLElement {
+  return [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-test-pretui-select-search-input]',
+    ),
+  ].at(-1)!;
+}
+
+// The option the search field names as highlighted.
+function activeOption(): HTMLElement | null {
+  return document.getElementById(
+    workspaceSearch().getAttribute('aria-activedescendant') ?? '',
+  );
+}
+
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
   setupWaitedBrowserWork(hooks);
@@ -2649,40 +2700,27 @@ module('Integration | key pages', function (hooks) {
         .hasValue('Maps', 'labelled with its key’s name until one is typed');
       assert.dom('[data-test-share-key-save]').isDisabled();
 
-      await click('[data-test-workspace-dropdown-trigger]');
-      assert.dom('[data-test-workspace-option]').exists({ count: 2 });
-      let search = '[data-test-workspace-dropdown-search]';
-      assert.dom(search).hasAttribute('role', 'combobox');
+      await click(WORKSPACE_TRIGGER);
+      assert.strictEqual(workspaceOptions().length, 2);
+      assert.dom(workspaceSearch()).hasAttribute('role', 'combobox');
       assert
-        .dom(search)
-        .hasAttribute(
-          'aria-activedescendant',
-          'workspace-option-0',
+        .dom(activeOption())
+        .hasText(
+          'Dashboard',
           'the highlighted option is named for a screen reader',
         );
-      await triggerKeyEvent(search, 'keydown', 'ArrowDown');
+      await triggerKeyEvent(workspaceSearch(), 'keydown', 'ArrowDown');
+      assert.dom(activeOption()).hasText('Team Workspace');
+      await triggerKeyEvent(workspaceSearch(), 'keydown', 'Escape');
       assert
-        .dom(search)
-        .hasAttribute('aria-activedescendant', 'workspace-option-1');
-      assert
-        .dom('#workspace-option-1')
-        .hasAttribute('data-test-workspace-option', 'Team Workspace');
-      await triggerKeyEvent(search, 'keydown', 'Escape');
-      assert.dom('[data-test-workspace-dropdown-content]').doesNotExist();
-      assert
-        .dom('[data-test-workspace-dropdown-trigger]')
-        .isFocused('closing from the keyboard puts focus back on the trigger');
+        .dom(WORKSPACE_TRIGGER)
+        .hasAttribute('aria-expanded', 'false', 'Escape closes the list');
 
-      await click('[data-test-workspace-dropdown-trigger]');
-      await fillIn(search, 'team');
-      assert.dom('[data-test-workspace-option]').exists({ count: 1 });
-      await triggerKeyEvent(search, 'keydown', 'Enter');
-      assert
-        .dom('[data-test-workspace-dropdown-selected]')
-        .hasText('Team Workspace');
-      assert
-        .dom('[data-test-workspace-dropdown-trigger]')
-        .isFocused('as does choosing from it');
+      await click(WORKSPACE_TRIGGER);
+      await fillIn(workspaceSearch(), 'team');
+      assert.strictEqual(workspaceOptions().length, 1);
+      await triggerKeyEvent(workspaceSearch(), 'keydown', 'Enter');
+      assert.dom(WORKSPACE_TRIGGER).hasText('Team Workspace');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -2732,8 +2770,8 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-share-key-intro="signed-in"]')
         .exists('until a workspace is picked, nothing is said of anyone else');
-      await click('[data-test-workspace-dropdown-trigger]');
-      await click('[data-test-workspace-option="Team Workspace"]');
+      await click(WORKSPACE_TRIGGER);
+      await click(workspaceOption('Team Workspace'));
       assert
         .dom('[data-test-share-key-intro="anyone"] strong')
         .hasText('and so will people who aren’t signed in');
@@ -2750,6 +2788,19 @@ module('Integration | key pages', function (hooks) {
         requests.some((r) => r.path === '_key-shares'),
         'nothing is shared',
       );
+    });
+
+    test('with no workspace the user writes, the share page says so in place of the picker', async function (assert) {
+      serve({
+        'GET _secure-window/realms': () => json(200, { data: [] }),
+      });
+      visitShell('keys/key-2/share');
+      await render(SharePage);
+      await waitFor('[data-test-workspace-dropdown-no-results]');
+      assert
+        .dom('[data-test-workspace-dropdown-no-results]')
+        .hasText('You don’t edit any workspace you could share a key with.');
+      assert.dom('[data-test-workspace-dropdown]').doesNotExist();
     });
 
     test('two workspaces with the same name are told apart by their addresses', async function (assert) {
@@ -2774,27 +2825,25 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys/key-2/share');
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
-      await click('[data-test-workspace-dropdown-trigger]');
+      await click(WORKSPACE_TRIGGER);
       assert
-        .dom(
-          '[data-test-workspace-option="Dashboard"] [data-test-workspace-address]',
-        )
+        .dom(OPTION_META, workspaceOption('Dashboard'))
         .doesNotExist('a name of its own needs no address');
       assert.deepEqual(
         [
-          ...document.querySelectorAll(
-            '[data-test-workspace-option="Team Workspace"] [data-test-workspace-address]',
-          ),
+          ...workspaceOptions().flatMap((option) => [
+            ...option.querySelectorAll(OPTION_META),
+          ]),
         ].map((e) => e.textContent?.trim()),
         [OTHER, REALM].map((url) => url.replace('https://', '')),
       );
       await click(
-        [...document.querySelectorAll('[data-test-workspace-option]')].find(
-          (e) => e.textContent?.includes(OTHER.replace('https://', '')),
+        workspaceOptions().find((e) =>
+          e.textContent?.includes(OTHER.replace('https://', '')),
         )!,
       );
       assert
-        .dom('[data-test-workspace-address]')
+        .dom(`${WORKSPACE_TRIGGER} ${OPTION_META}`)
         .hasText(OTHER.replace('https://', ''));
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -2825,7 +2874,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-key-picker-prompt]')
         .doesNotHaveClass('visually-hidden');
-      assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
+      assert.dom(WORKSPACE_TRIGGER).doesNotExist();
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       await click(
         '[data-test-pretui-choice-card]:has([data-test-key-choice="Maps"]) input',

@@ -57,7 +57,7 @@ import { Button } from '@cardstack/pretui/components/button';
 import { Field } from '@cardstack/pretui/components/field';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import Tag from '@cardstack/boxel-icons/tag';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import { eq } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -268,10 +268,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                         data-test-key-field='client-id'
                         as |controlId|
                       >
-                        <BoxelInput
-                          @id={{controlId}}
+                        <Input
+                          @controlId={{controlId}}
                           @type='text'
-                          @autocomplete='off'
+                          autocomplete='off'
                           @placeholder='The app’s Client ID, shown on the site'
                           @value={{this.form.clientId}}
                           @onInput={{this.setClientId}}

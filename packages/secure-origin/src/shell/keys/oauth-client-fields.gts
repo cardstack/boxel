@@ -11,7 +11,6 @@
 // The API addresses decide only where connect mode offers the app: where a
 // connection's tokens may go is granted when an operation using it is
 // approved.
-import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
 
@@ -20,7 +19,8 @@ import Globe from '@cardstack/boxel-icons/globe';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
+import { Textarea } from '@cardstack/pretui/components/textarea';
 
 import { readConfig } from '../../security/session.js';
 
@@ -116,10 +116,10 @@ export default class OAuthClientFields extends Component<Signature> {
         as |controlId|
       >
         <div class='with-hint'>
-          <BoxelInput
-            @id={{controlId}}
+          <Input
+            @controlId={{controlId}}
             @type='url'
-            @autocomplete='off'
+            autocomplete='off'
             @placeholder='https://example.com/oauth/authorize'
             @value={{@form.authorizeUrl}}
             @onInput={{this.setAuthorizeUrl}}
@@ -143,10 +143,10 @@ export default class OAuthClientFields extends Component<Signature> {
       as |controlId|
     >
       <div class='with-hint'>
-        <BoxelInput
-          @id={{controlId}}
+        <Input
+          @controlId={{controlId}}
           @type='url'
-          @autocomplete='off'
+          autocomplete='off'
           @placeholder='https://example.com/oauth/token'
           @value={{@form.tokenUrl}}
           @onInput={{this.setTokenUrl}}
@@ -167,10 +167,10 @@ export default class OAuthClientFields extends Component<Signature> {
       as |controlId|
     >
       <div class='with-hint'>
-        <BoxelInput
-          @id={{controlId}}
+        <Input
+          @controlId={{controlId}}
           @type='text'
-          @autocomplete='off'
+          autocomplete='off'
           @placeholder='For example: read:user'
           @value={{@form.scopes}}
           @onInput={{this.setScopes}}
@@ -192,18 +192,18 @@ export default class OAuthClientFields extends Component<Signature> {
       as |controlId|
     >
       <div class='with-hint'>
-        <textarea
-          id={{controlId}}
-          class='api-hosts'
-          name='api-hosts'
-          rows='2'
-          autocomplete='off'
-          spellcheck='false'
-          placeholder='https://api.example.com/'
-          value={{@form.apiHosts}}
-          data-test-oauth-api-hosts
-          {{on 'input' this.setApiHosts}}
-        ></textarea>
+        <div class='api-hosts'>
+          <Textarea
+            @controlId={{controlId}}
+            @placeholder='https://api.example.com/'
+            @value={{@form.apiHosts}}
+            @onInput={{this.setApiHosts}}
+            name='api-hosts'
+            autocomplete='off'
+            spellcheck='false'
+            data-test-oauth-api-hosts
+          />
+        </div>
         <span class='hint'>The addresses of the site’s API this app is for, one
           per line. When a card needs to reach one of them, Boxel offers this
           app for signing in.</span>
@@ -247,30 +247,9 @@ export default class OAuthClientFields extends Component<Signature> {
         color: var(--muted-foreground, var(--boxel-450));
         font-size: var(--boxel-font-size-xs);
       }
-      /* BoxelInput's look, for the one field that takes several lines. */
+      /* The addresses read as code; the field takes the face it inherits. */
       .api-hosts {
-        box-sizing: border-box;
-        width: 100%;
-        min-width: 0;
-        min-height: var(--boxel-form-control-height);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--background, var(--boxel-light));
-        color: var(--foreground, var(--boxel-dark));
-        border: 1px solid var(--border, var(--boxel-form-control-border-color));
-        border-radius: var(--boxel-form-control-border-radius);
-        box-shadow: var(--boxel-form-control-box-shadow);
-        outline: 1px solid transparent;
         font-family: var(--boxel-monospace-font-family);
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        resize: vertical;
-      }
-      .api-hosts:focus-visible {
-        outline-color: var(--ring, var(--boxel-highlight));
-        border-color: var(--ring, var(--boxel-highlight));
-      }
-      .api-hosts::placeholder {
-        color: var(--muted-foreground);
       }
     </style>
   </template>
@@ -287,8 +266,8 @@ export default class OAuthClientFields extends Component<Signature> {
   private setScopes = (value: string) => this.args.onChange('scopes', value);
   private setTokenAuth = (value: string) =>
     this.args.onChange('tokenAuth', value);
-  private setApiHosts = (event: Event) =>
-    this.args.onChange('apiHosts', (event.target as HTMLTextAreaElement).value);
+  private setApiHosts = (value: string) =>
+    this.args.onChange('apiHosts', value);
 }
 
 // Where the site sends people back after they sign in: the realm server's own

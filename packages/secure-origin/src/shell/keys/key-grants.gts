@@ -20,7 +20,7 @@ import cn from '../../helpers/cn.ts';
 import { eq, not } from '@cardstack/pretui/helpers';
 
 import type { KeyBinding, KeyGrant, ListedKey } from '../../security/keys.ts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: {

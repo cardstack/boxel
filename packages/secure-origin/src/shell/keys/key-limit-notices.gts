@@ -20,7 +20,7 @@ import { StatusChip } from '@cardstack/pretui/components/status-chip';
 import { Button } from '@cardstack/pretui/components/button';
 import type { KeyLimitNotice } from '../../security/keys.ts';
 
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: {

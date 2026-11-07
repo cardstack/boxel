@@ -15,6 +15,7 @@
 // Pretui — Input's field style for the typed inputs built on BoxelInput
 // (Email, Number, Password, Phone, Search, Url).
 import { htmlSafe } from '@ember/template';
+import type { KeptProperty } from './keep-style';
 
 // ── Typed inputs ─────────────────────────────────────────────────────────
 // Each rides BoxelInput's machinery for its native type and adds the one
@@ -32,7 +33,42 @@ import { htmlSafe } from '@ember/template';
 // The inline inset is left to the wrapper's --boxel-sp-sm and
 // --boxel-input-padding-inline-end, so BoxelInput can reserve the validation
 // icon's column. A control that pads around its own icon or button (Search's
-// magnifier, Password's reveal) adds that side's padding to TYPED_BLOCK_RULES.
-export const TYPED_BLOCK_RULES =
-  'font: inherit; letter-spacing: inherit; line-height: var(--boxel-form-control-line-height-sm); padding-block: 0.25rem;';
+// magnifier, Password's reveal) adds that side's padding to TYPED_PROPERTIES.
+//
+// The same rules come two ways. TYPED_PROPERTIES is the list `keepStyle`
+// writes through the CSSOM, for a control that renders no `style` attribute,
+// which is what a control the secure origin ships must do (its policy refuses
+// one). TYPED_BLOCK_RULES and TYPED_FONT are those declarations as a `style`
+// string, for the typed inputs that still bind one.
+
+export const TYPED_PROPERTIES: KeptProperty[] = [
+  { property: 'font', value: 'inherit', strength: 'arg' },
+  { property: 'letter-spacing', value: 'inherit', strength: 'arg' },
+  {
+    property: 'line-height',
+    value: 'var(--boxel-form-control-line-height-sm)',
+    strength: 'arg',
+  },
+  { property: 'padding-block', value: '0.25rem', strength: 'arg' },
+];
+
+// TYPED_PROPERTIES with more of a control's own properties after them.
+export function typedProperties(
+  more: Record<string, string> = {},
+): KeptProperty[] {
+  return [
+    ...TYPED_PROPERTIES,
+    ...Object.entries(more).map(
+      ([property, value]): KeptProperty => ({
+        property,
+        value,
+        strength: 'arg',
+      }),
+    ),
+  ];
+}
+
+export const TYPED_BLOCK_RULES = TYPED_PROPERTIES.map(
+  ({ property, value }) => `${property}: ${value};`,
+).join(' ');
 export const TYPED_FONT = htmlSafe(TYPED_BLOCK_RULES);

@@ -49,7 +49,7 @@ import KeyRound from '@cardstack/boxel-icons/key-round';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import Tag from '@cardstack/boxel-icons/tag';
 import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
@@ -73,7 +73,8 @@ import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedForShare } from './opened-for.ts';
-import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
+import WorkspacePicker from './workspace-picker.gts';
+import { addressOf } from './workspaces.ts';
 import { anonymousCapsClause } from './anonymous-caps.ts';
 
 interface Realm {
@@ -202,11 +203,12 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                   data-test-realm-picker
                   as |_controlId _messageId labelId|
                 >
-                  <WorkspaceDropdown
+                  <WorkspacePicker
                     @workspaces={{this.form.realms}}
                     @selected={{this.form.realm}}
                     @onSelect={{this.selectRealm}}
                     @labelId={{labelId}}
+                    @emptyMessage='You don’t edit any workspace you could share a key with.'
                   />
                 </Field>
               {{/unless}}
@@ -218,10 +220,10 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 data-test-key-field='label'
                 as |controlId|
               >
-                <BoxelInput
-                  @id={{controlId}}
+                <Input
+                  @controlId={{controlId}}
                   @type='text'
-                  @autocomplete='off'
+                  autocomplete='off'
                   @placeholder='What people with access to the workspace see it as'
                   @value={{this.form.label}}
                   @onInput={{this.setLabel}}

@@ -288,6 +288,33 @@ async function close(server: Server | undefined) {
   }
 }
 
+// What the stubbed realm server lists for a signed-in window: one key, and
+// two workspaces to share it into.
+const POLICY_TEST_KEY = {
+  type: 'user-key',
+  id: 'key-1',
+  attributes: {
+    name: 'Weather service',
+    kind: 'static',
+    state: 'active',
+    createdAt: '2026-10-01T12:00:00.000Z',
+    updatedAt: '2026-10-01T12:00:00.000Z',
+    anonymous: false,
+    anonymousDailyCap: null,
+    anonymousMonthlyCap: null,
+    usedWith: [],
+    sharedInto: [],
+  },
+};
+const POLICY_TEST_REALMS = [
+  ['https://realm-server.test/example-user/notes/', 'Notes'],
+  ['https://realm-server.test/example-team/notes/', 'Notes'],
+].map(([id, name]) => ({
+  type: 'secure-window-realm',
+  id,
+  attributes: { name },
+}));
+
 module(basename(import.meta.filename), function (hooks) {
   let browser: Browser;
   let page: Page;
@@ -298,12 +325,41 @@ module(basename(import.meta.filename), function (hooks) {
   let appOrigin: string;
 
   hooks.before(async function () {
-    // The realm server and the Matrix server the pages talk to. Neither has
-    // anything to say: a page that can't reach one still renders, and a
+    // The realm server and the Matrix server the pages talk to. They answer
+    // only what draws the parts of a page that come and go — a key's share
+    // page with its workspaces to pick from, and a username being checked —
+    // and nothing else: a page that can't reach one still renders, and a
     // request to one is within the policy either way.
-    let api = await listen((_req, res) => {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end('{}');
+    let api = await listen((req, res) => {
+      let cors = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers':
+          'authorization, content-type, x-boxel-logging-correlation-id',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      };
+      let answer = (status: number, body?: unknown) => {
+        res.writeHead(status, {
+          ...cors,
+          'Content-Type': 'application/vnd.api+json',
+        });
+        res.end(body === undefined ? '' : JSON.stringify(body));
+      };
+      let { pathname } = new URL(req.url ?? '/', 'http://localhost');
+      if (req.method === 'OPTIONS') {
+        return answer(204);
+      }
+      if (req.method === 'GET' && pathname === '/_user-keys') {
+        return answer(200, { data: [POLICY_TEST_KEY] });
+      }
+      if (req.method === 'GET' && pathname === '/_secure-window/realms') {
+        return answer(200, { data: POLICY_TEST_REALMS });
+      }
+      if (req.method === 'GET' && pathname.endsWith('/register/available')) {
+        // Long enough for the page to show that it is checking.
+        setTimeout(() => answer(200, { available: true }), 3000);
+        return;
+      }
+      answer(404, {});
     });
     apiServer = api.server;
     let apiURL = new URL(`http://localhost:${api.port}/`);
@@ -667,6 +723,65 @@ module(basename(import.meta.filename), function (hooks) {
       );
     }
   }
+
+  test('a workspace picker opened and a username being checked run under the policy', async function (assert) {
+    // The workspace list renders in the dropdown's wormhole, and the
+    // username's spinner only while the check is out: neither is on a page
+    // as it loads.
+    await page.goto(`${secureOrigin}/secure?mode=none`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.evaluate(() =>
+      localStorage.setItem(
+        'boxel-secure-session',
+        JSON.stringify({
+          token: 'policy-test',
+          user: '@someone:example.test',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+      ),
+    );
+    await page.goto(`${secureOrigin}/secure/keys/key-1/share`, {
+      waitUntil: 'networkidle0',
+    });
+    let trigger =
+      '[data-test-workspace-dropdown] [data-test-pretui-select-trigger]';
+    await page.waitForSelector(trigger, { timeout: 10000 });
+    await page.click(trigger);
+    await page.waitForSelector('[data-test-pretui-select-search-input]', {
+      timeout: 10000,
+    });
+    await page.type('[data-test-pretui-select-search-input]', 'not');
+    assert.strictEqual(
+      await page.$$eval(
+        '#ember-basic-dropdown-wormhole [role="option"]',
+        (options) => options.length,
+      ),
+      2,
+      'the list is open',
+    );
+    assert.deepEqual(
+      await violationsIn(page),
+      [],
+      'the workspace list open: no violation',
+    );
+    await page.evaluate(() => localStorage.clear());
+
+    await page.goto(`${secureOrigin}/secure/register`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.type('[data-test-username-field] input', 'someone-new');
+    await page.focus('[data-test-name-field]');
+    await page.waitForSelector(
+      '[data-test-username-field] [data-test-loading-indicator]',
+      { timeout: 10000 },
+    );
+    assert.deepEqual(
+      await violationsIn(page),
+      [],
+      'a username being checked: no violation',
+    );
+  });
 
   test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
     // Every page's stylesheet ships with the shell, so this one page holds

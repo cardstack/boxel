@@ -15,7 +15,10 @@ import { Field } from '@cardstack/pretui/components/field';
 import Globe from '@cardstack/boxel-icons/globe';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '@cardstack/boxel-icons/tag';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
+import { Textarea } from '@cardstack/pretui/components/textarea';
+
+import { fitContent } from '../../modifiers/fit-content.ts';
 
 import type { ServiceAccountDetails } from './context.ts';
 import type { ServiceAccountEntry } from './service-account-entry.ts';
@@ -108,10 +111,10 @@ export default class ServiceAccountFields extends Component<Signature> {
       as |controlId|
     >
       <div class='with-hint'>
-        <BoxelInput
-          @id={{controlId}}
+        <Input
+          @controlId={{controlId}}
           @type='email'
-          @autocomplete='off'
+          autocomplete='off'
           @placeholder='Optional: someone@your-domain.com'
           @value={{@entry.subject}}
           @onInput={{this.setSubject}}
@@ -131,16 +134,16 @@ export default class ServiceAccountFields extends Component<Signature> {
       as |controlId|
     >
       <div class='with-hint'>
-        <BoxelInput
-          @id={{controlId}}
-          @type='textarea'
-          @autocomplete='off'
+        <Textarea
+          @controlId={{controlId}}
+          autocomplete='off'
           @placeholder='https://www.googleapis.com/auth/spreadsheets'
           @value={{@entry.scopes}}
           @onInput={{this.setScopes}}
           name='service-account-scopes'
           spellcheck='false'
           data-test-service-account-scopes
+          {{fitContent @entry.scopes}}
         />
         <p class='hint'>What its tokens may do, one per line, or separated by
           spaces.</p>

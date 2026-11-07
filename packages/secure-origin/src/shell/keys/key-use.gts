@@ -34,7 +34,7 @@ import { eq } from '@cardstack/pretui/helpers';
 
 import { anonymousUseSummary } from './anonymous-use-fields.gts';
 import type { ListedKey, SharedWorkspace } from './context.ts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Signature {
   Args: {
