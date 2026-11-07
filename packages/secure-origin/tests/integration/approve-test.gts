@@ -160,6 +160,42 @@ function batch(attributes: Record<string, unknown> = {}) {
   };
 }
 
+// The batch as the realm server answers it, with `fillers` naming which keys
+// and shares fill each slot. A batch that doesn't name them has every key
+// fill each `userKey` slot and every share each `apiKey` one, for either use.
+function withFillers(attributes: Record<string, any>) {
+  if (attributes.fillers) {
+    return attributes;
+  }
+  let fill: Record<string, string[]> = {};
+  for (let group of attributes.groups ?? []) {
+    for (let operation of group.operations) {
+      for (let slot of operation.slots) {
+        fill[slot.slot] = (
+          slot.key === 'userKey' ? attributes.keys : attributes.shares
+        ).map((k: { id: string }) => k.id);
+      }
+    }
+  }
+  return { ...attributes, fillers: { interactive: fill, pipelines: fill } };
+}
+
+// A served batch answer whose attributes a test changed after they were
+// served, with `fillers` worked out again for what it holds.
+function refilled(answer: Answer): Answer {
+  let doc = answer.body as { data: { attributes: Record<string, any> } };
+  doc.data.attributes = withFillers({
+    ...doc.data.attributes,
+    fillers: undefined,
+  });
+  return answer;
+}
+
+// The same slots filled the same way for either use.
+function filledBy(slot: string, ids: string[]) {
+  return { interactive: { [slot]: ids }, pipelines: { [slot]: ids } };
+}
+
 function context() {
   return json(200, {
     data: {
@@ -224,7 +260,9 @@ module('Integration | approve pages', function (hooks) {
       'GET _secure-session': () => ({ status: 204 }),
       'POST _secure-window/context': () => context(),
       'POST _key-bindings/batch': () =>
-        json(200, { data: { type: 'key-binding-batch', attributes: batch() } }),
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: withFillers(batch()) },
+        }),
       'POST _key-bindings': () =>
         json(201, { data: [], meta: { batchId: 'b' } }),
     };
@@ -624,7 +662,7 @@ module('Integration | approve pages', function (hooks) {
           json(200, {
             data: {
               type: 'key-binding-batch',
-              attributes: batch({ groups: [] }),
+              attributes: withFillers(batch({ groups: [] })),
             },
           }),
       });
@@ -742,10 +780,12 @@ module('Integration | approve pages', function (hooks) {
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch({
-              review: true,
-              groups: [{ ...batch().groups[0], operations: [changed] }],
-            }),
+            attributes: withFillers(
+              batch({
+                review: true,
+                groups: [{ ...batch().groups[0], operations: [changed] }],
+              }),
+            ),
           },
         }),
     });
@@ -782,7 +822,7 @@ module('Integration | approve pages', function (hooks) {
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch({ remaining: 3 }),
+            attributes: withFillers(batch({ remaining: 3 })),
           },
         }),
     });
@@ -800,7 +840,7 @@ module('Integration | approve pages', function (hooks) {
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch({ groups: [] }),
+            attributes: withFillers(batch({ groups: [] })),
           },
         }),
     });
@@ -821,7 +861,7 @@ module('Integration | approve pages', function (hooks) {
       'POST _key-bindings/batch': () => {
         answered++;
         return json(200, {
-          data: { type: 'key-binding-batch', attributes: batch() },
+          data: { type: 'key-binding-batch', attributes: withFillers(batch()) },
         });
       },
     });
@@ -865,22 +905,14 @@ module('Integration | approve pages', function (hooks) {
     );
   });
 
-  test('a slot that declares its kind of key offers only keys of that kind', async function (assert) {
+  test('a slot offers only the keys the realm server names as filling it', async function (assert) {
     let declared = batch();
-    let [graphql] = declared.groups as { operations: any[] }[];
-    graphql!.operations[1] = {
-      ...graphql!.operations[1],
-      slots: graphql!.operations[1].slots.map((slot: object) => ({
-        ...slot,
-        keyKind: 'oauth',
-      })),
-    };
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: {
+            attributes: withFillers({
               ...declared,
               keys: [
                 ...declared.keys,
@@ -892,7 +924,8 @@ module('Integration | approve pages', function (hooks) {
                   covers: [],
                 },
               ],
-            },
+              fillers: filledBy('userKey', ['key-conn']),
+            }),
           },
         }),
     });
@@ -901,115 +934,13 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-approve-form]');
     assert
       .dom('[data-test-approve-key]')
-      .exists(
-        { count: 1 },
-        'one operation declaring it binds the whole choice',
-      );
+      .exists({ count: 1 }, 'a key that fills no slot is not offered');
     assert
       .dom(
         '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub account"]) input',
       )
       .isChecked('the only key that fits starts chosen');
     assert.dom('[data-test-approve-key="GitHub token"]').doesNotExist();
-  });
-
-  test('a slot offers only keys of the kinds its request can take', async function (assert) {
-    let inferred = batch();
-    for (let group of inferred.groups as { operations: any[] }[]) {
-      for (let operation of group.operations) {
-        operation.slots = operation.slots.map((slot: object) => ({
-          ...slot,
-          kinds: ['static', 'oauth'],
-        }));
-      }
-    }
-    serve({
-      'POST _key-bindings/batch': () =>
-        json(200, {
-          data: {
-            type: 'key-binding-batch',
-            attributes: {
-              ...inferred,
-              keys: [
-                ...inferred.keys,
-                {
-                  id: 'key-sa',
-                  name: 'Sheets robot',
-                  kind: 'google-service-account',
-                  state: 'active',
-                  covers: [],
-                },
-              ],
-            },
-          },
-        }),
-    });
-    visitShell(opened);
-    await render(<template><ApprovePage /></template>);
-    await waitFor('[data-test-approve-form]');
-    assert.dom('[data-test-approve-key]').exists({ count: 2 });
-    assert
-      .dom('[data-test-approve-key="Sheets robot"]')
-      .doesNotExist('a service account is not offered for GitHub');
-  });
-
-  test('an OAuth key is offered only where its client’s API hosts reach every destination the slot is sent to', async function (assert) {
-    let oauthKeys = batch({
-      keys: [
-        {
-          id: 'key-gh',
-          name: 'GitHub token',
-          kind: 'static',
-          state: 'active',
-          covers: [GRAPHQL],
-          serves: [GRAPHQL, UPLOADS],
-        },
-        {
-          id: 'key-github-account',
-          name: 'GitHub account',
-          kind: 'oauth-connection',
-          state: 'active',
-          covers: [],
-          serves: [GRAPHQL, UPLOADS],
-        },
-        {
-          id: 'key-api-only',
-          name: 'GitHub API account',
-          kind: 'oauth-connection',
-          state: 'active',
-          covers: [],
-          serves: [GRAPHQL],
-        },
-        {
-          id: 'key-google-account',
-          name: 'Google account',
-          kind: 'oauth-connection',
-          state: 'active',
-          covers: [],
-          serves: [],
-        },
-      ],
-    });
-    serve({
-      'POST _key-bindings/batch': () =>
-        json(200, {
-          data: { type: 'key-binding-batch', attributes: oauthKeys },
-        }),
-    });
-    visitShell(opened);
-    await render(<template><ApprovePage /></template>);
-    await waitFor('[data-test-approve-form]');
-    assert.dom('[data-test-approve-key]').exists({ count: 2 });
-    assert.dom('[data-test-approve-key="GitHub token"]').exists();
-    assert.dom('[data-test-approve-key="GitHub account"]').exists();
-    assert
-      .dom('[data-test-approve-key="GitHub API account"]')
-      .doesNotExist(
-        'one choice fills the slot at both destinations, and this account reaches only one',
-      );
-    assert
-      .dom('[data-test-approve-key="Google account"]')
-      .doesNotExist('an account for another service is not offered');
   });
 
   test('a key chosen for pipelines that interactive use no longer offers gives way to one it does', async function (assert) {
@@ -1021,7 +952,6 @@ module('Integration | approve pages', function (hooks) {
           kind: 'static',
           state: 'active',
           covers: [GRAPHQL],
-          serves: [GRAPHQL, UPLOADS],
         },
         {
           id: 'key-api-only',
@@ -1029,9 +959,14 @@ module('Integration | approve pages', function (hooks) {
           kind: 'oauth-connection',
           state: 'active',
           covers: [],
-          serves: [GRAPHQL],
         },
       ],
+      // The account reaches only the GraphQL API, so it fills the slot only
+      // without the upload, which pipelines don't approve again.
+      fillers: {
+        interactive: { userKey: ['key-gh'] },
+        pipelines: { userKey: ['key-gh', 'key-api-only'] },
+      },
     });
     let [, uploads] = mixed.groups as { operations: any[] }[];
     uploads!.operations = uploads!.operations.map((o) => ({
@@ -1051,7 +986,7 @@ module('Integration | approve pages', function (hooks) {
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
-          data: { type: 'key-binding-batch', attributes: mixed },
+          data: { type: 'key-binding-batch', attributes: withFillers(mixed) },
         }),
     });
     visitShell(opened);
@@ -1080,7 +1015,66 @@ module('Integration | approve pages', function (hooks) {
       .isChecked('the key the slot starts on is chosen in its place');
   });
 
-  test('a share is offered only where its key’s client reaches the destination', async function (assert) {
+  test('a page that starts on pipelines only starts each slot on a key pipelines offer', async function (assert) {
+    let mixed = batch({
+      keys: [
+        {
+          id: 'key-api-only',
+          name: 'GitHub API account',
+          kind: 'oauth-connection',
+          state: 'active',
+          covers: [],
+        },
+      ],
+      // The account reaches only the GraphQL API: it fills the slot for
+      // pipelines, which leave the upload out, and not for interactive use.
+      fillers: {
+        interactive: { userKey: [] },
+        pipelines: { userKey: ['key-api-only'] },
+      },
+    });
+    let [, uploads] = mixed.groups as { operations: any[] }[];
+    uploads!.operations = uploads!.operations.map((o) => ({
+      ...o,
+      status: 'pipelines-only',
+      slots: o.slots.map((slot: object) => ({
+        ...slot,
+        status: 'pipelines-only',
+        approved: {
+          snapshot: snapshot('null', UPLOADS),
+          keyId: 'key-gh',
+          shareId: null,
+          interactive: false,
+        },
+      })),
+    }));
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: { type: 'key-binding-batch', attributes: withFillers(mixed) },
+        }),
+    });
+    visitShell(
+      `approve#${new URLSearchParams({
+        card: CARD,
+        cli_port: '51234',
+        cli_state: 'c'.repeat(32),
+      })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-pretui-radio-option="pipelines"] input')
+      .isChecked('the CLI asked for pipelines only');
+    assert
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+      )
+      .isChecked('the only key pipelines offer starts chosen');
+    assert.dom('[data-test-approve-save]').isEnabled();
+  });
+
+  test('a share slot offers only the shares the realm server names as filling it', async function (assert) {
     let shared = batch({
       groups: [
         {
@@ -1116,7 +1110,6 @@ module('Integration | approve pages', function (hooks) {
           keyName: 'GitHub bot client',
           keyKind: 'oauth-client',
           covers: [],
-          serves: [GRAPHQL],
           interactive: false,
           dailyBudget: 100,
           anonymous: false,
@@ -1130,7 +1123,6 @@ module('Integration | approve pages', function (hooks) {
           keyName: 'Slack bot client',
           keyKind: 'oauth-client',
           covers: [],
-          serves: [],
           interactive: false,
           dailyBudget: 100,
           anonymous: false,
@@ -1138,11 +1130,12 @@ module('Integration | approve pages', function (hooks) {
           anonymousMonthlyCap: null,
         },
       ],
+      fillers: filledBy('apiKey', ['share-bot']),
     });
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
-          data: { type: 'key-binding-batch', attributes: shared },
+          data: { type: 'key-binding-batch', attributes: withFillers(shared) },
         }),
     });
     visitShell(opened);
@@ -1193,7 +1186,6 @@ module('Integration | approve pages', function (hooks) {
           keyName: 'Slack bot client',
           keyKind: 'oauth-client',
           covers: [],
-          serves: [],
           interactive: false,
           dailyBudget: 100,
           anonymous: false,
@@ -1201,11 +1193,12 @@ module('Integration | approve pages', function (hooks) {
           anonymousMonthlyCap: null,
         },
       ],
+      fillers: filledBy('apiKey', []),
     });
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
-          data: { type: 'key-binding-batch', attributes: unfit },
+          data: { type: 'key-binding-batch', attributes: withFillers(unfit) },
         }),
     });
     visitShell(opened);
@@ -1224,17 +1217,19 @@ module('Integration | approve pages', function (hooks) {
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch({
-              keys: [
-                {
-                  id: 'key-gh',
-                  name: 'GitHub token',
-                  kind: 'oauth-connection',
-                  state: 'rejected',
-                  covers: [GRAPHQL, UPLOADS],
-                },
-              ],
-            }),
+            attributes: withFillers(
+              batch({
+                keys: [
+                  {
+                    id: 'key-gh',
+                    name: 'GitHub token',
+                    kind: 'oauth-connection',
+                    state: 'rejected',
+                    covers: [GRAPHQL, UPLOADS],
+                  },
+                ],
+              }),
+            ),
           },
         }),
     });
@@ -1709,22 +1704,24 @@ module('Integration | approve pages', function (hooks) {
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch({
-              groups: [
-                {
-                  destination: {
-                    href: GRAPHQL,
-                    host: 'api.github.com',
-                    path: '/graphql/',
-                    registrableDomain: 'github.com',
+            attributes: withFillers(
+              batch({
+                groups: [
+                  {
+                    destination: {
+                      href: GRAPHQL,
+                      host: 'api.github.com',
+                      path: '/graphql/',
+                      registrableDomain: 'github.com',
+                    },
+                    operations: [
+                      operation('listPRs', 'List your open pull requests'),
+                      pipelinesOnly('listReviews', 'List reviews'),
+                    ],
                   },
-                  operations: [
-                    operation('listPRs', 'List your open pull requests'),
-                    pipelinesOnly('listReviews', 'List reviews'),
-                  ],
-                },
-              ],
-            }),
+                ],
+              }),
+            ),
           },
         }),
     });
@@ -1843,7 +1840,7 @@ module('Integration | approve pages', function (hooks) {
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch(batchOf(operations)),
+            attributes: withFillers(batch(batchOf(operations))),
           },
         }),
     });
@@ -1974,43 +1971,45 @@ module('Integration | approve pages', function (hooks) {
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch({
-              groups: [
-                {
-                  destination: {
-                    href: GRAPHQL,
-                    host: 'api.github.com',
-                    path: '/graphql/',
-                    registrableDomain: 'github.com',
-                  },
-                  operations: [
-                    {
-                      ...shared,
-                      slots: shared.slots.map((s) => ({
-                        ...s,
-                        slot: 'apiKey',
-                        key: 'apiKey',
-                      })),
+            attributes: withFillers(
+              batch({
+                groups: [
+                  {
+                    destination: {
+                      href: GRAPHQL,
+                      host: 'api.github.com',
+                      path: '/graphql/',
+                      registrableDomain: 'github.com',
                     },
-                  ],
-                },
-              ],
-              keys: [],
-              shares: [
-                {
-                  id: 'share-team',
-                  label: 'Team GitHub',
-                  keyId: 'key-gh',
-                  keyName: 'GitHub token',
-                  covers: [GRAPHQL],
-                  interactive: false,
-                  dailyBudget: 2400,
-                  anonymous: false,
-                  anonymousDailyCap: null,
-                  anonymousMonthlyCap: null,
-                },
-              ],
-            }),
+                    operations: [
+                      {
+                        ...shared,
+                        slots: shared.slots.map((s) => ({
+                          ...s,
+                          slot: 'apiKey',
+                          key: 'apiKey',
+                        })),
+                      },
+                    ],
+                  },
+                ],
+                keys: [],
+                shares: [
+                  {
+                    id: 'share-team',
+                    label: 'Team GitHub',
+                    keyId: 'key-gh',
+                    keyName: 'GitHub token',
+                    covers: [GRAPHQL],
+                    interactive: false,
+                    dailyBudget: 2400,
+                    anonymous: false,
+                    anonymousDailyCap: null,
+                    anonymousMonthlyCap: null,
+                  },
+                ],
+              }),
+            ),
           },
         }),
     });
@@ -2233,48 +2232,50 @@ module('Integration | approve pages', function (hooks) {
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch({
-              groups: [
-                {
-                  destination: {
-                    href: GRAPHQL,
-                    host: 'api.github.com',
-                    path: '/graphql/',
-                    registrableDomain: 'github.com',
-                  },
-                  operations: [
-                    asShared(
-                      operation('listTeamIssues', 'List the team’s issues'),
-                    ),
-                    asShared(
-                      operation(
-                        'listTeamPRs',
-                        'List the team’s pull requests',
-                        {
-                          openToAnonymous: opensToAnonymous,
-                        },
+            attributes: withFillers(
+              batch({
+                groups: [
+                  {
+                    destination: {
+                      href: GRAPHQL,
+                      host: 'api.github.com',
+                      path: '/graphql/',
+                      registrableDomain: 'github.com',
+                    },
+                    operations: [
+                      asShared(
+                        operation('listTeamIssues', 'List the team’s issues'),
                       ),
-                    ),
-                  ],
-                },
-              ],
-              keys: [],
-              shares: [
-                {
-                  id: 'share-team',
-                  label: 'Team GitHub',
-                  keyId: 'key-gh',
-                  keyName: 'GitHub token',
-                  covers: [GRAPHQL],
-                  interactive: false,
-                  dailyBudget: 2400,
-                  anonymous: false,
-                  anonymousDailyCap: null,
-                  anonymousMonthlyCap: null,
-                  ...share,
-                },
-              ],
-            }),
+                      asShared(
+                        operation(
+                          'listTeamPRs',
+                          'List the team’s pull requests',
+                          {
+                            openToAnonymous: opensToAnonymous,
+                          },
+                        ),
+                      ),
+                    ],
+                  },
+                ],
+                keys: [],
+                shares: [
+                  {
+                    id: 'share-team',
+                    label: 'Team GitHub',
+                    keyId: 'key-gh',
+                    keyName: 'GitHub token',
+                    covers: [GRAPHQL],
+                    interactive: false,
+                    dailyBudget: 2400,
+                    anonymous: false,
+                    anonymousDailyCap: null,
+                    anonymousMonthlyCap: null,
+                    ...share,
+                  },
+                ],
+              }),
+            ),
           },
         }),
     });
@@ -2308,7 +2309,7 @@ module('Integration | approve pages', function (hooks) {
             covers: [GRAPHQL],
           },
         ];
-        return answer;
+        return refilled(answer);
       },
     });
     visitShell(
@@ -2465,7 +2466,7 @@ module('Integration | approve pages', function (hooks) {
             covers: [GRAPHQL],
           },
         ];
-        return answer;
+        return refilled(answer);
       },
     });
     visitShell(opened);
@@ -2580,7 +2581,7 @@ module('Integration | approve pages', function (hooks) {
             covers: [],
           },
         ];
-        return answer;
+        return refilled(answer);
       },
     });
     visitShell(opened);
@@ -2647,7 +2648,7 @@ module('Integration | approve pages', function (hooks) {
           attributes.shares[0],
           { ...attributes.shares[0], id: 'share-other', label: 'Other GitHub' },
         ];
-        return answer;
+        return refilled(answer);
       },
     });
     let release!: () => void;

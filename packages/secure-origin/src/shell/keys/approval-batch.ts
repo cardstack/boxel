@@ -37,8 +37,12 @@ export interface SlotOption {
   covers: string[];
 }
 
-// Each slot token the batch's operations use, in the order they first appear.
-export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
+// Each slot token the batch's operations use, in the order they first appear,
+// with what can fill it when the batch is approved for `use`.
+export function slotChoices(
+  batch: ApprovalBatch,
+  use: ApprovalUse,
+): SlotChoice[] {
   let choices: SlotChoice[] = [];
   for (let slot of allSlots(batch)) {
     if (choices.some((c) => c.slot === slot.slot)) {
@@ -46,20 +50,12 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
     }
     let kind = slot.key;
     // One choice fills the slot in every operation of the batch, so it offers
-    // only the keys that can fill each of them: of a kind every one of them
-    // takes, and good at every destination the slot is sent to.
-    let slots = allSlots(batch).filter((s) => s.slot === slot.slot);
-    let destinations = destinationsOfSlot(batch, slot.slot);
-    let fits = (keyKind: string, serves: string[] | undefined) =>
-      slots.every((s) => {
-        let kinds = kindsOfSlot(s);
-        return kinds === undefined || kinds.includes(slotKindOfKey(keyKind));
-      }) &&
-      (serves === undefined || destinations.every((d) => serves.includes(d)));
+    // only the keys the realm server names as filling each of them.
+    let fillers = new Set(batch.fillers?.[use]?.[slot.slot] ?? []);
     let options: SlotOption[] =
       kind === 'userKey'
         ? batch.keys
-            .filter((key) => fits(key.kind, key.serves))
+            .filter((key) => fillers.has(key.id))
             .map(({ id, name, covers, state }) => ({
               id,
               name,
@@ -67,7 +63,7 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
               ...(state === 'rejected' ? { rejected: true } : {}),
             }))
         : batch.shares
-            .filter((share) => fits(share.keyKind, share.serves))
+            .filter((share) => fillers.has(share.id))
             .map(({ id, label, keyName, covers }) => ({
               id,
               name: label,
@@ -82,22 +78,6 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
     choices.push({ slot: slot.slot, kind, options });
   }
   return choices;
-}
-
-// The kind of slot a stored key fills: an OAuth connection, or an OAuth
-// client that gets its own tokens, fills an `oauth` slot. A copy of
-// `slotKindOfKey` in runtime-common's `call-api-key-kind.ts`, which approval
-// enforces with; the two must agree.
-function slotKindOfKey(keyKind: string): string {
-  return keyKind === 'oauth-connection' || keyKind === 'oauth-client'
-    ? 'oauth'
-    : keyKind;
-}
-
-// The kinds of key that can fill a slot: those the realm server names, else
-// the declared one. Undefined when neither is known: any key is offered.
-function kindsOfSlot(slot: BatchSlot): string[] | undefined {
-  return slot.kinds ?? (slot.keyKind ? [slot.keyKind] : undefined);
 }
 
 function allSlots(batch: ApprovalBatch): BatchSlot[] {
@@ -344,7 +324,8 @@ export const INTERACTIVE_CONFIRMATION = {
 
 // The batch as the page shows it for `use`. An operation approved for
 // pipelines only needs approving only for interactive use, so for pipelines
-// it is left out.
+// it is left out. The realm server leaves out the same operations when it
+// names what fills each slot for pipelines (`fillers.pipelines`).
 export function batchFor(
   batch: ApprovalBatch,
   use: ApprovalUse,
