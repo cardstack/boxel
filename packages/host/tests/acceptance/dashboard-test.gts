@@ -208,10 +208,12 @@ module('Acceptance | dashboard', function (hooks) {
     },
   });
 
+  let mainRealm: Awaited<ReturnType<typeof setupAcceptanceTestRealm>>['realm'];
+
   hooks.beforeEach(async function () {
     setupUserSubscription();
     setupAuthEndpoints();
-    await setupAcceptanceTestRealm({
+    ({ realm: mainRealm } = await setupAcceptanceTestRealm({
       realmURL,
       mockMatrixUtils,
       permissions: {
@@ -220,7 +222,7 @@ module('Acceptance | dashboard', function (hooks) {
       contents: {
         'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
       },
-    });
+    }));
   });
 
   module('state', function () {
@@ -1482,6 +1484,84 @@ module('Acceptance | dashboard', function (hooks) {
         assert
           .dom('[data-test-pinned-cards]')
           .exists({ count: 1 }, 'only the desk shows pins');
+      });
+
+      test('a pin saved to the Workspace card shows on its desk without a reload', async function (assert) {
+        const deskPins =
+          '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-pinned-card]';
+        await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+        await mainRealm.write(
+          'index.json',
+          JSON.stringify(workspaceIndexJSON({})),
+        );
+        await visitWithFavorites([realmURL]);
+        assert.dom(deskPins).doesNotExist();
+
+        await mainRealm.write(
+          'index.json',
+          JSON.stringify(
+            workspaceIndexJSON({
+              'entryPoints.0': { links: { self: './notes' } },
+            }),
+          ),
+        );
+        await waitUntil(() => findAll(deskPins).length === 1);
+
+        assert
+          .dom(deskPins)
+          .hasAttribute('aria-label', 'Open Notes')
+          .hasAttribute('data-test-pinned-card', `${realmURL}notes`);
+      });
+
+      test("a write to another card doesn't search for the desk's pins again", async function (assert) {
+        await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+        await mainRealm.write(
+          'index.json',
+          JSON.stringify(
+            workspaceIndexJSON({
+              'entryPoints.0': { links: { self: './notes' } },
+            }),
+          ),
+        );
+        let pinSearches = 0;
+        let { virtualNetwork } = getService('network');
+        let countPinSearches = async (request: Request) => {
+          if (
+            request.url.endsWith('/_federated-search') &&
+            JSON.stringify(await request.clone().json()).includes(
+              'item.entryPoints',
+            )
+          ) {
+            pinSearches++;
+          }
+          return null;
+        };
+        virtualNetwork.mount(countPinSearches, { prepend: true });
+        try {
+          await visitWithFavorites([realmURL]);
+          await waitUntil(
+            () =>
+              findAll(
+                '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-pinned-card]',
+              ).length === 1,
+          );
+          let searchesBefore = pinSearches;
+
+          await mainRealm.write(
+            'other.json',
+            JSON.stringify(cardJSON('Other')),
+          );
+          await settled();
+
+          assert.true(searchesBefore > 0, 'the desk searched for its pins');
+          assert.strictEqual(
+            pinSearches,
+            searchesBefore,
+            'the pins are not searched again',
+          );
+        } finally {
+          virtualNetwork.unmount(countPinSearches);
+        }
       });
 
       // The ids in the stack a pin opens, from the bottom.

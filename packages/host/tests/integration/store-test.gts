@@ -174,7 +174,7 @@ module('Integration | Store', function (hooks) {
       async nextEventFor(url: string): Promise<IncrementalIndexEventContent> {
         await waitUntil(() => find(url) !== undefined, {
           timeout: 10_000,
-          timeoutMessage: `the realm broadcast no incremental index event naming ${url}`,
+          timeoutMessage: `the realm broadcast no incremental index event naming ${url}; observed events: ${JSON.stringify(captured)}`,
         });
         let event = find(url)!;
         captured.length = 0;
@@ -4008,38 +4008,42 @@ module('Integration | Store', function (hooks) {
 
   test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {
     assert.expect(2);
+    let url = `${testRealmURL}Person/hassan`;
     let didSave = false;
     this.onSave(() => {
       didSave = true;
     });
-    setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
+    setCardInOperatorModeState(url);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
-    await testRealm.write(
-      'Person/hassan.json',
-      JSON.stringify({
-        data: {
-          attributes: {
-            name: 'Hassan updated',
-          },
-          meta: {
-            adoptsFrom: {
-              module: testRRI('person'),
-              name: 'Person',
+    let events = interceptRealmEvents();
+    try {
+      await testRealm.write(
+        'Person/hassan.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              name: 'Hassan updated',
+            },
+            meta: {
+              adoptsFrom: {
+                module: testRRI('person'),
+                name: 'Person',
+              },
             },
           },
-        },
-      } as LooseSingleCardDocument),
-    );
-    await waitUntil(
-      () =>
-        (storeService.peek(`${testRealmURL}Person/hassan`) as any)?.name ===
-        'Hassan updated',
-    );
+        } as LooseSingleCardDocument),
+      );
+      let event = await events.nextEventFor(url);
+      events.deliver(event);
+      await settled();
+    } finally {
+      events.restore();
+    }
     await storeService.flushSaves();
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')

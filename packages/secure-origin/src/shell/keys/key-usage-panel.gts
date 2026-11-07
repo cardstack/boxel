@@ -9,6 +9,8 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
+import { Alert } from '@cardstack/pretui/components/alert';
+import { Card } from '@cardstack/pretui/components/card';
 import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 
@@ -67,27 +69,29 @@ export default class KeyUsagePanel extends Component<Signature> {
           {{#if this.loading}}
             <BusyMessage @title='Loading usage…' />
           {{else if this.failed}}
-            <div class='failed' role='alert' data-test-key-usage-error>
-              This key’s usage couldn’t be loaded:
-              {{this.failed.message}}
-              <Button
-                @variant='ghost'
-                @size='xs'
-                data-test-key-usage-retry
-                {{on 'click' this.load}}
-              >Try again</Button>
-            </div>
+            <Alert @tone='danger' role='alert' data-test-key-usage-error>
+              <:default>This key’s usage couldn’t be loaded:
+                {{this.failed.message}}</:default>
+              <:action><Button
+                  @variant='secondary'
+                  @size='xs'
+                  data-test-key-usage-retry
+                  {{on 'click' this.load}}
+                >Try again</Button></:action>
+            </Alert>
           {{else if this.open}}
-            <div class='panel-body' data-test-key-usage-body>
-              <UsageSummary @usage={{this.open.usage}} />
-              <div class='limits'>
-                <h4 class='heading'>Limits</h4>
-                <LimitsForm
-                  @limits={{this.open.usage.limits}}
-                  @onSave={{this.saveLimits}}
-                />
+            <Card class='panel-body' data-test-key-usage-body>
+              <div class='panel-grid'>
+                <UsageSummary @usage={{this.open.usage}} />
+                <div class='limits'>
+                  <h4 class='heading'>Limits</h4>
+                  <LimitsForm
+                    @limits={{this.open.usage.limits}}
+                    @onSave={{this.saveLimits}}
+                  />
+                </div>
               </div>
-            </div>
+            </Card>
           {{/if}}
         </:default>
       </Disclosure>
@@ -99,14 +103,17 @@ export default class KeyUsagePanel extends Component<Signature> {
       }
       /* In the panel's text size, not the smaller one the disclosure sets
          for its trigger. */
+      /* Its outline is drawn inside the card, since the disclosure's fold
+         clips anything drawn outside it. */
       .panel-body {
+        --pretui-card-shadow: inset 0 0 0 1px var(--border);
+        --pretui-card-pad: var(--boxel-sp-sm);
+        --pretui-card-radius: var(--boxel-border-radius);
         font-size: var(--boxel-font-size-sm);
+      }
+      .panel-grid {
         display: grid;
         gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-sm);
-        border: 1px solid var(--border);
-        border-radius: var(--boxel-border-radius);
-        background: var(--card, var(--background));
       }
       .limits {
         display: grid;
@@ -118,10 +125,6 @@ export default class KeyUsagePanel extends Component<Signature> {
         margin: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
-      }
-      .failed {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>

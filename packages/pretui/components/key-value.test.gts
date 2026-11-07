@@ -48,6 +48,22 @@ module('Pretui | components/key-value', function (hooks) {
     assert.strictEqual(q('dd [data-test-custom]')?.textContent?.trim(), 'curing!');
   });
 
+  test("KeyValue gives the value block each item's own fields", async function (assert) {
+    const ITEMS = [
+      { key: 'Over budget', value: '4', code: 'over-budget' },
+      { key: 'Rate limited', value: '2', code: 'rate-limited' },
+    ];
+    await render(
+      <template>
+        <KeyValue @items={{ITEMS}}>
+          <:value as |item|><span data-test-code={{item.code}}>{{item.value}}</span></:value>
+        </KeyValue>
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-code="over-budget"]')?.textContent?.trim(), '4');
+    assert.strictEqual(q('[data-test-code="rate-limited"]')?.textContent?.trim(), '2');
+  });
+
   test('KeyValue lays out horizontally by default and takes stacked and inline layouts', async function (assert) {
     const ITEMS: KeyValueItem[] = [{ key: 'Origin', value: 'Wuyi' }];
     await render(

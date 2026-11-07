@@ -801,8 +801,8 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('error and muted text on the key pages meet WCAG AA contrast', async function (assert) {
-    // The key pages draw their errors on the key window's own panel, which
-    // has a theme and background of its own.
+    // The key pages draw their errors as Pret UI Alerts on the key window's
+    // own panel, which has a theme and background of its own.
     await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
     });
@@ -810,8 +810,85 @@ module(basename(import.meta.filename), function (hooks) {
     assertContrast(
       assert,
       'key pages',
-      await textColors('[data-test-keys-panel]', /^\.keys-error(\[[^\]]+\])?$/),
+      await textColors(
+        '[data-test-keys-panel]',
+        /^\.pretui-alert(\[[^\]]+\])?$/,
+      ),
     );
+
+    // An Alert's text sits on its own tint, not on the panel, so it is also
+    // measured there: each tone's hue, put through the Alert rule's own
+    // background and color on a probe in the panel. The hues are a copy of
+    // Pret UI's `ALERT_COLORS`, whose comment points back here; the build
+    // exposes no rule that names them.
+    let tinted = await page.evaluate(() => {
+      let panel = document.querySelector('[data-test-keys-panel]')!;
+      let rule: CSSStyleRule | undefined;
+      let visit = (rules: CSSRuleList) => {
+        for (let r of rules) {
+          if (r instanceof CSSGroupingRule) {
+            visit(r.cssRules);
+          } else if (
+            r instanceof CSSStyleRule &&
+            /^\.pretui-alert(\[[^\]]+\])?$/.test(r.selectorText) &&
+            r.style.getPropertyValue('background-color')
+          ) {
+            rule = r;
+          }
+        }
+      };
+      for (let sheet of document.styleSheets) {
+        visit(sheet.cssRules);
+      }
+      if (!rule) {
+        return undefined;
+      }
+      let canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      let context = canvas.getContext('2d', { willReadFrequently: true })!;
+      let toRGB = (color: string) => {
+        context.clearRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      let hues = {
+        info: 'var(--info)',
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        danger: 'var(--destructive)',
+      };
+      return Object.entries(hues).map(([tone, hue]) => {
+        let probe = document.createElement('div');
+        probe.style.setProperty('--pretui-alert-hue', hue);
+        probe.style.setProperty(
+          '--pretui-alert-mix',
+          rule!.style.getPropertyValue('--pretui-alert-mix'),
+        );
+        probe.style.setProperty(
+          'background-color',
+          rule!.style.getPropertyValue('background-color'),
+        );
+        probe.style.setProperty('color', rule!.style.getPropertyValue('color'));
+        panel.append(probe);
+        let style = getComputedStyle(probe);
+        let result = {
+          tone,
+          text: toRGB(style.color),
+          background: toRGB(style.backgroundColor),
+        };
+        probe.remove();
+        return result;
+      });
+    });
+    assert.ok(tinted, "the key pages' stylesheets hold Pret UI's Alert rule");
+    for (let { tone, text, background } of tinted ?? []) {
+      let ratio = contrast(text, background);
+      assert.ok(
+        ratio >= 4.5,
+        `key pages: a ${tone} Alert's text rgb(${text.join(', ')}) on its tint rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+      );
+    }
   });
 
   test("the chosen radio tile's ring meets WCAG's 3:1 against the key panel, and a hovered tile isn't ringed", async function (assert) {
