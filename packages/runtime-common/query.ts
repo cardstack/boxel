@@ -472,6 +472,13 @@ export interface MatchesFilter extends TypedFilter {
   // ranks it by its best passage, and the search reports the passages that
   // matched (`meta.passages`). Names a top-level field, e.g. `segments`.
   within?: string;
+  // Only the values of these fields (dotted paths into the search doc, such
+  // as `material` or `brand.name`; a list field's values all count): the
+  // same stemmed, case-insensitive word match, so "metal" finds "Metal" and
+  // "silicone" finds "Silicon". Evaluated per card rather than from an
+  // index, so anchor it on a type. Postgres; SQLite matches the text as a
+  // case-insensitive substring of any of the fields.
+  fields?: string[];
   // Only the card's title, name and alias roles (docs/search-intent.md). Not
   // `in`, which is the membership operator: a node holding both would read as
   // two operators.
@@ -1173,6 +1180,11 @@ function assertFilter(
   }
 
   let operator = operators[0];
+  if ('fields' in filter && operator !== 'matches') {
+    throw new InvalidQueryError(
+      `${pointer.concat('fields').join('/') || '/'}: fields belongs beside matches`,
+    );
+  }
   if ('within' in filter && operator !== 'matches') {
     throw new InvalidQueryError(
       `${pointer.concat('within').join('/') || '/'}: within belongs beside matches`,
@@ -1477,6 +1489,25 @@ function assertMatchesFilter(
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: a matches term takes scope or within, not both`,
     );
+  }
+  if ('fields' in filter) {
+    if (
+      !Array.isArray(filter.fields) ||
+      filter.fields.length === 0 ||
+      filter.fields.length > 8 ||
+      !filter.fields.every(
+        (f: unknown) => typeof f === 'string' && FACET_PATH.test(f),
+      )
+    ) {
+      throw new InvalidQueryError(
+        `${pointer.concat('fields').join('/') || '/'}: fields must list 1 to 8 field paths, such as ["material", "brand.name"]`,
+      );
+    }
+    if ('scope' in filter || 'within' in filter || 'prefix' in filter) {
+      throw new InvalidQueryError(
+        `${pointer.join('/') || '/'}: a matches term with fields takes no scope, within or prefix`,
+      );
+    }
   }
 }
 

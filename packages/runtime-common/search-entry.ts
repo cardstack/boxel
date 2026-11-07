@@ -458,6 +458,17 @@ function translateFilterNode(
     } else if (key === 'typeahead') {
       // Type-ahead over the `_typeahead` text — no field path to address.
       out.typeahead = value;
+    } else if (key === 'fields') {
+      // matches' field scope: field paths through item.
+      if (
+        !Array.isArray(value) ||
+        !value.every((f) => typeof f === 'string' && f.startsWith(ITEM_PREFIX))
+      ) {
+        throw invalidQuery(
+          `${pointer}/fields: fields lists field paths through item., such as ["item.material"]`,
+        );
+      }
+      out.fields = (value as string[]).map((f) => f.slice(ITEM_PREFIX.length));
     } else if (key === 'within') {
       // matches' passage list, addressed through item. like any field path.
       if (typeof value !== 'string' || !value.startsWith(ITEM_PREFIX)) {
@@ -1340,6 +1351,7 @@ export type SearchEntryWireFilter = {
   matches?: string;
   prefix?: boolean;
   within?: string;
+  fields?: string[];
   typeahead?: string;
   near?: Record<string, unknown>;
   pattern?: Record<string, string>;
@@ -1392,6 +1404,8 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
       out.typeahead = value as string;
     } else if (key === 'within') {
       out.within = `${ITEM_PREFIX}${value as string}`;
+    } else if (key === 'fields') {
+      out.fields = (value as string[]).map((f) => `${ITEM_PREFIX}${f}`);
     } else {
       throw new Error(
         `cannot translate filter member "${key}" to the entry wire grammar`,

@@ -516,6 +516,45 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('matches with fields searches only those fields, any case, stemmed', async function (assert) {
+    let titles = async (filter: any) =>
+      (
+        await search({
+          filter: { every: [{ type: on }, filter] },
+          sort: byScore,
+        })
+      ).titles;
+    assert.deepEqual(
+      await titles({ on, matches: 'loops', fields: ['channel'] }),
+      ['b', 'c', 'a'],
+      'a stemmed word in the channel',
+    );
+    assert.deepEqual(
+      await titles({ on, matches: 'goto', fields: ['channel'] }),
+      ['d', 'e'],
+      'case does not matter',
+    );
+    assert.deepEqual(
+      await titles({ on, matches: 'kleppmann', fields: ['channel'] }),
+      [],
+      'a word in another field does not count',
+    );
+    assert.deepEqual(
+      await titles({
+        on,
+        matches: 'kleppmann',
+        fields: ['channel', 'speakers'],
+      }),
+      ['a'],
+      'a list field counts its values',
+    );
+    assert.deepEqual(
+      await titles({ not: { on, matches: 'strange', fields: ['channel'] } }),
+      ['d', 'e', 'f', 'g'],
+      'it negates cleanly, keeping cards with no value',
+    );
+  });
+
   test('the wire grammar checks collapse and measure', function (assert) {
     let bad = (query: Record<string, unknown>, pattern: RegExp) =>
       assert.throws(
@@ -547,6 +586,25 @@ module(basename(import.meta.filename), function (hooks) {
       collapse: 'item.channel',
     });
     assert.deepEqual(parsed.itemQuery.collapse, { by: 'channel', on });
+    let scoped = parseSearchEntryQueryFromPayload({
+      filter: { 'item.on': on, matches: 'metal', fields: ['item.channel'] },
+    });
+    assert.deepEqual(scoped.itemQuery.filter, {
+      on,
+      matches: 'metal',
+      fields: ['channel'],
+    });
+    assert.throws(
+      () => assertQuery({ filter: { on, matches: 'x', fields: [] } } as any),
+      /fields must list 1 to 8 field paths/,
+    );
+    assert.throws(
+      () =>
+        assertQuery({
+          filter: { on, matches: 'x', fields: ['a'], scope: 'title' },
+        } as any),
+      /takes no scope, within or prefix/,
+    );
     let wire = searchEntryWireQueryFromQuery({
       collapse: { by: 'channel', on, keep: 2 },
     });

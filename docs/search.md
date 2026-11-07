@@ -25,6 +25,7 @@ The Query object may have a `filter` property, which controls which cards are in
   - `scope: 'title'` searches only the card's title, name and alias roles.
   - `within: '<field>'` searches the passages of a `PassageField` list instead, and reports the passages that matched in `meta.passages`.
   - `typos: true` also matches the closest words of the realm's fields declared `typos: true` (Postgres only).
+  - `fields: ['material', 'brand.name']` searches only those fields' values: the same stemmed, case-insensitive word match, so `metal` finds "Metal" and `silicone` finds "Silicon". A list field's values all count. It is computed per card rather than read from an index, so anchor it on a type. It takes no `scope`, `within` or `prefix`. SQLite matches a case-insensitive substring instead.
 - `typeahead`: every word is a prefix of a word of the card's title or alternative names, in any order, never stemmed. Takes `typos: true` too.
 - `pattern`: a glob (`*`, `?`) over a field's whole value, ignoring case, on fields searched by pattern (declared `search: { patterns: true }`, or an `identifier` or `code` role).
 - `regex`: a POSIX regular expression over the same fields (Postgres only).

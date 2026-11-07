@@ -4138,6 +4138,12 @@ export class IndexQueryEngine {
         this.#titleScopedMatchCondition(filter, context),
       ]);
     }
+    if (filter.fields?.length && filter.matches.trim() !== '') {
+      return every([
+        ...(typeRef ? [this.typeCondition(typeRef)] : []),
+        this.#fieldScopedMatchCondition(filter, filter.fields),
+      ]);
+    }
     let predicate: CardExpression =
       filter.matches.trim() === ''
         ? ['FALSE']
@@ -4190,6 +4196,51 @@ export class IndexQueryEngine {
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       predicate,
     ]);
+  }
+
+  // A `matches … fields` term: the words of those search-doc values alone,
+  // stemmed and case-insensitive as everywhere else. The values are read
+  // whole (`spill_unmark`, so a spilled value counts) and a list's values all
+  // count. Nothing indexes this text, so it is computed for each row the
+  // rest of the filter admits. SQLite matches a case-insensitive substring.
+  #fieldScopedMatchCondition(
+    filter: MatchesFilter,
+    fields: string[],
+  ): CardExpression {
+    let pgText: Expression = ["to_tsvector('english', concat_ws(' '"];
+    for (let path of fields) {
+      pgText.push(
+        ', spill_unmark(i.search_doc #>',
+        param(
+          `{${path
+            .split('.')
+            .map((p) => `"${p}"`)
+            .join(',')}}`,
+        ),
+        "::text[]) #>> '{}'",
+      );
+    }
+    pgText.push('))');
+    let sqliteText: Expression = ['LOWER(', "''"];
+    for (let path of fields) {
+      sqliteText.push(
+        "|| ' ' || coalesce(json_extract(i.search_doc,",
+        param(`$.${path}`),
+        "), '')",
+      );
+    }
+    sqliteText.push(')');
+    return [
+      dbExpression({
+        pg: [...pgText, '@@', ...matchTsQuery(filter)],
+        sqlite: [
+          ...sqliteText,
+          'LIKE LOWER(',
+          param(`%${escapeSqliteLikePattern(filter.matches)}%`),
+          `) ESCAPE '\\'`,
+        ],
+      }),
+    ];
   }
 
   // A `matches … scope: 'title'` term: the card's title, name and alias
