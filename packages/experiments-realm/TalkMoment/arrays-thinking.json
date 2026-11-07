@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Thinking in Whole Arrays",
+      "speaker": "Kenji Abara",
+      "quote": "Stop writing loops one element at a time. Say what should happen to the whole array and let the runtime decide how to do it fast.",
+      "startsAt": 233,
+      "recommenders": 12,
+      "lastDiscussed": "2025-02-17",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001484754,
+        "data": "NB3PNEipovwb4cA0FaI0SxU4KSUAGkm+BTDXu88ly6XfENMk/wov/cg5TukkGeIHzx0HyNtXzRPLUZLPyvkTvgT85xcvDjwfJBkObKm/DDQ0/Q7qFNX08AUYCN4FOy/0v8f4Xw/xGvPy6fTezBv5MyQYAeoL+R47PgoDJD6/7vDv8uDyQNHqFhQXngolEULQ0C/lG+X09+ACCtMI2BlB6tsIAgI/3g7vIPHL/H/+sB04zCMjEBgbOwEL4BXZOwMU6+0MPvsGFCVkiAUd7Nz6AfTaFBcEBCL7FP+zA/wWHD3C9B/qMtP25/3vNyHf+Pz6++D4NBAZDdFfAuMCKPvtOQ=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

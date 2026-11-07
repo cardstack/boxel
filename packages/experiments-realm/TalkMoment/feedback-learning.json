@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Teaching Models With Human Taste",
+      "speaker": "Nadia Volkova",
+      "quote": "People rank two answers, a reward model learns their preference, and the policy is tuned to please it, flaws in the rankings included.",
+      "startsAt": 512,
+      "recommenders": 15,
+      "lastDiscussed": "2025-08-25",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001871438,
+        "data": "ORsY21/SDAQM/MYvVyHu4REWFBEKUSEHtxQk0udF3wgAUPoMACwx4uH/B+XsNtzxEAoD5OgVQgHm+xgNwPoZEeT7EdvyCgQJ3PYcLs7RGioaAtH9BMfm5AsGBOj4HCb3F+T25x1E8SUPGdQwIwYOOyI6CvIK+OhDLfrp/kPI+uYCBtDz9x/i+Oz/lh4tFyUS59nzFR4fBwTo9eHS2P76/fsK5ATj/evrLvXq+zkb9/0k1gv2/zX0Bigf+y3n+wLa3SMQHv7QGxlPpeIM5OXRFxUGOfz3O+jy7QHa3fns9/cLCAf/Eeke1Av0Bc8kAwjd39jlGS7FEN9/9wHg/AoB5Q=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

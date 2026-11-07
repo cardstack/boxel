@@ -12,8 +12,16 @@ import {
   isCodeRef,
   generalSortFields,
   isMatchRelevanceSort,
+  isNearSort,
+  isBlendSort,
   MATCH_RELEVANCE_SORT_KEY,
+  BLEND_SORT_KEY,
 } from './index.ts';
+import {
+  isVector,
+  MAX_VECTOR_DIMENSIONS,
+  type Vector,
+} from './serializers/vector.ts';
 
 // `query.ts` is where callers reach for the grammar's error, so it stays
 // exported from here even though the class itself lives one module down.
@@ -78,6 +86,7 @@ export type Filter =
   | ContainsFilter
   | RangeFilter
   | MatchesFilter
+  | NearFilter
   | CardTypeFilter;
 
 export interface TypedFilter {
@@ -99,7 +108,42 @@ type SortExpressionWithCodeRef = {
   by: string;
   on: CodeRef;
   direction?: 'asc' | 'desc';
+  // Ranks by cosine similarity between the VectorField at `by` and this
+  // target, most similar first (`direction` defaults to `desc`). Cards with
+  // no vector at `by` sort last. See `NearSortTarget`.
+  near?: NearSortTarget;
 };
+
+// One signal inside a `_blend` sort: any other sort entry (text relevance, a
+// near sort, a general field such as `createdAt`, or a card field such as an
+// engagement count) plus an optional `weight` (default 1). Inside a blend
+// each signal ranks best first: highest value first unless `direction` is
+// `asc`.
+export type BlendComponent = (
+  | SortExpressionWithoutCodeRef
+  | SortExpressionWithCodeRef
+) & { weight?: number };
+
+// Reciprocal rank fusion of several signals: each card scores
+// sum(weight / (k + rank)) over the signals it has a value for, ranked over
+// every card the filter admits. Most-fused first (`direction` defaults to
+// `desc`). Each result carries the score in `meta._blendScore`.
+export type BlendSortExpression = {
+  by: typeof BLEND_SORT_KEY;
+  of: BlendComponent[];
+  method?: 'rrf';
+  k?: number;
+  direction?: 'asc' | 'desc';
+};
+
+// The most signals one blend takes; each is a ranking pass over the
+// filtered set.
+export const MAX_BLEND_COMPONENTS = 8;
+export const DEFAULT_RRF_K = 60;
+
+// A `near` sort's target: plain numbers, or a vector in its stored form (as
+// a VectorField serializes it). Its dimension must match the field's.
+export type NearSortTarget = number[] | Vector;
 
 type SortExpressionWithoutCodeRefWithInterpolations = {
   by: GeneralSortField;
@@ -110,9 +154,17 @@ type SortExpressionWithCodeRefWithInterpolations = {
   by: string;
   on?: CodeRef;
   direction?: string;
+  near?: NearSortTarget | string;
+  weight?: number;
+  of?: SortExpressionWithCodeRefWithInterpolations[];
+  method?: string;
+  k?: number;
 };
 
-type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
+type SortExpression =
+  | SortExpressionWithoutCodeRef
+  | SortExpressionWithCodeRef
+  | BlendSortExpression;
 type SortExpressionWithInterpolations =
   | SortExpressionWithoutCodeRefWithInterpolations
   | SortExpressionWithCodeRefWithInterpolations;
@@ -179,6 +231,24 @@ export interface ContainsFilter extends TypedFilter {
  */
 export interface MatchesFilter extends TypedFilter {
   matches: string;
+}
+
+// Vector similarity, field-keyed like `range`: a card matches when its
+// VectorField at the path has cosine similarity of at least `minSimilarity`
+// to `to` (any of its vectors, for a plural path). Without `minSimilarity` it
+// matches every card with a vector of `to`'s dimension at the path. Ranking
+// is the near sort's job, and top-k is `page.size` on a near-sorted query.
+export interface NearFilter extends TypedFilter {
+  near: Record<string, NearFilterValue>;
+}
+
+export interface NearFilterValue {
+  to: NearSortTarget;
+  minSimilarity?: number;
+}
+
+export function isNearFilter(filter: Filter): filter is NearFilter {
+  return 'near' in filter;
 }
 
 export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
@@ -333,7 +403,11 @@ export function assertQuery(
   // re-checks as a backstop for callers that bypass `assertQuery`.
   if (
     Array.isArray(query.sort) &&
-    query.sort.some(isMatchRelevanceSort) &&
+    query.sort.some(
+      (s: any) =>
+        isMatchRelevanceSort(s) ||
+        (isBlendSort(s) && s.of.some(isMatchRelevanceSort)),
+    ) &&
     collectPositiveMatchTerms(query.filter).length === 0
   ) {
     throw new InvalidQueryError(
@@ -426,6 +500,22 @@ function assertSortExpression(
     }
   }
 
+  if (isNearSort(sort)) {
+    if (!('on' in sort)) {
+      throw new InvalidQueryError(
+        `${pointer.concat('on').join('/') || '/'}: a near sort needs an on object naming the card type whose field it ranks by`,
+      );
+    }
+    assertCardType(sort.on, pointer.concat('on'));
+    assertNearTarget(sort.near, pointer.concat('near'));
+    return;
+  }
+
+  if (isBlendSort(sort)) {
+    assertBlendSort(sort, pointer);
+    return;
+  }
+
   // A relevance sort needs no `on` and ignores one, though a present `on`
   // must still be a well-formed ref.
   if (isMatchRelevanceSort(sort)) {
@@ -443,6 +533,80 @@ function assertSortExpression(
     );
   }
   assertCardType(sort.on, pointer.concat('on'));
+}
+
+function assertBlendSort(sort: any, pointer: string[]) {
+  let where = pointer.join('/') || '/';
+  if (!Array.isArray(sort.of) || sort.of.length === 0) {
+    throw new InvalidQueryError(
+      `${where}/of: a ${BLEND_SORT_KEY} sort needs an "of" array of the sort entries to fuse`,
+    );
+  }
+  if (sort.of.length > MAX_BLEND_COMPONENTS) {
+    throw new InvalidQueryError(
+      `${where}/of: a ${BLEND_SORT_KEY} sort fuses at most ${MAX_BLEND_COMPONENTS} signals`,
+    );
+  }
+  if ('method' in sort && sort.method !== 'rrf') {
+    throw new InvalidQueryError(
+      `${where}/method: ${BLEND_SORT_KEY} supports method "rrf" (reciprocal rank fusion)`,
+    );
+  }
+  if (
+    'k' in sort &&
+    !(typeof sort.k === 'number' && Number.isFinite(sort.k) && sort.k > 0)
+  ) {
+    throw new InvalidQueryError(`${where}/k: k must be a positive number`);
+  }
+  if ('on' in sort) {
+    throw new InvalidQueryError(
+      `${where}: a ${BLEND_SORT_KEY} sort takes no "on"; put "on" on its signals`,
+    );
+  }
+  sort.of.forEach((component: any, i: number) => {
+    let at = pointer.concat('of', String(i));
+    if (component && isBlendSort(component)) {
+      throw new InvalidQueryError(
+        `${at.join('/')}: a ${BLEND_SORT_KEY} sort cannot contain another`,
+      );
+    }
+    if (
+      component &&
+      'weight' in component &&
+      !(
+        typeof component.weight === 'number' &&
+        Number.isFinite(component.weight) &&
+        component.weight > 0
+      )
+    ) {
+      throw new InvalidQueryError(
+        `${at.join('/')}/weight: weight must be a positive number`,
+      );
+    }
+    assertSortExpression(component, at);
+  });
+}
+
+function assertNearTarget(near: any, pointer: string[]) {
+  let where = pointer.join('/') || '/';
+  if (Array.isArray(near)) {
+    if (near.length < 1 || near.length > MAX_VECTOR_DIMENSIONS) {
+      throw new InvalidQueryError(
+        `${where}: near must have from 1 to ${MAX_VECTOR_DIMENSIONS} components`,
+      );
+    }
+    if (!near.every((c) => typeof c === 'number' && Number.isFinite(c))) {
+      throw new InvalidQueryError(
+        `${where}: near must be an array of finite numbers`,
+      );
+    }
+    return;
+  }
+  if (!isVector(near)) {
+    throw new InvalidQueryError(
+      `${where}: near must be an array of numbers or a vector ({ dims, encoding, scale?, data })`,
+    );
+  }
 }
 
 function assertPage(
@@ -488,6 +652,7 @@ const FILTER_OPERATOR_ASSERTS: Record<
   contains: assertContainsFilter,
   range: assertRangeFilter,
   matches: assertMatchesFilter,
+  near: assertNearFilter,
 };
 
 const FILTER_OPERATORS = Object.keys(FILTER_OPERATOR_ASSERTS);
@@ -787,6 +952,53 @@ function assertMatchesFilter(
   if (typeof filter.matches !== 'string') {
     throw new InvalidQueryError(
       `${matchesPointer.join('/') || '/'}: matches must be a string`,
+    );
+  }
+}
+
+function assertNearFilter(
+  filter: any,
+  pointer: string[],
+): asserts filter is NearFilter {
+  let nearPointer = pointer.concat('near');
+  let where = nearPointer.join('/') || '/';
+  let near = filter?.near;
+  if (typeof near !== 'object' || near == null || Array.isArray(near)) {
+    throw new InvalidQueryError(
+      `${where}: near must be an object keyed by the VectorField's path`,
+    );
+  }
+  let entries = Object.entries(near);
+  if (entries.length !== 1) {
+    throw new InvalidQueryError(
+      `${where}: near takes exactly one field path; combine several under "every" or "any"`,
+    );
+  }
+  let [path, value] = entries[0] as [string, any];
+  assertKey(path, nearPointer);
+  if (typeof value !== 'object' || value == null || !('to' in value)) {
+    throw new InvalidQueryError(
+      `${where}/${path}: expected { to: <vector>, minSimilarity?: <number> }`,
+    );
+  }
+  for (let key of Object.keys(value)) {
+    if (key !== 'to' && key !== 'minSimilarity') {
+      throw new InvalidQueryError(
+        `${where}/${path}: unknown member "${key}" (near takes "to" and "minSimilarity"; for the k nearest, sort by near and set page.size)`,
+      );
+    }
+  }
+  assertNearTarget(value.to, nearPointer.concat(path, 'to'));
+  if (
+    'minSimilarity' in value &&
+    !(
+      typeof value.minSimilarity === 'number' &&
+      value.minSimilarity >= -1 &&
+      value.minSimilarity <= 1
+    )
+  ) {
+    throw new InvalidQueryError(
+      `${where}/${path}/minSimilarity: minSimilarity must be a number from -1 to 1`,
     );
   }
 }

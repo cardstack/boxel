@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Bigger Models, Smoother Curves",
+      "speaker": "Luis Ferreira",
+      "quote": "Loss falls as a power law in compute, data and parameters. Plot it on log axes and the line is boringly straight across six orders of magnitude.",
+      "startsAt": 980,
+      "recommenders": 22,
+      "lastDiscussed": "2026-07-11",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001727592,
+        "data": "HhHR+nXl2gMutO9PSvww7gIWDiYFSx3/2FLknNUl7ygSNPQ08kIi3AUfBhHyDuTm8AwH3g3tOfHx7wTv4/cWBu86G6Pv+fEZ6hDUK8PkLRca7en9E9np5Qn77RX4MPfv79D2DBz6LxsG/co9xvIFGEYc/g33HgpOH//1EzbMAN8A2MnvJwL49gDem///BSHKxwIXGgwVICLpAM7N2AX7GfD3+ub09tAGKPrhAFYG6NQPBxcMJEvNKh0e8QrGHh3s1AgR7fgCDBtUrgou3svd6wv5MOz4MgES8eba9/fRCCrs4fcII9AY9gHp5w0v3hfw3L4M2ifW/7R/8cHwMxvTAw=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

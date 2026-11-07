@@ -20,7 +20,11 @@ import {
   type QueryWithInterpolations,
 } from './query.ts';
 
+// `near` belongs here too: a `near: '$this.embedding'` sort on a card with no
+// embedding has nothing to rank by, so the field resolves to no cards rather
+// than to an unranked list.
 const EMPTY_PREDICATE_KEYS = new Set([
+  'near',
   'eq',
   'in',
   'contains',

@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Consensus Without Tears",
+      "speaker": "Dev Okafor",
+      "quote": "A cluster agrees on a value the way a committee does: a majority votes, and anyone who missed the vote catches up from the log.",
+      "startsAt": 1290,
+      "recommenders": 28,
+      "lastDiscussed": "2025-11-02",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001651172,
+        "data": "RvvmuDo1+z0cDbcvVL8HFTEk9EQlLQ7a8PbztwI4lS7ITcknGdPy+QEzBQECAxw1+OUHx9wOIgrZDu38tjkVAuAPFvhC/fcDEREcJ9fCMQv4GuvyBrUD4OYBGd7vOxnf+8r0E+M8mir06Rwb9gbB5iUR0uDw9hk9De/fFD/i6Afj6euV3g7+/fXzrAb2/xMQ8QYoGhcSM/W69eUGAS0LQ+zu+CTw0+HtOL0i9UkwBuzRuA4IAxzONAEaDh/41xvz+xYrFAQmGRo9nytP9wvuMQTAFREtFQAfCQD/BEcP+uwC3hrMI8D44gTt3xn1ILkZIfIHyjD9MAt/Ae0DDBv+8Q=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

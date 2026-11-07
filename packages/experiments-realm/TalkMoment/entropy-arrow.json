@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Why Time Has a Direction",
+      "speaker": "Oskar Brandt",
+      "quote": "The laws of motion run the same forwards and backwards. The arrow of time comes from the universe starting in an extraordinarily ordered state.",
+      "startsAt": 1702,
+      "recommenders": 49,
+      "lastDiscussed": "2019-01-15",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001879303,
+        "data": "+fMJ49cVnxEc4PklHMsvEvTvMR0AK63m7fYG1bojGLj0KAIX1wIR0AYbPhj52xkVRPYF6Af4/hfwF/nw6OoDH/j5CdoLPgcbHSMlocj0Cvc1Efv39uMG9vULBuM1CvsHB9IIGxIMzg/J1uQZ9B4R7Rnw9dQeLBg0BA0bDRHtLeHoAOL/Idfc+Oq+6+zeEi7h6SYAINXyJCXZFtcZDAH0AA/9GxTnFvzzMAHcGYHyFBkF0ewD+CjnAjHz6/jw1iPa6v0hDwkzuDFBkwQFGAfaKw+O/9cYDeYoDPUD+tUw9vbmOSkDFvAXzhHwrDf29/Mh+hcqxegd/OsREv3uAfn5KA=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

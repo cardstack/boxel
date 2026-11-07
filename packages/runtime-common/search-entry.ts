@@ -44,6 +44,9 @@ import { isCodeRef, isResolvedCodeRef } from './card-document-shape.ts';
 import {
   generalSortFields,
   MATCH_RELEVANCE_SORT_KEY,
+  BLEND_SORT_KEY,
+  isNearSort,
+  isBlendSort,
 } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import { parseUsedRenderType } from './search-resource-helpers.ts';
@@ -121,7 +124,7 @@ export type SearchEntryScope = 'cards' | 'files' | 'all';
 const SEARCH_ENTRY_SCOPES: SearchEntryScope[] = ['cards', 'files', 'all'];
 
 // The operator members whose value is an object keyed by field paths.
-const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range'];
+const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range', 'near'];
 
 // Which form of the `item` serialization the fieldset selects.
 export type SearchEntryItemSelection =
@@ -481,12 +484,16 @@ function translateFieldKeys(
   return out;
 }
 
-function translateSort(value: unknown, rootAnchor: unknown): unknown[] {
+function translateSort(
+  value: unknown,
+  rootAnchor: unknown,
+  path = 'sort',
+): unknown[] {
   if (!Array.isArray(value)) {
-    throw invalidQuery(`sort: sort must be an array`);
+    throw invalidQuery(`${path}: sort must be an array`);
   }
   return value.map((entry, i) => {
-    let pointer = `sort[${i}]`;
+    let pointer = `${path}[${i}]`;
     if (typeof entry !== 'object' || entry == null) {
       throw invalidQuery(`${pointer}: missing sort object`);
     }
@@ -501,6 +508,13 @@ function translateSort(value: unknown, rootAnchor: unknown): unknown[] {
         out.on = v;
       } else if (key === 'direction') {
         out.direction = v;
+      } else if (key === 'near') {
+        out.near = v;
+      } else if (key === 'weight' || key === 'method' || key === 'k') {
+        out[key] = v;
+      } else if (key === 'of') {
+        // a `_blend` sort's signals: sort entries in the same grammar
+        out.of = translateSort(v, rootAnchor, `${pointer}/of`);
       } else if (key === 'on') {
         throw invalidQuery(
           `${pointer}: the sort type anchor is addressed as item.on`,
@@ -517,6 +531,7 @@ function translateSort(value: unknown, rootAnchor: unknown): unknown[] {
       typeof out.by === 'string' &&
       !(out.by in generalSortFields) &&
       out.by !== MATCH_RELEVANCE_SORT_KEY &&
+      out.by !== BLEND_SORT_KEY &&
       rootAnchor !== undefined
     ) {
       out.on = rootAnchor;
@@ -1134,6 +1149,7 @@ const SHAPE_MEMBERS = [
   'contains',
   'range',
   'matches',
+  'near',
 ] as const;
 
 // The single member that decides what an unanchored node matches, or
@@ -1180,6 +1196,14 @@ export interface SearchEntryWireSortExpression {
   by: string;
   'item.on'?: CodeRef;
   direction?: 'asc' | 'desc';
+  // a near sort's target vector (see `NearSortTarget`)
+  near?: unknown;
+  // a `_blend` sort's signals, fusion method and constant, and a signal's
+  // weight (see `BlendSortExpression`)
+  of?: SearchEntryWireSortExpression[];
+  method?: 'rrf';
+  k?: number;
+  weight?: number;
 }
 
 export type SearchEntryWireFilter = {
@@ -1194,6 +1218,7 @@ export type SearchEntryWireFilter = {
   in?: Record<string, unknown>;
   range?: Record<string, unknown>;
   matches?: string;
+  near?: Record<string, unknown>;
 };
 
 export interface SearchEntryWireQuery {
@@ -1220,14 +1245,15 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
     } else if (key === 'not') {
       out.not = wireFilterFromFilter(value as Filter);
     } else if (FIELD_KEYED_OPERATORS.includes(key)) {
-      out[key as 'eq' | 'contains' | 'in' | 'range'] = Object.fromEntries(
-        Object.entries(value as Record<string, unknown>).map(
-          ([fieldPath, fieldValue]) => [
-            `${ITEM_PREFIX}${fieldPath}`,
-            fieldValue,
-          ],
-        ),
-      );
+      out[key as 'eq' | 'contains' | 'in' | 'range' | 'near'] =
+        Object.fromEntries(
+          Object.entries(value as Record<string, unknown>).map(
+            ([fieldPath, fieldValue]) => [
+              `${ITEM_PREFIX}${fieldPath}`,
+              fieldValue,
+            ],
+          ),
+        );
     } else if (key === 'matches') {
       out.matches = value as string;
     } else {
@@ -1237,6 +1263,21 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
     }
   }
   return out;
+}
+
+// One sort entry in the wire grammar: field paths through `item.`, the type
+// anchor as `item.on`, a blend's signals translated the same way.
+function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
+  return {
+    by: `${ITEM_PREFIX}${entry.by}`,
+    ...('on' in entry && entry.on ? { [ITEM_ANCHOR]: entry.on } : {}),
+    ...(entry.direction ? { direction: entry.direction } : {}),
+    ...('near' in entry && entry.near != null ? { near: entry.near } : {}),
+    ...(entry.weight != null ? { weight: entry.weight } : {}),
+    ...(Array.isArray(entry.of) ? { of: entry.of.map(wireSortFromSort) } : {}),
+    ...(entry.method ? { method: entry.method } : {}),
+    ...(entry.k != null ? { k: entry.k } : {}),
+  };
 }
 
 export function searchEntryWireQueryFromQuery(
@@ -1252,11 +1293,7 @@ export function searchEntryWireQueryFromQuery(
     wire.filter = wireFilterFromFilter(query.filter);
   }
   if (query.sort) {
-    wire.sort = (query.sort as Sort).map((entry) => ({
-      by: `${ITEM_PREFIX}${entry.by}`,
-      ...('on' in entry && entry.on ? { [ITEM_ANCHOR]: entry.on } : {}),
-      ...(entry.direction ? { direction: entry.direction } : {}),
-    }));
+    wire.sort = (query.sort as Sort).map(wireSortFromSort);
   }
   if (query.page) {
     wire.page = query.page;
@@ -1289,6 +1326,15 @@ export function combineSearchEntryResults(
   // the summed total then counts only the realms that answered. Count the
   // asked-for realms, not the resolved ones, so the first way is caught too.
   attemptedRealmCount?: number,
+  // When the query's primary sort is a `near` sort, each realm's page is
+  // ranked by cosine similarity to the same target — a score comparable
+  // across realms — so the merge orders the concatenated entries by
+  // `meta._nearSimilarity` (in the sort's direction, entries without a score
+  // last) instead of leaving them in realm order.
+  rankBy?: {
+    key: '_nearSimilarity' | '_blendScore';
+    direction: 'asc' | 'desc';
+  },
 ): EntryCollectionDocument {
   let combined: EntryCollectionDocument = {
     data: [],
@@ -1339,6 +1385,20 @@ export function combineSearchEntryResults(
       }
       included.push(resource);
     }
+  }
+
+  if (rankBy && docs.length > 1) {
+    let sign = rankBy.direction === 'asc' ? 1 : -1;
+    let score = (entry: EntryResource) => entry.meta?.[rankBy.key];
+    // Array#sort is stable, so equal scores keep realm order.
+    combined.data.sort((a, b) => {
+      let sa = score(a);
+      let sb = score(b);
+      if (sa == null || sb == null) {
+        return sa == null ? (sb == null ? 0 : 1) : -1;
+      }
+      return (sa - sb) * sign;
+    });
   }
 
   if (attemptedRealmCount != null && docs.length < attemptedRealmCount) {
@@ -1410,7 +1470,16 @@ export async function searchEntryRealms(
   // full length therefore asks the merge to account for those too, rather than
   // letting a realm that never got as far as a search drop out of the tally
   // that decides whether the total is short.
-  let combined = combineSearchEntryResults(docs, realms.length);
+  let primarySort = searchEntryQuery.itemQuery.sort?.[0];
+  let combined = combineSearchEntryResults(
+    docs,
+    realms.length,
+    primarySort && isBlendSort(primarySort)
+      ? { key: '_blendScore', direction: primarySort.direction ?? 'desc' }
+      : primarySort && isNearSort(primarySort)
+        ? { key: '_nearSimilarity', direction: primarySort.direction ?? 'desc' }
+        : undefined,
+  );
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);
   }
@@ -1454,8 +1523,23 @@ export function buildEntryResource(args: {
   // Full-text relevance for the query's `matches` terms — present only on a
   // relevance-sorted query; rides in `meta._matchRelevance`. Omitted otherwise.
   matchRelevance?: number;
+  // Cosine similarity to the target of the query's first `near` sort (1 =
+  // same direction, -1 = opposite) — present only on a near-sorted query; rides in
+  // `meta._nearSimilarity`. Omitted otherwise, and for a card with no vector.
+  nearSimilarity?: number;
+  // The first `_blend` sort's fused score — rides in `meta._blendScore`.
+  blendScore?: number;
 }): EntryResource {
-  let { url, htmlIds, itemType, iconId, generation, matchRelevance } = args;
+  let {
+    url,
+    htmlIds,
+    itemType,
+    iconId,
+    generation,
+    matchRelevance,
+    nearSimilarity,
+    blendScore,
+  } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
     id: url,
@@ -1474,12 +1558,21 @@ export function buildEntryResource(args: {
       data: { type: IconResourceType, id: iconId },
     };
   }
-  if (generation !== undefined || matchRelevance !== undefined) {
+  if (
+    generation !== undefined ||
+    matchRelevance !== undefined ||
+    nearSimilarity !== undefined ||
+    blendScore !== undefined
+  ) {
     resource.meta = {
       ...(generation !== undefined ? { generation } : {}),
       ...(matchRelevance !== undefined
         ? { _matchRelevance: matchRelevance }
         : {}),
+      ...(nearSimilarity !== undefined
+        ? { _nearSimilarity: nearSimilarity }
+        : {}),
+      ...(blendScore !== undefined ? { _blendScore: blendScore } : {}),
     };
   }
   return resource;

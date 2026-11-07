@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "The Value of Values",
+      "speaker": "Priya Halvorsen",
+      "quote": "A value never changes, so you can share it, cache it and reason about it. Most of the pain in programs comes from places that change under you.",
+      "startsAt": 615,
+      "recommenders": 57,
+      "lastDiscussed": "2016-08-30",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001570515,
+        "data": "UvjF+TsbxjHZFIEW/tRONiTdMAoe/z7G9DESAs4kxAnCWwEtDQTvKCA/JBUz6Awm4tri2+Q93gvhz7UQsQ0VHbIRHMr7SyImLAc8UqbDMzf8KxAA0bcR9774ClH1MxjA2L/sGQcfH+UBzCPxIPw8Nj4X5eb7BP8ICfHkJSzmHt75AAjVId3Q3vEYrP72KRH55CHpFAQZJBsAB7H4BBEV39311xQj5RoDMuDj/U0KFjAU+goOIRP9HwMHxCMJGiS77g8q6+v+HSddrP8lsQ3sPQsPMukTQxkJBt/V7tTf7TL1LfPZINQz1hHwjfXgBusnAtzlKxHp8/hLzN3NMBcFLg=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

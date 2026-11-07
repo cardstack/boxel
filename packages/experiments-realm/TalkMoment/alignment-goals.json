@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "When the Goal Is Slightly Wrong",
+      "speaker": "Amara Steen",
+      "quote": "A capable system optimising a slightly wrong objective does exactly what you said, not what you meant, and the gap grows with its capability.",
+      "startsAt": 1475,
+      "recommenders": 64,
+      "lastDiscussed": "2026-10-01",
+      "embedding": {
+        "dims": 256,
+        "encoding": "int8",
+        "scale": 0.001884739,
+        "data": "MSUI7vgN2BwN54EkGQcaEhgf9iD6LAbmqikRuvcPATsbTegQGfoh4B/uNBLhG+ICCAQE2grzC//NFtb/xxLj3Nbw8tj++Cv17dv8N9rF/g8d7OXyKewL+gAHuQsOOwm/39Hy7ew69+4j8QYLHAwLEVEo6v4BJCId7vHG/xTF+hT5++cBIzfa9wr/ldrg4RvX5OnlKSMHHhUf9ccY4Q8f5Qrw7uQLAvTYMsv4BA4hvPXo2hocEy7K5/8R+vzgABHu8uoM8fYA8BFoiw4TwQj8HAfqK+HkDCYEAgQUCBAgFNbYG+TPBd0e4+/z+sUi3xEX/hMYKhjTCuI7/vP9RR4W+Q=="
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vector-search-demo",
+        "name": "TalkMoment"
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@ import {
   isEveryFilter,
   isInFilter,
   isMatchesFilter,
+  isNearFilter,
   isNotFilter,
   isRangeFilter,
   isReferenceFilterField,
@@ -16,7 +17,12 @@ import {
   type RangeOperator,
   type Sort,
 } from './query.ts';
-import { isMatchRelevanceSort } from './index-query-engine.ts';
+import {
+  isBlendSort,
+  isMatchRelevanceSort,
+  isNearSort,
+} from './index-query-engine.ts';
+import { cosineSimilarity, isVector } from './serializers/vector.ts';
 
 import {
   CARD_INSTANCE_FILE_KEY,
@@ -81,6 +87,13 @@ const GENERAL_SORT_FIELDS = new Set(['lastModified', 'createdAt', 'cardURL']);
 // Operators the matcher can replicate in JS. `matches` (full-text) and any
 // operator not in this set force the caller to fall back to server-only
 // evaluation.
+// Whether a live query's sort can be re-applied to the instances the client
+// holds. A `_blend` sort ranks each signal over the server's whole match set,
+// which a client holding a subset cannot reproduce, so it defers to the server.
+export function isClientSortable(sort: Sort | undefined): boolean {
+  return !(sort ?? []).some((s) => isBlendSort(s));
+}
+
 export function isClientEvaluable(filter: Filter): boolean {
   // A node carrying more than one operator is invalid (`assertFilter` rejects
   // it), but live local queries don't pass through `assertQuery`. Declining
@@ -90,6 +103,10 @@ export function isClientEvaluable(filter: Filter): boolean {
     return false;
   }
   if (isMatchesFilter(filter)) {
+    return false;
+  }
+  // Near filters read the server's vector index; the client defers to it.
+  if (isNearFilter(filter)) {
     return false;
   }
   if (isAnyFilter(filter)) {
@@ -673,7 +690,13 @@ export function makeInstanceComparator(
 ): (a: CardDef, b: CardDef) => number {
   return (a: CardDef, b: CardDef) => {
     for (let expression of sort ?? []) {
-      let direction = expression.direction === 'desc' ? -1 : 1;
+      // A near sort ranks by similarity, most similar first unless asked
+      // otherwise — the server's default for it.
+      let direction =
+        (expression.direction ?? (isNearSort(expression) ? 'desc' : 'asc')) ===
+        'desc'
+          ? -1
+          : 1;
       let valueA = sortValue(a, expression, api);
       let valueB = sortValue(b, expression, api);
       let nullA = valueA == null;
@@ -711,8 +734,20 @@ function sortValue(
   // queries never reach this comparator (server results pass through
   // unsorted). If `matches` ever becomes client-evaluable, this needs a
   // relevance shim.
-  if (isMatchRelevanceSort(expression)) {
+  if (isMatchRelevanceSort(expression) || isBlendSort(expression)) {
     return null;
+  }
+  // A near sort mirrors the server's cosine similarity, so a live query
+  // re-sorts its instances the way the index would. Plural fields take their
+  // nearest vector, as the server's MAX does; a card with no vector, or one of
+  // another dimension, sorts last.
+  if (isNearSort(expression)) {
+    let { values } = resolvePath(instance, expression.by, api);
+    let similarities = values
+      .filter((v): v is NonNullable<typeof v> => isVector(v))
+      .filter((v) => v.dims === nearLength(expression.near))
+      .map((v) => cosineSimilarity(v, expression.near));
+    return similarities.length ? Math.max(...similarities) : null;
   }
   if ('on' in expression && expression.on) {
     let { values } = resolvePath(instance, expression.by, api);
@@ -730,6 +765,10 @@ function sortValue(
       // fields arrive with `on` and take the branch above.
       return null;
   }
+}
+
+function nearLength(near: unknown): number {
+  return isVector(near) ? near.dims : (near as ArrayLike<number>).length;
 }
 
 function rawCompare(a: any, b: any): number {
