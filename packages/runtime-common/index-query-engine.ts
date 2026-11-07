@@ -1554,8 +1554,10 @@ export class IndexQueryEngine {
               (facets ?? []).length,
             );
           }
-        } else if ((page.number ?? 0) === 0) {
-          // No match: no count, and every facet is empty.
+        } else if ((page.number ?? 0) === 0 && Number(page.size) > 0) {
+          // No match: no count, and every facet is empty. A counts-only page
+          // (`size: 0`) returns no row whether or not anything matched, so it
+          // takes the fallback below.
           totalResults = [{ total: 0 }];
           if (pgFacets) {
             facetResults = (facets ?? []).map(() => []);

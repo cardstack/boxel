@@ -363,6 +363,17 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(facets?.hnScore, [{ value: '30-*', count: 2 }]);
   });
 
+  test('a counts-only page (size 0) still counts the total and the facets', async function (assert) {
+    let { facets, page } = await meta({
+      filter: { type: on },
+      page: { size: 0 },
+      facets: [{ by: 'channel' }, { by: 'hnScore', ranges: [{ from: 30 }] }],
+    });
+    assert.strictEqual(page.total, 5);
+    assert.deepEqual(facets?.channel?.[0], { value: 'Strange Loop', count: 2 });
+    assert.deepEqual(facets?.hnScore, [{ value: '30-*', count: 2 }]);
+  });
+
   test('merging realms adds counts, keeps link labels and combines stats', function (assert) {
     let doc = (facets: unknown, facetStats?: unknown) =>
       ({ data: [], meta: { page: { total: 1 }, facets, facetStats } }) as never;
