@@ -105,6 +105,9 @@ import {
   isNearFilter,
   isReferenceFilterField,
   collapseBy,
+  EXPR_SORT_KEY,
+  exprSortSql,
+  isExprSort,
   type ResultExplanation,
   mapLetReferences,
   MAX_LET_ROWS,
@@ -1941,6 +1944,17 @@ export class IndexQueryEngine {
     ];
   }
 
+  // An `_expr` sort's formula as SQL over the row's search doc. Postgres
+  // only: the score profile lowers to Postgres functions.
+  #exprSql(expr: string): string {
+    if (this.#dbAdapter.kind !== 'pg') {
+      throw new InvalidQueryError(
+        `sort by "${EXPR_SORT_KEY}" runs on Postgres only`,
+      );
+    }
+    return exprSortSql(expr);
+  }
+
   // A query's `let` bindings, resolved before it is planned. A binding that
   // names one card by id and selects a link field's ids, read only by `in`s
   // on `id`, becomes `linkedFrom` and joins in the same statement. Any other
@@ -2275,35 +2289,43 @@ export class IndexQueryEngine {
           // the SELECT (see `_search`); reference the alias directly and default
           // to `desc` (best match first). A near sort's similarity column works
           // the same way. Everything else sorts on a column.
-          isBlendSort(s)
+          isExprSort(s)
             ? [
-                `"${blendScoreAlias(sort, index)}"`,
+                'ANY_VALUE(',
+                this.#exprSql(s.expr),
+                ')',
                 sortDirection(s.direction ?? 'desc'),
                 'NULLS LAST',
               ]
-            : isNearSort(s)
+            : isBlendSort(s)
               ? [
-                  `"${nearSimilarityAlias(sort, index)}"`,
+                  `"${blendScoreAlias(sort, index)}"`,
                   sortDirection(s.direction ?? 'desc'),
                   'NULLS LAST',
                 ]
-              : isMatchRelevanceSort(s)
+              : isNearSort(s)
                 ? [
-                    `"${MATCH_RELEVANCE_SORT_KEY}"`,
+                    `"${nearSimilarityAlias(sort, index)}"`,
                     sortDirection(s.direction ?? 'desc'),
                     'NULLS LAST',
                   ]
-                : [
-                    // intentionally not using field arity here--not sure what it
-                    // means to sort via a plural field
-                    'ANY_VALUE(',
-                    'on' in s && s.on
-                      ? fieldQuery(s.by, s.on, false, 'sort')
-                      : this.generalFieldSortColumn(s.by),
-                    ')',
-                    sortDirection(s.direction),
-                    'NULLS LAST',
-                  ],
+                : isMatchRelevanceSort(s)
+                  ? [
+                      `"${MATCH_RELEVANCE_SORT_KEY}"`,
+                      sortDirection(s.direction ?? 'desc'),
+                      'NULLS LAST',
+                    ]
+                  : [
+                      // intentionally not using field arity here--not sure what it
+                      // means to sort via a plural field
+                      'ANY_VALUE(',
+                      'on' in s && s.on
+                        ? fieldQuery(s.by, s.on, false, 'sort')
+                        : this.generalFieldSortColumn(s.by),
+                      ')',
+                      sortDirection(s.direction),
+                      'NULLS LAST',
+                    ],
         ),
         // `url` then `type` are the final sort keys for deterministic results
         // (the two rows of a dual-indexed card `.json` share a url).
@@ -2334,6 +2356,20 @@ export class IndexQueryEngine {
     let innerSortColumns: CardExpression = [];
     let outerKeys: CardExpression[] = [];
     sort.forEach((s, i) => {
+      if (isExprSort(s)) {
+        let alias = `_sort_${i}`;
+        innerSortColumns.push(
+          ', ANY_VALUE(',
+          this.#exprSql(s.expr),
+          `) AS ${alias}`,
+        );
+        outerKeys.push([
+          alias,
+          sortDirection(s.direction ?? 'desc'),
+          'NULLS LAST',
+        ]);
+        return;
+      }
       // Blend and near columns are projected by the inner SELECT too.
       if (isBlendSort(s)) {
         outerKeys.push([
@@ -3294,6 +3330,9 @@ export class IndexQueryEngine {
       return inverted
         ? ['NULLIF(MIN(CASE WHEN', ...condition, 'THEN 0 ELSE 1 END), 0)']
         : ['MAX(CASE WHEN', ...condition, 'THEN 1 END)'];
+    }
+    if (isExprSort(component)) {
+      return ['ANY_VALUE(', this.#exprSql(component.expr), ')'];
     }
     if (isMatchRelevanceSort(component)) {
       // ts_rank_cd is 0 for a card the terms don't match: no signal.
@@ -5482,13 +5521,15 @@ function explainRows(rows: Record<string, unknown>[], sort: Sort | undefined) {
     if (named) {
       return { signal: named.name, weight: named.weight };
     }
-    let signal = isWhenSignal(c)
-      ? 'when'
-      : isMatchRelevanceSort(c)
-        ? 'text'
-        : isNearSort(c)
-          ? `near ${c.by}`
-          : c.by;
+    let signal = isExprSort(c)
+      ? c.expr
+      : isWhenSignal(c)
+        ? 'when'
+        : isMatchRelevanceSort(c)
+          ? 'text'
+          : isNearSort(c)
+            ? `near ${c.by}`
+            : c.by;
     return { signal, weight: c.weight ?? 1 };
   });
   for (let row of rows) {

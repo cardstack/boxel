@@ -974,6 +974,100 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('an _expr sort ranks by a spreadsheet formula', async function (assert) {
+    let titles = async (sort: any, extra: any = {}) =>
+      (await search({ filter: { type: on }, sort, ...extra })).titles;
+    assert.deepEqual(
+      await titles([{ by: '_expr', on, expr: '100 - hnScore' }]),
+      ['g', 'f', 'a', 'c', 'b', 'e', 'd'],
+      'highest value first',
+    );
+    assert.deepEqual(
+      await titles([
+        { by: '_expr', on, expr: 'hnScore / MAX(DAYS(NOW(), published), 1)' },
+      ]),
+      ['e', 'a', 'f', 'b', 'g', 'c', 'd'],
+      'score per day since publishing; as in Excel, MAX skips a missing date',
+    );
+    assert.deepEqual(
+      await titles([
+        { by: '_expr', on, expr: 'IF(hnScore >= 30, 1, 0)' },
+        { on, by: 'hnScore', direction: 'asc' },
+      ]),
+      ['b', 'e', 'd', 'g', 'f', 'a', 'c'],
+      'a then-by sort breaks its ties',
+    );
+    assert.deepEqual(
+      await titles([{ by: '_expr', on, expr: 'hnScore' }], {
+        collapse: { by: 'channel', on },
+        page: { number: 0, size: 2 },
+      }),
+      ['d', 'b'],
+      'it orders a collapsed, paged search too',
+    );
+  });
+
+  test('an _expr signal blends, and explain names its formula', async function (assert) {
+    let { results } = await engine.search(
+      new URL(testRealm),
+      {
+        filter: { type: on },
+        explain: true,
+        sort: [
+          {
+            by: '_blend',
+            of: [
+              { by: '_expr', on, expr: 'IFERROR(100 / hnScore, 0)', weight: 2 },
+              { on, by: 'hnScore' },
+            ],
+          },
+        ],
+      },
+      {},
+      { kind: 'renderSet' },
+    );
+    let first = results[0] as any;
+    assert.strictEqual(
+      first.url,
+      `${testRealm}Talk/g.json`,
+      'the formula leads',
+    );
+    assert.deepEqual(first._explain.signals[0], {
+      signal: 'IFERROR(100 / hnScore, 0)',
+      weight: 2,
+      value: 100,
+      rank: 1,
+      contribution: 2 / 61,
+    });
+  });
+
+  test('a formula outside the score profile is refused, and _expr travels the wire', function (assert) {
+    assert.throws(
+      () => assertQuery({ sort: [{ by: '_expr', on, expr: 'LEN(title)' }] }),
+      (err: unknown) =>
+        err instanceof InvalidQueryError &&
+        /_expr: LEN is not part of the score profile/.test(err.message),
+    );
+    assert.throws(
+      () =>
+        assertQuery({
+          sort: [{ by: '_expr', on, expr: 'rating', near: [1] }],
+        } as any),
+      /takes by, expr, on, direction and weight/,
+    );
+    let parsed = parseSearchEntryQueryFromPayload({
+      filter: { 'item.on': on },
+      sort: [{ by: 'item._expr', expr: 'rating / LN(priceMin + 1)' }],
+    });
+    assert.deepEqual((parsed.itemQuery.sort as any)[0], {
+      by: '_expr',
+      expr: 'rating / LN(priceMin + 1)',
+      on,
+    });
+    let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
+    assert.strictEqual((wire.sort as any)[0].expr, 'rating / LN(priceMin + 1)');
+  });
+
   test('the wire grammar checks collapse and measure', function (assert) {
     let bad = (query: Record<string, unknown>, pattern: RegExp) =>
       assert.throws(

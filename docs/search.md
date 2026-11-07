@@ -276,6 +276,31 @@ sort: [
 
 Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `_matchRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, ranks are per realm, so a federated blend orders only approximately.
 
+### Ranking by a formula (`_expr`)
+
+An `_expr` sort ranks by a spreadsheet formula over each card's fields: `{ by: '_expr', on: productRef, expr: 'rating / LN(priceMin + 1)' }`. The formula is BXL in its score profile ([`packages/bxl/docs/score-sql.md`](../packages/bxl/docs/score-sql.md)): numbers, field names, arithmetic, comparisons and `IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, `NOW` and the like. It is compiled to SQL and computed for every match, so it orders the whole set, pages and collapses like any sort. Highest first unless `direction` is `asc`. As in Excel, a division by zero or a missing field is an error value rather than a failure: the card ranks last, and `IFERROR` gives it a value instead. A formula outside the profile is refused with the reason.
+
+It also works as a `_blend` signal with a `weight`, and `explain` names the signal by its formula.
+
+```js
+sort: [
+  {
+    by: '_blend',
+    of: [
+      { by: '_matchRelevance' },
+      {
+        by: '_expr',
+        on: productRef,
+        expr: 'IFERROR(wishlistCount / unitsSold30d, 0)',
+        weight: 1.5,
+      },
+    ],
+  },
+];
+```
+
+Postgres only.
+
 ### Why a result ranks where it does (`explain`)
 
 With `explain: true`, every result of a query sorted by `_blend` or `_relevance` carries `meta._explain`: the first blend's fused score, its `k`, and each signal's part in it.

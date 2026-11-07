@@ -19,6 +19,7 @@ import {
   isRelevanceSort,
   isRelativeDate,
   resolveRelativeDate,
+  isExprSort,
 } from './query.ts';
 import {
   isBlendSort,
@@ -94,7 +95,9 @@ const GENERAL_SORT_FIELDS = new Set(['lastModified', 'createdAt', 'cardURL']);
 // holds. A `_blend` sort ranks each signal over the server's whole match set,
 // which a client holding a subset cannot reproduce, so it defers to the server.
 export function isClientSortable(sort: Sort | undefined): boolean {
-  return !(sort ?? []).some((s) => isBlendSort(s) || isRelevanceSort(s));
+  return !(sort ?? []).some(
+    (s) => isBlendSort(s) || isRelevanceSort(s) || isExprSort(s),
+  );
 }
 
 export function isClientEvaluable(filter: Filter): boolean {

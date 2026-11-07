@@ -328,6 +328,10 @@ result.params;
 
 See [`predicate-sql.md`](./predicate-sql.md) for the detailed SQL compiler contract and the pushdown sweet spots that remain in the profile.
 
+## `score` (SQL lowering)
+
+A numeric formula over one record, compiled to SQL so a database ranks every row by it: the `_expr` sort of a Boxel search. Arithmetic, comparisons and the Excel functions Postgres can compute per row (`IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, …); Excel errors become NULL. The compiler enforces the profile itself and refuses anything else with the reason. See [Score Profile SQL Compiler](./score-sql.md).
+
 ## `derive`
 
 `derive` is for deterministic headless write/index-time computation. It is the right profile for Boxel `computeVia` and other derived values that the platform may store, index, cache, or reuse on a later read path. The Boxel `bxl()` / `expression()` factory enforces this profile when it constructs the compute function.

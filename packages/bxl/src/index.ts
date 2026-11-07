@@ -279,6 +279,14 @@ export type {
 };
 
 export { loadAllFormulaExtensions } from './bxl/bridge/lazy-formulas.ts';
+export {
+  BXL_SCORE_FUNCTIONS,
+  BxlScoreSqlError,
+  compileBxlScoreToSql,
+  type BxlScoreSqlOptions,
+  type BxlScoreSqlResult,
+  type BxlScoreSqlUsage,
+} from './bxl/sql/score.ts';
 
 export {
   BXL_AUTHORIZATION_IR_SCHEMA,

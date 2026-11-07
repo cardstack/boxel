@@ -1,3 +1,7 @@
+import {
+  BxlScoreSqlError,
+  compileBxlScoreToSql,
+} from '@cardstack/bxl/compiler';
 import { isEqual } from 'lodash-es';
 import qs from 'qs';
 
@@ -333,6 +337,7 @@ export type BlendComponent =
   | ((SortExpressionWithoutCodeRef | SortExpressionWithCodeRef) & {
       weight?: number;
     })
+  | ExprSortExpression
   | WhenSignal;
 
 // A "should" clause: a blend signal that lifts the cards matching `when`
@@ -426,6 +431,7 @@ export function isRelevanceSort(sort: object): sort is RelevanceSortExpression {
 }
 
 type SortExpression =
+  | ExprSortExpression
   | SortExpressionWithoutCodeRef
   | SortExpressionWithCodeRef
   | BlendSortExpression
@@ -435,6 +441,46 @@ type SortExpressionWithInterpolations =
   | SortExpressionWithCodeRefWithInterpolations;
 export type Sort = SortExpression[];
 type SortWithInterpolations = SortExpressionWithInterpolations[];
+
+// Ranks by a spreadsheet formula over each card's fields, in the BXL score
+// profile (`compileBxlScoreToSql`): numbers, fields, arithmetic, comparisons
+// and IF, IFERROR, ROUND, LN, LOG10, SQRT, POWER, MIN, MAX, AVERAGE, DAYS,
+// NOW and the like. `{ by: '_expr', expr: 'rating / LN(priceMin + 1)' }`.
+// Highest first unless `direction` is `asc`; a card whose formula has no
+// value (a missing field, a division by zero) ranks last. It also takes part
+// in a `_blend` as a signal. Postgres only.
+export const EXPR_SORT_KEY = '_expr';
+export type ExprSortExpression = {
+  by: typeof EXPR_SORT_KEY;
+  expr: string;
+  on?: CodeRef;
+  direction?: 'asc' | 'desc';
+  weight?: number;
+};
+export function isExprSort(sort: object): sort is ExprSortExpression {
+  return (sort as { by?: unknown }).by === EXPR_SORT_KEY;
+}
+
+// A formula's SQL, or the reason it is outside the score profile. Fields
+// are read from the search doc as numbers (booleans as 1 and 0) or, inside
+// DAYS, as dates.
+export function exprSortSql(expr: string): string {
+  try {
+    return compileBxlScoreToSql(expr, {
+      fieldToSql(parts, usage) {
+        let v = `spill_unmark(i.search_doc #> '{${parts.join(',')}}'::text[])`;
+        return usage === 'timestamp'
+          ? `(CASE WHEN (${v} #>> '{}') ~ '^\\d{4}-\\d{2}-\\d{2}' THEN (${v} #>> '{}')::timestamptz END)`
+          : `(CASE jsonb_typeof(${v}) WHEN 'number' THEN (${v} #>> '{}')::double precision WHEN 'boolean' THEN (CASE WHEN ${v} = 'true'::jsonb THEN 1 ELSE 0 END)::double precision END)`;
+      },
+    }).sql;
+  } catch (e) {
+    if (e instanceof BxlScoreSqlError) {
+      throw new InvalidQueryError(`${EXPR_SORT_KEY}: ${e.message}`);
+    }
+    throw e;
+  }
+}
 
 // The CardTypeFilter is used when you solely want to filter for all cards that
 // adopt from some particular card type--no other predicates are included in
@@ -1020,6 +1066,26 @@ function assertSortExpression(
 
   if (isRelevanceSort(sort)) {
     assertRelevanceSort(sort, pointer);
+    return;
+  }
+
+  if (isExprSort(sort)) {
+    for (let key of Object.keys(sort)) {
+      if (!['by', 'expr', 'on', 'direction', 'weight'].includes(key)) {
+        throw new InvalidQueryError(
+          `${pointer.join('/') || '/'}: a ${EXPR_SORT_KEY} sort takes by, expr, on, direction and weight, not "${key}"`,
+        );
+      }
+    }
+    if (typeof (sort as any).expr !== 'string') {
+      throw new InvalidQueryError(
+        `${pointer.concat('expr').join('/') || '/'}: expr must be a formula, such as "rating / LN(priceMin + 1)"`,
+      );
+    }
+    if ('on' in sort) {
+      assertCardType((sort as any).on, pointer.concat('on'));
+    }
+    exprSortSql((sort as any).expr);
     return;
   }
 

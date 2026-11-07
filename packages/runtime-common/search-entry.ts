@@ -569,6 +569,9 @@ function translateSort(
       } else if (key === 'of') {
         // a `_blend` sort's signals: sort entries in the same grammar
         out.of = translateSort(v, rootAnchor, `${pointer}/of`);
+      } else if (key === 'expr') {
+        // an `_expr` sort's formula; its field names are the card's own
+        out.expr = v;
       } else if (key === 'when') {
         // a `_when` signal's filter, in the filter grammar; it takes the
         // query's anchor when it names none
@@ -1428,6 +1431,8 @@ export interface SearchEntryWireSortExpression {
   weights?: Record<string, number>;
   // a `_when` signal's filter (see `WhenSignal`)
   when?: SearchEntryWireFilter;
+  // an `_expr` sort's formula (see `ExprSortExpression`)
+  expr?: string;
 }
 
 export type SearchEntryWireFilter = {
@@ -1539,6 +1544,7 @@ function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
     ...(entry.method ? { method: entry.method } : {}),
     ...(entry.k != null ? { k: entry.k } : {}),
     ...(entry.when ? { when: wireFilterFromFilter(entry.when) } : {}),
+    ...(typeof entry.expr === 'string' ? { expr: entry.expr } : {}),
   };
 }
 

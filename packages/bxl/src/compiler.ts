@@ -49,6 +49,14 @@ export {
   compileBxlPredicateAstToSql,
   compileBxlPredicateToSql,
 } from './bxl/sql/index.ts';
+export {
+  BXL_SCORE_FUNCTIONS,
+  BxlScoreSqlError,
+  compileBxlScoreToSql,
+  type BxlScoreSqlOptions,
+  type BxlScoreSqlResult,
+  type BxlScoreSqlUsage,
+} from './bxl/sql/score.ts';
 
 export type {
   ReadableSchema,
