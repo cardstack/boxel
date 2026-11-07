@@ -59,8 +59,8 @@ export const ALLOWED_PACKAGES = new Set([
   'ember-power-select',
   'lodash-es',
 
-  // Packages the build reaches through the ones above that ADR 019 §1.3
-  // doesn't name, each reviewed here.
+  // Packages the build reaches through the ones above, as ADR 019 §1.3
+  // names them.
   //
   // Embroider's run-time macros: `ember-provide-consume-context` calls
   // `importSync` from them, and Pret UI's Select reaches it by consuming
