@@ -93,6 +93,7 @@ import {
   DEFAULT_FACET_SIZE,
   type Facet,
   type FacetCount,
+  type FacetMeasureOp,
   type FacetInterval,
   type FacetRange,
   type FacetStats,
@@ -102,6 +103,10 @@ import {
   type TypeAheadFilter,
   isNearFilter,
   isReferenceFilterField,
+  collapseBy,
+  isWhenSignal,
+  isRelativeDate,
+  resolveRelativeDate,
 } from './query.ts';
 import {
   renderErrorSummary,
@@ -1303,7 +1308,7 @@ export class IndexQueryEngine {
   // loader that we should be using.
   private async _search(
     realmURL: URL,
-    { filter, sort, page, facets }: Query,
+    { filter, sort, page, facets, collapse }: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' | 'all' = 'instance',
@@ -1388,6 +1393,13 @@ export class IndexQueryEngine {
       }
 
       let everyCondition = every(conditions);
+      let collapsed = collapseBy(collapse);
+      let collapseOn = collapsed?.on ?? filterAnchor(filter);
+      if (collapsed && !collapseOn) {
+        throw new InvalidQueryError(
+          `collapse by "${collapsed.by}" needs a type: give it \`on\` or anchor the filter on a type`,
+        );
+      }
       let limitClause = page
         ? [`LIMIT ${page.size} OFFSET ${(page.number ?? 0) * page.size}`]
         : [];
@@ -1427,6 +1439,11 @@ export class IndexQueryEngine {
         sort,
         sortsByMatchRelevance ? collectPositiveMatchTerms(filter) : [],
         opts?.pendingStagingId !== undefined,
+        {
+          inAny: false,
+          prerenderedTable: prerenderedTableFromOpts(opts),
+          indexTable: tableFromOpts(opts),
+        },
       );
       relevanceColumn = [...relevanceColumn, ...nearColumns, ...blendColumns];
       nearJoins = [...nearJoins, ...blendJoins];
@@ -1497,7 +1514,62 @@ export class IndexQueryEngine {
       let results: Record<string, unknown>[];
       let totalResults: Record<string, unknown>[];
       let facetResults: unknown[];
-      if (page && !conditionalLiveDoc) {
+      if (collapsed && collapseOn && !conditionalLiveDoc) {
+        // Collapsed: the narrow pass keeps each group's best rows by the
+        // query's own order, then orders, counts and pages what remains.
+        // Facets count every match, so they run on their own.
+        let keys: Record<string, unknown>[];
+        [keys, ...facetResults] = await Promise.all([
+          this.#queryCards(
+            this.#collapsedNarrowPass({
+              opts,
+              sort,
+              collapse: {
+                by: collapsed.by,
+                on: collapseOn,
+                keep: collapsed.keep,
+              },
+              relevanceColumn,
+              nearJoins,
+              everyCondition,
+              limitClause,
+            }),
+            opts.timings,
+          ),
+          ...facetQueries().map((q) => this.#queryCards(q, opts.timings)),
+        ]);
+        if (keys.length > 0) {
+          totalResults = [{ total: keys[0].__page_total }];
+        } else {
+          let [row] = await this.#queryCards(
+            this.#collapsedNarrowPass({
+              opts,
+              sort: undefined,
+              collapse: {
+                by: collapsed.by,
+                on: collapseOn,
+                keep: collapsed.keep,
+              },
+              relevanceColumn: [],
+              nearJoins: [],
+              everyCondition,
+              limitClause: [],
+              countOnly: true,
+            }),
+            opts.timings,
+          );
+          totalResults = [{ total: row?.total ?? 0 }];
+        }
+        results =
+          keys.length > 0
+            ? await this.#pageRows(
+                keys,
+                selectClauseExpression,
+                baseConditions,
+                opts,
+              )
+            : [];
+      } else if (page && !conditionalLiveDoc) {
         // A paged search runs as a narrow pass then a wide one. The narrow
         // pass evaluates the filter once and returns only each match's key, its
         // sort values and the synthetic sort columns, ordered and limited to
@@ -1839,13 +1911,72 @@ export class IndexQueryEngine {
     ];
   }
 
+  // The narrow pass of a collapsed search: every match's key and sort
+  // values, as in a paged search, plus its group's value at `collapse.by`.
+  // Each group keeps its best `keep` rows by the query's order (a match with
+  // no value is a group of its own), and the total counts what is kept.
+  #collapsedNarrowPass({
+    opts,
+    sort,
+    collapse,
+    relevanceColumn,
+    nearJoins,
+    everyCondition,
+    limitClause,
+    countOnly = false,
+  }: {
+    opts: QueryOptions;
+    sort: Sort | undefined;
+    collapse: { by: string; on: CodeRef; keep: number };
+    relevanceColumn: CardExpression;
+    nearJoins: CardExpression;
+    everyCondition: CardExpression;
+    limitClause: string[];
+    countOnly?: boolean;
+  }): CardExpression {
+    let { innerSortColumns, outerOrderBy } = this.#wrappedOrderExpression(sort);
+    let kept: CardExpression = [
+      'WITH m AS (',
+      'SELECT i.url AS url, i.type AS type',
+      ...relevanceColumn,
+      ...innerSortColumns,
+      ', ANY_VALUE(',
+      fieldQuery(collapse.by, collapse.on, false, 'sort'),
+      ') AS __collapse',
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      ...nearJoins,
+      tableValuedFunctionsPlaceholder,
+      'WHERE',
+      ...everyCondition,
+      'GROUP BY i.url, i.type',
+      '), c AS (',
+      'SELECT m.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(CAST(m.__collapse AS TEXT), m.url)',
+      ...outerOrderBy,
+      ') AS __collapse_rank FROM m',
+      ')',
+    ];
+    if (countOnly) {
+      return [
+        ...kept,
+        `SELECT COUNT(*) AS total FROM c WHERE c.__collapse_rank <= ${Number(collapse.keep)}`,
+      ];
+    }
+    return [
+      ...kept,
+      'SELECT c.*, COUNT(*) OVER () AS __page_total FROM c',
+      `WHERE c.__collapse_rank <= ${Number(collapse.keep)}`,
+      ...outerOrderBy,
+      ...limitClause,
+    ];
+  }
+
   // Projection-parametrized instance search. `_search` builds the shared query
   // core (WHERE / GROUP BY url / ORDER / LIMIT); this method varies only the
   // SELECT list by projection. `searchCards` and `searchPrerendered` are thin
   // wrappers, each fixing one projection.
   async search(
     realmURL: URL,
-    { filter, sort, page, facets }: Query,
+    { filter, sort, page, facets, collapse }: Query,
     opts: QueryOptions,
     projection: SearchProjection,
     // 'all' searches both `instance` and `file` rows in one query (kind is
@@ -1922,7 +2053,7 @@ export class IndexQueryEngine {
 
     return (await this._search(
       realmURL,
-      { filter, sort, page, facets },
+      { filter, sort, page, facets, collapse },
       opts,
       selectClauseExpression,
       entryType,
@@ -1937,14 +2068,14 @@ export class IndexQueryEngine {
 
   async searchCards(
     realmURL: URL,
-    { filter, sort, page, facets }: Query,
+    { filter, sort, page, facets, collapse }: Query,
     opts: QueryOptions = {},
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this.search(
       realmURL,
-      { filter, sort, page, facets },
+      { filter, sort, page, facets, collapse },
       opts,
       { kind: 'dataOnly' },
     );
@@ -1958,12 +2089,12 @@ export class IndexQueryEngine {
 
   async searchFiles(
     realmURL: URL,
-    { filter, sort, page, facets }: Query,
+    { filter, sort, page, facets, collapse }: Query,
     opts: QueryOptions = {},
   ): Promise<{ files: IndexedFile[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this._search(
       realmURL,
-      { filter, sort, page, facets },
+      { filter, sort, page, facets, collapse },
       opts,
       [
         `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(ph.deps) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(ph.isolated_html) AS isolated_html, ANY_VALUE(ph.head_html) AS head_html, ANY_VALUE(ph.embedded_html) AS embedded_html, ANY_VALUE(ph.fitted_html) AS fitted_html, ANY_VALUE(ph.atom_html) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(ph.markdown) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(ph.generation) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
@@ -2889,6 +3020,7 @@ export class IndexQueryEngine {
     sort: Sort | undefined,
     matches: MatchTerm[],
     staged: boolean,
+    filterContext: FilterContext,
   ): Promise<{ blendColumns: CardExpression; blendJoins: CardExpression }> {
     let blendColumns: CardExpression = [];
     let blendJoins: CardExpression = [];
@@ -2902,19 +3034,33 @@ export class IndexQueryEngine {
       let k = s.k ?? DEFAULT_RRF_K;
       let terms: CardExpression[] = [];
       for (let [j, component] of s.of.entries()) {
+        let weight = component.weight ?? 1;
+        let inverted = weight < 0;
         let score = await this.#blendSignalScore(
           component,
           matches,
           `nb${index}_${j}`,
           blendJoins,
           staged,
+          filterContext,
+          inverted,
         );
-        let direction = component.direction ?? 'desc';
+        // A negative weight inverts the signal: the same size, ranked the
+        // other way round. A `_when` signal inverts in its score instead.
+        let declared = isWhenSignal(component)
+          ? 'desc'
+          : (component.direction ?? 'desc');
+        let direction =
+          inverted && !isWhenSignal(component)
+            ? declared === 'desc'
+              ? 'asc'
+              : 'desc'
+            : declared;
         terms.push([
           'CASE WHEN',
           ...score,
           'IS NULL THEN 0 ELSE CAST(',
-          param(component.weight ?? 1),
+          param(Math.abs(weight)),
           dbExpression({ pg: 'AS DOUBLE PRECISION)', sqlite: 'AS REAL)' }),
           '/ (',
           param(k),
@@ -2947,7 +3093,23 @@ export class IndexQueryEngine {
     joinAlias: string,
     joins: CardExpression,
     staged: boolean,
+    filterContext: FilterContext,
+    inverted = false,
   ): Promise<CardExpression> {
+    if (isWhenSignal(component)) {
+      // 1 for a card the filter admits, NULL (no signal) otherwise, so every
+      // match ties for first place. Inverted, the cards it doesn't admit.
+      await this.#assertNearFilters(component.when, baseCardRef);
+      let condition = this.filterCondition(
+        component.when,
+        baseCardRef,
+        'positive',
+        filterContext,
+      );
+      return inverted
+        ? ['NULLIF(MIN(CASE WHEN', ...condition, 'THEN 0 ELSE 1 END), 0)']
+        : ['MAX(CASE WHEN', ...condition, 'THEN 1 END)'];
+    }
     if (isMatchRelevanceSort(component)) {
       // ts_rank_cd is 0 for a card the terms don't match: no signal.
       return ['NULLIF(', ...this.matchRelevanceScore(matches, staged), ', 0)'];
@@ -3404,13 +3566,14 @@ export class IndexQueryEngine {
     let size = facet.size ?? DEFAULT_FACET_SIZE;
     let interval: FacetInterval | undefined =
       shape === 'date' ? (facet.interval ?? 'month') : undefined;
-    let order: 'count' | 'value' =
+    let order: 'count' | 'value' | 'measure' =
       facet.order ?? (interval ? 'value' : 'count');
     let wantStats =
       Boolean(facet.stats) ||
       shape !== 'values' ||
       Boolean(facet.missing) ||
-      order === 'value';
+      order === 'value' ||
+      order === 'measure';
     let stats = wantStats
       ? await this.#facetStatsQuery(facet, opts, condition)
       : undefined;
@@ -3426,7 +3589,7 @@ export class IndexQueryEngine {
         facet,
         interval,
         size,
-        order,
+        order === 'measure' ? 'count' : order,
         opts,
         condition,
       );
@@ -3480,21 +3643,45 @@ export class IndexQueryEngine {
     link = false,
   ): CardExpression {
     let path = facet.by.split('.');
+    let measured = facetMeasureOf(facet);
+    let pgMeasure: Expression = measured
+      ? [
+          ", (SELECT CASE WHEN jsonb_typeof(mv.v) = 'number' THEN (mv.v #>> '{}')::numeric END FROM (SELECT spill_unmark(i.search_doc #>",
+          param(
+            `{${measured.path
+              .split('.')
+              .map((p) => `"${p}"`)
+              .join(',')}}`,
+          ),
+          '::text[]) AS v) AS mv) AS m',
+        ]
+      : [', NULL AS m'];
+    let sqliteMeasure: Expression = measured
+      ? [
+          ', CASE WHEN json_type(i.search_doc,',
+          param(`$.${measured.path}`),
+          ") IN ('integer', 'real') THEN json_extract(i.search_doc,",
+          param(`$.${measured.path}`),
+          ') END AS m',
+        ]
+      : [', NULL AS m'];
     let pgValue = link ? `fv0.value ->> 'id'` : `fv0.value #>> '{}'`;
     let sqliteValue = link ? `json_extract(fv0.value, '$.id')` : 'fv0.value';
     return [
       dbExpression({
         pg: [
-          `(SELECT DISTINCT f.url, f.type, ${pgValue} AS value, CASE WHEN jsonb_typeof(fv0.value) = 'number' THEN (fv0.value #>> '{}')::numeric END AS num FROM (`,
+          `(SELECT DISTINCT f.url, f.type, ${pgValue} AS value, CASE WHEN jsonb_typeof(fv0.value) = 'number' THEN (fv0.value #>> '{}')::numeric END AS num, f.m AS measure FROM (`,
           'SELECT DISTINCT i.url, i.type, spill_unmark(i.search_doc #>',
           param(`{${path.map((p) => `"${p}"`).join(',')}}`),
           '::text[]) AS v',
+          ...pgMeasure,
         ],
         sqlite: [
-          `(SELECT DISTINCT f.url, f.type, ${sqliteValue} AS value, CASE WHEN fv0.type IN ('integer', 'real') THEN fv0.value END AS num FROM (`,
+          `(SELECT DISTINCT f.url, f.type, ${sqliteValue} AS value, CASE WHEN fv0.type IN ('integer', 'real') THEN fv0.value END AS num, f.m AS measure FROM (`,
           'SELECT DISTINCT i.url, i.type, i.search_doc ->',
           param(`$.${facet.by}`),
           'AS v',
+          ...sqliteMeasure,
         ],
       }),
       `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)} ${tableValuedFunctionsPlaceholder}`,
@@ -3518,14 +3705,19 @@ export class IndexQueryEngine {
   async #facetValueCounts(
     facet: Facet,
     size: number,
-    order: 'count' | 'value',
+    order: 'count' | 'value' | 'measure',
     opts: QueryOptions,
     condition: CardExpression,
     link = false,
   ): Promise<FacetCount[]> {
+    let measured = facetMeasureOf(facet);
     let rows = await this.#queryCards(
       [
-        'SELECT fv.value AS facet_value, COUNT(*) AS count FROM',
+        'SELECT fv.value AS facet_value, COUNT(*) AS count',
+        measured
+          ? `, ${measured.op.toUpperCase()}(fv.measure) AS facet_measure`
+          : '',
+        'FROM',
         ...this.#facetValuesTable(facet, opts, condition, link),
         ...(facet.prefix
           ? [
@@ -3537,12 +3729,23 @@ export class IndexQueryEngine {
         'GROUP BY fv.value',
         order === 'value'
           ? 'ORDER BY fv.value'
-          : 'ORDER BY count DESC, fv.value',
+          : order === 'measure' && measured
+            ? 'ORDER BY facet_measure DESC NULLS LAST, count DESC, fv.value'
+            : 'ORDER BY count DESC, fv.value',
         `LIMIT ${Number(size)}`,
       ],
       opts.timings,
     );
-    return facetCountsOf(rows);
+    let kept = rows.filter((row) => row.facet_value != null);
+    let counts = facetCountsOf(kept);
+    if (measured) {
+      counts = counts.map((c, i) =>
+        kept[i].facet_measure == null
+          ? c
+          : { ...c, measure: { [measured.op]: Number(kept[i].facet_measure) } },
+      );
+    }
+    return counts;
   }
 
   // Labels each link facet value (a linked card's id) with that card's
@@ -4488,7 +4691,18 @@ export class IndexQueryEngine {
         let serializer = field.serializerName
           ? getSerializer(field.serializerName)
           : undefined;
-        if (isParam(value)) {
+        if (isParam(value) && isRelativeDate(value.param)) {
+          // `now-30d` and the like, as the field's search doc spells a date.
+          let when = new Date(resolveRelativeDate(value.param));
+          // A date field holds a calendar day: the UTC day the bound falls
+          // on, as the bound itself is reckoned in UTC.
+          queryValue =
+            field.serializerName === 'date'
+              ? when.toISOString().slice(0, 10)
+              : field.serializerName === 'datetime'
+                ? serializer!.queryableValue(when)
+                : when.toISOString();
+        } else if (isParam(value)) {
           queryValue = serializer?.formatQuery?.(value.param) ?? value.param;
         } else if (typeof value === 'string') {
           queryValue = serializer?.formatQuery?.(value) ?? value;
@@ -4957,6 +5171,17 @@ const RELEVANCE_SORT_KEY_NAME = '_relevance';
 // anchor among the branches of a top-level `every`.
 // A glob as a LIKE pattern: `*` is `%`, `?` is `_`, and LIKE's own
 // wildcards and escape are escaped.
+// A facet's `measure`, as the aggregate and the field it reads.
+function facetMeasureOf(
+  facet: Facet,
+): { op: FacetMeasureOp; path: string } | undefined {
+  if (!facet.measure) {
+    return undefined;
+  }
+  let [op, path] = Object.entries(facet.measure)[0] ?? [];
+  return op && path ? { op: op as FacetMeasureOp, path } : undefined;
+}
+
 export function globToLike(glob: string): string {
   return glob
     .replace(/[\\%_]/g, (c) => `\\${c}`)

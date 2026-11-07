@@ -498,7 +498,7 @@ module(basename(import.meta.filename), function () {
           assertQuery({
             sort: [{ by: '_blend', of: [{ by: 'createdAt', weight: 0 }] }],
           } as any),
-        /weight must be a positive number/,
+        /weight must be a nonzero number/,
       );
       assert.throws(
         () =>

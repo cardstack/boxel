@@ -7,6 +7,8 @@ import {
   type Filter,
   type Query,
   type Sort,
+  type FacetCount,
+  WHEN_SIGNAL_KEY,
 } from './query.ts';
 import {
   emitSearchTiming,
@@ -111,6 +113,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'sort',
   'page',
   'facets',
+  'collapse',
   'realms',
   'fields',
   'cardUrls',
@@ -547,6 +550,18 @@ function translateSort(
       } else if (key === 'of') {
         // a `_blend` sort's signals: sort entries in the same grammar
         out.of = translateSort(v, rootAnchor, `${pointer}/of`);
+      } else if (key === 'when') {
+        // a `_when` signal's filter, in the filter grammar; it takes the
+        // query's anchor when it names none
+        let when = translateFilterNode(v, `${pointer}/when`, {});
+        if (
+          when.on === undefined &&
+          when.type === undefined &&
+          rootAnchor !== undefined
+        ) {
+          when = { on: rootAnchor, ...when };
+        }
+        out.when = when;
       } else if (key === 'on') {
         throw invalidQuery(
           `${pointer}: the sort type anchor is addressed as item.on`,
@@ -564,6 +579,7 @@ function translateSort(
       !(out.by in generalSortFields) &&
       out.by !== MATCH_RELEVANCE_SORT_KEY &&
       out.by !== BLEND_SORT_KEY &&
+      out.by !== WHEN_SIGNAL_KEY &&
       rootAnchor !== undefined
     ) {
       out.on = rootAnchor;
@@ -648,6 +664,40 @@ function translateFacets(facets: unknown): unknown {
     }
     return { ...facet, by: by.slice(ITEM_PREFIX.length) };
   });
+}
+
+// `collapse` in the wire grammar names its field through `item.` and its
+// type as `item.on`; without one it takes the filter's root anchor.
+function translateCollapse(collapse: unknown, rootAnchor: unknown): unknown {
+  let shape: Record<string, unknown> | undefined =
+    typeof collapse === 'string'
+      ? { by: collapse }
+      : typeof collapse === 'object' &&
+          collapse != null &&
+          !Array.isArray(collapse)
+        ? { ...(collapse as Record<string, unknown>) }
+        : undefined;
+  if (!shape || typeof shape.by !== 'string') {
+    return collapse;
+  }
+  if (!(shape.by as string).startsWith(ITEM_PREFIX)) {
+    throw invalidQuery(
+      `collapse: by is a field path addressed through item., such as "item.productType"`,
+    );
+  }
+  let out: Record<string, unknown> = {
+    by: (shape.by as string).slice(ITEM_PREFIX.length),
+  };
+  let on = shape[ITEM_ANCHOR] ?? rootAnchor;
+  if (on !== undefined) {
+    out.on = on;
+  }
+  for (let [key, value] of Object.entries(shape)) {
+    if (key !== 'by' && key !== ITEM_ANCHOR) {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 export function parseSearchEntryQueryFromPayload(
@@ -746,6 +796,9 @@ export function parseSearchEntryQueryFromPayload(
   }
   if (record.facets !== undefined) {
     itemQuery.facets = translateFacets(record.facets);
+  }
+  if (record.collapse !== undefined) {
+    itemQuery.collapse = translateCollapse(record.collapse, rootAnchor);
   }
   try {
     assertQuery(itemQuery);
@@ -1269,6 +1322,8 @@ export interface SearchEntryWireSortExpression {
   weight?: number;
   // a `_relevance` sort's signal weights (see `RelevanceSortExpression`)
   weights?: Record<string, number>;
+  // a `_when` signal's filter (see `WhenSignal`)
+  when?: SearchEntryWireFilter;
 }
 
 export type SearchEntryWireFilter = {
@@ -1299,6 +1354,8 @@ export interface SearchEntryWireQuery {
   page?: { number?: number; size: number; generation?: number };
   // field paths through `item.`, as in a sort
   facets?: (Facet & { by: string })[];
+  // one result per group; `by` through `item.` (see `Collapse`)
+  collapse?: string | { by: string; 'item.on'?: CodeRef; keep?: number };
   fields?: { entry: string[] };
   cardUrls?: string[];
   realms?: string[];
@@ -1357,6 +1414,7 @@ function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
     ...(Array.isArray(entry.of) ? { of: entry.of.map(wireSortFromSort) } : {}),
     ...(entry.method ? { method: entry.method } : {}),
     ...(entry.k != null ? { k: entry.k } : {}),
+    ...(entry.when ? { when: wireFilterFromFilter(entry.when) } : {}),
   };
 }
 
@@ -1384,6 +1442,17 @@ export function searchEntryWireQueryFromQuery(
       by: `${ITEM_PREFIX}${facet.by}`,
     }));
   }
+  if (query.collapse) {
+    let c = query.collapse;
+    wire.collapse =
+      typeof c === 'string'
+        ? `${ITEM_PREFIX}${c}`
+        : {
+            by: `${ITEM_PREFIX}${c.by}`,
+            ...(c.on ? { [ITEM_ANCHOR]: c.on } : {}),
+            ...(c.keep != null ? { keep: c.keep } : {}),
+          };
+  }
   if (opts?.fields) {
     wire.fields = { entry: [...opts.fields] };
   }
@@ -1391,6 +1460,32 @@ export function searchEntryWireQueryFromQuery(
     wire.scope = opts.scope;
   }
   return wire;
+}
+
+function combineFacetMeasure(
+  a: { count: number; measure: NonNullable<FacetCount['measure']> },
+  b: { count: number; measure: NonNullable<FacetCount['measure']> },
+): NonNullable<FacetCount['measure']> {
+  let out: NonNullable<FacetCount['measure']> = {};
+  for (let op of ['avg', 'min', 'max', 'sum'] as const) {
+    let x = a.measure[op];
+    let y = b.measure[op];
+    if (x == null || y == null) {
+      if (x != null || y != null) {
+        out[op] = (x ?? y)!;
+      }
+      continue;
+    }
+    out[op] =
+      op === 'avg'
+        ? (x * a.count + y * b.count) / (a.count + b.count)
+        : op === 'min'
+          ? Math.min(x, y)
+          : op === 'max'
+            ? Math.max(x, y)
+            : x + y;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -1479,7 +1574,23 @@ export function combineSearchEntryResults(
             .filter((c) => c.label !== undefined)
             .map((c) => [c.value, c.label!] as const),
         );
-        for (let { value, count } of counts) {
+        // A measure combines across realms: an average weighted by each
+        // realm's count, the smaller min, the larger max, the summed sum.
+        let measures = new Map(
+          (facets[by] ?? [])
+            .filter((c) => c.measure)
+            .map((c) => [c.value, { count: c.count, measure: c.measure! }]),
+        );
+        for (let { value, count, measure } of counts) {
+          if (measure) {
+            let prior = measures.get(value);
+            measures.set(value, {
+              count: (prior?.count ?? 0) + count,
+              measure: prior
+                ? combineFacetMeasure(prior, { count, measure })
+                : measure,
+            });
+          }
           merged.set(value, (merged.get(value) ?? 0) + count);
         }
         // A facet that sorts by value (an interval, `order: 'value'`) or
@@ -1488,18 +1599,30 @@ export function combineSearchEntryResults(
         let order = doc.meta.facetStats?.[by]?.order;
         let isRanges =
           doc.meta.facetStats?.[by] !== undefined && order === undefined;
-        let entries = [...merged].map(([value, count]) =>
-          labels.has(value)
-            ? { value, count, label: labels.get(value)! }
-            : { value, count },
-        );
+        let entries: FacetCount[] = [...merged].map(([value, count]) => ({
+          value,
+          count,
+          ...(labels.has(value) ? { label: labels.get(value)! } : {}),
+          ...(measures.has(value)
+            ? { measure: measures.get(value)!.measure }
+            : {}),
+        }));
+        let measureOf = (c: FacetCount) =>
+          c.measure ? (Object.values(c.measure)[0] ?? -Infinity) : -Infinity;
         facets[by] = isRanges
           ? entries
-          : order === 'value'
-            ? entries.sort((a, b) => a.value.localeCompare(b.value))
-            : entries.sort(
-                (a, b) => b.count - a.count || a.value.localeCompare(b.value),
-              );
+          : order === 'measure'
+            ? entries.sort(
+                (a, b) =>
+                  measureOf(b) - measureOf(a) ||
+                  b.count - a.count ||
+                  a.value.localeCompare(b.value),
+              )
+            : order === 'value'
+              ? entries.sort((a, b) => a.value.localeCompare(b.value))
+              : entries.sort(
+                  (a, b) => b.count - a.count || a.value.localeCompare(b.value),
+                );
       }
     }
     if (doc.meta?.facetStats) {

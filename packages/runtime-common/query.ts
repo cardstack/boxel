@@ -57,6 +57,10 @@ export type SparseFieldsets = Record<string, string[]>;
 //   (`meta.facetStats[by].missing`).
 // - `order` sorts the values by `count` (most first, the default) or by
 //   `value`; an interval sorts by value unless it says otherwise.
+// - `measure` adds, to each value, an aggregate of another number field over
+//   the matches holding it: `{ avg: 'price' }` is each brand's average price,
+//   in `counts[i].measure.avg`. One of avg, min, max or sum. With
+//   `order: 'measure'` the values sort by it, largest first.
 // A field declared `search: { facet }` takes its shape from the declaration
 // when the query names none of `stats`, `ranges` and `interval`: a number
 // facet is range buckets with stats, a date facet a monthly histogram with
@@ -70,8 +74,12 @@ export interface Facet {
   interval?: FacetInterval;
   prefix?: string;
   missing?: boolean;
-  order?: 'count' | 'value';
+  order?: 'count' | 'value' | 'measure';
+  measure?: FacetMeasure;
 }
+export const FACET_MEASURES = ['avg', 'min', 'max', 'sum'] as const;
+export type FacetMeasureOp = (typeof FACET_MEASURES)[number];
+export type FacetMeasure = Partial<Record<FacetMeasureOp, string>>;
 export interface FacetRange {
   key?: string;
   from?: number | string;
@@ -91,6 +99,9 @@ export interface FacetCount {
   // a plain-text list. Show the card itself by delegating to its
   // prerendered HTML by id.
   label?: string;
+  // The facet's `measure` over the matches holding this value; absent when
+  // none holds a number there.
+  measure?: Partial<Record<FacetMeasureOp, number>>;
 }
 
 // A facet's statistics, in `meta.facetStats[by]`: `count` matches hold a
@@ -107,13 +118,34 @@ export interface FacetStats {
   sum?: number;
   avg?: number;
   missing?: number;
-  order?: 'count' | 'value';
+  order?: 'count' | 'value' | 'measure';
+}
+
+// One result per group: of the cards that share a value at `by` (a variant
+// group, a product type), only the best `keep` (default 1) by the query's own
+// sort come back, and `meta.page.total` counts what remains. A card with no
+// value at `by` is a group of its own. Facets still count every match. `on`
+// names the type whose field `by` is; a search entry's root anchor supplies
+// it. A string is shorthand for `{ by }`.
+export type Collapse = string | { by: string; on?: CodeRef; keep?: number };
+export const MAX_COLLAPSE_KEEP = 10;
+
+export function collapseBy(
+  collapse: Collapse | undefined,
+): { by: string; on?: CodeRef; keep: number } | undefined {
+  if (collapse == null) {
+    return undefined;
+  }
+  return typeof collapse === 'string'
+    ? { by: collapse, keep: 1 }
+    : { by: collapse.by, on: collapse.on, keep: collapse.keep ?? 1 };
 }
 
 interface QueryCommon {
   filter?: Filter;
   sort?: Sort;
   facets?: Facet[];
+  collapse?: Collapse;
   page?: {
     number?: number; // page.number is 0-based
     size: number;
@@ -199,11 +231,28 @@ type SortExpressionWithCodeRef = {
 // near sort, a general field such as `createdAt`, or a card field such as an
 // engagement count) plus an optional `weight` (default 1). Inside a blend
 // each signal ranks best first: highest value first unless `direction` is
-// `asc`.
-export type BlendComponent = (
-  | SortExpressionWithoutCodeRef
-  | SortExpressionWithCodeRef
-) & { weight?: number };
+// `asc`. A negative weight inverts the signal, as in `_relevance`: it ranks
+// the other way round with the weight's size (least popular first, least
+// similar first), and a `_when` signal lifts the cards that don't match.
+export type BlendComponent =
+  | ((SortExpressionWithoutCodeRef | SortExpressionWithCodeRef) & {
+      weight?: number;
+    })
+  | WhenSignal;
+
+// A "should" clause: a blend signal that lifts the cards matching `when`
+// without dropping the rest. Every match ties for first place in it, so each
+// gains `weight / (k + 1)` and a card that doesn't match gains nothing.
+// Only inside a `_blend`. `when` is any filter, anchored like the query's.
+export const WHEN_SIGNAL_KEY = '_when';
+export interface WhenSignal {
+  by: typeof WHEN_SIGNAL_KEY;
+  when: Filter;
+  weight?: number;
+}
+export function isWhenSignal(sort: object): sort is WhenSignal {
+  return (sort as { by?: unknown }).by === WHEN_SIGNAL_KEY;
+}
 
 // Reciprocal rank fusion of several signals: each card scores
 // sum(weight / (k + rank)) over the signals it has a value for, ranked over
@@ -325,6 +374,67 @@ export type RangeOperator = 'gt' | 'gte' | 'lt' | 'lte';
 export type RangeFilterValue = {
   [range in RangeOperator]?: JSONValue;
 };
+
+// A relative date in a `range` bound: `now`, optionally moved by whole units
+// (`now-30d`, `now+1w`; s, m, h, d, w, M for months, y) and optionally
+// rounded down to the start of a unit in UTC (`now-30d/d`, `now/M`). It is
+// read when the query runs, so a saved search for "added this month" stays
+// current. Any other string is a literal bound.
+const RELATIVE_DATE = /^now(?:([+-])(\d+)([smhdwMy]))?(?:\/([smhdwMy]))?$/;
+
+export function isRelativeDate(value: unknown): value is string {
+  return typeof value === 'string' && RELATIVE_DATE.test(value);
+}
+
+export function resolveRelativeDate(value: string, now = new Date()): string {
+  let match = RELATIVE_DATE.exec(value);
+  if (!match) {
+    return value;
+  }
+  let [, sign, amount, unit, round] = match;
+  let d = new Date(now.getTime());
+  if (sign) {
+    let n = Number(amount) * (sign === '-' ? -1 : 1);
+    switch (unit) {
+      case 's':
+        d.setUTCSeconds(d.getUTCSeconds() + n);
+        break;
+      case 'm':
+        d.setUTCMinutes(d.getUTCMinutes() + n);
+        break;
+      case 'h':
+        d.setUTCHours(d.getUTCHours() + n);
+        break;
+      case 'd':
+        d.setUTCDate(d.getUTCDate() + n);
+        break;
+      case 'w':
+        d.setUTCDate(d.getUTCDate() + 7 * n);
+        break;
+      case 'M':
+        d.setUTCMonth(d.getUTCMonth() + n);
+        break;
+      case 'y':
+        d.setUTCFullYear(d.getUTCFullYear() + n);
+        break;
+    }
+  }
+  if (round) {
+    let order = ['s', 'm', 'h', 'd', 'M', 'y'];
+    let upTo = round === 'w' ? order.indexOf('d') : order.indexOf(round);
+    if (upTo >= 0) d.setUTCMilliseconds(0);
+    if (upTo >= 1) d.setUTCSeconds(0);
+    if (upTo >= 2) d.setUTCMinutes(0);
+    if (upTo >= 3) d.setUTCHours(0);
+    if (round === 'w') {
+      // weeks start on Monday, as a facet's week interval does
+      d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    }
+    if (upTo >= 4) d.setUTCDate(1);
+    if (upTo >= 5) d.setUTCMonth(0);
+  }
+  return d.toISOString();
+}
 
 export interface RangeFilter extends TypedFilter {
   range: {
@@ -628,6 +738,9 @@ export function assertQuery(
       case 'facets':
         assertFacets(value, pointer.concat('facets'));
         break;
+      case 'collapse':
+        assertCollapse(value, pointer.concat('collapse'));
+        break;
       case 'asData':
         if (typeof value !== 'boolean') {
           throw new InvalidQueryError(
@@ -735,6 +848,11 @@ function assertSortExpression(
   if (typeof sort.by !== 'string') {
     throw new InvalidQueryError(
       `${pointer.concat('by').join('/') || '/'}: by must be a string`,
+    );
+  }
+  if (sort.by === WHEN_SIGNAL_KEY) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: a ${WHEN_SIGNAL_KEY} signal ranks only inside a _blend sort`,
     );
   }
   // Every sort entry carries a direction, whether or not it names a type: a
@@ -878,12 +996,28 @@ function assertBlendSort(sort: any, pointer: string[]) {
       !(
         typeof component.weight === 'number' &&
         Number.isFinite(component.weight) &&
-        component.weight > 0
+        component.weight !== 0
       )
     ) {
       throw new InvalidQueryError(
-        `${at.join('/')}/weight: weight must be a positive number`,
+        `${at.join('/')}/weight: weight must be a nonzero number (a negative weight inverts the signal)`,
       );
+    }
+    if (component && component.by === WHEN_SIGNAL_KEY) {
+      for (let key of Object.keys(component)) {
+        if (!['by', 'when', 'weight'].includes(key)) {
+          throw new InvalidQueryError(
+            `${at.join('/')}: a ${WHEN_SIGNAL_KEY} signal takes by, when and weight, not "${key}"`,
+          );
+        }
+      }
+      if (typeof component.when !== 'object' || component.when == null) {
+        throw new InvalidQueryError(
+          `${at.join('/')}/when: a ${WHEN_SIGNAL_KEY} signal needs a filter in "when"`,
+        );
+      }
+      assertFilter(component.when, at.concat('when'));
+      return;
     }
     assertSortExpression(component, at);
   });
@@ -1348,6 +1482,49 @@ function assertMatchesFilter(
 
 const FACET_PATH = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
 
+function assertCollapse(
+  collapse: any,
+  pointer: string[],
+): asserts collapse is Collapse {
+  let where = pointer.join('/') || '/';
+  let shape =
+    typeof collapse === 'string'
+      ? { by: collapse }
+      : typeof collapse === 'object' &&
+          collapse != null &&
+          !Array.isArray(collapse)
+        ? collapse
+        : undefined;
+  if (!shape) {
+    throw new InvalidQueryError(
+      `${where}: collapse must be a field path or { by, on?, keep? }`,
+    );
+  }
+  for (let key of Object.keys(shape)) {
+    if (!['by', 'on', 'keep'].includes(key)) {
+      throw new InvalidQueryError(`${where}: unknown collapse member "${key}"`);
+    }
+  }
+  if (typeof shape.by !== 'string' || !FACET_PATH.test(shape.by)) {
+    throw new InvalidQueryError(
+      `${where}/by: by must be a field path such as "productType" or "brand.name"`,
+    );
+  }
+  if (shape.on !== undefined) {
+    assertCardType(shape.on, pointer.concat('on'));
+  }
+  if (
+    shape.keep !== undefined &&
+    (!Number.isInteger(shape.keep) ||
+      shape.keep < 1 ||
+      shape.keep > MAX_COLLAPSE_KEEP)
+  ) {
+    throw new InvalidQueryError(
+      `${where}/keep: keep must be an integer from 1 to ${MAX_COLLAPSE_KEEP}`,
+    );
+  }
+}
+
 function assertFacets(
   facets: any,
   pointer: string[],
@@ -1400,6 +1577,7 @@ const FACET_MEMBERS = new Set([
   'prefix',
   'missing',
   'order',
+  'measure',
 ]);
 
 function assertFacetMembers(facet: any, at: string) {
@@ -1417,11 +1595,37 @@ function assertFacetMembers(facet: any, at: string) {
   if (
     facet.order !== undefined &&
     facet.order !== 'count' &&
-    facet.order !== 'value'
+    facet.order !== 'value' &&
+    facet.order !== 'measure'
   ) {
     throw new InvalidQueryError(
-      `${at}/order: order must be "count" or "value"`,
+      `${at}/order: order must be "count", "value" or "measure"`,
     );
+  }
+  if (facet.measure !== undefined) {
+    let m = facet.measure;
+    let keys =
+      typeof m === 'object' && m != null && !Array.isArray(m)
+        ? Object.keys(m)
+        : [];
+    if (
+      keys.length !== 1 ||
+      !(FACET_MEASURES as readonly string[]).includes(keys[0]) ||
+      typeof m[keys[0]] !== 'string' ||
+      !FACET_PATH.test(m[keys[0]])
+    ) {
+      throw new InvalidQueryError(
+        `${at}/measure: measure must be one of ${FACET_MEASURES.map((k) => `{ ${k}: "<field>" }`).join(', ')}`,
+      );
+    }
+    if (facet.ranges !== undefined || facet.interval !== undefined) {
+      throw new InvalidQueryError(
+        `${at}/measure: measure counts values, so it takes no ranges or interval`,
+      );
+    }
+  }
+  if (facet.order === 'measure' && facet.measure === undefined) {
+    throw new InvalidQueryError(`${at}/order: order "measure" needs a measure`);
   }
   if (
     facet.interval !== undefined &&

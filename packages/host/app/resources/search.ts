@@ -1044,6 +1044,11 @@ export class SearchResource<
     if (!isClientSortable(this.activeQuery?.sort as Sort | undefined)) {
       return false;
     }
+    // A collapsed query keeps each group's best match over the server's
+    // whole match set, which the client can't reproduce either.
+    if ((this.activeQuery as { collapse?: unknown } | undefined)?.collapse) {
+      return false;
+    }
     // The matcher needs the filter's refs in canonical form (the engine
     // rewrites them server-side; see loadCanonicalizedFilter). Until the
     // rewrite lands for this exact filter — or if some ref didn't resolve —

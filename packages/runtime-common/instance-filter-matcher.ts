@@ -17,6 +17,8 @@ import {
   type RangeOperator,
   type Sort,
   isRelevanceSort,
+  isRelativeDate,
+  resolveRelativeDate,
 } from './query.ts';
 import {
   isBlendSort,
@@ -553,7 +555,11 @@ function matchRange(
       }
       return [
         operator as RangeOperator,
-        formatValue(leafField, bound, api),
+        formatValue(
+          leafField,
+          isRelativeDate(bound) ? resolveRelativeDate(bound) : bound,
+          api,
+        ),
       ] as [RangeOperator, any];
     },
   );

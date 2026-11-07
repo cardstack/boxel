@@ -14,12 +14,20 @@ The Query object may have a `filter` property, which controls which cards are in
 
 - `type`: allow specification of a particular card type. Also includes descendant cards in this card's adoption chain.
 - `eq`: allows specifying a card with a specific field value
-- `range`: allows specifying a card with a field value that is gt, gte, lt, or lte a specific value
+- `in`: a field value that is one of a list (`in: { color: ['red', 'blue'] }`)
+- `range`: allows specifying a card with a field value that is gt, gte, lt, or lte a specific value. A date bound may be relative (see [Relative dates](#relative-dates)).
 - `any`: allows an "OR" union of other filters
 - `every`: allows an "AND" union of other filters
 - `not`: allow negating another filter
 - `contains`: allows you to specify a card that has a field value containing a specific value.
-- `matches`: full-text search over each card's rendered markdown, in Postgres `websearch_to_tsquery` syntax (`"exact phrase"`, `or`, `-excluded`). Add `prefix: true` for type-ahead (see [Type-ahead](#type-ahead-prefix)).
+- `matches`: full-text search over each card's rendered markdown, in Postgres `websearch_to_tsquery` syntax (`"exact phrase"`, `or`, `-excluded`). Options:
+  - `prefix: true` for type-ahead (see [Type-ahead](#type-ahead-prefix)).
+  - `scope: 'title'` searches only the card's title, name and alias roles.
+  - `within: '<field>'` searches the passages of a `PassageField` list instead, and reports the passages that matched in `meta.passages`.
+  - `typos: true` also matches the closest words of the realm's fields declared `typos: true` (Postgres only).
+- `typeahead`: every word is a prefix of a word of the card's title or alternative names, in any order, never stemmed. Takes `typos: true` too.
+- `pattern`: a glob (`*`, `?`) over a field's whole value, ignoring case, on fields searched by pattern (declared `search: { patterns: true }`, or an `identifier` or `code` role).
+- `regex`: a POSIX regular expression over the same fields (Postgres only).
 - `near`: keeps cards whose `VectorField` is at least `minSimilarity` similar to a target vector (see [Vector search](#vector-search-near)).
 
 - `on`: may be used with `eq`,`range` and `every` to limit results to a particular card type. `on` provides the card type context for a field. This is how we can disambiguate, for example, between a `Company.name` field and a `Country.name` field. Simply providing a predicate to filter by the `name` field isnt enough. You need to say which card's name field you want to filter by -- this is the function of `on`.
@@ -186,7 +194,10 @@ let { data: nearest } = await indexer.search({
   filter: {
     every: [
       { on: momentRef, eq: { topic: 'ml' } },
-      { on: momentRef, near: { embedding: { to: target, minSimilarity: 0.5 } } },
+      {
+        on: momentRef,
+        near: { embedding: { to: target, minSimilarity: 0.5 } },
+      },
     ],
   },
   sort: [{ on: momentRef, by: 'embedding', near: target }],
@@ -215,7 +226,10 @@ let { data: ranked } = await indexer.search({
   filter: {
     any: [
       { on: momentRef, matches: 'pasta recipe' },
-      { on: momentRef, near: { embedding: { to: target, minSimilarity: 0.5 } } },
+      {
+        on: momentRef,
+        near: { embedding: { to: target, minSimilarity: 0.5 } },
+      },
     ],
   },
   sort: [
@@ -233,7 +247,109 @@ let { data: ranked } = await indexer.search({
 });
 ```
 
+A negative `weight` inverts a signal, as in `_relevance`: it ranks the other way round with the weight's size, so `{ on: productRef, by: 'unitsSold30d', weight: -1 }` favours the least sold, and a negative `near` signal favours the least similar.
+
+A `_when` signal is a "should" clause: `{ by: '_when', when: <filter>, weight }` lifts the cards the filter admits without dropping the rest. Every match ties for first place in it, so each gains `weight / (k + 1)` and a card that doesn't match gains nothing. With a negative weight it lifts the cards that don't match. `when` is any filter; on the wire its field paths go through `item.` and it takes the query's anchor when it names none. `_when` ranks only inside a `_blend`.
+
+```js
+sort: [
+  {
+    by: '_blend',
+    of: [
+      { by: '_matchRelevance' },
+      {
+        by: '_when',
+        when: { on: productRef, eq: { material: 'Leather' } },
+        weight: 1.5,
+      },
+      {
+        by: '_when',
+        when: { on: productRef, range: { returnRate: { gt: 0.1 } } },
+        weight: -1,
+      },
+    ],
+  },
+];
+```
+
 Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `_matchRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, ranks are per realm, so a federated blend orders only approximately.
+
+### Relevance (`_relevance`)
+
+A `_relevance` sort ranks by search intent. It blends text relevance (weighted by the search roles of the fields that matched) with the ranking signals the type declares (`search: { rank: 'popularity' }` and the like: `popularity`, `quality`, `recency`, `priority`). Given `near`, it also blends in the similarity of the type's vector field as the `meaning` signal. It compiles to a `_blend`, so results carry `meta._blendScore`.
+
+`weights` re-weights signals by name. Unnamed signals take their defaults: `text` and `meaning` 1, the rest 0.5. A weight of 0 drops a signal, and a negative weight inverts it (least popular first).
+
+```js
+sort: [
+  {
+    by: '_relevance',
+    on: productRef,
+    near: queryVector,
+    weights: { text: 0.6, meaning: 1.5, quality: 0.5, popularity: 0 },
+  },
+];
+```
+
+### Collapsing to one per group (`collapse`)
+
+`collapse` keeps the best cards of each group: of the cards that share a value at `by`, only the first `keep` (default 1) by the query's own sort come back. Use it to show one size of a product rather than five, or one card per type. A card with no value at `by` is a group of its own. `meta.page.total` counts what remains, and pages page over it. Facets still count every match.
+
+`on` names the type whose field `by` is; without it, the filter's anchor (`on` or `type`) is used. A string is shorthand for `{ by }`.
+
+```js
+let { data, meta } = await indexer.search({
+  filter: { on: productRef, matches: 'running shoe' },
+  sort: [{ by: '_relevance', on: productRef }],
+  collapse: { by: 'variantGroup', on: productRef, keep: 1 },
+  page: { size: 24 },
+});
+```
+
+On the wire, `by` goes through `item.` (`collapse: 'item.variantGroup'`) and the type is `item.on`. Live queries leave a collapsed query to the server, since the best of a group is chosen over the whole match set. Across realms each realm collapses its own results, so two realms may each return a card of the same group.
+
+### Relative dates
+
+A `range` bound on a date field may be relative: `now`, optionally moved by whole units (`now-30d`, `now+1w`), optionally rounded down to the start of a unit in UTC (`now-30d/d`, `now/M`). The units are `s`, `m`, `h`, `d`, `w`, `M` (months) and `y`. A week starts on Monday. The bound is read when the query runs, so a saved search for "added this month" stays current. On a `DateField` or `DateTimeField` the bound is compared in the field's own format. Any other string is a literal bound.
+
+```js
+filter: {
+  on: productRef,
+  range: { publishedAt: { gte: 'now-30d/d' } },
+},
+```
+
+### Facets
+
+The Query object may have a `facets` property: up to 8 counts of what the matched cards hold in one field, counted by the database over every match, not only the page returned. Each facet comes back in `meta.facets[by]` as `{ value, count }` entries, most common first. `by` is a field path, dotted for a compound field; a list field counts each of its values. A link facet's value is the linked card's id, with its title as `label`.
+
+| Member          | Effect                                                                                                                                                                                   |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `size`          | How many values come back (default 50, at most 1000).                                                                                                                                    |
+| `own: 'ignore'` | Counts without the facet's own selection, so a multi-select list keeps its other values while one is picked.                                                                             |
+| `stats: true`   | Adds count, distinct count and min, max, sum and average (numbers) or min and max (text) in `meta.facetStats[by]`.                                                                       |
+| `ranges`        | Counts the matches in each `[from, to)` bucket, labelled by `key` or `from-to` (`*` for an open end).                                                                                    |
+| `interval`      | Counts by `day`, `week` (from Monday), `month` or `year` of a date value.                                                                                                                |
+| `prefix`        | Keeps the values that start with it, ignoring case.                                                                                                                                      |
+| `missing: true` | Adds the count of matches with no value (`meta.facetStats[by].missing`).                                                                                                                 |
+| `order`         | `count` (the default), `value`, or `measure`.                                                                                                                                            |
+| `measure`       | An aggregate of another number field over the matches holding each value: one of `{ avg }`, `{ min }`, `{ max }`, `{ sum }`, naming the field. It comes back as `measure` on each entry. |
+
+A field declared `search: { facet }` takes its shape from the declaration when the query names none of `stats`, `ranges` and `interval`: a number facet is range buckets with stats, and a date facet is a monthly histogram with stats.
+
+```js
+facets: [
+  {
+    by: 'brand.name',
+    measure: { avg: 'priceMin' },
+    order: 'measure',
+    size: 20,
+  },
+];
+// meta.facets['brand.name'] → [{ value: 'Acme', count: 12, measure: { avg: 84.5 } }, …]
+```
+
+Across realms, counts add up. A measure combines too: an average weighted by each realm's count, the smaller min, the larger max, the summed sum.
 
 ### Pagination
 
