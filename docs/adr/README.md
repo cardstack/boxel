@@ -34,3 +34,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [017](017-fit-toolbar-rows-with-layoutcontrol-not-per-app-css.md)                               | Fit toolbar rows with LayoutControl, not per-app CSS                                      | proposed   |
 | [018](018-build-realm-historian-as-erasable-typescript-node-runs-unbuilt.md)                    | Build realm-historian as erasable TypeScript that Node runs unbuilt                       | proposed   |
 | [019](019-build-the-secure-origins-pages-as-their-own-ember-app-on-pret-ui.md)                  | Build the secure origin's pages as their own Ember app, on Pret UI                        | proposed   |
+| [021](021-run-boxels-oauth-provider-in-the-realm-server-with-opaque-resource-bound-tokens.md)   | Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource  | proposed   |
