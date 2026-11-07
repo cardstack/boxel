@@ -1,6 +1,6 @@
 /**
  * Populate `packages/boxel-cli/bundled-realms/` from `packages/base/`,
- * `packages/skills-realm/contents/` and `packages/pretui/` so a published
+ * `packages/skills-realm/contents/skills/` and `packages/pretui/` so a published
  * `@cardstack/boxel-cli` install can run `boxel test` without a realm-server
  * on PATH.
  *
@@ -39,7 +39,7 @@ interface RealmSource {
   src: string;
   /**
    * If `true`, fail when the source is missing; if `false`, warn and
-   * skip. `packages/skills-realm/contents/` is gitignored and only
+   * skip. `packages/skills-realm/contents/skills/` is gitignored and only
    * populated via `pnpm --filter @cardstack/skills-realm skills:setup`
    * (which clones the external `cardstack/boxel-skills` repo). CI
    * runners and minimal monorepo checkouts don't have it; card tests
@@ -59,7 +59,7 @@ const REALMS: RealmSource[] = [
   { name: 'base', src: join(MONOREPO_PACKAGES, 'base'), required: true },
   {
     name: 'skills',
-    src: join(MONOREPO_PACKAGES, 'skills-realm', 'contents'),
+    src: join(MONOREPO_PACKAGES, 'skills-realm', 'contents', 'skills'),
     required: false,
   },
   {
@@ -159,7 +159,7 @@ function main(): void {
       } else {
         console.log(
           `  skipping "${realm.name}" — source missing at ${realm.src} ` +
-            '(non-required realm; usually packages/skills-realm/contents ' +
+            '(non-required realm; usually packages/skills-realm/contents/skills ' +
             'not populated)',
         );
         continue;

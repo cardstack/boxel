@@ -20,7 +20,7 @@ production runs:
   * each realm in your `realms[]` array
 * host-dist mounted on the realm-server for static asset serving
 
-The skills realm (`packages/skills-realm/contents/`) is **opt-in** —
+The skills realm (`packages/skills-realm/contents/skills/`) is **opt-in** —
 mounted only when `TEST_HARNESS_INCLUDE_SKILLS=1`. Tests and benches
 that don't reach for skill cards leave it off and avoid paying for its
 indexing.
@@ -213,7 +213,7 @@ fresh build.
 
 | Var | Meaning |
 | --- | --- |
-| `TEST_HARNESS_INCLUDE_SKILLS` | Set to `1` to mount the skills realm (`packages/skills-realm/contents/`). Off by default — most tests don't need it. |
+| `TEST_HARNESS_INCLUDE_SKILLS` | Set to `1` to mount the skills realm (`packages/skills-realm/contents/skills/`). Off by default — most tests don't need it. |
 | `TEST_HARNESS_CACHE_SALT` | Mix into the template-DB cache key to force rebuilds when an out-of-band input changes. |
 | `TEST_HARNESS_HOST_DIST_PACKAGE_DIR` | Override the host package directory whose `dist/` the realm-server serves. |
 | `TEST_HARNESS_REALM_LOG_LEVELS` | `@cardstack/logger` levels passed to spawned realm-server / worker / prerender children. |

@@ -154,7 +154,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
-  --path='../skills-realm/contents' \
+  --path='../skills-realm/contents/skills' \
   --username='skills_realm' \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
