@@ -3,10 +3,8 @@ import { action } from '@ember/object';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 
-import { isTesting } from '@embroider/macros';
-
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import { ContextButton } from '@cardstack/boxel-ui/components';
 import { and, bool } from '@cardstack/boxel-ui/helpers';
@@ -27,12 +25,6 @@ interface Signature {
 }
 
 export default class HostModeStackItem extends Component<Signature> {
-  @tracked private animationType:
-    | 'opening'
-    | 'closing'
-    | 'movingForward'
-    | undefined = 'opening';
-
   @cached
   private get cardResource(): ReturnType<typeof getCard> | undefined {
     if (!this.args.cardId) {
@@ -118,24 +110,6 @@ export default class HostModeStackItem extends Component<Signature> {
     );
   }
 
-  private get doOpeningAnimation() {
-    return (
-      this.isTopCard && this.animationType === 'opening' && !this.isTesting
-    );
-  }
-
-  private get doClosingAnimation() {
-    return this.animationType === 'closing';
-  }
-
-  private get doMovingForwardAnimation() {
-    return this.animationType === 'movingForward';
-  }
-
-  private get isTesting() {
-    return isTesting();
-  }
-
   @action
   private handleClose() {
     if (this.args.close) {
@@ -147,12 +121,8 @@ export default class HostModeStackItem extends Component<Signature> {
     <div
       class='host-mode-stack-item
         {{if this.isBuried "buried"}}
-        {{if this.doOpeningAnimation "opening-animation"}}
-        {{if this.doClosingAnimation "closing-animation"}}
-        {{if this.doMovingForwardAnimation "move-forward-animation"}}
         {{if this.isItemFullWidth "full-width"}}
-        {{if @isNarrow "narrow"}}
-        {{if this.isTesting "testing"}}'
+        {{if @isNarrow "narrow"}}'
       style={{this.styleForStackedCard}}
       data-host-mode-stack-item
       data-test-host-mode-stack-item-index={{@index}}
@@ -179,36 +149,13 @@ export default class HostModeStackItem extends Component<Signature> {
     </div>
 
     <style scoped>
+      /* A card's entrance. It ends at the card's own transform and opacity,
+         so it needs no fill mode and leaves nothing behind once it has
+         played. */
       @keyframes scaleIn {
         from {
           transform: scale(0.1);
           opacity: 0;
-        }
-        to {
-          transform: scale(1);
-          opacity: 1;
-        }
-      }
-
-      @keyframes fadeOut {
-        from {
-          opacity: 1;
-          transform: translateY(0);
-        }
-        to {
-          opacity: 0;
-          transform: translateY(100%);
-        }
-      }
-
-      @keyframes moveForward {
-        from {
-          transform: translateY(0);
-          opacity: 0.8;
-        }
-        to {
-          transform: translateY(25px);
-          opacity: 1;
         }
       }
 
@@ -222,6 +169,14 @@ export default class HostModeStackItem extends Component<Signature> {
         padding-top: var(--boxel-sp-2xl);
         z-index: 0;
         pointer-events: none;
+        /* A card scales in as its box appears: when it is inserted, and when
+           the narrow layout shows a card it had hidden. A card that was
+           already showing is not re-entered when the card over it closes.
+           The animation reacts to the rendered DOM alone (ADR 007 §1.1): the
+           component keeps no animation state, and the markup is the same
+           wherever it renders, including in tests, where the animation
+           simply plays. */
+        animation: scaleIn 0.2s;
       }
 
       .host-mode-stack-item:not(.buried) {
@@ -235,6 +190,8 @@ export default class HostModeStackItem extends Component<Signature> {
         /* The top card fills its item; otherwise it keeps its 50rem default
            and is clipped when the item is narrower. */
         --host-mode-card-width: 100%;
+        /* The card a closing card uncovers slides to its new offset. */
+        transition: margin-top var(--boxel-transition);
       }
 
       /* Buried cards stay 50rem, even behind a wide primary card that sets
@@ -259,61 +216,21 @@ export default class HostModeStackItem extends Component<Signature> {
         display: none;
       }
 
-      .host-mode-stack-item.opening-animation {
-        animation: scaleIn 0.2s forwards;
-        transition: margin-top var(--boxel-transition);
-      }
-
-      .host-mode-stack-item.closing-animation {
-        animation: fadeOut 0.2s forwards;
-      }
-
-      .host-mode-stack-item.move-forward-animation {
-        animation: moveForward 0.2s none;
-      }
-
-      .host-mode-stack-item.opening-animation.testing {
-        animation-duration: 0s;
-      }
-
-      .host-mode-stack-item.closing-animation.testing {
-        animation-duration: 0s;
-      }
-
-      .host-mode-stack-item.move-forward-animation.testing {
-        animation-duration: 0s;
-      }
-
-      /* reduced motion: a card fades in and out where it stands, and the
-         cards under it keep their places rather than sliding */
+      /* reduced motion: a card fades in where it stands, and a card the
+         closing card uncovers takes its new offset without sliding */
       @keyframes stackItemFadeIn {
         from {
           opacity: 0;
         }
       }
 
-      @keyframes stackItemFadeOut {
-        to {
-          opacity: 0;
-        }
-      }
-
       @media (prefers-reduced-motion: reduce) {
         .host-mode-stack-item {
-          transition: none;
-        }
-
-        .host-mode-stack-item.opening-animation {
           animation-name: stackItemFadeIn;
+        }
+
+        .host-mode-stack-item:not(.buried) {
           transition: none;
-        }
-
-        .host-mode-stack-item.closing-animation {
-          animation-name: stackItemFadeOut;
-        }
-
-        .host-mode-stack-item.move-forward-animation {
-          animation: none;
         }
       }
 
