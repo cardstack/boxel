@@ -77,6 +77,15 @@ const loopKey = (cue: Cue) =>
     .sort()
     .join(',');
 
+/** where releaseForMeasure stands a transform a tween is carrying */
+const TRANSFORM_REST: Record<string, PropValue> = {
+  scale: 1,
+  scaleX: 1,
+  scaleY: 1,
+  x: 0,
+  y: 0,
+};
+
 /** a tween a replacement pass carries on: see Run.midfade */
 export interface Fade {
   /** score ms until it starts (0 when it is already running) */
@@ -467,7 +476,9 @@ export class ChoreoRun implements Run {
       value: unknown;
       ve: VisualElement;
     }[];
-  } = { borrowed: [], moved: [] };
+    /** transforms in-flight tweens carry, rested for the measure */
+    tweened: { key: string; value: unknown; ve: VisualElement }[];
+  } = { borrowed: [], moved: [], tweened: [] };
   private owned: { el: HTMLElement; key: string; ve: VisualElement }[] = [];
   private cancelled = false;
   private ended = false;
@@ -2874,7 +2885,7 @@ export class ChoreoRun implements Run {
       this.dropCameraAnimation(t);
     }
     const touched = new Set<VisualElement>();
-    this.retired = { borrowed: [], moved: [] };
+    this.retired = { borrowed: [], moved: [], tweened: [] };
     for (const { ve, el, key, prior } of this.borrowedValues.splice(0)) {
       this.retired.borrowed.push({
         el,
@@ -2901,6 +2912,41 @@ export class ChoreoRun implements Run {
       ve.getValue(key)?.jump(rest ?? 0);
       touched.add(ve);
     }
+    // A transform a tween or spring is still carrying (an entrance's scale,
+    // a slide's y) is part of the picture, not of the layout: measured with
+    // it on, the final box would be the one it paints mid-way, and a move
+    // the next score plays from it would land short and snap. So it rests
+    // for the measurement too. A kept run stands it back up (reassert); a
+    // replacement either moves the sprite from its painted box or carries
+    // it on to rest (the region's continuity cues).
+    const now = this.master;
+    const rested = new Set<string>();
+    for (const t of this.tracks) {
+      const { cue } = t;
+      const ve = cue.sprite.node.visualElement;
+      if (
+        !ve ||
+        t.passed ||
+        t.end <= now ||
+        cue.loop ||
+        (cue.kind !== 'tween' && cue.kind !== 'spring') ||
+        !cue.target
+      ) {
+        continue;
+      }
+      for (const key of Object.keys(cue.target)) {
+        const rest = TRANSFORM_REST[key];
+        const seen = `${cue.sprite.node.layoutKey}:${key}`;
+        if (rest === undefined || rested.has(seen) || !ve.hasValue(key)) {
+          continue;
+        }
+        rested.add(seen);
+        const value = ve.getValue(key)!;
+        this.retired.tweened.push({ key, value: value.get(), ve });
+        value.jump(rest);
+        touched.add(ve);
+      }
+    }
     touched.forEach((ve) => ve.render());
   }
 
@@ -2920,8 +2966,14 @@ export class ChoreoRun implements Run {
    * run's own clock, so a keep is invisible rather than a restart.
    */
   reassert() {
-    const { borrowed, moved } = this.retired;
-    this.retired = { borrowed: [], moved: [] };
+    const { borrowed, moved, tweened } = this.retired;
+    this.retired = { borrowed: [], moved: [], tweened: [] };
+    // first, so a value a move also writes ends on the move's own
+    for (const { key, value, ve } of tweened) {
+      if (value !== undefined) {
+        ve.getValue(key)?.jump(value as PropValue);
+      }
+    }
     for (const { el, key, prior, value, ve } of borrowed) {
       if (value !== undefined) {
         ve.getValue(key, value as PropValue)!.jump(value as PropValue);
