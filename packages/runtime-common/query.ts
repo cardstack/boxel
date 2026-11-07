@@ -163,6 +163,34 @@ export interface LetBinding {
 }
 export const MAX_LET_BINDINGS = 4;
 
+// Re-ranks the top of a result with any spreadsheet formula, in BXL's full
+// library (text, statistical and financial functions included): the query
+// ranks as it would, the realm takes its first `top` rows (default 100, at
+// most MAX_RERANK_TOP), evaluates `expr` over each row's fields in BXL's
+// sandbox, and orders those rows by the value, highest first unless
+// `direction` is `asc`. A row whose formula has no number keeps its place
+// after the ones that do. Pages read the re-ranked window; a page past it
+// keeps the query's order. Each re-ranked row carries `meta._rerank`.
+//
+// The formula can compare a row with a comparison set: by default every
+// match of the query, or `compare.filter`'s matches, and with `compare.by`
+// only those sharing the row's value at that path (its own product type).
+// Two names reach the set, for the fields the formula mentions:
+// - `stats.<field>.<count|sum|avg|min|max|median|p10|p25|p75|p90|stdev>`:
+//   aggregates over the whole set, e.g. `priceMin / stats.priceMin.median`.
+// - `peers.<field>`: the set's values as a list (at most MAX_PEER_VALUES per
+//   group), for any Excel function: `PERCENTRANK_INC(peers.rating, rating)`.
+// Aggregates a card already stores are fields like any other.
+export interface Rerank {
+  expr: string;
+  top?: number;
+  direction?: 'asc' | 'desc';
+  compare?: { filter?: Filter; by?: string };
+}
+export const MAX_PEER_VALUES = 2000;
+export const DEFAULT_RERANK_TOP = 100;
+export const MAX_RERANK_TOP = 500;
+
 // Why a result ranks where it does: the first `_blend` (or `_relevance`)
 // sort's fused score and each signal's part in it. `signal` names it: `text`,
 // a `_relevance` signal (`popularity`, `quality`, `recency`, `priority`,
@@ -244,6 +272,7 @@ interface QueryCommon {
   // with its value, its rank over the matches, its weight and its share of
   // the fused score (see `ResultExplanation`).
   explain?: boolean;
+  rerank?: Rerank;
   page?: {
     number?: number; // page.number is 0-based
     size: number;
@@ -929,6 +958,82 @@ export function assertQuery(
         break;
       case 'let':
         break; // checked above
+      case 'rerank': {
+        let at = pointer.concat('rerank').join('/') || '/';
+        let value = query.rerank as any;
+        if (
+          typeof value !== 'object' ||
+          value == null ||
+          Array.isArray(value)
+        ) {
+          throw new InvalidQueryError(
+            `${at}: rerank must be { expr, top?, direction? }`,
+          );
+        }
+        for (let key of Object.keys(value)) {
+          if (!['expr', 'top', 'direction', 'compare'].includes(key)) {
+            throw new InvalidQueryError(
+              `${at}: unknown rerank member "${key}"`,
+            );
+          }
+        }
+        if (
+          typeof value.expr !== 'string' ||
+          value.expr.trim() === '' ||
+          value.expr.length > 2000
+        ) {
+          throw new InvalidQueryError(
+            `${at}/expr: expr must be a formula of at most 2,000 characters`,
+          );
+        }
+        if (
+          value.top !== undefined &&
+          (!Number.isInteger(value.top) ||
+            value.top < 1 ||
+            value.top > MAX_RERANK_TOP)
+        ) {
+          throw new InvalidQueryError(
+            `${at}/top: top must be an integer from 1 to ${MAX_RERANK_TOP}`,
+          );
+        }
+        if (value.compare !== undefined) {
+          let c = value.compare;
+          if (
+            typeof c !== 'object' ||
+            c == null ||
+            Array.isArray(c) ||
+            Object.keys(c).some((k) => k !== 'filter' && k !== 'by')
+          ) {
+            throw new InvalidQueryError(
+              `${at}/compare: compare is { filter?, by? }`,
+            );
+          }
+          if (
+            c.by !== undefined &&
+            (typeof c.by !== 'string' || !FACET_PATH.test(c.by))
+          ) {
+            throw new InvalidQueryError(
+              `${at}/compare/by: by must be a field path, such as "productType"`,
+            );
+          }
+          if (c.filter !== undefined) {
+            assertFilter(
+              c.filter,
+              pointer.concat('rerank', 'compare', 'filter'),
+            );
+          }
+        }
+        if (
+          value.direction !== undefined &&
+          value.direction !== 'asc' &&
+          value.direction !== 'desc'
+        ) {
+          throw new InvalidQueryError(
+            `${at}/direction: direction must be 'asc' or 'desc'`,
+          );
+        }
+        break;
+      }
       case 'explain':
         if (typeof value !== 'boolean') {
           throw new InvalidQueryError(

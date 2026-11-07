@@ -105,6 +105,9 @@ import {
   isNearFilter,
   isReferenceFilterField,
   collapseBy,
+  MAX_PEER_VALUES,
+  DEFAULT_RERANK_TOP,
+  MAX_RERANK_TOP,
   EXPR_SORT_KEY,
   exprSortSql,
   isExprSort,
@@ -468,7 +471,13 @@ export interface QueryResultsMeta {
   // Filled by the host's search resource, never by the engine: under
   // `explain`, each result's `meta._explain` by card id.
   explanations?: Record<string, ResultExplanation>;
+  // For a query with `rerank`: the window it re-ranked and how many of its
+  // rows the formula gave a number.
+  rerank?: { window: number; scored: number };
 }
+
+// Per re-ranked row: its formula value.
+export const RERANK_KEY = '_rerank';
 
 // Per result row, under `explain`: the row's `_explain` column.
 export const EXPLAIN_KEY = '_explain';
@@ -1326,7 +1335,7 @@ export class IndexQueryEngine {
   // loader that we should be using.
   private async _search(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets, explain }: Query,
+    { filter, sort, page, facets, collapse, let: lets, explain, rerank }: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' | 'all' = 'instance',
@@ -1340,6 +1349,18 @@ export class IndexQueryEngine {
     meta: QueryResultsMeta;
     results: Partial<IndexRowWithHtml>[];
   }> {
+    if (rerank) {
+      let reranked = await this.#reranked(
+        realmURL,
+        { filter, sort, page, facets, collapse, let: lets, rerank },
+        opts,
+        selectClauseExpression,
+        entryType,
+      );
+      if (reranked) {
+        return reranked;
+      }
+    }
     try {
       let letMeta: QueryResultsMeta['lets'];
       if (lets && Object.keys(lets).length) {
@@ -1944,6 +1965,204 @@ export class IndexQueryEngine {
     ];
   }
 
+  // A `rerank`: the query's first `top` rows, ordered by a BXL formula over
+  // each row's search doc, then the page of that order. Undefined when the
+  // page lies past the window, so the query runs in its own order.
+  async #reranked(
+    realmURL: URL,
+    query: Query,
+    opts: QueryOptions,
+    selectClauseExpression: CardExpression,
+    entryType: 'instance' | 'file' | 'all',
+  ): Promise<
+    { meta: QueryResultsMeta; results: Partial<IndexRowWithHtml>[] } | undefined
+  > {
+    let rerank = query.rerank!;
+    let top = Math.min(rerank.top ?? DEFAULT_RERANK_TOP, MAX_RERANK_TOP);
+    let start = query.page ? (query.page.number ?? 0) * query.page.size : 0;
+    if (query.page && start >= top) {
+      return undefined;
+    }
+    let candidates = await this._search(
+      realmURL,
+      {
+        filter: query.filter,
+        sort: query.sort,
+        page: { number: 0, size: top },
+        facets: query.facets,
+        collapse: query.collapse,
+        let: query.let,
+      },
+      opts,
+      [
+        'SELECT i.url AS url, ANY_VALUE(i.type) AS type, ANY_VALUE(i.search_doc) AS search_doc',
+      ],
+      entryType,
+    );
+    let rows = candidates.results as {
+      url: string;
+      type?: string;
+      search_doc?: unknown;
+    }[];
+    let docs = rows.map((row) => {
+      let doc = row.search_doc;
+      if (typeof doc === 'string') {
+        try {
+          doc = JSON.parse(doc);
+        } catch {
+          doc = {};
+        }
+      }
+      return (doc ?? {}) as Record<string, unknown>;
+    });
+    let set = await this.#comparisonSet(realmURL, query, opts, entryType);
+    let inputs = set
+      ? docs.map((doc) => {
+          let group = set!.groups.get(groupKey(doc, query.rerank!.compare?.by));
+          return {
+            ...doc,
+            peers: group?.peers ?? {},
+            stats: group?.stats ?? {},
+          };
+        })
+      : docs;
+    let values = await scoreWithBxl(rerank.expr, inputs);
+    let direction = rerank.direction === 'asc' ? 1 : -1;
+    let order = rows
+      .map((row, index) => ({ row, index, value: values[index] }))
+      .sort((a, b) => {
+        if (a.value == null || b.value == null) {
+          return a.value == null && b.value == null
+            ? a.index - b.index
+            : a.value == null
+              ? 1
+              : -1;
+        }
+        return (a.value - b.value) * direction || a.index - b.index;
+      });
+    let window = query.page
+      ? order.slice(start, start + query.page.size)
+      : order;
+    let results: Partial<IndexRowWithHtml>[] = [];
+    if (window.length > 0) {
+      let { results: page } = await this._search(
+        realmURL,
+        {},
+        { ...opts, cardUrls: [...new Set(window.map((w) => w.row.url))] },
+        selectClauseExpression,
+        entryType,
+      );
+      let byKey = new Map(
+        page.map((r) => [`${(r as any).type ?? ''} ${(r as any).url}`, r]),
+      );
+      for (let w of window) {
+        let row =
+          byKey.get(`${w.row.type ?? ''} ${w.row.url}`) ??
+          page.find((r) => (r as any).url === w.row.url);
+        if (row) {
+          results.push({
+            ...row,
+            [RERANK_KEY]: w.value,
+          } as Partial<IndexRowWithHtml>);
+        }
+      }
+    }
+    return {
+      results,
+      meta: {
+        ...candidates.meta,
+        rerank: {
+          window: rows.length,
+          scored: values.filter((v) => v != null).length,
+        },
+      },
+    };
+  }
+
+  // A rerank's comparison set, when its formula reads `peers.` or `stats.`:
+  // the fields it names, read as numbers from every row of the set (the
+  // query's matches, or `compare.filter`'s), grouped by `compare.by`.
+  async #comparisonSet(
+    realmURL: URL,
+    query: Query,
+    opts: QueryOptions,
+    entryType: 'instance' | 'file' | 'all',
+  ): Promise<
+    | {
+        groups: Map<
+          string,
+          {
+            peers: Record<string, number[]>;
+            stats: Record<string, Record<string, number | null>>;
+          }
+        >;
+      }
+    | undefined
+  > {
+    let rerank = query.rerank!;
+    let fields = [
+      ...new Set(
+        [...rerank.expr.matchAll(/\b(?:peers|stats)\.([A-Za-z_$][\w$]*)/g)].map(
+          (m) => m[1],
+        ),
+      ),
+    ];
+    if (fields.length === 0) {
+      return undefined;
+    }
+    if (this.#dbAdapter.kind !== 'pg') {
+      throw new InvalidQueryError(
+        'rerank: a comparison set (peers. or stats.) runs on Postgres only',
+      );
+    }
+    let path = (p: string) => `'{${p.split('.').join(',')}}'::text[]`;
+    let columns = fields
+      .map(
+        (f, i) =>
+          `ANY_VALUE(CASE jsonb_typeof(spill_unmark(i.search_doc #> ${path(f)})) WHEN 'number' THEN (spill_unmark(i.search_doc #> ${path(f)}) #>> '{}')::double precision END) AS c${i}`,
+      )
+      .join(', ');
+    let by = rerank.compare?.by;
+    let group = by
+      ? `, ANY_VALUE(spill_unmark(i.search_doc #> ${path(by)}) #>> '{}') AS g`
+      : '';
+    let { results } = await this._search(
+      realmURL,
+      { filter: rerank.compare?.filter ?? query.filter, let: query.let },
+      { ...opts, cardUrls: undefined },
+      [`SELECT i.url AS url, ${columns}${group}`],
+      entryType,
+    );
+    let values = new Map<string, number[][]>();
+    for (let row of results as Record<string, unknown>[]) {
+      let key = by ? String(row.g ?? '') : '';
+      let lists = values.get(key) ?? fields.map(() => [] as number[]);
+      fields.forEach((_f, i) => {
+        let v = row[`c${i}`];
+        if (v != null && Number.isFinite(Number(v))) lists[i].push(Number(v));
+      });
+      values.set(key, lists);
+    }
+    let groups = new Map<
+      string,
+      {
+        peers: Record<string, number[]>;
+        stats: Record<string, Record<string, number | null>>;
+      }
+    >();
+    for (let [key, lists] of values) {
+      groups.set(key, {
+        peers: Object.fromEntries(
+          fields.map((f, i) => [f, lists[i].slice(0, MAX_PEER_VALUES)]),
+        ),
+        stats: Object.fromEntries(
+          fields.map((f, i) => [f, summarize(lists[i])]),
+        ),
+      });
+    }
+    return { groups };
+  }
+
   // An `_expr` sort's formula as SQL over the row's search doc. Postgres
   // only: the score profile lowers to Postgres functions.
   #exprSql(expr: string): string {
@@ -2136,7 +2355,7 @@ export class IndexQueryEngine {
   // wrappers, each fixing one projection.
   async search(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets, explain }: Query,
+    { filter, sort, page, facets, collapse, let: lets, explain, rerank }: Query,
     opts: QueryOptions,
     projection: SearchProjection,
     // 'all' searches both `instance` and `file` rows in one query (kind is
@@ -2213,7 +2432,7 @@ export class IndexQueryEngine {
 
     return (await this._search(
       realmURL,
-      { filter, sort, page, facets, collapse, let: lets, explain },
+      { filter, sort, page, facets, collapse, let: lets, explain, rerank },
       opts,
       selectClauseExpression,
       entryType,
@@ -2228,14 +2447,14 @@ export class IndexQueryEngine {
 
   async searchCards(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets, explain }: Query,
+    { filter, sort, page, facets, collapse, let: lets, explain, rerank }: Query,
     opts: QueryOptions = {},
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this.search(
       realmURL,
-      { filter, sort, page, facets, collapse, let: lets, explain },
+      { filter, sort, page, facets, collapse, let: lets, explain, rerank },
       opts,
       { kind: 'dataOnly' },
     );
@@ -2249,12 +2468,12 @@ export class IndexQueryEngine {
 
   async searchFiles(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets, explain }: Query,
+    { filter, sort, page, facets, collapse, let: lets, explain, rerank }: Query,
     opts: QueryOptions = {},
   ): Promise<{ files: IndexedFile[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this._search(
       realmURL,
-      { filter, sort, page, facets, collapse, let: lets, explain },
+      { filter, sort, page, facets, collapse, let: lets, explain, rerank },
       opts,
       [
         `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(ph.deps) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(ph.isolated_html) AS isolated_html, ANY_VALUE(ph.head_html) AS head_html, ANY_VALUE(ph.embedded_html) AS embedded_html, ANY_VALUE(ph.fitted_html) AS fitted_html, ANY_VALUE(ph.atom_html) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(ph.markdown) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(ph.generation) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
@@ -5499,6 +5718,117 @@ const RELEVANCE_SORT_KEY_NAME = '_relevance';
 // anchor among the branches of a top-level `every`.
 // A glob as a LIKE pattern: `*` is `%`, `?` is `_`, and LIKE's own
 // wildcards and escape are escaped.
+// The comparison group a row belongs to: its value at `by`, as text.
+function groupKey(doc: Record<string, unknown>, by: string | undefined) {
+  if (!by) return '';
+  let v: unknown = doc;
+  for (let part of by.split('.')) {
+    v =
+      v && typeof v === 'object'
+        ? (v as Record<string, unknown>)[part]
+        : undefined;
+  }
+  return v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+}
+
+// A comparison set's aggregates for one field: Excel's inclusive
+// percentiles, and the sample standard deviation.
+function summarize(xs: number[]): Record<string, number | null> {
+  let n = xs.length;
+  if (n === 0) {
+    return {
+      count: 0,
+      sum: 0,
+      avg: null,
+      min: null,
+      max: null,
+      median: null,
+      p10: null,
+      p25: null,
+      p75: null,
+      p90: null,
+      stdev: null,
+    };
+  }
+  let sorted = [...xs].sort((a, b) => a - b);
+  let sum = sorted.reduce((a, b) => a + b, 0);
+  let avg = sum / n;
+  let pct = (p: number) => {
+    let h = (n - 1) * p;
+    let lo = Math.floor(h);
+    return (
+      sorted[lo] + (h - lo) * ((sorted[lo + 1] ?? sorted[lo]) - sorted[lo])
+    );
+  };
+  let variance =
+    n > 1 ? sorted.reduce((a, x) => a + (x - avg) ** 2, 0) / (n - 1) : null;
+  return {
+    count: n,
+    sum,
+    avg,
+    min: sorted[0],
+    max: sorted[n - 1],
+    median: pct(0.5),
+    p10: pct(0.1),
+    p25: pct(0.25),
+    p75: pct(0.75),
+    p90: pct(0.9),
+    stdev: variance == null ? null : Math.sqrt(variance),
+  };
+}
+
+// A `rerank` formula's number for each search doc, or null where it has
+// none. The formula is BXL with every Excel function (the lazily loaded
+// statistical, financial and engineering ones too), compiled once with the
+// docs' own field names as its labels so `rating` reads `.rating`, and run in
+// BXL's sandbox under a per-row and a total time budget.
+let formulaExtensions: Promise<void> | undefined;
+async function scoreWithBxl(
+  expr: string,
+  docs: Record<string, unknown>[],
+): Promise<(number | null)[]> {
+  let bxl = await import('@cardstack/bxl');
+  formulaExtensions ??= bxl.loadAllFormulaExtensions().catch(() => undefined);
+  await formulaExtensions;
+  let keys = new Set<string>();
+  for (let doc of docs) {
+    for (let key of Object.keys(doc)) {
+      if (/^[A-Za-z_$][\w$]*$/.test(key)) keys.add(key);
+    }
+  }
+  let prepared;
+  try {
+    prepared = bxl.prepareBxl(expr, {
+      schema: { fields: [...keys].map((key) => ({ key, label: key })) },
+    });
+  } catch (e) {
+    throw new InvalidQueryError(
+      `rerank: the formula does not compile: ${(e as Error).message}`,
+    );
+  }
+  let deadline = Date.now() + 1000;
+  return docs.map((doc) => {
+    if (Date.now() > deadline) {
+      return null;
+    }
+    try {
+      let value = prepared.evaluate(doc, {
+        runtimeLimits: { maxMillis: 20, maxSteps: 100_000, maxOutputs: 4 },
+      }).value;
+      if (typeof value === 'boolean') return value ? 1 : 0;
+      let n =
+        typeof value === 'number'
+          ? value
+          : typeof value === 'string' && value.trim() !== ''
+            ? Number(value)
+            : NaN;
+      return Number.isFinite(n) ? n : null;
+    } catch {
+      return null;
+    }
+  });
+}
+
 // The `_relevance` signal a blend component stands for, by identity: set
 // when `#relevanceBlend` builds the component, read by `explainRows`.
 const explainNames = new WeakMap<

@@ -118,6 +118,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'collapse',
   'let',
   'explain',
+  'rerank',
   'realms',
   'fields',
   'cardUrls',
@@ -866,6 +867,32 @@ export function parseSearchEntryQueryFromPayload(
   if (record.explain !== undefined) {
     itemQuery.explain = record.explain;
   }
+  if (record.rerank !== undefined) {
+    let r = record.rerank as Record<string, any>;
+    let compare = r && typeof r === 'object' ? r.compare : undefined;
+    itemQuery.rerank =
+      compare && typeof compare === 'object'
+        ? {
+            ...r,
+            compare: {
+              ...(compare.filter !== undefined
+                ? {
+                    filter: translateFilterNode(
+                      compare.filter,
+                      'rerank/compare/filter',
+                      {},
+                    ),
+                  }
+                : {}),
+              ...(typeof compare.by === 'string'
+                ? { by: stripItemPrefix(compare.by, 'rerank/compare/by') }
+                : compare.by !== undefined
+                  ? { by: compare.by }
+                  : {}),
+            },
+          }
+        : r;
+  }
   try {
     assertQuery(itemQuery);
   } catch (e) {
@@ -1011,12 +1038,27 @@ export function policyScopedQuery(
   let callerFilter = query.itemQuery.filter
     ? rewrite(query.itemQuery.filter)
     : undefined;
+  let rerank = query.itemQuery.rerank;
   return {
     ...query,
     itemQuery: {
       ...query.itemQuery,
       filter: composePolicyScopedFilter(callerFilter, grantFilters),
       ...(Object.keys(lets).length ? { let: lets } : {}),
+      ...(rerank?.compare?.filter
+        ? {
+            rerank: {
+              ...rerank,
+              compare: {
+                ...rerank.compare,
+                filter: composePolicyScopedFilter(
+                  rerank.compare.filter,
+                  grantFilters,
+                ),
+              },
+            },
+          }
+        : {}),
     },
   };
 }
@@ -1479,6 +1521,13 @@ export interface SearchEntryWireQuery {
   >;
   // each result explains its rank in `meta._explain`
   explain?: boolean;
+  // re-rank the top of the result by a BXL formula (see `Rerank`)
+  rerank?: {
+    expr: string;
+    top?: number;
+    direction?: 'asc' | 'desc';
+    compare?: { filter?: SearchEntryWireFilter; by?: string };
+  };
   // one result per group; `by` through `item.` (see `Collapse`)
   collapse?: string | { by: string; 'item.on'?: CodeRef; keep?: number };
   fields?: { entry: string[] };
@@ -1574,6 +1623,22 @@ export function searchEntryWireQueryFromQuery(
   }
   if (query.explain) {
     wire.explain = true;
+  }
+  if (query.rerank) {
+    let { compare, ...rest } = query.rerank;
+    wire.rerank = {
+      ...rest,
+      ...(compare
+        ? {
+            compare: {
+              ...(compare.filter
+                ? { filter: wireFilterFromFilter(compare.filter) }
+                : {}),
+              ...(compare.by ? { by: `${ITEM_PREFIX}${compare.by}` } : {}),
+            },
+          }
+        : {}),
+    };
   }
   if (query.let) {
     wire.let = Object.fromEntries(
@@ -1978,6 +2043,8 @@ export function buildEntryResource(args: {
   blendScore?: number;
   // Under `explain`, each signal's part in that score — `meta._explain`.
   explanation?: ResultExplanation;
+  // Under `rerank`, the row's formula value — `meta._rerank`.
+  rerankValue?: number | null;
 }): EntryResource {
   let {
     url,
@@ -1989,6 +2056,7 @@ export function buildEntryResource(args: {
     nearSimilarity,
     blendScore,
     explanation,
+    rerankValue,
   } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
@@ -2013,7 +2081,8 @@ export function buildEntryResource(args: {
     matchRelevance !== undefined ||
     nearSimilarity !== undefined ||
     blendScore !== undefined ||
-    explanation !== undefined
+    explanation !== undefined ||
+    rerankValue !== undefined
   ) {
     resource.meta = {
       ...(generation !== undefined ? { generation } : {}),
@@ -2025,6 +2094,7 @@ export function buildEntryResource(args: {
         : {}),
       ...(blendScore !== undefined ? { _blendScore: blendScore } : {}),
       ...(explanation !== undefined ? { _explain: explanation } : {}),
+      ...(rerankValue !== undefined ? { _rerank: rerankValue } : {}),
     };
   }
   return resource;

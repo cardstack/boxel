@@ -301,6 +301,29 @@ sort: [
 
 Postgres only.
 
+### Re-ranking the top with any formula (`rerank`)
+
+`_expr` runs in the database, so it uses the functions Postgres can compute. `rerank` is the second layer: the query ranks as it would (filter, sort, `let`, `collapse`), the realm takes its first `top` rows (default 100, at most 500), evaluates a BXL formula over each row's fields with every Excel function (text, statistical and financial ones included) in BXL's sandbox, and orders those rows by the value, highest first unless `direction` is `asc`. A row whose formula gives no number (an error, a missing field) keeps its place after the ones that do. Pages read the re-ranked window; a page that starts past it keeps the query's order. Each re-ranked row carries `meta._rerank`, and `meta.rerank` reports the window and how many rows got a number.
+
+```js
+rerank: { expr: 'IF(ISNUMBER(SEARCH("organic", title)), 1.2, 1) * rating', top: 200 }
+```
+
+**Comparison sets.** A formula can measure a row against a set, by percentile or by ratio. `compare.filter` names the set (by default, every match of the query), and `compare.by` narrows it to the rows sharing the row's value at that path, such as its own product type. The formula reaches the set through two names, for the fields it mentions:
+
+- `stats.<field>.<count|sum|avg|min|max|median|p10|p25|p75|p90|stdev>`: aggregates over the whole set, computed when the query runs. `priceMin / stats.priceMin.median` is a product's price against the median of its kind.
+- `peers.<field>`: the set's values as a list (at most 2,000 per group), for any Excel function. `PERCENTRANK_INC(peers.rating, rating)` is where its rating falls among its kind, 0 to 1.
+
+```js
+rerank: {
+  expr: 'PERCENTRANK_INC(peers.rating, rating)',
+  compare: { by: 'productType' },
+  top: 200,
+}
+```
+
+Aggregates a card stores, such as a category's median price, are fields like any other (`category.medianPrice`, when the link is searchable). Under a realm policy, the grants that scope the caller's query also scope `compare.filter`. A comparison set runs on Postgres only.
+
 ### Why a result ranks where it does (`explain`)
 
 With `explain: true`, every result of a query sorted by `_blend` or `_relevance` carries `meta._explain`: the first blend's fused score, its `k`, and each signal's part in it.

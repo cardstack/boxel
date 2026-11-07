@@ -1068,6 +1068,172 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((wire.sort as any)[0].expr, 'rating / LN(priceMin + 1)');
   });
 
+  async function reranked(query: Query) {
+    let { results, meta } = await engine.search(
+      new URL(testRealm),
+      query,
+      {},
+      { kind: 'renderSet' },
+    );
+    return {
+      rows: results.map((r: any) => [
+        r.url.replace(`${testRealm}Talk/`, '').replace('.json', ''),
+        r._rerank == null ? null : Number(Number(r._rerank).toFixed(3)),
+      ]),
+      meta,
+    };
+  }
+  const byScoreDesc = [{ on, by: 'hnScore', direction: 'desc' as const }];
+
+  test('rerank orders the top of a result by any Excel formula', async function (assert) {
+    // A text function the score profile refuses: Strange Loop talks first.
+    let { rows, meta } = await reranked({
+      filter: { type: on },
+      sort: byScoreDesc,
+      rerank: { expr: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0)' },
+    });
+    assert.deepEqual(
+      rows.map((r) => r[0]),
+      ['b', 'c', 'a', 'd', 'e', 'f', 'g'],
+      'matching rows lead, each group keeping the query order',
+    );
+    // BXL's SEARCH raises where Excel's returns #VALUE!, and ISNUMBER does
+    // not catch it, so the GOTO and channel-less talks have no value: they
+    // follow the scored ones in the query's order.
+    assert.deepEqual(meta.rerank, { window: 7, scored: 3 });
+    assert.strictEqual(meta.page.total, 7);
+
+    let windowed = await reranked({
+      filter: { type: on },
+      sort: byScoreDesc,
+      page: { number: 0, size: 3 },
+      rerank: { expr: '100 - hnScore', top: 4 },
+    });
+    assert.deepEqual(
+      windowed.rows,
+      [
+        ['c', 80],
+        ['b', 70],
+        ['e', 60],
+      ],
+      'only the first four are re-ranked, lowest score first',
+    );
+    let past = await reranked({
+      filter: { type: on },
+      sort: byScoreDesc,
+      page: { number: 1, size: 4 },
+      rerank: { expr: '100 - hnScore', top: 4 },
+    });
+    assert.deepEqual(
+      past.rows.map((r) => r[0]),
+      ['a', 'f', 'g'],
+      'a page past the window keeps the query order',
+    );
+  });
+
+  test('rerank compares each row with its peers', async function (assert) {
+    let { rows } = await reranked({
+      filter: { type: on },
+      sort: byScoreDesc,
+      rerank: {
+        expr: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+        compare: { by: 'channel' },
+      },
+    });
+    assert.deepEqual(
+      rows,
+      [
+        ['d', 1],
+        ['b', 1],
+        ['f', 1],
+        ['c', 0.5],
+        ['e', 0],
+        ['a', 0],
+        ['g', 0],
+      ],
+      'each talk ranked within its own channel (f and g have none)',
+    );
+    let ratio = await reranked({
+      filter: { type: on },
+      sort: byScoreDesc,
+      rerank: { expr: 'hnScore / stats.hnScore.median', direction: 'asc' },
+    });
+    assert.deepEqual(
+      ratio.rows,
+      [
+        ['g', 0.05],
+        ['f', 0.25],
+        ['a', 0.5],
+        ['c', 1],
+        ['b', 1.5],
+        ['e', 2],
+        ['d', 2.5],
+      ],
+      'a ratio to the median of every match',
+    );
+    let against = await reranked({
+      filter: { on, eq: { channel: 'GOTO' } },
+      rerank: {
+        expr: '(hnScore - stats.hnScore.avg) / stats.hnScore.stdev',
+        compare: { filter: { type: on } },
+      },
+    });
+    assert.deepEqual(
+      against.rows.map((r) => r[0]),
+      ['d', 'e'],
+      'a comparison set other than the matches',
+    );
+    assert.ok(
+      (against.rows[0][1] as number) > 1,
+      'd sits more than a standard deviation above every talk',
+    );
+  });
+
+  test('rerank is checked, travels the wire, and a policy scopes its comparison set', function (assert) {
+    assert.throws(
+      () => assertQuery({ rerank: { expr: 'x', top: 501 } } as any),
+      /top must be an integer from 1 to 500/,
+    );
+    assert.throws(
+      () =>
+        assertQuery({ rerank: { expr: 'x', compare: { by: 'a b' } } } as any),
+      /by must be a field path/,
+    );
+    let parsed = parseSearchEntryQueryFromPayload({
+      filter: { 'item.on': on },
+      rerank: {
+        expr: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+        top: 50,
+        compare: {
+          filter: { 'item.on': on, eq: { 'item.channel': 'GOTO' } },
+          by: 'item.channel',
+        },
+      },
+    });
+    assert.deepEqual(parsed.itemQuery.rerank, {
+      expr: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+      top: 50,
+      compare: { filter: { on, eq: { channel: 'GOTO' } }, by: 'channel' },
+    });
+    let grant = { on, eq: { channel: 'GOTO' } };
+    let scoped = policyScopedQuery(parsed, [grant]);
+    assert.deepEqual(scoped.itemQuery.rerank!.compare!.filter, {
+      every: [{ on, eq: { channel: 'GOTO' } }, { any: [grant] }],
+    });
+  });
+
+  test('a rerank formula that does not compile is refused', async function (assert) {
+    await assert.rejects(
+      engine.search(
+        new URL(testRealm),
+        { filter: { type: on }, rerank: { expr: 'IF(' } },
+        {},
+        { kind: 'renderSet' },
+      ),
+      /rerank: the formula does not compile/,
+    );
+  });
+
   test('the wire grammar checks collapse and measure', function (assert) {
     let bad = (query: Record<string, unknown>, pattern: RegExp) =>
       assert.throws(

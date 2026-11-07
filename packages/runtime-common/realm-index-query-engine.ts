@@ -12,6 +12,7 @@ import {
   NEAR_SIMILARITY_KEY,
   BLEND_SCORE_KEY,
   EXPLAIN_KEY,
+  RERANK_KEY,
   fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -516,6 +517,11 @@ export class RealmIndexQueryEngine {
       let explanation = (row as Record<string, unknown>)[EXPLAIN_KEY] as
         | ResultExplanation
         | undefined;
+      // And, under `rerank`, the row's formula value.
+      let rerankValue = (row as Record<string, unknown>)[RERANK_KEY] as
+        | number
+        | null
+        | undefined;
       // A `file` row (mixed 'all' scope) renders natively and carries no
       // ancestor coercion — its renderings hang off its own type's entry with
       // no renderTypeKey, and its resource is the synthesized `file-meta`. This
@@ -601,6 +607,7 @@ export class RealmIndexQueryEngine {
             nearSimilarity,
             blendScore,
             explanation,
+            rerankValue,
           }),
         );
         continue;
@@ -753,6 +760,7 @@ export class RealmIndexQueryEngine {
           nearSimilarity,
           blendScore,
           explanation,
+          rerankValue,
         }),
       );
     }
