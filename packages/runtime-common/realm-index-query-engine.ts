@@ -11,6 +11,7 @@ import {
   MATCH_RELEVANCE_SORT_KEY,
   NEAR_SIMILARITY_KEY,
   BLEND_SCORE_KEY,
+  EXPLAIN_KEY,
   fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -44,7 +45,7 @@ import type {
   RealmIdentifier,
 } from './realm-identifiers.ts';
 import { rri } from './realm-identifiers.ts';
-import type { Filter, Query } from './query.ts';
+import type { Filter, Query, ResultExplanation } from './query.ts';
 import {
   CardError,
   type RenderErrorSummary,
@@ -511,6 +512,10 @@ export class RealmIndexQueryEngine {
       let rawBlendScore = (row as Record<string, unknown>)[BLEND_SCORE_KEY];
       let blendScore =
         rawBlendScore == null ? undefined : Number(rawBlendScore);
+      // And, under `explain`, why it ranks where it does.
+      let explanation = (row as Record<string, unknown>)[EXPLAIN_KEY] as
+        | ResultExplanation
+        | undefined;
       // A `file` row (mixed 'all' scope) renders natively and carries no
       // ancestor coercion — its renderings hang off its own type's entry with
       // no renderTypeKey, and its resource is the synthesized `file-meta`. This
@@ -595,6 +600,7 @@ export class RealmIndexQueryEngine {
             matchRelevance,
             nearSimilarity,
             blendScore,
+            explanation,
           }),
         );
         continue;
@@ -746,6 +752,7 @@ export class RealmIndexQueryEngine {
           matchRelevance,
           nearSimilarity,
           blendScore,
+          explanation,
         }),
       );
     }

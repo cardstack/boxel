@@ -276,6 +276,50 @@ sort: [
 
 Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `_matchRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, ranks are per realm, so a federated blend orders only approximately.
 
+### Why a result ranks where it does (`explain`)
+
+With `explain: true`, every result of a query sorted by `_blend` or `_relevance` carries `meta._explain`: the first blend's fused score, its `k`, and each signal's part in it.
+
+```json
+{
+  "score": 0.0397,
+  "k": 60,
+  "signals": [
+    {
+      "signal": "text",
+      "weight": 1,
+      "value": 0.42,
+      "rank": 2,
+      "contribution": 0.0161
+    },
+    {
+      "signal": "popularity",
+      "weight": 0.5,
+      "value": 812,
+      "rank": 1,
+      "contribution": 0.0082
+    },
+    {
+      "signal": "when",
+      "weight": 1.5,
+      "value": 1,
+      "rank": 1,
+      "contribution": 0.0246
+    },
+    {
+      "signal": "recency",
+      "weight": -0.5,
+      "inverted": true,
+      "value": null,
+      "rank": null,
+      "contribution": 0
+    }
+  ]
+}
+```
+
+`signal` names a `_relevance` signal (`text`, `popularity`, `quality`, `recency`, `priority`, `meaning`), `when` for a `_when` boost, or the field a signal sorts by. `rank` is the card's place for that signal over every match, not just the page, so the contributions add up to `score`. A signal the card has no value for has no rank and contributes nothing. `inverted` marks a negative weight. The ranks are computed in the same statement as the search, so asking costs two extra columns per signal.
+
 ### Relevance (`_relevance`)
 
 A `_relevance` sort ranks by search intent. It blends text relevance (weighted by the search roles of the fields that matched) with the ranking signals the type declares (`search: { rank: 'popularity' }` and the like: `popularity`, `quality`, `recency`, `priority`). Given `near`, it also blends in the similarity of the type's vector field as the `meaning` signal. It compiles to a `_blend`, so results carry `meta._blendScore`.

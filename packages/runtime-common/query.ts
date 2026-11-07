@@ -158,6 +158,25 @@ export interface LetBinding {
   select: string;
 }
 export const MAX_LET_BINDINGS = 4;
+
+// Why a result ranks where it does: the first `_blend` (or `_relevance`)
+// sort's fused score and each signal's part in it. `signal` names it: `text`,
+// a `_relevance` signal (`popularity`, `quality`, `recency`, `priority`,
+// `meaning`), `when` for a `_when` boost, or the field it sorts by. A signal
+// the card has no value for has no rank and contributes nothing. `inverted`
+// marks a negative weight.
+export interface ResultExplanation {
+  score: number;
+  k: number;
+  signals: {
+    signal: string;
+    weight: number;
+    inverted?: true;
+    value: unknown;
+    rank: number | null;
+    contribution: number;
+  }[];
+}
 export const MAX_LET_ROWS = 1000;
 export const MAX_LET_VALUES = 1000;
 const LET_NAME = /^[A-Za-z_][\w]*$/;
@@ -216,6 +235,11 @@ interface QueryCommon {
   facets?: Facet[];
   collapse?: Collapse;
   let?: Record<string, LetBinding>;
+  // Each result explains its rank: `meta._explain` on every row of a query
+  // sorted by `_blend` or `_relevance` lists the first blend's signals, each
+  // with its value, its rank over the matches, its weight and its share of
+  // the fused score (see `ResultExplanation`).
+  explain?: boolean;
   page?: {
     number?: number; // page.number is 0-based
     size: number;
@@ -859,6 +883,13 @@ export function assertQuery(
         break;
       case 'let':
         break; // checked above
+      case 'explain':
+        if (typeof value !== 'boolean') {
+          throw new InvalidQueryError(
+            `${pointer.concat('explain').join('/') || '/'}: explain must be a boolean`,
+          );
+        }
+        break;
       case 'asData':
         if (typeof value !== 'boolean') {
           throw new InvalidQueryError(

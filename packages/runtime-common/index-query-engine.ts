@@ -105,6 +105,7 @@ import {
   isNearFilter,
   isReferenceFilterField,
   collapseBy,
+  type ResultExplanation,
   mapLetReferences,
   MAX_LET_ROWS,
   MAX_LET_VALUES,
@@ -462,6 +463,9 @@ export interface QueryResultsMeta {
   // the same statement; `list` ran its query first and passed `values` on.
   lets?: Record<string, { strategy: 'join' | 'list'; values?: number }>;
 }
+
+// Per result row, under `explain`: the row's `_explain` column.
+export const EXPLAIN_KEY = '_explain';
 
 // A mapper for fields that can be sorted on but are not an attribute of a card
 // SQL fragments consumed by `_search`'s ORDER BY, which runs with the
@@ -1316,7 +1320,7 @@ export class IndexQueryEngine {
   // loader that we should be using.
   private async _search(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets }: Query,
+    { filter, sort, page, facets, collapse, let: lets, explain }: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' | 'all' = 'instance',
@@ -1462,6 +1466,7 @@ export class IndexQueryEngine {
           prerenderedTable: prerenderedTableFromOpts(opts),
           indexTable: tableFromOpts(opts),
         },
+        Boolean(explain),
       );
       relevanceColumn = [...relevanceColumn, ...nearColumns, ...blendColumns];
       nearJoins = [...nearJoins, ...blendJoins];
@@ -1685,6 +1690,9 @@ export class IndexQueryEngine {
       }
       // A projection that returns `search_doc` (file rows) returns it whole.
       await restoreSpilledSearchDocs(this.#dbAdapter, results);
+      if (explain) {
+        explainRows(results, sort);
+      }
 
       let filterContext: FilterContext = {
         inAny: false,
@@ -2111,7 +2119,7 @@ export class IndexQueryEngine {
   // wrappers, each fixing one projection.
   async search(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets }: Query,
+    { filter, sort, page, facets, collapse, let: lets, explain }: Query,
     opts: QueryOptions,
     projection: SearchProjection,
     // 'all' searches both `instance` and `file` rows in one query (kind is
@@ -2188,7 +2196,7 @@ export class IndexQueryEngine {
 
     return (await this._search(
       realmURL,
-      { filter, sort, page, facets, collapse, let: lets },
+      { filter, sort, page, facets, collapse, let: lets, explain },
       opts,
       selectClauseExpression,
       entryType,
@@ -2203,14 +2211,14 @@ export class IndexQueryEngine {
 
   async searchCards(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets }: Query,
+    { filter, sort, page, facets, collapse, let: lets, explain }: Query,
     opts: QueryOptions = {},
     // TODO this should be returning a CardCollectionDocument--handle that in
     // subsequent PR where we start storing card documents in "pristine_doc"
   ): Promise<{ cards: CardResource[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this.search(
       realmURL,
-      { filter, sort, page, facets, collapse, let: lets },
+      { filter, sort, page, facets, collapse, let: lets, explain },
       opts,
       { kind: 'dataOnly' },
     );
@@ -2224,12 +2232,12 @@ export class IndexQueryEngine {
 
   async searchFiles(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets }: Query,
+    { filter, sort, page, facets, collapse, let: lets, explain }: Query,
     opts: QueryOptions = {},
   ): Promise<{ files: IndexedFile[]; meta: QueryResultsMeta }> {
     let { results, meta } = await this._search(
       realmURL,
-      { filter, sort, page, facets, collapse, let: lets },
+      { filter, sort, page, facets, collapse, let: lets, explain },
       opts,
       [
         `SELECT i.url AS url, ANY_VALUE(i.pristine_doc) AS pristine_doc, ANY_VALUE(i.search_doc) AS search_doc, ANY_VALUE(i.types) AS types, ANY_VALUE(i.display_names) AS display_names, ANY_VALUE(ph.deps) AS deps, ANY_VALUE(i.last_modified) AS last_modified, ANY_VALUE(i.resource_created_at) AS resource_created_at, ANY_VALUE(ph.isolated_html) AS isolated_html, ANY_VALUE(ph.head_html) AS head_html, ANY_VALUE(ph.embedded_html) AS embedded_html, ANY_VALUE(ph.fitted_html) AS fitted_html, ANY_VALUE(ph.atom_html) AS atom_html, ANY_VALUE(i.icon_html) AS icon_html, ANY_VALUE(ph.markdown) AS markdown, ANY_VALUE(i.generation) AS generation, ANY_VALUE(ph.generation) AS html_generation, ANY_VALUE(i.realm_url) AS realm_url, ANY_VALUE(i.indexed_at) AS indexed_at`,
@@ -3097,16 +3105,21 @@ export class IndexQueryEngine {
     let signal = (
       weight: number,
       entry: { by: string; on?: CodeRef; near?: NearSortTarget },
-    ): BlendComponent =>
-      ({
+      name?: RelevanceSignal,
+    ): BlendComponent => {
+      let component = {
         ...entry,
         weight: Math.abs(weight),
         direction: weight < 0 ? 'asc' : 'desc',
-      }) as BlendComponent;
+      } as BlendComponent;
+      // read by `explain`, never on the wire
+      if (name) explainNames.set(component, { name, weight });
+      return component;
+    };
     let of: BlendComponent[] = [];
     let text = weightOf('text');
     if (text !== 0 && collectPositiveMatchTerms(filter).length > 0) {
-      of.push(signal(text, { by: MATCH_RELEVANCE_SORT_KEY }));
+      of.push(signal(text, { by: MATCH_RELEVANCE_SORT_KEY }, 'text'));
     }
     let on = sort.on ?? filterAnchor(filter);
     if (on) {
@@ -3116,7 +3129,7 @@ export class IndexQueryEngine {
         let field = rankFields[name]?.[0];
         let weight = weightOf(name);
         if (field && weight !== 0) {
-          of.push(signal(weight, { by: field, on }));
+          of.push(signal(weight, { by: field, on }, name));
         }
       }
       let meaning = weightOf('meaning');
@@ -3130,7 +3143,9 @@ export class IndexQueryEngine {
             `sort by "${RELEVANCE_SORT_KEY_NAME}" near a vector needs a type with a VectorField; ${JSON.stringify(on)} has none`,
           );
         }
-        of.push(signal(meaning, { by: vectorField, on, near: sort.near }));
+        of.push(
+          signal(meaning, { by: vectorField, on, near: sort.near }, 'meaning'),
+        );
       }
     } else if (sort.near != null) {
       throw new InvalidQueryError(
@@ -3161,6 +3176,7 @@ export class IndexQueryEngine {
     matches: MatchTerm[],
     staged: boolean,
     filterContext: FilterContext,
+    explain = false,
   ): Promise<{ blendColumns: CardExpression; blendJoins: CardExpression }> {
     let blendColumns: CardExpression = [];
     let blendJoins: CardExpression = [];
@@ -3187,6 +3203,32 @@ export class IndexQueryEngine {
         );
         // A negative weight inverts the signal: the same size, ranked the
         // other way round. A `_when` signal inverts in its score instead.
+        if (explain && index === sort.findIndex((s) => isBlendSort(s))) {
+          let order: CardExpression = [
+            '(ORDER BY',
+            ...score,
+            sortDirection(
+              isWhenSignal(component)
+                ? 'desc'
+                : inverted
+                  ? (component.direction ?? 'desc') === 'desc'
+                    ? 'asc'
+                    : 'desc'
+                  : (component.direction ?? 'desc'),
+            ),
+            'NULLS LAST)',
+          ];
+          blendColumns.push(
+            ', (',
+            ...score,
+            `) AS "_x${j}_value"`,
+            ', (CASE WHEN',
+            ...score,
+            'IS NULL THEN NULL ELSE RANK() OVER',
+            ...order,
+            `END) AS "_x${j}_rank"`,
+          );
+        }
         let declared = isWhenSignal(component)
           ? 'desc'
           : (component.direction ?? 'desc');
@@ -5415,6 +5457,64 @@ const RELEVANCE_SORT_KEY_NAME = '_relevance';
 // anchor among the branches of a top-level `every`.
 // A glob as a LIKE pattern: `*` is `%`, `?` is `_`, and LIKE's own
 // wildcards and escape are escaped.
+// The `_relevance` signal a blend component stands for, by identity: set
+// when `#relevanceBlend` builds the component, read by `explainRows`.
+const explainNames = new WeakMap<
+  object,
+  { name: RelevanceSignal; weight: number }
+>();
+
+// Folds each row's per-signal `_xN_value` / `_xN_rank` columns into one
+// `_explain` object (see `ResultExplanation`) and drops them.
+function explainRows(rows: Record<string, unknown>[], sort: Sort | undefined) {
+  let blend = (sort ?? []).find((s) => isBlendSort(s)) as
+    | BlendSortExpression
+    | undefined;
+  if (!blend) {
+    return;
+  }
+  let k = blend.k ?? DEFAULT_RRF_K;
+  let labels = blend.of.map((c) => {
+    let named = explainNames.get(c);
+    if (named) {
+      return { signal: named.name, weight: named.weight };
+    }
+    let signal = isWhenSignal(c)
+      ? 'when'
+      : isMatchRelevanceSort(c)
+        ? 'text'
+        : isNearSort(c)
+          ? `near ${c.by}`
+          : c.by;
+    return { signal, weight: c.weight ?? 1 };
+  });
+  for (let row of rows) {
+    let signals = labels.map(({ signal, weight }, j) => {
+      let rawRank = row[`_x${j}_rank`];
+      let rank = rawRank == null ? null : Number(rawRank);
+      let value = row[`_x${j}_value`] ?? null;
+      delete row[`_x${j}_rank`];
+      delete row[`_x${j}_value`];
+      return {
+        signal,
+        weight,
+        ...(weight < 0 ? { inverted: true as const } : {}),
+        value:
+          typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value)
+            ? Number(value)
+            : value,
+        rank,
+        contribution: rank == null ? 0 : Math.abs(weight) / (k + rank),
+      };
+    });
+    row[EXPLAIN_KEY] = {
+      score: Number(row[BLEND_SCORE_KEY] ?? 0),
+      k,
+      signals,
+    } satisfies ResultExplanation;
+  }
+}
+
 // A binding the engine can run as a join: one card named by id, selecting a
 // link field's ids (`items.id`). Its `linkedFrom` reads that card's links in
 // the same statement as the query that uses them.

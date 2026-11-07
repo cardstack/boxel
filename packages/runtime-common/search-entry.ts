@@ -9,6 +9,7 @@ import {
   type Sort,
   type FacetCount,
   type LetBinding,
+  type ResultExplanation,
   WHEN_SIGNAL_KEY,
 } from './query.ts';
 import {
@@ -116,6 +117,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'facets',
   'collapse',
   'let',
+  'explain',
   'realms',
   'fields',
   'cardUrls',
@@ -858,6 +860,9 @@ export function parseSearchEntryQueryFromPayload(
   if (record.let !== undefined) {
     itemQuery.let = translateLets(record.let);
   }
+  if (record.explain !== undefined) {
+    itemQuery.explain = record.explain;
+  }
   try {
     assertQuery(itemQuery);
   } catch (e) {
@@ -1467,6 +1472,8 @@ export interface SearchEntryWireQuery {
       select: string;
     }
   >;
+  // each result explains its rank in `meta._explain`
+  explain?: boolean;
   // one result per group; `by` through `item.` (see `Collapse`)
   collapse?: string | { by: string; 'item.on'?: CodeRef; keep?: number };
   fields?: { entry: string[] };
@@ -1558,6 +1565,9 @@ export function searchEntryWireQueryFromQuery(
       ...facet,
       by: `${ITEM_PREFIX}${facet.by}`,
     }));
+  }
+  if (query.explain) {
+    wire.explain = true;
   }
   if (query.let) {
     wire.let = Object.fromEntries(
@@ -1960,6 +1970,8 @@ export function buildEntryResource(args: {
   nearSimilarity?: number;
   // The first `_blend` sort's fused score — rides in `meta._blendScore`.
   blendScore?: number;
+  // Under `explain`, each signal's part in that score — `meta._explain`.
+  explanation?: ResultExplanation;
 }): EntryResource {
   let {
     url,
@@ -1970,6 +1982,7 @@ export function buildEntryResource(args: {
     matchRelevance,
     nearSimilarity,
     blendScore,
+    explanation,
   } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
@@ -1993,7 +2006,8 @@ export function buildEntryResource(args: {
     generation !== undefined ||
     matchRelevance !== undefined ||
     nearSimilarity !== undefined ||
-    blendScore !== undefined
+    blendScore !== undefined ||
+    explanation !== undefined
   ) {
     resource.meta = {
       ...(generation !== undefined ? { generation } : {}),
@@ -2004,6 +2018,7 @@ export function buildEntryResource(args: {
         ? { _nearSimilarity: nearSimilarity }
         : {}),
       ...(blendScore !== undefined ? { _blendScore: blendScore } : {}),
+      ...(explanation !== undefined ? { _explain: explanation } : {}),
     };
   }
   return resource;
