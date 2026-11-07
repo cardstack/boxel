@@ -88,7 +88,7 @@ import Warning from '../../components/icons/warning.gts';
 import { Field } from '@cardstack/pretui/components/field';
 import { Alert } from '@cardstack/pretui/components/alert';
 import Globe from '@cardstack/boxel-icons/globe';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import { eq, gt } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
@@ -565,12 +565,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   data-test-approve-budget={{share.label}}
                   as |_controlId _messageId labelId|
                 >
-                  <BoxelInput
+                  <Input
                     @type='text'
-                    @autocomplete='off'
+                    autocomplete='off'
                     @value={{this.budgetText share}}
                     @onInput={{fn this.setBudget share.id}}
-                    @state={{if (this.budgetValid share) 'none' 'invalid'}}
+                    @invalid={{if (this.budgetValid share) false true}}
                     @errorMessage={{this.budgetError share}}
                     @describedBy='budget-note-{{share.id}}'
                     inputmode='numeric'

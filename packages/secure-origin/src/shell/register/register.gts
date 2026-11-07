@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
-import type { InputGroupValidationState } from '../../components/input-group.gts';
+import type { InputGroupState } from '@cardstack/pretui/components/input-group';
 import { eq } from '@cardstack/pretui/helpers';
 import {
   AwaitingEmail,
@@ -141,7 +141,7 @@ export default class Register extends Component<Signature> {
     return this.state.registering || !this.state.token;
   }
 
-  private get usernameState(): InputGroupValidationState {
+  private get usernameState(): InputGroupState {
     if (this.state.usernameError) {
       return 'invalid';
     }

@@ -3,7 +3,9 @@ import { render, settled, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import BoxelInput from '../../src/components/input.gts';
+import { Textarea } from '@cardstack/pretui/components/textarea';
+
+import { fitContent } from '../../src/modifiers/fit-content.ts';
 
 const noop = () => {};
 
@@ -13,7 +15,9 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
 ];
 
-module('Integration | BoxelInput', function (hooks) {
+// fitContent on Pret UI's Textarea, as the service account's scopes field
+// uses it, where the browser doesn't size a field by its content.
+module('Integration | fitContent', function (hooks) {
   setupRenderingTest(hooks);
 
   test('a textarea the browser doesn’t size by its content is as tall as its wrapped lines', async function (assert) {
@@ -21,10 +25,10 @@ module('Integration | BoxelInput', function (hooks) {
     await render(
       <template>
         <div data-test-narrow>
-          <BoxelInput
-            @type='textarea'
+          <Textarea
             @value={{field.value}}
             @onInput={{noop}}
+            {{fitContent field.value}}
           />
         </div>
       </template>,
@@ -59,10 +63,10 @@ module('Integration | BoxelInput', function (hooks) {
     await render(
       <template>
         <div data-test-narrow>
-          <BoxelInput
-            @type='textarea'
+          <Textarea
             @value={{field.value}}
             @onInput={{noop}}
+            {{fitContent field.value}}
           />
         </div>
       </template>,
@@ -88,42 +92,6 @@ module('Integration | BoxelInput', function (hooks) {
       textarea.clientHeight,
       wide,
       'wider again, it drops the rows it no longer needs',
-    );
-  });
-
-  test('a textarea carries the same attributes as an input', async function (assert) {
-    await render(
-      <template>
-        <BoxelInput
-          @type='text'
-          @id='as-input'
-          @value='a'
-          @placeholder='p'
-          @autocomplete='off'
-          @state='invalid'
-          @errorMessage='e'
-          name='n'
-        />
-        <BoxelInput
-          @type='textarea'
-          @id='as-textarea'
-          @value='a'
-          @placeholder='p'
-          @autocomplete='off'
-          @state='invalid'
-          @errorMessage='e'
-          name='n'
-        />
-      </template>,
-    );
-    let names = (selector: string) =>
-      [...document.querySelector(selector)!.attributes]
-        .map((attribute) => attribute.name)
-        .filter((name) => !['type', 'rows', 'style'].includes(name))
-        .sort();
-    assert.deepEqual(
-      names('[data-test-boxel-input-id="as-textarea"]'),
-      names('[data-test-boxel-input-id="as-input"]'),
     );
   });
 });

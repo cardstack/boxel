@@ -49,9 +49,31 @@ export const ALLOWED_PACKAGES = new Set([
   '@cardstack/boxel-ui',
   '@cardstack/boxel-icons',
   'ember-modifier',
+  'ember-provide-consume-context',
 
   // boxel-ui's run-time dependencies, as ADR 019 §1.3 names them.
   'classnames',
+  'dompurify',
+  'ember-basic-dropdown',
+  'ember-concurrency',
+  'ember-power-select',
+  'lodash-es',
+
+  // Packages the build reaches through the ones above, as ADR 019 §1.3
+  // names them.
+  //
+  // Embroider's run-time macros: `ember-provide-consume-context` calls
+  // `importSync` from them, and Pret UI's Select reaches it by consuming
+  // context.
+  '@embroider/macros',
+  // `ember-basic-dropdown`'s and `ember-power-select`'s helpers and
+  // modifier, which arrive with boxel-ui's select: the `eq`/`and`/`or`
+  // helpers, a dynamic `{{element}}`, and a modifier that sets style
+  // properties through the CSSOM (`element.style.setProperty`), which the
+  // policy allows.
+  'ember-truth-helpers',
+  'ember-element-helper',
+  'ember-style-modifier',
 ]);
 
 // Modules the bundler itself generates, which have no file on disk.

@@ -9,7 +9,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { Field } from '@cardstack/pretui/components/field';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '@cardstack/boxel-icons/tag';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import { focusWhen } from '@cardstack/pretui/focus';
 
 interface Signature {
@@ -37,10 +37,10 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
       data-test-key-field='name'
       as |controlId|
     >
-      <BoxelInput
-        @id={{controlId}}
+      <Input
+        @controlId={{controlId}}
         @type='text'
-        @autocomplete='off'
+        autocomplete='off'
         @placeholder='A name you’ll recognize, such as “Weather service”'
         @value={{@name}}
         @onInput={{@onName}}
@@ -60,10 +60,10 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
       data-test-key-field='value'
       as |controlId|
     >
-      <BoxelInput
-        @id={{controlId}}
+      <Input
+        @controlId={{controlId}}
         @type='password'
-        @autocomplete='off'
+        autocomplete='off'
         @placeholder={{if @valueLabel 'Paste the secret' 'Paste the key'}}
         @value={{@value}}
         @onInput={{@onValue}}

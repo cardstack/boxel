@@ -50,7 +50,8 @@ import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import { openedFor } from './opened-for.ts';
-import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
+import WorkspacePicker from './workspace-picker.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Card {
   module: string;
@@ -140,11 +141,12 @@ class UseKey extends Component<{
                 data-test-use-key-realm
                 as |_controlId _messageId labelId|
               >
-                <WorkspaceDropdown
+                <WorkspacePicker
                   @workspaces={{this.form.realms}}
                   @selected={{this.form.realm}}
                   @onSelect={{this.selectRealm}}
                   @labelId={{labelId}}
+                  @emptyMessage='You don’t have access to any workspace to use this key in.'
                 />
               </Field>
             {{/if}}

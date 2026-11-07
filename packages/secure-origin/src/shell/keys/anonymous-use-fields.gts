@@ -11,7 +11,7 @@ import { Checkbox } from '@cardstack/pretui/components/checkbox';
 import { Field } from '@cardstack/pretui/components/field';
 
 import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
-import BoxelInput from '../../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 
 import { anonymousCapsPhrase, type AnonymousCaps } from './anonymous-caps.ts';
 
@@ -64,10 +64,6 @@ export function anonymousUseSummary(
 
 function capInvalid(anonymous: boolean, text: string): boolean {
   return anonymousCapOf(anonymous, text) === undefined;
-}
-
-function capState(anonymous: boolean, text: string): 'none' | 'invalid' {
-  return capInvalid(anonymous, text) ? 'invalid' : 'none';
 }
 
 function capError(anonymous: boolean, text: string): string | undefined {
@@ -125,13 +121,13 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
       data-test-anonymous-cap
       as |_controlId _messageId labelId|
     >
-      <BoxelInput
+      <Input
         @type='text'
-        @autocomplete='off'
+        autocomplete='off'
         @placeholder='No cap'
         @value={{@cap}}
         @onInput={{@onCap}}
-        @state={{capState @anonymous @cap}}
+        @invalid={{capInvalid @anonymous @cap}}
         @errorMessage={{capError @anonymous @cap}}
         @describedBy='anonymous-cap-note'
         inputmode='numeric'
@@ -152,13 +148,13 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
       data-test-anonymous-monthly-cap
       as |_controlId _messageId labelId|
     >
-      <BoxelInput
+      <Input
         @type='text'
-        @autocomplete='off'
+        autocomplete='off'
         @placeholder='No cap'
         @value={{@monthlyCap}}
         @onInput={{@onMonthlyCap}}
-        @state={{capState @anonymous @monthlyCap}}
+        @invalid={{capInvalid @anonymous @monthlyCap}}
         @errorMessage={{capError @anonymous @monthlyCap}}
         @describedBy='anonymous-monthly-cap-note'
         inputmode='numeric'

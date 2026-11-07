@@ -61,7 +61,7 @@ import { ServiceAccountEntry } from './service-account-entry.ts';
 import ServiceAccountFields, {
   type ServiceAccountReplacing,
 } from './service-account-fields.gts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 // What the page does for one slot.
 type SlotView =
