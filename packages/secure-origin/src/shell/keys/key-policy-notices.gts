@@ -10,12 +10,15 @@
 // whose key has since been deleted is settled too.
 //
 // Below them, quieter, is where visitors already use one of the user's keys
-// that allows it: nothing to answer, a record of where the key is used.
+// that allows it: nothing to answer, a record of where the key is used, one
+// Pret UI Item each on a Card.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TOC } from '@ember/component/template-only';
 
 import { Alert } from '@cardstack/pretui/components/alert';
+import { Card } from '@cardstack/pretui/components/card';
+import { Item } from '@cardstack/pretui/components/item';
 import { StatusChip } from '@cardstack/pretui/components/status-chip';
 
 import { Button } from '@cardstack/pretui/components/button';
@@ -141,33 +144,37 @@ const KeyPolicyNotices: TOC<Signature> = <template>
               data-test-key-policy-notice-reason='visitors-wanted'
             >
               <Alert @tone='warning' role='note'>
-                <p class='summary'>
-                  <strong>{{addressOf request.notice.realm}}</strong>
-                  wants people who aren’t signed in to use your key
-                  <strong>“{{request.notice.label}}”</strong>
-                  ({{request.key.name}}).
-                </p>
-                <p class='explain'>
-                  They are refused until you allow it. Allowing it lets anyone
-                  who opens that workspace’s cards make these calls with your
-                  key, up to the daily cap you set.
-                </p>
-                <Operations @notice={{request.notice}} />
-                <div class='actions'>
-                  <Button
-                    @variant='primary'
-                    @size='s'
-                    data-test-key-policy-notice-allow
-                    {{on 'click' (fn @onAllow request.key)}}
-                  >Allow anonymous use…</Button>
-                  <Button
-                    @variant='secondary'
-                    @size='s'
-                    @loading={{isDeclining @declining request.notice.id}}
-                    data-test-key-policy-notice-decline
-                    {{on 'click' (fn @onDecline request.notice)}}
-                  >Decline</Button>
-                </div>
+                <:default>
+                  <p class='summary'>
+                    <strong>{{addressOf request.notice.realm}}</strong>
+                    wants people who aren’t signed in to use your key
+                    <strong>“{{request.notice.label}}”</strong>
+                    ({{request.key.name}}).
+                  </p>
+                  <p class='explain'>
+                    They are refused until you allow it. Allowing it lets anyone
+                    who opens that workspace’s cards make these calls with your
+                    key, up to the daily cap you set.
+                  </p>
+                  <Operations @notice={{request.notice}} />
+                </:default>
+                <:action>
+                  <div class='actions'>
+                    <Button
+                      @variant='primary'
+                      @size='s'
+                      data-test-key-policy-notice-allow
+                      {{on 'click' (fn @onAllow request.key)}}
+                    >Allow anonymous use…</Button>
+                    <Button
+                      @variant='secondary'
+                      @size='s'
+                      @loading={{isDeclining @declining request.notice.id}}
+                      data-test-key-policy-notice-decline
+                      {{on 'click' (fn @onDecline request.notice)}}
+                    >Decline</Button>
+                  </div>
+                </:action>
               </Alert>
             </li>
           {{/each}}
@@ -179,23 +186,26 @@ const KeyPolicyNotices: TOC<Signature> = <template>
     {{#if used.length}}
       <section class='used' data-test-key-policy-notices>
         <h2>Where people who aren’t signed in use your keys</h2>
-        <ul>
-          {{#each used key='id' as |notice|}}
-            <li
-              class='notice'
-              data-test-key-policy-notice={{notice.label}}
-              data-test-key-policy-notice-reason='visitors-use'
-            >
-              <p class='summary'>
-                People who aren’t signed in now use
-                <strong>“{{notice.label}}”</strong>
-                in
-                {{addressOf notice.realm}}.
-              </p>
-              <Operations @notice={{notice}} />
-            </li>
-          {{/each}}
-        </ul>
+        <Card class='used-list'>
+          <ul>
+            {{#each used key='id' as |notice|}}
+              <li
+                class='notice'
+                data-test-key-policy-notice={{notice.label}}
+                data-test-key-policy-notice-reason='visitors-use'
+              >
+                <Item class='notice-item' @size='s' @wrap={{true}}>
+                  <:title><span class='notice-text'>People who aren’t signed in
+                      now use
+                      <strong>“{{notice.label}}”</strong>
+                      in
+                      {{addressOf notice.realm}}.</span></:title>
+                  <:default><Operations @notice={{notice}} /></:default>
+                </Item>
+              </li>
+            {{/each}}
+          </ul>
+        </Card>
       </section>
     {{/if}}
   {{/let}}
@@ -236,18 +246,28 @@ const KeyPolicyNotices: TOC<Signature> = <template>
       display: flex;
       flex-wrap: wrap;
       gap: var(--boxel-sp-xs);
-      margin-top: var(--boxel-sp-sm);
+      margin-top: var(--boxel-sp-xs);
     }
-    .used ul {
+    .used-list {
+      --pretui-card-pad: 0;
+      --pretui-card-radius: var(--boxel-border-radius);
+    }
+    .used-list ul {
       gap: 0;
-      border: 1px solid var(--border);
-      border-radius: var(--boxel-border-radius);
     }
     .notice {
       padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
     }
     .notice + .notice {
       border-top: 1px solid var(--border);
+    }
+    /* The record wraps rather than cutting a workspace's address short. */
+    .notice-item {
+      font-size: var(--boxel-font-size-sm);
+      letter-spacing: normal;
+    }
+    .notice-text {
+      font-weight: normal;
     }
   </style>
 </template>;
