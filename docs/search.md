@@ -30,6 +30,7 @@ The Query object may have a `filter` property, which controls which cards are in
 - `pattern`: a glob (`*`, `?`) over a field's whole value, ignoring case, on fields searched by pattern (declared `search: { patterns: true }`, or an `identifier` or `code` role).
 - `regex`: a POSIX regular expression over the same fields (Postgres only).
 - `near`: keeps cards whose `VectorField` is at least `minSimilarity` similar to a target vector (see [Vector search](#vector-search-near)).
+- `linkedFrom`: keeps the cards another card links to. `{ linkedFrom: { card: 'https://my.realm/Wishlist/mine', field: 'items' } }` is "in my saved list". `field` names a `linksTo` or `linksToMany` of that card, dotted through a compound field. The source is read from that card's index entry, so it must be a card instance in the realm being searched; a card in another realm, or one that doesn't exist, links to nothing.
 
 - `on`: may be used with `eq`,`range` and `every` to limit results to a particular card type. `on` provides the card type context for a field. This is how we can disambiguate, for example, between a `Company.name` field and a `Country.name` field. Simply providing a predicate to filter by the `name` field isnt enough. You need to say which card's name field you want to filter by -- this is the function of `on`.
 

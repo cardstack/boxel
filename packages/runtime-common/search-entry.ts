@@ -458,6 +458,10 @@ function translateFilterNode(
     } else if (key === 'typeahead') {
       // Type-ahead over the `_typeahead` text — no field path to address.
       out.typeahead = value;
+    } else if (key === 'linkedFrom') {
+      // another card's links: its URL and its own field name, neither of
+      // them a path on the cards being searched.
+      out.linkedFrom = value;
     } else if (key === 'fields') {
       // matches' field scope: field paths through item.
       if (
@@ -1352,6 +1356,7 @@ export type SearchEntryWireFilter = {
   prefix?: boolean;
   within?: string;
   fields?: string[];
+  linkedFrom?: { card: string; field: string };
   typeahead?: string;
   near?: Record<string, unknown>;
   pattern?: Record<string, string>;
@@ -1406,6 +1411,8 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
       out.within = `${ITEM_PREFIX}${value as string}`;
     } else if (key === 'fields') {
       out.fields = (value as string[]).map((f) => `${ITEM_PREFIX}${f}`);
+    } else if (key === 'linkedFrom') {
+      out.linkedFrom = value as { card: string; field: string };
     } else {
       throw new Error(
         `cannot translate filter member "${key}" to the entry wire grammar`,

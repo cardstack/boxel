@@ -188,6 +188,7 @@ export type QueryWithInterpolations =
 
 export type CardURL = string;
 export type Filter =
+  | LinkedFromFilter
   | AnyFilter
   | EveryFilter
   | NotFilter
@@ -492,6 +493,16 @@ export interface MatchesFilter extends TypedFilter {
   // of a long enough word still being typed.
   typoQuery?: string;
   typoPartial?: string;
+}
+
+// Membership in another card's links: keeps the cards that `card` links to
+// in `field` (a linksTo or linksToMany, dotted through a compound field), as
+// that card's index entry records them. "In my saved list" is
+// `{ linkedFrom: { card: '…/Wishlist/mine', field: 'items' } }`. `card` is
+// an absolute card URL in the realm being searched; a card in another realm,
+// or one that doesn't exist, links to nothing here.
+export interface LinkedFromFilter extends TypedFilter {
+  linkedFrom: { card: string; field: string };
 }
 
 // A glob over a field's whole value, ignoring case: `*` is any run of
@@ -1097,10 +1108,37 @@ const FILTER_OPERATOR_ASSERTS: Record<
   matches: assertMatchesFilter,
   typeahead: assertTypeAheadFilter,
   near: assertNearFilter,
+  linkedFrom: assertLinkedFromFilter,
   pattern: (filter, pointer) =>
     assertStringKeyedFilter(filter, pointer, 'pattern'),
   regex: (filter, pointer) => assertStringKeyedFilter(filter, pointer, 'regex'),
 };
+
+function assertLinkedFromFilter(filter: any, pointer: string[]) {
+  let at = pointer.concat('linkedFrom').join('/') || '/';
+  let v = filter.linkedFrom;
+  if (
+    typeof v !== 'object' ||
+    v == null ||
+    Array.isArray(v) ||
+    Object.keys(v).some((k) => k !== 'card' && k !== 'field')
+  ) {
+    throw new InvalidQueryError(`${at}: linkedFrom must be { card, field }`);
+  }
+  if (typeof v.card !== 'string' || !/^https?:\/\//.test(v.card)) {
+    throw new InvalidQueryError(
+      `${at}/card: card must be an absolute card URL`,
+    );
+  }
+  if (
+    typeof v.field !== 'string' ||
+    !/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(v.field)
+  ) {
+    throw new InvalidQueryError(
+      `${at}/field: field must name a link field of that card, such as "items"`,
+    );
+  }
+}
 
 function assertStringKeyedFilter(
   filter: any,

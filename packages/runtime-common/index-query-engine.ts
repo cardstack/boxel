@@ -101,6 +101,7 @@ import {
   type PassageMatch,
   typeAheadWords,
   type TypeAheadFilter,
+  type LinkedFromFilter,
   isNearFilter,
   isReferenceFilterField,
   collapseBy,
@@ -2310,6 +2311,11 @@ export class IndexQueryEngine {
       return this.typeAheadCondition(filter, typeConditionRef, context);
     } else if (isNearFilter(filter)) {
       return this.nearCondition(filter, typeConditionRef);
+    } else if ('linkedFrom' in filter) {
+      return every([
+        ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+        this.#linkedFromCondition(filter as LinkedFromFilter, context),
+      ]);
     } else if ('pattern' in filter || 'regex' in filter) {
       return this.#patternCondition(
         filter as PatternFilter | RegexFilter,
@@ -4196,6 +4202,59 @@ export class IndexQueryEngine {
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       predicate,
     ]);
+  }
+
+  // `linkedFrom`: the ids `card` links to at `field`, read from its search
+  // doc (a link is `{ id }` there, a list of them for linksToMany), matched
+  // against each row's card id. The source must be a live card instance in
+  // the realm being searched, so a search never reads another realm's links.
+  #linkedFromCondition(
+    filter: LinkedFromFilter,
+    context: FilterContext,
+  ): CardExpression {
+    let card = filter.linkedFrom.card.replace(/\.json$/, '');
+    let path = filter.linkedFrom.field;
+    return [
+      dbExpression({
+        pg: [
+          `i.file_alias IN (SELECT lf.value ->> 'id' FROM ${context.indexTable} AS lfs CROSS JOIN LATERAL jsonb_array_elements(CASE jsonb_typeof(spill_unmark(lfs.search_doc #>`,
+          param(
+            `{${path
+              .split('.')
+              .map((p) => `"${p}"`)
+              .join(',')}}`,
+          ),
+          `::text[])) WHEN 'array' THEN spill_unmark(lfs.search_doc #>`,
+          param(
+            `{${path
+              .split('.')
+              .map((p) => `"${p}"`)
+              .join(',')}}`,
+          ),
+          `::text[]) WHEN 'object' THEN jsonb_build_array(spill_unmark(lfs.search_doc #>`,
+          param(
+            `{${path
+              .split('.')
+              .map((p) => `"${p}"`)
+              .join(',')}}`,
+          ),
+          `::text[])) ELSE '[]'::jsonb END) AS lf(value) WHERE lfs.file_alias =`,
+          param(card),
+          `AND lfs.type = 'instance' AND lfs.realm_url = i.realm_url AND (lfs.is_deleted IS NOT TRUE) AND lf.value ->> 'id' IS NOT NULL)`,
+        ],
+        sqlite: [
+          `i.file_alias IN (SELECT json_extract(lf.value, '$.id') FROM ${context.indexTable} AS lfs, json_each(CASE json_type(lfs.search_doc,`,
+          param(`$.${path}`),
+          `) WHEN 'array' THEN json_extract(lfs.search_doc,`,
+          param(`$.${path}`),
+          `) WHEN 'object' THEN json_array(json_extract(lfs.search_doc,`,
+          param(`$.${path}`),
+          `)) ELSE '[]' END) AS lf WHERE lfs.file_alias =`,
+          param(card),
+          `AND lfs.type = 'instance' AND lfs.realm_url = i.realm_url AND (lfs.is_deleted IS NULL OR lfs.is_deleted = 0))`,
+        ],
+      }),
+    ];
   }
 
   // A `matches … fields` term: the words of those search-doc values alone,

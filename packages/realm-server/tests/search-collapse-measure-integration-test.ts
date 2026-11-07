@@ -555,6 +555,103 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('linkedFrom keeps the cards another card links to', async function (assert) {
+    let batch = await new IndexWriter(adapter).createBatch(
+      new URL(testRealm),
+      virtualNetwork,
+      undefined,
+      { splitPrerenderHtml: false },
+    );
+    let listURL = new URL(`${testRealm}List/saved.json`);
+    let id = (name: string) => `${testRealm}Talk/${name}`;
+    await batch.updateEntry(listURL, {
+      type: 'instance',
+      resource: {
+        id: rri(listURL.href),
+        type: 'card',
+        attributes: {},
+        meta: { adoptsFrom: { module: rri(`${testRealm}list`), name: 'List' } },
+      },
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: {
+        title: 'Saved',
+        items: [{ id: id('b') }, { id: id('f') }, { id: id('d') }],
+        pinned: { id: id('c') },
+      },
+      markdown: 'Saved',
+      deps: new Set(),
+      displayNames: ['List'],
+      types: [],
+      isolatedHtml: '<div>saved</div>',
+    });
+    await batch.done();
+    let saved = `${testRealm}List/saved`;
+    let titles = async (filter: any) =>
+      (
+        await search({
+          filter: { every: [{ type: on }, filter] },
+          sort: byScore,
+        })
+      ).titles;
+    assert.deepEqual(
+      await titles({ linkedFrom: { card: saved, field: 'items' } }),
+      ['d', 'b', 'f'],
+      'a linksToMany',
+    );
+    assert.deepEqual(
+      await titles({ linkedFrom: { card: saved, field: 'pinned' } }),
+      ['c'],
+      'a linksTo',
+    );
+    assert.deepEqual(
+      await titles({
+        every: [
+          { linkedFrom: { card: `${saved}.json`, field: 'items' } },
+          { on, range: { hnScore: { gte: 10 } } },
+        ],
+      }),
+      ['d', 'b'],
+      'it composes, and a .json URL names the same card',
+    );
+    assert.deepEqual(
+      await titles({ not: { linkedFrom: { card: saved, field: 'items' } } }),
+      ['e', 'c', 'a', 'g'],
+      'it negates',
+    );
+    assert.deepEqual(
+      await titles({
+        linkedFrom: { card: `${testRealm}List/nope`, field: 'items' },
+      }),
+      [],
+      'a missing card links to nothing',
+    );
+    assert.deepEqual(
+      await titles({
+        linkedFrom: {
+          card: 'https://elsewhere.example/List/saved',
+          field: 'items',
+        },
+      }),
+      [],
+      'a card in another realm links to nothing',
+    );
+    let wire = parseSearchEntryQueryFromPayload({
+      filter: { 'item.on': on, linkedFrom: { card: saved, field: 'items' } },
+    });
+    assert.deepEqual(wire.itemQuery.filter, {
+      on,
+      linkedFrom: { card: saved, field: 'items' },
+    });
+    assert.throws(
+      () =>
+        assertQuery({
+          filter: { linkedFrom: { card: 'List/saved', field: 'items' } },
+        } as any),
+      /card must be an absolute card URL/,
+    );
+  });
+
   test('the wire grammar checks collapse and measure', function (assert) {
     let bad = (query: Record<string, unknown>, pattern: RegExp) =>
       assert.throws(
