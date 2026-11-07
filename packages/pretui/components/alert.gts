@@ -25,6 +25,8 @@ const ALERT_VARIANTS: Record<string, AlertTone> = {
 // Each tone names its fill and the fill's paired foreground (the ink that
 // reads on the disc). The text is `--foreground`: the `-ink` tokens are only
 // guaranteed on `--background`, `--card` and `--muted`, not on the tint.
+// The secure origin's policy test (`secure-origin-policy-test.ts`) measures each
+// tone's text on its tint from these hues; keep its list in step with them.
 const ALERT_COLORS: Record<AlertTone, { hue: string; onHue: string }> = {
   info: {
     hue: 'var(--info)',

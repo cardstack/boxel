@@ -11,9 +11,11 @@ export type KeyValueLayout = 'horizontal' | 'stacked' | 'inline';
 export const KEY_VALUE_VALUE_ALIGNS = ['start', 'end'] as const;
 export type KeyValueValueAlign = (typeof KEY_VALUE_VALUE_ALIGNS)[number];
 
-export interface KeyValueSignature {
+export interface KeyValueSignature<T extends KeyValueItem = KeyValueItem> {
   Args: {
-    items: KeyValueItem[];
+    /** Each item may carry fields of its own beyond `key` and `value`; the
+     *  `value` block is given the item as passed, with them. */
+    items: T[];
     /** 'horizontal' (default): keys in one column, values beside them.
      *  'stacked': each key above its value. 'inline': pairs side by side,
      *  wrapping onto the next line. 'vertical' is an alias of 'stacked'. */
@@ -28,11 +30,11 @@ export interface KeyValueSignature {
      *  Default 'start'. Only the 'horizontal' layout takes it. */
     valueAlign?: KeyValueValueAlign;
   };
-  Blocks: { value: [item: KeyValueItem] };
+  Blocks: { value: [item: T] };
   Element: HTMLDListElement;
 }
 
-export class KeyValue extends Component<KeyValueSignature> {
+export class KeyValue<T extends KeyValueItem = KeyValueItem> extends Component<KeyValueSignature<T>> {
   get layout(): KeyValueLayout {
     let { layout } = this.args;
     if (layout === 'stacked' || layout === 'vertical') {
