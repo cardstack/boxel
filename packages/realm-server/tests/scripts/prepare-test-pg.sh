@@ -15,6 +15,7 @@ compute_seed_fingerprint() {
     cksum \
       packages/realm-server/tests/scripts/create_seeded_db.sh \
       packages/realm-server/tests/scripts/test-pg-config.sh
+    echo "$TEST_PG_IMAGE"
   ) | cksum | awk '{ print $1 "-" $2 }'
 }
 
