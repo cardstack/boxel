@@ -10,8 +10,11 @@ import {
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
   SearchBoundError,
+  DEFAULT_SEARCH_PAGE_SIZE,
   MAX_SEARCH_PAGE_SIZE,
+  QUERY_FIELD_DEFAULT_PAGE_SIZE,
   SERVER_MAX_SEARCH_PAGE_SIZE,
+  normalizeQueryDefinition,
   SERVER_ABSOLUTE_MAX_PAGE_SIZE,
   MAX_REALMS_PER_SEARCH_REQUEST,
   type Query,
@@ -55,13 +58,19 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('applySearchPageBound', function () {
-    test('an absent page is clamped to the max (mandatory pagination)', function (assert) {
+    test('an absent page gets the default page (mandatory pagination)', function (assert) {
       let bounded = applySearchPageBound({ filter: { eq: {} } } as Query);
       assert.deepEqual(
         bounded.page,
-        { size: MAX_SEARCH_PAGE_SIZE },
+        { size: DEFAULT_SEARCH_PAGE_SIZE },
         'a default page size is injected',
       );
+      assert.strictEqual(DEFAULT_SEARCH_PAGE_SIZE, 50);
+    });
+
+    test('an explicit page between the default and the cap is honored', function (assert) {
+      let query = { page: { size: DEFAULT_SEARCH_PAGE_SIZE + 1 } } as Query;
+      assert.strictEqual(applySearchPageBound(query), query);
     });
 
     test('a page at or under the max passes through unchanged', function (assert) {
@@ -75,8 +84,8 @@ module(basename(import.meta.filename), function (hooks) {
       } as unknown as Query);
       assert.deepEqual(
         bounded.page,
-        { number: 0, size: MAX_SEARCH_PAGE_SIZE },
-        'the cap is injected and page.number is preserved',
+        { number: 0, size: DEFAULT_SEARCH_PAGE_SIZE },
+        'the default is injected and page.number is preserved',
       );
     });
 
@@ -85,8 +94,8 @@ module(basename(import.meta.filename), function (hooks) {
         let bounded = applySearchPageBound({ page: { size: bad } } as Query);
         assert.strictEqual(
           bounded.page?.size,
-          MAX_SEARCH_PAGE_SIZE,
-          `size ${bad} is clamped to the cap`,
+          DEFAULT_SEARCH_PAGE_SIZE,
+          `size ${bad} takes the default`,
         );
       }
     });
@@ -126,11 +135,57 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('query-backed field pages', function () {
+    let normalize = (queryDefinition: Record<string, unknown>) =>
+      normalizeQueryDefinition({
+        fieldDefinition: {
+          type: 'linksToMany',
+          isPrimitive: false,
+          isComputed: false,
+          fieldOrCard: { module: 'https://test/person', name: 'Person' },
+        } as any,
+        queryDefinition: queryDefinition as any,
+        realmURL: new URL('https://test/'),
+        fieldName: 'people',
+        resolvePathValue: () => undefined,
+        relativeTo: new URL('https://test/Host/1') as any,
+      })!.query;
+
+    test('a field naming no page takes the field default, not the search default', function (assert) {
+      assert.deepEqual(normalize({ filter: { eq: { name: 'x' } } }).page, {
+        size: QUERY_FIELD_DEFAULT_PAGE_SIZE,
+        number: 0,
+      });
+      assert.true(QUERY_FIELD_DEFAULT_PAGE_SIZE > DEFAULT_SEARCH_PAGE_SIZE);
+    });
+
+    test('a field keeps the page it declares', function (assert) {
+      assert.deepEqual(
+        normalize({ filter: { eq: { name: 'x' } }, page: { size: 7 } }).page,
+        { size: 7, number: 0 },
+      );
+    });
+
+    test('the field default is explicit, so the server default never shrinks it', function (assert) {
+      let query = normalize({ filter: { eq: { name: 'x' } } });
+      assert.strictEqual(applyServerSearchPageBound(query), query);
+    });
+
+    test('the override lowers the field default', function (assert) {
+      setSearchBoundsForTests({ queryFieldPageSize: 3 });
+      assert.deepEqual(normalize({ filter: { eq: { name: 'x' } } }).page, {
+        size: 3,
+        number: 0,
+      });
+    });
+  });
+
   module('applyServerSearchPageBound', function () {
-    test('the server ceiling is higher than the card @context cap', function (assert) {
-      assert.true(
-        SERVER_MAX_SEARCH_PAGE_SIZE > MAX_SEARCH_PAGE_SIZE,
-        'the server backstop lets the host page larger than a card',
+    test('a request naming no page gets the same default as a card search', function (assert) {
+      assert.strictEqual(
+        SERVER_MAX_SEARCH_PAGE_SIZE,
+        DEFAULT_SEARCH_PAGE_SIZE,
+        'one first page, whoever runs the query',
       );
     });
 

@@ -527,7 +527,7 @@ The Query object may have a `page` property, which controls pagination of search
 The `page` object has the following properties:
 
 - `number`: The page number (0-based indexing)
-- `size`: The number of results per page. If not provided, there is no default size and will just behave like a regular search.
+- `size`: The number of results per page. A query that names none gets the first 50, whoever runs it: a card's `getCards`, a host search, or a `_search` or `_federated-search` request. Name a size for more: a card search takes up to 100, and a request to the server up to 2,000, clamped above that. A query-backed `linksToMany` field that names none takes 500, since it is read as the set it declares.
 
 The search response includes a `meta` object with pagination information:
 

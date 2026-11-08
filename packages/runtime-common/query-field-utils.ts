@@ -1,6 +1,7 @@
 import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import { CARD_INSTANCE_FILE_KEY } from './search-doc-keys.ts';
+import { queryFieldDefaultPageSize } from './search-bounds.ts';
 import type { FieldDefinition } from './definitions.ts';
 import type {
   FileMetaResource,
@@ -338,14 +339,14 @@ export function normalizeQueryDefinition({
     page.size = 1;
     page.number = 0;
     queryAny.page = page;
-  } else if (queryAny.page) {
-    let page = queryAny.page;
-    if (page.size != null || page.number != null) {
-      page.number = page.number ?? 0;
-      queryAny.page = page;
-    } else {
-      delete queryAny.page;
-    }
+  } else {
+    // A field's page is explicit on every leg: one it names, or the field
+    // default. A search's default page is smaller, and a field relying on it
+    // would read as a different set from the one it declares.
+    let page = queryAny.page ?? {};
+    page.size = page.size ?? queryFieldDefaultPageSize();
+    page.number = page.number ?? 0;
+    queryAny.page = page;
   }
 
   return { query: workingQuery as Query, realms: resolvedRealms };

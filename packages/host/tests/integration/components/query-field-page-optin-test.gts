@@ -31,10 +31,10 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 const HOST_URL = `${testRealmURL}Host/anchor`;
 
-// The real ceilings are 500 and 2000, so exercising them honestly would mean
-// indexing thousands of cards. These stand in at the same shape: a default low
-// enough that a field taking it truncates, a maximum a few rows above it, and
-// a match count that overruns both.
+// The real field default and ceiling are 500 and 2000, so exercising them
+// honestly would mean indexing thousands of cards. These stand in at the same
+// shape: a default low enough that a field taking it truncates, a maximum a few
+// rows above it, and a match count that overruns both.
 const DEFAULT_CEILING = 1;
 const ABSOLUTE_MAX = 5;
 const MATCH_COUNT = 7;
@@ -56,7 +56,7 @@ module('Integration | query-field page opt-in', function (hooks) {
     // Before the realm is indexed: the indexer's expansion reads these, and the
     // seed it writes is what the assertions below read back.
     setSearchBoundsForTests({
-      serverMaxPageSize: DEFAULT_CEILING,
+      queryFieldPageSize: DEFAULT_CEILING,
       serverAbsoluteMaxPageSize: ABSOLUTE_MAX,
     });
 
@@ -72,7 +72,7 @@ module('Integration | query-field page opt-in', function (hooks) {
     class Host extends CardDef {
       static displayName = 'Host';
       @field cardTitle = contains(StringField);
-      // Declares no page, so it takes the default ceiling.
+      // Declares no page, so it takes the field default.
       @field capped = linksToMany(() => Person, {
         query: { filter: { eq: { name: '$this.cardTitle' } } },
       });

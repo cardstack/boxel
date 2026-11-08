@@ -900,15 +900,16 @@ function resolveQueryAndRealm(
     return undefined;
   }
 
-  // Deliberately the query as authored, with no page ceiling applied. The
-  // ceiling is the server's to enforce — `_search` clamps this query's page on
-  // arrival, and the indexer clamps the same query in its own expansion — and
-  // the number behind it is an ops-tunable env var this side cannot read. A
+  // Deliberately the query with the field's own page (the one it declares, or
+  // the fixed field default the normalizer fills in) and no ceiling applied.
+  // The ceiling is the server's to enforce — `_search` clamps this query's page
+  // on arrival, and the indexer clamps the same query in its own expansion —
+  // and the number behind it is an ops-tunable env var this side cannot read. A
   // client that guessed at it would produce a query differing from the one the
   // seed URL advertises the moment an operator tuned it, and a seeded resource
   // decides whether to skip its initial search by comparing exactly those two.
   // Guessing wrong there costs a redundant `_federated-search` per query field
-  // per loaded card; leaving the page off costs nothing, because the server
+  // per loaded card; leaving the ceiling off costs nothing, because the server
   // bounds the result set either way and reports the true match count alongside
   // it.
   return {
