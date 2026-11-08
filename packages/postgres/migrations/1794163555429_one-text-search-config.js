@@ -1,5 +1,5 @@
 // One text-search configuration family everywhere. Every text vector and every
-// query folds accents with `unaccent` (migration 1794100000000): `boxel_english`
+// query folds accents with `unaccent` (migration 1794163494426): `boxel_english`
 // where words are stemmed (field, rank, passage and rendered-markdown vectors)
 // and `boxel_simple` where they are not (type-ahead, and a prefix still being
 // typed). Before this, rendered markdown and type-ahead used Postgres's plain

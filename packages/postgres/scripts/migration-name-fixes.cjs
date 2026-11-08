@@ -26,6 +26,26 @@ const migrationRenames = [
     '1769200000000_add-has-error-to-index',
     '1769004232071_add-has-error-to-index',
   ],
+  // Query V2 migrations first written with hand-picked timestamps. (Its
+  // removal-phase drop was renamed too; it is idempotent, so it simply runs
+  // again under the new name.)
+  [
+    '1793990000000_add-boxel-index-search-tsv',
+    '1794163311417_add-boxel-index-search-tsv',
+  ],
+  [
+    '1793995000000_add-typo-words-and-pattern-text',
+    '1794163372420_add-typo-words-and-pattern-text',
+  ],
+  [
+    '1793999000000_add-boxel-index-rank-vector',
+    '1794163433423_add-boxel-index-rank-vector',
+  ],
+  ['1794100000000_add-bm25-term-stats', '1794163494426_add-bm25-term-stats'],
+  [
+    '1794200000000_one-text-search-config',
+    '1794163555429_one-text-search-config',
+  ],
 ];
 
 function buildUpdateMigrationSql(mapping) {

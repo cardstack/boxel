@@ -4621,7 +4621,7 @@ export class Realm {
           `DROP INDEX CONCURRENTLY IF EXISTS prerendered_html_markdown_fts_idx`,
         );
         await run(
-          'drop the simple type-ahead index (removal 1794200000001)',
+          'drop the simple type-ahead index (removal 1794163616432)',
           `DROP INDEX CONCURRENTLY IF EXISTS boxel_index_type_ahead_idx`,
         );
       }

@@ -1,7 +1,7 @@
 // Post-deploy: drop the type-ahead index built on Postgres's plain `simple`
 // configuration (migrations/1793909895811_add-type-ahead-index.js). The engine
 // now queries the accent-folding `boxel_simple` vector, indexed by
-// migrations/1794200000000_one-text-search-config.js. It runs after the
+// migrations/1794163555429_one-text-search-config.js. It runs after the
 // previous code revision has drained, because that revision still queries the
 // `simple` vector and needs this index while it serves.
 
