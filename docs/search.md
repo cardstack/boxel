@@ -516,7 +516,7 @@ A path names a column after itself; a one-member object renames it (`{ brand: 'b
 
 Ask for `Accept: application/x-ndjson` (or `application/jsonl`, the same format) and the table comes one row a line, each an object keyed by column, then a last `{ "meta": … }` line, which a table loader such as DuckDB's `read_json` reads as it is.
 
-`select` takes the same filter, sort, `let`, `collapse`, `rerank`, facets and paging as any query, with the same page limit. It needs the query's type, from a top-level `type` or the filter's anchor (`needs-type`). A path the type lacks is `unknown-field`; a path through a link that does not carry it is `not-indexed`; `select` beside `fields` is `conflicting-members`, since one answers a table and the other entries. It runs on Postgres only (`needs-postgres`).
+`select` takes the same filter, sort, `let`, `collapse`, `rerank`, facets and paging as any query, with the same page limit. It needs the query's type, from a top-level `type` or the filter's anchor (`needs-type`). A path the type lacks is `unknown-field`; a path through a link that does not carry it is `not-selectable`; `select` beside `fields` is `select-excludes-fields`, since one answers a table and the other entries. It runs on Postgres only (`needs-postgres`).
 
 Under a realm policy, the rows are the ones the caller's grants admit, as for any search, and a value read through a link shows only where the linked card's own type's grants admit the caller as well: otherwise it reads null (or, in a list, is left out). A `select` value is never wider than what the caller could read card by card.
 

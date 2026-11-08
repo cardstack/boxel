@@ -1196,7 +1196,7 @@ export function parseSearchEntryQueryFromPayload(
     if (record.fields !== undefined) {
       throw invalidQuery(
         'select and fields cannot go together: select answers a table, fields answers entries',
-        'conflicting-members',
+        'select-excludes-fields',
       );
     }
     columns = parseColumns(record.select);

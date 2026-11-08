@@ -563,8 +563,8 @@ module(basename(import.meta.filename), function (hooks) {
     }
     assert.deepEqual(codes, {
       'no such field': [400, 'unknown-field'],
-      'a linked field the link does not carry': [400, 'not-indexed'],
-      'beside fields': [400, 'conflicting-members'],
+      'a linked field the link does not carry': [400, 'not-selectable'],
+      'beside fields': [400, 'select-excludes-fields'],
       'named id': [400, 'conflicting-members'],
     });
   });

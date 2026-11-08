@@ -26,7 +26,8 @@
 //   engine-only            a member only the engine sets
 //   invalid-formula, invalid-json, invalid-page, unknown-field,
 //   unknown-binding, binding-kind, policy-linked-from
-//   not-indexed            a select path the search doc does not carry
+//   not-selectable         a select path the search doc does not carry
+//   select-excludes-fields select beside fields (a table or entries, not both)
 export class InvalidQueryError extends Error {
   code: string;
   constructor(message: string, code: string) {

@@ -3238,7 +3238,7 @@ export class IndexQueryEngine {
         if (isFilterRefersToNonsearchableFieldError(e)) {
           throw new InvalidQueryError(
             `select: "${path}" is not in the index: the "${e.relationshipPath}" link does not carry it (${e.reason === 'query-backed' ? 'a query-backed link never does' : `add it to the link's search.include`})`,
-            'not-indexed',
+            'not-selectable',
           );
         }
         throw e;
