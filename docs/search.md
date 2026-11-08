@@ -492,7 +492,7 @@ filter: {
 
 ### Facets
 
-The Query object may have a `facets` property: up to 8 counts of what the matched cards hold in one field, counted by the database over every match, not only the page returned. Each facet comes back in `meta.facets[by]` as `{ value, count }` entries, most common first. `by` is a field path, dotted for a compound field; a list field counts each of its values. A link facet's value is the linked card's id, with its title as `label`.
+The Query object may have a `facets` property: up to 8 counts of what the matched cards hold in one field, counted by the database over every match, not only the page returned. Each facet comes back in `meta.facets[by]` as `{ value, count }` entries, most common first. `by` is a field path, dotted for a compound field; a list field counts each of its values. A link facet's value is the linked card's id, with its title as `label` when the search could return that card itself: one in the realm searched, not deleted, and, for a caller a realm policy scopes, one its grants admit. Any other value keeps its id and count with no label.
 
 | Member          | Effect                                                                                                                                                                                   |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

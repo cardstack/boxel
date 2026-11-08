@@ -445,6 +445,10 @@ export type QueryOptions = WIPOptions & {
   // (IDF, typo corrections) are used only under the small-count rules
   // (`STATS_MIN_ROWS`, `STATS_MIN_COUNT`).
   anonymizeStatistics?: boolean;
+  // Set for a caller a realm policy scopes: the policy's grants. A link
+  // facet's value is labeled with the linked card's title only when that
+  // card meets them, as it would have to for the caller to read it.
+  labelFilter?: Filter;
   // Restrict the result set to this subset of URLs (SQL `i.url IN (...)`) —
   // instance rows by their `.json` file URL, file rows by their canonical URL.
   cardUrls?: string[];
@@ -1884,7 +1888,7 @@ export class IndexQueryEngine {
                 : []),
             ]);
           }
-          return this.#extendedFacet(plan, opts, condition);
+          return this.#extendedFacet(plan, opts, condition, realmURL);
         }),
       );
       let plainCounts = new Map<string, FacetCount[]>(
@@ -4801,6 +4805,7 @@ export class IndexQueryEngine {
     { facet, shape, link }: FacetPlan,
     opts: QueryOptions,
     condition: CardExpression,
+    realmURL: URL,
   ): Promise<{ counts: FacetCount[]; stats?: FacetStats }> {
     let size = facet.size ?? DEFAULT_FACET_SIZE;
     let interval: FacetInterval | undefined =
@@ -4842,7 +4847,7 @@ export class IndexQueryEngine {
         link,
       );
       if (link) {
-        counts = await this.#labelLinkCounts(counts, opts);
+        counts = await this.#labelLinkCounts(counts, opts, realmURL);
       }
     }
     if (!stats) {
@@ -4988,21 +4993,43 @@ export class IndexQueryEngine {
   }
 
   // Labels each link facet value (a linked card's id) with that card's
-  // indexed title, in one lookup for the values returned. A value whose card
-  // isn't indexed in this realm keeps no label; the id still renders the card
-  // by delegating to its prerendered HTML.
+  // indexed title, in one lookup for the values returned. Only a card the
+  // search could itself return lends its title: one in the realm searched,
+  // not deleted, and, for a caller a policy scopes, one its grants admit. Any
+  // other value keeps no label, so a facet never shows the title of a card
+  // in another realm, a deleted card, or one the caller cannot read; the id
+  // still renders the card by delegating to its prerendered HTML, which
+  // applies the caller's own access.
   async #labelLinkCounts(
     counts: FacetCount[],
     opts: QueryOptions,
+    realmURL: URL,
   ): Promise<FacetCount[]> {
     if (counts.length === 0) {
       return counts;
     }
     let ids = counts.map((c) => c.value);
+    let granted: CardExpression = opts.labelFilter
+      ? [
+          'AND (',
+          ...this.filterCondition(opts.labelFilter, baseCardRef, 'positive', {
+            inAny: false,
+            prerenderedTable: prerenderedTableFromOpts(opts),
+            indexTable: tableFromOpts(opts),
+          }),
+          ')',
+        ]
+      : [];
     let rows = await this.#queryCards(
       [
-        `SELECT i.file_alias AS card_id, i.search_doc ->> '${CARD_TITLE_KEY}' AS card_title FROM ${tableFromOpts(opts)} AS i WHERE i.type = 'instance' AND i.file_alias IN`,
+        `SELECT i.file_alias AS card_id, ANY_VALUE(i.search_doc) ->> '${CARD_TITLE_KEY}' AS card_title`,
+        `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)} ${tableValuedFunctionsPlaceholder}`,
+        `WHERE i.type = 'instance' AND i.realm_url =`,
+        param(realmURL.href),
+        'AND (i.is_deleted = FALSE OR i.is_deleted IS NULL) AND i.file_alias IN',
         ...addExplicitParens(separatedByCommas(ids.map((id) => [param(id)]))),
+        ...granted,
+        'GROUP BY i.file_alias',
       ],
       opts.timings,
     );

@@ -1247,6 +1247,11 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(scoped.itemQuery.rerank!.compare!.filter, {
       every: [{ on, eq: { channel: 'GOTO' } }, { any: [grant] }],
     });
+    assert.deepEqual(
+      scoped.labelFilter,
+      { any: [grant] },
+      "the grants also decide which linked cards' titles label a facet",
+    );
   });
 
   test('look-alike comparisons are checked, travel the wire, and a policy scopes them', function (assert) {

@@ -37,6 +37,21 @@ function ref(module: string, name: string): ResolvedCodeRef {
 const stringRef = ref('@cardstack/base/string', 'default');
 const numberRef = ref('@cardstack/base/number', 'default');
 const talkRef = ref(`${testRealm}talk`, 'Talk');
+const conceptRef = ref(`${testRealm}concept`, 'Concept');
+const conceptDef: Definition = {
+  type: 'card-def',
+  codeRef: conceptRef,
+  displayName: 'Concept',
+  fields: { name: 'c0' },
+  fieldDefs: {
+    c0: {
+      type: 'contains',
+      isPrimitive: true,
+      isComputed: false,
+      fieldOrCard: stringRef,
+    },
+  },
+} as Definition;
 
 const talkDef: Definition = {
   type: 'card-def',
@@ -48,6 +63,7 @@ const talkDef: Definition = {
     speakers: 'f5',
     hnScore: 'f2',
     lastDiscussed: 'f3',
+    concepts: 'f6',
   },
   fieldDefs: {
     f0: {
@@ -94,6 +110,13 @@ const talkDef: Definition = {
       fieldOrCard: stringRef,
       search: { role: 'name', facet: true },
     },
+    f6: {
+      type: 'linksToMany',
+      isPrimitive: false,
+      isComputed: false,
+      fieldOrCard: conceptRef,
+      search: { facet: true },
+    },
   },
   search: { rank: { recency: 'lastDiscussed' } },
 } as Definition;
@@ -103,6 +126,12 @@ function makeDefinitionLookup(): DefinitionLookup {
     async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
       if (codeRef.module === talkRef.module && codeRef.name === talkRef.name) {
         return talkDef;
+      }
+      if (
+        codeRef.module === conceptRef.module &&
+        codeRef.name === conceptRef.name
+      ) {
+        return conceptDef;
       }
       throw new Error(
         `unexpected definition lookup: ${codeRef.module}/${codeRef.name}`,
@@ -372,6 +401,110 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(page.total, 5);
     assert.deepEqual(facets?.channel?.[0], { value: 'Strange Loop', count: 2 });
     assert.deepEqual(facets?.hnScore, [{ value: '30-*', count: 2 }]);
+  });
+
+  test("a link facet's labels come only from cards the search could return", async function (assert) {
+    // Two realms share one index table. A talk here links to a concept here,
+    // to one in the other realm, and to one here that has been deleted.
+    let otherRealm = 'http://other-realm.test/';
+    let conceptKey = internalKeyFor(conceptRef, undefined, virtualNetwork);
+    let write = async (
+      realm: string,
+      entries: [string, Record<string, unknown>, string[]][],
+    ) => {
+      let batch = await new IndexWriter(adapter).createBatch(
+        new URL(realm),
+        virtualNetwork,
+        undefined,
+        { splitPrerenderHtml: false },
+      );
+      for (let [href, searchData, types] of entries) {
+        let cardURL = new URL(href);
+        await batch.updateEntry(cardURL, {
+          type: 'instance',
+          resource: {
+            id: rri(cardURL.href),
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: rri(
+                  types[0] === talkKey ? talkRef.module : conceptRef.module,
+                ),
+                name: types[0] === talkKey ? 'Talk' : 'Concept',
+              },
+            },
+          },
+          lastModified: Date.now(),
+          resourceCreatedAt: Date.now(),
+          searchData,
+          markdown: String(searchData._title ?? ''),
+          deps: new Set(),
+          displayNames: [types[0] === talkKey ? 'Talk' : 'Concept'],
+          types,
+          isolatedHtml: '<div></div>',
+        });
+      }
+      await batch.done();
+    };
+    let here = `${testRealm}Concept/crdt`;
+    let elsewhere = `${otherRealm}Concept/secret`;
+    let gone = `${testRealm}Concept/gone`;
+    await write(otherRealm, [
+      [
+        `${elsewhere}.json`,
+        { _title: 'Secret plan', name: 'Secret plan' },
+        [conceptKey],
+      ],
+    ]);
+    await write(testRealm, [
+      [`${here}.json`, { _title: 'CRDT', name: 'CRDT' }, [conceptKey]],
+      [
+        `${gone}.json`,
+        { _title: 'Retired idea', name: 'Retired idea' },
+        [conceptKey],
+      ],
+      [
+        url('linked'),
+        {
+          title: 'Linked',
+          concepts: [{ id: here }, { id: elsewhere }, { id: gone }],
+        },
+        [talkKey],
+      ],
+    ]);
+    await adapter.execute(
+      `UPDATE boxel_index SET is_deleted = TRUE WHERE url = $1`,
+      { bind: [`${gone}.json`] },
+    );
+
+    let labels = async (opts = {}) => {
+      let { meta } = await engine.searchCards(
+        new URL(testRealm),
+        { filter: { type: on }, facets: [{ by: 'concepts' }] },
+        opts,
+      );
+      return Object.fromEntries(
+        (meta.facets?.concepts ?? []).map((c) => [c.value, c.label ?? null]),
+      );
+    };
+    assert.deepEqual(
+      await labels(),
+      { [here]: 'CRDT', [elsewhere]: null, [gone]: null },
+      "another realm's card and a deleted one lend no title; the ids still count",
+    );
+    assert.deepEqual(
+      await labels({ labelFilter: { type: talkRef } }),
+      { [here]: null, [elsewhere]: null, [gone]: null },
+      'a caller whose grants admit no concept sees no concept titles',
+    );
+    assert.deepEqual(
+      await labels({
+        labelFilter: { any: [{ type: talkRef }, { type: conceptRef }] },
+      }),
+      { [here]: 'CRDT', [elsewhere]: null, [gone]: null },
+      'grants that admit concepts label them',
+    );
   });
 
   test('merging realms adds counts, keeps link labels and combines stats', function (assert) {

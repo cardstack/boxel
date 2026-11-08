@@ -200,6 +200,9 @@ export interface SearchEntryQuery {
   // policy, so the engine applies the small-count rules to word statistics.
   // Internal; not part of the wire grammar.
   anonymizeStatistics?: boolean;
+  // Set by `policyScopedQuery`: the policy's grants, which a linked card
+  // must meet for its title to label a link facet's value. Internal.
+  labelFilter?: Filter;
 }
 
 function invalidQuery(message: string, code?: string): SearchRequestError {
@@ -1245,6 +1248,7 @@ export function policyScopedQuery(
   return {
     ...query,
     anonymizeStatistics: true,
+    labelFilter: composePolicyScopedFilter(undefined, grantFilters),
     itemQuery: {
       ...query.itemQuery,
       filter: composePolicyScopedFilter(callerFilter, grantFilters),
