@@ -968,6 +968,53 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("under a policy, linkedFrom's bindings never take a caller's binding name", function (assert) {
+    let grant = { on, eq: { channel: 'GOTO' } };
+    let mine = {
+      from: {
+        filter: { 'item.on': on, range: { 'item.hnScore': { gte: 40 } } },
+      },
+      select: 'item.channel',
+    };
+    let scoped = policyScopedQuery(
+      parseSearchEntryQueryFromPayload({
+        let: { __linkedFrom0: mine },
+        filter: {
+          every: [
+            {
+              'item.on': on,
+              in: { 'item.channel': { $let: '__linkedFrom0' } },
+            },
+            { linkedFrom: { card: `${testRealm}List/saved`, field: 'items' } },
+          ],
+        },
+      }),
+      [grant],
+    );
+    let lets = scoped.itemQuery.let!;
+    assert.deepEqual(
+      lets.__linkedFrom0?.select,
+      'channel',
+      "the caller's binding keeps its name and its query",
+    );
+    let added = Object.keys(lets).filter((n) => n !== '__linkedFrom0');
+    assert.strictEqual(
+      added.length,
+      1,
+      'linkedFrom became a binding of its own',
+    );
+    assert.strictEqual(lets[added[0]].select, 'items.id');
+    let text = JSON.stringify(scoped.itemQuery.filter);
+    assert.true(
+      text.includes('"$let":"__linkedFrom0"'),
+      'the caller still reads its own',
+    );
+    assert.true(
+      text.includes(`"$let":"${added[0]}"`),
+      'and the rewrite reads its own',
+    );
+  });
+
   test("under a policy, linkedFrom's bindings are capped apart from the caller's", function (assert) {
     let grant = { on, eq: { channel: 'GOTO' } };
     let list = (n: number) => ({

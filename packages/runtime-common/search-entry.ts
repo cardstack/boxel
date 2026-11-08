@@ -1208,12 +1208,18 @@ export function policyScopedQuery(
   // `linkedFrom` reads its card's links directly, so under a policy it runs
   // as a binding whose query the grants scope like any other.
   let count = 0;
+  let serial = 0;
   let rewrite = (node: Filter): Filter => {
     if ('any' in node) return { ...node, any: node.any.map(rewrite) };
     if ('every' in node) return { ...node, every: node.every.map(rewrite) };
     if ('not' in node) return { ...node, not: rewrite(node.not) };
     if ('linkedFrom' in node) {
-      let name = `__linkedFrom${count++}`;
+      // A name of its own: one the caller's bindings do not already use.
+      let name: string;
+      do {
+        name = `__linkedFrom${serial++}`;
+      } while (name in lets);
+      count++;
       lets[name] = {
         from: {
           filter: composePolicyScopedFilter(
