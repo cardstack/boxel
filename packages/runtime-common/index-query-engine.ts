@@ -2209,9 +2209,10 @@ export class IndexQueryEngine {
           WHERE s.field_path = '${field}' AND s.dims = ${dims} AND s.ordinal = 0
             AND s.realm_url =`,
         param(realmURL.href),
-        'AND s.url = ANY(',
-        param(rowUrls),
-        '::text[])',
+        'AND s.url IN',
+        ...addExplicitParens(
+          separatedByCommas(rowUrls.map((url) => [param(url)])),
+        ),
       ]);
     });
     let bySrc = new Map<string, { url: string; sim: number }[]>();
