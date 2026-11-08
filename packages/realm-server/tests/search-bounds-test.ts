@@ -90,8 +90,14 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a non-positive page.size is clamped, not left unbounded', function (assert) {
-      for (let bad of [-1, 0]) {
+    test('a counts-only page (size 0) passes through', function (assert) {
+      let query = { page: { size: 0 } } as Query;
+      assert.strictEqual(applySearchPageBound(query), query);
+      assert.strictEqual(applyServerSearchPageBound(query), query);
+    });
+
+    test('a negative page.size is clamped, not left unbounded', function (assert) {
+      for (let bad of [-1]) {
         let bounded = applySearchPageBound({ page: { size: bad } } as Query);
         assert.strictEqual(
           bounded.page?.size,
@@ -263,7 +269,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a page whose size cannot bound anything falls back to the default', function (assert) {
-      for (let bad of [undefined, null, 0, -1, 'lots']) {
+      for (let bad of [undefined, null, -1, 'lots']) {
         let bounded = applyServerSearchPageBound({
           page: { size: bad },
         } as unknown as Query);

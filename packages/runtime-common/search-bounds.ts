@@ -728,8 +728,13 @@ function boundPageSize(
     return { ...query, page: { size: effectiveDefault } } as Query;
   }
   let size = Number((page as { size?: unknown }).size);
+  // `size: 0` is a counts-only page: the total and the facets, no rows. It is
+  // already bounded, so it passes through as asked.
+  if ((page as { size?: unknown }).size === 0) {
+    return query;
+  }
   if (!Number.isFinite(size) || size < 1) {
-    // A page object with a missing / non-numeric / non-positive size can't
+    // A page object with a missing / non-numeric / negative size can't
     // bound the result set — and would compile to `LIMIT undefined` / a
     // negative limit — so treat it like an absent page and clamp to the
     // default rather than let it through unbounded.
