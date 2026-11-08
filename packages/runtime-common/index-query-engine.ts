@@ -4631,11 +4631,26 @@ export class IndexQueryEngine {
         // the full vectors; ranking never reads the rendered page.
         pg: matches.every((m) => m.wordStatistics)
           ? wordStatisticsScore(matches, staged)
-          : [
-              `ts_rank_cd(COALESCE(${rankVector('i', staged)}, ''::tsvector), `,
-              ...pgTsQuery,
-              `, 32)`,
-            ],
+          : matches.some((m) => m.optional)
+            ? // The words are optional (under an `any`), so a row whose
+              // fields score nothing may not have matched them at all: it
+              // scores a floor only where its rendered page holds them, and
+              // that page is read only for such rows.
+              [
+                `COALESCE(NULLIF(ts_rank_cd(COALESCE(${rankVector('i', staged)}, ''::tsvector), `,
+                ...pgTsQuery,
+                `, 32), 0), CASE WHEN COALESCE(${markdownVector('ph', staged)}, ''::tsvector) @@ (`,
+                ...pgTsQuery,
+                `) THEN ${PAGE_ONLY_RELEVANCE} ELSE 0 END)`,
+              ]
+            : // Every row matched the words, so one whose fields score
+              // nothing matched them on its rendered page: it ranks below
+              // every field match, without reading the page.
+              [
+                `GREATEST(ts_rank_cd(COALESCE(${rankVector('i', staged)}, ''::tsvector), `,
+                ...pgTsQuery,
+                `, 32), ${PAGE_ONLY_RELEVANCE})`,
+              ],
         sqlite: [`CASE WHEN (`, ...sqliteLike, `) THEN 1 ELSE 0 END`],
       }),
       `)`,
@@ -6865,6 +6880,10 @@ function searchTextVector(alias: string, staged: boolean): string {
 
 // A card's small, inline rank vector (the `add-boxel-index-rank-vector`
 // migration); staged rows build it inline from their `_searchText`.
+// The relevance of a card that matched a query's words on its rendered page
+// alone: below any field match, above a card that did not match.
+const PAGE_ONLY_RELEVANCE = '1e-6';
+
 function rankVector(alias: string, staged: boolean): string {
   return staged
     ? `search_rank_vector(${alias}.search_doc -> '${SEARCH_TEXT_KEY}')`

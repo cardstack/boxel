@@ -918,6 +918,8 @@ export type MatchTerm = Pick<
   wordStatistics?: WordStatistics;
   // A type-ahead term (`{ typeahead }`), which ranks by title tier.
   typeahead?: boolean;
+  // Under an `any` or a `not`: a row can be in the result without matching.
+  optional?: boolean;
 };
 
 // The type-ahead split of a `prefix` query: the finished words, and the
@@ -987,9 +989,12 @@ export function isMatchesFilter(filter: Filter): filter is MatchesFilter {
 // empty-query short-circuit), so both are excluded. Shared by `assertQuery`'s
 // parse-time validation and the engine's rank expression so the two agree on
 // what counts as a rankable term.
+// `optional`: the term sits under an `any` (or a `not`), so a row can be in
+// the result without matching it.
 export function collectPositiveMatchTerms(
   filter: Filter | undefined,
   polarity: 'positive' | 'negated' = 'positive',
+  optional = false,
 ): MatchTerm[] {
   if (!filter) {
     return [];
@@ -1007,6 +1012,7 @@ export function collectPositiveMatchTerms(
               ? { typoQuery: filter.typoQuery }
               : {}),
             ...(filter.typoPartial ? { typoPartial: filter.typoPartial } : {}),
+            ...(optional ? { optional: true } : {}),
             ...((filter as { wordStatistics?: WordStatistics }).wordStatistics
               ? {
                   wordStatistics: (
@@ -1035,13 +1041,18 @@ export function collectPositiveMatchTerms(
     return collectPositiveMatchTerms(
       filter.not,
       polarity === 'positive' ? 'negated' : 'positive',
+      true,
     );
   }
   if ('every' in filter) {
-    return filter.every.flatMap((f) => collectPositiveMatchTerms(f, polarity));
+    return filter.every.flatMap((f) =>
+      collectPositiveMatchTerms(f, polarity, optional),
+    );
   }
   if ('any' in filter) {
-    return filter.any.flatMap((f) => collectPositiveMatchTerms(f, polarity));
+    return filter.any.flatMap((f) =>
+      collectPositiveMatchTerms(f, polarity, true),
+    );
   }
   return [];
 }
