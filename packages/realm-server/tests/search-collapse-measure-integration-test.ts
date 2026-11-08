@@ -490,19 +490,14 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('the entry wire grammar carries _when filters through item.', function (assert) {
+  test('the entry wire grammar carries boost filters through item.', function (assert) {
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },
       sort: [
         {
-          by: 'item._blend',
-          of: [
+          blend: [
             { by: 'item.hnScore' },
-            {
-              by: 'item._when',
-              when: { eq: { 'item.channel': 'GOTO' } },
-              weight: 2,
-            },
+            { boost: { eq: { 'item.channel': 'GOTO' } }, weight: 2 },
           ],
         },
       ],
@@ -1042,12 +1037,12 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
-  test('a formula outside the score profile is refused, and _expr travels the wire', function (assert) {
+  test('a formula outside the score profile is refused, and formula travels the wire', function (assert) {
     assert.throws(
       () => assertQuery({ sort: [{ by: '_expr', on, expr: 'LEN(title)' }] }),
       (err: unknown) =>
         err instanceof InvalidQueryError &&
-        /_expr: LEN is not part of the score profile/.test(err.message),
+        /formula: LEN is not part of the score profile/.test(err.message),
     );
     assert.throws(
       () =>
@@ -1058,7 +1053,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },
-      sort: [{ by: 'item._expr', expr: 'rating / LN(priceMin + 1)' }],
+      sort: [{ formula: 'rating / LN(priceMin + 1)' }],
     });
     assert.deepEqual((parsed.itemQuery.sort as any)[0], {
       by: '_expr',
@@ -1066,7 +1061,19 @@ module(basename(import.meta.filename), function (hooks) {
       on,
     });
     let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
-    assert.strictEqual((wire.sort as any)[0].expr, 'rating / LN(priceMin + 1)');
+    assert.strictEqual(
+      (wire.sort as any)[0].formula,
+      'rating / LN(priceMin + 1)',
+    );
+    assert.throws(
+      () =>
+        parseSearchEntryQueryFromPayload({
+          filter: { 'item.on': on },
+          sort: [{ by: 'item._expr', expr: 'rating' }],
+        }),
+      /is not a sort key/,
+      'the engine form is not part of the request grammar',
+    );
   });
 
   async function reranked(query: Query) {

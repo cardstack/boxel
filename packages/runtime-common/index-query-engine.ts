@@ -132,7 +132,13 @@ import {
   type RenderErrorSummary,
   type SerializedError,
 } from './error.ts';
-import { queryHasLabels, resolveQueryLabels } from './query-syntax.ts';
+import {
+  lowerQuery,
+  queryHasLabels,
+  resolveQueryLabels,
+  usesNewSyntax,
+} from './query-syntax.ts';
+import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -1374,7 +1380,7 @@ export class IndexQueryEngine {
   // loader that we should be using.
   private async _search(
     realmURL: URL,
-    { filter, sort, page, facets, collapse, let: lets, explain, rerank }: Query,
+    asWritten: Query,
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' | 'all' = 'instance',
@@ -1388,6 +1394,22 @@ export class IndexQueryEngine {
     meta: QueryResultsMeta;
     results: Partial<IndexRowWithHtml>[];
   }> {
+    // A query in the request grammar's spellings (a top-level type, blend,
+    // formula and boost keys) lowers to the engine's form first.
+    let {
+      filter,
+      sort,
+      page,
+      facets,
+      collapse,
+      let: lets,
+      explain,
+      rerank,
+    } = usesNewSyntax(asWritten)
+      ? (lowerQuery(asWritten as Record<string, any>, {
+          knownFunctions: BXL_FORMULA_FUNCTIONS,
+        }).query as Query)
+      : asWritten;
     // Fields written as labels (`PriceMin`, `"Units Sold 30d"`, `Brand.Name`)
     // resolve to their paths against the anchoring type first.
     if (queryHasLabels({ filter, sort, collapse, facets, rerank })) {
@@ -6382,7 +6404,7 @@ function topWindowReason(expr: string): string {
     exprSortSql(expr);
     return 'asked for the top window';
   } catch (e) {
-    return (e as Error).message.replace(/^_expr: /, '');
+    return (e as Error).message.replace(/^formula: /, '');
   }
 }
 

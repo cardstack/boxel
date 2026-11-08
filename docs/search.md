@@ -169,8 +169,7 @@ let { data: suggestions } = await indexer.search({
   filter: { on: talkRef, matches: 'martin kleppm', prefix: true },
   sort: [
     {
-      by: '_blend',
-      of: [
+      blend: [
         { by: '_matchRelevance' },
         { on: talkRef, by: 'views', weight: 0.5 },
       ],
@@ -219,29 +218,34 @@ In a query-backed field, `near` interpolates like any value, so "related moments
 });
 ```
 
-### Blended ranking (`_blend`)
+### One type for the whole query (`type`)
 
-A `_blend` sort fuses several ranking signals into one order with reciprocal rank fusion. Each card scores `sum(weight / (k + rank))` over the signals it has a value for, with each signal ranked over every card the filter admits. `of` takes any other sort entries: text relevance (`_matchRelevance`), a `near` sort, a general field such as `createdAt` (recency), or a card field such as a view count (engagement). Each signal ranks best first, meaning highest value first unless the entry says `direction: 'asc'`. A card with no value for a signal (no vector, no text match, an empty field) gets nothing from that signal, rather than a last place. `weight` (default 1) scales a signal; `k` (default 60) controls how sharply a top rank beats the next one. Results carry `meta._blendScore`.
+A query may name its card type once, at the top: `{ type: productRef, filter: { eq: { color: 'Grey' } }, sort: [{ by: 'rating' }] }`. The filter, every sort entry and the collapse inherit it, so no clause needs its own `on`. A clause that names a different `on` keeps it. A field sort with no type anywhere is refused (`sort-needs-type`), and so is a field the type does not have (`unknown-field`), with the nearest field name.
+
+A field may be written as its path, with or without `item.`, or as a label in any case and spacing: `PriceMin`, `"Units Sold 30d"` and `Brand.Name` resolve to `priceMin`, `unitsSold30d` and `brand.name` against the type.
+
+`exists: path` keeps the cards with a value there, and `missing: path` those without one. On a field sort, `missing: 'first'` puts the cards with no value first (they go last by default).
+
+### Blended ranking (`blend`)
+
+A `blend` sort fuses several ranking signals into one order with reciprocal rank fusion. Each card scores `sum(weight / (k + rank))` over the signals it has a value for, with each signal ranked over every card the filter admits. The list takes any other sort entries: text relevance (`_matchRelevance`), a `near` sort, a general field such as `createdAt` (recency), a card field such as a view count (engagement), a `formula` and a `boost`. Each signal ranks best first, meaning highest value first unless the entry says `direction: 'asc'`. A card with no value for a signal (no vector, no text match, an empty field) gets nothing from that signal, rather than a last place. `weight` (default 1) scales a signal; `k` (default 60) controls how sharply a top rank beats the next one. Results carry `meta._blendScore`.
 
 ```js
 let { data: ranked } = await indexer.search({
+  type: momentRef,
   filter: {
     any: [
-      { on: momentRef, matches: 'pasta recipe' },
-      {
-        on: momentRef,
-        near: { embedding: { to: target, minSimilarity: 0.5 } },
-      },
+      { matches: 'pasta recipe' },
+      { near: { embedding: { to: target, minSimilarity: 0.5 } } },
     ],
   },
   sort: [
     {
-      by: '_blend',
-      of: [
+      blend: [
         { by: '_matchRelevance' },
-        { on: momentRef, by: 'embedding', near: target, weight: 2 },
+        { by: 'embedding', near: target, weight: 2 },
         { by: 'createdAt', weight: 0.5 },
-        { on: momentRef, by: 'views', weight: 0.5 },
+        { by: 'views', weight: 0.5 },
       ],
     },
   ],
@@ -249,26 +253,17 @@ let { data: ranked } = await indexer.search({
 });
 ```
 
-A negative `weight` inverts a signal, as in `_relevance`: it ranks the other way round with the weight's size, so `{ on: productRef, by: 'unitsSold30d', weight: -1 }` favours the least sold, and a negative `near` signal favours the least similar.
+A negative `weight` inverts a signal, as in `_relevance`: it ranks the other way round with the weight's size, so `{ by: 'unitsSold30d', weight: -1 }` favours the least sold, and a negative `near` signal favours the least similar.
 
-A `_when` signal is a "should" clause: `{ by: '_when', when: <filter>, weight }` lifts the cards the filter admits without dropping the rest. Every match ties for first place in it, so each gains `weight / (k + 1)` and a card that doesn't match gains nothing. With a negative weight it lifts the cards that don't match. `when` is any filter; on the wire its field paths go through `item.` and it takes the query's anchor when it names none. `_when` ranks only inside a `_blend`.
+A `boost` is a "should" clause: `{ boost: <filter>, weight }` lifts the cards the filter admits without dropping the rest. Every match ties for first place in it, so each gains `weight / (k + 1)` and a card that doesn't match gains nothing. With a negative weight it lifts the cards that don't match. A boost ranks only inside a `blend`, and takes the query's type when its filter names none.
 
 ```js
 sort: [
   {
-    by: '_blend',
-    of: [
+    blend: [
       { by: '_matchRelevance' },
-      {
-        by: '_when',
-        when: { on: productRef, eq: { material: 'Leather' } },
-        weight: 1.5,
-      },
-      {
-        by: '_when',
-        when: { on: productRef, range: { returnRate: { gt: 0.1 } } },
-        weight: -1,
-      },
+      { boost: { eq: { material: 'Leather' } }, weight: 1.5 },
+      { boost: { range: { returnRate: { gt: 0.1 } } }, weight: -1 },
     ],
   },
 ];
@@ -276,24 +271,21 @@ sort: [
 
 Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `_matchRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, ranks are per realm, so a federated blend orders only approximately.
 
-### Ranking by a formula (`_expr`)
+### Ranking by a formula (`formula`)
 
-An `_expr` sort ranks by a spreadsheet formula over each card's fields: `{ by: '_expr', on: productRef, expr: 'rating / LN(priceMin + 1)' }`. The formula is BXL in its score profile ([`packages/bxl/docs/score-sql.md`](../packages/bxl/docs/score-sql.md)): numbers, field names, arithmetic, comparisons and `IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, `NOW` and the like. It is compiled to SQL and computed for every match, so it orders the whole set, pages and collapses like any sort. Highest first unless `direction` is `asc`. As in Excel, a division by zero or a missing field is an error value rather than a failure: the card ranks last, and `IFERROR` gives it a value instead. A formula outside the profile is refused with the reason.
+A `formula` sort ranks by a spreadsheet formula over each card's fields: `{ formula: 'rating / LN(priceMin + 1)' }`, highest first unless `direction` is `asc`. The engine places it:
 
-It also works as a `_blend` signal with a `weight`, and `explain` names the signal by its formula.
+- **In SQL, over every match**, when the formula is in BXL's score profile ([`packages/bxl/docs/score-sql.md`](../packages/bxl/docs/score-sql.md)): numbers, field names, arithmetic, comparisons and `IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, `NOW` and the like. It orders the whole set, pages and collapses like any sort. As in Excel, a division by zero or a missing field is an error value rather than a failure: the card ranks last, and `IFERROR` gives it a value instead.
+- **Over the top window** (the query's first 500 rows), when it uses a function the profile does not (text, statistical, financial): the realm runs it there with every Excel function, as a `rerank` does. `placement: 'top'` asks for this placement.
+
+`meta.formula` says where it ran (`{ "placement": "sql" }`, or `"top"` with the `reason`), and each result carries its value as `meta._formula`. A function BXL does not know is refused (`unknown-function`), naming it. Inside a `blend`, a formula is a signal with a `weight` (in SQL only), and `explain` names it by its text.
 
 ```js
 sort: [
   {
-    by: '_blend',
-    of: [
+    blend: [
       { by: '_matchRelevance' },
-      {
-        by: '_expr',
-        on: productRef,
-        expr: 'IFERROR(wishlistCount / unitsSold30d, 0)',
-        weight: 1.5,
-      },
+      { formula: 'IFERROR(wishlistCount / unitsSold30d, 0)', weight: 1.5 },
     ],
   },
 ];
@@ -303,7 +295,7 @@ Postgres only.
 
 ### Re-ranking the top with any formula (`rerank`)
 
-`_expr` runs in the database, so it uses the functions Postgres can compute. `rerank` is the second layer: the query ranks as it would (filter, sort, `let`, `collapse`), the realm takes its first `top` rows (default 100, at most 500), evaluates a BXL formula over each row's fields with every Excel function (text, statistical and financial ones included) in BXL's sandbox, and orders those rows by the value, highest first unless `direction` is `asc`. A row whose formula gives no number (an error, a missing field) keeps its place after the ones that do. Pages read the re-ranked window; a page that starts past it keeps the query's order. Each re-ranked row carries `meta._rerank`, and `meta.rerank` reports the window and how many rows got a number.
+A formula in SQL can use only the functions Postgres can compute. `rerank` is the second layer: the query ranks as it would (filter, sort, `let`, `collapse`), the realm takes its first `top` rows (default 100, at most 500), evaluates a BXL formula over each row's fields with every Excel function (text, statistical and financial ones included) in BXL's sandbox, and orders those rows by the value, highest first unless `direction` is `asc`. A row whose formula gives no number (an error, a missing field) keeps its place after the ones that do. Pages read the re-ranked window; a page that starts past it keeps the query's order. Each re-ranked row carries `meta._rerank`, and `meta.rerank` reports the window and how many rows got a number.
 
 ```js
 rerank: { expr: 'IF(ISNUMBER(SEARCH("organic", title)), 1.2, 1) * rating', top: 200 }
@@ -343,7 +335,7 @@ Aggregates a card stores, such as a category's median price, are fields like any
 
 ### Why a result ranks where it does (`explain`)
 
-With `explain: true`, every result of a query sorted by `_blend` or `_relevance` carries `meta._explain`: the first blend's fused score, its `k`, and each signal's part in it.
+With `explain: true`, every result of a query sorted by a `blend` or `_relevance` carries `meta._explain`: the first blend's fused score, its `k`, and each signal's part in it.
 
 ```json
 {
@@ -383,11 +375,11 @@ With `explain: true`, every result of a query sorted by `_blend` or `_relevance`
 }
 ```
 
-`signal` names a `_relevance` signal (`text`, `popularity`, `quality`, `recency`, `priority`, `meaning`), `when` for a `_when` boost, or the field a signal sorts by. `rank` is the card's place for that signal over every match, not just the page, so the contributions add up to `score`. A signal the card has no value for has no rank and contributes nothing. `inverted` marks a negative weight. The ranks are computed in the same statement as the search, so asking costs two extra columns per signal.
+`signal` names a `_relevance` signal (`text`, `popularity`, `quality`, `recency`, `priority`, `meaning`), `when` for a `boost`, or the field a signal sorts by. `rank` is the card's place for that signal over every match, not just the page, so the contributions add up to `score`. A signal the card has no value for has no rank and contributes nothing. `inverted` marks a negative weight. The ranks are computed in the same statement as the search, so asking costs two extra columns per signal.
 
 ### Relevance (`_relevance`)
 
-A `_relevance` sort ranks by search intent. It blends text relevance (weighted by the search roles of the fields that matched) with the ranking signals the type declares (`search: { rank: 'popularity' }` and the like: `popularity`, `quality`, `recency`, `priority`). Given `near`, it also blends in the similarity of the type's vector field as the `meaning` signal. It compiles to a `_blend`, so results carry `meta._blendScore`.
+A `_relevance` sort ranks by search intent. It blends text relevance (weighted by the search roles of the fields that matched) with the ranking signals the type declares (`search: { rank: 'popularity' }` and the like: `popularity`, `quality`, `recency`, `priority`). Given `near`, it also blends in the similarity of the type's vector field as the `meaning` signal. It compiles to a blend, so results carry `meta._blendScore`.
 
 `weights` re-weights signals by name. Unnamed signals take their defaults: `text` and `meaning` 1, the rest 0.5. A weight of 0 drops a signal, and a negative weight inverts it (least popular first).
 
@@ -421,7 +413,7 @@ On the wire, `by` goes through `item.` (`collapse: 'item.variantGroup'`) and the
 
 ### Lists computed first (`let`)
 
-A query can name lists it computes before it runs, in the manner of a FLWOR `let`, and read them in its filter. Each binding is a query over the same realm (`from`: a filter, optionally a sort and a `page.size` of at most 1,000) and a search-doc path (`select`) whose values, across the rows that query finds, become the list. A list field contributes each of its values and a link its id; a path through a link (`items.brand.name`) reads only what the link's `searchable` option puts in the search doc. An `in` names the binding as `"$name"`, in the filter or inside a `_when` signal.
+A query can name lists it computes before it runs, in the manner of a FLWOR `let`, and read them in its filter. Each binding is a query over the same realm (`from`: a filter, optionally a sort and a `page.size` of at most 1,000) and a search-doc path (`select`) whose values, across the rows that query finds, become the list. A list field contributes each of its values and a link its id; a path through a link (`items.brand.name`) reads only what the link's `searchable` option puts in the search doc. An `in` names the binding as `"$name"`, in the filter or inside a `boost`.
 
 ```js
 let { data, meta } = await indexer.search({

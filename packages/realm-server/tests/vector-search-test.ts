@@ -289,11 +289,10 @@ module(basename(import.meta.filename), function () {
         ],
       };
       let wire = searchEntryWireQueryFromQuery(query);
-      assert.deepEqual(wire.sort, [
+      assert.deepEqual(wire.sort as any, [
         {
-          by: 'item._blend',
           k: 30,
-          of: [
+          blend: [
             { by: 'item._matchRelevance' },
             {
               by: 'item.embedding',

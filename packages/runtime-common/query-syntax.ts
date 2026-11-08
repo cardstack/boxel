@@ -16,7 +16,7 @@
 // `resolveQueryLabels` reads the type's fields, so it runs where definitions
 // are at hand (the engine, or a checker with a fixture).
 import { InvalidQueryError } from './invalid-query-error.ts';
-import { exprSortSql } from './query.ts';
+import { exprSortSql, registerQueryLowering } from './query.ts';
 import type { CodeRef } from './code-ref.ts';
 
 export class QuerySyntaxError extends InvalidQueryError {
@@ -236,7 +236,7 @@ export function placeFormula(
   } catch (e) {
     return {
       placement: 'top',
-      reason: (e as Error).message.replace(/^_expr: /, ''),
+      reason: (e as Error).message.replace(/^formula: /, ''),
     };
   }
 }
@@ -558,3 +558,8 @@ export async function resolveQueryLabels(
   }
   return out;
 }
+
+// assertQuery checks a query in the newer spellings by its lowered form.
+registerQueryLowering((query) =>
+  usesNewSyntax(query) ? lowerQuery(query).query : query,
+);

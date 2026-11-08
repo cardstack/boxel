@@ -802,9 +802,33 @@ function unwireAnchors(node: unknown, key?: string): unknown {
   return out;
 }
 
+// The engine's internal sort keys are not part of the request grammar: a
+// blend is `{ blend }`, a formula `{ formula }`, a boost `{ boost }`.
+const INTERNAL_SORT_KEYS = new Set(['_blend', '_expr', '_when']);
+function refuseInternalSortKeys(sort: unknown, path = 'sort') {
+  if (!Array.isArray(sort)) return;
+  sort.forEach((entry, i) => {
+    if (entry == null || typeof entry !== 'object') return;
+    let by = (entry as Record<string, unknown>).by;
+    if (
+      typeof by === 'string' &&
+      INTERNAL_SORT_KEYS.has(unprefix(by) as string)
+    ) {
+      throw invalidQuery(`${path}[${i}]/by: "${by}" is not a sort key`);
+    }
+    for (let key of ['of', 'blend']) {
+      refuseInternalSortKeys(
+        (entry as Record<string, unknown>)[key],
+        `${path}[${i}]/${key}`,
+      );
+    }
+  });
+}
+
 function lowerEntryPayload(
   record: Record<string, unknown>,
 ): Record<string, unknown> {
+  refuseInternalSortKeys(record.sort);
   let query: Record<string, any> = {};
   let rest: Record<string, unknown> = {};
   for (let [k, v] of Object.entries(record)) {
@@ -836,10 +860,16 @@ function lowerEntryPayload(
     }
     throw e;
   }
-  let wire = searchEntryWireQueryFromQuery(lowered.query as Query) as Record<
-    string,
-    any
-  >;
+  let wire: Record<string, any>;
+  emitEngineSortKeys = true;
+  try {
+    wire = searchEntryWireQueryFromQuery(lowered.query as Query) as Record<
+      string,
+      any
+    >;
+  } finally {
+    emitEngineSortKeys = false;
+  }
   if (htmlQuery !== undefined) {
     wire.filter = {
       ...(wire.filter ?? {}),
@@ -1729,7 +1759,32 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
 
 // One sort entry in the wire grammar: field paths through `item.`, the type
 // anchor as `item.on`, a blend's signals translated the same way.
+// The request grammar spells the engine's signal sorts by key: `_blend` is
+// `{ blend }`, `_expr` is `{ formula }`, a `_when` signal is `{ boost }`.
+// The parser's own rewire (`lowerEntryPayload`) keeps the engine's form.
+let emitEngineSortKeys = false;
 function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
+  if (!emitEngineSortKeys) {
+    if (entry.by === '_blend' && Array.isArray(entry.of)) {
+      return {
+        blend: entry.of.map(wireSortFromSort),
+        ...(entry.k != null ? { k: entry.k } : {}),
+      } as unknown as SearchEntryWireSortExpression;
+    }
+    if (entry.by === '_expr') {
+      return {
+        formula: entry.expr,
+        ...(entry.direction ? { direction: entry.direction } : {}),
+        ...(entry.weight != null ? { weight: entry.weight } : {}),
+      } as unknown as SearchEntryWireSortExpression;
+    }
+    if (entry.by === '_when') {
+      return {
+        boost: wireFilterFromFilter(entry.when),
+        ...(entry.weight != null ? { weight: entry.weight } : {}),
+      } as unknown as SearchEntryWireSortExpression;
+    }
+  }
   return {
     by: `${ITEM_PREFIX}${entry.by}`,
     ...('on' in entry && entry.on ? { [ITEM_ANCHOR]: entry.on } : {}),

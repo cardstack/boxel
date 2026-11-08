@@ -385,6 +385,9 @@ export function mapCardReferences<T>(
 }
 
 interface QueryCommon {
+  // The query's card type, once: the filter, every sort entry and the
+  // collapse inherit it.
+  type?: CodeRef;
   filter?: Filter;
   sort?: Sort;
   facets?: Facet[];
@@ -584,6 +587,32 @@ export function isRelevanceSort(sort: object): sort is RelevanceSortExpression {
   return (sort as { by?: unknown }).by === RELEVANCE_SORT_KEY;
 }
 
+// The request grammar's signal sorts (query-syntax.ts lowers them):
+// `{ blend: [...] }` fuses signals by reciprocal rank, `{ formula }` ranks by
+// a spreadsheet formula (in SQL when the score profile can run it, else over
+// the top window), and `{ boost }` inside a blend lifts the cards a filter
+// admits.
+export interface BlendSort {
+  blend: (Sort[number] | FormulaSort | BoostSignal)[];
+  k?: number;
+}
+export interface FormulaSort {
+  formula: string;
+  weight?: number;
+  direction?: 'asc' | 'desc';
+  placement?: 'top';
+}
+export interface BoostSignal {
+  boost: Filter;
+  weight?: number;
+}
+// A query as a request may write it: the engine's form, plus a top-level
+// type and the signal sorts by key.
+export type RequestQuery = Omit<Query, 'sort'> & {
+  type?: CodeRef;
+  sort?: (Sort[number] | BlendSort | FormulaSort)[];
+};
+
 type SortExpression =
   | ExprSortExpression
   | SortExpressionWithoutCodeRef
@@ -630,7 +659,7 @@ export function exprSortSql(expr: string): string {
     }).sql;
   } catch (e) {
     if (e instanceof BxlScoreSqlError) {
-      throw new InvalidQueryError(`${EXPR_SORT_KEY}: ${e.message}`);
+      throw new InvalidQueryError(`formula: ${e.message}`);
     }
     throw e;
   }
@@ -995,6 +1024,14 @@ export function buildQueryParamValue(query: Query): string {
   return qs.stringify(query, { strictNullHandling: true, encode: false });
 }
 
+// The request grammar's newer spellings lower before they are checked; the
+// lowering (query-syntax.ts) registers itself here, since it imports this
+// module.
+let lowerForCheck: ((query: any) => any) | undefined;
+export function registerQueryLowering(lower: (query: any) => any) {
+  lowerForCheck = lower;
+}
+
 export function assertQuery(
   query: any,
   pointer: string[] = [''],
@@ -1003,6 +1040,13 @@ export function assertQuery(
     throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: missing query object`,
     );
+  }
+  if (lowerForCheck && pointer.length === 1 && pointer[0] === '') {
+    let lowered = lowerForCheck(query);
+    if (lowered !== query) {
+      assertQuery(lowered, ['', '']);
+      return;
+    }
   }
 
   if ('realm' in query && 'realms' in query) {
