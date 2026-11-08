@@ -441,7 +441,44 @@ The engine resolves each binding one of two ways and reports which in `meta.lets
 - **Join.** A binding whose `from` is one card by id and whose `select` is a link field's ids (`items.id`), read only by `in`s on `id`, runs as [`linkedFrom`](#filters) in the same statement: `{ "saved": { "strategy": "join" } }`.
 - **List.** Any other runs its query first, and its values (at most 1,000) stand in for each `"$name"`: `{ "hot": { "strategy": "list", "values": 12 } }`.
 
-A binding's query cannot use another binding, and a query takes at most 4. Bindings resolve within each realm a search reaches. Under a realm policy, the grants that scope the caller's query also scope every binding's query, and a `linkedFrom` runs as a binding, so a list never holds anything the caller couldn't search for. Live queries leave a query with bindings to the server. On the wire, `select` and the binding's field paths go through `item.`.
+**One card.** A binding with `one: true` in place of `select` is the first card its query finds, whole. The query reads that card's values as `"$name.path"` wherever a value goes: an `eq` value, a `range` bound, a `near` target in a filter or a sort, and a `rerank` formula reads the card under the binding's name (`name.path`). A link reads as its id, and a path through it as whatever its `searchable` option put in the search doc. A path the card has no value at reads null, as does every path when the query finds no card; an `eq` then finds the cards with no value, and a `range` bound or `near` target that reads null matches nothing. `meta.lets` reports `{ "strategy": "card", "found": true }`.
+
+```js
+// dupes of one sofa: its look, its kind, under its price, from another brand
+let { data } = await indexer.search({
+  let: {
+    sofa: {
+      from: { filter: { on: productRef, eq: { id: sofaId } } },
+      one: true,
+    },
+  },
+  filter: {
+    every: [
+      {
+        on: productRef,
+        near: {
+          imageEmbedding: { to: '$sofa.imageEmbedding', minSimilarity: 0.6 },
+        },
+      },
+      { on: productRef, eq: { productType: '$sofa.productType' } },
+      { on: productRef, range: { priceMin: { lt: '$sofa.priceMin' } } },
+      {
+        any: [
+          { on: productRef, eq: { 'brand.name': null } },
+          { not: { on: productRef, eq: { 'brand.name': '$sofa.brand.name' } } },
+        ],
+      },
+    ],
+  },
+  sort: [
+    { on: productRef, by: 'imageEmbedding', near: '$sofa.imageEmbedding' },
+  ],
+  collapse: { by: 'brand.name', on: productRef },
+  rerank: { expr: 'ROUND(sofa.priceMin - priceMin, 2)' },
+});
+```
+
+A binding's query cannot use another binding, and a query takes at most 4. Bindings resolve within each realm a search reaches. Under a realm policy, the grants that scope the caller's query also scope every binding's query, and a `linkedFrom` runs as a binding, so a list never holds anything the caller couldn't search for. Live queries leave a query with bindings to the server. On the wire, `select` and the binding's field paths go through `item.`; a `"$name.path"` reference reads the card's own path, with or without `item.`.
 
 ### Relative dates
 

@@ -157,9 +157,17 @@ export function collapseBy(
 // a link field's ids, read by an `in` on `id`, runs as `linkedFrom` inside
 // the same statement. Anything else runs `from` first and passes its values
 // (at most MAX_LET_VALUES) to the query. `meta.lets` reports which it did.
+//
+// With `one: true` instead of `select`, the binding is one card: the first
+// row `from` finds. The query reads its values as `"$name.path"` wherever a
+// value goes: an `eq` value, a `range` bound, a `near` target (in a filter
+// or a sort), and in a rerank formula as `name.path`. A path the card has
+// no value at reads null, as does every path when `from` finds no card; a
+// `range` bound or `near` target that reads null matches nothing.
 export interface LetBinding {
   from: { filter?: Filter; sort?: Sort; page?: { size: number } };
-  select: string;
+  select?: string;
+  one?: true;
 }
 export const MAX_LET_BINDINGS = 4;
 
@@ -272,6 +280,108 @@ export function mapLetReferences<T extends { filter?: Filter; sort?: Sort }>(
         : s,
     ) as Sort;
   return out;
+}
+
+// A one-card binding's value reference, `"$name.path"`, or undefined.
+const CARD_REFERENCE =
+  /^\$([A-Za-z_]\w*)\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)$/;
+export function cardReference(
+  value: unknown,
+): { name: string; path: string } | undefined {
+  if (typeof value !== 'string') return undefined;
+  let m = CARD_REFERENCE.exec(value);
+  return m ? { name: m[1], path: m[2].replace(/^item\./, '') } : undefined;
+}
+
+// Where a reference stands decides what it must be: a `near` target is a
+// vector, a `range` bound a number or date, anything else any value.
+export type CardReferenceRole = 'vector' | 'bound' | 'value';
+
+// Replaces every reference to a binding in `names` in a filter or sort:
+// `replace` gets the binding, the path and the reference's role, and
+// returns the value to stand in its place. A `range` bound or `near`
+// target the replacement leaves null makes its node match nothing.
+export function mapCardReferences<T>(
+  node: T,
+  names: Set<string>,
+  replace: (name: string, path: string, role: CardReferenceRole) => unknown,
+): T {
+  let nothing = (n: any) => ({
+    ...(n.on ? { on: n.on } : {}),
+    in: { id: [] },
+  });
+  let value = (v: unknown, role: CardReferenceRole): unknown => {
+    let ref = cardReference(v);
+    return ref && names.has(ref.name) ? replace(ref.name, ref.path, role) : v;
+  };
+  let walkFilter = (n: any): any => {
+    if (!n || typeof n !== 'object' || Array.isArray(n)) return n;
+    if (Array.isArray(n.any)) return { ...n, any: n.any.map(walkFilter) };
+    if (Array.isArray(n.every)) return { ...n, every: n.every.map(walkFilter) };
+    if (n.not) return { ...n, not: walkFilter(n.not) };
+    let out: any = { ...n };
+    for (let op of ['eq', 'contains'] as const) {
+      if (n[op] && typeof n[op] === 'object') {
+        out[op] = Object.fromEntries(
+          Object.entries(n[op]).map(([k, v]) => [k, value(v, 'value')]),
+        );
+      }
+    }
+    if (n.range && typeof n.range === 'object') {
+      let empty = false;
+      out.range = Object.fromEntries(
+        Object.entries(n.range).map(([k, bounds]) => [
+          k,
+          bounds && typeof bounds === 'object'
+            ? Object.fromEntries(
+                Object.entries(bounds as object).map(([b, v]) => {
+                  let r = value(v, 'bound');
+                  if (r == null && cardReference(v)) empty = true;
+                  return [b, r];
+                }),
+              )
+            : bounds,
+        ]),
+      );
+      if (empty) return nothing(n);
+    }
+    if (n.near && typeof n.near === 'object') {
+      let empty = false;
+      out.near = Object.fromEntries(
+        Object.entries(n.near).map(([k, t]: [string, any]) => {
+          if (!t || typeof t !== 'object' || !('to' in t)) return [k, t];
+          let to = value(t.to, 'vector');
+          if (to == null && cardReference(t.to)) empty = true;
+          return [k, { ...t, to }];
+        }),
+      );
+      if (empty) return nothing(n);
+    }
+    return out;
+  };
+  let walkSort = (e: any): any => {
+    if (!e || typeof e !== 'object') return e;
+    if (Array.isArray(e.of)) {
+      return { ...e, of: e.of.map(walkSort).filter(Boolean) };
+    }
+    let out: any = { ...e };
+    if ('near' in e && cardReference(e.near)) {
+      let to = value(e.near, 'vector');
+      if (to == null && names.has(cardReference(e.near)!.name))
+        return undefined;
+      out.near = to;
+    }
+    if (e.when) out.when = walkFilter(e.when);
+    return out;
+  };
+  let q: any = node;
+  if (q && typeof q === 'object' && ('filter' in q || 'sort' in q)) {
+    let out: any = { ...q };
+    if (q.filter) out.filter = walkFilter(q.filter);
+    if (Array.isArray(q.sort)) out.sort = q.sort.map(walkSort).filter(Boolean);
+    return out;
+  }
+  return walkFilter(node);
 }
 
 interface QueryCommon {
@@ -904,7 +1014,43 @@ export function assertQuery(
   let declared = new Set<string>();
   if ('let' in query) {
     assertLetBindings(query.let, pointer.concat('let'));
-    declared = new Set(Object.keys(query.let));
+    let cards = new Set(
+      Object.entries(query.let as Record<string, LetBinding>)
+        .filter(([, b]) => b.one)
+        .map(([n]) => n),
+    );
+    declared = new Set(Object.keys(query.let).filter((n) => !cards.has(n)));
+    // A one-card binding's references stand in as values of their role.
+    if (cards.size) {
+      let placeholder = (_n: string, _p: string, role: CardReferenceRole) =>
+        role === 'vector' ? [0] : role === 'bound' ? 0 : null;
+      let probe = mapCardReferences(
+        { filter: query.filter, sort: query.sort } as any,
+        cards,
+        placeholder,
+      );
+      query = {
+        ...query,
+        ...(query.filter ? { filter: probe.filter } : {}),
+        ...(query.sort ? { sort: probe.sort } : {}),
+      };
+      if (query.rerank?.compare?.filter) {
+        query = {
+          ...query,
+          rerank: {
+            ...query.rerank,
+            compare: {
+              ...query.rerank.compare,
+              filter: mapCardReferences(
+                query.rerank.compare.filter,
+                cards,
+                placeholder,
+              ),
+            },
+          },
+        };
+      }
+    }
   }
   if (query.filter || query.sort) {
     let unknown: string[] = [];
@@ -1928,13 +2074,19 @@ function assertLetBindings(lets: any, pointer: string[]) {
       );
     }
     for (let key of Object.keys(b)) {
-      if (key !== 'from' && key !== 'select') {
+      if (key !== 'from' && key !== 'select' && key !== 'one') {
         throw new InvalidQueryError(
           `${at.join('/')}: unknown binding member "${key}"`,
         );
       }
     }
-    if (typeof b.select !== 'string' || !FACET_PATH.test(b.select)) {
+    if ('one' in b) {
+      if (b.one !== true || 'select' in b) {
+        throw new InvalidQueryError(
+          `${at.join('/')}: a binding is { from, select } for a list, or { from, one: true } for one card`,
+        );
+      }
+    } else if (typeof b.select !== 'string' || !FACET_PATH.test(b.select)) {
       throw new InvalidQueryError(
         `${at.concat('select').join('/')}: select must be a field path, such as "items.id"`,
       );
@@ -1978,6 +2130,10 @@ function assertLetBindings(lets: any, pointer: string[]) {
     mapLetReferences(inner, (_f, _n, node) => {
       nested = true;
       return node;
+    });
+    mapCardReferences(inner, new Set(names), () => {
+      nested = true;
+      return null;
     });
     if (nested) {
       throw new InvalidQueryError(

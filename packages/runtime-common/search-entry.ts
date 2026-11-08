@@ -1529,7 +1529,9 @@ export interface SearchEntryWireQuery {
         sort?: SearchEntryWireSortExpression[];
         page?: { size: number };
       };
-      select: string;
+      // a list's path through `item.`, or `one: true` for one card
+      select?: string;
+      one?: true;
     }
   >;
   // each result explains its rank in `meta._explain`
@@ -1680,7 +1682,9 @@ export function searchEntryWireQueryFromQuery(
               : {}),
             ...(b.from.page ? { page: b.from.page } : {}),
           },
-          select: `${ITEM_PREFIX}${b.select}`,
+          ...(b.one
+            ? { one: true as const }
+            : { select: `${ITEM_PREFIX}${b.select}` }),
         },
       ]),
     );

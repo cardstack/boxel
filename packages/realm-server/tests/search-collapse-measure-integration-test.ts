@@ -1333,4 +1333,128 @@ module(basename(import.meta.filename), function (hooks) {
       keep: 2,
     });
   });
+  test("a one-card let binding's values stand in where values go", async function (assert) {
+    let top = {
+      from: { filter: { on, eq: { title: 'D' } } },
+      one: true as const,
+    };
+    let same = await search({
+      let: { top },
+      filter: { on, eq: { channel: '$top.channel' } },
+      sort: byScore,
+    });
+    assert.deepEqual(same.titles, ['d', 'e'], "an eq reads the card's channel");
+    assert.deepEqual(same.meta.lets, {
+      top: { strategy: 'card', found: true },
+    });
+    let lower = await search({
+      let: { top },
+      filter: { on, range: { hnScore: { lt: '$top.hnScore' } } },
+      sort: byScore,
+    });
+    assert.deepEqual(
+      lower.titles,
+      ['e', 'b', 'c', 'a', 'f', 'g'],
+      'a range bound reads its score',
+    );
+    let { rows } = await reranked({
+      let: { top },
+      filter: { type: on },
+      sort: byScoreDesc,
+      rerank: { expr: 'top.hnScore - hnScore', direction: 'asc' },
+    });
+    assert.deepEqual(
+      rows.slice(0, 3),
+      [
+        ['d', 0],
+        ['e', 10],
+        ['b', 20],
+      ],
+      'a rerank formula reads the card under its name',
+    );
+  });
+
+  test('a one-card binding that finds nothing reads null', async function (assert) {
+    let none = {
+      from: { filter: { on, eq: { title: 'Z' } } },
+      one: true as const,
+    };
+    let bounded = await search({
+      let: { none },
+      filter: { on, range: { hnScore: { lt: '$none.hnScore' } } },
+    });
+    assert.deepEqual(bounded.titles, [], 'a null bound matches nothing');
+    assert.deepEqual(bounded.meta.lets, {
+      none: { strategy: 'card', found: false },
+    });
+    let missing = await search({
+      let: { none },
+      filter: { on, eq: { channel: '$none.channel' } },
+      sort: byScore,
+    });
+    assert.deepEqual(
+      missing.titles,
+      ['f', 'g'],
+      'eq null finds the cards with no value',
+    );
+  });
+
+  test('one-card bindings are checked, and travel the wire', function (assert) {
+    let bad = (query: Record<string, unknown>, pattern: RegExp) =>
+      assert.throws(
+        () => assertQuery(query),
+        (err: unknown) =>
+          err instanceof InvalidQueryError && pattern.test(err.message),
+      );
+    let top = { from: { filter: { type: on } }, one: true };
+    bad({ let: { top: { ...top, select: 'a' } } }, /or \{ from, one: true \}/);
+    bad({ let: { top: { ...top, one: 1 } } }, /or \{ from, one: true \}/);
+    bad(
+      { let: { top }, filter: { in: { id: '$top' } } },
+      /names no binding in let/,
+    );
+    bad(
+      {
+        let: {
+          top,
+          x: {
+            from: { filter: { on, eq: { channel: '$top.channel' } } },
+            select: 'a',
+          },
+        },
+      },
+      /cannot use another binding/,
+    );
+    assertQuery({
+      let: { top },
+      filter: {
+        every: [
+          { on, eq: { channel: '$top.channel' } },
+          { on, range: { hnScore: { lt: '$top.hnScore' } } },
+        ],
+      },
+      sort: [{ on, by: 'hnScore', direction: 'desc' }],
+    });
+    assert.ok(true, 'references pass where values go');
+    let parsed = parseSearchEntryQueryFromPayload({
+      let: {
+        top: {
+          from: { filter: { 'item.on': on, eq: { 'item.title': 'D' } } },
+          one: true,
+        },
+      },
+      filter: {
+        'item.on': on,
+        range: { 'item.hnScore': { lt: '$top.hnScore' } },
+      },
+    });
+    assert.deepEqual(parsed.itemQuery.let, {
+      top: { from: { filter: { on, eq: { title: 'D' } } }, one: true },
+    });
+    let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
+    assert.deepEqual((wire.let as any).top, {
+      from: { filter: { 'item.on': on, eq: { 'item.title': 'D' } } },
+      one: true,
+    });
+  });
 });

@@ -118,6 +118,7 @@ import {
   isExprSort,
   type ResultExplanation,
   mapLetReferences,
+  mapCardReferences,
   MAX_LET_ROWS,
   MAX_LET_VALUES,
   type LetBinding,
@@ -472,7 +473,10 @@ export interface QueryResultsMeta {
   incomplete?: boolean;
   // For a query with `let` bindings: how each was resolved. `join` ran in
   // the same statement; `list` ran its query first and passed `values` on.
-  lets?: Record<string, { strategy: 'join' | 'list'; values?: number }>;
+  lets?: Record<
+    string,
+    { strategy: 'join' | 'list' | 'card'; values?: number; found?: boolean }
+  >;
   // Filled by the host's search resource, never by the engine: under
   // `explain`, each result's `meta._explain` by card id.
   explanations?: Record<string, ResultExplanation>;
@@ -1356,6 +1360,34 @@ export class IndexQueryEngine {
     meta: QueryResultsMeta;
     results: Partial<IndexRowWithHtml>[];
   }> {
+    // One-card bindings resolve first: their values stand in for each
+    // reference, and the query runs on without them.
+    if (lets && Object.values(lets).some((b) => b.one)) {
+      let resolved = await this.#resolveCardLets(
+        realmURL,
+        { filter, sort, rerank, let: lets },
+        opts,
+      );
+      let out = await this._search(
+        realmURL,
+        {
+          filter: resolved.filter,
+          sort: resolved.sort,
+          page,
+          facets,
+          collapse,
+          let: resolved.lets,
+          explain,
+          rerank: resolved.rerank,
+        },
+        opts,
+        selectClauseExpression,
+        entryType,
+        conditionalLiveDoc,
+      );
+      out.meta.lets = { ...(out.meta.lets ?? {}), ...resolved.letMeta };
+      return out;
+    }
     if (rerank) {
       let reranked = await this.#reranked(
         realmURL,
@@ -2051,7 +2083,11 @@ export class IndexQueryEngine {
             };
           })
         : docs;
-    let values = await scoreWithBxl(rerank.expr, inputs);
+    let bound = this.#rerankBindings.get(rerank);
+    let values = await scoreWithBxl(
+      rerank.expr,
+      bound ? inputs.map((doc) => ({ ...doc, ...bound })) : inputs,
+    );
     let direction = rerank.direction === 'asc' ? 1 : -1;
     let order = rows
       .map((row, index) => ({ row, index, value: values[index] }))
@@ -2209,10 +2245,9 @@ export class IndexQueryEngine {
           WHERE s.field_path = '${field}' AND s.dims = ${dims} AND s.ordinal = 0
             AND s.realm_url =`,
         param(realmURL.href),
-        'AND s.url IN',
-        ...addExplicitParens(
-          separatedByCommas(rowUrls.map((url) => [param(url)])),
-        ),
+        'AND s.url IN (',
+        ...rowUrls.flatMap((url, i) => (i ? [',', param(url)] : [param(url)])),
+        ')',
       ]);
     });
     let bySrc = new Map<string, { url: string; sim: number }[]>();
@@ -2421,6 +2456,107 @@ export class IndexQueryEngine {
   // on `id`, becomes `linkedFrom` and joins in the same statement. Any other
   // runs its own query over this realm first, and its selected values stand
   // in for each `"$name"`.
+  // Each one-card binding's card: the first row of its query, read whole
+  // from its search doc. Its values replace the references to it in the
+  // filter, the sort and a rerank's comparison filter; a rerank formula
+  // reads the card itself under the binding's name.
+  #rerankBindings = new WeakMap<object, Record<string, unknown>>();
+  async #resolveCardLets(
+    realmURL: URL,
+    query: Pick<Query, 'filter' | 'sort' | 'rerank' | 'let'>,
+    opts: QueryOptions,
+  ): Promise<{
+    filter: Filter | undefined;
+    sort: Sort | undefined;
+    rerank: Query['rerank'];
+    lets: Record<string, LetBinding> | undefined;
+    letMeta: NonNullable<QueryResultsMeta['lets']>;
+  }> {
+    let cards: Record<string, Record<string, unknown> | null> = {};
+    let rest: Record<string, LetBinding> = {};
+    let letMeta: NonNullable<QueryResultsMeta['lets']> = {};
+    for (let [name, binding] of Object.entries(query.let ?? {})) {
+      if (!binding.one) {
+        rest[name] = binding;
+        continue;
+      }
+      let { results } = await this._search(
+        realmURL,
+        {
+          filter: binding.from.filter,
+          sort: binding.from.sort,
+          page: { size: 1 },
+        },
+        { ...opts, cardUrls: undefined },
+        ['SELECT i.url AS url, ANY_VALUE(i.search_doc) AS search_doc'],
+        'instance',
+      );
+      let doc = (results[0] as { search_doc?: unknown } | undefined)
+        ?.search_doc;
+      if (typeof doc === 'string') {
+        try {
+          doc = JSON.parse(doc);
+        } catch {
+          doc = undefined;
+        }
+      }
+      let card =
+        doc && typeof doc === 'object'
+          ? (doc as Record<string, unknown>)
+          : null;
+      cards[name] = card;
+      letMeta[name] = { strategy: 'card', found: card != null };
+    }
+    let names = new Set(Object.keys(cards));
+    let read = (name: string, path: string) => {
+      let v: unknown = cards[name];
+      for (let key of path.split('.')) {
+        v =
+          v && typeof v === 'object' && !Array.isArray(v)
+            ? (v as Record<string, unknown>)[key]
+            : undefined;
+      }
+      // a link reads as its id
+      if (
+        v &&
+        typeof v === 'object' &&
+        !Array.isArray(v) &&
+        'id' in v &&
+        !('data' in v)
+      ) {
+        return (v as { id: unknown }).id ?? null;
+      }
+      return v === undefined ? null : v;
+    };
+    let { filter, sort } = mapCardReferences(
+      { filter: query.filter, sort: query.sort },
+      names,
+      read,
+    );
+    let rerank = query.rerank;
+    if (rerank) {
+      rerank = {
+        ...rerank,
+        ...(rerank.compare?.filter
+          ? {
+              compare: {
+                ...rerank.compare,
+                filter: mapCardReferences(rerank.compare.filter, names, read),
+              },
+            }
+          : {}),
+      };
+      this.#rerankBindings.set(rerank, cards);
+    }
+    return {
+      filter,
+      sort,
+      rerank,
+      lets: Object.keys(rest).length ? rest : undefined,
+      letMeta,
+    };
+  }
+
   async #resolveLets(
     realmURL: URL,
     lets: Record<string, LetBinding>,
@@ -2527,7 +2663,7 @@ export class IndexQueryEngine {
           continue;
         }
       }
-      collect(doc, binding.select.split('.'));
+      collect(doc, binding.select!.split('.'));
     }
     return values;
   }
@@ -6146,7 +6282,7 @@ function explainRows(rows: Record<string, unknown>[], sort: Sort | undefined) {
 function joinableLet(
   binding: LetBinding,
 ): { card: string; field: string } | undefined {
-  if (binding.from.sort || !binding.select.endsWith('.id')) {
+  if (binding.from.sort || !binding.select?.endsWith('.id')) {
     return undefined;
   }
   let node: any = binding.from.filter;
@@ -6162,7 +6298,7 @@ function joinableLet(
   if (typeof id !== 'string' || Object.keys(node.eq).length !== 1) {
     return undefined;
   }
-  return { card: id, field: binding.select.slice(0, -'.id'.length) };
+  return { card: id, field: binding.select!.slice(0, -'.id'.length) };
 }
 
 // A facet's `measure`, as the aggregate and the field it reads.
