@@ -8668,6 +8668,37 @@ export class Realm {
   // A realm that names no policy contributes nothing, and is not asked: the
   // search it answers is no policy's decision, so no policy decision is
   // recorded for it.
+  // The grants a direct read of a card of a given type would face, for a
+  // caller this realm's policy scopes; null where none admits them. Cached
+  // per type for the one search.
+  #grantsForType(
+    invocation: SearchInvocation | undefined,
+    requestContext: RequestContext,
+  ): (type: CodeRef) => Promise<Filter[] | null> {
+    let cache = new Map<string, Promise<Filter[] | null>>();
+    return (type) => {
+      let key = `${type && 'module' in type ? type.module : ''}#${type && 'name' in type ? type.name : ''}`;
+      let known = cache.get(key);
+      if (!known) {
+        known = (async () => {
+          if (!invocation) return null;
+          try {
+            let scope = await this.#policyQueryScope(
+              { ...invocation, types: [type] },
+              requestContext,
+            );
+            return scope.kind === 'scoped' ? scope.filters : null;
+          } catch (err: unknown) {
+            if (isOperationFailure(err)) return null;
+            throw err;
+          }
+        })();
+        cache.set(key, known);
+      }
+      return known;
+    };
+  }
+
   // For each card a policy-scoped search's linkedFrom names, the grants a
   // direct read of that card would face: its own type's, which the query's
   // grants (for the types it names) do not include. Null where no grant on
@@ -16571,15 +16602,18 @@ export class Realm {
         // Composed before the page is applied below, so the page the engine
         // fills is a page of rows the policy admits rather than a page of the
         // caller's rows with some removed.
-        searchEntryQuery = policyScopedQuery(
-          searchEntryQuery,
-          policyScope.filters,
-          await this.#linkedFromGrants(
+        searchEntryQuery = {
+          ...policyScopedQuery(
             searchEntryQuery,
-            invocation,
-            requestContext,
+            policyScope.filters,
+            await this.#linkedFromGrants(
+              searchEntryQuery,
+              invocation,
+              requestContext,
+            ),
           ),
-        );
+          grantsForType: this.#grantsForType(invocation, requestContext),
+        };
         // An archived realm answers a caller it reaches only through its
         // policy with its seal where this search would answer them with a
         // row, and with no rows where it would answer none, as it does while

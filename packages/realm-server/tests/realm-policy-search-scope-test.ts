@@ -51,6 +51,12 @@ const MODULE = `
   import NumberField from "@cardstack/base/number";
   export class Section extends CardDef {
     @field name = contains(StringField);
+    @field audience = contains(StringField);
+    @field cardTitle = contains(StringField, {
+      computeVia: function (this: Section) {
+        return this.name;
+      },
+    });
   }
   export class Article extends CardDef {
     @field headline = contains(StringField);
@@ -106,7 +112,7 @@ function policyCard() {
           },
           {
             targetType: type('Section'),
-            grants: [{ operation: 'query', where: 'true' }],
+            grants: [{ operation: 'query', where: '.audience == actor()' }],
           },
           {
             targetType: type('Picks'),
@@ -148,9 +154,18 @@ module(basename(import.meta.filename), function (hooks) {
               policy: POLICY,
             }),
             'news.gts': MODULE,
-            'sections/world.json': card('Section', { name: 'World' }),
-            'sections/sport.json': card('Section', { name: 'Sport' }),
-            'sections/secret.json': card('Section', { name: 'Secret desk' }),
+            'sections/world.json': card('Section', {
+              name: 'World',
+              audience: MEMBER,
+            }),
+            'sections/sport.json': card('Section', {
+              name: 'Sport',
+              audience: MEMBER,
+            }),
+            'sections/secret.json': card('Section', {
+              name: 'Secret desk',
+              audience: MEMBER,
+            }),
             'articles/a.json': card(
               'Article',
               { headline: 'A', status: 'published', views: 10 },
@@ -295,6 +310,33 @@ module(basename(import.meta.filename), function (hooks) {
       after,
       before,
       'rows, scores, counts and labels are unchanged',
+    );
+  });
+
+  test("a link facet's labels come from the linked type's grants", async function (assert) {
+    // Sections are opened to the member only, by the Section rule, which the
+    // query's Article grants say nothing about.
+    let body = {
+      filter: { 'item.on': Article, eq: { 'item.status': 'published' } },
+      facets: [{ by: 'item.section' }],
+      fields: { entry: ['item.headline'] },
+    };
+    let labels = (facets: any) =>
+      Object.fromEntries(
+        (facets?.section ?? []).map((c: any) => [
+          String(c.value).replace(NEWSROOM, ''),
+          [c.count, c.label ?? null],
+        ]),
+      );
+    assert.deepEqual(
+      labels((await search(body)).facets),
+      { 'sections/world': [2, 'World'], 'sections/sport': [1, 'Sport'] },
+      'the member, whom the Section grant admits, sees the section titles',
+    );
+    assert.deepEqual(
+      labels((await search(body, OTHER)).facets),
+      { 'sections/world': [2, null], 'sections/sport': [1, null] },
+      'another caller gets the same counts, and no titles',
     );
   });
 

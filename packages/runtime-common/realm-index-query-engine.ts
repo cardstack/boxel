@@ -435,6 +435,7 @@ export class RealmIndexQueryEngine {
       anonymizeStatistics,
       labelFilter,
       grantFilter,
+      grantsForType,
     } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
@@ -442,6 +443,7 @@ export class RealmIndexQueryEngine {
       ...(anonymizeStatistics ? { anonymizeStatistics } : {}),
       ...(labelFilter ? { labelFilter } : {}),
       ...(grantFilter ? { grantFilter } : {}),
+      ...(grantsForType ? { grantsForType } : {}),
     };
 
     // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one

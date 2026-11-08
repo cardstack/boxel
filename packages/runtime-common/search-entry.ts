@@ -211,6 +211,11 @@ export interface SearchEntryQuery {
   // of the caller's filter (a facet's `own: 'ignore'`) cannot drop them.
   // Internal.
   grantFilter?: Filter;
+  // Set by the realm for a caller its policy scopes: the grants a direct
+  // read of a card of `type` would face (null where none admits the caller),
+  // for reads of cards of another type than the query's. Internal; in
+  // process only.
+  grantsForType?: (type: CodeRef) => Promise<Filter[] | null>;
 }
 
 function invalidQuery(message: string, code?: string): SearchRequestError {

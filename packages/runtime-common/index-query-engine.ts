@@ -449,6 +449,11 @@ export type QueryOptions = WIPOptions & {
   // facet's value is labeled with the linked card's title only when that
   // card meets them, as it would have to for the caller to read it.
   labelFilter?: Filter;
+  // Set for a caller a realm policy scopes: the grants a direct read of a
+  // card of `type` would face (null where none admits the caller). Used for
+  // reads of cards of another type than the query's, such as the cards a link
+  // facet labels its values with.
+  grantsForType?: (type: CodeRef) => Promise<Filter[] | null>;
   // Set for a caller a realm policy scopes: the policy's grants, applied to
   // every read of the query (rows, facets, bindings, comparison sets) as a
   // base condition beside the caller's filter, so no rewrite of the caller's
@@ -4854,6 +4859,7 @@ export class IndexQueryEngine {
     let plans: FacetPlan[] = [];
     for (let facet of facets) {
       let link = false;
+      let linkTarget: CodeRef | undefined;
       if (definition) {
         try {
           let field = await getField(
@@ -4862,6 +4868,9 @@ export class IndexQueryEngine {
             this.#definitionLookup,
           );
           link = field.type === 'linksTo' || field.type === 'linksToMany';
+          if (link) {
+            linkTarget = field.fieldOrCard;
+          }
         } catch {
           link = false;
         }
@@ -4896,7 +4905,13 @@ export class IndexQueryEngine {
         !link &&
         shape === 'values' &&
         Object.keys(facet).every((key) => key === 'by' || key === 'size');
-      plans.push({ facet, shape: link ? 'values' : shape, plain, link });
+      plans.push({
+        facet,
+        shape: link ? 'values' : shape,
+        plain,
+        link,
+        ...(linkTarget ? { linkTarget } : {}),
+      });
     }
     return plans;
   }
@@ -4905,7 +4920,7 @@ export class IndexQueryEngine {
   // value, by range or by date bucket) and, when it asked for them or its
   // shape implies them, its statistics.
   async #extendedFacet(
-    { facet, shape, link }: FacetPlan,
+    { facet, shape, link, linkTarget }: FacetPlan,
     opts: QueryOptions,
     condition: CardExpression,
     realmURL: URL,
@@ -4950,7 +4965,12 @@ export class IndexQueryEngine {
         link,
       );
       if (link) {
-        counts = await this.#labelLinkCounts(counts, opts, realmURL);
+        counts = await this.#labelLinkCounts(
+          counts,
+          opts,
+          realmURL,
+          linkTarget,
+        );
       }
     }
     if (!stats) {
@@ -5107,15 +5127,28 @@ export class IndexQueryEngine {
     counts: FacetCount[],
     opts: QueryOptions,
     realmURL: URL,
+    linkTarget?: CodeRef,
   ): Promise<FacetCount[]> {
     if (counts.length === 0) {
       return counts;
     }
     let ids = counts.map((c) => c.value);
-    let granted: CardExpression = opts.labelFilter
+    // A linked card lends its title under its own type's grants, as a direct
+    // read of it would face them, not the query's: the query's grants are for
+    // the type it searches. Where no grant on that type admits the caller, no
+    // value gets a label.
+    let labelFilter = opts.labelFilter;
+    if (opts.grantsForType && linkTarget) {
+      let own = await opts.grantsForType(linkTarget);
+      if (own === null) {
+        return counts;
+      }
+      labelFilter = { any: own };
+    }
+    let granted: CardExpression = labelFilter
       ? [
           'AND (',
-          ...this.filterCondition(opts.labelFilter, baseCardRef, 'positive', {
+          ...this.filterCondition(labelFilter, baseCardRef, 'positive', {
             inAny: false,
             prerenderedTable: prerenderedTableFromOpts(opts),
             indexTable: tableFromOpts(opts),
@@ -6586,6 +6619,9 @@ interface FacetPlan {
   // A link field: counted by the linked card's id, each value labelled with
   // the card's title (docs/search-intent.md, `facet`).
   link?: boolean;
+  // The type the link field points at, whose grants decide which linked
+  // cards may lend a label to a caller a policy scopes.
+  linkTarget?: CodeRef;
 }
 const NUMBER_SERIALIZERS = new Set(['number', 'big-integer']);
 const DATE_SERIALIZERS = new Set(['date', 'datetime']);
