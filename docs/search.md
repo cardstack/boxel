@@ -44,6 +44,8 @@ A typical query names its type once and lets every clause inherit it:
 }
 ```
 
+For what people ask for and the query that answers it ("hidden gem", "cheap for its kind", "dupes of this"), see the [search cookbook](search-cookbook.md).
+
 The older form, with an `on` in every clause, still works and is what most examples in the next two sections use. Unknown members are refused rather than ignored, with the nearest real name (see [Refusals](#refusals)).
 
 ### Filters
