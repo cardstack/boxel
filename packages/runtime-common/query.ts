@@ -165,6 +165,10 @@ export interface LetBinding {
   from: { filter?: Filter; sort?: Sort; page?: { size: number } };
   select?: string;
   one?: true;
+  // Internal, set by policyScopedQuery: the binding reads a card under that
+  // card's own type's grants, composed into `from.filter`, rather than the
+  // query's.
+  ownGrants?: true;
 }
 export const MAX_LET_BINDINGS = 4;
 

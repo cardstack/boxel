@@ -2924,7 +2924,11 @@ export class IndexQueryEngine {
           size: Math.min(binding.from.page?.size ?? MAX_LET_ROWS, MAX_LET_ROWS),
         },
       },
-      { ...opts, cardUrls: undefined },
+      // A binding a policy composed with a linked card's own type's grants
+      // reads that card under those, not the query's.
+      binding.ownGrants
+        ? { ...opts, cardUrls: undefined, grantFilter: undefined }
+        : { ...opts, cardUrls: undefined },
       ['SELECT i.url AS url, ANY_VALUE(i.search_doc) AS search_doc'],
       'instance',
     );

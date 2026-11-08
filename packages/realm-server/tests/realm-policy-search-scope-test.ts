@@ -37,6 +37,8 @@ const EDITOR = '@editor:localhost';
 // Signed in, holding no permission on the Newsroom: every row they are
 // served is one a grant admits.
 const MEMBER = '@member:localhost';
+// Signed in too, reads the published articles, and owns no picks list.
+const OTHER = '@other:localhost';
 
 const REALM_POLICY = {
   module: rri('@cardstack/catalog/realm-policy/realm-policy'),
@@ -58,6 +60,7 @@ const MODULE = `
     @field related = linksToMany(() => Article, { searchable: true });
   }
   export class Picks extends CardDef {
+    @field ownerId = contains(StringField);
     @field items = linksToMany(() => Article, { searchable: true });
   }
 `;
@@ -107,7 +110,7 @@ function policyCard() {
           },
           {
             targetType: type('Picks'),
-            grants: [{ operation: 'query', where: 'true' }],
+            grants: [{ operation: 'query', where: '.ownerId == actor()' }],
           },
         ],
       },
@@ -162,7 +165,7 @@ module(basename(import.meta.filename), function (hooks) {
             'articles/d.json': article('D', 'draft', 5, 'secret'),
             'picks/mine.json': card(
               'Picks',
-              {},
+              { ownerId: MEMBER },
               {
                 'items.0': { links: { self: '../articles/a' } },
                 'items.1': { links: { self: '../articles/c' } },
@@ -292,6 +295,40 @@ module(basename(import.meta.filename), function (hooks) {
       after,
       before,
       'rows, scores, counts and labels are unchanged',
+    );
+  });
+
+  test("linkedFrom to another type's card reads it under that type's grants", async function (assert) {
+    // Articles, through the links of a Picks list: the policy opens a Picks
+    // list to its owner only.
+    let body = {
+      filter: {
+        every: [
+          { 'item.on': Article, eq: { 'item.status': 'published' } },
+          {
+            linkedFrom: { card: `${NEWSROOM}picks/mine.json`, field: 'items' },
+          },
+        ],
+      },
+      fields: { entry: ['item.headline'] },
+    };
+    let owner = await search(body);
+    assert.deepEqual(
+      owner.rows.map(([id]) => id),
+      ['articles/a', 'articles/c'],
+      'the owner, whom the Picks grant admits, gets the articles it links',
+    );
+    let other = await search(body, OTHER);
+    assert.deepEqual(
+      other.rows.map(([id]) => id),
+      [],
+      "a caller the Picks grant does not admit reads none of the list's links",
+    );
+    await addHiddenRow();
+    assert.deepEqual(
+      await search(body),
+      owner,
+      'and a hidden row changes nothing',
     );
   });
 

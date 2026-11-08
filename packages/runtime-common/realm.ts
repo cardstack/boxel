@@ -131,6 +131,7 @@ import {
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
+import type { Filter } from './query.ts';
 import {
   rri,
   type RealmResourceIdentifier,
@@ -8667,6 +8668,56 @@ export class Realm {
   // A realm that names no policy contributes nothing, and is not asked: the
   // search it answers is no policy's decision, so no policy decision is
   // recorded for it.
+  // For each card a policy-scoped search's linkedFrom names, the grants a
+  // direct read of that card would face: its own type's, which the query's
+  // grants (for the types it names) do not include. Null where no grant on
+  // the card's type admits the caller, or the card is not here.
+  async #linkedFromGrants(
+    searchEntryQuery: SearchEntryQuery,
+    invocation: SearchInvocation | undefined,
+    requestContext: RequestContext,
+  ): Promise<Map<string, Filter[] | null>> {
+    let cards = new Set<string>();
+    let walk = (v: unknown) => {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') {
+        let linked = (v as { linkedFrom?: { card?: unknown } }).linkedFrom;
+        if (linked && typeof linked.card === 'string') cards.add(linked.card);
+        Object.values(v).forEach(walk);
+      }
+    };
+    walk(searchEntryQuery.itemQuery.filter);
+    walk(searchEntryQuery.itemQuery.sort);
+    let grants = new Map<string, Filter[] | null>();
+    for (let card of cards) {
+      let scope: PolicyQueryScope | undefined;
+      try {
+        let url = new URL(card.endsWith('.json') ? card : `${card}.json`);
+        let row = await this.#realmIndexQueryEngine.instance(url);
+        let adoptsFrom =
+          row?.type === 'instance' ? row.instance?.meta?.adoptsFrom : undefined;
+        if (adoptsFrom && invocation) {
+          let ref = codeRefWithAbsoluteIdentifier(
+            adoptsFrom,
+            url,
+            undefined,
+            this.#virtualNetwork,
+          );
+          scope = await this.#policyQueryScope(
+            { ...invocation, types: [ref] },
+            requestContext,
+          );
+        }
+      } catch (err: unknown) {
+        if (!isOperationFailure(err) && !(err instanceof TypeError)) {
+          throw err;
+        }
+      }
+      grants.set(card, scope?.kind === 'scoped' ? scope.filters : null);
+    }
+    return grants;
+  }
+
   async #policyQueryScope(
     invocation: SearchInvocation | undefined,
     requestContext: RequestContext,
@@ -16523,6 +16574,11 @@ export class Realm {
         searchEntryQuery = policyScopedQuery(
           searchEntryQuery,
           policyScope.filters,
+          await this.#linkedFromGrants(
+            searchEntryQuery,
+            invocation,
+            requestContext,
+          ),
         );
         // An archived realm answers a caller it reaches only through its
         // policy with its seal where this search would answer them with a

@@ -1184,9 +1184,13 @@ export function policyFilterFromWire(filter: SearchEntryWireFilter): Filter {
 // that filter inside an `every` would carry the binding away from where it is
 // read. Everything but the filter — page, sort, fieldset, rendering — is the
 // caller's query as it stands.
+// `linkedGrants`: for each card a linkedFrom names, the grants a direct read
+// of that card faces, which are its own type's (null where none admits the
+// caller). A card it does not list reads under `grantFilters`.
 export function policyScopedQuery(
   query: SearchEntryQuery,
   grantFilters: Filter[],
+  linkedGrants?: Map<string, Filter[] | null>,
 ): SearchEntryQuery {
   if (grantFilters.length === 0) {
     throw new Error(
@@ -1220,14 +1224,25 @@ export function policyScopedQuery(
         name = `__linkedFrom${serial++}`;
       } while (name in lets);
       count++;
+      let id = node.linkedFrom.card.replace(/\.json$/, '');
+      let own = linkedGrants?.has(node.linkedFrom.card)
+        ? linkedGrants.get(node.linkedFrom.card)!
+        : linkedGrants?.has(id)
+          ? linkedGrants.get(id)!
+          : undefined;
       lets[name] = {
         from: {
-          filter: composePolicyScopedFilter(
-            { eq: { id: node.linkedFrom.card.replace(/\.json$/, '') } },
-            grantFilters,
-          ),
+          // A card no grant opens to the caller: a binding that matches
+          // nothing, so the links it would have read stay unread.
+          filter:
+            own === null
+              ? { every: [{ eq: { id } }, { not: { eq: { id } } }] }
+              : composePolicyScopedFilter({ eq: { id } }, own ?? grantFilters),
         },
         select: `${node.linkedFrom.field}.id`,
+        // Read under the card's own type's grants, composed above, not the
+        // query's.
+        ...(own !== undefined ? { ownGrants: true as const } : {}),
       };
       return {
         ...(node.on ? { on: node.on } : {}),
