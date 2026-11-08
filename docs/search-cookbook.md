@@ -2,7 +2,7 @@
 
 What people ask for, and the query that answers it. Many requests don't map to an obvious operator: "hidden gem" is a blend with an inverted signal, "cheap for its kind" is a rerank against a comparison set, "dupes of this" is a one-card `let` binding. Find the phrase, then adapt the type and field names to your cards.
 
-Every query here is in the V2 grammar described in [search.md](search.md), with `productRef` standing for a product card type with the usual shop fields (`productType`, `priceMin`, `rating`, `reviewCount`, `unitsSold30d`, `imageEmbedding`, …). Each one is checked against the query grammar, and all but the four marked as needing an embedding or a saved list ran against a real catalog and found results.
+Every query here is in the V2 grammar described in [search.md](search.md), with `productRef` standing for the product card type's fully qualified code ref, such as `{ module: 'https://my.realm/product', name: 'Product' }` or a registered prefix like `{ module: '@cardstack/catalog/product', name: 'Product' }` (never a bare name or a relative module). The examples assume a product type with the usual shop fields (`productType`, `priceMin`, `rating`, `reviewCount`, `unitsSold30d`, `imageEmbedding`, …). Each one is checked against the query grammar, and all but the four marked as needing an embedding or a saved list ran against a real catalog and found results.
 
 ## Find a pattern
 
