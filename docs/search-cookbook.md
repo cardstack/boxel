@@ -14,6 +14,7 @@ Every query here is in the V2 grammar described in [search.md](search.md), with 
 | "almost sold out", "low stock", "last few"                                   | [Almost gone](#almost-gone)                                                  |
 | "no color listed", "without a price", "incomplete"                           | [Missing information](#missing-information)                                  |
 | "from my wishlist", "from my saved", "in my list"                            | [From my saved list](#from-my-saved-list)                                    |
+| "floor lamps", "in this category", "nothing in this category"                | [A category, then its neighbors](#a-category-then-its-neighbors)             |
 | "reclinr", "cushon covr", "any typo"                                         | [Misspelled](#misspelled)                                                    |
 | "search box", "autocomplete", "type-ahead"                                   | [As they type](#as-they-type)                                                |
 | "coffee table but not glass", "iphone 11 but not pro"                        | [An exact phrase, minus a word](#an-exact-phrase-minus-a-word)               |
@@ -170,6 +171,44 @@ const query = {
 **Watch out:** Under a realm policy, `linkedFrom` cannot sit inside a binding or a comparison filter.
 
 _Needs a value computed first (an embedding, a saved list, or several realms), so it is checked against the grammar only._
+
+### A category, then its neighbors
+
+**Say:** "floor lamps", "in this category", "nothing in this category"
+
+```js
+const query = {
+  type: productRef,
+  filter: { matches: 'lamp' },
+  sort: [
+    {
+      blend: [
+        {
+          boost: {
+            every: [
+              { eq: { 'category.name': 'Floor Lamps' } },
+              { matches: 'lamp', scope: 'title' },
+            ],
+          },
+          weight: 10,
+        },
+        {
+          boost: {
+            in: { 'category.name': ['Table Lamps', 'Desk Lamps', 'Lamps'] },
+          },
+          weight: 5,
+        },
+        { by: 'textRelevance' },
+        { by: 'rating', weight: 0.5 },
+      ],
+    },
+  ],
+};
+```
+
+Tiers, not a hard filter: every good match in the chosen category comes first, then its siblings, then everything else by relevance, so the page is never empty. A boost adds `weight / (k + 1)`, so a tier's weight must exceed the sum of every weight below it (10 > 5 + 1 + 0.5). Matching the category by name rather than by full path also catches the same category in a parallel branch of the tree.
+
+**Watch out:** Require a strong match for the top tier (here, the word in the title), or one weak match in the chosen category outranks excellent ones next door. The sibling names come from the chosen category's parent, which the UI already holds.
 
 ## Words
 
