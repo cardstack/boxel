@@ -2372,6 +2372,8 @@ export function buildEntryResource(args: {
   explanation?: ResultExplanation;
   // Under `rerank`, the row's formula value — `meta._rerank`.
   rerankValue?: number | null;
+  // Under `collapse`, the row's group size — `meta._collapseSize`.
+  collapseSize?: number;
   // The query's formula value — `meta._formula`.
   formulaValue?: number | null;
 }): EntryResource {
@@ -2387,6 +2389,7 @@ export function buildEntryResource(args: {
     explanation,
     rerankValue,
     formulaValue,
+    collapseSize,
   } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
@@ -2413,7 +2416,8 @@ export function buildEntryResource(args: {
     blendScore !== undefined ||
     explanation !== undefined ||
     rerankValue !== undefined ||
-    formulaValue !== undefined
+    formulaValue !== undefined ||
+    collapseSize !== undefined
   ) {
     resource.meta = {
       ...(generation !== undefined ? { generation } : {}),
@@ -2426,6 +2430,7 @@ export function buildEntryResource(args: {
       ...(blendScore !== undefined ? { _blendScore: blendScore } : {}),
       ...(explanation !== undefined ? { _explain: explanation } : {}),
       ...(rerankValue !== undefined ? { _rerank: rerankValue } : {}),
+      ...(collapseSize !== undefined ? { _collapseSize: collapseSize } : {}),
       ...(formulaValue !== undefined
         ? {
             _formula:

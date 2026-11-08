@@ -643,6 +643,10 @@ export const NEAR_SIMILARITY_KEY = '_nearSimilarity';
 export const BLEND_SORT_KEY = '_blend';
 export const BLEND_SCORE_KEY = '_blendScore';
 
+// Under `collapse`, how many matches the row's group holds, the kept rows
+// included. Rides `meta._collapseSize`.
+export const COLLAPSE_SIZE_KEY = '_collapseSize';
+
 export function isBlendSort(sort: object): sort is BlendSortExpression {
   return (sort as { by?: unknown }).by === BLEND_SORT_KEY;
 }
@@ -2997,6 +3001,8 @@ export class IndexQueryEngine {
   // values, as in a paged search, plus its group's value at `collapse.by`.
   // Each group keeps its best `keep` rows by the query's order (a match with
   // no value is a group of its own), and the total counts what is kept.
+  // Each kept row carries its group's size, every match in it, so a caller
+  // can say how many more a row stands for (`meta._collapseSize`).
   #collapsedNarrowPass({
     opts,
     sort,
@@ -3034,7 +3040,9 @@ export class IndexQueryEngine {
       '), c AS (',
       'SELECT m.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(CAST(m.__collapse AS TEXT), m.url)',
       ...outerOrderBy,
-      ') AS __collapse_rank FROM m',
+      ') AS __collapse_rank,',
+      `COUNT(*) OVER (PARTITION BY COALESCE(CAST(m.__collapse AS TEXT), m.url)) AS "${COLLAPSE_SIZE_KEY}"`,
+      'FROM m',
       ')',
     ];
     if (countOnly) {

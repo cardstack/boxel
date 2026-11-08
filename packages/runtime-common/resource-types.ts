@@ -358,6 +358,9 @@ export interface EntryResource {
     // fusion; higher ranks first). Present only on a blend-sorted query.
     // Ranks are per realm, so across realms it orders only approximately.
     _blendScore?: number;
+    // Under `collapse`: how many matches this entry's group holds, itself
+    // and any other kept rows included. 1 when it stood alone.
+    _collapseSize?: number;
   };
 }
 

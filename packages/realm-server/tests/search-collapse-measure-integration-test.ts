@@ -331,6 +331,43 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("each kept row carries its group's size", async function (assert) {
+    let sizes = async (keep: number) =>
+      (
+        await engine.search(
+          new URL(testRealm),
+          {
+            filter: { type: on },
+            sort: byScore,
+            collapse: { by: 'channel', on, keep },
+          },
+          {},
+          { kind: 'renderSet' },
+        )
+      ).results.map((r: any) => [
+        r.url.replace(`${testRealm}Talk/`, '').replace('.json', ''),
+        Number(r._collapseSize),
+      ]);
+    assert.deepEqual(
+      await sizes(1),
+      [
+        ['d', 2],
+        ['b', 3],
+        ['f', 1],
+        ['g', 1],
+      ],
+      'GOTO holds 2, Strange Loop 3, a card with no channel stands alone',
+    );
+    assert.deepEqual(
+      (await sizes(2)).slice(0, 2),
+      [
+        ['d', 2],
+        ['e', 2],
+      ],
+      'every kept row of a group carries the same size',
+    );
+  });
+
   test('collapse takes the filter anchor, and facets count every match', async function (assert) {
     let { titles, meta } = await search({
       filter: { on, range: { hnScore: { gte: 10 } } },

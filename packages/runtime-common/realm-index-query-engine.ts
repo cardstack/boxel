@@ -11,6 +11,7 @@ import {
   MATCH_RELEVANCE_SORT_KEY,
   NEAR_SIMILARITY_KEY,
   BLEND_SCORE_KEY,
+  COLLAPSE_SIZE_KEY,
   EXPLAIN_KEY,
   RERANK_KEY,
   FORMULA_KEY,
@@ -522,6 +523,10 @@ export class RealmIndexQueryEngine {
       let rawBlendScore = (row as Record<string, unknown>)[BLEND_SCORE_KEY];
       let blendScore =
         rawBlendScore == null ? undefined : Number(rawBlendScore);
+      // And, under `collapse`, how many matches the row's group holds.
+      let rawCollapseSize = (row as Record<string, unknown>)[COLLAPSE_SIZE_KEY];
+      let collapseSize =
+        rawCollapseSize == null ? undefined : Number(rawCollapseSize);
       // And, under `explain`, why it ranks where it does.
       let explanation = (row as Record<string, unknown>)[EXPLAIN_KEY] as
         | ResultExplanation
@@ -622,6 +627,7 @@ export class RealmIndexQueryEngine {
             blendScore,
             explanation,
             rerankValue,
+            collapseSize,
             formulaValue,
           }),
         );
@@ -776,6 +782,7 @@ export class RealmIndexQueryEngine {
           blendScore,
           explanation,
           rerankValue,
+          collapseSize,
           formulaValue,
         }),
       );

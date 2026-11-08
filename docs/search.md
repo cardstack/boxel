@@ -403,7 +403,7 @@ sort: [
 
 ### Collapsing to one per group (`collapse`)
 
-`collapse` keeps the best cards of each group: of the cards that share a value at `by`, only the first `keep` (default 1) by the query's own sort come back. Use it to show one size of a product rather than five, or one card per type. A card with no value at `by` is a group of its own. `meta.page.total` counts what remains, and pages page over it. Facets still count every match, so after a collapse the two disagree: one-per-brand might show 40 results while the Colour facet still says "Black (120)", counting every black product including the ones the collapse hid.
+`collapse` keeps the best cards of each group: of the cards that share a value at `by`, only the first `keep` (default 1) by the query's own sort come back. Use it to show one size of a product rather than five, or one card per type. A card with no value at `by` is a group of its own. Each card that comes back carries `meta._collapseSize`, how many matches its group holds (itself and any other kept cards included), so a result can say "and 12 more" without a second query. `meta.page.total` counts what remains, and pages page over it. Facets still count every match, so after a collapse the two disagree: one-per-brand might show 40 results while the Colour facet still says "Black (120)", counting every black product including the ones the collapse hid.
 
 `on` names the type whose field `by` is; without it, the filter's anchor (`on` or `type`) is used. A string is shorthand for `{ by }`.
 
