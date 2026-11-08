@@ -1050,44 +1050,46 @@ Helpers are **scoped to the expression**. There is no module system, and that's 
 
 ## Statistics
 
-| Function                      | Description                                  | Example                                    |
-| ----------------------------- | -------------------------------------------- | ------------------------------------------ |
-| `SUM(arr)`                    | Sum of numbers (skips nulls)                 | `SUM([10, 20, 30])` → `60`                 |
-| `AVERAGE(arr)`                | Mean (skips nulls)                           | `AVERAGE([10, 20, 30])` → `20`             |
-| `COUNT(arr)`                  | Count of finite numbers                      | `COUNT([1, "a", 3])` → `2`                 |
-| `COUNTA(arr)`                 | Count of non-blank values                    | `COUNTA([1, "a", null])` → `2`             |
-| `MAX(arr)`                    | Maximum                                      | `MAX([3, 1, 4])` → `4`                     |
-| `MIN(arr)`                    | Minimum                                      | `MIN([3, 1, 4])` → `1`                     |
-| `STDEV(arr)`                  | Sample standard deviation (alias: `STDEV_S`) | `STDEV([2, 4, 4, 4, 5, 5, 7, 9])`          |
-| `STDEV_P(arr)`                | Population standard deviation                | `STDEV_P([2, 4, 4, 4, 5, 5, 7, 9])`        |
-| `MEDIAN(arr)`                 | Middle value                                 | `MEDIAN([1, 3, 5, 7])` → `4`               |
-| `VAR(arr)`                    | Sample variance (alias: `VAR_S`)             | `VAR([2, 4, 4, 4, 5, 5, 7, 9])`            |
-| `VAR_P(arr)`                  | Population variance                          | `VAR_P([2, 4, 4, 4, 5, 5, 7, 9])`          |
-| `LARGE(arr, k)`               | Kth largest                                  | `LARGE([3, 1, 4, 1, 5], 2)` → `4`          |
-| `SMALL(arr, k)`               | Kth smallest                                 | `SMALL([3, 1, 4, 1, 5], 2)` → `1`          |
-| `COUNTBLANK(arr)`             | Count of empty/null values                   | `COUNTBLANK([1, null, "", 3])` → `2`       |
-| `RANK_EQ(n, arr)`             | Rank (descending)                            | `RANK_EQ(4, [5, 4, 3, 2])` → `2`           |
-| `RANK_AVG(n, arr)`            | Rank with average for ties                   | `RANK_AVG(4, [5, 4, 4, 2])` → `2.5`        |
-| `PERCENTILE_INC(arr, k)`      | Percentile (inclusive)                       | `PERCENTILE_INC([1,2,3,4], 0.75)` → `3.25` |
-| `QUARTILE_INC(arr, q)`        | Quartile (0--4)                              | `QUARTILE_INC([1,2,3,4], 1)` → `1.75`      |
-| `CORREL(x, y)`                | Correlation coefficient                      | `CORREL([1,2,3], [2,4,6])` → `1`           |
-| `SLOPE(y, x)`                 | Linear regression slope                      | `SLOPE([2,4,6], [1,2,3])` → `2`            |
-| `INTERCEPT(y, x)`             | Linear regression intercept                  | `INTERCEPT([2,4,6], [1,2,3])` → `0`        |
-| `FORECAST(x, y, knownX)`      | Linear prediction                            | `FORECAST(4, [2,4,6], [1,2,3])` → `8`      |
-| `GEOMEAN(arr)`                | Geometric mean                               | `GEOMEAN([2, 8])` → `4`                    |
-| `HARMEAN(arr)`                | Harmonic mean                                | `HARMEAN([2, 8])` → `3.2`                  |
-| `TRIMMEAN(arr, pct)`          | Mean excluding outliers                      | `TRIMMEAN([1,2,3,4,100], 0.4)`             |
-| `AVEDEV(arr)`                 | Average absolute deviation                   | `AVEDEV([2, 4, 8, 16])`                    |
-| `DEVSQ(arr)`                  | Sum of squared deviations                    | `DEVSQ([2, 4, 8, 16])`                     |
-| `SKEW(arr)`                   | Distribution skewness                        | `SKEW([1, 2, 3, 4, 100])` → positive       |
-| `KURT(arr)`                   | Distribution kurtosis                        | `KURT([1, 2, 3, 4, 100])` → heavy-tailed   |
-| `MAXIFS([vals, range, crit])` | Conditional max                              | `MAXIFS([[5,3,8], [1,2,1], 1])` → `8`      |
-| `MINIFS([vals, range, crit])` | Conditional min                              | `MINIFS([[5,3,8], [1,2,1], 1])` → `5`      |
-| `PERCENTILE_EXC(arr, k)`      | Percentile (exclusive)                       | `PERCENTILE_EXC([1,2,3,4,5], 0.4)`         |
-| `QUARTILE_EXC(arr, q)`        | Quartile exclusive (1--3)                    | `QUARTILE_EXC([1,2,3,4,5], 1)`             |
-| `PERCENTRANK_INC(arr, x)`     | Percentile rank (inclusive)                  | `PERCENTRANK_INC([1,2,3,4], 3)` → `0.667`  |
-| `PERCENTRANK_EXC(arr, x)`     | Percentile rank (exclusive)                  | `PERCENTRANK_EXC([1,2,3,4], 3)` → `0.6`    |
-| `PEARSON(x, y)`               | Pearson correlation (alias for CORREL)       | `PEARSON([1,2,3], [2,4,6])` → `1`          |
+| Function                           | Description                                                          | Example                                    |
+| ---------------------------------- | -------------------------------------------------------------------- | ------------------------------------------ |
+| `SUM(arr)`                         | Sum of numbers (skips nulls)                                         | `SUM([10, 20, 30])` → `60`                 |
+| `AVERAGE(arr)`                     | Mean (skips nulls)                                                   | `AVERAGE([10, 20, 30])` → `20`             |
+| `COUNT(arr)`                       | Count of finite numbers                                              | `COUNT([1, "a", 3])` → `2`                 |
+| `COUNTA(arr)`                      | Count of non-blank values                                            | `COUNTA([1, "a", null])` → `2`             |
+| `MAX(arr)`                         | Maximum                                                              | `MAX([3, 1, 4])` → `4`                     |
+| `MIN(arr)`                         | Minimum                                                              | `MIN([3, 1, 4])` → `1`                     |
+| `STDEV(arr)`                       | Sample standard deviation (alias: `STDEV_S`)                         | `STDEV([2, 4, 4, 4, 5, 5, 7, 9])`          |
+| `STDEV_P(arr)`                     | Population standard deviation                                        | `STDEV_P([2, 4, 4, 4, 5, 5, 7, 9])`        |
+| `MEDIAN(arr)`                      | Middle value                                                         | `MEDIAN([1, 3, 5, 7])` → `4`               |
+| `VAR(arr)`                         | Sample variance (alias: `VAR_S`)                                     | `VAR([2, 4, 4, 4, 5, 5, 7, 9])`            |
+| `VAR_P(arr)`                       | Population variance                                                  | `VAR_P([2, 4, 4, 4, 5, 5, 7, 9])`          |
+| `LARGE(arr, k)`                    | Kth largest                                                          | `LARGE([3, 1, 4, 1, 5], 2)` → `4`          |
+| `SMALL(arr, k)`                    | Kth smallest                                                         | `SMALL([3, 1, 4, 1, 5], 2)` → `1`          |
+| `COUNTBLANK(arr)`                  | Count of empty/null values                                           | `COUNTBLANK([1, null, "", 3])` → `2`       |
+| `RANK_EQ(n, arr)`                  | Rank (descending)                                                    | `RANK_EQ(4, [5, 4, 3, 2])` → `2`           |
+| `RANK_AVG(n, arr)`                 | Rank with average for ties                                           | `RANK_AVG(4, [5, 4, 4, 2])` → `2.5`        |
+| `PERCENTILE_INC(arr, k)`           | Percentile (inclusive)                                               | `PERCENTILE_INC([1,2,3,4], 0.75)` → `3.25` |
+| `QUARTILE_INC(arr, q)`             | Quartile (0--4)                                                      | `QUARTILE_INC([1,2,3,4], 1)` → `1.75`      |
+| `CORREL(x, y)`                     | Correlation coefficient                                              | `CORREL([1,2,3], [2,4,6])` → `1`           |
+| `SLOPE(y, x)`                      | Linear regression slope                                              | `SLOPE([2,4,6], [1,2,3])` → `2`            |
+| `INTERCEPT(y, x)`                  | Linear regression intercept                                          | `INTERCEPT([2,4,6], [1,2,3])` → `0`        |
+| `FORECAST(x, y, knownX)`           | Linear prediction                                                    | `FORECAST(4, [2,4,6], [1,2,3])` → `8`      |
+| `LINEST(y, [x], [const], [stats])` | Multiple linear regression: `[m_k … m_1, b]`, or a 5-row stats array | `LINEST([1,9,5,7], [0,4,2,3])` → `[2, 1]`  |
+| `RSQ(y, x)`                        | R² of the linear fit                                                 | `RSQ([2,4,5,4,5], [1,2,3,4,5])` → `0.6`    |
+| `GEOMEAN(arr)`                     | Geometric mean                                                       | `GEOMEAN([2, 8])` → `4`                    |
+| `HARMEAN(arr)`                     | Harmonic mean                                                        | `HARMEAN([2, 8])` → `3.2`                  |
+| `TRIMMEAN(arr, pct)`               | Mean excluding outliers                                              | `TRIMMEAN([1,2,3,4,100], 0.4)`             |
+| `AVEDEV(arr)`                      | Average absolute deviation                                           | `AVEDEV([2, 4, 8, 16])`                    |
+| `DEVSQ(arr)`                       | Sum of squared deviations                                            | `DEVSQ([2, 4, 8, 16])`                     |
+| `SKEW(arr)`                        | Distribution skewness                                                | `SKEW([1, 2, 3, 4, 100])` → positive       |
+| `KURT(arr)`                        | Distribution kurtosis                                                | `KURT([1, 2, 3, 4, 100])` → heavy-tailed   |
+| `MAXIFS([vals, range, crit])`      | Conditional max                                                      | `MAXIFS([[5,3,8], [1,2,1], 1])` → `8`      |
+| `MINIFS([vals, range, crit])`      | Conditional min                                                      | `MINIFS([[5,3,8], [1,2,1], 1])` → `5`      |
+| `PERCENTILE_EXC(arr, k)`           | Percentile (exclusive)                                               | `PERCENTILE_EXC([1,2,3,4,5], 0.4)`         |
+| `QUARTILE_EXC(arr, q)`             | Quartile exclusive (1--3)                                            | `QUARTILE_EXC([1,2,3,4,5], 1)`             |
+| `PERCENTRANK_INC(arr, x)`          | Percentile rank (inclusive)                                          | `PERCENTRANK_INC([1,2,3,4], 3)` → `0.667`  |
+| `PERCENTRANK_EXC(arr, x)`          | Percentile rank (exclusive)                                          | `PERCENTRANK_EXC([1,2,3,4], 3)` → `0.6`    |
+| `PEARSON(x, y)`                    | Pearson correlation (alias for CORREL)                               | `PEARSON([1,2,3], [2,4,6])` → `1`          |
 
 > `SUM` and `AVERAGE` automatically skip nulls and non-numeric values, just like their spreadsheet counterparts.
 

@@ -1,5 +1,56 @@
 import type { CoverageCase } from './case.ts';
 
+// LINEST results are arrays of numbers (and "#N/A" cells); compare them
+// cell by cell, numbers within a relative tolerance.
+function closeTo(expected: unknown, tolerance = 1e-9) {
+  const near = (a: unknown, e: unknown, path: string): void => {
+    if (Array.isArray(e)) {
+      if (!Array.isArray(a) || a.length !== e.length) {
+        throw new Error(
+          `${path}: expected ${JSON.stringify(e)}, got ${JSON.stringify(a)}`,
+        );
+      }
+      e.forEach((cell, i) => near(a[i], cell, `${path}[${i}]`));
+      return;
+    }
+    if (typeof e === 'number') {
+      if (
+        typeof a !== 'number' ||
+        Math.abs(a - e) > tolerance * Math.max(1, Math.abs(e))
+      ) {
+        throw new Error(`${path}: expected ${e}, got ${JSON.stringify(a)}`);
+      }
+      return;
+    }
+    if (a !== e)
+      throw new Error(
+        `${path}: expected ${JSON.stringify(e)}, got ${JSON.stringify(a)}`,
+      );
+  };
+  return (outputs: unknown[]) => {
+    if (outputs.length !== 1) throw new Error('expected a single output');
+    near(outputs[0], expected, 'result');
+  };
+}
+
+// Microsoft's LINEST example 3: assessed value of 11 office buildings from
+// floor space, offices, entrances and age.
+const OFFICES = [
+  [2310, 2, 2, 20, 142000],
+  [2333, 2, 2, 12, 144000],
+  [2356, 3, 1.5, 33, 151000],
+  [2379, 3, 2, 43, 150000],
+  [2402, 2, 3, 53, 139000],
+  [2425, 4, 2, 23, 169000],
+  [2448, 2, 1.5, 99, 126000],
+  [2471, 2, 2, 34, 142900],
+  [2494, 3, 3, 23, 163000],
+  [2517, 4, 4, 55, 169000],
+  [2540, 2, 3, 22, 149000],
+];
+const OFFICES_Y = JSON.stringify(OFFICES.map((r) => r[4]));
+const OFFICES_X = JSON.stringify(OFFICES.map((r) => r.slice(0, 4)));
+
 export const formulaStatsCases: CoverageCase[] = [
   // Counting trio: one input where all three answers differ — COUNT sees only
   // the numbers, COUNTA everything non-blank, COUNTBLANK only the blanks.
@@ -225,6 +276,130 @@ export const formulaStatsCases: CoverageCase[] = [
     covers: 'FORECAST/3',
     source: 'FORECAST(6, [2, 4, 5, 4, 5], [1, 2, 3, 4, 5])',
     expected: 5.8,
+    tolerance: 1e-12,
+  },
+  // LINEST: least squares with Excel's argument shapes and result layout.
+  // Coefficients come back in reverse variable order, then the intercept.
+  // Expected values from Microsoft's LINEST examples, and exact rational
+  // arithmetic for the rest.
+  {
+    covers: 'LINEST/1',
+    // No x: x is {1, 2, 3}. Fit of [1, 2, 4] is 1.5x − 2/3.
+    source: 'LINEST([1, 2, 4])',
+    check: closeTo([1.5, -2 / 3]),
+  },
+  {
+    covers: 'LINEST/2',
+    source: 'LINEST([1, 9, 5, 7], [0, 4, 2, 3])',
+    check: closeTo([2, 1]),
+  },
+  {
+    covers: 'LINEST/3',
+    // const FALSE forces the line through the origin.
+    source: 'LINEST([1, 9, 5, 7], [0, 4, 2, 3], false)',
+    check: closeTo([2.310344828, 0], 1e-9),
+  },
+  {
+    covers: 'LINEST/4',
+    // Through the origin with stats: se_b is #N/A, R² is uncentred, df = n − k.
+    source: 'LINEST([1, 9, 5, 7], [0, 4, 2, 3], false, true)',
+    check: closeTo(
+      [
+        [2.310344828, 0],
+        [0.1177810433, '#N/A'],
+        [0.9922634836, 0.6342703293],
+        [384.7714286, 3],
+        [154.7931034, 1.206896552],
+      ],
+      1e-9,
+    ),
+  },
+  {
+    covers: 'LINEST/4',
+    // Microsoft example 3: four variables, intercept and stats.
+    source: `LINEST(${OFFICES_Y}, ${OFFICES_X}, true, true)`,
+    check: closeTo(
+      [
+        [-234.2371645, 2553.21066, 12529.76817, 27.64138737, 52317.83051],
+        [13.26801148, 530.6691519, 400.0668382, 5.429374042, 12237.3616],
+        [0.996747993, 970.5784629, '#N/A', '#N/A', '#N/A'],
+        [459.7536742, 6, '#N/A', '#N/A', '#N/A'],
+        [1732393319, 5652135.316, '#N/A', '#N/A', '#N/A'],
+      ],
+      1e-8,
+    ),
+  },
+  {
+    covers: 'LINEST/4',
+    // Two variables through the origin, x given one row per observation.
+    source:
+      'LINEST([3, 5, 8, 9, 13], [[1, 2], [2, 1], [3, 3], [4, 2], [5, 4]], false, true)',
+    check: closeTo(
+      [
+        [0.619047619, 2.047619048, 0],
+        [0.2038925806, 0.1603096022, '#N/A'],
+        [0.9987684729, 0.377964473, '#N/A'],
+        [1216.5, 3, '#N/A'],
+        [347.5714286, 0.4285714286, '#N/A'],
+      ],
+      1e-9,
+    ),
+  },
+  {
+    covers: 'LINEST/4',
+    // An exact fit: standard errors 0, R² 1, F #N/A.
+    source: 'LINEST([1, 9, 5, 7], [0, 4, 2, 3], true, true)',
+    check: closeTo(
+      [
+        [2, 1],
+        [0, 0],
+        [1, 0],
+        ['#N/A', 2],
+        [35, 0],
+      ],
+      1e-9,
+    ),
+  },
+  {
+    covers: 'LINEST/4',
+    // Collinear columns (the second is twice the first): one is dropped with
+    // coefficient 0 and se 0, and df counts only the kept column. Which of
+    // the two Excel drops is undocumented; here pivoting keeps the larger.
+    source:
+      'LINEST([1, 2, 3, 4, 5], [[1, 2], [2, 4], [3, 6], [4, 8], [5, 10]], true, true)',
+    check: closeTo(
+      [
+        [0.5, 0, 0],
+        [0, 0, 0],
+        [1, 0, '#N/A'],
+        ['#N/A', 3, '#N/A'],
+        [10, 0, '#N/A'],
+      ],
+      1e-9,
+    ),
+  },
+  {
+    covers: 'LINEST/2',
+    // A one-row y reads each row of x as a variable.
+    source: 'LINEST([[3, 5, 8, 9, 13]], [[1, 2, 3, 4, 5], [2, 1, 3, 2, 4]])',
+    check: closeTo([2 / 3, 31 / 15, -1 / 5], 1e-9),
+  },
+  {
+    covers: 'LINEST/2',
+    // x rows must match y's length.
+    source: 'LINEST([1, 2, 3], [1, 2])',
+    throws: /#REF!/,
+  },
+  {
+    covers: 'LINEST/2',
+    source: 'LINEST([1, 2, "three"], [1, 2, 3])',
+    throws: /#VALUE!/,
+  },
+  {
+    covers: 'RSQ/2',
+    // r² for the regression data set: (√0.6)² = 0.6.
+    source: 'RSQ([2, 4, 5, 4, 5], [1, 2, 3, 4, 5])',
+    expected: 0.6,
     tolerance: 1e-12,
   },
   // r = 6/√(10·6) = √0.6 for the regression data set; PEARSON and CORREL

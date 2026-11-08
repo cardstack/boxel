@@ -19,6 +19,7 @@ import {
   matchesCriteria,
 } from '../../formulajs/criteria.ts';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
+import { linest, rsq } from '../../formulajs/linest.ts';
 import { isoWeekNumber } from '../../formulajs/isoWeek.ts';
 import { excelWildcardSearch } from '../../formulajs/wildcard.ts';
 import { compare } from '../../jqtools/evaluate/compare.ts';
@@ -2310,6 +2311,23 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     }
     if (sumX2 === 0) throwExcelError(EXCEL_ERROR.div0);
     yield sumXY / sumX2;
+  },
+  // Multiple linear regression and its R², with Excel's shapes and layout;
+  // see formulajs/linest.ts.
+  *'LINEST/1'(_input, knownY) {
+    yield linest(knownY);
+  },
+  *'LINEST/2'(_input, knownY, knownX) {
+    yield linest(knownY, knownX);
+  },
+  *'LINEST/3'(_input, knownY, knownX, constant) {
+    yield linest(knownY, knownX, constant);
+  },
+  *'LINEST/4'(_input, knownY, knownX, constant, stats) {
+    yield linest(knownY, knownX, constant, stats);
+  },
+  *'RSQ/2'(_input, knownY, knownX) {
+    yield rsq(knownY, knownX);
   },
   *'INTERCEPT/2'(_input, knownY, knownX) {
     const y = flattenExcelArgs(knownY).filter(
