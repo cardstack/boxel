@@ -35,6 +35,7 @@ export function assertJSONValue(v: any, pointer: string[]) {
   }
   throw new InvalidQueryError(
     `${pointer.join('/')}: value not allowed in json`,
+    'invalid-json',
   );
 }
 
@@ -52,6 +53,7 @@ export function assertJSONPrimitive(p: any, pointer: string[]) {
         `${pointer.join(
           '/',
         )}: JSON primitive must be of type string, number, boolean, or null`,
+        'invalid-json',
       );
   }
 }

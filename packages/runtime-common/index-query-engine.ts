@@ -1599,6 +1599,7 @@ export class IndexQueryEngine {
       if (collapsed && !collapseOn) {
         throw new InvalidQueryError(
           `collapse by "${collapsed.by}" needs a type: give it \`on\` or anchor the filter on a type`,
+          'needs-type',
         );
       }
       let limitClause = page
@@ -1623,6 +1624,7 @@ export class IndexQueryEngine {
         if (matches.length === 0) {
           throw new InvalidQueryError(
             `sort by textRelevance requires at least one positive \`matches\` filter`,
+            'matches-required',
           );
         }
         if ((sort ?? []).some(isMatchRelevanceSort)) {
@@ -2372,7 +2374,7 @@ export class IndexQueryEngine {
       return { ...scores, ran: 'thread' };
     } catch (e) {
       if (e instanceof RerankFormulaError) {
-        throw new InvalidQueryError(e.message);
+        throw new InvalidQueryError(e.message, 'invalid-formula');
       }
       throw e;
     }
@@ -2405,6 +2407,7 @@ export class IndexQueryEngine {
     if (this.#dbAdapter.kind !== 'pg') {
       throw new InvalidQueryError(
         'rerank: look-alikes (compare.near) run on Postgres only',
+        'needs-postgres',
       );
     }
     let anchor = filterAnchor(query.filter);
@@ -2422,6 +2425,7 @@ export class IndexQueryEngine {
     if (!declared) {
       throw new InvalidQueryError(
         `rerank: compare.near reads each card's look-alikes by "${field}", which needs a neighbour index: declare the field with search: { neighbors: true }, and anchor the query on its type`,
+        'needs-declaration',
       );
     }
     let [dimsRow] = await this.#dbAdapter.execute(
@@ -2630,6 +2634,7 @@ export class IndexQueryEngine {
     if (this.#dbAdapter.kind !== 'pg') {
       throw new InvalidQueryError(
         'rerank: a comparison set (peers. or stats.) runs on Postgres only',
+        'needs-postgres',
       );
     }
     let path = (p: string) => `'{${p.split('.').join(',')}}'::text[]`;
@@ -2699,7 +2704,10 @@ export class IndexQueryEngine {
   // only: the score profile lowers to Postgres functions.
   #exprSql(expr: string): string {
     if (this.#dbAdapter.kind !== 'pg') {
-      throw new InvalidQueryError(`a formula sort runs on Postgres only`);
+      throw new InvalidQueryError(
+        `a formula sort runs on Postgres only`,
+        'needs-postgres',
+      );
     }
     return exprSortSql(expr);
   }
@@ -3333,6 +3341,7 @@ export class IndexQueryEngine {
           .join(
             ', ',
           )}; combine operators by nesting them under "every" or "any"`,
+        'conflicting-members',
       );
     }
 
@@ -3661,13 +3670,17 @@ export class IndexQueryEngine {
     if (field.serializerName !== 'vector') {
       throw new InvalidQueryError(
         `${what} requires "${path}" to be a VectorField`,
+        'needs-declaration',
       );
     }
     if (
       this.#dbAdapter.kind === 'pg' &&
       !(await hasVectorIndex(this.#dbAdapter))
     ) {
-      throw new InvalidQueryError(VECTOR_INDEX_UNAVAILABLE_MESSAGE);
+      throw new InvalidQueryError(
+        VECTOR_INDEX_UNAVAILABLE_MESSAGE,
+        'needs-postgres',
+      );
     }
   }
 
@@ -3691,6 +3704,7 @@ export class IndexQueryEngine {
       if (operator === 'regex' && this.#dbAdapter.kind !== 'pg') {
         throw new InvalidQueryError(
           'a regex filter needs Postgres; this index has no regular expressions',
+          'needs-postgres',
         );
       }
       let definition = await this.getDefinition(on);
@@ -3702,6 +3716,7 @@ export class IndexQueryEngine {
         if (!searchesByPattern(search)) {
           throw new InvalidQueryError(
             `a ${operator} filter on "${path}" needs a field searched by pattern: declare it \`search: { patterns: true }\`, or give it an identifier or code role`,
+            'needs-declaration',
           );
         }
       }
@@ -4231,6 +4246,7 @@ export class IndexQueryEngine {
         if (!vectorField) {
           throw new InvalidQueryError(
             `sort by "${RELEVANCE_SORT_KEY_NAME}" near a vector needs a type with a VectorField; ${JSON.stringify(on)} has none`,
+            'needs-declaration',
           );
         }
         of.push(
@@ -4240,11 +4256,13 @@ export class IndexQueryEngine {
     } else if (sort.near != null) {
       throw new InvalidQueryError(
         `sort by "${RELEVANCE_SORT_KEY_NAME}" near a vector needs "on", the type whose vector field it compares`,
+        'needs-type',
       );
     }
     if (of.length === 0) {
       throw new InvalidQueryError(
         `sort by "${RELEVANCE_SORT_KEY_NAME}" has nothing to rank by: give the query a positive \`matches\` filter, or anchor it ("on") to a type that declares rank fields`,
+        'matches-required',
       );
     }
     return {

@@ -534,7 +534,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.throws(
       () => assertQuery({ sort: [{ by: '_when', when: { type: on } }] }),
-      /ranks only inside a _blend/,
+      /a boost ranks only inside a blend/,
     );
   });
 

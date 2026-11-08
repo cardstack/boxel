@@ -39,7 +39,7 @@ export function exprSortSql(expr: string): string {
     }).sql;
   } catch (e) {
     if (e instanceof BxlScoreSqlError) {
-      throw new InvalidQueryError(`formula: ${e.message}`);
+      throw new InvalidQueryError(`formula: ${e.message}`, 'invalid-formula');
     }
     throw e;
   }
