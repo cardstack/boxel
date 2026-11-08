@@ -141,8 +141,10 @@ export function sortForTerm(
   activeSort: SortOption,
   term: string | undefined,
 ): SortOption['sort'] {
-  let ranksByRelevance = activeSort.sort.some(
-    (s) => (s as { by?: string }).by === '_matchRelevance',
+  let ranksByRelevance = activeSort.sort.some((s) =>
+    ['textRelevance', '_matchRelevance'].includes(
+      (s as { by?: string }).by ?? '',
+    ),
   );
   if (ranksByRelevance && !term) {
     return SORT_OPTIONS.find((o) => o.displayName === 'A-Z')?.sort ?? [];

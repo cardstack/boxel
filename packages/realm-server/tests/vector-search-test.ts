@@ -293,7 +293,7 @@ module(basename(import.meta.filename), function () {
         {
           k: 30,
           blend: [
-            { by: 'item._matchRelevance' },
+            { by: 'item.textRelevance' },
             {
               by: 'item.embedding',
               'item.on': momentRef,

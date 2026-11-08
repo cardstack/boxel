@@ -128,7 +128,7 @@ const RAIL_MAX_WIDTH = `${RAIL_MAX_WIDTH_REM}rem`;
 // Best match first: type-ahead title tiers, then full-text relevance, then
 // the most recently changed (docs/search-intent.md).
 const RELEVANCE_SORT = [
-  { by: '_matchRelevance', direction: 'desc' },
+  { by: 'textRelevance', direction: 'desc' },
   { by: 'lastModified', direction: 'desc' },
 ];
 

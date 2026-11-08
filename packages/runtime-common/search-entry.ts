@@ -828,7 +828,13 @@ function unwireAnchors(node: unknown, key?: string): unknown {
 
 // The engine's internal sort keys are not part of the request grammar: a
 // blend is `{ blend }`, a formula `{ formula }`, a boost `{ boost }`.
-const INTERNAL_SORT_KEYS = new Set(['_blend', '_expr', '_when']);
+const INTERNAL_SORT_KEYS = new Set([
+  '_blend',
+  '_expr',
+  '_when',
+  '_relevance',
+  '_matchRelevance',
+]);
 function refuseInternalSortKeys(sort: unknown, path = 'sort') {
   if (!Array.isArray(sort)) return;
   sort.forEach((entry, i) => {
@@ -1812,6 +1818,21 @@ function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
     if (entry.by === '_when') {
       return {
         boost: wireFilterFromFilter(entry.when),
+        ...(entry.weight != null ? { weight: entry.weight } : {}),
+      } as unknown as SearchEntryWireSortExpression;
+    }
+    if (entry.by === '_relevance') {
+      return {
+        relevance: entry.weights ?? true,
+        ...('on' in entry && entry.on ? { [ITEM_ANCHOR]: entry.on } : {}),
+        ...('near' in entry && entry.near != null ? { near: entry.near } : {}),
+        ...(entry.weight != null ? { weight: entry.weight } : {}),
+      } as unknown as SearchEntryWireSortExpression;
+    }
+    if (entry.by === '_matchRelevance') {
+      return {
+        by: `${ITEM_PREFIX}textRelevance`,
+        ...(entry.direction ? { direction: entry.direction } : {}),
         ...(entry.weight != null ? { weight: entry.weight } : {}),
       } as unknown as SearchEntryWireSortExpression;
     }

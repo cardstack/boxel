@@ -58,6 +58,9 @@ const PATH_OPS = [
   'regex',
 ] as const;
 const DEFAULT_FORMULA_TOP = 500;
+// The request grammar's name for the text score; the engine's is
+// `_matchRelevance`.
+const TEXT_RELEVANCE = 'textRelevance';
 
 const isObject = (v: unknown): v is Record<string, any> =>
   v != null && typeof v === 'object' && !Array.isArray(v);
@@ -111,10 +114,17 @@ export function usesNewSyntax(query: unknown): boolean {
     if (n.not) visitFilter(n.not);
   };
   visitFilter(query.filter);
+  let signal = (s: any): boolean =>
+    isObject(s) &&
+    ('blend' in s ||
+      'formula' in s ||
+      'boost' in s ||
+      'relevance' in s ||
+      s.by === TEXT_RELEVANCE ||
+      s.by === `item.${TEXT_RELEVANCE}` ||
+      (Array.isArray(s.blend) && s.blend.some(signal)));
   for (let s of Array.isArray(query.sort) ? query.sort : []) {
-    if (isObject(s) && ('blend' in s || 'formula' in s || 'boost' in s)) {
-      found = true;
-    }
+    if (signal(s)) found = true;
   }
   // a path written with `item.` or as a quoted label
   let spelled = (p: unknown) =>
@@ -206,8 +216,21 @@ function lowerSignal(entry: any, type: CodeRef | undefined): any {
 }
 
 function lowerFieldSort(entry: any, type: CodeRef | undefined): any {
+  if (isObject(entry) && 'relevance' in entry) {
+    // search intent's relevance: named weights for its signals
+    let { relevance, ...rest } = entry;
+    return {
+      by: '_relevance',
+      ...rest,
+      ...(isObject(relevance) ? { weights: relevance } : {}),
+      ...(type && !rest.on ? { on: type } : {}),
+    };
+  }
   if (!isObject(entry) || typeof entry.by !== 'string') return entry;
   let by = barePath(entry.by);
+  if (by === TEXT_RELEVANCE) {
+    return { ...entry, by: '_matchRelevance' };
+  }
   let out: Record<string, any> = { ...entry, by };
   if (by === '_when' && entry.when) out.when = anchored(entry.when, type);
   if (Array.isArray(entry.of))

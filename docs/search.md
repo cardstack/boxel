@@ -170,7 +170,7 @@ let { data: suggestions } = await indexer.search({
   sort: [
     {
       blend: [
-        { by: '_matchRelevance' },
+        { by: 'textRelevance' },
         { on: talkRef, by: 'views', weight: 0.5 },
       ],
     },
@@ -185,7 +185,7 @@ Words are indexed by their English stems, so a word whose stem is shorter than w
 
 A card can carry an embedding in a `VectorField` (`@cardstack/base/vector`; Qwen3-Embedding-8B at 1024 dimensions by default, any size up to 2,000 through a subclass that sets `dimensions` and `embeddingModel`). Queries reach it two ways:
 
-- **Ranking**: a sort entry with a `near` target ranks by cosine similarity to it, most similar first (`direction` defaults to `desc`). Cards with no vector at the path sort last. Each result carries `meta._nearSimilarity` (1 = same direction, -1 = opposite), the way a `_matchRelevance` sort carries `meta._matchRelevance`. The k most similar cards are a near sort plus `page: { size: k }`.
+- **Ranking**: a sort entry with a `near` target ranks by cosine similarity to it, most similar first (`direction` defaults to `desc`). Cards with no vector at the path sort last. Each result carries `meta._nearSimilarity` (1 = same direction, -1 = opposite), the way a `textRelevance` sort carries `meta._matchRelevance`. The k most similar cards are a near sort plus `page: { size: k }`.
 - **Threshold**: a `near` filter, keyed by the field path like `range`, keeps cards whose vector has at least `minSimilarity` to `to`. Without `minSimilarity` it keeps every card that has a vector of `to`'s dimension there. It nests under `every`/`any`/`not`, so it combines with other filters and with realm policy.
 
 `near` targets are a number array or a vector in its stored form (`{ dims, encoding, scale?, data }`). A plural path (`segments.embedding`) scores a card by its nearest vector. Search is exact. On Postgres it needs the pgvector extension; without it a `near` query is refused with an error that says so. The SQLite index (host tests) scores singular paths only.
@@ -228,7 +228,7 @@ A field may be written as its path, with or without `item.`, or as a label in an
 
 ### Blended ranking (`blend`)
 
-A `blend` sort fuses several ranking signals into one order with reciprocal rank fusion. Each card scores `sum(weight / (k + rank))` over the signals it has a value for, with each signal ranked over every card the filter admits. The list takes any other sort entries: text relevance (`_matchRelevance`), a `near` sort, a general field such as `createdAt` (recency), a card field such as a view count (engagement), a `formula` and a `boost`. Each signal ranks best first, meaning highest value first unless the entry says `direction: 'asc'`. A card with no value for a signal (no vector, no text match, an empty field) gets nothing from that signal, rather than a last place. `weight` (default 1) scales a signal; `k` (default 60) controls how sharply a top rank beats the next one. Results carry `meta._blendScore`.
+A `blend` sort fuses several ranking signals into one order with reciprocal rank fusion. Each card scores `sum(weight / (k + rank))` over the signals it has a value for, with each signal ranked over every card the filter admits. The list takes any other sort entries: text relevance (`textRelevance`), a `near` sort, a general field such as `createdAt` (recency), a card field such as a view count (engagement), a `formula` and a `boost`. Each signal ranks best first, meaning highest value first unless the entry says `direction: 'asc'`. A card with no value for a signal (no vector, no text match, an empty field) gets nothing from that signal, rather than a last place. `weight` (default 1) scales a signal; `k` (default 60) controls how sharply a top rank beats the next one. Results carry `meta._blendScore`.
 
 ```js
 let { data: ranked } = await indexer.search({
@@ -242,7 +242,7 @@ let { data: ranked } = await indexer.search({
   sort: [
     {
       blend: [
-        { by: '_matchRelevance' },
+        { by: 'textRelevance' },
         { by: 'embedding', near: target, weight: 2 },
         { by: 'createdAt', weight: 0.5 },
         { by: 'views', weight: 0.5 },
@@ -253,7 +253,7 @@ let { data: ranked } = await indexer.search({
 });
 ```
 
-A negative `weight` inverts a signal, as in `_relevance`: it ranks the other way round with the weight's size, so `{ by: 'unitsSold30d', weight: -1 }` favours the least sold, and a negative `near` signal favours the least similar.
+A negative `weight` inverts a signal, as in `relevance`: it ranks the other way round with the weight's size, so `{ by: 'unitsSold30d', weight: -1 }` favours the least sold, and a negative `near` signal favours the least similar.
 
 A `boost` is a "should" clause: `{ boost: <filter>, weight }` lifts the cards the filter admits without dropping the rest. Every match ties for first place in it, so each gains `weight / (k + 1)` and a card that doesn't match gains nothing. With a negative weight it lifts the cards that don't match. A boost ranks only inside a `blend`, and takes the query's type when its filter names none.
 
@@ -261,7 +261,7 @@ A `boost` is a "should" clause: `{ boost: <filter>, weight }` lifts the cards th
 sort: [
   {
     blend: [
-      { by: '_matchRelevance' },
+      { by: 'textRelevance' },
       { boost: { eq: { material: 'Leather' } }, weight: 1.5 },
       { boost: { range: { returnRate: { gt: 0.1 } } }, weight: -1 },
     ],
@@ -269,7 +269,7 @@ sort: [
 ];
 ```
 
-Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `_matchRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, ranks are per realm, so a federated blend orders only approximately.
+Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `textRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, ranks are per realm, so a federated blend orders only approximately.
 
 ### Ranking by a formula (`formula`)
 
@@ -284,7 +284,7 @@ A `formula` sort ranks by a spreadsheet formula over each card's fields: `{ form
 sort: [
   {
     blend: [
-      { by: '_matchRelevance' },
+      { by: 'textRelevance' },
       { formula: 'IFERROR(wishlistCount / unitsSold30d, 0)', weight: 1.5 },
     ],
   },
@@ -335,7 +335,7 @@ Aggregates a card stores, such as a category's median price, are fields like any
 
 ### Why a result ranks where it does (`explain`)
 
-With `explain: true`, every result of a query sorted by a `blend` or `_relevance` carries `meta._explain`: the first blend's fused score, its `k`, and each signal's part in it.
+With `explain: true`, every result of a query sorted by a `blend` or `relevance` carries `meta._explain`: the first blend's fused score, its `k`, and each signal's part in it.
 
 ```json
 {
@@ -375,21 +375,20 @@ With `explain: true`, every result of a query sorted by a `blend` or `_relevance
 }
 ```
 
-`signal` names a `_relevance` signal (`text`, `popularity`, `quality`, `recency`, `priority`, `meaning`), `when` for a `boost`, or the field a signal sorts by. `rank` is the card's place for that signal over every match, not just the page, so the contributions add up to `score`. A signal the card has no value for has no rank and contributes nothing. `inverted` marks a negative weight. The ranks are computed in the same statement as the search, so asking costs two extra columns per signal.
+`signal` names a `relevance` signal (`text`, `popularity`, `quality`, `recency`, `priority`, `meaning`), `when` for a `boost`, or the field a signal sorts by. `rank` is the card's place for that signal over every match, not just the page, so the contributions add up to `score`. A signal the card has no value for has no rank and contributes nothing. `inverted` marks a negative weight. The ranks are computed in the same statement as the search, so asking costs two extra columns per signal.
 
-### Relevance (`_relevance`)
+### Relevance (`relevance`)
 
-A `_relevance` sort ranks by search intent. It blends text relevance (weighted by the search roles of the fields that matched) with the ranking signals the type declares (`search: { rank: 'popularity' }` and the like: `popularity`, `quality`, `recency`, `priority`). Given `near`, it also blends in the similarity of the type's vector field as the `meaning` signal. It compiles to a blend, so results carry `meta._blendScore`.
+A `relevance` sort ranks by search intent. It blends text relevance (weighted by the search roles of the fields that matched) with the ranking signals the type declares (`search: { rank: 'popularity' }` and the like: `popularity`, `quality`, `recency`, `priority`). Given `near`, it also blends in the similarity of the type's vector field as the `meaning` signal. It compiles to a blend, so results carry `meta._blendScore`.
 
-`weights` re-weights signals by name. Unnamed signals take their defaults: `text` and `meaning` 1, the rest 0.5. A weight of 0 drops a signal, and a negative weight inverts it (least popular first).
+Its value re-weights signals by name (`true` keeps every default). Unnamed signals take their defaults: `text` and `meaning` 1, the rest 0.5. A weight of 0 drops a signal, and a negative weight inverts it (least popular first).
 
 ```js
 sort: [
   {
-    by: '_relevance',
     on: productRef,
     near: queryVector,
-    weights: { text: 0.6, meaning: 1.5, quality: 0.5, popularity: 0 },
+    relevance: { text: 0.6, meaning: 1.5, quality: 0.5, popularity: 0 },
   },
 ];
 ```
@@ -403,7 +402,7 @@ sort: [
 ```js
 let { data, meta } = await indexer.search({
   filter: { on: productRef, matches: 'running shoe' },
-  sort: [{ by: '_relevance', on: productRef }],
+  sort: [{ on: productRef, relevance: true }],
   collapse: { by: 'variantGroup', on: productRef, keep: 1 },
   page: { size: 24 },
 });

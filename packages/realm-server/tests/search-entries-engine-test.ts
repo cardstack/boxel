@@ -237,7 +237,7 @@ module(basename(import.meta.filename), function () {
 
     test('a relevance-sorted entry query orders by score and carries meta._matchRelevance on the wire', async function (assert) {
       // The wire spelling end-to-end: the sort key is addressed as
-      // `item._matchRelevance` and must NOT inherit the filter's type anchor
+      // `item.textRelevance` and must NOT inherit the filter's type anchor
       // (it is anchorless), and the computed score must ride each entry's
       // `meta`. John matches the full-text term (his rendered markdown carries
       // "John"); Jane is admitted only by the `eq` branch, so she scores 0 and
@@ -248,7 +248,7 @@ module(basename(import.meta.filename), function () {
             'item.on': { module: `${realmHref}person`, name: 'Person' },
             any: [{ matches: 'john' }, { eq: { 'item.firstName': 'Jane' } }],
           },
-          sort: [{ by: 'item._matchRelevance' }],
+          sort: [{ by: 'item.textRelevance' }],
         }),
       );
       assert.deepEqual(
@@ -300,7 +300,7 @@ module(basename(import.meta.filename), function () {
           sort: [sort],
         });
       let anchored = await testRealm.realmIndexQueryEngine.searchEntries(
-        query({ by: 'item._matchRelevance', 'item.on': personRef }),
+        query({ by: 'item.textRelevance', 'item.on': personRef }),
       );
       assert.deepEqual(
         anchored.data.map((entry) => entry.id),
@@ -316,7 +316,7 @@ module(basename(import.meta.filename), function () {
         () =>
           parseSearchEntryQueryFromPayload({
             filter: { 'item.on': personRef },
-            sort: [{ by: 'item._matchRelevance', 'item.on': personRef }],
+            sort: [{ by: 'item.textRelevance', 'item.on': personRef }],
           }),
         /requires at least one positive `matches` filter/,
         'the anchor does not exempt it from the matches requirement',
@@ -330,7 +330,7 @@ module(basename(import.meta.filename), function () {
             filter: {
               'item.on': { module: `${realmHref}person`, name: 'Person' },
             },
-            sort: [{ by: 'item._matchRelevance' }],
+            sort: [{ by: 'item.textRelevance' }],
           }),
         /requires at least one positive `matches` filter/,
         'the wire parser rejects it as an invalid query (HTTP 400), before the engine runs',
@@ -339,7 +339,7 @@ module(basename(import.meta.filename), function () {
         () =>
           parseSearchEntryQueryFromPayload({
             filter: { not: { matches: 'john' } },
-            sort: [{ by: 'item._matchRelevance' }],
+            sort: [{ by: 'item.textRelevance' }],
           }),
         /requires at least one positive `matches` filter/,
         'a negated-only matches term does not count as a positive term',

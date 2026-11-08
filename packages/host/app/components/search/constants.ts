@@ -54,7 +54,7 @@ export const SECTION_SHOW_MORE_INCREMENT = 5;
 export const RELEVANCE_SORT_OPTION: SortOption = {
   displayName: 'Relevance',
   sort: [
-    { by: '_matchRelevance', direction: 'desc' },
+    { by: 'textRelevance', direction: 'desc' },
     { by: 'lastModified', direction: 'desc' },
   ],
 };

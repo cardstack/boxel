@@ -96,7 +96,13 @@ const GENERAL_SORT_FIELDS = new Set(['lastModified', 'createdAt', 'cardURL']);
 // which a client holding a subset cannot reproduce, so it defers to the server.
 export function isClientSortable(sort: Sort | undefined): boolean {
   return !(sort ?? []).some(
-    (s) => isBlendSort(s) || isRelevanceSort(s) || isExprSort(s),
+    (s) =>
+      isBlendSort(s) ||
+      isRelevanceSort(s) ||
+      isExprSort(s) ||
+      // the request grammar's signal sorts, before the engine lowers them
+      ['blend', 'formula', 'relevance'].some((k) => k in (s as object)) ||
+      (s as { by?: string }).by === 'textRelevance',
   );
 }
 

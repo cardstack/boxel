@@ -1591,4 +1591,31 @@ module(basename(import.meta.filename), function (hooks) {
       'never on the query itself',
     );
   });
+  test('relevance and textRelevance are the request names; the engine names are not', function (assert) {
+    let parsed = parseSearchEntryQueryFromPayload({
+      type: on,
+      filter: { matches: 'talk' },
+      sort: [
+        { relevance: { text: 1, popularity: 0 } },
+        { blend: [{ by: 'item.textRelevance' }, { by: 'item.hnScore' }] },
+      ],
+    });
+    let [rel, blend] = parsed.itemQuery.sort as any[];
+    assert.strictEqual(rel.by, '_relevance');
+    assert.deepEqual(rel.weights, { text: 1, popularity: 0 });
+    assert.strictEqual(blend.of[0].by, '_matchRelevance');
+    let wire = searchEntryWireQueryFromQuery(parsed.itemQuery) as any;
+    assert.deepEqual(wire.sort[0].relevance, { text: 1, popularity: 0 });
+    assert.strictEqual(wire.sort[1].blend[0].by, 'item.textRelevance');
+    for (let by of ['item._relevance', 'item._matchRelevance']) {
+      assert.throws(
+        () =>
+          parseSearchEntryQueryFromPayload({
+            filter: { 'item.on': on, matches: 'talk' },
+            sort: [{ by, 'item.on': on }],
+          }),
+        /is not a sort key/,
+      );
+    }
+  });
 });
