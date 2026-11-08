@@ -12,6 +12,7 @@ import {
   NEAR_SIMILARITY_KEY,
   BLEND_SCORE_KEY,
   COLLAPSE_SIZE_KEY,
+  SORT_VALUES_KEY,
   EXPLAIN_KEY,
   RERANK_KEY,
   FORMULA_KEY,
@@ -491,6 +492,7 @@ export class RealmIndexQueryEngine {
       labelFilter,
       grantFilter,
       grantsForType,
+      exposeSortValues,
     } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
@@ -499,6 +501,7 @@ export class RealmIndexQueryEngine {
       ...(labelFilter ? { labelFilter } : {}),
       ...(grantFilter ? { grantFilter } : {}),
       ...(grantsForType ? { grantsForType } : {}),
+      ...(exposeSortValues ? { exposeSortValues } : {}),
     };
 
     // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one
@@ -577,6 +580,10 @@ export class RealmIndexQueryEngine {
       let rawBlendScore = (row as Record<string, unknown>)[BLEND_SCORE_KEY];
       let blendScore =
         rawBlendScore == null ? undefined : Number(rawBlendScore);
+      // And, for a federated merge, the values the row was sorted by.
+      let sortValues = (row as Record<string, unknown>)[SORT_VALUES_KEY] as
+        | unknown[]
+        | undefined;
       // And, under `collapse`, how many matches the row's group holds.
       let rawCollapseSize = (row as Record<string, unknown>)[COLLAPSE_SIZE_KEY];
       let collapseSize =
@@ -682,6 +689,7 @@ export class RealmIndexQueryEngine {
             explanation,
             rerankValue,
             collapseSize,
+            sortValues,
             formulaValue,
           }),
         );
@@ -837,6 +845,7 @@ export class RealmIndexQueryEngine {
           explanation,
           rerankValue,
           collapseSize,
+          sortValues,
           formulaValue,
         }),
       );

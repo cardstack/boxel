@@ -441,6 +441,10 @@ export type InstanceOrError = IndexedInstance | InstanceError;
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & {
   includeErrors?: true;
+  // Set by a federated merge: each paged row carries the values the query
+  // sorted it by (`_sortValues`), so rows from several realms can be ordered
+  // by the query's own sort.
+  exposeSortValues?: boolean;
   // Set for a caller a realm policy scopes: realm-wide word statistics
   // (IDF, typo corrections) are used only under the small-count rules
   // (`STATS_MIN_ROWS`, `STATS_MIN_COUNT`).
@@ -646,6 +650,31 @@ export const BLEND_SCORE_KEY = '_blendScore';
 // Under `collapse`, how many matches the row's group holds, the kept rows
 // included. Rides `meta._collapseSize`.
 export const COLLAPSE_SIZE_KEY = '_collapseSize';
+
+// Under `exposeSortValues`, a row's sort values in sort order, then its url
+// (the engine's tiebreak). Rides `meta._sortValues`.
+export const SORT_VALUES_KEY = '_sortValues';
+
+// The values a narrow-pass key row was ordered by, one per sort entry: a
+// field's `_sort_i`, a blend's score, a near sort's similarity, text
+// relevance; then the url tiebreak.
+function sortValuesOf(
+  key: Record<string, unknown>,
+  sort: Sort | undefined,
+): unknown[] {
+  let values = (sort ?? []).map((s, i) => {
+    let column = isBlendSort(s)
+      ? blendScoreAlias(sort!, i)
+      : isNearSort(s)
+        ? nearSimilarityAlias(sort!, i)
+        : isMatchRelevanceSort(s as { by: string })
+          ? MATCH_RELEVANCE_SORT_KEY
+          : `_sort_${i}`;
+    let v = key[column];
+    return v === undefined ? null : v;
+  });
+  return [...values, key.url];
+}
 
 // The scores a `select` list may name beside field paths: each is read off
 // the row the query ranked, as `meta` would carry it.
@@ -1830,6 +1859,7 @@ export class IndexQueryEngine {
                 selectClauseExpression,
                 baseConditions,
                 opts,
+                sort,
               )
             : [];
       } else if (page && !conditionalLiveDoc) {
@@ -1918,6 +1948,7 @@ export class IndexQueryEngine {
                 selectClauseExpression,
                 baseConditions,
                 opts,
+                sort,
               )
             : [];
       } else {
@@ -2085,6 +2116,7 @@ export class IndexQueryEngine {
     selectClauseExpression: CardExpression,
     baseConditions: CardExpression[],
     opts: QueryOptions,
+    sort?: Sort,
   ): Promise<Record<string, unknown>[]> {
     let urls = [...new Set(keys.map((key) => String(key.url)))];
     let rows = (await this.#queryCards(
@@ -2128,7 +2160,13 @@ export class IndexQueryEngine {
             !/^_sort_\d+$/.test(name),
         ),
       );
-      page.push({ ...columns, ...synthetic });
+      page.push({
+        ...columns,
+        ...synthetic,
+        ...(opts.exposeSortValues
+          ? { [SORT_VALUES_KEY]: sortValuesOf(key, sort) }
+          : {}),
+      });
     }
     return page;
   }

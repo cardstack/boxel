@@ -79,6 +79,26 @@ export interface EntryCollectionDocument {
       // `page.total` can't tell a consumer how many rows one realm holds past
       // its page, which is what paging a single realm's results needs.
       realmTotals?: Record<string, number>;
+      // A federated search's shape: per realm (each realm pages on its own,
+      // sections in order of their best card) or merged (one global order
+      // and page).
+      federation?: { results: 'byRealm' | 'merged' };
+      // Per realm, in the order `data` holds them: the realm, how many of
+      // its rows are on this page, and the section's score (its best card's,
+      // when the sort scores rows).
+      sections?: { realm: string; count: number; score?: number }[];
+      // How each realm asked for answered. `refused` carries the query
+      // grammar's code; `timeout` is a realm cut off by the time budget;
+      // `unavailable` is one that would not resolve or failed otherwise.
+      realms?: Record<
+        string,
+        {
+          status: 'ok' | 'refused' | 'timeout' | 'unavailable';
+          code?: string;
+          total?: number;
+          ms?: number;
+        }
+      >;
       // The realms whose rows here are the only ones of theirs the result may
       // hold, because the server decided them by more than the caller's query:
       // the caller does not read the realm outright, so what they see of it is

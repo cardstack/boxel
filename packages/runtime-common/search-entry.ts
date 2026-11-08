@@ -16,7 +16,6 @@ import {
 } from './query.ts';
 import {
   emitSearchTiming,
-  fanOutRealmSearch,
   SearchRequestError,
   type SearchOpts,
 } from './search-utils.ts';
@@ -141,6 +140,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'realms',
   'fields',
   'select',
+  'federation',
   'cardUrls',
   'scope',
 ];
@@ -220,6 +220,13 @@ export interface SearchEntryQuery {
   // `select`: values to read off each row's search doc, by path, in order.
   // The response is then a table (`{ columns, rows }`), not entries.
   columns?: SearchColumn[];
+  // A search over several realms: each realm's rows in a section of their own
+  // (the default) or one merged, globally paged list.
+  federation?: { results: 'byRealm' | 'merged' };
+  // Set by the federated merge on each realm's query: answer each row with
+  // the values the query sorted it by (`meta._sortValues`), so rows from
+  // different realms can be ordered by the query's own sort. Internal.
+  exposeSortValues?: boolean;
 }
 
 // One requested column: the name it goes out under, and the search-doc path
@@ -1201,6 +1208,23 @@ export function parseSearchEntryQueryFromPayload(
     }
     columns = parseColumns(record.select);
   }
+  let federation: SearchEntryQuery['federation'];
+  if (record.federation !== undefined) {
+    let f = record.federation as { results?: unknown } | null;
+    if (
+      !f ||
+      typeof f !== 'object' ||
+      Array.isArray(f) ||
+      Object.keys(f).some((k) => k !== 'results') ||
+      (f.results !== 'byRealm' && f.results !== 'merged')
+    ) {
+      throw invalidQuery(
+        'federation is { results: "byRealm" } or { results: "merged" }; federation.results takes byRealm or merged',
+        'invalid-value',
+      );
+    }
+    federation = { results: f.results };
+  }
   let fieldset = parseFieldset(record.fields);
 
   return {
@@ -1214,6 +1238,7 @@ export function parseSearchEntryQueryFromPayload(
       record.filter as SearchEntryWireFilter | undefined,
     ),
     ...(columns ? { columns } : {}),
+    ...(federation ? { federation } : {}),
   };
 }
 
@@ -2372,53 +2397,173 @@ export async function searchEntryRealms(
     opts?.timings ?? (ownsTimings ? new RequestTimings() : undefined);
   let perRealmOpts = ownsTimings && opts ? { ...opts, timings } : opts;
   let startedAt = ownsTimings ? Date.now() : 0;
-  let docs = await fanOutRealmSearch(
-    realms,
-    searchEntryQuery.itemQuery,
-    async (realm) => {
-      let doc = await realm.searchEntries(
-        queryForRealm ? queryForRealm(realm) : searchEntryQuery,
-        perRealmOpts,
-      );
-      if (!realm.url) {
-        return doc;
-      }
-      return {
-        ...doc,
-        meta: {
-          ...doc.meta,
-          realmTotals: { [realm.url]: doc.meta?.page?.total ?? 0 },
-        },
-      };
-    },
-    (label, queryLabel) =>
-      `searchEntryRealms realm search failed: ${label} query=${queryLabel}`,
-  );
+  let results = searchEntryQuery.federation?.results ?? 'byRealm';
+  let page = searchEntryQuery.itemQuery.page as
+    | { number?: number; size: number }
+    | undefined;
+  // Merged: each realm answers its top `offset + size` rows, with the values
+  // it sorted them by; the merge orders the union by the query's sort and
+  // keeps one global page. Per realm: each realm pages on its own.
+  let perRealmQuery = (q: SearchEntryQuery): SearchEntryQuery =>
+    results === 'merged'
+      ? {
+          ...q,
+          exposeSortValues: true,
+          itemQuery: {
+            ...q.itemQuery,
+            ...(page
+              ? {
+                  page: {
+                    number: 0,
+                    size: ((page.number ?? 0) + 1) * page.size,
+                  },
+                }
+              : {}),
+          },
+        }
+      : q;
   // `realms` is positional with the requested realm list: an entry is nullish
-  // exactly when that realm could not be resolved to an instance. Passing the
-  // full length therefore asks the merge to account for those too, rather than
-  // letting a realm that never got as far as a search drop out of the tally
-  // that decides whether the total is short.
+  // exactly when that realm could not be resolved to an instance.
+  let asked = searchEntryQuery.realms ?? [];
+  let statuses: NonNullable<EntryCollectionDocument['meta']['realms']> = {};
+  let answered: { url: string | undefined; doc: EntryCollectionDocument }[] =
+    [];
+  let settled = await Promise.all(
+    realms.map(async (realm, index) => {
+      let url = realm?.url ?? asked[index];
+      if (!realm) {
+        return { url, status: { status: 'unavailable' as const } };
+      }
+      let t0 = Date.now();
+      try {
+        let doc = await realm.searchEntries(
+          perRealmQuery(
+            queryForRealm ? queryForRealm(realm) : searchEntryQuery,
+          ),
+          perRealmOpts,
+        );
+        return {
+          url,
+          doc,
+          status: {
+            status: 'ok' as const,
+            total: doc.meta?.page?.total ?? 0,
+            ms: Date.now() - t0,
+          },
+        };
+      } catch (e: any) {
+        console.error(
+          `searchEntryRealms realm search failed: ${url ?? `index ${index}`}`,
+          e,
+        );
+        return {
+          url,
+          status: { ...realmFailureStatus(e), ms: Date.now() - t0 },
+        };
+      }
+    }),
+  );
+  for (let { url, doc, status } of settled) {
+    if (url) {
+      statuses[url] = status;
+    }
+    if (doc) {
+      answered.push({
+        url,
+        doc: url
+          ? {
+              ...doc,
+              meta: {
+                ...doc.meta,
+                realmTotals: { [url]: doc.meta?.page?.total ?? 0 },
+              },
+            }
+          : doc,
+      });
+    }
+  }
   let primarySort = searchEntryQuery.itemQuery.sort?.[0];
-  let combined = combineSearchEntryResults(
-    docs,
-    realms.length,
+  let rankBy =
     primarySort && (isBlendSort(primarySort) || isRelevanceSort(primarySort))
       ? // A `_relevance` sort compiles to a blend in each realm's engine.
-        { key: '_blendScore', direction: primarySort.direction ?? 'desc' }
+        {
+          key: '_blendScore' as const,
+          direction: primarySort.direction ?? 'desc',
+        }
       : primarySort && primarySort.by === MATCH_RELEVANCE_SORT_KEY
         ? // Text relevance (with type-ahead tiers) compares across realms.
           {
-            key: '_matchRelevance',
+            key: '_matchRelevance' as const,
             direction: primarySort.direction ?? 'desc',
           }
         : primarySort && isNearSort(primarySort)
           ? {
-              key: '_nearSimilarity',
+              key: '_nearSimilarity' as const,
               direction: primarySort.direction ?? 'desc',
             }
-          : undefined,
-  );
+          : undefined;
+  let combined: EntryCollectionDocument;
+  if (results === 'merged') {
+    // The union in the query's own order, then one global page.
+    combined = combineSearchEntryResults(
+      answered.map((a) => a.doc),
+      realms.length,
+    );
+    let directions = (searchEntryQuery.itemQuery.sort ?? []).map((s: any) =>
+      (s.direction ??
+        (isBlendSort(s) || isRelevanceSort(s) ? 'desc' : 'asc')) === 'desc'
+        ? -1
+        : 1,
+    );
+    combined.data.sort((a, b) =>
+      compareSortValues(
+        a.meta?._sortValues as unknown[] | undefined,
+        b.meta?._sortValues as unknown[] | undefined,
+        directions,
+      ),
+    );
+    if (page) {
+      let start = (page.number ?? 0) * page.size;
+      combined.data = combined.data.slice(start, start + page.size);
+    }
+    for (let entry of combined.data) {
+      if (entry.meta && '_sortValues' in entry.meta) {
+        let { _sortValues: _drop, ...rest } = entry.meta as Record<
+          string,
+          unknown
+        >;
+        entry.meta = rest as EntryResource['meta'];
+      }
+    }
+  } else {
+    // Per realm: each realm's rows stay together, sections in order of their
+    // best card's score when the sort scores rows (a realm matching nothing
+    // last), in the order asked otherwise.
+    let sign = rankBy?.direction === 'asc' ? -1 : 1;
+    let scored = answered.map((a, i) => {
+      let best = rankBy ? a.doc.data[0]?.meta?.[rankBy.key] : undefined;
+      return { ...a, i, score: typeof best === 'number' ? best : undefined };
+    });
+    scored.sort((x, y) => {
+      let ex = x.doc.data.length === 0;
+      let ey = y.doc.data.length === 0;
+      if (ex !== ey) return ex ? 1 : -1;
+      if (x.score !== undefined && y.score !== undefined && x.score !== y.score)
+        return (y.score - x.score) * sign;
+      return x.i - y.i;
+    });
+    combined = combineSearchEntryResults(
+      scored.map((s) => s.doc),
+      realms.length,
+    );
+    combined.meta.sections = scored.map((s) => ({
+      realm: s.url ?? '',
+      count: s.doc.data.length,
+      ...(s.score !== undefined ? { score: s.score } : {}),
+    }));
+  }
+  combined.meta.federation = { results };
+  combined.meta.realms = statuses;
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);
   }
@@ -2431,6 +2576,55 @@ export async function searchEntryRealms(
     );
   }
   return combined;
+}
+
+// How a realm's failed search reads in `meta.realms`: a refusal the query
+// grammar raised (with its code), a time-budget cutoff, or anything else.
+function realmFailureStatus(e: any): {
+  status: 'refused' | 'timeout' | 'unavailable';
+  code?: string;
+} {
+  if (e instanceof InvalidQueryError) {
+    return { status: 'refused', code: e.code };
+  }
+  if (e instanceof SearchRequestError) {
+    return { status: 'refused', code: e.queryCode ?? e.code };
+  }
+  if (
+    (e?.name === 'SearchBoundError' && e.status === 408) ||
+    e?.name === 'AbortError' ||
+    e?.name === 'TimeoutError'
+  ) {
+    return { status: 'timeout' };
+  }
+  return { status: 'unavailable' };
+}
+
+// Orders two rows by the values each realm sorted them by, key by key, each
+// in its sort's direction (keys past the sort list, the engine's tiebreaks,
+// ascending). A row with no values sorts last; nulls sort after values.
+function compareSortValues(
+  a: unknown[] | undefined,
+  b: unknown[] | undefined,
+  directions: number[],
+): number {
+  if (!a || !b) {
+    return !a && !b ? 0 : !a ? 1 : -1;
+  }
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    let x = a[i];
+    let y = b[i];
+    if (x === y) continue;
+    if (x == null || y == null) return x == null ? 1 : -1;
+    let d = directions[i] ?? 1;
+    if (typeof x === 'number' && typeof y === 'number') return (x - y) * d;
+    let nx = Number(x);
+    let ny = Number(y);
+    if (!Number.isNaN(nx) && !Number.isNaN(ny) && typeof x !== 'boolean')
+      return (nx - ny) * d;
+    return String(x).localeCompare(String(y)) * d;
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -2474,6 +2668,8 @@ export function buildEntryResource(args: {
   rerankValue?: number | null;
   // Under `collapse`, the row's group size — `meta._collapseSize`.
   collapseSize?: number;
+  // For a federated merge, the row's sort values — `meta._sortValues`.
+  sortValues?: unknown[];
   // The query's formula value — `meta._formula`.
   formulaValue?: number | null;
 }): EntryResource {
@@ -2490,6 +2686,7 @@ export function buildEntryResource(args: {
     rerankValue,
     formulaValue,
     collapseSize,
+    sortValues,
   } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
@@ -2517,7 +2714,8 @@ export function buildEntryResource(args: {
     explanation !== undefined ||
     rerankValue !== undefined ||
     formulaValue !== undefined ||
-    collapseSize !== undefined
+    collapseSize !== undefined ||
+    sortValues !== undefined
   ) {
     resource.meta = {
       ...(generation !== undefined ? { generation } : {}),
@@ -2531,6 +2729,7 @@ export function buildEntryResource(args: {
       ...(explanation !== undefined ? { _explain: explanation } : {}),
       ...(rerankValue !== undefined ? { _rerank: rerankValue } : {}),
       ...(collapseSize !== undefined ? { _collapseSize: collapseSize } : {}),
+      ...(sortValues !== undefined ? { _sortValues: sortValues } : {}),
       ...(formulaValue !== undefined
         ? {
             _formula:

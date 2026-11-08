@@ -361,6 +361,10 @@ export interface EntryResource {
     // Under `collapse`: how many matches this entry's group holds, itself
     // and any other kept rows included. 1 when it stood alone.
     _collapseSize?: number;
+    // For a federated merge only: the values this entry was sorted by, so
+    // the merge can order entries from several realms. Removed before the
+    // merged page goes out.
+    _sortValues?: unknown[];
   };
 }
 
