@@ -21,6 +21,7 @@ import {
   type SearchOpts,
 } from './search-utils.ts';
 import { RequestTimings } from './request-timings.ts';
+import { internalSortKeyIn } from './internal-sort-keys.ts';
 import { lowerQuery, usesNewSyntax } from './query-syntax.ts';
 import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import type {
@@ -830,33 +831,14 @@ function unwireAnchors(node: unknown, key?: string): unknown {
   return out;
 }
 
-// The engine's internal sort keys are not part of the request grammar: a
-// blend is `{ blend }`, a formula `{ formula }`, a boost `{ boost }`.
-const INTERNAL_SORT_KEYS = new Set([
-  '_blend',
-  '_expr',
-  '_when',
-  '_relevance',
-  '_matchRelevance',
-]);
-function refuseInternalSortKeys(sort: unknown, path = 'sort') {
-  if (!Array.isArray(sort)) return;
-  sort.forEach((entry, i) => {
-    if (entry == null || typeof entry !== 'object') return;
-    let by = (entry as Record<string, unknown>).by;
-    if (
-      typeof by === 'string' &&
-      INTERNAL_SORT_KEYS.has(unprefix(by) as string)
-    ) {
-      throw invalidQuery(`${path}[${i}]/by: "${by}" is not a sort key`);
-    }
-    for (let key of ['of', 'blend']) {
-      refuseInternalSortKeys(
-        (entry as Record<string, unknown>)[key],
-        `${path}[${i}]/${key}`,
-      );
-    }
-  });
+function refuseInternalSortKeys(sort: unknown) {
+  let found = internalSortKeyIn(sort);
+  if (found) {
+    throw invalidQuery(
+      `${found.path}: "${found.by}" is not a sort key`,
+      'unknown-key',
+    );
+  }
 }
 
 function lowerEntryPayload(

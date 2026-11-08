@@ -2,6 +2,8 @@ import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import { CARD_INSTANCE_FILE_KEY } from './search-doc-keys.ts';
 import { queryFieldDefaultPageSize } from './search-bounds.ts';
+import { internalSortKeyIn } from './internal-sort-keys.ts';
+import { InvalidQueryError } from './invalid-query-error.ts';
 import type { FieldDefinition } from './definitions.ts';
 import type {
   FileMetaResource,
@@ -80,6 +82,15 @@ export function normalizeQueryDefinition({
   relativeTo,
   resolveRealmForReference,
 }: NormalizeQueryDefinitionParams): NormalizedQueryDefinitionResult | null {
+  let internal = internalSortKeyIn(
+    (queryDefinition as { sort?: unknown }).sort,
+  );
+  if (internal) {
+    throw new InvalidQueryError(
+      `${fieldName}: ${internal.path}: "${internal.by}" is not a sort key`,
+      'unknown-key',
+    );
+  }
   let workingQuery: QueryWithInterpolations = JSON.parse(
     JSON.stringify(queryDefinition),
   );

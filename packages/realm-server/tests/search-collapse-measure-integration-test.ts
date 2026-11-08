@@ -2014,7 +2014,8 @@ module(basename(import.meta.filename), function (hooks) {
             filter: { 'item.on': on, matches: 'talk' },
             sort: [{ by, 'item.on': on }],
           }),
-        /is not a sort key/,
+        (e: any) =>
+          /is not a sort key/.test(e.message) && e.queryCode === 'unknown-key',
       );
     }
   });

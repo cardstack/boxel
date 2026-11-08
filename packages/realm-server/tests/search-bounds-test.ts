@@ -10,6 +10,7 @@ import {
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
   SearchBoundError,
+  InvalidQueryError,
   DEFAULT_SEARCH_PAGE_SIZE,
   MAX_SEARCH_PAGE_SIZE,
   QUERY_FIELD_DEFAULT_PAGE_SIZE,
@@ -169,6 +170,34 @@ module(basename(import.meta.filename), function (hooks) {
     test('the field default is explicit, so the server default never shrinks it', function (assert) {
       let query = normalize({ filter: { eq: { name: 'x' } } });
       assert.strictEqual(applyServerSearchPageBound(query), query);
+    });
+
+    test("a field's query is refused for the engine's internal sort keys, on every leg", function (assert) {
+      // The indexer runs a field's query in-process and the client sends it
+      // over the wire; both normalize it here, so both refuse it alike.
+      for (let sort of [
+        [{ by: '_blend', of: [{ by: 'name' }] }],
+        [{ by: '_expr', expr: 'rating * 2' }],
+        [{ by: '_blend', of: [{ by: '_when', when: { eq: { name: 'x' } } }] }],
+        [{ by: '_relevance' }],
+        [{ by: '_matchRelevance' }],
+      ]) {
+        assert.throws(
+          () => normalize({ filter: { eq: { name: 'x' } }, sort }),
+          (e: unknown) =>
+            e instanceof InvalidQueryError &&
+            e.code === 'unknown-key' &&
+            /is not a sort key/.test(e.message),
+          JSON.stringify(sort),
+        );
+      }
+      assert.ok(
+        normalize({
+          filter: { eq: { name: 'x' } },
+          sort: [{ blend: [{ by: 'name' }] }],
+        }),
+        'the public spelling is read',
+      );
     });
 
     test('the override lowers the field default', function (assert) {
