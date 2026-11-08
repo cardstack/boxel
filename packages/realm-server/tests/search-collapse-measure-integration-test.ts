@@ -1548,6 +1548,64 @@ module(basename(import.meta.filename), function (hooks) {
         }),
       (e: any) => e.queryCode === 'unknown-function' && /SUMM/.test(e.message),
     );
+    let refused = (query: unknown, code: string, pattern: RegExp) =>
+      assert.throws(
+        () => parseSearchEntryQueryFromPayload(query),
+        (e: any) => e.queryCode === code && pattern.test(e.message),
+        String(pattern),
+      );
+    let textual = 'IF(ISNUMBER(SEARCH("a", title)), 1, 0)';
+    refused(
+      { type: on, sort: [{ formula: 42 }] },
+      'invalid-formula',
+      /non-empty string/,
+    );
+    refused(
+      { type: on, sort: [{ formula: 'hnScore', placement: 'gpu' }] },
+      'invalid-formula',
+      /"sql" or "top"/,
+    );
+    refused(
+      { type: on, sort: [{ formula: textual, placement: 'sql' }] },
+      'formula-placement',
+      /cannot run as SQL/,
+    );
+    refused(
+      { type: on, sort: [{ by: 'hnScore' }, { formula: textual }] },
+      'formula-placement',
+      /must be the first sort key/,
+    );
+    refused(
+      { type: on, sort: [{ formula: textual }], collapse: 'channel' },
+      'formula-placement',
+      /collapse/,
+    );
+    refused(
+      {
+        type: on,
+        sort: [{ formula: textual }],
+        rerank: { expr: 'hnScore', top: 50 },
+      },
+      'formula-placement',
+      /already has a rerank/,
+    );
+    refused(
+      {
+        type: on,
+        sort: [{ blend: [{ by: 'hnScore' }, { formula: textual }] }],
+      },
+      'formula-placement',
+      /in a blend runs as SQL/,
+    );
+    let sqlPlaced = parseSearchEntryQueryFromPayload({
+      type: on,
+      sort: [{ by: 'hnScore' }, { formula: 'hnScore * 2', placement: 'sql' }],
+    });
+    assert.strictEqual(
+      (sqlPlaced.itemQuery.sort as any)[1].by,
+      '_expr',
+      'a formula that compiles may come after another key',
+    );
     let { titles } = await search({
       filter: { on, eq: { Channel: 'GOTO' } },
       sort: [{ on, by: 'HnScore', direction: 'desc' }],
@@ -1558,6 +1616,28 @@ module(basename(import.meta.filename), function (hooks) {
       (e: any) => e.code === 'unknown-field' && /channel/.test(e.message),
     );
   });
+  test('a formula that overflows in SQL runs over the top window instead', async function (assert) {
+    let plain = await search({
+      filter: { type: on },
+      sort: [{ by: '_expr', expr: 'hnScore * 2', direction: 'desc' }],
+    } as Query);
+    assert.strictEqual(plain.meta.formula?.placement, 'sql');
+    // 1e300 squared is past a double: Postgres raises, JavaScript gives #NUM!
+    let { titles, meta } = await search({
+      filter: { type: on },
+      sort: [
+        {
+          by: '_expr',
+          expr: 'IF(hnScore > 25, 1e300 * 1e300, hnScore)',
+          direction: 'desc',
+        },
+      ],
+    } as Query);
+    assert.strictEqual(meta.formula?.placement, 'top');
+    assert.ok(/overflows/.test(meta.formula?.reason ?? ''), 'it says why');
+    assert.ok(titles.length > 0, 'the search still answers');
+  });
+
   test('unknown members are refused with a code and the nearest name', function (assert) {
     let refused = (query: unknown, code: string, pattern?: RegExp) =>
       assert.throws(

@@ -139,7 +139,10 @@ import {
   resolveQueryLabels,
   usesNewSyntax,
 } from './query-syntax.ts';
-import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
+import {
+  BXL_FORMULA_FUNCTIONS,
+  type PreparedSpreadsheetFormula,
+} from '@cardstack/bxl/compiler';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -1453,6 +1456,8 @@ export class IndexQueryEngine {
       out.meta.lets = { ...(out.meta.lets ?? {}), ...resolved.letMeta };
       return out;
     }
+    // the projection as asked for, before a leading formula adds its column
+    let askedSelect = selectClauseExpression;
     if (rerank) {
       let reranked = await this.#reranked(
         realmURL,
@@ -1937,6 +1942,45 @@ export class IndexQueryEngine {
             page: { total: 0 },
           },
         };
+      }
+      // A formula whose value overflows (or underflows) a double makes
+      // Postgres raise rather than give a number. Run it over the top window
+      // instead, where such a value is #NUM!, rather than failing the search.
+      let leading = Array.isArray(sort) ? sort[0] : undefined;
+      if (
+        leading &&
+        isExprSort(leading) &&
+        !rerank &&
+        /value out of range: (overflow|underflow)/.test(
+          String((error as Error)?.message),
+        )
+      ) {
+        let out = await this._search(
+          realmURL,
+          {
+            filter,
+            sort: (sort as Sort).slice(1),
+            page,
+            facets,
+            collapse,
+            let: lets,
+            explain,
+            rerank: {
+              expr: leading.expr,
+              top: MAX_RERANK_TOP,
+              ...(leading.direction ? { direction: leading.direction } : {}),
+            },
+          },
+          opts,
+          askedSelect,
+          entryType,
+          conditionalLiveDoc,
+        );
+        out.meta.formula = {
+          placement: 'top',
+          reason: 'its value overflows a number in SQL',
+        };
+        return out;
       }
       throw error;
     }
@@ -6476,10 +6520,12 @@ function summarize(xs: number[]): Record<string, number | null> {
 }
 
 // A `rerank` formula's number for each search doc, or null where it has
-// none. The formula is BXL with every Excel function (the lazily loaded
-// statistical, financial and engineering ones too), compiled once with the
-// docs' own field names as its labels so `rating` reads `.rating`, and run in
-// BXL's sandbox under a per-row and a total time budget.
+// none. A spreadsheet formula runs with Excel's rules for blanks and errors,
+// the same rules a formula placed in SQL follows; any function beyond the
+// interpreter's own (the lazily loaded statistical, financial and
+// engineering ones too) runs in BXL's sandbox. Any other BXL is compiled once
+// with the docs' own field names as its labels, so `rating` reads `.rating`.
+// Both run under a per-row and a total time budget.
 let formulaExtensions: Promise<void> | undefined;
 async function scoreWithBxl(
   expr: string,
@@ -6503,6 +6549,40 @@ async function scoreWithBxl(
       keys.add(key);
     }
   }
+  let limits = { maxMillis: 20, maxSteps: 100_000, maxOutputs: 4 };
+  let deadline = Date.now() + 1000;
+  // A spreadsheet formula runs with Excel's rules for blanks and errors, the
+  // ones its SQL follows; a function outside the interpreter's own runs in
+  // BXL, one call at a time.
+  let spreadsheet: PreparedSpreadsheetFormula | undefined;
+  try {
+    spreadsheet = bxl.prepareSpreadsheetFormula(expr, {
+      callFunction(name, arity) {
+        let fields = Array.from({ length: arity }, (_, i) => `a${i}`);
+        let call;
+        try {
+          call = bxl.prepareBxl(`${name}(${fields.join(', ')})`, {
+            schema: { fields: fields.map((key) => ({ key, label: key })) },
+          });
+        } catch {
+          return undefined;
+        }
+        return (args) =>
+          call.evaluate(
+            Object.fromEntries(args.map((a, i) => [fields[i], a])),
+            { runtimeLimits: limits },
+          ).value;
+      },
+    });
+  } catch (e) {
+    if (!(e instanceof bxl.SpreadsheetFormulaUnsupported)) throw e;
+  }
+  if (spreadsheet) {
+    let now = new Date();
+    return docs.map((doc) =>
+      Date.now() > deadline ? null : spreadsheet!.evaluate(doc, { now }),
+    );
+  }
   let prepared;
   try {
     prepared = bxl.prepareBxl(expr, {
@@ -6513,15 +6593,12 @@ async function scoreWithBxl(
       `rerank: the formula does not compile: ${(e as Error).message}`,
     );
   }
-  let deadline = Date.now() + 1000;
   return docs.map((doc) => {
     if (Date.now() > deadline) {
       return null;
     }
     try {
-      let value = prepared.evaluate(doc, {
-        runtimeLimits: { maxMillis: 20, maxSteps: 100_000, maxOutputs: 4 },
-      }).value;
+      let value = prepared.evaluate(doc, { runtimeLimits: limits }).value;
       if (typeof value === 'boolean') return value ? 1 : 0;
       let n =
         typeof value === 'number'

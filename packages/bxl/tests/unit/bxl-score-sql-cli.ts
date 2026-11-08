@@ -1,4 +1,4 @@
-import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
+import { deepStrictEqual, ok, throws } from 'node:assert';
 import {
   BXL_SCORE_FUNCTIONS,
   BxlScoreSqlError,
@@ -23,38 +23,53 @@ check(() => {
   let r = compileBxlScoreToSql('rating / LN(priceMin + 1)', { fieldToSql });
   deepStrictEqual(r.fields, ['rating', 'priceMin']);
   ok(r.sql.includes('number:rating'), 'bare names are fields');
-  ok(r.sql.includes('NULLIF('), 'a division by zero is NULL, not an error');
   ok(
-    r.sql.includes('> 0 THEN ln('),
-    'the log of a non-positive number is NULL',
+    r.sql.startsWith('NULLIF('),
+    'an error (NaN) has no score, as a blank (NULL) has none',
+  );
+  ok(
+    r.sql.includes(", 0)), 'NaN'::double precision)"),
+    'a division by zero is an error, not a blank',
+  );
+  ok(
+    r.sql.includes('ln(NULLIF(GREATEST('),
+    'the log of a non-positive number is an error',
   );
 });
 
 check(() => {
-  strictEqual(
-    sql('.rating * 2'),
-    '(number:rating * (2::double precision))',
-    'jq paths are fields too',
+  ok(
+    sql('.rating * 2').includes(
+      '(COALESCE(number:rating, 0) * (2::double precision))',
+    ),
+    'jq paths are fields too, and a blank is 0 in arithmetic',
   );
   ok(sql('brand.name').includes('number:brand.name'), 'dotted fields');
   ok(sql('rating^2').includes('power('), '^ is POWER');
 });
 
 check(() => {
-  let s = sql('IF(discountPercent >= 20, rating * 1.2, rating)');
-  ok(s.startsWith('(CASE WHEN (number:discountPercent >= '));
   ok(
-    sql('IFERROR(reviewCount / views30d, 0)').startsWith('COALESCE('),
-    'IFERROR catches the NULL an error became',
-  );
-  ok(
-    sql('IF(AND(inStock, onSale), 2, 1)').includes(
-      '(COALESCE(number:inStock, 0) <> 0) AND',
+    sql('IF(discountPercent >= 20, rating * 1.2, rating)').includes(
+      'compare:discountPercent',
     ),
-    'a number is true when non-zero',
+    'a field compared reads text as above every number',
   );
-  ok(sql('MAX(rating, 3)').startsWith('GREATEST('), 'MAX skips blanks');
+  let iferror = sql('IFERROR(reviewCount / views30d, 0)');
+  ok(
+    iferror.includes('NULLIF(COALESCE(NULLIF(COALESCE('),
+    'IFERROR catches an error, and only an error: a blank passes through',
+  );
+  ok(
+    sql('IFERROR(rating, 0)').includes('passthrough:rating'),
+    "IFERROR keeps a field's text as a value",
+  );
+  ok(
+    sql('MAX(rating, 3)').includes('GREATEST(aggregate:rating'),
+    'MAX reads only the numbers of a field it reads directly',
+  );
   ok(sql('ROUND(rating, 1)').includes('round(CAST('), 'ROUND keeps its digits');
+  ok(sql('NOT(rating)').includes('WHEN 0 THEN 1 ELSE 0'), 'NOT runs in SQL');
 });
 
 check(() => {

@@ -60,6 +60,15 @@ export {
   type BxlScoreSqlResult,
   type BxlScoreSqlUsage,
 } from './bxl/sql/score.ts';
+export {
+  prepareSpreadsheetFormula,
+  SpreadsheetError,
+  SpreadsheetFormulaUnsupported,
+  type PreparedSpreadsheetFormula,
+  type SpreadsheetFormulaOptions,
+  type SpreadsheetFunction,
+  type SpreadsheetValue,
+} from './bxl/sql/formula-eval.ts';
 
 export type {
   ReadableSchema,

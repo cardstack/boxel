@@ -275,10 +275,14 @@ Ranks are positions, not raw scores, so signals on different scales (text releva
 
 A `formula` sort ranks by a spreadsheet formula over each card's fields: `{ formula: 'rating / LN(priceMin + 1)' }`, highest first unless `direction` is `asc`. The engine places it:
 
-- **In SQL, over every match**, when the formula is in BXL's score profile ([`packages/bxl/docs/score-sql.md`](../packages/bxl/docs/score-sql.md)): numbers, field names, arithmetic, comparisons and `IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, `NOW` and the like. It orders the whole set, pages and collapses like any sort. As in Excel, a division by zero or a missing field is an error value rather than a failure: the card ranks last, and `IFERROR` gives it a value instead.
-- **Over the top window** (the query's first 500 rows), when it uses a function the profile does not (text, statistical, financial): the realm runs it there with every Excel function, as a `rerank` does. `placement: 'top'` asks for this placement.
+- **In SQL, over every match**, when the formula is in BXL's score profile ([`packages/bxl/docs/score-sql.md`](../packages/bxl/docs/score-sql.md)): numbers, field names, arithmetic, comparisons and `IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, `NOW` and the like. It orders the whole set, pages and collapses like any sort.
+- **Over the top window** (the query's first 500 rows), when it uses a function the profile does not (text, statistical, financial): the realm runs it there with every Excel function, as a `rerank` does. `placement: 'top'` asks for this placement, and `placement: 'sql'` insists on the first; a formula that cannot run as SQL is then refused.
 
-`meta.formula` says where it ran (`{ "placement": "sql" }`, or `"top"` with the `reason`), and each result carries its value as `meta._formula`. A function BXL does not know is refused (`unknown-function`), naming it. Inside a `blend`, a formula is a signal with a `weight` (in SQL only), and `explain` names it by its text.
+Both places follow Excel's rules for blanks and errors, so a formula ranks the same wherever it runs. A missing field is 0 in arithmetic and in a comparison, and `IF` on it takes the else branch. `MIN`, `MAX` and `AVERAGE` skip it. A division by zero or the log of a non-positive number is an error that propagates until `IFERROR` catches it, and `IFERROR` catches only errors, not blanks. A card whose formula ends blank or an error ranks last. A value too large for SQL makes the realm run the formula over the top window rather than fail the search.
+
+A formula over the top window re-ranks what the rest of the query found, so it must be the first sort key, and it is refused beside a `collapse` or a `rerank` of the query's own (`formula-placement`, saying why the formula is there). A formula that isn't a non-empty string is refused (`invalid-formula`), and so is a function BXL does not know (`unknown-function`), naming it.
+
+`meta.formula` says where it ran (`{ "placement": "sql" }`, or `"top"` with the `reason`), and each result carries its value as `meta._formula`. Inside a `blend`, a formula is a signal with a `weight`; it runs in SQL only, so one that cannot is refused (`formula-placement`). `explain` names it by its text.
 
 ```js
 sort: [
@@ -295,7 +299,7 @@ Postgres only.
 
 ### Re-ranking the top with any formula (`rerank`)
 
-A formula in SQL can use only the functions Postgres can compute. `rerank` is the second layer: the query ranks as it would (filter, sort, `let`, `collapse`), the realm takes its first `top` rows (default 100, at most 500), evaluates a BXL formula over each row's fields with every Excel function (text, statistical and financial ones included) in BXL's sandbox, and orders those rows by the value, highest first unless `direction` is `asc`. A row whose formula gives no number (an error, a missing field) keeps its place after the ones that do. Pages read the re-ranked window; a page that starts past it keeps the query's order. Each re-ranked row carries `meta._rerank`, and `meta.rerank` reports the window and how many rows got a number.
+A formula in SQL can use only the functions Postgres can compute. `rerank` is the second layer: the query ranks as it would (filter, sort, `let`, `collapse`), the realm takes its first `top` rows (default 100, at most 500), evaluates a BXL formula over each row's fields with every Excel function (text, statistical and financial ones included) in BXL's sandbox, and orders those rows by the value, highest first unless `direction` is `asc`. A spreadsheet formula there follows the same rules for blanks and errors as a `formula` in SQL. A row whose formula gives no number (an error, a missing field) keeps its place after the ones that do. Pages read the re-ranked window; a page that starts past it keeps the query's order. Each re-ranked row carries `meta._rerank`, and `meta.rerank` reports the window and how many rows got a number.
 
 ```js
 rerank: { expr: 'IF(ISNUMBER(SEARCH("organic", title)), 1.2, 1) * rating', top: 200 }

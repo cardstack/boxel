@@ -21,12 +21,21 @@ Anything else is refused with the reason: text values and text functions (`LEN`,
 
 ## Excel's semantics, in SQL
 
-- **Errors are NULL.** Division by zero, the log or square root of a number out of range, an overflowing `EXP` or `POWER`, and a missing or non-numeric field all yield NULL rather than a database error. `IFERROR` and `IFNA` catch it, so `IFERROR(reviews / views, 0)` behaves as in Excel.
-- **Blanks are skipped.** `MIN`, `MAX` and `AVERAGE` ignore missing values, as Excel's do, so `MAX(DAYS(NOW(), publishedAt), 7)` is 7 for a record with no date.
-- **Truthiness.** A number is true when it is non-zero, and a boolean field reads as 1 or 0.
+Blanks and errors follow Excel's rules, and stay apart: a blank (a missing field, or null) is SQL NULL, and an error is NaN.
+
+- **A blank is 0** in arithmetic and in a comparison, so `rating * 2` is 0 and `rating = 0` is true for a record with no rating. `IF` on a blank takes the else branch, and `NOT` of a blank is true.
+- **Blanks are skipped** by `MIN`, `MAX` and `AVERAGE`, and a field they read directly gives only its numbers, as Excel skips the rest of a range. `MAX(DAYS(NOW(), publishedAt), 7)` is 7 for a record with no date.
+- **Errors propagate.** Division by zero, the log or square root of a number out of range, an overflowing `EXP` or `POWER`, and a field holding text, a list or an object in arithmetic are errors. An error passes through arithmetic, comparisons, `IF`'s condition and `AND`, `OR` and `NOT`.
+- **`IFERROR` catches errors only.** A blank passes through it, so `IFERROR(rating, 5)` is blank for a record with no rating. `IFNA` catches `#N/A` only, which nothing in this profile raises.
+- **Text.** A field holding text that spells a number reads as that number in arithmetic. In a comparison, text ranks above every number and equals none.
+- **Truthiness.** A number is true when it is non-zero, and a boolean field reads as 1 or 0, in a comparison too.
 - **Rounding.** `ROUND` rounds half away from zero; `ROUNDUP` and `ROUNDDOWN` round away from and toward zero. The digits must be a literal whole number from -15 to 15.
 
-A row whose formula is NULL ranks last in an `_expr` sort, and gains nothing from it as a `_blend` signal.
+A formula whose value is blank or an error has no score: it ranks last in an `_expr` sort and gains nothing from it as a `_blend` signal. A value past a double's range makes Postgres raise rather than return; a Boxel search then runs the formula over the top window instead.
+
+`prepareSpreadsheetFormula` computes the same values in JavaScript, for the formulas a database cannot run: it knows the operators and the functions above (and `SUM`, `COUNT`, `IFS` and the `IS…` tests), and hands any other function to the caller after an error among its arguments has become the result. The realm-server suite `formula-parity-test.ts` runs every formula in a matrix of records both ways and requires the same value.
+
+Each value is read once where Postgres allows it: a simple `CASE`'s operand, `NULLIF` and `COALESCE` evaluate once, and `GREATEST` ranks NaN above every number. So `MAX` is `GREATEST`, `MIN` is the negated `GREATEST` of the negatives, and a comparison is a `CASE` on the sign of the difference.
 
 ## API
 
@@ -37,7 +46,8 @@ const { sql, fields } = compileBxlScoreToSql(
   'IFERROR(rating / LN(priceMin + 1), 0)',
   {
     fieldToSql(parts, usage) {
-      // usage is 'number' (NULL unless the value is a number) or 'timestamp'
+      // usage is 'number', 'passthrough', 'compare', 'aggregate' or
+      // 'timestamp': see BxlScoreSqlUsage
       return usage === 'number'
         ? `(data #>> '{${parts.join(',')}}')::double precision`
         : `(data #>> '{${parts.join(',')}}')::timestamptz`;

@@ -215,6 +215,20 @@ function lowerSignal(entry: any, type: CodeRef | undefined): any {
   }
   if ('formula' in entry) {
     let { formula, ...rest } = entry;
+    if (typeof formula !== 'string' || formula.trim() === '') {
+      throw new QuerySyntaxError(
+        'invalid-formula',
+        'formula: a formula is a non-empty string of BXL',
+      );
+    }
+    // a blend ranks every match by each signal, so its formula runs as SQL
+    let placed = placeFormula(formula, undefined);
+    if (placed.placement !== 'sql') {
+      throw new QuerySyntaxError(
+        'formula-placement',
+        `formula: a formula in a blend runs as SQL, and this one cannot: ${placed.reason}`,
+      );
+    }
     return { by: '_expr', expr: formula, ...rest };
   }
   return lowerFieldSort(entry, type);
@@ -361,11 +375,59 @@ function lowerQueryInto(
         });
       } else if (isObject(entry) && 'formula' in entry) {
         let { formula, placement, direction, ...more } = entry;
+        if (typeof formula !== 'string' || formula.trim() === '') {
+          throw new QuerySyntaxError(
+            'invalid-formula',
+            'formula: a formula is a non-empty string of BXL',
+          );
+        }
+        if (
+          placement !== undefined &&
+          placement !== 'sql' &&
+          placement !== 'top'
+        ) {
+          throw new QuerySyntaxError(
+            'invalid-formula',
+            `formula: placement is "sql" or "top", not ${JSON.stringify(placement)}`,
+          );
+        }
         let placed =
           placement === 'top'
             ? { placement: 'top' as const, reason: 'asked for' }
             : placeFormula(formula, opts.knownFunctions);
         if (placement === 'top') placeFormula(formula, opts.knownFunctions);
+        if (placement === 'sql' && placed.placement !== 'sql') {
+          throw new QuerySyntaxError(
+            'formula-placement',
+            `formula: placement "sql" was asked for, but the formula cannot run as SQL: ${placed.reason}`,
+          );
+        }
+        if (placed.placement === 'top') {
+          // over the top window, the formula orders the rows the rest of the
+          // query found; it is the first key, and the only re-ranking
+          let why =
+            placement === 'top'
+              ? ''
+              : ` (it runs over the top window because ${placed.reason})`;
+          if (query.sort.indexOf(entry) > 0) {
+            throw new QuerySyntaxError(
+              'formula-placement',
+              `formula: a formula over the top window must be the first sort key${why}`,
+            );
+          }
+          if (query.rerank !== undefined) {
+            throw new QuerySyntaxError(
+              'formula-placement',
+              `formula: a formula over the top window re-ranks the query, which already has a rerank${why}`,
+            );
+          }
+          if (query.collapse !== undefined) {
+            throw new QuerySyntaxError(
+              'formula-placement',
+              `formula: a formula over the top window cannot be combined with collapse${why}`,
+            );
+          }
+        }
         notes.formula = placed;
         if (placed.placement === 'sql') {
           sort.push({
@@ -380,7 +442,6 @@ function lowerQueryInto(
             expr: formula,
             top: DEFAULT_FORMULA_TOP,
             ...(direction ? { direction } : {}),
-            ...(query.rerank ?? {}),
           };
         }
       } else {

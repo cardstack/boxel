@@ -9,21 +9,46 @@
 //   ABS, SIGN, SQRT, POWER, EXP, LN, LOG, LOG10, MIN, MAX, AVERAGE, FLOOR,
 //   CEILING, DAYS, NOW, TODAY
 //
-// Anything else is refused with the reason. Excel's errors become NULL: a
-// division by zero, the log of a non-positive number or a missing field
-// yields NULL rather than a database error, and IFERROR / IFNA catch it as
-// Excel does. A row whose score is NULL ranks last (or, in a blend, gets
-// nothing from the signal).
+// Anything else is refused with the reason. Blanks and errors follow Excel,
+// and stay apart: a blank (a missing field) is SQL NULL and an error is NaN.
+//
+// - A blank is 0 in arithmetic and in a comparison, so `rating * 2` is 0 and
+//   `rating = 0` is true for a card with no rating. IF on a blank takes the
+//   else branch; NOT of a blank is true.
+// - MIN, MAX and AVERAGE skip blanks, and a field they read directly skips
+//   anything that is not a number, as Excel skips them in a range.
+// - A division by zero, the log of a non-positive number, the root of a
+//   negative one or an overflow is an error, and an error propagates through
+//   arithmetic, comparisons, IF's condition and AND / OR / NOT.
+// - IFERROR catches errors only: a blank passes through it. IFNA catches #N/A
+//   only, which nothing in this profile raises.
+// - A field holding text, a list or an object is #VALUE! in arithmetic.
+//
+// The formula's value is NULL when it is blank or an error, so such a row
+// ranks last (or, in a blend, gets nothing from the signal).
+// `evaluateSpreadsheetFormula` (formula-eval.ts) computes the same values in
+// JavaScript, for the formulas a database cannot run.
 //
 // Numbers are inlined (they are checked finite), so the result needs no
 // parameters; fields reach the SQL only through `fieldToSql`.
 import { parseBxlAst, type BxlAstNode } from '../ast/index.ts';
 
-export type BxlScoreSqlUsage = 'number' | 'timestamp';
+// `number`: a number, NULL for a blank, NaN (an error) for anything else.
+// `aggregate`: a number, NULL for anything else (MIN, MAX and AVERAGE skip it).
+// `passthrough`: as `number`, but text that is not a number is NULL
+// (IFERROR's value keeps text, and text has no score).
+// `compare`: as `number`, but text is +Infinity, since Excel ranks text above
+// every number (and never equal to one) rather than raising an error.
+// `timestamp`: a date, NULL for anything else.
+export type BxlScoreSqlUsage =
+  | 'number'
+  | 'passthrough'
+  | 'compare'
+  | 'aggregate'
+  | 'timestamp';
 
 export interface BxlScoreSqlOptions {
-  // The SQL for a field, read as a number (NULL unless the value is one) or
-  // as a timestamp (NULL unless it is a date).
+  // The SQL for a field, read as `usage` says.
   fieldToSql: (parts: string[], usage: BxlScoreSqlUsage) => string;
 }
 
@@ -73,11 +98,12 @@ const FUNCTIONS = new Set<string>(BXL_SCORE_FUNCTIONS);
 const FIELD_KEY = /^[A-Za-z_$][\w$]*$/;
 const MAX_SOURCE_LENGTH = 2000;
 const MAX_NODES = 200;
+// IF and the error checks read an argument more than once, so nesting grows
+// the SQL; past this it is refused, and the formula runs over the top window.
+const MAX_SQL_LENGTH = 100_000;
 
-export function compileBxlScoreToSql(
-  source: string,
-  options: BxlScoreSqlOptions,
-): BxlScoreSqlResult {
+// A formula's syntax tree, with the profile's limits on its size.
+export function parseScoreFormula(source: string): BxlAstNode {
   if (typeof source !== 'string' || source.trim() === '') {
     throw new BxlScoreSqlError('A score formula cannot be empty.');
   }
@@ -97,14 +123,30 @@ export function compileBxlScoreToSql(
   if (!program.body) {
     throw new BxlScoreSqlError('A score formula cannot be empty.');
   }
+  return program.body;
+}
+
+export function compileBxlScoreToSql(
+  source: string,
+  options: BxlScoreSqlOptions,
+): BxlScoreSqlResult {
+  let body = parseScoreFormula(source);
   let compiler = new ScoreCompiler(options);
-  let sql = compiler.number(program.body);
+  let value = compiler.number(body);
+  // an error has no score, as a blank has none
+  let sql = `NULLIF(${value}, ${ERR})`;
+  if (sql.length > MAX_SQL_LENGTH) {
+    throw new BxlScoreSqlError(
+      'The formula is too deeply nested to run as SQL.',
+    );
+  }
   return { sql, fields: [...compiler.fields], source };
 }
 
 class ScoreCompiler {
   fields = new Set<string>();
   #nodes = 0;
+  #memo = new Map<BxlAstNode, Map<BxlScoreSqlUsage, string>>();
   private options: BxlScoreSqlOptions;
   constructor(options: BxlScoreSqlOptions) {
     this.options = options;
@@ -118,12 +160,24 @@ class ScoreCompiler {
     }
   }
 
-  // A numeric SQL expression (double precision, NULL for Excel errors).
-  number(node: BxlAstNode): string {
+  // A numeric SQL expression (double precision): NULL for a blank, NaN for
+  // an error.
+  number(node: BxlAstNode, usage: BxlScoreSqlUsage = 'number'): string {
+    // a node read twice (inside a CASE) is compiled and counted once
+    let memo = this.#memo.get(node);
+    let hit = memo?.get(usage);
+    if (hit !== undefined) return hit;
+    let sql = this.#number(node, usage);
+    if (!memo) this.#memo.set(node, (memo = new Map()));
+    memo.set(usage, sql);
+    return sql;
+  }
+
+  #number(node: BxlAstNode, usage: BxlScoreSqlUsage): string {
     this.#visit();
     let field = this.#fieldParts(node);
     if (field) {
-      return this.#field(field, 'number');
+      return this.#field(field, usage);
     }
     switch (node.type) {
       case 'literal':
@@ -144,33 +198,58 @@ class ScoreCompiler {
         );
       case 'unary':
         if (node.operator === '-') {
-          return `(-${this.number(node.expr)})`;
+          return `(-${num(this.number(node.expr))})`;
         }
         if (node.operator === '+') {
           return this.number(node.expr);
         }
         break;
-      case 'binary':
-        if (['+', '-', '*'].includes(node.operator)) {
-          return `(${this.number(node.left)} ${node.operator} ${this.number(node.right)})`;
+      case 'binary': {
+        let op = node.operator;
+        if (op === '+' || op === '-' || op === '*') {
+          let a = num(this.number(node.left));
+          let b = num(this.number(node.right));
+          return op === '*' ? mul(a, b) : add(op, a, b);
         }
-        if (node.operator === '/') {
-          return `(${this.number(node.left)} / NULLIF(${this.number(node.right)}, 0))`;
+        // the divisor is read once: NULLIF turns 0 into NULL, which the
+        // quotient keeps and COALESCE turns into #DIV/0!
+        if (op === '/') {
+          let a = num(this.number(node.left));
+          let b = num(this.number(node.right));
+          return `COALESCE(${div(a, `NULLIF(${b}, 0)`)}, ${ERR})`;
         }
-        if (node.operator === '%') {
-          return `(CAST(${this.number(node.left)} AS numeric) % NULLIF(CAST(${this.number(node.right)} AS numeric), 0))::double precision`;
+        if (op === '%') {
+          let a = num(this.number(node.left));
+          let b = num(this.number(node.right));
+          return `COALESCE((CAST(${a} AS numeric) % NULLIF(CAST(${b} AS numeric), 0))::double precision, ${ERR})`;
         }
-        if (isCondition(node)) {
-          return `(CASE WHEN ${this.condition(node)} THEN 1 ELSE 0 END)::double precision`;
+        if (op === 'and' || op === 'or') {
+          return this.#logical(op.toUpperCase() as 'AND' | 'OR', [
+            node.left,
+            node.right,
+          ]);
+        }
+        // NOT(x) arrives as `x | not`
+        if (
+          op === '|' &&
+          node.right.type === 'call' &&
+          node.right.name === 'not' &&
+          node.right.args.length === 0
+        ) {
+          return this.#call('NOT', [node.left]);
+        }
+        if (COMPARISONS[op]) {
+          return this.#compare(node, '1::double precision', FALSE);
         }
         break;
+      }
       case 'if': {
         let branches = [{ cond: node.cond, then: node.then }, ...node.elifs];
-        return `(CASE ${branches
-          .map(
-            (b) => `WHEN ${this.condition(b.cond)} THEN ${this.number(b.then)}`,
-          )
-          .join(' ')} ELSE ${node.else ? this.number(node.else) : 'NULL'} END)`;
+        let out = node.else ? this.number(node.else) : FALSE;
+        for (let b of branches.reverse()) {
+          out = this.#if(b.cond, this.number(b.then), out);
+        }
+        return out;
       }
       case 'call':
         return this.#call(node.name.toUpperCase(), this.#args(node));
@@ -180,39 +259,45 @@ class ScoreCompiler {
     );
   }
 
-  // A SQL boolean for IF, AND, OR, NOT and comparisons. A number counts as
-  // true when it is non-zero, as in Excel.
-  condition(node: BxlAstNode): string {
-    this.#visit();
-    if (node.type === 'binary') {
-      if (node.operator === 'and' || node.operator === 'or') {
-        return `(${this.condition(node.left)} ${node.operator.toUpperCase()} ${this.condition(node.right)})`;
-      }
-      let op = COMPARISONS[node.operator];
-      if (op) {
-        return `(${this.number(node.left)} ${op} ${this.number(node.right)})`;
-      }
+  // Each value below is read once: Postgres evaluates a simple CASE's
+  // operand once, NULLIF's and COALESCE's arguments once, and ranks NaN above
+  // every number, so GREATEST of anything with an error is the error.
+
+  // IF: an error in the condition is the result, a blank is false. A
+  // comparison goes into the CASE itself.
+  #if(condNode: BxlAstNode, then: string, otherwise: string): string {
+    if (condNode.type === 'binary' && COMPARISONS[condNode.operator]) {
+      return this.#compare(condNode, then, otherwise);
     }
-    if (node.type === 'call') {
-      let name = node.name.toUpperCase();
-      let args = this.#args(node);
-      if (name === 'AND' || name === 'OR') {
-        this.#arity(name, args, 1, Infinity);
-        return `(${args.map((a) => this.condition(a)).join(` ${name} `)})`;
-      }
-      if (name === 'NOT') {
-        this.#arity(name, args, 1, 1);
-        return `(NOT ${this.condition(args[0])})`;
-      }
-      if (name === 'ISBLANK') {
-        this.#arity(name, args, 1, 1);
-        return `(${this.number(args[0])} IS NULL)`;
-      }
-    }
-    if (node.type === 'literal' && node.valueType === 'boolean') {
-      return node.value ? 'TRUE' : 'FALSE';
-    }
-    return `(COALESCE(${this.number(node)}, 0) <> 0)`;
+    let cond = num(this.number(condNode));
+    return `(CASE ${cond} WHEN ${ERR} THEN ${ERR} WHEN 0 THEN ${otherwise} ELSE ${then} END)`;
+  }
+
+  // A comparison, by the sign of the difference: NaN when either side is an
+  // error, and a field's text (+Infinity) above every number.
+  #compare(
+    node: Extract<BxlAstNode, { type: 'binary' }>,
+    then: string,
+    otherwise: string,
+  ): string {
+    let a = num(this.number(node.left, 'compare'));
+    let b = num(this.number(node.right, 'compare'));
+    let signs = SIGNS[COMPARISONS[node.operator]];
+    // sign() of NaN is 0, so NaN becomes NULL first and NULL the code 2
+    return `(CASE COALESCE(sign(NULLIF(${a} - ${b}, ${ERR})), 2) WHEN 2 THEN ${ERR} ${signs.map((s) => `WHEN ${s} THEN ${then}`).join(' ')} ELSE ${otherwise} END)`;
+  }
+
+  // AND / OR: an error is the result, blanks are skipped, and with nothing
+  // left the result is #VALUE!. Each argument becomes 0 or 1 (NULL for a
+  // blank, NaN for an error); OR is the greatest of them, AND the least.
+  #logical(name: 'AND' | 'OR', args: BxlAstNode[]): string {
+    let codes = args.map(
+      (a) =>
+        `(CASE COALESCE(${this.number(a)}, ${BLANK}) WHEN ${BLANK} THEN NULL WHEN ${ERR} THEN ${ERR} WHEN 0 THEN 0 ELSE 1 END)::double precision`,
+    );
+    return name === 'OR'
+      ? `COALESCE(GREATEST(${codes.join(', ')}), ${ERR})`
+      : `COALESCE(-GREATEST(${codes.map((c) => `-${c}`).join(', ')}), ${ERR})`;
   }
 
   #call(name: string, args: BxlAstNode[]): string {
@@ -222,84 +307,118 @@ class ScoreCompiler {
       );
     }
     let n = (i: number) => this.number(args[i]);
+    // an argument as a number: a blank is 0, an error stays one
+    let v = (i: number) => num(n(i));
     switch (name) {
       case 'IF':
         this.#arity(name, args, 2, 3);
-        return `(CASE WHEN ${this.condition(args[0])} THEN ${n(1)} ELSE ${args[2] ? n(2) : '0::double precision'} END)`;
-      case 'IFERROR':
-      case 'IFNA':
+        return this.#if(args[0], n(1), args[2] ? n(2) : FALSE);
+      case 'IFERROR': {
         this.#arity(name, args, 2, 2);
-        return `COALESCE(${n(0)}, ${n(1)})`;
+        // a field's text is a value, not an error: it passes through. A
+        // blank stands as -Infinity (which no value is) so it is kept, an
+        // error becomes NULL and takes the fallback.
+        let x = this.number(args[0], 'passthrough');
+        return `NULLIF(COALESCE(NULLIF(COALESCE(${x}, ${BLANK}), ${ERR}), ${n(1)}), ${BLANK})`;
+      }
+      case 'IFNA':
+        // nothing in the score profile raises #N/A
+        this.#arity(name, args, 2, 2);
+        n(1);
+        return n(0);
       case 'ISBLANK':
+        this.#arity(name, args, 1, 1);
+        return `(CASE WHEN ${n(0)} IS NULL THEN 1 ELSE 0 END)::double precision`;
       case 'AND':
       case 'OR':
+        this.#arity(name, args, 1, Infinity);
+        return this.#logical(name, args);
       case 'NOT':
-        return `(CASE WHEN ${this.condition({ type: 'call', name, arity: args.length, args })} THEN 1 ELSE 0 END)::double precision`;
+        this.#arity(name, args, 1, 1);
+        return `(CASE ${v(0)} WHEN ${ERR} THEN ${ERR} WHEN 0 THEN 1 ELSE 0 END)::double precision`;
       case 'ROUND':
       case 'ROUNDUP':
       case 'ROUNDDOWN': {
         this.#arity(name, args, 1, 2);
         let digits = args[1] ? this.#integer(args[1], name) : 0;
         let scale = `power(10::double precision, ${digits})`;
-        let fn =
-          name === 'ROUND' ? 'round' : name === 'ROUNDUP' ? 'ceil' : 'floor';
-        // ROUNDUP / ROUNDDOWN round away from / toward zero, as in Excel.
-        let x = n(0);
-        return name === 'ROUND'
-          ? `(round(CAST(${x} AS numeric), ${digits})::double precision)`
-          : `(sign(${x}) * ${fn}(abs(${x}) * ${scale}) / ${scale})`;
+        let x = v(0);
+        // ROUND rounds half away from zero; ROUNDUP / ROUNDDOWN round away
+        // from / toward zero, as in Excel.
+        if (name === 'ROUND') {
+          return `(round(CAST(${x} AS numeric), ${digits})::double precision)`;
+        }
+        let fn = name === 'ROUNDUP' ? 'ceil' : 'floor';
+        return `(sign(${x}) * ${fn}(abs(${x}) * ${scale}) / ${scale})`;
       }
       case 'ABS':
       case 'SIGN':
         this.#arity(name, args, 1, 1);
-        return `${name.toLowerCase()}(${n(0)})`;
-      case 'SQRT':
+        return `${name.toLowerCase()}(${v(0)})`;
+      case 'SQRT': {
         this.#arity(name, args, 1, 1);
-        return `(CASE WHEN ${n(0)} >= 0 THEN sqrt(${n(0)}) END)`;
-      case 'POWER':
+        let x = v(0);
+        return `(CASE WHEN ${x} >= 0 THEN sqrt(${x}) ELSE ${ERR} END)`;
+      }
+      case 'POWER': {
         this.#arity(name, args, 2, 2);
-        return `(CASE WHEN ${n(0)} > 0 OR (${n(0)} = 0 AND ${n(1)} >= 0) OR (${n(0)} < 0 AND ${n(1)} = trunc(${n(1)})) THEN (CASE WHEN abs(${n(1)} * ln(GREATEST(abs(${n(0)}), 1e-300))) < 700 THEN power(${n(0)}, ${n(1)}) END) END)`;
+        let a = v(0);
+        let b = v(1);
+        return `(CASE WHEN ${isErr(a)} OR ${isErr(b)} THEN ${ERR} WHEN ${a} = 0 AND ${b} < 0 THEN ${ERR} WHEN ${a} = 0 AND ${b} = 0 THEN ${ERR} WHEN ${a} = 0 THEN 0::double precision WHEN ${a} < 0 AND ${b} <> trunc(${b}) THEN ${ERR} WHEN abs(${b} * ln(abs(${a}))) >= ${MAX_EXP} THEN ${ERR} ELSE power(${a}, ${b}) END)`;
+      }
       case 'EXP':
         this.#arity(name, args, 1, 1);
-        return `(CASE WHEN ${n(0)} < 700 THEN exp(${n(0)}) END)`;
+        // past the bound (and for NaN, which LEAST ranks above it) the value
+        // is the bound, which NULLIF makes NULL and COALESCE #NUM!
+        return `COALESCE(exp(NULLIF(LEAST(${v(0)}, ${MAX_EXP}), ${MAX_EXP})), ${ERR})`;
       case 'LN':
+      case 'LOG10': {
         this.#arity(name, args, 1, 1);
-        return `(CASE WHEN ${n(0)} > 0 THEN ln(${n(0)}) END)`;
-      case 'LOG10':
-        this.#arity(name, args, 1, 1);
-        return `(CASE WHEN ${n(0)} > 0 THEN log(${n(0)}) END)`;
+        // the argument is read once: a non-positive one becomes NULL
+        // (GREATEST, then NULLIF), the log keeps it and COALESCE makes it
+        // #NUM!; NaN passes through all three
+        return `COALESCE(${name === 'LN' ? 'ln' : 'log'}(NULLIF(GREATEST(${v(0)}, 0), 0)), ${ERR})`;
+      }
       case 'LOG': {
         this.#arity(name, args, 1, 2);
-        let base = args[1] ? n(1) : '10::double precision';
-        return `(CASE WHEN ${n(0)} > 0 AND ${base} > 0 AND ${base} <> 1 THEN ln(${n(0)}) / ln(${base}) END)`;
+        let x = v(0);
+        let base = args[1] ? v(1) : '10::double precision';
+        return `(CASE WHEN ${isErr(x)} OR ${isErr(base)} THEN ${ERR} WHEN ${x} <= 0 OR ${base} <= 0 OR ${base} = 1 THEN ${ERR} ELSE ln(${x}) / ln(${base}) END)`;
       }
       case 'MIN':
-      case 'MAX': {
-        this.#arity(name, args, 1, Infinity);
-        // Excel skips blanks: LEAST / GREATEST ignore NULLs.
-        return `${name === 'MIN' ? 'LEAST' : 'GREATEST'}(${args.map((a) => this.number(a)).join(', ')})`;
-      }
+      case 'MAX':
       case 'AVERAGE': {
         this.#arity(name, args, 1, Infinity);
-        let xs = args.map((a) => this.number(a));
-        let count = xs
-          .map((x) => `(CASE WHEN ${x} IS NULL THEN 0 ELSE 1 END)`)
-          .join(' + ');
-        let sum = xs.map((x) => `COALESCE(${x}, 0)`).join(' + ');
-        return `((${sum}) / NULLIF(${count}, 0))`;
+        // Excel skips blanks, and a field read directly skips any non-number
+        let xs = args.map((a) => this.number(a, 'aggregate'));
+        if (name === 'AVERAGE') {
+          // an error propagates through the sum
+          let count = xs
+            .map((x) => `(CASE WHEN ${x} IS NULL THEN 0 ELSE 1 END)`)
+            .join(' + ');
+          let sum = xs.map((x) => `COALESCE(${x}, 0)`).join(' + ');
+          return `COALESCE((${sum}) / NULLIF(${count}, 0), ${ERR})`;
+        }
+        // GREATEST skips NULLs and is NaN when any argument is; MIN is the
+        // greatest of the negatives, negated
+        return name === 'MAX'
+          ? `COALESCE(GREATEST(${xs.join(', ')}), 0)`
+          : `COALESCE(-GREATEST(${xs.map((x) => `-${x}`).join(', ')}), 0)`;
       }
       case 'FLOOR':
       case 'CEILING': {
         this.#arity(name, args, 1, 2);
         let fn = name === 'FLOOR' ? 'floor' : 'ceil';
-        if (!args[1]) return `${fn}(${n(0)})`;
-        return `(${fn}(${n(0)} / NULLIF(${n(1)}, 0)) * ${n(1)})`;
+        let x = v(0);
+        if (!args[1]) return `${fn}(${x})`;
+        let step = v(1);
+        return `(CASE WHEN ${step} = 0 THEN ${ERR} ELSE ${mul(`${fn}(${div(x, step)})`, step)} END)`;
       }
       case 'DAYS': {
         this.#arity(name, args, 2, 2);
         let end = this.#timestamp(args[0]);
         let start = this.#timestamp(args[1]);
-        return `(EXTRACT(EPOCH FROM (${end} - ${start})) / 86400.0)`;
+        return `(EXTRACT(EPOCH FROM (${end} - ${start})) / 86400.0)::double precision`;
       }
       case 'NOW':
       case 'TODAY':
@@ -417,14 +536,35 @@ const COMPARISONS: Record<string, string> = {
   '>=': '>=',
 };
 
-function isCondition(node: BxlAstNode): boolean {
-  return (
-    node.type === 'binary' &&
-    (node.operator === 'and' ||
-      node.operator === 'or' ||
-      node.operator in COMPARISONS)
-  );
-}
+// An error, as SQL: NaN. A blank is NULL.
+const ERR = `'NaN'::double precision`;
+const FALSE = '(0::double precision)';
+// A blank, where NULL cannot stand for one: no value is -Infinity.
+const BLANK = `'-Infinity'::double precision`;
+// For each comparison, the signs of (left - right) that make it true.
+const SIGNS: Record<string, number[]> = {
+  '=': [0],
+  '<>': [1, -1],
+  '<': [-1],
+  '<=': [-1, 0],
+  '>': [1],
+  '>=': [1, 0],
+};
+// Beyond this, exp() and power() overflow a double.
+const MAX_EXP = 709;
+// A value as a number: a blank is 0. A literal is never blank.
+const LITERAL = /^\(-?[\d.]+(e[-+]?\d+)?::double precision\)$/;
+const num = (x: string) => (LITERAL.test(x) ? x : `COALESCE(${x}, 0)`);
+// Whether a value is an error (NULL, not false, for a blank: CASE skips it).
+const isErr = (x: string) => (LITERAL.test(x) ? 'FALSE' : `(${x} = ${ERR})`);
+
+// NaN propagates through + - * and / without an error, so the operators
+// need no checks of their own. Postgres does raise one where a double
+// overflows or underflows; the engine then runs the formula over the top
+// window in JavaScript, where such a value is #NUM!.
+const mul = (a: string, b: string) => `(${a} * ${b})`;
+const div = (a: string, b: string) => `(${a} / ${b})`;
+const add = (op: '+' | '-', a: string, b: string) => `(${a} ${op} ${b})`;
 
 function flattenComma(node: BxlAstNode): BxlAstNode[] {
   if (node.type === 'binary' && node.operator === ',') {
