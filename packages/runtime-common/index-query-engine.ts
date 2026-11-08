@@ -2360,7 +2360,10 @@ export class IndexQueryEngine {
     ran: 'sql' | 'thread';
   }> {
     let deadline = Date.now() + rerankTimeBudgetMs();
-    if (this.#dbAdapter.kind === 'pg' && docs.length > 0) {
+    // `peers.` values are lists, which the SQL score profile reads as one
+    // number each, so a formula over them runs on the scorer.
+    let readsLists = /\bpeers\./.test(expr);
+    if (this.#dbAdapter.kind === 'pg' && docs.length > 0 && !readsLists) {
       let sql: string | undefined;
       try {
         sql = exprSortSql(expr);
@@ -2467,8 +2470,12 @@ export class IndexQueryEngine {
     void this.#ensureNeighborIndex(field, dims);
 
     let k = Math.min(compare.k ?? DEFAULT_NEAR_PEERS, MAX_NEAR_PEERS);
+    // The neighbours a row may have: those its comparison filter and, for a
+    // caller a policy scopes, its grants admit. They are applied inside the
+    // nearest-neighbour read, before its ORDER BY and LIMIT, so rows the
+    // caller cannot see never take an admitted neighbour's place.
     let allowed: Set<string> | undefined;
-    if (compare.filter) {
+    if (compare.filter || opts.grantFilter) {
       let { results } = await this._search(
         realmURL,
         { filter: compare.filter, let: query.let },
@@ -2481,7 +2488,7 @@ export class IndexQueryEngine {
     // The field path and dimension are inlined, checked, so the planner
     // matches the partial index; the iterative scan keeps reading the index
     // until enough rows of this realm turn up.
-    let fetchK = allowed ? Math.min(k * 4, 400) : k;
+    let fetchK = k;
     let vec = `::vector(${dims})`;
     let pairs = await this.#dbAdapter.withTransaction(async (q) => {
       try {
@@ -2498,8 +2505,15 @@ export class IndexQueryEngine {
                FROM boxel_index_vectors AS v
               WHERE v.field_path = '${field}' AND v.dims = ${dims}
                 AND v.realm_url = s.realm_url AND v.url <> s.url
-                AND v.type = 'instance'
-              ORDER BY v.embedding${vec} <=> s.embedding${vec}
+                AND v.type = 'instance'`,
+        ...(allowed
+          ? [
+              'AND v.url IN (SELECT jsonb_array_elements_text(',
+              param(JSON.stringify([...allowed])),
+              '::jsonb))',
+            ]
+          : []),
+        `ORDER BY v.embedding${vec} <=> s.embedding${vec}
               LIMIT ${fetchK}
            ) AS n
           WHERE s.field_path = '${field}' AND s.dims = ${dims} AND s.ordinal = 0

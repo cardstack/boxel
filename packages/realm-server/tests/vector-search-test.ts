@@ -1068,6 +1068,72 @@ module(basename(import.meta.filename), function () {
     );
 
     pgvectorTest(
+      "under a policy, rows the caller cannot see never take an admitted look-alike's place",
+      async function (assert) {
+        let visible = {
+          a: { title: 'a', views: 10, embedding: vec([1, 0, 0]) },
+          b: { title: 'b', views: 50, embedding: vec([0.99, 0.1, 0]) },
+          c: { title: 'c', views: 20, embedding: vec([0.98, 0.15, 0]) },
+          d: { title: 'd', views: 5, embedding: vec([0, 1, 0]) },
+          e: { title: 'e', views: 100, embedding: vec([0, 0.99, 0.1]) },
+        };
+        let grant = { on: momentRef, in: { title: Object.keys(visible) } };
+        let scored = async () => {
+          let { results, meta } = await engine.search(
+            new URL(testRealm),
+            {
+              filter: { type: momentRef },
+              rerank: {
+                expr: 'views / stats.views.median',
+                compare: {
+                  near: 'embedding',
+                  k: 2,
+                  minSimilarity: 0.5,
+                  filter: grant,
+                },
+              },
+            } as Query,
+            { grantFilter: grant },
+            { kind: 'renderSet' },
+          );
+          return {
+            rows: results.map((r: any) => [
+              r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
+              r._rerank == null ? null : Number(Number(r._rerank).toFixed(3)),
+            ]),
+            total: meta.page.total,
+          };
+        };
+        await index(visible);
+        let before = await scored();
+        // Ten hidden moments, each nearer to a, b and c than any visible one.
+        let hidden = Object.fromEntries(
+          Array.from({ length: 10 }, (_, i) => [
+            `h${i}`,
+            {
+              title: `hidden ${i}`,
+              views: 1_000_000,
+              embedding: vec([1, 0.001 * (i + 1), 0.0005]),
+            },
+          ]),
+        );
+        await index({ ...visible, ...hidden });
+        let after = await scored();
+        let [vectors] = await adapter.execute(
+          `SELECT count(*)::int AS n FROM boxel_index_vectors WHERE realm_url = $1`,
+          { bind: [testRealm] },
+        );
+        assert.strictEqual(vectors.n, 15, 'the hidden moments are indexed');
+        assert.deepEqual(
+          after,
+          before,
+          'the rows, their scores and the total are what they were',
+        );
+        assert.strictEqual(before.total, 5);
+      },
+    );
+
+    pgvectorTest(
       'rerank compares each card with its own look-alikes',
       async function (assert) {
         await index({
