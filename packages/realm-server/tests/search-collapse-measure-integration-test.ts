@@ -1066,7 +1066,7 @@ module(basename(import.meta.filename), function (hooks) {
         assertQuery({
           sort: [{ by: '_expr', on, expr: 'rating', near: [1] }],
         } as any),
-      /takes by, expr, on, direction and weight/,
+      /a formula sort takes formula, on, direction, weight and placement/,
     );
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },

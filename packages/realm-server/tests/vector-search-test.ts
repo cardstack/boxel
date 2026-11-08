@@ -471,7 +471,7 @@ module(basename(import.meta.filename), function () {
       } as any);
       assert.throws(
         () => assertQuery({ sort: [{ by: '_blend', of: [] }] } as any),
-        /needs an "of" array/,
+        /a blend needs an array of the sort entries/,
       );
       assert.throws(
         () =>

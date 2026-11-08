@@ -114,7 +114,6 @@ import {
   MAX_PEER_VALUES,
   DEFAULT_RERANK_TOP,
   MAX_RERANK_TOP,
-  EXPR_SORT_KEY,
   exprSortSql,
   isExprSort,
   type ResultExplanation,
@@ -1610,7 +1609,7 @@ export class IndexQueryEngine {
         let matches = collectPositiveMatchTerms(filter);
         if (matches.length === 0) {
           throw new InvalidQueryError(
-            `sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
+            `sort by textRelevance requires at least one positive \`matches\` filter`,
           );
         }
         if ((sort ?? []).some(isMatchRelevanceSort)) {
@@ -2663,9 +2662,7 @@ export class IndexQueryEngine {
   // only: the score profile lowers to Postgres functions.
   #exprSql(expr: string): string {
     if (this.#dbAdapter.kind !== 'pg') {
-      throw new InvalidQueryError(
-        `sort by "${EXPR_SORT_KEY}" runs on Postgres only`,
-      );
+      throw new InvalidQueryError(`a formula sort runs on Postgres only`);
     }
     return exprSortSql(expr);
   }

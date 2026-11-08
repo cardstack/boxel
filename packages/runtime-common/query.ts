@@ -9,6 +9,7 @@ import {
 import { InvalidQueryError } from './invalid-query-error.ts';
 import { lowerQuery, usesNewSyntax } from './query-syntax.ts';
 import { exprSortSql } from './formula-sql.ts';
+import type { MATCH_RELEVANCE_SORT_KEY, BLEND_SORT_KEY } from './index.ts';
 import {
   type CodeRef,
   isCodeRef,
@@ -16,8 +17,6 @@ import {
   isMatchRelevanceSort,
   isNearSort,
   isBlendSort,
-  MATCH_RELEVANCE_SORT_KEY,
-  BLEND_SORT_KEY,
 } from './index.ts';
 import {
   isVector,
@@ -1357,7 +1356,7 @@ export function assertQuery(
     collectPositiveMatchTerms(query.filter).length === 0
   ) {
     throw new InvalidQueryError(
-      `${pointer.join('/') || '/'}: sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
+      `${pointer.join('/') || '/'}: sort by textRelevance requires at least one positive \`matches\` filter`,
     );
   }
 }
@@ -1526,7 +1525,7 @@ function assertSortExpression(
     for (let key of Object.keys(sort)) {
       if (!['by', 'expr', 'on', 'direction', 'weight'].includes(key)) {
         throw new InvalidQueryError(
-          `${pointer.join('/') || '/'}: a ${EXPR_SORT_KEY} sort takes by, expr, on, direction and weight, not "${key}"`,
+          `${pointer.join('/') || '/'}: a formula sort takes formula, on, direction, weight and placement, not "${key}"`,
         );
       }
     }
@@ -1619,7 +1618,7 @@ function assertRelevanceSort(sort: any, pointer: string[]) {
   for (let key of Object.keys(sort)) {
     if (!['by', 'on', 'near', 'weights', 'direction'].includes(key)) {
       throw new InvalidQueryError(
-        `${where}/${key}: a ${RELEVANCE_SORT_KEY} sort takes by, on, near, weights and direction`,
+        `${where}/${key}: a relevance sort takes relevance (true or the weights), on, near and direction`,
       );
     }
   }
@@ -1629,17 +1628,25 @@ function assertBlendSort(sort: any, pointer: string[]) {
   let where = pointer.join('/') || '/';
   if (!Array.isArray(sort.of) || sort.of.length === 0) {
     throw new InvalidQueryError(
-      `${where}/of: a ${BLEND_SORT_KEY} sort needs an "of" array of the sort entries to fuse`,
+      `${where}/of: a blend needs an array of the sort entries to fuse`,
     );
   }
   if (sort.of.length > MAX_BLEND_COMPONENTS) {
     throw new InvalidQueryError(
-      `${where}/of: a ${BLEND_SORT_KEY} sort fuses at most ${MAX_BLEND_COMPONENTS} signals`,
+      `${where}/of: a blend fuses at most ${MAX_BLEND_COMPONENTS} signals, and this one has ${sort.of.length}; past the limit: ${sort.of
+        .slice(MAX_BLEND_COMPONENTS)
+        .map((e: any) =>
+          e?.by === EXPR_SORT_KEY
+            ? `formula "${e.expr}"`
+            : `"${String(e?.by ?? 'a signal').replace(/^_/, '')}"`,
+        )
+        .join(', ')}`,
+      'limit-exceeded',
     );
   }
   if ('method' in sort && sort.method !== 'rrf') {
     throw new InvalidQueryError(
-      `${where}/method: ${BLEND_SORT_KEY} supports method "rrf" (reciprocal rank fusion)`,
+      `${where}/method: a blend supports method "rrf" (reciprocal rank fusion)`,
     );
   }
   if (
@@ -1650,19 +1657,19 @@ function assertBlendSort(sort: any, pointer: string[]) {
   }
   if ('on' in sort) {
     throw new InvalidQueryError(
-      `${where}: a ${BLEND_SORT_KEY} sort takes no "on"; put "on" on its signals`,
+      `${where}: a blend takes no "on"; put "on" on its signals`,
     );
   }
   sort.of.forEach((component: any, i: number) => {
     let at = pointer.concat('of', String(i));
     if (component && isBlendSort(component)) {
       throw new InvalidQueryError(
-        `${at.join('/')}: a ${BLEND_SORT_KEY} sort cannot contain another`,
+        `${at.join('/')}: a blend cannot contain another blend`,
       );
     }
     if (component && isRelevanceSort(component)) {
       throw new InvalidQueryError(
-        `${at.join('/')}: a ${BLEND_SORT_KEY} sort cannot contain a ${RELEVANCE_SORT_KEY} sort, which is itself a blend`,
+        `${at.join('/')}: a blend cannot contain a relevance sort, which is itself a blend`,
       );
     }
     if (

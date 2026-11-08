@@ -335,7 +335,7 @@ module(basename(import.meta.filename), function (hooks) {
         assertQuery({
           sort: [{ by: '_blend', of: [{ by: '_relevance' }] }],
         }),
-      /cannot contain a _relevance sort/,
+      /cannot contain a relevance sort/,
     );
     assert.throws(
       () => assertQuery({ filter: { matches: 'x', scope: 'body' } }),
