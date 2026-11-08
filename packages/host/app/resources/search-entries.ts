@@ -679,10 +679,22 @@ export class SearchEntriesResource extends Resource<Args> {
                 (r.meta as { _explain: ResultExplanation })._explain,
               ]),
           );
+          // Under `rerank`, each result's formula value, by card id.
+          let reranks = Object.fromEntries(
+            (doc.data ?? [])
+              .filter(
+                (r) => (r.meta as { _rerank?: unknown })?._rerank !== undefined,
+              )
+              .map((r) => [
+                r.id,
+                (r.meta as { _rerank: number | null })._rerank,
+              ]),
+          );
           this._meta = {
             ...doc.meta,
             ...(realmTotals ? { realmTotals } : {}),
             ...(Object.keys(explanations).length ? { explanations } : {}),
+            ...(Object.keys(reranks).length ? { reranks } : {}),
           };
           this._entriesQuery = query;
           this.hasCompletedFullRun = true;

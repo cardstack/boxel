@@ -471,6 +471,8 @@ export interface QueryResultsMeta {
   // Filled by the host's search resource, never by the engine: under
   // `explain`, each result's `meta._explain` by card id.
   explanations?: Record<string, ResultExplanation>;
+  // Likewise each re-ranked result's formula value, by card id.
+  reranks?: Record<string, number | null>;
   // For a query with `rerank`: the window it re-ranked and how many of its
   // rows the formula gave a number.
   rerank?: { window: number; scored: number };
