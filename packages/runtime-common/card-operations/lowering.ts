@@ -1,6 +1,8 @@
 import { isPlainObject } from '../is-plain-object.ts';
 import { codeRefForDef, isResolvedCodeRef, type CodeRef } from '../code-ref.ts';
-import { getImmediateFieldDef } from '../definitions.ts';
+import { getFieldDef, getImmediateFieldDef } from '../definitions.ts';
+import { InvalidQueryError } from '../invalid-query-error.ts';
+import { resolveSavedQueryLabels, type FieldsAt } from '../query-syntax.ts';
 import type { Definition, FieldDefinition } from '../definitions.ts';
 import {
   bxlFieldPath,
@@ -629,11 +631,32 @@ async function lowerOperation(
     );
   }
   if (base === 'query') {
-    let query = lowerQueryTemplate(
-      (declaration as { query?: Record<string, unknown> }).query,
-      sink,
-      { codeRef: (value) => identify(value, context) },
-    );
+    // A saved search: its labels resolve now, against the types as they
+    // stand, and it is stored with bare paths, so a later schema change
+    // cannot make one ambiguous.
+    let declared = (declaration as { query?: Record<string, unknown> }).query;
+    if (declared) {
+      try {
+        declared = await resolveSavedQueryLabels(
+          declared,
+          fieldsAtFrom(context),
+          (anchor) => identify(anchor, context),
+        );
+      } catch (err: any) {
+        if (!(err instanceof InvalidQueryError)) throw err;
+        sink.add(
+          'invalid-query',
+          'query',
+          `\`query\` names a field the type does not have — ${err.message}`,
+        );
+        declared = undefined;
+      }
+    }
+    let query = declared
+      ? lowerQueryTemplate(declared, sink, {
+          codeRef: (value) => identify(value, context),
+        })
+      : undefined;
     if (query) {
       operation.query = query;
     }
@@ -751,6 +774,26 @@ function identify(
   context: LoweringContext,
 ): CodeRef | undefined {
   return codeRefForDef(value, context.identifyCard);
+}
+
+// The field names at one level of a type, read from definitions, for
+// resolving a saved query's labels (the engine reads them the same way).
+function fieldsAtFrom(context: LoweringContext): FieldsAt {
+  let lookup = async (ref: CodeRef) =>
+    isResolvedCodeRef(ref)
+      ? await context.lookupDefinition(ref).catch(() => undefined)
+      : undefined;
+  return async (type, prefix) => {
+    let definition = await lookup(type);
+    if (!definition) return undefined;
+    if (!prefix.length) return Object.keys(definition.fields);
+    let field = await getFieldDef(definition, prefix.join('.'), lookup).catch(
+      () => undefined,
+    );
+    if (!field || !isResolvedCodeRef(field.fieldOrCard)) return undefined;
+    let inner = await lookup(field.fieldOrCard);
+    return inner ? Object.keys(inner.fields) : undefined;
+  };
 }
 
 // ---------------------------------------------------------------------------

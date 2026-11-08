@@ -135,6 +135,7 @@ import {
   ensureQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
+  savedFieldQuery,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -1497,7 +1498,17 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly searchable: Searchable | undefined;
   searchIntent: FieldSearchOption | undefined;
   readonly configuration?: ConfigurationInput<any>;
-  readonly queryDefinition?: QueryWithInterpolations;
+  #declaredQuery?: QueryWithInterpolations;
+  #savedQuery?: QueryWithInterpolations;
+  // The field's query with its labels resolved against its target type, on
+  // first read (the type may not be defined yet when the field is).
+  get queryDefinition(): QueryWithInterpolations | undefined {
+    if (!this.#declaredQuery) return undefined;
+    return (this.#savedQuery ??= savedFieldQuery(
+      this.#declaredQuery,
+      () => this.card as unknown as typeof BaseDef,
+    ));
+  }
   readonly eager?: boolean;
   constructor({
     cardThunk,
@@ -1515,7 +1526,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     this.name = name;
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
-    this.queryDefinition = queryDefinition;
+    this.#declaredQuery = queryDefinition;
     this.eager = eager;
   }
 
@@ -1974,7 +1985,17 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   readonly searchable: Searchable | undefined;
   searchIntent: FieldSearchOption | undefined;
   readonly configuration?: ConfigurationInput<any>;
-  readonly queryDefinition?: QueryWithInterpolations;
+  #declaredQuery?: QueryWithInterpolations;
+  #savedQuery?: QueryWithInterpolations;
+  // The field's query with its labels resolved against its target type, on
+  // first read (the type may not be defined yet when the field is).
+  get queryDefinition(): QueryWithInterpolations | undefined {
+    if (!this.#declaredQuery) return undefined;
+    return (this.#savedQuery ??= savedFieldQuery(
+      this.#declaredQuery,
+      () => this.card as unknown as typeof BaseDef,
+    ));
+  }
   readonly eager?: boolean;
   constructor({
     cardThunk,
@@ -1992,7 +2013,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     this.name = name;
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
-    this.queryDefinition = queryDefinition;
+    this.#declaredQuery = queryDefinition;
     this.eager = eager;
   }
 

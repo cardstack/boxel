@@ -588,6 +588,138 @@ export async function resolveLabel(
   return out.join('.');
 }
 
+// Every field path a query names, in either grammar, rewritten by `map`:
+// filter operators' paths and `fields`, sort and signal `by`s, boost filters,
+// collapse, facets and a rerank's comparison `by`. `map` gets the path as
+// written and the type that anchors it (the nearest `on`, the query's
+// `type`, or `anchor`), and returns the path to store. Values, `on`/`type`
+// refs and the engine's own sort keys are left alone. A saved query (a
+// query-backed field, a declared query operation) runs its labels through
+// here once, so it is stored with bare paths that a later schema change
+// cannot make ambiguous.
+export function mapQueryPaths<Q>(
+  query: Q,
+  map: (path: string, anchor: unknown) => string,
+  anchor?: unknown,
+): Q {
+  if (!isObject(query)) return query;
+  let q = query as Record<string, any>;
+  let top = q.type ?? anchor;
+  let filter = (n: any, type: unknown): any => {
+    if (Array.isArray(n)) return n.map((x) => filter(x, type));
+    if (!isObject(n)) return n;
+    let t = n.on ?? type;
+    let out: Record<string, any> = {};
+    for (let [k, v] of Object.entries(n)) {
+      if ((k === 'every' || k === 'any') && Array.isArray(v)) {
+        out[k] = v.map((x) => filter(x, t));
+      } else if (k === 'not') {
+        out[k] = filter(v, t);
+      } else if ((PATH_OPS as readonly string[]).includes(k) && isObject(v)) {
+        out[k] = Object.fromEntries(
+          Object.entries(v).map(([path, x]) => [map(path, t), x]),
+        );
+      } else if ((k === 'exists' || k === 'missing') && typeof v === 'string') {
+        out[k] = map(v, t);
+      } else if (k === 'fields' && Array.isArray(v)) {
+        out[k] = v.map((path) =>
+          typeof path === 'string' ? map(path, t) : path,
+        );
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  };
+  let isFieldSort = (by: unknown) =>
+    typeof by === 'string' &&
+    !barePath(by).startsWith('_') &&
+    !GENERAL_SORTS.has(barePath(by)) &&
+    barePath(by) !== TEXT_RELEVANCE;
+  let sortEntry = (e: any, type: unknown): any => {
+    if (!isObject(e)) return e;
+    let t = e.on ?? type;
+    let out: Record<string, any> = { ...e };
+    if (isFieldSort(e.by)) out.by = map(e.by, t);
+    for (let key of ['of', 'blend']) {
+      if (Array.isArray(e[key]))
+        out[key] = e[key].map((x: any) => sortEntry(x, t));
+    }
+    if (isObject(e.when)) out.when = filter(e.when, t);
+    if (isObject(e.boost)) out.boost = filter(e.boost, t);
+    return out;
+  };
+  let out: Record<string, any> = { ...q };
+  if (q.filter !== undefined) out.filter = filter(q.filter, top);
+  if (Array.isArray(q.sort))
+    out.sort = q.sort.map((e: any) => sortEntry(e, top));
+  if (typeof q.collapse === 'string') out.collapse = map(q.collapse, top);
+  else if (isObject(q.collapse) && typeof q.collapse.by === 'string') {
+    out.collapse = {
+      ...q.collapse,
+      by: map(q.collapse.by, q.collapse.on ?? top),
+    };
+  }
+  if (Array.isArray(q.facets)) {
+    out.facets = q.facets.map((f: any) =>
+      isObject(f) && typeof f.by === 'string'
+        ? { ...f, by: map(f.by, f.on ?? top) }
+        : f,
+    );
+  }
+  if (isObject(q.rerank?.compare) && typeof q.rerank.compare.by === 'string') {
+    out.rerank = {
+      ...q.rerank,
+      compare: { ...q.rerank.compare, by: map(q.rerank.compare.by, top) },
+    };
+  }
+  return out as Q;
+}
+
+// A saved query with its labels resolved and every path bare: what a declared
+// query operation stores. `fieldsAt` reads the anchoring type's fields, as the
+// engine's own resolution does; a path whose anchor is unknown is stored as
+// written (bare), and resolves when the query runs.
+export async function resolveSavedQueryLabels<Q>(
+  query: Q,
+  fieldsAt: FieldsAt,
+  // the code ref an anchor stands for: an anchor in a declaration can be the
+  // card class itself, or a thunk returning it
+  refOf: (anchor: unknown) => CodeRef | undefined = (a) =>
+    isCodeRefLike(a) ? a : undefined,
+  anchor?: unknown,
+): Promise<Q> {
+  let wanted: [string, CodeRef][] = [];
+  mapQueryPaths(
+    query,
+    (path, type) => {
+      let ref = looksLikeLabel(path) ? refOf(type) : undefined;
+      if (ref) wanted.push([path, ref]);
+      return path;
+    },
+    anchor,
+  );
+  let resolved = new Map<string, string>();
+  let keyOf = (path: string, ref: CodeRef) => `${JSON.stringify(ref)} ${path}`;
+  for (let [path, ref] of wanted) {
+    let key = keyOf(path, ref);
+    if (!resolved.has(key)) {
+      resolved.set(key, await resolveLabel(ref, path, fieldsAt));
+    }
+  }
+  return mapQueryPaths(
+    query,
+    (path, type) => {
+      let ref = looksLikeLabel(path) ? refOf(type) : undefined;
+      return (ref && resolved.get(keyOf(path, ref))) ?? barePath(path);
+    },
+    anchor,
+  );
+}
+
+const isCodeRefLike = (v: unknown): v is CodeRef =>
+  isObject(v) && typeof v.module === 'string' && typeof v.name === 'string';
+
 // Resolves every field path in a query (filters, sorts, collapse, facets, a
 // rerank's comparison set) against the type that anchors it.
 export function queryHasLabels(query: Record<string, any>): boolean {

@@ -27,7 +27,10 @@ import {
   parseRealmsParam,
 } from '@cardstack/runtime-common';
 import {
+  barePath,
   buildQuerySearchURL,
+  looksLikeLabel,
+  mapQueryPaths,
   normalizeQueryDefinition,
 } from '@cardstack/runtime-common';
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
@@ -36,10 +39,71 @@ import { initSharedState } from './shared-state';
 import {
   bumpFieldLoadingSignal,
   getDataBucket,
+  getFields,
   markQueryFieldRead,
   type LinkErrorValue,
   type LinkNotFoundValue,
 } from './field-support';
+
+const foldName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// A field written as a label (`PriceMin`, `"Units Sold 30d"`, `Brand.Name`)
+// resolved against a card class, segment by segment through its links, as
+// the engine resolves it; undefined when a segment matches no field, or
+// more than one.
+function labelOnClass(card: typeof BaseDef, label: string): string | undefined {
+  let path = barePath(label);
+  if (path.startsWith('_') || path === 'id') return path;
+  let out: string[] = [];
+  let at: typeof BaseDef | undefined = card;
+  for (let segment of path.split('.')) {
+    if (!at) return undefined;
+    let fields = getFields(at, { includeComputeds: true }) as Record<
+      string,
+      { card: typeof BaseDef }
+    >;
+    let names = Object.keys(fields);
+    let name = names.includes(segment)
+      ? segment
+      : (() => {
+          let matches = names.filter((n) => foldName(n) === foldName(segment));
+          return matches.length === 1 ? matches[0] : undefined;
+        })();
+    if (!name) return undefined;
+    out.push(name);
+    at = fields[name]?.card;
+  }
+  return out.join('.');
+}
+
+// A query-backed field's query as it is saved: each label resolved against
+// the field's target type, now, so the query holds bare paths a later schema
+// change cannot make ambiguous. A path anchored on another type, or one that
+// does not resolve, is left as written and resolves when the query runs.
+// The indexer's leg (the field's definition) and the client's live refresh
+// both read the field's query through here, so they agree.
+export function savedFieldQuery(
+  query: QueryWithInterpolations,
+  target: () => typeof BaseDef,
+): QueryWithInterpolations {
+  try {
+    let card = target();
+    let ref = identifyCard(card);
+    return mapQueryPaths(query, (path, anchor) => {
+      if (!looksLikeLabel(path)) return path;
+      let anchored =
+        anchor === undefined ||
+        (ref !== undefined &&
+          (anchor as { module?: string; name?: string })?.module ===
+            (ref as { module: string }).module &&
+          (anchor as { name?: string })?.name ===
+            (ref as { name: string }).name);
+      return (anchored && labelOnClass(card, path)) || path;
+    });
+  } catch {
+    return query;
+  }
+}
 
 interface QueryFieldState {
   seedSearchURL?: string | null;

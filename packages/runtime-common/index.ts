@@ -1944,6 +1944,7 @@ import type { SearchEntryScope } from './search-entry.ts';
 export * from './search-entry.ts';
 export * from './search-bounds.ts';
 export * from './rerank-score.ts';
+export { barePath, looksLikeLabel, mapQueryPaths } from './query-syntax.ts';
 export * from './link-shape-policy.ts';
 export * from './ttl-response-cache.ts';
 export * from './card-document-cache.ts';
