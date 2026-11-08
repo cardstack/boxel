@@ -8,6 +8,44 @@ Note that search results are only as good as the most recent index, so if indexi
 
 The `SearchIndex#search(...)` method has one required argument, a search query. The simplest query is an empty object (`{}`), which returns all cards in the index.
 
+### The shape of a query
+
+A query is declarative: it says what it wants, and the engine chooses the order in which to do it. No member means something different because of where it sits in the object or in a list, and there is no ordered pipeline form. The members are:
+
+| Member     | What it says                                                                                   | Section                                                 |
+| ---------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `type`     | The card type the whole query is about. Every clause inherits it.                              | [One type](#one-type-for-the-whole-query-type)          |
+| `filter`   | Which cards match.                                                                             | [Filters](#filters)                                     |
+| `sort`     | How the matches are ordered: fields, `textRelevance`, `near`, `formula`, `blend`, `relevance`. | [Sort Order](#sort-order)                               |
+| `let`      | Lists or one card, computed before the query and read with `{ "$let": … }`.                    | [`let`](#lists-computed-first-let)                      |
+| `collapse` | Keep the best few of each group.                                                               | [`collapse`](#collapsing-to-one-per-group-collapse)     |
+| `rerank`   | Re-order the top rows by any Excel formula, optionally against a comparison set.               | [`rerank`](#re-ranking-the-top-with-any-formula-rerank) |
+| `facets`   | Counts and statistics over every match.                                                        | [Facets](#facets)                                       |
+| `explain`  | Each result's ranking signals and their shares.                                                | [`explain`](#why-a-result-ranks-where-it-does-explain)  |
+| `select`   | Answer as a table of indexed values instead of entries.                                        | [`select`](#a-table-of-values-select)                   |
+| `page`     | Which slice of the results. A query that names none gets 50.                                   | [Pagination](#pagination)                               |
+
+Over HTTP the query also carries `realms`, and across several realms `federation` (see [Federated search](#federated-search)).
+
+A typical query names its type once and lets every clause inherit it:
+
+```js
+{
+  type: productRef,
+  filter: {
+    every: [
+      { matches: 'brass lamp' },
+      { range: { priceMin: { lte: 50 } } },
+    ],
+  },
+  sort: [{ blend: [{ by: 'textRelevance' }, { by: 'rating', weight: 0.5 }] }],
+  facets: [{ by: 'brand.name', size: 10 }],
+  page: { size: 24 },
+}
+```
+
+The older form, with an `on` in every clause, still works and is what most examples in the next two sections use. Unknown members are refused rather than ignored, with the nearest real name (see [Refusals](#refusals)).
+
 ### Filters
 
 The Query object may have a `filter` property, which controls which cards are included in the result set.
@@ -269,7 +307,7 @@ sort: [
 ];
 ```
 
-Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `textRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, ranks are per realm, so a federated blend orders only approximately.
+Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `textRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, each realm ranks its own matches, so a merged federated blend orders only approximately (see [Federated search](#federated-search)).
 
 ### Ranking by a formula (`formula`)
 
@@ -561,7 +599,7 @@ facets: [
 // meta.facets['brand.name'] → [{ value: 'Acme', count: 12, measure: { avg: 84.5 } }, …]
 ```
 
-Across realms, counts add up. A measure combines too: an average weighted by each realm's count, the smaller min, the larger max, the summed sum.
+Across realms, counts add up. Each realm answers more values than asked for (1.5 × `size` + 10) so the merged top values are right more often, and `meta.facetErrors[by]` bounds how far any merged count may be short. A measure combines too: an average weighted by each realm's count, the smaller min, the larger max, the summed sum.
 
 ### Pagination
 
@@ -644,6 +682,81 @@ let response = await request
 ```
 
 The response is an `entry` collection document: each entry resolves to prerendered HTML (the fast path) or a live serialization, and `fields: ['item']` asks for the full card/file serialization in `included`.
+
+### Federated search
+
+A `_federated-search` request names its realms in `realms`, all on the realm server it is sent to. `federation.results` chooses the shape of the answer:
+
+- **`byRealm`** (the default): each realm's rows stay together, paged on their own, as the search sheet shows them in sections. `meta.sections` lists the sections in order, `{ realm, count, score? }`: under a sort that scores rows (relevance, blend, text relevance, `near`), by each realm's best score, with realms that matched nothing last; otherwise in the order asked.
+- **`merged`**: one list, ordered by the query's own sort across realms (field sorts included), and paged once. Each realm is asked for its first `offset + size` rows and the union is sliced to the page. Scores that each realm computes over its own matches (blend, relevance and text relevance) compare only approximately across realms.
+
+```js
+{
+  realms: [catalogRealm, myRealm],
+  federation: { results: 'merged' },
+  type: productRef,
+  filter: { matches: 'brass lamp' },
+  sort: [{ by: 'priceMin' }],
+  page: { size: 24 },
+}
+```
+
+`meta.realms` reports every realm asked, `{ status, code?, total?, ms? }`, where `status` is `ok`, `refused` (with the refusal `code`), `timeout` or `unavailable`. A realm that fails never fails the search; `meta.incomplete` is true when any realm did not answer `ok`.
+
+### Refusals
+
+A query the grammar refuses gets a 400 whose body carries a code a caller can act on, and a message naming the member, the nearest valid name where there is one, and what to write instead:
+
+```json
+{
+  "errors": [
+    {
+      "status": "400",
+      "title": "Invalid Query",
+      "code": "unknown-key",
+      "message": "…"
+    }
+  ]
+}
+```
+
+| Code                                                       | Meaning                                                                                                    |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `unknown-key`                                              | A member the grammar does not have; the message names the nearest real one.                                |
+| `unknown-field`                                            | A field the type does not have, with the nearest field.                                                    |
+| `invalid-value`                                            | A member has the wrong kind of value, or one out of range.                                                 |
+| `missing-member`                                           | Something the query needs is absent.                                                                       |
+| `conflicting-members`                                      | Two members that cannot go together.                                                                       |
+| `limit-exceeded`                                           | More of something than a query may have (signals in a blend, bindings, facets).                            |
+| `invalid-nesting`                                          | Something placed where it cannot go.                                                                       |
+| `invalid-type`                                             | A type reference that names no card type.                                                                  |
+| `needs-type`, `sort-needs-type`                            | A path that needs a type, from `type` or an `on`.                                                          |
+| `needs-declaration`                                        | A field or type lacks a declaration the feature needs, such as `search: { neighbors: true }`.              |
+| `needs-postgres`                                           | A feature the SQLite index cannot run.                                                                     |
+| `matches-required`                                         | A text-relevance sort with no `matches` filter to score.                                                   |
+| `engine-only`                                              | A member only the engine sets.                                                                             |
+| `invalid-formula`, `formula-placement`, `unknown-function` | A formula that is not a string, cannot run where the query puts it, or calls a function BXL does not know. |
+| `unknown-binding`, `binding-kind`                          | A `{ "$let" }` reference to a binding that does not exist, or of the wrong kind.                           |
+| `policy-linked-from`                                       | A `linkedFrom` where a realm policy cannot scope it.                                                       |
+| `invalid-page`, `invalid-json`, `invalid-filter`           | A malformed page, body or filter node.                                                                     |
+| `not-selectable`, `select-excludes-fields`                 | A `select` path the index does not carry, or `select` beside `fields`.                                     |
+
+### Upgrading from the old keys
+
+Queries written before V2 used the engine's internal sort keys. A request or a query-backed field that uses one is now refused (`unknown-key`), with a message naming the key and where it is. Rewrite it as:
+
+| Old                                       | New                                  |
+| ----------------------------------------- | ------------------------------------ |
+| `{ by: '_blend', of: [...] }`             | `{ blend: [...] }`                   |
+| `{ by: '_expr', expr: '…' }`              | `{ formula: '…' }`                   |
+| `{ by: '_when', when: <filter>, weight }` | `{ boost: <filter>, weight }`        |
+| `{ by: '_relevance', … }`                 | `{ relevance: true \| { weights } }` |
+| `{ by: '_matchRelevance' }`               | `{ by: 'textRelevance' }`            |
+| `"$name"` in an `in`                      | `{ "$let": "name" }`                 |
+| `"$name.path"`                            | `{ "$let": "name", "path": "path" }` |
+| `page.cursor`                             | removed; page by `number`            |
+
+The per-result response field `meta._matchRelevance` keeps its name.
 
 ### A result a policy scoped
 
