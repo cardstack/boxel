@@ -3237,7 +3237,9 @@ export class IndexQueryEngine {
       } catch (e) {
         if (isFilterRefersToNonsearchableFieldError(e)) {
           throw new InvalidQueryError(
-            `select: "${path}" is not in the index: the "${e.relationshipPath}" link does not carry it (${e.reason === 'query-backed' ? 'a query-backed link never does' : `add it to the link's search.include`})`,
+            e.reason === 'query-backed'
+              ? `select: "${path}" is not in the index: ${e.relationshipPath} is a query-backed link, so its cards are found by a search, not stored, and the index holds none of their values (search.include cannot change that)`
+              : `select: "${path}" is not in the index: the "${e.relationshipPath}" link does not carry it; add it to the link's search.include`,
             'not-selectable',
           );
         }
