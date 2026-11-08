@@ -12,18 +12,18 @@ The `SearchIndex#search(...)` method has one required argument, a search query. 
 
 A query is declarative: it says what it wants, and the engine chooses the order in which to do it. No member means something different because of where it sits in the object or in a list, and there is no ordered pipeline form. The members are:
 
-| Member     | What it says                                                                                   | Section                                                 |
-| ---------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `type`     | The card type the whole query is about. Every clause inherits it.                              | [One type](#one-type-for-the-whole-query-type)          |
-| `filter`   | Which cards match.                                                                             | [Filters](#filters)                                     |
-| `sort`     | How the matches are ordered: fields, `textRelevance`, `near`, `formula`, `blend`, `relevance`. | [Sort Order](#sort-order)                               |
-| `let`      | Lists or one card, computed before the query and read with `{ "$let": … }`.                    | [`let`](#lists-computed-first-let)                      |
-| `collapse` | Keep the best few of each group.                                                               | [`collapse`](#collapsing-to-one-per-group-collapse)     |
-| `rerank`   | Re-order the top rows by any Excel formula, optionally against a comparison set.               | [`rerank`](#re-ranking-the-top-with-any-formula-rerank) |
-| `facets`   | Counts and statistics over every match.                                                        | [Facets](#facets)                                       |
-| `explain`  | Each result's ranking signals and their shares.                                                | [`explain`](#why-a-result-ranks-where-it-does-explain)  |
-| `select`   | Answer as a table of indexed values instead of entries.                                        | [`select`](#a-table-of-values-select)                   |
-| `page`     | Which slice of the results. A query that names none gets 50.                                   | [Pagination](#pagination)                               |
+| Member     | What it says                                                                                      | Section                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `type`     | The card type the whole query is about. Every clause inherits it.                                 | [One type](#one-type-for-the-whole-query-type)             |
+| `filter`   | Which cards match.                                                                                | [Filters](#filters)                                        |
+| `sort`     | How the matches are ordered: fields, `textRelevance`, `near`, `expression`, `blend`, `relevance`. | [Sort Order](#sort-order)                                  |
+| `let`      | Lists or one card, computed before the query and read with `{ "$let": … }`.                       | [`let`](#lists-computed-first-let)                         |
+| `collapse` | Keep the best few of each group.                                                                  | [`collapse`](#collapsing-to-one-per-group-collapse)        |
+| `rerank`   | Re-order the top rows by any Excel expression, optionally against a comparison set.               | [`rerank`](#re-ranking-the-top-with-any-expression-rerank) |
+| `facets`   | Counts and statistics over every match.                                                           | [Facets](#facets)                                          |
+| `explain`  | Each result's ranking signals and their shares.                                                   | [`explain`](#why-a-result-ranks-where-it-does-explain)     |
+| `select`   | Answer as a table of indexed values instead of entries.                                           | [`select`](#a-table-of-values-select)                      |
+| `page`     | Which slice of the results. A query that names none gets 50.                                      | [Pagination](#pagination)                                  |
 
 Over HTTP the query also carries `realms`, and across several realms `federation` (see [Federated search](#federated-search)).
 
@@ -268,7 +268,7 @@ A field may be written as its path, with or without `item.`, or as a label in an
 
 ### Blended ranking (`blend`)
 
-A `blend` sort fuses several ranking signals into one order with reciprocal rank fusion. Each card scores `sum(weight / (k + rank))` over the signals it has a value for, with each signal ranked over every card the filter admits. The list takes any other sort entries: text relevance (`textRelevance`), a `near` sort, a general field such as `createdAt` (recency), a card field such as a view count (engagement), a `formula` and a `boost`. Each signal ranks best first, meaning highest value first unless the entry says `direction: 'asc'`. A card with no value for a signal (no vector, no text match, an empty field) gets nothing from that signal, rather than a last place. `weight` (default 1) scales a signal; `k` (default 60) controls how sharply a top rank beats the next one. Results carry `meta._blendScore`.
+A `blend` sort fuses several ranking signals into one order with reciprocal rank fusion. Each card scores `sum(weight / (k + rank))` over the signals it has a value for, with each signal ranked over every card the filter admits. The list takes any other sort entries: text relevance (`textRelevance`), a `near` sort, a general field such as `createdAt` (recency), a card field such as a view count (engagement), an `expression` and a `boost`. Each signal ranks best first, meaning highest value first unless the entry says `direction: 'asc'`. A card with no value for a signal (no vector, no text match, an empty field) gets nothing from that signal, rather than a last place. `weight` (default 1) scales a signal; `k` (default 60) controls how sharply a top rank beats the next one. Results carry `meta._blendScore`.
 
 ```js
 let { data: ranked } = await indexer.search({
@@ -311,25 +311,25 @@ sort: [
 
 Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `textRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, each realm ranks its own matches, so a merged federated blend orders only approximately (see [Federated search](#federated-search)).
 
-### Ranking by a formula (`formula`)
+### Ranking by an expression (`expression`)
 
-A `formula` sort ranks by a spreadsheet formula over each card's fields: `{ formula: 'rating / LN(priceMin + 1)' }`, highest first unless `direction` is `asc`. The engine places it:
+An `expression` sort ranks by a spreadsheet expression over each card's fields: `{ expression: 'rating / LN(priceMin + 1)' }`, highest first unless `direction` is `asc`. The engine places it:
 
-- **In SQL, over every match**, when the formula is in BXL's score profile ([`packages/bxl/docs/score-sql.md`](../packages/bxl/docs/score-sql.md)): numbers, field names, arithmetic, comparisons and `IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, `NOW` and the like. It orders the whole set, pages and collapses like any sort.
-- **Over the top window** (the query's first 500 rows), when it uses a function the profile does not (text, statistical, financial): the realm runs it there with every Excel function, as a `rerank` does. `placement: 'top'` asks for this placement, and `placement: 'sql'` insists on the first; a formula that cannot run as SQL is then refused.
+- **In SQL, over every match**, when the expression is in BXL's score profile ([`packages/bxl/docs/score-sql.md`](../packages/bxl/docs/score-sql.md)): numbers, field names, arithmetic, comparisons and `IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, `NOW` and the like. It orders the whole set, pages and collapses like any sort.
+- **Over the top window** (the query's first 500 rows), when it uses a function the profile does not (text, statistical, financial): the realm runs it there with every Excel function, as a `rerank` does. `placement: 'top'` asks for this placement, and `placement: 'sql'` insists on the first; an expression that cannot run as SQL is then refused.
 
-Both places follow Excel's rules for blanks and errors, so a formula ranks the same wherever it runs. A missing field is 0 in arithmetic and in a comparison, and `IF` on it takes the else branch. `MIN`, `MAX` and `AVERAGE` skip it. A division by zero or the log of a non-positive number is an error that propagates until `IFERROR` catches it, and `IFERROR` catches only errors, not blanks. A card whose formula ends blank or an error ranks last. A value too large for SQL makes the realm run the formula over the top window rather than fail the search.
+Both places follow Excel's rules for blanks and errors, so an expression ranks the same wherever it runs. A missing field is 0 in arithmetic and in a comparison, and `IF` on it takes the else branch. `MIN`, `MAX` and `AVERAGE` skip it. A division by zero or the log of a non-positive number is an error that propagates until `IFERROR` catches it, and `IFERROR` catches only errors, not blanks. A card whose expression ends blank or an error ranks last. A value too large for SQL makes the realm run the expression over the top window rather than fail the search.
 
-A formula over the top window re-ranks what the rest of the query found, so it must be the first sort key, and it is refused beside a `collapse` or a `rerank` of the query's own (`formula-placement`, saying why the formula is there). A formula that isn't a non-empty string is refused (`invalid-formula`), and so is a function BXL does not know (`unknown-function`), naming it.
+An expression over the top window re-ranks what the rest of the query found, so it must be the first sort key, and it is refused beside a `collapse` or a `rerank` of the query's own (`expression-placement`, saying why the expression is there). An expression that isn't a non-empty string is refused (`invalid-expression`), and so is a function BXL does not know (`unknown-function`), naming it.
 
-`meta.formula` says where it ran (`{ "placement": "sql" }`, or `"top"` with the `reason`), and each result carries its value as `meta._formula`. Inside a `blend`, a formula is a signal with a `weight`; it runs in SQL only, so one that cannot is refused (`formula-placement`). `explain` names it by its text.
+`meta.expression` says where it ran (`{ "placement": "sql" }`, or `"top"` with the `reason`), and each result carries its value as `meta._expression`. Inside a `blend`, an expression is a signal with a `weight`; it runs in SQL only, so one that cannot is refused (`expression-placement`). `explain` names it by its text.
 
 ```js
 sort: [
   {
     blend: [
       { by: 'textRelevance' },
-      { formula: 'IFERROR(wishlistCount / unitsSold30d, 0)', weight: 1.5 },
+      { expression: 'IFERROR(wishlistCount / unitsSold30d, 0)', weight: 1.5 },
     ],
   },
 ];
@@ -337,17 +337,17 @@ sort: [
 
 Postgres only.
 
-### Re-ranking the top with any formula (`rerank`)
+### Re-ranking the top with any expression (`rerank`)
 
-A formula in SQL can use only the functions Postgres can compute. `rerank` is the second layer: the query ranks as it would (filter, sort, `let`, `collapse`), the realm takes its first `top` rows (default 100, at most 500), evaluates a BXL formula over each row's fields with every Excel function (text, statistical and financial ones included) in BXL's sandbox, and orders those rows by the value, highest first unless `direction` is `asc`. A spreadsheet formula there follows the same rules for blanks and errors as a `formula` in SQL. A row whose formula gives no number (an error, a missing field) keeps its place after the ones that do. Pages read the re-ranked window; a page that starts past it keeps the query's order. Each re-ranked row carries `meta._rerank`, and `meta.rerank` reports the window and how many rows got a number.
+An expression in SQL can use only the functions Postgres can compute. `rerank` is the second layer: the query ranks as it would (filter, sort, `let`, `collapse`), the realm takes its first `top` rows (default 100, at most 500), evaluates a BXL expression over each row's fields with every Excel function (text, statistical and financial ones included) in BXL's sandbox, and orders those rows by the value, highest first unless `direction` is `asc`. A spreadsheet expression there follows the same rules for blanks and errors as an `expression` in SQL. A row whose expression gives no number (an error, a missing field) keeps its place after the ones that do. Pages read the re-ranked window; a page that starts past it keeps the query's order. Each re-ranked row carries `meta._rerank`, and `meta.rerank` reports the window and how many rows got a number.
 
-**Where it runs, and its time limit.** A formula Postgres can compute is scored in Postgres over the window's rows (`meta.rerank.ran` is `sql`), with its bindings and comparison sets read the same way. Any other runs on a pool of threads beside the realm server (`ran: 'thread'`; `RERANK_THREADS`, default 2), never on its event loop. Scoring has 1 second, including any wait for a free thread. A rerank that runs out of time ranks nothing: the window keeps the query's order, no row carries a value, and `meta.warnings` holds `{ code: 'rerank-timeout' }`. A thread still scoring at the limit is stopped. To stay inside it, narrow the query, lower `top`, or use functions Postgres can compute.
+**Where it runs, and its time limit.** An expression Postgres can compute is scored in Postgres over the window's rows (`meta.rerank.ran` is `sql`), with its bindings and comparison sets read the same way. Any other runs on a pool of threads beside the realm server (`ran: 'thread'`; `RERANK_THREADS`, default 2), never on its event loop. Scoring has 1 second, including any wait for a free thread. A rerank that runs out of time ranks nothing: the window keeps the query's order, no row carries a value, and `meta.warnings` holds `{ code: 'rerank-timeout' }`. A thread still scoring at the limit is stopped. To stay inside it, narrow the query, lower `top`, or use functions Postgres can compute.
 
 ```js
-rerank: { expr: 'IF(ISNUMBER(SEARCH("organic", title)), 1.2, 1) * rating', top: 200 }
+rerank: { expression: 'IF(ISNUMBER(SEARCH("organic", title)), 1.2, 1) * rating', top: 200 }
 ```
 
-**Comparison sets.** A formula can measure a row against a set, by percentile or by ratio. `compare.filter` names the set (by default, every match of the query), and `compare.by` narrows it to the rows sharing the row's value at that path, such as its own product type. The formula reaches the set through two names, for the fields it mentions:
+**Comparison sets.** An expression can measure a row against a set, by percentile or by ratio. `compare.filter` names the set (by default, every match of the query), and `compare.by` narrows it to the rows sharing the row's value at that path, such as its own product type. The expression reaches the set through two names, for the fields it mentions:
 
 - `stats.<field>.<count|sum|avg|min|max|median|p10|p25|p75|p90|stdev>`: aggregates over the whole set, computed when the query runs. `priceMin / stats.priceMin.median` is a product's price against the median of its kind.
 - `peers.<field>`: the set's values as a list (at most 2,000 per group), for any Excel function. `PERCENTRANK_INC(peers.rating, rating)` is where its rating falls among its kind, 0 to 1.
@@ -356,7 +356,7 @@ A set reads at most 10,000 rows. Past that, `stats.` and `peers.` describe the f
 
 ```js
 rerank: {
-  expr: 'PERCENTRANK_INC(peers.rating, rating)',
+  expression: 'PERCENTRANK_INC(peers.rating, rating)',
   compare: { by: 'productType' },
   top: 200,
 }
@@ -367,12 +367,12 @@ rerank: {
 ```js
 rerank: {
   // how much cheaper than the 20 products that look most like it
-  expr: '1 - priceMin / stats.priceMin.median',
+  expression: '1 - priceMin / stats.priceMin.median',
   compare: { near: 'imageEmbedding', k: 20, minSimilarity: 0.75 },
 }
 // its near-identical twin, if it has one, and how much more that costs
 rerank: {
-  expr: 'IF(COUNT(peers.priceMin) > 0, MIN(peers.priceMin) - priceMin, 0)',
+  expression: 'IF(COUNT(peers.priceMin) > 0, MIN(peers.priceMin) - priceMin, 0)',
   compare: { near: 'imageEmbedding', k: 3, minSimilarity: 0.9 },
 }
 ```
@@ -483,7 +483,7 @@ The engine resolves each binding one of two ways and reports which in `meta.lets
 - **Join.** A binding whose `from` is one card by id and whose `select` is a link field's ids (`items.id`), read only by `in`s on `id`, runs as [`linkedFrom`](#filters) in the same statement: `{ "saved": { "strategy": "join" } }`.
 - **List.** Any other runs its query first, and its values (at most 1,000) stand in for the reference: `{ "hot": { "strategy": "list", "values": 12 } }`.
 
-**One card.** A binding with `one: true` in place of `select` is the first card its query finds, whole. The query reads that card's values with `{ "$let": "name", "path": "priceMin" }` wherever a value goes: an `eq` value, a `range` bound, a `near` target in a filter or a sort. A `rerank` formula reads the card under the binding's name (`name.path`). A link reads as its id, and a path through it as whatever its `searchable` option put in the search doc. A path the card has no value at reads null, as does every path when the query finds no card; an `eq` then finds the cards with no value, and a `range` bound or `near` target that reads null matches nothing. `meta.lets` reports `{ "strategy": "card", "found": true }`.
+**One card.** A binding with `one: true` in place of `select` is the first card its query finds, whole. The query reads that card's values with `{ "$let": "name", "path": "priceMin" }` wherever a value goes: an `eq` value, a `range` bound, a `near` target in a filter or a sort. A `rerank` expression reads the card under the binding's name (`name.path`). A link reads as its id, and a path through it as whatever its `searchable` option put in the search doc. A path the card has no value at reads null, as does every path when the query finds no card; an `eq` then finds the cards with no value, and a `range` bound or `near` target that reads null matches nothing. `meta.lets` reports `{ "strategy": "card", "found": true }`.
 
 ```js
 // dupes of one sofa: its look, its kind, under its price, from another brand
@@ -515,7 +515,7 @@ let { data } = await indexer.search({
   },
   sort: [{ by: 'imageEmbedding', near: sofa('imageEmbedding') }],
   collapse: 'brand.name',
-  rerank: { expr: 'ROUND(sofa.priceMin - priceMin, 2)' },
+  rerank: { expression: 'ROUND(sofa.priceMin - priceMin, 2)' },
 });
 ```
 
@@ -722,26 +722,26 @@ A query the grammar refuses gets a 400 whose body carries a code a caller can ac
 }
 ```
 
-| Code                                                       | Meaning                                                                                                    |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `unknown-key`                                              | A member the grammar does not have; the message names the nearest real one.                                |
-| `unknown-field`                                            | A field the type does not have, with the nearest field.                                                    |
-| `invalid-value`                                            | A member has the wrong kind of value, or one out of range.                                                 |
-| `missing-member`                                           | Something the query needs is absent.                                                                       |
-| `conflicting-members`                                      | Two members that cannot go together.                                                                       |
-| `limit-exceeded`                                           | More of something than a query may have (signals in a blend, bindings, facets).                            |
-| `invalid-nesting`                                          | Something placed where it cannot go.                                                                       |
-| `invalid-type`                                             | A type reference that names no card type.                                                                  |
-| `needs-type`, `sort-needs-type`                            | A path that needs a type, from `type` or an `on`.                                                          |
-| `needs-declaration`                                        | A field or type lacks a declaration the feature needs, such as `search: { neighbors: true }`.              |
-| `needs-postgres`                                           | A feature the SQLite index cannot run.                                                                     |
-| `matches-required`                                         | A text-relevance sort with no `matches` filter to score.                                                   |
-| `engine-only`                                              | A member only the engine sets.                                                                             |
-| `invalid-formula`, `formula-placement`, `unknown-function` | A formula that is not a string, cannot run where the query puts it, or calls a function BXL does not know. |
-| `unknown-binding`, `binding-kind`                          | A `{ "$let" }` reference to a binding that does not exist, or of the wrong kind.                           |
-| `policy-linked-from`                                       | A `linkedFrom` where a realm policy cannot scope it.                                                       |
-| `invalid-page`, `invalid-json`, `invalid-filter`           | A malformed page, body or filter node.                                                                     |
-| `not-selectable`, `select-excludes-fields`                 | A `select` path the index does not carry, or `select` beside `fields`.                                     |
+| Code                                                             | Meaning                                                                                                        |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `unknown-key`                                                    | A member the grammar does not have; the message names the nearest real one.                                    |
+| `unknown-field`                                                  | A field the type does not have, with the nearest field.                                                        |
+| `invalid-value`                                                  | A member has the wrong kind of value, or one out of range.                                                     |
+| `missing-member`                                                 | Something the query needs is absent.                                                                           |
+| `conflicting-members`                                            | Two members that cannot go together.                                                                           |
+| `limit-exceeded`                                                 | More of something than a query may have (signals in a blend, bindings, facets).                                |
+| `invalid-nesting`                                                | Something placed where it cannot go.                                                                           |
+| `invalid-type`                                                   | A type reference that names no card type.                                                                      |
+| `needs-type`, `sort-needs-type`                                  | A path that needs a type, from `type` or an `on`.                                                              |
+| `needs-declaration`                                              | A field or type lacks a declaration the feature needs, such as `search: { neighbors: true }`.                  |
+| `needs-postgres`                                                 | A feature the SQLite index cannot run.                                                                         |
+| `matches-required`                                               | A text-relevance sort with no `matches` filter to score.                                                       |
+| `engine-only`                                                    | A member only the engine sets.                                                                                 |
+| `invalid-expression`, `expression-placement`, `unknown-function` | An expression that is not a string, cannot run where the query puts it, or calls a function BXL does not know. |
+| `unknown-binding`, `binding-kind`                                | A `{ "$let" }` reference to a binding that does not exist, or of the wrong kind.                               |
+| `policy-linked-from`                                             | A `linkedFrom` where a realm policy cannot scope it.                                                           |
+| `invalid-page`, `invalid-json`, `invalid-filter`                 | A malformed page, body or filter node.                                                                         |
+| `not-selectable`, `select-excludes-fields`                       | A `select` path the index does not carry, or `select` beside `fields`.                                         |
 
 ### Upgrading from the old keys
 
@@ -750,7 +750,7 @@ Queries written before V2 used the engine's internal sort keys. A request or a q
 | Old                                       | New                                  |
 | ----------------------------------------- | ------------------------------------ |
 | `{ by: '_blend', of: [...] }`             | `{ blend: [...] }`                   |
-| `{ by: '_expr', expr: '…' }`              | `{ formula: '…' }`                   |
+| `{ by: '_expr', expr: '…' }`              | `{ expression: '…' }`                |
 | `{ by: '_when', when: <filter>, weight }` | `{ boost: <filter>, weight }`        |
 | `{ by: '_relevance', … }`                 | `{ relevance: true \| { weights } }` |
 | `{ by: '_matchRelevance' }`               | `{ by: 'textRelevance' }`            |
@@ -759,6 +759,8 @@ Queries written before V2 used the engine's internal sort keys. A request or a q
 | `page.cursor`                             | removed; page by `number`            |
 
 The per-result response field `meta._matchRelevance` keeps its name.
+
+Earlier V2 drafts called an expression `formula` (a sort key) and `expr` (in `rerank`). Both are refused now; write `expression`, the same word cards use in `computeVia: expression(…)`.
 
 ### A result a policy scoped
 

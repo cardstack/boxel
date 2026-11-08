@@ -349,7 +349,7 @@ const query = {
 };
 ```
 
-Price ranks lowest first (`direction: "asc"`), rating highest first; the blend balances them. For a stricter trade-off, use the value formula below.
+Price ranks lowest first (`direction: "asc"`), rating highest first; the blend balances them. For a stricter trade-off, use the value expression below.
 
 ### Just the best one
 
@@ -428,9 +428,9 @@ const query = {
 
 Plain sorts apply in order: the shop's priority, then rating to break ties.
 
-## Ranking by a formula
+## Ranking by an expression
 
-When the idea is a ratio or a curve, write it as a spreadsheet formula. It runs in SQL over every match when Postgres can compute it.
+When the idea is a ratio or a curve, write it as a spreadsheet expression. It runs in SQL over every match when Postgres can compute it.
 
 ### Value for money
 
@@ -444,14 +444,14 @@ const query = {
     {
       blend: [
         { by: 'textRelevance', weight: 0.6 },
-        { formula: 'rating / LN(priceMin + 1)', weight: 1.5 },
+        { expression: 'rating / LN(priceMin + 1)', weight: 1.5 },
       ],
     },
   ],
 };
 ```
 
-Rating over the log of the price: a $20 lamp is not judged 10× better than a $200 one. Inside a blend the formula is one more signal.
+Rating over the log of the price: a $20 lamp is not judged 10× better than a $200 one. Inside a blend the expression is one more signal.
 
 ### Loved, not hyped
 
@@ -461,7 +461,9 @@ Rating over the log of the price: a $20 lamp is not judged 10× better than a $2
 const query = {
   type: productRef,
   filter: { matches: 'throw pillow' },
-  sort: [{ formula: 'IFERROR(wishlistCount / unitsSold30d, wishlistCount)' }],
+  sort: [
+    { expression: 'IFERROR(wishlistCount / unitsSold30d, wishlistCount)' },
+  ],
 };
 ```
 
@@ -475,7 +477,7 @@ Saves per sale. `IFERROR` covers products with no sales, which would divide by z
 const query = {
   type: productRef,
   filter: { matches: 'kitchen' },
-  sort: [{ formula: 'unitsSold30d / MAX(DAYS(NOW(), publishedAt), 7)' }],
+  sort: [{ expression: 'unitsSold30d / MAX(DAYS(NOW(), publishedAt), 7)' }],
 };
 ```
 
@@ -489,7 +491,7 @@ Sales per day since launch, with a 7-day floor so a product listed this morning 
 const query = {
   type: productRef,
   filter: { every: [{ eq: { productType: 'CHAIR' } }, { matches: 'office' }] },
-  sort: [{ formula: 'rating * LOG10(reviewCount + 1) - returnRate * 20' }],
+  sort: [{ expression: 'rating * LOG10(reviewCount + 1) - returnRate * 20' }],
 };
 ```
 
@@ -503,7 +505,9 @@ A good rating backed by many reviews, minus a penalty for returns.
 const query = {
   type: productRef,
   filter: { eq: { productType: 'BOOT' } },
-  sort: [{ formula: '(rating * reviewCount + 4 * 20) / (reviewCount + 20)' }],
+  sort: [
+    { expression: '(rating * reviewCount + 4 * 20) / (reviewCount + 20)' },
+  ],
 };
 ```
 
@@ -517,7 +521,7 @@ A Bayesian average: 20 imaginary 4-star reviews pull a 5.0 from two reviews belo
 const query = {
   type: productRef,
   filter: { matches: 'gift' },
-  sort: [{ formula: 'EXP(-POWER((priceMin - 40) / 15, 2))' }],
+  sort: [{ expression: 'EXP(-POWER((priceMin - 40) / 15, 2))' }],
 };
 ```
 
@@ -531,7 +535,7 @@ A bell curve centered on the budget: $40 scores 1, $25 or $55 about 0.37. Better
 const query = {
   type: productRef,
   filter: { eq: { productType: 'HANDBAG' } },
-  sort: [{ formula: 'rating * EXP(-DAYS(NOW(), publishedAt) / 30)' }],
+  sort: [{ expression: 'rating * EXP(-DAYS(NOW(), publishedAt) / 30)' }],
 };
 ```
 
@@ -545,7 +549,7 @@ Rating decayed by age with a 30-day time constant: recency matters without buryi
 const query = {
   type: productRef,
   filter: { eq: { productType: 'CELLULAR_PHONE_CASE' } },
-  sort: [{ formula: 'IFERROR(addToCarts30d / views30d, 0) * 100' }],
+  sort: [{ expression: 'IFERROR(addToCarts30d / views30d, 0) * 100' }],
 };
 ```
 
@@ -559,7 +563,7 @@ Add-to-cart rate per view.
 const query = {
   type: productRef,
   filter: { eq: { productType: 'GROCERY' } },
-  sort: [{ formula: 'IFERROR((unitsSold7d * 30 / 7) / unitsSold30d, 0)' }],
+  sort: [{ expression: 'IFERROR((unitsSold7d * 30 / 7) / unitsSold30d, 0)' }],
 };
 ```
 
@@ -578,7 +582,7 @@ const query = {
   type: productRef,
   filter: { eq: { productType: 'HOME' } },
   rerank: {
-    expr: '1 - priceMin / stats.priceMin.median',
+    expression: '1 - priceMin / stats.priceMin.median',
     top: 200,
     compare: { by: 'productType' },
   },
@@ -596,7 +600,7 @@ const query = {
   type: productRef,
   filter: { eq: { productType: 'FURNITURE' } },
   rerank: {
-    expr: 'PERCENTRANK_INC(peers.rating, rating)',
+    expression: 'PERCENTRANK_INC(peers.rating, rating)',
     top: 200,
     compare: { by: 'productType' },
   },
@@ -614,7 +618,7 @@ const query = {
   type: productRef,
   filter: { matches: 'kitchen' },
   rerank: {
-    expr: 'PERCENTRANK_INC(peers.unitsSold30d, unitsSold30d)',
+    expression: 'PERCENTRANK_INC(peers.unitsSold30d, unitsSold30d)',
     top: 200,
     compare: { by: 'brand.name' },
   },
@@ -632,7 +636,7 @@ const query = {
   type: productRef,
   filter: { eq: { productType: 'CHAIR' } },
   rerank: {
-    expr: '(rating - stats.rating.avg) / stats.rating.stdev',
+    expression: '(rating - stats.rating.avg) / stats.rating.stdev',
     top: 200,
     compare: { by: 'productType' },
   },
@@ -650,7 +654,8 @@ const query = {
   type: productRef,
   filter: { eq: { productType: 'RUG' } },
   rerank: {
-    expr: 'PERCENTRANK_INC(peers.rating, rating) - PERCENTRANK_INC(peers.priceMin, priceMin)',
+    expression:
+      'PERCENTRANK_INC(peers.rating, rating) - PERCENTRANK_INC(peers.priceMin, priceMin)',
     top: 200,
     compare: { by: 'productType' },
   },
@@ -668,7 +673,8 @@ const query = {
   type: productRef,
   filter: { eq: { productType: 'LAMP' } },
   rerank: {
-    expr: 'LET(fit, LINEST(peers.priceMin, peers.rating), INDEX(fit, 1) * rating + INDEX(fit, 2) - priceMin)',
+    expression:
+      'LET(fit, LINEST(peers.priceMin, peers.rating), INDEX(fit, 1) * rating + INDEX(fit, 2) - priceMin)',
     top: 200,
     compare: { by: 'productType' },
   },
@@ -834,7 +840,7 @@ const query = {
     { by: 'imageEmbedding', near: { $let: 'orig', path: 'imageEmbedding' } },
   ],
   collapse: 'brand.name',
-  rerank: { expr: 'ROUND(orig.priceMin - priceMin, 2)', top: 200 },
+  rerank: { expression: 'ROUND(orig.priceMin - priceMin, 2)', top: 200 },
 };
 ```
 
@@ -849,7 +855,7 @@ const query = {
   type: productRef,
   filter: { eq: { productType: 'LAMP' } },
   rerank: {
-    expr: '1 - priceMin / stats.priceMin.median',
+    expression: '1 - priceMin / stats.priceMin.median',
     top: 200,
     compare: { near: 'imageEmbedding', k: 20, minSimilarity: 0.75 },
   },
