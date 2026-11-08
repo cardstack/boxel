@@ -2829,10 +2829,23 @@ export class IndexQueryEngine {
       if (role === 'vector' && typeof v === 'string' && v.startsWith('vec:[')) {
         try {
           let nums = JSON.parse(v.slice(4));
-          return Array.isArray(nums) ? nums : null;
+          return Array.isArray(nums) && nums.length > 0 ? nums : null;
         } catch {
           return null;
         }
+      }
+      // Anything else read as a near target that is not a vector (a spilled
+      // value that could not be restored, an empty list) is a missing value,
+      // which matches nothing, rather than a vector of no dimensions.
+      if (
+        role === 'vector' &&
+        !(
+          Array.isArray(v) &&
+          v.length > 0 &&
+          v.every((n) => typeof n === 'number')
+        )
+      ) {
+        return null;
       }
       return v === undefined ? null : v;
     };

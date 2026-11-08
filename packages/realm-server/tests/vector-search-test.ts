@@ -1068,6 +1068,44 @@ module(basename(import.meta.filename), function () {
     );
 
     pgvectorTest(
+      "a bound card whose vector can't be read is a missing near target, not an error",
+      async function (assert) {
+        await index({
+          a: { title: 'a', embedding: vec([1, 0, 0]) },
+          b: { title: 'b', embedding: vec([0.9, 0.1, 0]) },
+        });
+        // The search doc keeps a reference to a spilled vector whose row is
+        // gone, as an index copied without its spill table has.
+        await adapter.execute(
+          `UPDATE boxel_index SET search_doc = jsonb_set(search_doc, '{embedding}', '{"ref": "gone", "$spilled": "vector"}'::jsonb) WHERE url = $1 AND type = 'instance'`,
+          { bind: [url('a')] },
+        );
+        let { results } = await engine.search(
+          new URL(testRealm),
+          {
+            let: {
+              me: {
+                from: { filter: { on: momentRef, eq: { title: 'a' } } },
+                one: true,
+              },
+            },
+            filter: { type: momentRef },
+            sort: [
+              {
+                on: momentRef,
+                by: 'embedding',
+                near: { $let: 'me', path: 'embedding' },
+              },
+            ],
+          } as unknown as Query,
+          {},
+          { kind: 'renderSet' },
+        );
+        assert.strictEqual(results.length, 2, 'the search answers');
+      },
+    );
+
+    pgvectorTest(
       "under a policy, rows the caller cannot see never take an admitted look-alike's place",
       async function (assert) {
         let visible = {
