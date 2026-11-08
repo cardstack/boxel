@@ -119,6 +119,7 @@ import {
   type ResultExplanation,
   mapLetReferences,
   mapCardReferences,
+  type CardReferenceRole,
   MAX_LET_ROWS,
   MAX_LET_VALUES,
   type LetBinding,
@@ -2508,7 +2509,7 @@ export class IndexQueryEngine {
       letMeta[name] = { strategy: 'card', found: card != null };
     }
     let names = new Set(Object.keys(cards));
-    let read = (name: string, path: string) => {
+    let read = (name: string, path: string, role?: CardReferenceRole) => {
       let v: unknown = cards[name];
       for (let key of path.split('.')) {
         v =
@@ -2525,6 +2526,16 @@ export class IndexQueryEngine {
         !('data' in v)
       ) {
         return (v as { id: unknown }).id ?? null;
+      }
+      // A VectorField's search-doc value is "vec:[…]": as a near target it
+      // reads as the numbers.
+      if (role === 'vector' && typeof v === 'string' && v.startsWith('vec:[')) {
+        try {
+          let nums = JSON.parse(v.slice(4));
+          return Array.isArray(nums) ? nums : null;
+        } catch {
+          return null;
+        }
       }
       return v === undefined ? null : v;
     };

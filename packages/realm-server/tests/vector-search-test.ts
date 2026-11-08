@@ -1019,6 +1019,45 @@ module(basename(import.meta.filename), function () {
     }
 
     pgvectorTest(
+      "a one-card binding's vector is a near target",
+      async function (assert) {
+        await index({
+          a: { title: 'a', views: 10, embedding: vec([1, 0, 0]) },
+          b: { title: 'b', views: 50, embedding: vec([0.99, 0.1, 0]) },
+          c: { title: 'c', views: 20, embedding: vec([0, 1, 0]) },
+        });
+        let { results, meta } = await engine.search(
+          new URL(testRealm),
+          {
+            let: {
+              a: {
+                from: { filter: { on: momentRef, eq: { title: 'a' } } },
+                one: true,
+              },
+            },
+            filter: {
+              on: momentRef,
+              near: { embedding: { to: '$a.embedding', minSimilarity: 0.5 } },
+            },
+            sort: [{ on: momentRef, by: 'embedding', near: '$a.embedding' }],
+          } as Query,
+          {},
+          { kind: 'renderSet' },
+        );
+        assert.deepEqual(
+          results.map((r: any) =>
+            r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
+          ),
+          ['a', 'b'],
+          'nearest first, and c is too far',
+        );
+        assert.deepEqual((meta as any).lets, {
+          a: { strategy: 'card', found: true },
+        });
+      },
+    );
+
+    pgvectorTest(
       'rerank compares each card with its own look-alikes',
       async function (assert) {
         await index({
