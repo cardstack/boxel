@@ -1097,10 +1097,9 @@ module(basename(import.meta.filename), function (hooks) {
       ['b', 'c', 'a', 'd', 'e', 'f', 'g'],
       'matching rows lead, each group keeping the query order',
     );
-    // BXL's SEARCH raises where Excel's returns #VALUE!, and ISNUMBER does
-    // not catch it, so the GOTO and channel-less talks have no value: they
-    // follow the scored ones in the query's order.
-    assert.deepEqual(meta.rerank, { window: 7, scored: 3 });
+    // A SEARCH that finds nothing is #VALUE!, which ISNUMBER reads as FALSE,
+    // as in Excel: every talk gets a value.
+    assert.deepEqual(meta.rerank, { window: 7, scored: 7 });
     assert.strictEqual(meta.page.total, 7);
 
     let windowed = await reranked({

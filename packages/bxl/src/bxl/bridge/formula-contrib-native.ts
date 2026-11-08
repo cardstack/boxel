@@ -1548,15 +1548,21 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'INT/1'(_input, value) {
     yield Math.floor(parseExcelNumber(value));
   },
-  *'ISBLANK/1'(_input, value) {
+  // The value tests behind ISBLANK (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISBLANK/1'(_input, value) {
     yield value === null || value === undefined;
   },
-  *'ISNUMBER/1'(_input, value) {
+  // The value tests behind ISNUMBER (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISNUMBER/1'(_input, value) {
     yield typeof value === 'number' &&
       !Number.isNaN(value) &&
       Number.isFinite(value);
   },
-  *'ISTEXT/1'(_input, value) {
+  // The value tests behind ISTEXT (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISTEXT/1'(_input, value) {
     yield typeof value === 'string';
   },
   *'LEFT/1'(_input, value) {
@@ -2145,10 +2151,14 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'ISODD/1'(_input, value) {
     yield truncValue(value) % 2 !== 0;
   },
-  *'ISLOGICAL/1'(_input, value) {
+  // The value tests behind ISLOGICAL (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISLOGICAL/1'(_input, value) {
     yield typeof value === 'boolean';
   },
-  *'ISNONTEXT/1'(_input, value) {
+  // The value tests behind ISNONTEXT (see formula-contrib-jq.ts), which
+  // answers for an Excel error value in its argument as Excel does.
+  *'_XL_ISNONTEXT/1'(_input, value) {
     yield typeof value !== 'string';
   },
 

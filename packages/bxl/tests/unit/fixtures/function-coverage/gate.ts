@@ -59,6 +59,18 @@ export const PRIVATE_BUILTINS = new Map<string, string>([
       'does not recurse into itself',
   ],
   ['_EXCEL_INDEX/3', "the three-argument half of Excel's INDEX worker"],
+  ...['ISBLANK', 'ISLOGICAL', 'ISNONTEXT', 'ISNUMBER', 'ISTEXT'].map(
+    (name) =>
+      [
+        `_XL_${name}/1`,
+        `the value test behind Excel's \`def ${name}\`, which reads an Excel ` +
+          'error value in its argument as an answer rather than a failure',
+      ] as [string, string],
+  ),
+  [
+    '_XL_IS_ERROR_CODE/0',
+    'whether a caught error is an Excel error value, for the value tests',
+  ],
   [
     '_assign/2',
     "jq's desugaring target for `=`; BXL's evaluator handles the operator " +
