@@ -1244,6 +1244,38 @@ export function policyScopedQuery(
   let callerFilter = query.itemQuery.filter
     ? rewrite(query.itemQuery.filter)
     : undefined;
+  // A boost in a blend is a filter too, and reads bindings the same way.
+  let sort = query.itemQuery.sort?.map((s: any) =>
+    s && s.by === '_blend' && Array.isArray(s.of)
+      ? {
+          ...s,
+          of: s.of.map((c: any) =>
+            c && c.by === WHEN_SIGNAL_KEY && c.when
+              ? { ...c, when: rewrite(c.when) }
+              : c,
+          ),
+        }
+      : s,
+  ) as typeof query.itemQuery.sort;
+  // A binding's own query and a rerank's comparison filter cannot use a
+  // binding, so a linkedFrom there cannot become one. Under a policy it is
+  // refused rather than left to read the card's links directly, which the
+  // grants around it would not stop.
+  let refuseLinkedFrom = (node: unknown, where: string) => {
+    if (JSON.stringify(node ?? null).includes('"linkedFrom":')) {
+      throw new InvalidQueryError(
+        `${where}: under a realm policy, linkedFrom works only in the query's filter and its boosts; move it there`,
+        'policy-linked-from',
+      );
+    }
+  };
+  for (let [name, binding] of Object.entries(query.itemQuery.let ?? {})) {
+    refuseLinkedFrom(binding.from?.filter, `/let/${name}/from/filter`);
+  }
+  refuseLinkedFrom(
+    query.itemQuery.rerank?.compare?.filter,
+    '/rerank/compare/filter',
+  );
   let rerank = query.itemQuery.rerank;
   return {
     ...query,
@@ -1252,6 +1284,7 @@ export function policyScopedQuery(
     itemQuery: {
       ...query.itemQuery,
       filter: composePolicyScopedFilter(callerFilter, grantFilters),
+      ...(sort ? { sort } : {}),
       ...(Object.keys(lets).length ? { let: lets } : {}),
       // A comparison set the grants scope: an explicit one, and a row's
       // look-alikes, which would otherwise reach every card in the realm.

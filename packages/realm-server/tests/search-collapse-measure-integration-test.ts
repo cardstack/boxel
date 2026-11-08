@@ -128,6 +128,27 @@ function makeDefinitionLookup(): DefinitionLookup {
       if (codeRef.module === talkRef.module && codeRef.name === talkRef.name) {
         return talkDef;
       }
+      // The base card, for a filter on `id` with no type anchor (the binding
+      // a policy makes of linkedFrom).
+      if (
+        codeRef.module === '@cardstack/base/card-api' &&
+        codeRef.name === 'CardDef'
+      ) {
+        return {
+          type: 'card-def',
+          codeRef,
+          displayName: 'Card',
+          fields: { id: 'id' },
+          fieldDefs: {
+            id: {
+              type: 'contains',
+              isPrimitive: true,
+              isComputed: false,
+              fieldOrCard: ref('@cardstack/base/string', 'default'),
+            },
+          },
+        } as Definition;
+      }
       throw new Error(
         `unexpected definition lookup: ${codeRef.module}/${codeRef.name}`,
       );
@@ -878,6 +899,71 @@ module(basename(import.meta.filename), function (hooks) {
     assert.notOk(
       JSON.stringify(scoped.itemQuery.filter).includes('"linkedFrom":'),
       'the direct join is gone',
+    );
+  });
+
+  test('under a policy, linkedFrom never reads links directly, wherever it is written', async function (assert) {
+    let grant = { on, eq: { channel: 'GOTO' } };
+    let saved = {
+      linkedFrom: { card: `${testRealm}List/saved`, field: 'items' },
+    };
+    let scope = (payload: Record<string, unknown>) =>
+      policyScopedQuery(parseSearchEntryQueryFromPayload(payload), [grant]);
+    let refused = (payload: Record<string, unknown>, at: RegExp) =>
+      assert.throws(
+        () => scope(payload),
+        (e: unknown) =>
+          e instanceof InvalidQueryError &&
+          e.code === 'policy-linked-from' &&
+          at.test(e.message),
+      );
+
+    // In a boost, it becomes a binding the grants scope, as in the filter.
+    let boosted = scope({
+      filter: { 'item.on': on, range: { 'item.hnScore': { gte: 0 } } },
+      sort: [
+        {
+          blend: [
+            { 'item.on': on, by: 'item.hnScore' },
+            { boost: saved, weight: 2 },
+          ],
+        },
+      ],
+    });
+    assert.notOk(
+      JSON.stringify(boosted.itemQuery).includes('"linkedFrom":'),
+      'no direct read is left in the query',
+    );
+    assert.deepEqual(boosted.itemQuery.let?.__linkedFrom0?.from.filter, {
+      every: [{ eq: { id: `${testRealm}List/saved` } }, { any: [grant] }],
+    });
+    let { results } = await engine.search(
+      new URL(testRealm),
+      boosted.itemQuery,
+      {},
+      { kind: 'renderSet' },
+    );
+    assert.strictEqual(results.length, 2, 'and the scoped query runs');
+
+    // In a binding's query and a comparison filter it cannot become one.
+    refused(
+      {
+        let: {
+          mine: { from: { filter: saved }, select: 'item.channel' },
+        },
+        filter: { 'item.on': on, in: { 'item.channel': { $let: 'mine' } } },
+      },
+      /^\/let\/mine\/from\/filter:/,
+    );
+    refused(
+      {
+        filter: { 'item.on': on, range: { 'item.hnScore': { gte: 0 } } },
+        rerank: {
+          expr: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+          compare: { filter: saved },
+        },
+      },
+      /^\/rerank\/compare\/filter:/,
     );
   });
 
