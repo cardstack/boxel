@@ -283,7 +283,7 @@ export function assertFieldSearchOption(
   ) {
     throw new Error(`${where}: search include must be a list of field names`);
   }
-  for (let flag of ['typos', 'patterns', 'appendOnly'] as const) {
+  for (let flag of ['typos', 'patterns', 'appendOnly', 'neighbors'] as const) {
     if (intent[flag] !== undefined && typeof intent[flag] !== 'boolean') {
       throw new Error(`${where}: search ${flag} must be a boolean`);
     }
@@ -303,6 +303,7 @@ const FIELD_SEARCH_KEYS = new Set([
   'include',
   'appendOnly',
   'language',
+  'neighbors',
 ]);
 
 // A card class's `static searchDefaults`, merged up its ancestry: the nearest
