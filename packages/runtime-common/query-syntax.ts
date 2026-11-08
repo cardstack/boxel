@@ -26,6 +26,9 @@ export class QuerySyntaxError extends InvalidQueryError {
 }
 
 export interface LoweringNotes {
+  // Each quoted label the lowering turned into a name, by that name, so a
+  // later "not a field" error can quote what the author wrote.
+  quotedLabels?: Record<string, string>;
   // Where each `formula` sort runs: in SQL over every match, or over the
   // top window when the score profile cannot express it.
   formula?: { placement: 'sql' | 'top'; reason?: string };
@@ -60,9 +63,10 @@ const isObject = (v: unknown): v is Record<string, any> =>
   v != null && typeof v === 'object' && !Array.isArray(v);
 
 // A field path as the engine reads it: no `item.`, no surrounding quotes.
-// The quoted labels lowering has turned into names, so an error can quote
-// the label as the author wrote it.
-const QUOTED = new Map<string, string>();
+// The quoted labels the lowering in progress has turned into names, so an
+// error can quote a label as its author wrote it (lowerQuery is synchronous;
+// set for one call, then cleared).
+let quoted: Record<string, string> | undefined;
 
 export function barePath(path: string): string {
   let p = path.startsWith('item.') ? path.slice(5) : path;
@@ -80,8 +84,7 @@ export function barePath(path: string): string {
           : w.charAt(0).toUpperCase() + w.slice(1),
       )
       .join('');
-    if (QUOTED.size > 1000) QUOTED.clear();
-    QUOTED.set(name, p.slice(1, -1));
+    if (quoted) quoted[name] = p.slice(1, -1);
     return name;
   }
   return p;
@@ -156,6 +159,16 @@ function lowerFilter(node: any, type: CodeRef | undefined): any {
         throw new QuerySyntaxError(
           'invalid-filter',
           `filter: ${k} takes a field path`,
+        );
+      }
+      // one operator per filter node, as everywhere in the grammar
+      let others = Object.keys(node).filter(
+        (key) => key !== k && key !== 'on' && key !== 'type',
+      );
+      if (others.length) {
+        throw new QuerySyntaxError(
+          'invalid-filter',
+          `filter: ${k} is an operator of its own; combine it with "${others[0]}" under "every"`,
         );
       }
       let test = { eq: { [barePath(v)]: null } };
@@ -250,6 +263,20 @@ export function lowerQuery(
   input: Record<string, any>,
   opts: LowerOptions = {},
 ): LoweredQuery {
+  quoted = {};
+  try {
+    let lowered = lowerQueryInto(input, opts);
+    if (Object.keys(quoted).length) lowered.notes.quotedLabels = quoted;
+    return lowered;
+  } finally {
+    quoted = undefined;
+  }
+}
+
+function lowerQueryInto(
+  input: Record<string, any>,
+  opts: LowerOptions,
+): LoweredQuery {
   let notes: LoweringNotes = {};
   let { type: declared, ...rest } = input;
   // With no top-level type, the filter's own anchor is the query's type.
@@ -278,6 +305,13 @@ export function lowerQuery(
         every:
           Array.isArray(f.every) && Object.keys(f).length === 1 ? f.every : [f],
       };
+    } else if (
+      declared &&
+      isObject(f) &&
+      JSON.stringify(f.on ?? f.type) !== JSON.stringify(declared)
+    ) {
+      // a filter anchored on another type still answers to the query's type
+      f = { on: declared, every: [f] };
     }
     query.filter = f;
   } else if (declared) {
@@ -412,6 +446,7 @@ export async function resolveLabel(
   type: CodeRef,
   label: string,
   fieldsAt: FieldsAt,
+  written?: Record<string, string>,
 ): Promise<string> {
   let raw = barePath(label);
   if (isSynthetic(raw)) return raw;
@@ -442,10 +477,10 @@ export async function resolveLabel(
       (a, b) => distance(fold(a), fold(base)) - distance(fold(b), fold(base)),
     )[0];
     let where = out.length ? ` in ${out.join('.')}` : '';
-    let written = QUOTED.get(barePath(label)) ?? label;
+    let asWritten = written?.[barePath(label)] ?? label;
     throw new QuerySyntaxError(
       'unknown-field',
-      `"${written}" is not a field${where} on ${(type as any).name ?? 'this type'}${nearest ? `; did you mean "${[...out, nearest].join('.')}"?` : ''}`,
+      `"${asWritten}" is not a field${where} on ${(type as any).name ?? 'this type'}${nearest ? `; did you mean "${[...out, nearest].join('.')}"?` : ''}`,
     );
   }
   return out.join('.');
@@ -475,12 +510,13 @@ export function queryHasLabels(query: Record<string, any>): boolean {
 export async function resolveQueryLabels(
   query: Record<string, any>,
   fieldsAt: FieldsAt,
-  // every path, not only those written as labels (a checker with a fixture)
-  opts: { all?: boolean } = {},
+  // every path, not only those written as labels (a checker with a fixture);
+  // `written`: the lowering's quoted labels, for error messages
+  opts: { all?: boolean; written?: Record<string, string> } = {},
 ): Promise<Record<string, any>> {
   let resolve = (type: CodeRef | undefined, path: string) =>
     type && typeof path === 'string' && (opts.all || looksLikeLabel(path))
-      ? resolveLabel(type, path, fieldsAt)
+      ? resolveLabel(type, path, fieldsAt, opts.written)
       : Promise.resolve(path);
   let filter = async (n: any, type: CodeRef | undefined): Promise<any> => {
     if (!isObject(n)) return n;

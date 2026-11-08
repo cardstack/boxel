@@ -432,10 +432,12 @@ export class RealmIndexQueryEngine {
       fieldset,
       cardUrls,
       scope,
+      anonymizeStatistics,
     } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
       ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
+      ...(anonymizeStatistics ? { anonymizeStatistics } : {}),
     };
 
     // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one

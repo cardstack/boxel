@@ -1,6 +1,7 @@
 import {
   assertQuery,
   InvalidQueryError,
+  nearestMember,
   isRelevanceSort,
   type Facet,
   type FacetStats,
@@ -112,6 +113,20 @@ export const DEFAULT_HTML_QUERY = {
   eq: { format: 'fitted' },
 } as const satisfies HtmlQuery;
 
+const WIRE_SORT_MEMBERS = [
+  'by',
+  'item.on',
+  'direction',
+  'missing',
+  'near',
+  'weight',
+  'weights',
+  'method',
+  'k',
+  'of',
+  'expr',
+  'when',
+];
 const SEARCH_ENTRY_QUERY_MEMBERS = [
   'filter',
   'sort',
@@ -181,6 +196,10 @@ export interface SearchEntryQuery {
   // `item.on` anchors the translation to `itemQuery` spreads across `on` and
   // `type`.
   typeAnchors?: CodeRef[];
+  // Set by `policyScopedQuery`: the caller reads this realm only through its
+  // policy, so the engine applies the small-count rules to word statistics.
+  // Internal; not part of the wire grammar.
+  anonymizeStatistics?: boolean;
 }
 
 function invalidQuery(message: string, code?: string): SearchRequestError {
@@ -501,6 +520,7 @@ function translateFilterNode(
         `${pointer}: unknown filter member "${key}" — the type anchor is item.on and field paths are addressed through item. inside the filter operators (${FIELD_KEYED_OPERATORS.join(
           '/',
         )})`,
+        'unknown-key',
       );
     }
   }
@@ -598,7 +618,11 @@ function translateSort(
           `${pointer}: the sort type anchor is addressed as item.on`,
         );
       } else {
-        throw invalidQuery(`${pointer}: unknown sort member "${key}"`);
+        let near = nearestMember(key, WIRE_SORT_MEMBERS);
+        throw invalidQuery(
+          `${pointer}: unknown sort member "${key}"${near ? `; did you mean "${near}"?` : ''}`,
+          'unknown-key',
+        );
       }
     }
     // A card-field sort entry without its own anchor inherits the filter's —
@@ -854,6 +878,8 @@ function lowerEntryPayload(
     lowered = lowerQuery(query, {
       knownFunctions: BXL_FORMULA_FUNCTIONS,
     });
+    // checked before it is wired again, which carries known members only
+    assertQuery(lowered.query);
   } catch (e) {
     if (e instanceof InvalidQueryError) {
       throw invalidQuery(e.message, e.code);
@@ -930,7 +956,11 @@ export function parseSearchEntryQueryFromPayload(
   let record = lowerEntryPayload(payload as Record<string, unknown>);
   for (let key of Object.keys(record)) {
     if (!SEARCH_ENTRY_QUERY_MEMBERS.includes(key)) {
-      throw invalidQuery(`unknown member "${key}" in entry query`);
+      let near = nearestMember(key, [...SEARCH_ENTRY_QUERY_MEMBERS, 'type']);
+      throw invalidQuery(
+        `unknown member "${key}" in entry query${near ? `; did you mean "${near}"?` : ''}`,
+        'unknown-key',
+      );
     }
   }
 
@@ -1208,9 +1238,9 @@ export function policyScopedQuery(
   let rerank = query.itemQuery.rerank;
   return {
     ...query,
+    anonymizeStatistics: true,
     itemQuery: {
       ...query.itemQuery,
-      anonymizeStatistics: true,
       filter: composePolicyScopedFilter(callerFilter, grantFilters),
       ...(Object.keys(lets).length ? { let: lets } : {}),
       // A comparison set the grants scope: an explicit one, and a row's

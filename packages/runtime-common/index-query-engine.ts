@@ -435,6 +435,10 @@ export type InstanceOrError = IndexedInstance | InstanceError;
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & {
   includeErrors?: true;
+  // Set for a caller a realm policy scopes: realm-wide word statistics
+  // (IDF, typo corrections) are used only under the small-count rules
+  // (`STATS_MIN_ROWS`, `STATS_MIN_COUNT`).
+  anonymizeStatistics?: boolean;
   // Restrict the result set to this subset of URLs (SQL `i.url IN (...)`) —
   // instance rows by their `.json` file URL, file rows by their canonical URL.
   cardUrls?: string[];
@@ -1397,6 +1401,11 @@ export class IndexQueryEngine {
   }> {
     // A query in the request grammar's spellings (a top-level type, blend,
     // formula and boost keys) lowers to the engine's form first.
+    let lowering = usesNewSyntax(asWritten)
+      ? lowerQuery(asWritten as Record<string, any>, {
+          knownFunctions: BXL_FORMULA_FUNCTIONS,
+        })
+      : undefined;
     let {
       filter,
       sort,
@@ -1406,17 +1415,14 @@ export class IndexQueryEngine {
       let: lets,
       explain,
       rerank,
-    } = usesNewSyntax(asWritten)
-      ? (lowerQuery(asWritten as Record<string, any>, {
-          knownFunctions: BXL_FORMULA_FUNCTIONS,
-        }).query as Query)
-      : asWritten;
+    } = (lowering?.query as Query | undefined) ?? asWritten;
     // Fields written as labels (`PriceMin`, `"Units Sold 30d"`, `Brand.Name`)
     // resolve to their paths against the anchoring type first.
     if (queryHasLabels({ filter, sort, collapse, facets, rerank })) {
       ({ filter, sort, collapse, facets, rerank } = (await resolveQueryLabels(
         { filter, sort, collapse, facets, rerank },
         this.#fieldsAt,
+        { written: lowering?.notes.quotedLabels },
       )) as Query);
     }
     // One-card bindings resolve first: their values stand in for each
@@ -1470,7 +1476,7 @@ export class IndexQueryEngine {
           opts,
         ));
       }
-      let anonymize = Boolean(asWritten.anonymizeStatistics);
+      let anonymize = Boolean(opts.anonymizeStatistics);
       filter = await this.#resolveTypos(filter, realmURL, anonymize);
       filter = await this.#prepareWordStatistics(filter, realmURL, anonymize);
       sort = await this.#expandRelevanceSorts(sort, filter);

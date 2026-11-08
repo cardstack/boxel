@@ -1514,4 +1514,81 @@ module(basename(import.meta.filename), function (hooks) {
       (e: any) => e.code === 'unknown-field' && /channel/.test(e.message),
     );
   });
+  test('unknown members are refused with a code and the nearest name', function (assert) {
+    let refused = (query: unknown, code: string, pattern?: RegExp) =>
+      assert.throws(
+        () => assertQuery(query),
+        (e: any) =>
+          e instanceof InvalidQueryError &&
+          e.code === code &&
+          (!pattern || pattern.test(e.message)),
+      );
+    refused({ fliter: { type: on } }, 'unknown-key', /did you mean "filter"/);
+    refused(
+      { sort: [{ on, by: 'hnScore', order: 'desc' }] },
+      'unknown-key',
+      /order/,
+    );
+    refused(
+      { sort: [{ on, by: 'hnScore', directon: 'desc' }] },
+      'unknown-key',
+      /did you mean "direction"/,
+    );
+    refused(
+      { filter: { on, eq: { title: 'A' }, colour: 'red' } },
+      'unknown-key',
+      /colour/,
+    );
+    refused(
+      { filter: { type: on }, page: { size: 10, cursor: 'x' } },
+      'unknown-key',
+      /cursor/,
+    );
+    refused({ filter: { type: on }, page: { size: -1 } }, 'invalid-page');
+    refused(
+      { filter: { type: on }, page: { size: 10, number: -1 } },
+      'invalid-page',
+    );
+    assertQuery({ filter: { type: on }, page: { size: 0 } });
+    assert.ok(true, 'size 0 still asks for counts only');
+    assert.throws(
+      () =>
+        parseSearchEntryQueryFromPayload({
+          filter: { 'item.on': on },
+          sort: [{ by: 'item.hnScore', 'item.on': on, ordr: 'desc' }],
+        }),
+      (e: any) => e.queryCode === 'unknown-key',
+    );
+  });
+
+  test('exists keeps its own node, a type ANDs with another anchor, and policy marks the statistics rule', function (assert) {
+    assert.throws(
+      () =>
+        parseSearchEntryQueryFromPayload({
+          type: on,
+          filter: { exists: 'item.channel', eq: { 'item.title': 'A' } },
+        }),
+      (e: any) => e.queryCode === 'invalid-filter',
+    );
+    let other = ref(`${testRealm}other`, 'Other');
+    let parsed = parseSearchEntryQueryFromPayload({
+      type: on,
+      filter: { 'item.on': other, eq: { 'item.title': 'A' } },
+    });
+    assert.deepEqual(parsed.itemQuery.filter, {
+      on,
+      every: [{ on: other, eq: { title: 'A' } }],
+    });
+    let scoped = policyScopedQuery(
+      parseSearchEntryQueryFromPayload({
+        filter: { 'item.on': on, eq: { 'item.title': 'A' } },
+      }),
+      [{ on, eq: { channel: 'GOTO' } }],
+    );
+    assert.true(scoped.anonymizeStatistics, 'set on the entry query');
+    assert.notOk(
+      'anonymizeStatistics' in scoped.itemQuery,
+      'never on the query itself',
+    );
+  });
 });

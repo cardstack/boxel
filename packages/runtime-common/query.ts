@@ -386,11 +386,6 @@ interface QueryCommon {
   // The query's card type, once: the filter, every sort entry and the
   // collapse inherit it.
   type?: CodeRef;
-  // Set by realm-policy scoping for a caller who cannot read the whole
-  // realm: realm-wide word statistics (BM25's IDF, typo corrections) are
-  // used only under the small-count rules (`STATS_MIN_ROWS`,
-  // `STATS_MIN_COUNT` in the engine). Not part of the wire grammar.
-  anonymizeStatistics?: boolean;
   filter?: Filter;
   sort?: Sort;
   facets?: Facet[];
@@ -1024,6 +1019,20 @@ export function buildQueryParamValue(query: Query): string {
   return qs.stringify(query, { strictNullHandling: true, encode: false });
 }
 
+// The members a query may carry, for the unknown-key refusal.
+const QUERY_MEMBERS = [
+  'filter',
+  'sort',
+  'page',
+  'facets',
+  'collapse',
+  'let',
+  'explain',
+  'rerank',
+  'asData',
+  'fields',
+] as const;
+
 export function assertQuery(
   query: any,
   pointer: string[] = [''],
@@ -1282,7 +1291,7 @@ export function assertQuery(
         break;
 
       default:
-        throw new InvalidQueryError(`unknown field in query: ${key}`);
+        throw unknownMember(pointer.join('/') || '/', key, QUERY_MEMBERS);
     }
   }
 
@@ -1359,6 +1368,64 @@ function assertFields(
           `${pointer.concat(typeName).join('/') || '/'}: each field name must be a string`,
         );
       }
+    }
+  }
+}
+
+// An unknown member, refused with the nearest known one (`unknown-key`).
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+// The known member nearest an unknown one, when it is close enough to be a
+// slip ("ordr" for "order"); undefined otherwise.
+export function nearestMember(
+  key: string,
+  known: readonly string[],
+): string | undefined {
+  let nearest = [...known]
+    .map((k) => ({ k, d: editDistance(k.toLowerCase(), key.toLowerCase()) }))
+    .sort((a, b) => a.d - b.d)[0];
+  return nearest && nearest.d <= Math.max(2, Math.floor(key.length / 3))
+    ? nearest.k
+    : undefined;
+}
+function unknownMember(
+  where: string,
+  key: string,
+  known: readonly string[],
+): InvalidQueryError {
+  let nearest = [...known]
+    .map((k) => ({ k, d: editDistance(k.toLowerCase(), key.toLowerCase()) }))
+    .sort((a, b) => a.d - b.d)[0];
+  let hint =
+    nearest && nearest.d <= Math.max(2, Math.floor(key.length / 3))
+      ? `; did you mean "${nearest.k}"?`
+      : ` (known: ${known.join(', ')})`;
+  return new InvalidQueryError(
+    `${where}: unknown member "${key}"${hint}`,
+    'unknown-key',
+  );
+}
+function assertKnownMembers(
+  value: Record<string, unknown>,
+  known: readonly string[],
+  pointer: string[],
+) {
+  for (let key of Object.keys(value)) {
+    if (!known.includes(key)) {
+      throw unknownMember(pointer.join('/') || '/', key, known);
     }
   }
 }
@@ -1453,11 +1520,17 @@ function assertSortExpression(
   // A relevance sort needs no `on` and ignores one, though a present `on`
   // must still be a well-formed ref.
   if (isMatchRelevanceSort(sort)) {
+    assertKnownMembers(sort, ['by', 'on', 'direction', 'weight'], pointer);
     if ('on' in sort) {
       assertCardType(sort.on, pointer.concat('on'));
     }
     return;
   }
+  assertKnownMembers(
+    sort,
+    ['by', 'on', 'direction', 'missing', 'weight'],
+    pointer,
+  );
   if (!('on' in sort)) {
     if (Object.keys(generalSortFields).includes(sort.by)) {
       return;
@@ -1616,21 +1689,33 @@ function assertPage(
     );
   }
 
+  assertKnownMembers(page, ['size', 'number', 'generation'], pointer);
+  // size 0 asks for counts and facets only
   if ('size' in page) {
+    let size = Number(page.size);
     if (
       (typeof page.size !== 'number' && typeof page.size !== 'string') ||
-      (typeof page.size === 'string' && isNaN(page.size))
+      !Number.isInteger(size) ||
+      size < 0
     ) {
       throw new InvalidQueryError(
-        `${pointer.concat('size').join('/') || '/'}: size must be a number`,
+        `${pointer.concat('size').join('/') || '/'}: size must be a whole number, 0 or more`,
+        'invalid-page',
       );
     }
   }
-
-  if ('cursor' in page && typeof page.cursor !== 'string') {
-    throw new InvalidQueryError(
-      `${pointer.concat('cursor').join('/') || '/'}: cursor must be a string`,
-    );
+  if ('number' in page) {
+    let number = Number(page.number);
+    if (
+      (typeof page.number !== 'number' && typeof page.number !== 'string') ||
+      !Number.isInteger(number) ||
+      number < 0
+    ) {
+      throw new InvalidQueryError(
+        `${pointer.concat('number').join('/') || '/'}: number is a 0-based page number`,
+        'invalid-page',
+      );
+    }
   }
 }
 
@@ -1761,6 +1846,14 @@ function assertFilter(
   }
 
   let operator = operators[0];
+  for (let key of Object.keys(filter)) {
+    if (key !== operator && !FILTER_MODIFIERS.includes(key)) {
+      throw unknownMember(pointer.join('/') || '/', key, [
+        ...FILTER_MODIFIERS,
+        ...Object.keys(FILTER_OPERATOR_ASSERTS),
+      ]);
+    }
+  }
   if ('fields' in filter && operator !== 'matches') {
     throw new InvalidQueryError(
       `${pointer.concat('fields').join('/') || '/'}: fields belongs beside matches`,
@@ -1793,6 +1886,21 @@ function assertFilter(
   }
   FILTER_OPERATOR_ASSERTS[operator](filter, pointer);
 }
+
+// What may sit beside a filter's one operator: its type anchor and the
+// options that belong to `matches` (and the engine's own annotations).
+const FILTER_MODIFIERS = [
+  'on',
+  'type',
+  'fields',
+  'within',
+  'prefix',
+  'typos',
+  'scope',
+  'typoQuery',
+  'typoPartial',
+  'wordStatistics',
+];
 
 function assertCardType(type: any, pointer: string[]) {
   if (!isCodeRef(type)) {
