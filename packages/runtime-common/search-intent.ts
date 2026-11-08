@@ -47,6 +47,11 @@ export interface FieldSearchIntent {
   include?: string[];
   appendOnly?: boolean;
   language?: string;
+  // On a VectorField: index its vectors for nearest-neighbour lookups, so a
+  // search can compare each card with its own look-alikes (a rerank's
+  // `compare.near`). Opt-in because the index costs on every write; an
+  // undeclared vector keeps exact `near` search and no index.
+  neighbors?: boolean;
 }
 
 // `false` keeps the field out of the search doc.

@@ -185,9 +185,22 @@ export interface Rerank {
   expr: string;
   top?: number;
   direction?: 'asc' | 'desc';
-  compare?: { filter?: Filter; by?: string };
+  compare?: {
+    filter?: Filter;
+    by?: string;
+    // Each row's own look-alikes: its `k` nearest cards by the vector field
+    // at `near` (default 20, at most MAX_NEAR_PEERS), at least
+    // `minSimilarity` similar. The field must declare
+    // `search: { neighbors: true }`; `peers.similarity` holds how similar
+    // each is.
+    near?: string;
+    k?: number;
+    minSimilarity?: number;
+  };
 }
 export const MAX_PEER_VALUES = 2000;
+export const DEFAULT_NEAR_PEERS = 20;
+export const MAX_NEAR_PEERS = 100;
 export const DEFAULT_RERANK_TOP = 100;
 export const MAX_RERANK_TOP = 500;
 
@@ -1002,10 +1015,47 @@ export function assertQuery(
             typeof c !== 'object' ||
             c == null ||
             Array.isArray(c) ||
-            Object.keys(c).some((k) => k !== 'filter' && k !== 'by')
+            Object.keys(c).some(
+              (k) =>
+                !['filter', 'by', 'near', 'k', 'minSimilarity'].includes(k),
+            )
           ) {
             throw new InvalidQueryError(
-              `${at}/compare: compare is { filter?, by? }`,
+              `${at}/compare: compare is { filter?, by? } or { near, k?, minSimilarity?, filter? }`,
+            );
+          }
+          if (c.near !== undefined) {
+            if (typeof c.near !== 'string' || !FACET_PATH.test(c.near)) {
+              throw new InvalidQueryError(
+                `${at}/compare/near: near names a vector field, such as "imageEmbedding"`,
+              );
+            }
+            if (c.by !== undefined) {
+              throw new InvalidQueryError(
+                `${at}/compare: a row's look-alikes (near) are its own set, so compare takes near or by, not both`,
+              );
+            }
+          }
+          if (
+            c.k !== undefined &&
+            (c.near === undefined ||
+              !Number.isInteger(c.k) ||
+              c.k < 1 ||
+              c.k > MAX_NEAR_PEERS)
+          ) {
+            throw new InvalidQueryError(
+              `${at}/compare/k: k goes with near, an integer from 1 to ${MAX_NEAR_PEERS}`,
+            );
+          }
+          if (
+            c.minSimilarity !== undefined &&
+            (c.near === undefined ||
+              typeof c.minSimilarity !== 'number' ||
+              c.minSimilarity < -1 ||
+              c.minSimilarity > 1)
+          ) {
+            throw new InvalidQueryError(
+              `${at}/compare/minSimilarity: minSimilarity goes with near, a number from -1 to 1`,
             );
           }
           if (

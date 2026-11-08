@@ -1,4 +1,7 @@
 import type * as JSONTypes from 'json-typescript';
+import { logger } from './log.ts';
+
+const log = logger('index-query-engine');
 import { flatten } from 'lodash-es';
 import stringify from 'safe-stable-stringify';
 import {
@@ -105,6 +108,8 @@ import {
   isNearFilter,
   isReferenceFilterField,
   collapseBy,
+  DEFAULT_NEAR_PEERS,
+  MAX_NEAR_PEERS,
   MAX_PEER_VALUES,
   DEFAULT_RERANK_TOP,
   MAX_RERANK_TOP,
@@ -2017,17 +2022,35 @@ export class IndexQueryEngine {
       }
       return (doc ?? {}) as Record<string, unknown>;
     });
-    let set = await this.#comparisonSet(realmURL, query, opts, entryType);
-    let inputs = set
-      ? docs.map((doc) => {
-          let group = set!.groups.get(groupKey(doc, query.rerank!.compare?.by));
-          return {
-            ...doc,
-            peers: group?.peers ?? {},
-            stats: group?.stats ?? {},
-          };
+    let lookalikes = rerank.compare?.near
+      ? await this.#lookalikeSets(
+          realmURL,
+          query,
+          rows.map((row) => row.url),
+          opts,
+          entryType,
+        )
+      : undefined;
+    let set = lookalikes
+      ? undefined
+      : await this.#comparisonSet(realmURL, query, opts, entryType);
+    let inputs = lookalikes
+      ? docs.map((doc, i) => {
+          let own = lookalikes!.get(rows[i].url);
+          return { ...doc, peers: own?.peers ?? {}, stats: own?.stats ?? {} };
         })
-      : docs;
+      : set
+        ? docs.map((doc) => {
+            let group = set!.groups.get(
+              groupKey(doc, query.rerank!.compare?.by),
+            );
+            return {
+              ...doc,
+              peers: group?.peers ?? {},
+              stats: group?.stats ?? {},
+            };
+          })
+        : docs;
     let values = await scoreWithBxl(rerank.expr, inputs);
     let direction = rerank.direction === 'asc' ? 1 : -1;
     let order = rows
@@ -2079,6 +2102,222 @@ export class IndexQueryEngine {
         },
       },
     };
+  }
+
+  // Each window row's own comparison set: its `k` nearest cards in the realm
+  // by the vector field `compare.near`, at least `minSimilarity` similar,
+  // read through that field's nearest-neighbour index. The field must
+  // declare `search: { neighbors: true }`. With `compare.filter` (which a
+  // realm policy sets to its grants), a neighbour the filter does not admit
+  // is left out. `peers.similarity` and `stats.similarity` describe how
+  // alike they are.
+  async #lookalikeSets(
+    realmURL: URL,
+    query: Query,
+    rowUrls: string[],
+    opts: QueryOptions,
+    entryType: 'instance' | 'file' | 'all',
+  ): Promise<
+    Map<
+      string,
+      {
+        peers: Record<string, number[]>;
+        stats: Record<string, Record<string, number | null>>;
+      }
+    >
+  > {
+    let compare = query.rerank!.compare!;
+    let field = compare.near!;
+    if (this.#dbAdapter.kind !== 'pg') {
+      throw new InvalidQueryError(
+        'rerank: look-alikes (compare.near) run on Postgres only',
+      );
+    }
+    let anchor = filterAnchor(query.filter);
+    let declared = false;
+    if (anchor) {
+      try {
+        let definition = await this.getDefinition(anchor);
+        let def = await getField(definition, field, this.#definitionLookup);
+        declared =
+          typeof def.search === 'object' && def.search?.neighbors === true;
+      } catch {
+        declared = false;
+      }
+    }
+    if (!declared) {
+      throw new InvalidQueryError(
+        `rerank: compare.near reads each card's look-alikes by "${field}", which needs a neighbour index: declare the field with search: { neighbors: true }, and anchor the query on its type`,
+      );
+    }
+    let [dimsRow] = await this.#dbAdapter.execute(
+      'SELECT dims FROM boxel_index_vectors WHERE realm_url = $1 AND field_path = $2 LIMIT 1',
+      { bind: [realmURL.href, field] },
+    );
+    let out = new Map<
+      string,
+      {
+        peers: Record<string, number[]>;
+        stats: Record<string, Record<string, number | null>>;
+      }
+    >();
+    if (!dimsRow || rowUrls.length === 0) {
+      return out;
+    }
+    let dims = Number(dimsRow.dims);
+    if (!Number.isInteger(dims) || dims < 1 || dims > 2000) {
+      return out;
+    }
+    void this.#ensureNeighborIndex(field, dims);
+
+    let k = Math.min(compare.k ?? DEFAULT_NEAR_PEERS, MAX_NEAR_PEERS);
+    let allowed: Set<string> | undefined;
+    if (compare.filter) {
+      let { results } = await this._search(
+        realmURL,
+        { filter: compare.filter, let: query.let },
+        { ...opts, cardUrls: undefined },
+        ['SELECT i.url AS url'],
+        entryType,
+      );
+      allowed = new Set(results.map((r) => String((r as any).url)));
+    }
+    // The field path and dimension are inlined, checked, so the planner
+    // matches the partial index; the iterative scan keeps reading the index
+    // until enough rows of this realm turn up.
+    let fetchK = allowed ? Math.min(k * 4, 400) : k;
+    let vec = `::vector(${dims})`;
+    let pairs = await this.#dbAdapter.withTransaction(async (q) => {
+      try {
+        await q(['SET LOCAL hnsw.iterative_scan = relaxed_order']);
+        await q([`SET LOCAL hnsw.ef_search = ${Math.max(40, fetchK * 2)}`]);
+      } catch {
+        // an older pgvector: plain index scans, which may return fewer
+      }
+      return await q([
+        `SELECT s.url AS src, n.url AS nb, n.sim AS sim
+           FROM boxel_index_vectors AS s
+           CROSS JOIN LATERAL (
+             SELECT v.url, 1 - (v.embedding${vec} <=> s.embedding${vec}) AS sim
+               FROM boxel_index_vectors AS v
+              WHERE v.field_path = '${field}' AND v.dims = ${dims}
+                AND v.realm_url = s.realm_url AND v.url <> s.url
+                AND v.type = 'instance'
+              ORDER BY v.embedding${vec} <=> s.embedding${vec}
+              LIMIT ${fetchK}
+           ) AS n
+          WHERE s.field_path = '${field}' AND s.dims = ${dims} AND s.ordinal = 0
+            AND s.realm_url =`,
+        param(realmURL.href),
+        'AND s.url = ANY(',
+        param(rowUrls),
+        '::text[])',
+      ]);
+    });
+    let bySrc = new Map<string, { url: string; sim: number }[]>();
+    for (let p of pairs as Record<string, unknown>[]) {
+      let sim = Number(p.sim);
+      let nb = String(p.nb);
+      if (compare.minSimilarity !== undefined && sim < compare.minSimilarity)
+        continue;
+      if (allowed && !allowed.has(nb)) continue;
+      let list = bySrc.get(String(p.src)) ?? [];
+      if (list.length < k) list.push({ url: nb, sim });
+      bySrc.set(String(p.src), list);
+    }
+    let fields = [
+      ...new Set(
+        [
+          ...query.rerank!.expr.matchAll(
+            /\b(?:peers|stats)\.([A-Za-z_$][\w$]*)/g,
+          ),
+        ]
+          .map((m) => m[1])
+          .filter((f) => f !== 'similarity'),
+      ),
+    ];
+    let neighbourUrls = [
+      ...new Set([...bySrc.values()].flat().map((n) => n.url)),
+    ];
+    let values = new Map<string, (number | null)[]>();
+    if (fields.length && neighbourUrls.length) {
+      let path = (p: string) => `'{${p.split('.').join(',')}}'::text[]`;
+      let columns = fields
+        .map(
+          (f, i) =>
+            `CASE jsonb_typeof(spill_unmark(search_doc #> ${path(f)})) WHEN 'number' THEN (spill_unmark(search_doc #> ${path(f)}) #>> '{}')::double precision END AS c${i}`,
+        )
+        .join(', ');
+      let rows = await this.#dbAdapter.execute(
+        `SELECT url, ${columns} FROM ${tableFromOpts(opts)} WHERE realm_url = $1 AND type = 'instance' AND url = ANY($2::text[]) AND (is_deleted IS NOT TRUE)`,
+        { bind: [realmURL.href, neighbourUrls] },
+      );
+      for (let row of rows as Record<string, unknown>[]) {
+        values.set(
+          String(row.url),
+          fields.map((_f, i) =>
+            row[`c${i}`] == null ? null : Number(row[`c${i}`]),
+          ),
+        );
+      }
+    }
+    for (let [src, list] of bySrc) {
+      let peers: Record<string, number[]> = {
+        similarity: list.map((n) => n.sim),
+      };
+      fields.forEach((f, i) => {
+        peers[f] = list
+          .map((n) => values.get(n.url)?.[i])
+          .filter((v): v is number => v != null && Number.isFinite(v));
+      });
+      out.set(src, {
+        peers,
+        stats: Object.fromEntries(
+          Object.entries(peers).map(([f, xs]) => [f, summarize(xs)]),
+        ),
+      });
+    }
+    return out;
+  }
+
+  // The nearest-neighbour index for one declared vector field and
+  // dimension: an HNSW index over that slice of boxel_index_vectors, built
+  // once, concurrently, the first time a search asks for look-alikes by it.
+  // Until it is valid, lookups scan exactly.
+  #neighborIndexes = new Map<string, Promise<void>>();
+  #ensureNeighborIndex(field: string, dims: number): Promise<void> {
+    let key = `${field}:${dims}`;
+    let pending = this.#neighborIndexes.get(key);
+    if (pending) return pending;
+    let slug = field
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .slice(0, 30);
+    let name = `boxel_index_vectors_nb_${slug}_${dims}`;
+    pending = (async () => {
+      try {
+        let [existing] = await this.#dbAdapter.execute(
+          `SELECT i.indisvalid AS valid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname = $1`,
+          { bind: [name] },
+        );
+        if (existing && existing.valid) return;
+        if (existing) {
+          await this.#dbAdapter.execute(
+            `DROP INDEX CONCURRENTLY IF EXISTS ${name}`,
+          );
+        }
+        await this.#dbAdapter.execute(
+          `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${name} ON boxel_index_vectors USING hnsw ((embedding::vector(${dims})) vector_cosine_ops) WHERE field_path = '${field}' AND dims = ${dims}`,
+        );
+      } catch (e) {
+        this.#neighborIndexes.delete(key);
+        log.warn(
+          `could not build the neighbour index ${name}: ${(e as Error).message}`,
+        );
+      }
+    })();
+    this.#neighborIndexes.set(key, pending);
+    return pending;
   }
 
   // A rerank's comparison set, when its formula reads `peers.` or `stats.`:

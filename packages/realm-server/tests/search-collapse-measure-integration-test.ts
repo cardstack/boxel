@@ -1225,6 +1225,43 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  test('look-alike comparisons are checked, travel the wire, and a policy scopes them', function (assert) {
+    let bad = (compare: Record<string, unknown>, pattern: RegExp) =>
+      assert.throws(
+        () => assertQuery({ rerank: { expr: 'x', compare } } as any),
+        pattern,
+      );
+    bad({ near: 'embedding', by: 'channel' }, /near or by, not both/);
+    bad({ near: 'embedding', k: 0 }, /k goes with near/);
+    bad({ k: 5 }, /k goes with near/);
+    bad({ minSimilarity: 0.5 }, /minSimilarity goes with near/);
+    bad({ near: 'a b' }, /near names a vector field/);
+    let parsed = parseSearchEntryQueryFromPayload({
+      filter: { 'item.on': on },
+      rerank: {
+        expr: 'priceMin / stats.priceMin.median',
+        compare: { near: 'item.imageEmbedding', k: 20, minSimilarity: 0.8 },
+      },
+    });
+    assert.deepEqual(parsed.itemQuery.rerank!.compare, {
+      near: 'imageEmbedding',
+      k: 20,
+      minSimilarity: 0.8,
+    });
+    let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
+    assert.strictEqual(
+      (wire.rerank as any).compare.near,
+      'item.imageEmbedding',
+    );
+    let grant = { on, eq: { channel: 'GOTO' } };
+    let scoped = policyScopedQuery(parsed, [grant]);
+    assert.deepEqual(
+      scoped.itemQuery.rerank!.compare!.filter,
+      { any: [grant] },
+      "a row's look-alikes reach only the cards the grants admit",
+    );
+  });
+
   test('a rerank formula that does not compile is refused', async function (assert) {
     await assert.rejects(
       engine.search(

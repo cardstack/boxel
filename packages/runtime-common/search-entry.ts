@@ -889,6 +889,17 @@ export function parseSearchEntryQueryFromPayload(
                 : compare.by !== undefined
                   ? { by: compare.by }
                   : {}),
+              ...(typeof compare.near === 'string'
+                ? {
+                    near: stripItemPrefix(compare.near, 'rerank/compare/near'),
+                  }
+                : compare.near !== undefined
+                  ? { near: compare.near }
+                  : {}),
+              ...(compare.k !== undefined ? { k: compare.k } : {}),
+              ...(compare.minSimilarity !== undefined
+                ? { minSimilarity: compare.minSimilarity }
+                : {}),
             },
           }
         : r;
@@ -1045,7 +1056,9 @@ export function policyScopedQuery(
       ...query.itemQuery,
       filter: composePolicyScopedFilter(callerFilter, grantFilters),
       ...(Object.keys(lets).length ? { let: lets } : {}),
-      ...(rerank?.compare?.filter
+      // A comparison set the grants scope: an explicit one, and a row's
+      // look-alikes, which would otherwise reach every card in the realm.
+      ...(rerank?.compare?.filter || rerank?.compare?.near
         ? {
             rerank: {
               ...rerank,
@@ -1526,7 +1539,13 @@ export interface SearchEntryWireQuery {
     expr: string;
     top?: number;
     direction?: 'asc' | 'desc';
-    compare?: { filter?: SearchEntryWireFilter; by?: string };
+    compare?: {
+      filter?: SearchEntryWireFilter;
+      by?: string;
+      near?: string;
+      k?: number;
+      minSimilarity?: number;
+    };
   };
   // one result per group; `by` through `item.` (see `Collapse`)
   collapse?: string | { by: string; 'item.on'?: CodeRef; keep?: number };
@@ -1635,6 +1654,13 @@ export function searchEntryWireQueryFromQuery(
                 ? { filter: wireFilterFromFilter(compare.filter) }
                 : {}),
               ...(compare.by ? { by: `${ITEM_PREFIX}${compare.by}` } : {}),
+              ...(compare.near
+                ? { near: `${ITEM_PREFIX}${compare.near}` }
+                : {}),
+              ...(compare.k !== undefined ? { k: compare.k } : {}),
+              ...(compare.minSimilarity !== undefined
+                ? { minSimilarity: compare.minSimilarity }
+                : {}),
             },
           }
         : {}),

@@ -89,6 +89,8 @@ const momentDef: Definition = {
       isComputed: false,
       fieldOrCard: vectorRef,
       serializerName: 'vector',
+      // opted in to look-alike lookups (rerank compare.near)
+      search: { neighbors: true },
     },
     f2: {
       type: 'containsMany',
@@ -1015,6 +1017,69 @@ module(basename(import.meta.filename), function () {
         Number(Number((r as any)._blendScore).toFixed(6)),
       ]);
     }
+
+    pgvectorTest(
+      'rerank compares each card with its own look-alikes',
+      async function (assert) {
+        await index({
+          a: { title: 'a', views: 10, embedding: vec([1, 0, 0]) },
+          b: { title: 'b', views: 50, embedding: vec([0.99, 0.1, 0]) },
+          c: { title: 'c', views: 20, embedding: vec([0.98, 0.15, 0]) },
+          d: { title: 'd', views: 5, embedding: vec([0, 1, 0]) },
+          e: { title: 'e', views: 100, embedding: vec([0, 0.99, 0.1]) },
+        });
+        let rerankRows = async (rerank: any) => {
+          let { results, meta } = await engine.search(
+            new URL(testRealm),
+            { filter: { type: momentRef }, rerank } as Query,
+            {},
+            { kind: 'renderSet' },
+          );
+          return {
+            rows: results.map((r: any) => [
+              r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
+              r._rerank == null ? null : Number(Number(r._rerank).toFixed(3)),
+            ]),
+            meta,
+          };
+        };
+        // Views against the median of each card's two nearest look-alikes
+        // (d and e have only each other above 0.5).
+        let { rows } = await rerankRows({
+          expr: 'views / stats.views.median',
+          compare: { near: 'embedding', k: 2, minSimilarity: 0.5 },
+        });
+        assert.deepEqual(rows, [
+          ['e', 20],
+          ['b', 3.333],
+          ['c', 0.667],
+          ['a', 0.286],
+          ['d', 0.05],
+        ]);
+        let similar = await rerankRows({
+          expr: 'MAX(peers.similarity)',
+          compare: { near: 'embedding', k: 1 },
+        });
+        assert.ok(
+          similar.rows.every(([, v]) => typeof v === 'number' && v > 0.9),
+          "each card's twin is nearly identical",
+        );
+        await assert.rejects(
+          rerankRows({ expr: 'views', compare: { near: 'views' } }),
+          /declare the field with search: \{ neighbors: true \}/,
+          'a field that has not opted in is refused',
+        );
+        let built = false;
+        for (let i = 0; i < 50 && !built; i++) {
+          let [row] = await adapter.execute(
+            `SELECT count(*) AS n FROM pg_indexes WHERE indexname = 'boxel_index_vectors_nb_embedding_3'`,
+          );
+          built = Number(row.n) > 0;
+          if (!built) await new Promise((r) => setTimeout(r, 100));
+        }
+        assert.ok(built, "the first lookup builds the field's neighbour index");
+      },
+    );
 
     pgvectorTest(
       'a blend fuses similarity and engagement by reciprocal rank',
