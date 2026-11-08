@@ -100,7 +100,9 @@ import {
   type RenderingCandidate,
   type SearchEntryFieldset,
   type SearchEntryQuery,
+  type SearchColumnsDocument,
 } from './search-entry.ts';
+import { InvalidQueryError } from './invalid-query-error.ts';
 import type { FieldDefinition } from './definitions.ts';
 import { urlNamesFile } from './file-def-code-ref.ts';
 import {
@@ -418,6 +420,58 @@ export class RealmIndexQueryEngine {
   // result's own native type (`types[0]`) is in play; an explicit predicate
   // opens the full adoption-chain universe. The applied htmlQuery is echoed
   // once as `meta.htmlQuery` whenever the html branch is in play.
+  // A `select` search: the query's rows as a table of values read off the
+  // search doc, `id` first. See `IndexQueryEngine.planColumns`.
+  async searchColumns(
+    searchEntryQuery: SearchEntryQuery,
+    opts?: Options,
+  ): Promise<SearchColumnsDocument> {
+    let {
+      itemQuery: query,
+      columns,
+      typeAnchors,
+      cardUrls,
+      anonymizeStatistics,
+      labelFilter,
+      grantFilter,
+      grantsForType,
+    } = searchEntryQuery;
+    if (!columns) {
+      throw new Error('searchColumns needs columns');
+    }
+    let type = typeAnchors?.length === 1 ? typeAnchors[0] : undefined;
+    if (!type) {
+      throw new InvalidQueryError(
+        'select: the query needs one type to read its paths from: give it a top-level type, or anchor its filter on one',
+        'needs-type',
+      );
+    }
+    let engineOpts: Options = {
+      ...opts,
+      ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
+      ...(anonymizeStatistics ? { anonymizeStatistics } : {}),
+      ...(labelFilter ? { labelFilter } : {}),
+      ...(grantFilter ? { grantFilter } : {}),
+      ...(grantsForType ? { grantsForType } : {}),
+    };
+    let plans = await this.#indexQueryEngine.planColumns(type, columns);
+    let run = () =>
+      this.#indexQueryEngine.searchColumns(
+        new URL(this.#realm.url),
+        query,
+        engineOpts,
+        plans,
+      );
+    let { meta, rows } = opts?.timings
+      ? await opts.timings.time('sql', run)
+      : await run();
+    return {
+      columns: ['id', ...columns.map((c) => c.name)],
+      rows,
+      meta: meta as SearchColumnsDocument['meta'],
+    };
+  }
+
   async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,

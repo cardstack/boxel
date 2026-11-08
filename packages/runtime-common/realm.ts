@@ -128,9 +128,11 @@ import {
   parseSearchEntryQueryFromPayload,
   policyScopedQuery,
   policyScopedRealms,
+  type SearchColumnsDocument,
   type SearchEntryFieldset,
   type SearchEntryQuery,
 } from './search-entry.ts';
+import { InvalidQueryError } from './invalid-query-error.ts';
 import type { Filter } from './query.ts';
 import {
   rri,
@@ -3398,6 +3400,20 @@ export class Realm {
       .query(
         '/_search',
         SupportedMimeType.CardJson,
+        this.searchEntriesResponse.bind(this),
+        SEARCH_ROUTE,
+      )
+      // A `select` search can answer one row a line, as NDJSON or JSONL
+      // (the same format under two names).
+      .query(
+        '/_search',
+        SupportedMimeType.NDJSON,
+        this.searchEntriesResponse.bind(this),
+        SEARCH_ROUTE,
+      )
+      .query(
+        '/_search',
+        SupportedMimeType.JSONL,
         this.searchEntriesResponse.bind(this),
         SEARCH_ROUTE,
       )
@@ -16577,21 +16593,70 @@ export class Realm {
         readable: () => policyScope === undefined,
         resolvedByServer,
       });
+      let accept = request.headers.get('Accept') ?? '';
+      let lineType = accept.includes(SupportedMimeType.JSONL)
+        ? SupportedMimeType.JSONL
+        : accept.includes(SupportedMimeType.NDJSON)
+          ? SupportedMimeType.NDJSON
+          : undefined;
+      let wantsNDJSON = lineType !== undefined;
+      if (wantsNDJSON && !searchEntryQuery.columns) {
+        throw new SearchRequestError(
+          'invalid-query',
+          'Invalid query: an NDJSON or JSONL answer is a table: give the query a select',
+          'missing-member',
+        );
+      }
+      // A `select` search answers a table, as JSON or as NDJSON.
+      let columnsResponse = (doc: SearchColumnsDocument) =>
+        wantsNDJSON
+          ? createResponse({
+              body:
+                doc.rows
+                  .map((row) =>
+                    JSON.stringify(
+                      Object.fromEntries(
+                        doc.columns.map((c, i) => [c, row[i] ?? null]),
+                      ),
+                    ),
+                  )
+                  .join('\n') +
+                (doc.rows.length ? '\n' : '') +
+                JSON.stringify({ meta: doc.meta }) +
+                '\n',
+              init: {
+                headers: { 'content-type': lineType! },
+              },
+              requestContext,
+            })
+          : createResponse({
+              body: JSON.stringify(doc),
+              init: {
+                headers: { 'content-type': SupportedMimeType.CardJson },
+              },
+              requestContext,
+            });
       let noRows = () =>
-        createResponse({
-          body: JSON.stringify(
-            markPolicyScoped(
-              emptySearchEntryDocument(searchEntryQuery),
-              scopedRealms,
-            ),
-            null,
-            2,
-          ),
-          init: {
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
+        searchEntryQuery.columns
+          ? columnsResponse({
+              columns: ['id', ...searchEntryQuery.columns.map((c) => c.name)],
+              rows: [],
+              meta: { page: { total: 0 } },
+            })
+          : createResponse({
+              body: JSON.stringify(
+                markPolicyScoped(
+                  emptySearchEntryDocument(searchEntryQuery),
+                  scopedRealms,
+                ),
+                null,
+                2,
+              ),
+              init: {
+                headers: { 'content-type': SupportedMimeType.CardJson },
+              },
+              requestContext,
+            });
       if (admittingNothing || policyScope?.kind === 'denied') {
         return noRows();
       }
@@ -16635,6 +16700,35 @@ export class Realm {
       // ceiling bounds the result set even when the client card cap was
       // skipped, and a wall-clock cutoff can't live client-side. The realms and
       // concurrency caps stay on the card `@context` surface.
+      if (searchEntryQuery.columns) {
+        // The same page bound and time budget as the item leg: a table is
+        // values off the index, never rendered, so its page is the item
+        // leg's page.
+        searchEntryQuery.itemQuery = applyServerSearchPageBound(
+          searchEntryQuery.itemQuery,
+        );
+        let columnsQuery = searchEntryQuery;
+        let runColumns = () =>
+          this.#realmIndexQueryEngine.searchColumns(columnsQuery, {
+            cacheOnlyDefinitions: duringPrerender,
+          });
+        try {
+          return columnsResponse(
+            duringPrerender
+              ? await runColumns()
+              : await runWithSearchTimeBudget(runColumns),
+          );
+        } catch (e) {
+          if (e instanceof InvalidQueryError) {
+            throw new SearchRequestError(
+              'invalid-query',
+              `Invalid query: ${e.message}`,
+              e.code,
+            );
+          }
+          throw e;
+        }
+      }
       let itemLegBounded =
         isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
       // Clamp an absent page to the default so the query carries a LIMIT, and

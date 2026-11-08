@@ -626,6 +626,15 @@ export default function handleSearch(opts: {
       parsed = timings
         ? await timings.time('parse', parseRequest)
         : await parseRequest();
+      if (parsed.columns) {
+        // A table spans one realm for now: rows from several would need one
+        // order across realms, which entries only approximate.
+        throw new SearchRequestError(
+          'invalid-query',
+          "Invalid query: select runs on one realm's _search, not across realms",
+          'conflicting-members',
+        );
+      }
     } catch (e) {
       if (e instanceof SearchRequestError) {
         await respondToInvalidSearch(ctxt, e);

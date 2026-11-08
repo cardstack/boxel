@@ -140,6 +140,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'rerank',
   'realms',
   'fields',
+  'select',
   'cardUrls',
   'scope',
 ];
@@ -216,6 +217,94 @@ export interface SearchEntryQuery {
   // for reads of cards of another type than the query's. Internal; in
   // process only.
   grantsForType?: (type: CodeRef) => Promise<Filter[] | null>;
+  // `select`: values to read off each row's search doc, by path, in order.
+  // The response is then a table (`{ columns, rows }`), not entries.
+  columns?: SearchColumn[];
+}
+
+// One requested column: the name it goes out under, and the search-doc path
+// (bare, `item.` stripped) or score it reads.
+export interface SearchColumn {
+  name: string;
+  path: string;
+}
+
+// The answer to a `select` search: one row per match, `id` first, then each
+// requested column in order. A value is what the search doc holds (a list
+// field reads as a list), or null. `meta` carries the page total and any
+// facets, as an entry search's does.
+export interface SearchColumnsDocument {
+  columns: string[];
+  rows: unknown[][];
+  meta: { page?: { total?: number } } & Record<string, unknown>;
+}
+
+export const MAX_COLUMNS = 64;
+const COLUMN_PATH = /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/;
+
+// `select: ['title', 'brand.name', { sku: 'itemId' }]`: a path names a
+// column after itself, a one-member object renames it. `id` is always the
+// first column, so no column may take that name.
+function parseColumns(value: unknown): SearchColumn[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw invalidQuery(
+      'select must be a non-empty list of field paths, such as ["title", "brand.name"]',
+      'invalid-value',
+    );
+  }
+  if (value.length > MAX_COLUMNS) {
+    throw invalidQuery(
+      `select takes at most ${MAX_COLUMNS} paths`,
+      'limit-exceeded',
+    );
+  }
+  let out: SearchColumn[] = [];
+  let names = new Set<string>(['id']);
+  for (let [i, entry] of value.entries()) {
+    let name: string;
+    let path: unknown;
+    if (typeof entry === 'string') {
+      path = entry;
+      name = entry.startsWith(ITEM_PREFIX)
+        ? entry.slice(ITEM_PREFIX.length)
+        : entry;
+    } else if (
+      entry &&
+      typeof entry === 'object' &&
+      !Array.isArray(entry) &&
+      Object.keys(entry).length === 1
+    ) {
+      [[name, path]] = Object.entries(entry as Record<string, unknown>);
+    } else {
+      throw invalidQuery(
+        `select/${i}: a column is a path, or { name: path } to rename it`,
+        'invalid-value',
+      );
+    }
+    if (typeof path !== 'string') {
+      throw invalidQuery(`select/${i}: a path is a string`, 'invalid-value');
+    }
+    let bare = path.startsWith(ITEM_PREFIX)
+      ? path.slice(ITEM_PREFIX.length)
+      : path;
+    if (!COLUMN_PATH.test(bare)) {
+      throw invalidQuery(
+        `select/${i}: "${path}" is not a field path`,
+        'invalid-value',
+      );
+    }
+    if (names.has(name)) {
+      throw invalidQuery(
+        name === 'id'
+          ? `select/${i}: every row starts with its id; name this column something else`
+          : `select/${i}: two columns are named "${name}"`,
+        'conflicting-members',
+      );
+    }
+    names.add(name);
+    out.push({ name, path: bare });
+  }
+  return out;
 }
 
 function invalidQuery(message: string, code?: string): SearchRequestError {
@@ -1102,6 +1191,16 @@ export function parseSearchEntryQueryFromPayload(
     throw e;
   }
 
+  let columns: SearchColumn[] | undefined;
+  if (record.select !== undefined) {
+    if (record.fields !== undefined) {
+      throw invalidQuery(
+        'select and fields cannot go together: select answers a table, fields answers entries',
+        'conflicting-members',
+      );
+    }
+    columns = parseColumns(record.select);
+  }
   let fieldset = parseFieldset(record.fields);
 
   return {
@@ -1114,6 +1213,7 @@ export function parseSearchEntryQueryFromPayload(
     typeAnchors: wireFilterTypeAnchors(
       record.filter as SearchEntryWireFilter | undefined,
     ),
+    ...(columns ? { columns } : {}),
   };
 }
 

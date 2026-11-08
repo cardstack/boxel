@@ -481,6 +481,45 @@ let { data } = await indexer.search({
 
 A reference names a binding of the right kind, or the query is refused: `unknown-binding` for a name `let` doesn't declare (with the nearest declared name), and `binding-kind` for `{ "$let" }` on a one-card binding or `{ "$let", "path" }` on a list. A binding's query cannot use another binding, and a query takes at most 4. Bindings resolve within each realm a search reaches. Under a realm policy, the grants that scope the caller's query also scope every binding's query, and a `linkedFrom` runs as a binding, so a list never holds anything the caller couldn't search for. Live queries leave a query with bindings to the server. On the wire, `select` and the binding's field paths go through `item.`; a reference's `path` reads the card's own path, with or without `item.`.
 
+### A table of values (`select`)
+
+`select` answers a query as a table instead of entries: the values at the paths it names, read straight from each row's search doc, so nothing is loaded or rendered. `id` is always the first column.
+
+```js
+{
+  type: productRef,
+  filter: { range: { priceMin: { lt: 100 } } },
+  sort: [{ by: 'unitsSold30d', direction: 'desc' }],
+  select: ['itemId', 'title', 'priceMin', 'brand.name', { category: 'category.path' }],
+  page: { size: 2000 },
+}
+```
+
+A path names a column after itself; a one-member object renames it (`{ brand: 'brand.name' }`). A path through a link reads what the link carries in the search doc, so `brand.name` works when the link declares `search: { include: ['name'] }` (or a `searchable` route reaches it); a list, or a path through a list of links, reads as a list. A score the query computes can be a column too: `_blendScore`, `_matchRelevance`, `_nearSimilarity`, `_rerank`, `_collapseSize`.
+
+```json
+{
+  "columns": ["id", "itemId", "title", "priceMin", "brand.name", "category"],
+  "rows": [
+    [
+      "https://…/Product/B07…",
+      "B07…",
+      "Brass desk lamp",
+      64,
+      "Lumen",
+      "Home > Lighting"
+    ]
+  ],
+  "meta": { "page": { "total": 1322 } }
+}
+```
+
+Ask for `Accept: application/x-ndjson` (or `application/jsonl`, the same format) and the table comes one row a line, each an object keyed by column, then a last `{ "meta": … }` line, which a table loader such as DuckDB's `read_json` reads as it is.
+
+`select` takes the same filter, sort, `let`, `collapse`, `rerank`, facets and paging as any query, with the same page limit. It needs the query's type, from a top-level `type` or the filter's anchor (`needs-type`). A path the type lacks is `unknown-field`; a path through a link that does not carry it is `not-indexed`; `select` beside `fields` is `conflicting-members`, since one answers a table and the other entries. It runs on Postgres only (`needs-postgres`).
+
+Under a realm policy, the rows are the ones the caller's grants admit, as for any search, and a value read through a link shows only where the linked card's own type's grants admit the caller as well: otherwise it reads null (or, in a list, is left out). A `select` value is never wider than what the caller could read card by card.
+
 ### Relative dates
 
 A `range` bound on a date field may be relative: `now`, optionally moved by whole units (`now-30d`, `now+1w`), optionally rounded down to the start of a unit in UTC (`now-30d/d`, `now/M`). The units are `s`, `m`, `h`, `d`, `w`, `M` (months) and `y`. A week starts on Monday. The bound is read when the query runs, so a saved search for "added this month" stays current. On a `DateField` or `DateTimeField` the bound is compared in the field's own format. Any other string is a literal bound.

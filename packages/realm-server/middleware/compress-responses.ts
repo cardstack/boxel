@@ -15,7 +15,7 @@ import type Koa from 'koa';
 
 const MIN_BYTES = 1024;
 const COMPRESSIBLE =
-  /^(text\/(?!event-stream)|application\/(json|vnd\.[\w.+-]*json|javascript|xml|[\w.+-]*\+json|[\w.+-]*\+xml)|image\/svg\+xml)/i;
+  /^(text\/(?!event-stream)|application\/(json|jsonl|x-ndjson|vnd\.[\w.+-]*json|javascript|xml|[\w.+-]*\+json|[\w.+-]*\+xml)|image\/svg\+xml)/i;
 
 // The encoding to use for `Accept-Encoding`: br, else gzip, skipping any
 // listed with q=0.
