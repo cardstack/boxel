@@ -1076,7 +1076,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept, x-boxel-link-shape',
+            'Accept, x-boxel-link-shape, Accept-Encoding',
             'caches key on the negotiated type and on the link shape, which are the two request members that select which representation of this URL is returned',
           );
         });
@@ -1100,7 +1100,7 @@ module(basename(import.meta.filename), function () {
           assert.notOk(response.text, 'the 304 carries no body');
           assert.strictEqual(
             response.get('vary'),
-            'Accept, x-boxel-link-shape',
+            'Accept, x-boxel-link-shape, Accept-Encoding',
             'a 304 has to carry the same key as the 200 it revalidates, or a cache stores the response under a narrower one',
           );
         });
@@ -2166,7 +2166,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept',
+            'Accept, Accept-Encoding',
             'the response varies on Accept',
           );
         });
@@ -6087,7 +6087,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept',
+            'Accept, Accept-Encoding',
             'the response varies on Accept',
           );
         });
@@ -6159,7 +6159,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept',
+            'Accept, Accept-Encoding',
             'the no-op response varies on Accept',
           );
         });

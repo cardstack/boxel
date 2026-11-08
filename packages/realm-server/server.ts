@@ -1,3 +1,4 @@
+import { compressResponses } from './middleware/compress-responses.ts';
 import type { PublishedProxyPolicies } from './lib/published-proxy-policy.ts';
 import Koa from 'koa';
 import cors from '@koa/cors';
@@ -967,6 +968,8 @@ export class RealmServer {
       .use(clientAddress(this.clientAddress))
       .use(httpLogging)
       .use(instanceIdHeader)
+      // Wraps everything below, so it sees each response as it leaves.
+      .use(compressResponses())
       .use(
         cors({
           origin: '*',
