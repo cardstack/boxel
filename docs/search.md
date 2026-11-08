@@ -312,6 +312,8 @@ rerank: { expr: 'IF(ISNUMBER(SEARCH("organic", title)), 1.2, 1) * rating', top: 
 - `stats.<field>.<count|sum|avg|min|max|median|p10|p25|p75|p90|stdev>`: aggregates over the whole set, computed when the query runs. `priceMin / stats.priceMin.median` is a product's price against the median of its kind.
 - `peers.<field>`: the set's values as a list (at most 2,000 per group), for any Excel function. `PERCENTRANK_INC(peers.rating, rating)` is where its rating falls among its kind, 0 to 1.
 
+A set reads at most 10,000 rows. Past that, `stats.` and `peers.` describe the first 10,000 the set's query returns, and `meta.rerank.compareTruncated` gives `{ rows, total }`. `meta.rerank.peersTruncated` says a group's `peers.` list was cut to 2,000 values; its `stats.` still cover the whole group. `meta.rerank.truncated` says the query matched more rows than the window, so the rows past it keep the query's order.
+
 ```js
 rerank: {
   expr: 'PERCENTRANK_INC(peers.rating, rating)',

@@ -12,6 +12,7 @@ import {
   assertQuery,
   combineSearchEntryResults,
   internalKeyFor,
+  setCompareRowLimitForTests,
   setRerankScorer,
   setRerankTimeBudgetForTests,
   parseSearchEntryQueryFromPayload,
@@ -1287,6 +1288,42 @@ module(basename(import.meta.filename), function (hooks) {
       ['a', 'f', 'g'],
       'a page past the window keeps the query order',
     );
+  });
+
+  test('a rerank says when its window or its comparison set was cut short', async function (assert) {
+    let whole = await reranked({
+      filter: { type: on },
+      sort: byScoreDesc,
+      rerank: { expr: 'hnScore / stats.hnScore.median' },
+    });
+    assert.notOk(whole.meta.rerank?.truncated, 'a window holding every match');
+    assert.notOk(whole.meta.rerank?.compareTruncated, 'a whole comparison set');
+
+    let top = await reranked({
+      filter: { type: on },
+      sort: byScoreDesc,
+      rerank: { expr: 'hnScore / stats.hnScore.median', top: 4 },
+    });
+    assert.true(
+      top.meta.rerank?.truncated,
+      'seven matches, four re-ranked: the rest keep the query order',
+    );
+
+    setCompareRowLimitForTests(3);
+    try {
+      let capped = await reranked({
+        filter: { type: on },
+        sort: byScoreDesc,
+        rerank: { expr: 'hnScore / stats.hnScore.median' },
+      });
+      assert.deepEqual(
+        capped.meta.rerank?.compareTruncated,
+        { rows: 3, total: 7 },
+        'the set read three of its seven rows, and says so',
+      );
+    } finally {
+      setCompareRowLimitForTests(undefined);
+    }
   });
 
   test('rerank compares each row with its peers', async function (assert) {

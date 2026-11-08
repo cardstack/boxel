@@ -204,6 +204,18 @@ export interface Rerank {
   };
 }
 export const MAX_PEER_VALUES = 2000;
+// The most rows a comparison set reads. Past it, `stats.` and `peers.`
+// describe the first MAX_COMPARE_ROWS rows the set's query returns, and
+// `meta.rerank.compareTruncated` says so.
+export const MAX_COMPARE_ROWS = 10_000;
+let compareRows = MAX_COMPARE_ROWS;
+export function compareRowLimit(): number {
+  return compareRows;
+}
+// For tests: a limit a few rows can reach.
+export function setCompareRowLimitForTests(n: number | undefined): void {
+  compareRows = n ?? MAX_COMPARE_ROWS;
+}
 export const DEFAULT_NEAR_PEERS = 20;
 export const MAX_NEAR_PEERS = 100;
 export const DEFAULT_RERANK_TOP = 100;

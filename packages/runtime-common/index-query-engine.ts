@@ -112,6 +112,7 @@ import {
   DEFAULT_NEAR_PEERS,
   MAX_NEAR_PEERS,
   MAX_PEER_VALUES,
+  compareRowLimit,
   DEFAULT_RERANK_TOP,
   MAX_RERANK_TOP,
   exprSortSql,
@@ -508,7 +509,19 @@ export interface QueryResultsMeta {
   // rows the formula gave a number.
   // `ran` says where its formula ran: `sql` in Postgres, `thread` on the
   // rerank scorer (the realm server's thread pool).
-  rerank?: { window: number; scored: number; ran?: 'sql' | 'thread' };
+  // `truncated`: the query matched more rows than the window, and the rest
+  // keep the query's order. `compareTruncated`: the comparison set had more
+  // rows than MAX_COMPARE_ROWS, so `stats.` and `peers.` describe the first
+  // `rows` of its `total`. `peersTruncated`: a group's `peers.` list was cut
+  // to MAX_PEER_VALUES values (its `stats.` still cover the whole group).
+  rerank?: {
+    window: number;
+    scored: number;
+    ran?: 'sql' | 'thread';
+    truncated?: boolean;
+    compareTruncated?: { rows: number; total: number };
+    peersTruncated?: boolean;
+  };
   // Problems that left the result usable but not as asked, by code:
   // `rerank-timeout` when a rerank ran out of time and kept the query's order.
   warnings?: { code: string; message: string }[];
@@ -2289,6 +2302,13 @@ export class IndexQueryEngine {
           window: rows.length,
           scored: values.filter((v) => v != null).length,
           ran: scored.ran,
+          // The query matched more than the window, so the rows past it
+          // keep the query's order.
+          ...(Number(candidates.meta.page?.total ?? 0) > rows.length
+            ? { truncated: true }
+            : {}),
+          ...(set?.truncated ? { compareTruncated: set.truncated } : {}),
+          ...(set?.peersTruncated ? { peersTruncated: true } : {}),
         },
         formula: { placement: 'top', reason: topWindowReason(rerank.expr) },
         ...(scored.timedOut
@@ -2591,6 +2611,8 @@ export class IndexQueryEngine {
             stats: Record<string, Record<string, number | null>>;
           }
         >;
+        truncated?: { rows: number; total: number };
+        peersTruncated?: boolean;
       }
     | undefined
   > {
@@ -2621,13 +2643,18 @@ export class IndexQueryEngine {
     let group = by
       ? `, ANY_VALUE(spill_unmark(i.search_doc #> ${path(by)}) #>> '{}') AS g`
       : '';
-    let { results } = await this._search(
+    let { results, meta: setMeta } = await this._search(
       realmURL,
-      { filter: rerank.compare?.filter ?? query.filter, let: query.let },
+      {
+        filter: rerank.compare?.filter ?? query.filter,
+        let: query.let,
+        page: { number: 0, size: compareRowLimit() },
+      },
       { ...opts, cardUrls: undefined },
       [`SELECT i.url AS url, ${columns}${group}`],
       entryType,
     );
+    let setTotal = Number(setMeta.page?.total ?? results.length);
     let values = new Map<string, number[][]>();
     for (let row of results as Record<string, unknown>[]) {
       let key = by ? String(row.g ?? '') : '';
@@ -2645,7 +2672,11 @@ export class IndexQueryEngine {
         stats: Record<string, Record<string, number | null>>;
       }
     >();
+    let peersTruncated = false;
     for (let [key, lists] of values) {
+      if (lists.some((l) => l.length > MAX_PEER_VALUES)) {
+        peersTruncated = true;
+      }
       groups.set(key, {
         peers: Object.fromEntries(
           fields.map((f, i) => [f, lists[i].slice(0, MAX_PEER_VALUES)]),
@@ -2655,7 +2686,13 @@ export class IndexQueryEngine {
         ),
       });
     }
-    return { groups };
+    return {
+      groups,
+      ...(setTotal > results.length
+        ? { truncated: { rows: results.length, total: setTotal } }
+        : {}),
+      ...(peersTruncated ? { peersTruncated } : {}),
+    };
   }
 
   // An `_expr` sort's formula as SQL over the row's search doc. Postgres
