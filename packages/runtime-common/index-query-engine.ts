@@ -139,10 +139,13 @@ import {
   resolveQueryLabels,
   usesNewSyntax,
 } from './query-syntax.ts';
+import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import {
-  BXL_FORMULA_FUNCTIONS,
-  type PreparedSpreadsheetFormula,
-} from '@cardstack/bxl/compiler';
+  fieldsTheFormulaReads,
+  RerankFormulaError,
+  rerankScorer,
+  rerankTimeBudgetMs,
+} from './rerank-score.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -500,7 +503,12 @@ export interface QueryResultsMeta {
   reranks?: Record<string, number | null>;
   // For a query with `rerank`: the window it re-ranked and how many of its
   // rows the formula gave a number.
-  rerank?: { window: number; scored: number };
+  // `ran` says where its formula ran: `sql` in Postgres, `thread` on the
+  // rerank scorer (the realm server's thread pool).
+  rerank?: { window: number; scored: number; ran?: 'sql' | 'thread' };
+  // Problems that left the result usable but not as asked, by code:
+  // `rerank-timeout` when a rerank ran out of time and kept the query's order.
+  warnings?: { code: string; message: string }[];
   // where the query's formula ran: `sql` over every match, or `top` over the
   // rerank window, with why it could not run in SQL
   formula?: { placement: 'sql' | 'top'; reason?: string };
@@ -2212,14 +2220,26 @@ export class IndexQueryEngine {
           })
         : docs;
     let bound = this.#rerankBindings.get(rerank);
-    let values = await scoreWithBxl(
+    let scored = await this.#scoreRerank(
       rerank.expr,
-      bound ? inputs.map((doc) => ({ ...doc, ...bound })) : inputs,
+      fieldsTheFormulaReads(
+        rerank.expr,
+        bound ? inputs.map((doc) => ({ ...doc, ...bound })) : inputs,
+      ),
     );
+    // Past the time budget the window keeps the query's order: a page ranked
+    // by the rows that scored in time, against ones that never did, would be
+    // an order nobody asked for.
+    let values: (number | null)[] = scored.timedOut
+      ? rows.map(() => null)
+      : scored.values;
     let direction = rerank.direction === 'asc' ? 1 : -1;
     let order = rows
       .map((row, index) => ({ row, index, value: values[index] }))
       .sort((a, b) => {
+        if (scored.timedOut) {
+          return a.index - b.index;
+        }
         if (a.value == null || b.value == null) {
           return a.value == null && b.value == null
             ? a.index - b.index
@@ -2264,10 +2284,74 @@ export class IndexQueryEngine {
         rerank: {
           window: rows.length,
           scored: values.filter((v) => v != null).length,
+          ran: scored.ran,
         },
         formula: { placement: 'top', reason: topWindowReason(rerank.expr) },
+        ...(scored.timedOut
+          ? {
+              warnings: [
+                ...(candidates.meta.warnings ?? []),
+                {
+                  code: 'rerank-timeout',
+                  message: `rerank: the formula did not finish over the ${rows.length} rows of its window within ${rerankTimeBudgetMs()} ms, so they keep the query's order; narrow the query, lower rerank.top, or write the formula with functions SQL can run`,
+                },
+              ],
+            }
+          : {}),
       },
     };
+  }
+
+  // A rerank's values for its window. A formula SQL can run is scored by
+  // Postgres over the window's docs, with the rules for blanks and errors a
+  // formula placed in SQL follows, and off the server's event loop. Any other
+  // runs on the registered scorer — the realm server's thread pool, or this
+  // thread where none is registered — within the rerank time budget.
+  async #scoreRerank(
+    expr: string,
+    docs: Record<string, unknown>[],
+  ): Promise<{
+    values: (number | null)[];
+    timedOut: boolean;
+    ran: 'sql' | 'thread';
+  }> {
+    let deadline = Date.now() + rerankTimeBudgetMs();
+    if (this.#dbAdapter.kind === 'pg' && docs.length > 0) {
+      let sql: string | undefined;
+      try {
+        sql = exprSortSql(expr);
+      } catch {
+        sql = undefined;
+      }
+      if (sql) {
+        try {
+          let rows = await this.#dbAdapter.execute(
+            `SELECT (${sql}) AS v FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS i(search_doc, ord) ORDER BY i.ord`,
+            { bind: [JSON.stringify(docs)] },
+          );
+          return {
+            values: rows.map((row) =>
+              row.v == null ? null : Number(row.v as number | string),
+            ),
+            timedOut: false,
+            ran: 'sql',
+          };
+        } catch (e) {
+          // A value past a double's range fails the whole statement; the
+          // scorer gives that row no number instead.
+          if (!/out of range/.test(String((e as Error).message))) throw e;
+        }
+      }
+    }
+    try {
+      let scores = await rerankScorer()(expr, docs, deadline);
+      return { ...scores, ran: 'thread' };
+    } catch (e) {
+      if (e instanceof RerankFormulaError) {
+        throw new InvalidQueryError(e.message);
+      }
+      throw e;
+    }
   }
 
   // Each window row's own comparison set: its `k` nearest cards in the realm
@@ -6517,100 +6601,6 @@ function summarize(xs: number[]): Record<string, number | null> {
     p90: pct(0.9),
     stdev: variance == null ? null : Math.sqrt(variance),
   };
-}
-
-// A `rerank` formula's number for each search doc, or null where it has
-// none. A spreadsheet formula runs with Excel's rules for blanks and errors,
-// the same rules a formula placed in SQL follows; any function beyond the
-// interpreter's own (the lazily loaded statistical, financial and
-// engineering ones too) runs in BXL's sandbox. Any other BXL is compiled once
-// with the docs' own field names as its labels, so `rating` reads `.rating`.
-// Both run under a per-row and a total time budget.
-let formulaExtensions: Promise<void> | undefined;
-async function scoreWithBxl(
-  expr: string,
-  docs: Record<string, unknown>[],
-): Promise<(number | null)[]> {
-  let bxl = await import('@cardstack/bxl');
-  formulaExtensions ??= bxl.loadAllFormulaExtensions().catch(() => undefined);
-  await formulaExtensions;
-  // The docs' own field names become the formula's labels, so `rating`
-  // reads `.rating`. The engine's synthetic keys (`_title`, `_cardType`) are
-  // left out, as is any name that reads the same as one already taken once
-  // case and punctuation are ignored, so no label is ambiguous.
-  let keys = new Set<string>();
-  let taken = new Set<string>();
-  for (let doc of docs) {
-    for (let key of Object.keys(doc)) {
-      if (!/^[A-Za-z$][\w$]*$/.test(key) || keys.has(key)) continue;
-      let folded = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (taken.has(folded)) continue;
-      taken.add(folded);
-      keys.add(key);
-    }
-  }
-  let limits = { maxMillis: 20, maxSteps: 100_000, maxOutputs: 4 };
-  let deadline = Date.now() + 1000;
-  // A spreadsheet formula runs with Excel's rules for blanks and errors, the
-  // ones its SQL follows; a function outside the interpreter's own runs in
-  // BXL, one call at a time.
-  let spreadsheet: PreparedSpreadsheetFormula | undefined;
-  try {
-    spreadsheet = bxl.prepareSpreadsheetFormula(expr, {
-      callFunction(name, arity) {
-        let fields = Array.from({ length: arity }, (_, i) => `a${i}`);
-        let call;
-        try {
-          call = bxl.prepareBxl(`${name}(${fields.join(', ')})`, {
-            schema: { fields: fields.map((key) => ({ key, label: key })) },
-          });
-        } catch {
-          return undefined;
-        }
-        return (args) =>
-          call.evaluate(
-            Object.fromEntries(args.map((a, i) => [fields[i], a])),
-            { runtimeLimits: limits },
-          ).value;
-      },
-    });
-  } catch (e) {
-    if (!(e instanceof bxl.SpreadsheetFormulaUnsupported)) throw e;
-  }
-  if (spreadsheet) {
-    let now = new Date();
-    return docs.map((doc) =>
-      Date.now() > deadline ? null : spreadsheet!.evaluate(doc, { now }),
-    );
-  }
-  let prepared;
-  try {
-    prepared = bxl.prepareBxl(expr, {
-      schema: { fields: [...keys].map((key) => ({ key, label: key })) },
-    });
-  } catch (e) {
-    throw new InvalidQueryError(
-      `rerank: the formula does not compile: ${(e as Error).message}`,
-    );
-  }
-  return docs.map((doc) => {
-    if (Date.now() > deadline) {
-      return null;
-    }
-    try {
-      let value = prepared.evaluate(doc, { runtimeLimits: limits }).value;
-      if (typeof value === 'boolean') return value ? 1 : 0;
-      let n =
-        typeof value === 'number'
-          ? value
-          : typeof value === 'string' && value.trim() !== ''
-            ? Number(value)
-            : NaN;
-      return Number.isFinite(n) ? n : null;
-    } catch {
-      return null;
-    }
-  });
 }
 
 // The `_relevance` signal a blend component stands for, by identity: set

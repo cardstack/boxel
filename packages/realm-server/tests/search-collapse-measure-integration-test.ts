@@ -12,6 +12,8 @@ import {
   assertQuery,
   combineSearchEntryResults,
   internalKeyFor,
+  setRerankScorer,
+  setRerankTimeBudgetForTests,
   parseSearchEntryQueryFromPayload,
   policyScopedQuery,
   resolveRelativeDate,
@@ -29,6 +31,7 @@ import {
   prepareTestDB,
   testRealm,
 } from './helpers/index.ts';
+import { RerankPool } from '@cardstack/runtime-common/rerank-pool';
 
 const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
 
@@ -1124,7 +1127,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     // A SEARCH that finds nothing is #VALUE!, which ISNUMBER reads as FALSE,
     // as in Excel: every talk gets a value.
-    assert.deepEqual(meta.rerank, { window: 7, scored: 7 });
+    assert.deepEqual(meta.rerank, { window: 7, scored: 7, ran: 'thread' });
     assert.strictEqual(meta.page.total, 7);
 
     let windowed = await reranked({
@@ -1293,6 +1296,106 @@ module(basename(import.meta.filename), function (hooks) {
       ),
       /rerank: the formula does not compile/,
     );
+  });
+
+  test('a rerank formula SQL can run is scored in Postgres', async function (assert) {
+    let { rows, meta } = await reranked({
+      filter: { type: on },
+      sort: byScoreDesc,
+      rerank: { expr: 'IFERROR(100 / (hnScore - 30), -1)', top: 4 },
+    });
+    assert.strictEqual(meta.rerank?.ran, 'sql', 'it ran in Postgres');
+    assert.deepEqual(
+      rows.slice(0, 4),
+      [
+        ['e', 10],
+        ['d', 5],
+        ['b', -1],
+        ['c', -10],
+      ],
+      "the top four by score, re-ranked; b's #DIV/0! caught by IFERROR",
+    );
+  });
+
+  test('a rerank formula SQL cannot run is scored on the thread pool', async function (assert) {
+    let pool = new RerankPool(1);
+    setRerankScorer(pool.scorer);
+    try {
+      let { rows, meta } = await reranked({
+        filter: { type: on },
+        sort: byScoreDesc,
+        rerank: {
+          expr: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
+        },
+      });
+      assert.deepEqual(
+        rows.map((r) => r[0]),
+        ['b', 'c', 'a', 'd', 'e', 'f', 'g'],
+        'the same order as in this thread',
+      );
+      assert.deepEqual(meta.rerank, { window: 7, scored: 7, ran: 'thread' });
+      assert.strictEqual(pool.running, 1, 'one thread scored it');
+      await assert.rejects(
+        engine.search(
+          new URL(testRealm),
+          { filter: { type: on }, rerank: { expr: 'IF(' } },
+          {},
+          { kind: 'renderSet' },
+        ),
+        /rerank: the formula does not compile/,
+        "a formula the thread cannot compile is the caller's error",
+      );
+    } finally {
+      setRerankScorer(undefined);
+      await pool.terminate();
+    }
+  });
+
+  test('a rerank out of time keeps the query order and says so', async function (assert) {
+    setRerankTimeBudgetForTests(0);
+    try {
+      let { rows, meta } = await reranked({
+        filter: { type: on },
+        sort: byScoreDesc,
+        rerank: {
+          expr: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
+        },
+      });
+      assert.deepEqual(
+        rows,
+        ['d', 'e', 'b', 'c', 'a', 'f', 'g'].map((k) => [k, null]),
+        "the query's own order (by score), with no row scored",
+      );
+      assert.deepEqual(meta.rerank, { window: 7, scored: 0, ran: 'thread' });
+      assert.deepEqual(
+        meta.warnings?.map((w) => w.code),
+        ['rerank-timeout'],
+      );
+    } finally {
+      setRerankTimeBudgetForTests(undefined);
+    }
+  });
+
+  test('the rerank pool stops a thread still scoring at its deadline', async function (assert) {
+    let pool = new RerankPool(1);
+    try {
+      let past = await pool.scorer('1', [{}], Date.now() - 1);
+      assert.deepEqual(past, { values: [], timedOut: true }, 'already late');
+      assert.strictEqual(pool.running, 0, 'and no thread was started');
+      // A new thread loads BXL before it scores, which takes far longer than
+      // this: it is stopped at the deadline rather than left running.
+      let late = await pool.scorer('1 + 1', [{}], Date.now() + 5);
+      assert.true(late.timedOut, 'the slow start times out');
+      assert.strictEqual(pool.running, 0, 'and its thread is gone');
+      let fine = await pool.scorer(
+        'rating * 2',
+        [{ rating: 3 }, {}],
+        Date.now() + 30_000,
+      );
+      assert.deepEqual(fine, { values: [6, 0], timedOut: false });
+    } finally {
+      await pool.terminate();
+    }
   });
 
   test('the wire grammar checks collapse and measure', function (assert) {

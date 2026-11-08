@@ -301,6 +301,8 @@ Postgres only.
 
 A formula in SQL can use only the functions Postgres can compute. `rerank` is the second layer: the query ranks as it would (filter, sort, `let`, `collapse`), the realm takes its first `top` rows (default 100, at most 500), evaluates a BXL formula over each row's fields with every Excel function (text, statistical and financial ones included) in BXL's sandbox, and orders those rows by the value, highest first unless `direction` is `asc`. A spreadsheet formula there follows the same rules for blanks and errors as a `formula` in SQL. A row whose formula gives no number (an error, a missing field) keeps its place after the ones that do. Pages read the re-ranked window; a page that starts past it keeps the query's order. Each re-ranked row carries `meta._rerank`, and `meta.rerank` reports the window and how many rows got a number.
 
+**Where it runs, and its time limit.** A formula Postgres can compute is scored in Postgres over the window's rows (`meta.rerank.ran` is `sql`), with its bindings and comparison sets read the same way. Any other runs on a pool of threads beside the realm server (`ran: 'thread'`; `RERANK_THREADS`, default 2), never on its event loop. Scoring has 1 second, including any wait for a free thread. A rerank that runs out of time ranks nothing: the window keeps the query's order, no row carries a value, and `meta.warnings` holds `{ code: 'rerank-timeout' }`. A thread still scoring at the limit is stopped. To stay inside it, narrow the query, lower `top`, or use functions Postgres can compute.
+
 ```js
 rerank: { expr: 'IF(ISNUMBER(SEARCH("organic", title)), 1.2, 1) * rating', top: 200 }
 ```
