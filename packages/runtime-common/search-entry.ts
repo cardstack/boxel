@@ -1919,9 +1919,9 @@ export interface SearchEntryWireQuery {
   >;
   // each result explains its rank in `meta._explain`
   explain?: boolean;
-  // re-rank the top of the result by a BXL formula (see `Rerank`)
+  // re-rank the top of the result by a BXL expression (see `Rerank`)
   rerank?: {
-    expr: string;
+    expression: string;
     top?: number;
     direction?: 'asc' | 'desc';
     compare?: {
@@ -1999,7 +1999,7 @@ function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
     }
     if (entry.by === '_expr') {
       return {
-        formula: entry.expr,
+        expression: entry.expr,
         ...(entry.direction ? { direction: entry.direction } : {}),
         ...(entry.weight != null ? { weight: entry.weight } : {}),
       } as unknown as SearchEntryWireSortExpression;
@@ -2708,7 +2708,7 @@ export function buildEntryResource(args: {
   collapseSize?: number;
   // For a federated merge, the row's sort values — `meta._sortValues`.
   sortValues?: unknown[];
-  // The query's formula value — `meta._formula`.
+  // The query's expression value — `meta._expression`.
   formulaValue?: number | null;
 }): EntryResource {
   let {
@@ -2770,7 +2770,7 @@ export function buildEntryResource(args: {
       ...(sortValues !== undefined ? { _sortValues: sortValues } : {}),
       ...(formulaValue !== undefined
         ? {
-            _formula:
+            _expression:
               typeof formulaValue === 'string'
                 ? Number(formulaValue)
                 : formulaValue,

@@ -21,10 +21,11 @@
 //   needs-type, sort-needs-type  a path that needs a type anchor
 //   needs-declaration      a field or type lacks a declaration a feature
 //                          needs
+//   expression-placement   an expression placed where it cannot run
 //   needs-postgres         a feature this index (SQLite) cannot run
 //   matches-required       a text-relevance sort with no `matches` filter
 //   engine-only            a member only the engine sets
-//   invalid-formula, invalid-json, invalid-page, unknown-field,
+//   invalid-expression, invalid-json, invalid-page, unknown-field,
 //   unknown-binding, binding-kind, policy-linked-from
 //   not-selectable         a select path the search doc does not carry
 //   select-excludes-fields select beside fields (a table or entries, not both)

@@ -539,16 +539,16 @@ export interface QueryResultsMeta {
   // Problems that left the result usable but not as asked, by code:
   // `rerank-timeout` when a rerank ran out of time and kept the query's order.
   warnings?: { code: string; message: string }[];
-  // where the query's formula ran: `sql` over every match, or `top` over the
-  // rerank window, with why it could not run in SQL
-  formula?: { placement: 'sql' | 'top'; reason?: string };
+  // where the query's expression ran: `sql` over every match, or `top` over
+  // the rerank window, with why it could not run in SQL
+  expression?: { placement: 'sql' | 'top'; reason?: string };
 }
 
 // Per re-ranked row: its formula value.
 export const RERANK_KEY = '_rerank';
-// The value of the query's formula for a row, wherever it ran: its `_expr`
-// sort in SQL, or its rerank over the top window. `meta.formula` says which.
-export const FORMULA_KEY = '_formula';
+// The value of the query's expression for a row, wherever it ran: its `_expr`
+// sort in SQL, or its rerank over the top window. `meta.expression` says which.
+export const FORMULA_KEY = '_expression';
 
 // Per result row, under `explain`: the row's `_explain` column.
 export const EXPLAIN_KEY = '_explain';
@@ -1587,7 +1587,7 @@ export class IndexQueryEngine {
       sort = await this.#expandRelevanceSorts(sort, filter);
       // A formula that leads the sort ran in SQL; each row carries its value.
       let leadingExpr = sort?.[0];
-      let formulaMeta: QueryResultsMeta['formula'];
+      let formulaMeta: QueryResultsMeta['expression'];
       if (
         leadingExpr &&
         isExprSort(leadingExpr) &&
@@ -2048,7 +2048,7 @@ export class IndexQueryEngine {
             : {}),
           ...(Object.keys(facetStats).length ? { facetStats } : {}),
           ...(letMeta ? { lets: letMeta } : {}),
-          ...(formulaMeta ? { formula: formulaMeta } : {}),
+          ...(formulaMeta ? { expression: formulaMeta } : {}),
         },
       };
     } catch (error) {
@@ -2083,7 +2083,7 @@ export class IndexQueryEngine {
             let: lets,
             explain,
             rerank: {
-              expr: leading.expr,
+              expression: leading.expr,
               top: MAX_RERANK_TOP,
               ...(leading.direction ? { direction: leading.direction } : {}),
             },
@@ -2093,7 +2093,7 @@ export class IndexQueryEngine {
           entryType,
           conditionalLiveDoc,
         );
-        out.meta.formula = {
+        out.meta.expression = {
           placement: 'top',
           reason: 'its value overflows a number in SQL',
         };
@@ -2337,9 +2337,9 @@ export class IndexQueryEngine {
         : docs;
     let bound = this.#rerankBindings.get(rerank);
     let scored = await this.#scoreRerank(
-      rerank.expr,
+      rerank.expression,
       fieldsTheFormulaReads(
-        rerank.expr,
+        rerank.expression,
         bound ? inputs.map((doc) => ({ ...doc, ...bound })) : inputs,
       ),
     );
@@ -2409,7 +2409,10 @@ export class IndexQueryEngine {
           ...(set?.truncated ? { compareTruncated: set.truncated } : {}),
           ...(set?.peersTruncated ? { peersTruncated: true } : {}),
         },
-        formula: { placement: 'top', reason: topWindowReason(rerank.expr) },
+        expression: {
+          placement: 'top',
+          reason: topWindowReason(rerank.expression),
+        },
         ...(scored.timedOut
           ? {
               warnings: [
@@ -2474,7 +2477,7 @@ export class IndexQueryEngine {
       return { ...scores, ran: 'thread' };
     } catch (e) {
       if (e instanceof RerankFormulaError) {
-        throw new InvalidQueryError(e.message, 'invalid-formula');
+        throw new InvalidQueryError(e.message, 'invalid-expression');
       }
       throw e;
     }
@@ -2623,7 +2626,7 @@ export class IndexQueryEngine {
     let fields = [
       ...new Set(
         [
-          ...query.rerank!.expr.matchAll(
+          ...query.rerank!.expression.matchAll(
             /\b(?:peers|stats)\.([A-Za-z_$][\w$]*)/g,
           ),
         ]
@@ -2740,9 +2743,11 @@ export class IndexQueryEngine {
     let rerank = query.rerank!;
     let fields = [
       ...new Set(
-        [...rerank.expr.matchAll(/\b(?:peers|stats)\.([A-Za-z_$][\w$]*)/g)].map(
-          (m) => m[1],
-        ),
+        [
+          ...rerank.expression.matchAll(
+            /\b(?:peers|stats)\.([A-Za-z_$][\w$]*)/g,
+          ),
+        ].map((m) => m[1]),
       ),
     ];
     if (fields.length === 0) {

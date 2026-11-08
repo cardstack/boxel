@@ -997,7 +997,7 @@ module(basename(import.meta.filename), function (hooks) {
       {
         filter: { 'item.on': on, range: { 'item.hnScore': { gte: 0 } } },
         rerank: {
-          expr: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+          expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
           compare: { filter: saved },
         },
       },
@@ -1275,7 +1275,7 @@ module(basename(import.meta.filename), function (hooks) {
       () => assertQuery({ sort: [{ by: '_expr', on, expr: 'LEN(title)' }] }),
       (err: unknown) =>
         err instanceof InvalidQueryError &&
-        /formula: LEN is not part of the score profile/.test(err.message),
+        /expression: LEN is not part of the score profile/.test(err.message),
     );
     assert.throws(
       () =>
@@ -1286,7 +1286,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },
-      sort: [{ formula: 'rating / LN(priceMin + 1)' }],
+      sort: [{ expression: 'rating / LN(priceMin + 1)' }],
     });
     assert.deepEqual((parsed.itemQuery.sort as any)[0], {
       by: '_expr',
@@ -1295,7 +1295,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
     let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
     assert.strictEqual(
-      (wire.sort as any)[0].formula,
+      (wire.sort as any)[0].expression,
       'rating / LN(priceMin + 1)',
     );
     assert.throws(
@@ -1333,7 +1333,8 @@ module(basename(import.meta.filename), function (hooks) {
       sort: byScoreDesc,
       // `title` beside the engine's synthetic `_title`, as every card has.
       rerank: {
-        expr: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
+        expression:
+          'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
       },
     });
     assert.deepEqual(
@@ -1350,7 +1351,7 @@ module(basename(import.meta.filename), function (hooks) {
       filter: { type: on },
       sort: byScoreDesc,
       page: { number: 0, size: 3 },
-      rerank: { expr: '100 - hnScore', top: 4 },
+      rerank: { expression: '100 - hnScore', top: 4 },
     });
     assert.deepEqual(
       windowed.rows,
@@ -1365,7 +1366,7 @@ module(basename(import.meta.filename), function (hooks) {
       filter: { type: on },
       sort: byScoreDesc,
       page: { number: 1, size: 4 },
-      rerank: { expr: '100 - hnScore', top: 4 },
+      rerank: { expression: '100 - hnScore', top: 4 },
     });
     assert.deepEqual(
       past.rows.map((r) => r[0]),
@@ -1378,7 +1379,7 @@ module(basename(import.meta.filename), function (hooks) {
     let whole = await reranked({
       filter: { type: on },
       sort: byScoreDesc,
-      rerank: { expr: 'hnScore / stats.hnScore.median' },
+      rerank: { expression: 'hnScore / stats.hnScore.median' },
     });
     assert.notOk(whole.meta.rerank?.truncated, 'a window holding every match');
     assert.notOk(whole.meta.rerank?.compareTruncated, 'a whole comparison set');
@@ -1386,7 +1387,7 @@ module(basename(import.meta.filename), function (hooks) {
     let top = await reranked({
       filter: { type: on },
       sort: byScoreDesc,
-      rerank: { expr: 'hnScore / stats.hnScore.median', top: 4 },
+      rerank: { expression: 'hnScore / stats.hnScore.median', top: 4 },
     });
     assert.true(
       top.meta.rerank?.truncated,
@@ -1398,7 +1399,7 @@ module(basename(import.meta.filename), function (hooks) {
       let capped = await reranked({
         filter: { type: on },
         sort: byScoreDesc,
-        rerank: { expr: 'hnScore / stats.hnScore.median' },
+        rerank: { expression: 'hnScore / stats.hnScore.median' },
       });
       assert.deepEqual(
         capped.meta.rerank?.compareTruncated,
@@ -1415,7 +1416,7 @@ module(basename(import.meta.filename), function (hooks) {
       filter: { type: on },
       sort: byScoreDesc,
       rerank: {
-        expr: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+        expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
         compare: { by: 'channel' },
       },
     });
@@ -1435,7 +1436,10 @@ module(basename(import.meta.filename), function (hooks) {
     let ratio = await reranked({
       filter: { type: on },
       sort: byScoreDesc,
-      rerank: { expr: 'hnScore / stats.hnScore.median', direction: 'asc' },
+      rerank: {
+        expression: 'hnScore / stats.hnScore.median',
+        direction: 'asc',
+      },
     });
     assert.deepEqual(
       ratio.rows,
@@ -1453,7 +1457,7 @@ module(basename(import.meta.filename), function (hooks) {
     let against = await reranked({
       filter: { on, eq: { channel: 'GOTO' } },
       rerank: {
-        expr: '(hnScore - stats.hnScore.avg) / stats.hnScore.stdev',
+        expression: '(hnScore - stats.hnScore.avg) / stats.hnScore.stdev',
         compare: { filter: { type: on } },
       },
     });
@@ -1470,18 +1474,20 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('rerank is checked, travels the wire, and a policy scopes its comparison set', function (assert) {
     assert.throws(
-      () => assertQuery({ rerank: { expr: 'x', top: 501 } } as any),
+      () => assertQuery({ rerank: { expression: 'x', top: 501 } } as any),
       /top must be an integer from 1 to 500/,
     );
     assert.throws(
       () =>
-        assertQuery({ rerank: { expr: 'x', compare: { by: 'a b' } } } as any),
+        assertQuery({
+          rerank: { expression: 'x', compare: { by: 'a b' } },
+        } as any),
       /by must be a field path/,
     );
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },
       rerank: {
-        expr: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+        expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
         top: 50,
         compare: {
           filter: { 'item.on': on, eq: { 'item.channel': 'GOTO' } },
@@ -1490,7 +1496,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     });
     assert.deepEqual(parsed.itemQuery.rerank, {
-      expr: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+      expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
       top: 50,
       compare: { filter: { on, eq: { channel: 'GOTO' } }, by: 'channel' },
     });
@@ -1509,7 +1515,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('look-alike comparisons are checked, travel the wire, and a policy scopes them', function (assert) {
     let bad = (compare: Record<string, unknown>, pattern: RegExp) =>
       assert.throws(
-        () => assertQuery({ rerank: { expr: 'x', compare } } as any),
+        () => assertQuery({ rerank: { expression: 'x', compare } } as any),
         pattern,
       );
     bad({ near: 'embedding', by: 'channel' }, /near or by, not both/);
@@ -1520,7 +1526,7 @@ module(basename(import.meta.filename), function (hooks) {
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },
       rerank: {
-        expr: 'priceMin / stats.priceMin.median',
+        expression: 'priceMin / stats.priceMin.median',
         compare: { near: 'item.imageEmbedding', k: 20, minSimilarity: 0.8 },
       },
     });
@@ -1547,7 +1553,7 @@ module(basename(import.meta.filename), function (hooks) {
     await assert.rejects(
       engine.search(
         new URL(testRealm),
-        { filter: { type: on }, rerank: { expr: 'IF(' } },
+        { filter: { type: on }, rerank: { expression: 'IF(' } },
         {},
         { kind: 'renderSet' },
       ),
@@ -1559,7 +1565,7 @@ module(basename(import.meta.filename), function (hooks) {
     let { rows, meta } = await reranked({
       filter: { type: on },
       sort: byScoreDesc,
-      rerank: { expr: 'IFERROR(100 / (hnScore - 30), -1)', top: 4 },
+      rerank: { expression: 'IFERROR(100 / (hnScore - 30), -1)', top: 4 },
     });
     assert.strictEqual(meta.rerank?.ran, 'sql', 'it ran in Postgres');
     assert.deepEqual(
@@ -1582,7 +1588,8 @@ module(basename(import.meta.filename), function (hooks) {
         filter: { type: on },
         sort: byScoreDesc,
         rerank: {
-          expr: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
+          expression:
+            'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
         },
       });
       assert.deepEqual(
@@ -1595,7 +1602,7 @@ module(basename(import.meta.filename), function (hooks) {
       await assert.rejects(
         engine.search(
           new URL(testRealm),
-          { filter: { type: on }, rerank: { expr: 'IF(' } },
+          { filter: { type: on }, rerank: { expression: 'IF(' } },
           {},
           { kind: 'renderSet' },
         ),
@@ -1615,7 +1622,8 @@ module(basename(import.meta.filename), function (hooks) {
         filter: { type: on },
         sort: byScoreDesc,
         rerank: {
-          expr: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
+          expression:
+            'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
         },
       });
       assert.deepEqual(
@@ -1745,7 +1753,7 @@ module(basename(import.meta.filename), function (hooks) {
       let: { top },
       filter: { type: on },
       sort: byScoreDesc,
-      rerank: { expr: 'top.hnScore - hnScore', direction: 'asc' },
+      rerank: { expression: 'top.hnScore - hnScore', direction: 'asc' },
     });
     assert.deepEqual(
       rows.slice(0, 3),
@@ -1854,7 +1862,7 @@ module(basename(import.meta.filename), function (hooks) {
         {
           blend: [
             { by: 'item.hnScore', weight: 2 },
-            { formula: 'hnScore * 2' },
+            { expression: 'hnScore * 2' },
           ],
         },
       ],
@@ -1893,10 +1901,10 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let topWindow = parseSearchEntryQueryFromPayload({
       type: on,
-      sort: [{ formula: 'IF(ISNUMBER(SEARCH("a", title)), 1, 0)' }],
+      sort: [{ expression: 'IF(ISNUMBER(SEARCH("a", title)), 1, 0)' }],
     });
     assert.strictEqual(
-      topWindow.itemQuery.rerank?.expr,
+      topWindow.itemQuery.rerank?.expression,
       'IF(ISNUMBER(SEARCH("a", title)), 1, 0)',
       'a formula outside the score profile runs over the top window',
     );
@@ -1904,7 +1912,7 @@ module(basename(import.meta.filename), function (hooks) {
       () =>
         parseSearchEntryQueryFromPayload({
           type: on,
-          sort: [{ formula: 'SUMM(hnScore, 1)' }],
+          sort: [{ expression: 'SUMM(hnScore, 1)' }],
         }),
       (e: any) => e.queryCode === 'unknown-function' && /SUMM/.test(e.message),
     );
@@ -1916,50 +1924,53 @@ module(basename(import.meta.filename), function (hooks) {
       );
     let textual = 'IF(ISNUMBER(SEARCH("a", title)), 1, 0)';
     refused(
-      { type: on, sort: [{ formula: 42 }] },
-      'invalid-formula',
+      { type: on, sort: [{ expression: 42 }] },
+      'invalid-expression',
       /non-empty string/,
     );
     refused(
-      { type: on, sort: [{ formula: 'hnScore', placement: 'gpu' }] },
-      'invalid-formula',
+      { type: on, sort: [{ expression: 'hnScore', placement: 'gpu' }] },
+      'invalid-expression',
       /"sql" or "top"/,
     );
     refused(
-      { type: on, sort: [{ formula: textual, placement: 'sql' }] },
-      'formula-placement',
+      { type: on, sort: [{ expression: textual, placement: 'sql' }] },
+      'expression-placement',
       /cannot run as SQL/,
     );
     refused(
-      { type: on, sort: [{ by: 'hnScore' }, { formula: textual }] },
-      'formula-placement',
+      { type: on, sort: [{ by: 'hnScore' }, { expression: textual }] },
+      'expression-placement',
       /must be the first sort key/,
     );
     refused(
-      { type: on, sort: [{ formula: textual }], collapse: 'channel' },
-      'formula-placement',
+      { type: on, sort: [{ expression: textual }], collapse: 'channel' },
+      'expression-placement',
       /collapse/,
     );
     refused(
       {
         type: on,
-        sort: [{ formula: textual }],
-        rerank: { expr: 'hnScore', top: 50 },
+        sort: [{ expression: textual }],
+        rerank: { expression: 'hnScore', top: 50 },
       },
-      'formula-placement',
+      'expression-placement',
       /already has a rerank/,
     );
     refused(
       {
         type: on,
-        sort: [{ blend: [{ by: 'hnScore' }, { formula: textual }] }],
+        sort: [{ blend: [{ by: 'hnScore' }, { expression: textual }] }],
       },
-      'formula-placement',
+      'expression-placement',
       /in a blend runs as SQL/,
     );
     let sqlPlaced = parseSearchEntryQueryFromPayload({
       type: on,
-      sort: [{ by: 'hnScore' }, { formula: 'hnScore * 2', placement: 'sql' }],
+      sort: [
+        { by: 'hnScore' },
+        { expression: 'hnScore * 2', placement: 'sql' },
+      ],
     });
     assert.strictEqual(
       (sqlPlaced.itemQuery.sort as any)[1].by,
@@ -1981,7 +1992,7 @@ module(basename(import.meta.filename), function (hooks) {
       filter: { type: on },
       sort: [{ by: '_expr', expr: 'hnScore * 2', direction: 'desc' }],
     } as Query);
-    assert.strictEqual(plain.meta.formula?.placement, 'sql');
+    assert.strictEqual(plain.meta.expression?.placement, 'sql');
     // 1e300 squared is past a double: Postgres raises, JavaScript gives #NUM!
     let { titles, meta } = await search({
       filter: { type: on },
@@ -1993,8 +2004,8 @@ module(basename(import.meta.filename), function (hooks) {
         },
       ],
     } as Query);
-    assert.strictEqual(meta.formula?.placement, 'top');
-    assert.ok(/overflows/.test(meta.formula?.reason ?? ''), 'it says why');
+    assert.strictEqual(meta.expression?.placement, 'top');
+    assert.ok(/overflows/.test(meta.expression?.reason ?? ''), 'it says why');
     assert.ok(titles.length > 0, 'the search still answers');
   });
 

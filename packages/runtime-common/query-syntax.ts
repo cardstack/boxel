@@ -31,7 +31,7 @@ export interface LoweringNotes {
   quotedLabels?: Record<string, string>;
   // Where each `formula` sort runs: in SQL over every match, or over the
   // top window when the score profile cannot express it.
-  formula?: { placement: 'sql' | 'top'; reason?: string };
+  expression?: { placement: 'sql' | 'top'; reason?: string };
 }
 
 export interface LoweredQuery {
@@ -117,7 +117,7 @@ export function usesNewSyntax(query: unknown): boolean {
   let signal = (s: any): boolean =>
     isObject(s) &&
     ('blend' in s ||
-      'formula' in s ||
+      'expression' in s ||
       'boost' in s ||
       'relevance' in s ||
       s.by === TEXT_RELEVANCE ||
@@ -214,19 +214,25 @@ function lowerSignal(entry: any, type: CodeRef | undefined): any {
     return { by: '_when', ...rest, when: anchored(when, type) };
   }
   if ('formula' in entry) {
-    let { formula, ...rest } = entry;
+    throw new QuerySyntaxError(
+      'unknown-key',
+      'sort: "formula" is not a key; did you mean "expression"?',
+    );
+  }
+  if ('expression' in entry) {
+    let { expression: formula, ...rest } = entry;
     if (typeof formula !== 'string' || formula.trim() === '') {
       throw new QuerySyntaxError(
-        'invalid-formula',
-        'formula: a formula is a non-empty string of BXL',
+        'invalid-expression',
+        'expression: an expression is a non-empty string of BXL',
       );
     }
     // a blend ranks every match by each signal, so its formula runs as SQL
     let placed = placeFormula(formula, undefined);
     if (placed.placement !== 'sql') {
       throw new QuerySyntaxError(
-        'formula-placement',
-        `formula: a formula in a blend runs as SQL, and this one cannot: ${placed.reason}`,
+        'expression-placement',
+        `expression: an expression in a blend runs as SQL, and this one cannot: ${placed.reason}`,
       );
     }
     return { by: '_expr', expr: formula, ...rest };
@@ -281,7 +287,7 @@ export function placeFormula(
     if (unknown.length) {
       throw new QuerySyntaxError(
         'unknown-function',
-        `formula: ${[...new Set(unknown)].join(', ')} ${unknown.length > 1 ? 'are not functions' : 'is not a function'} BXL knows`,
+        `expression: ${[...new Set(unknown)].join(', ')} ${unknown.length > 1 ? 'are not functions' : 'is not a function'} BXL knows`,
       );
     }
   }
@@ -291,7 +297,7 @@ export function placeFormula(
   } catch (e) {
     return {
       placement: 'top',
-      reason: (e as Error).message.replace(/^formula: /, ''),
+      reason: (e as Error).message.replace(/^(formula|expression): /, ''),
     };
   }
 }
@@ -374,11 +380,16 @@ function lowerQueryInto(
           ),
         });
       } else if (isObject(entry) && 'formula' in entry) {
-        let { formula, placement, direction, ...more } = entry;
+        throw new QuerySyntaxError(
+          'unknown-key',
+          'sort: "formula" is not a key; did you mean "expression"?',
+        );
+      } else if (isObject(entry) && 'expression' in entry) {
+        let { expression: formula, placement, direction, ...more } = entry;
         if (typeof formula !== 'string' || formula.trim() === '') {
           throw new QuerySyntaxError(
-            'invalid-formula',
-            'formula: a formula is a non-empty string of BXL',
+            'invalid-expression',
+            'expression: an expression is a non-empty string of BXL',
           );
         }
         if (
@@ -387,8 +398,8 @@ function lowerQueryInto(
           placement !== 'top'
         ) {
           throw new QuerySyntaxError(
-            'invalid-formula',
-            `formula: placement is "sql" or "top", not ${JSON.stringify(placement)}`,
+            'invalid-expression',
+            `expression: placement is "sql" or "top", not ${JSON.stringify(placement)}`,
           );
         }
         let placed =
@@ -398,8 +409,8 @@ function lowerQueryInto(
         if (placement === 'top') placeFormula(formula, opts.knownFunctions);
         if (placement === 'sql' && placed.placement !== 'sql') {
           throw new QuerySyntaxError(
-            'formula-placement',
-            `formula: placement "sql" was asked for, but the formula cannot run as SQL: ${placed.reason}`,
+            'expression-placement',
+            `expression: placement "sql" was asked for, but the expression cannot run as SQL: ${placed.reason}`,
           );
         }
         if (placed.placement === 'top') {
@@ -411,24 +422,24 @@ function lowerQueryInto(
               : ` (it runs over the top window because ${placed.reason})`;
           if (query.sort.indexOf(entry) > 0) {
             throw new QuerySyntaxError(
-              'formula-placement',
-              `formula: a formula over the top window must be the first sort key${why}`,
+              'expression-placement',
+              `expression: an expression over the top window must be the first sort key${why}`,
             );
           }
           if (query.rerank !== undefined) {
             throw new QuerySyntaxError(
-              'formula-placement',
-              `formula: a formula over the top window re-ranks the query, which already has a rerank${why}`,
+              'expression-placement',
+              `expression: an expression over the top window re-ranks the query, which already has a rerank${why}`,
             );
           }
           if (query.collapse !== undefined) {
             throw new QuerySyntaxError(
-              'formula-placement',
-              `formula: a formula over the top window cannot be combined with collapse${why}`,
+              'expression-placement',
+              `expression: an expression over the top window cannot be combined with collapse${why}`,
             );
           }
         }
-        notes.formula = placed;
+        notes.expression = placed;
         if (placed.placement === 'sql') {
           sort.push({
             by: '_expr',
@@ -439,7 +450,7 @@ function lowerQueryInto(
         } else {
           // over the top window, in BXL's full library
           query.rerank = {
-            expr: formula,
+            expression: formula,
             top: DEFAULT_FORMULA_TOP,
             ...(direction ? { direction } : {}),
           };

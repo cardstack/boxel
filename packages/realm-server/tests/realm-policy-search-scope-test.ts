@@ -346,7 +346,7 @@ module(basename(import.meta.filename), function (hooks) {
           k: 60,
         },
       ],
-      rerank: { expr: 'views / stats.views.median', top: 10 },
+      rerank: { expression: 'views / stats.views.median', top: 10 },
       fields: { entry: ['item.headline'] },
     };
     let before = await search(body);

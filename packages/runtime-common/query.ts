@@ -191,7 +191,8 @@ export const MAX_LET_BINDINGS = 4;
 //   group), for any Excel function: `PERCENTRANK_INC(peers.rating, rating)`.
 // Aggregates a card already stores are fields like any other.
 export interface Rerank {
-  expr: string;
+  // The BXL expression each row is ranked by.
+  expression: string;
   top?: number;
   direction?: 'asc' | 'desc';
   compare?: {
@@ -1242,22 +1243,24 @@ export function assertQuery(
           Array.isArray(value)
         ) {
           throw new InvalidQueryError(
-            `${at}: rerank must be { expr, top?, direction? }`,
+            `${at}: rerank must be { expression, top?, direction? }`,
             'invalid-value',
           );
         }
         for (let key of Object.keys(value)) {
-          if (!['expr', 'top', 'direction', 'compare'].includes(key)) {
+          if (!['expression', 'top', 'direction', 'compare'].includes(key)) {
             throw new InvalidQueryError(
-              `${at}: unknown rerank member "${key}"`,
+              key === 'expr' || key === 'formula'
+                ? `${at}: unknown rerank member "${key}"; did you mean "expression"?`
+                : `${at}: unknown rerank member "${key}"`,
               'unknown-key',
             );
           }
         }
         if (
-          typeof value.expr !== 'string' ||
-          value.expr.trim() === '' ||
-          value.expr.length > 2000
+          typeof value.expression !== 'string' ||
+          value.expression.trim() === '' ||
+          value.expression.length > 2000
         ) {
           throw new InvalidQueryError(
             `${at}/expr: expr must be a formula of at most 2,000 characters`,

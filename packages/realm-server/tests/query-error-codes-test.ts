@@ -121,12 +121,12 @@ const MISTAKES: [string, unknown, string][] = [
   ],
   [
     'an unknown rerank member',
-    { rerank: { expr: 'a', model: 'x' } },
+    { rerank: { expression: 'a', model: 'x' } },
     'unknown-key',
   ],
   [
     'a rerank top out of range',
-    { rerank: { expr: 'a', top: 10_000 } },
+    { rerank: { expression: 'a', top: 10_000 } },
     'invalid-value',
   ],
   [

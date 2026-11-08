@@ -101,7 +101,7 @@ export function isClientSortable(sort: Sort | undefined): boolean {
       isRelevanceSort(s) ||
       isExprSort(s) ||
       // the request grammar's signal sorts, before the engine lowers them
-      ['blend', 'formula', 'relevance'].some((k) => k in (s as object)) ||
+      ['blend', 'expression', 'relevance'].some((k) => k in (s as object)) ||
       (s as { by?: string }).by === 'textRelevance',
   );
 }

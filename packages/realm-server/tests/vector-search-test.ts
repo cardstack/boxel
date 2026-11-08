@@ -1122,7 +1122,7 @@ module(basename(import.meta.filename), function () {
             {
               filter: { type: momentRef },
               rerank: {
-                expr: 'views / stats.views.median',
+                expression: 'views / stats.views.median',
                 compare: {
                   near: 'embedding',
                   k: 2,
@@ -1199,7 +1199,7 @@ module(basename(import.meta.filename), function () {
         // Views against the median of each card's two nearest look-alikes
         // (d and e have only each other above 0.5).
         let { rows } = await rerankRows({
-          expr: 'views / stats.views.median',
+          expression: 'views / stats.views.median',
           compare: { near: 'embedding', k: 2, minSimilarity: 0.5 },
         });
         assert.deepEqual(rows, [
@@ -1210,7 +1210,7 @@ module(basename(import.meta.filename), function () {
           ['d', 0.05],
         ]);
         let similar = await rerankRows({
-          expr: 'MAX(peers.similarity)',
+          expression: 'MAX(peers.similarity)',
           compare: { near: 'embedding', k: 1 },
         });
         assert.ok(
@@ -1218,7 +1218,7 @@ module(basename(import.meta.filename), function () {
           "each card's twin is nearly identical",
         );
         await assert.rejects(
-          rerankRows({ expr: 'views', compare: { near: 'views' } }),
+          rerankRows({ expression: 'views', compare: { near: 'views' } }),
           /declare the field with search: \{ neighbors: true \}/,
           'a field that has not opted in is refused',
         );
