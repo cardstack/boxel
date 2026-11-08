@@ -536,7 +536,8 @@ export const EXPLAIN_KEY = '_explain';
 // it — which, for a plain GIN expression index, aborts the whole index build.
 // Some instances carry multi-megabyte markdown (base64 image data embedded by
 // image cards), so the raw column can't be indexed. prerendered_html's markdown
-// GIN index is built on `to_tsvector('english', markdown_search_text(markdown))`.
+// vector is `to_tsvector('boxel_english', markdown_search_text(markdown))`,
+// the accent-folding English configuration every stemmed text vector uses.
 // That vector is stored in `prerendered_html.markdown_tsv` (kept current by a
 // trigger, migration 1793936584288) and GIN-indexed there, so `matches` and
 // relevance read the column: a phrase recheck, a rank, or a key-probe filter
@@ -4570,7 +4571,7 @@ export class IndexQueryEngine {
         continue;
       }
       let tsquery: Expression | undefined = term.typoQuery
-        ? [`to_tsquery('simple',`, param(term.typoQuery), `)`]
+        ? [`to_tsquery('boxel_simple',`, param(term.typoQuery), `)`]
         : typeAheadTsQuery(term.matches);
       scores.push([
         dbExpression({
@@ -4582,7 +4583,7 @@ export class IndexQueryEngine {
             `THEN 2`,
             ...(tsquery
               ? [
-                  `WHEN to_tsvector('simple', coalesce(${title}, '')) @@`,
+                  `WHEN to_tsvector('boxel_simple', coalesce(${title}, '')) @@`,
                   ...tsquery,
                   `THEN 1`,
                 ]
@@ -4674,7 +4675,7 @@ export class IndexQueryEngine {
       }
       if (isTypeAheadFilter(branch)) {
         let query = branch.typoQuery
-          ? [`to_tsquery('simple',`, param(branch.typoQuery), `)`]
+          ? [`to_tsquery('boxel_simple',`, param(branch.typoQuery), `)`]
           : typeAheadTsQuery(branch.typeahead);
         if (query) {
           selects.push([
@@ -5302,8 +5303,9 @@ export class IndexQueryEngine {
   }
 
   // Type-ahead: every typed word is a word prefix of the card's `_typeahead`
-  // text. Postgres matches an unstemmed ('simple') tsvector of that text,
-  // which the `add-type-ahead-index` migration indexes; like a prefix
+  // text. Postgres matches an unstemmed, accent-folding (`boxel_simple`)
+  // tsvector of that text, which the `one-text-search-config` migration
+  // indexes, so "creme" finds "Crème"; like a prefix
   // `matches`, it asks the index once through an uncorrelated IN, because the
   // planner can't estimate a prefix query and beside a type anchor would
   // otherwise test every typed row. SQLite requires each word as a substring.
@@ -5316,7 +5318,7 @@ export class IndexQueryEngine {
       (w) => !TYPE_AHEAD_STOP_WORDS.has(w),
     );
     let query = filter.typoQuery
-      ? [`to_tsquery('simple',`, param(filter.typoQuery), `)`]
+      ? [`to_tsquery('boxel_simple',`, param(filter.typoQuery), `)`]
       : typeAheadTsQuery(filter.typeahead);
     let predicate: CardExpression = !query
       ? ['FALSE']
@@ -5352,7 +5354,7 @@ export class IndexQueryEngine {
   // full-text membership is eventually consistent: a row whose prerender-html
   // job hasn't landed yet has no markdown and is not full-text findable until
   // it does. The predicate is an expression match against the GIN-indexed
-  // `to_tsvector('english', markdown_search_text(markdown))` —
+  // `to_tsvector('boxel_english', markdown_search_text(markdown))` —
   // `markdown_search_text` strips oversized base64 runs and caps length so
   // the tsvector stays under Postgres's byte limit, and the predicate must
   // call the same function as the migration's index expression or the
@@ -6442,7 +6444,7 @@ function facetCountsFromColumn(
 // affordable because staging only ever holds one pass.
 function markdownVector(alias: string, staged: boolean): string {
   return staged
-    ? `to_tsvector('english', markdown_search_text(${alias}.markdown))`
+    ? `to_tsvector('boxel_english', markdown_search_text(${alias}.markdown))`
     : `${alias}.markdown_tsv`;
 }
 
@@ -6954,11 +6956,12 @@ const PRERENDERED_HTML_SELECTS = [
   .join(', ');
 
 // The Postgres tsquery one `matches` term compiles to. Without `prefix` it is
-// `websearch_to_tsquery('english', …)` over the whole string. With it, the
+// `websearch_to_tsquery('boxel_english', …)` over the whole string. With it, the
 // finished words keep that form, ANDed with an OR over the unfinished last
 // word:
-//   - the word as a prefix of any lexeme (`kleppm:*`, under 'simple' so it is
-//     not stemmed first);
+//   - the word as a prefix of any lexeme (`kleppm:*`, under `boxel_simple`
+//     so it is not stemmed first, but its accents fold as the document's
+//     did);
 //   - the word's own english stem, exact (`jobs` → `job`);
 //   - the word less its last one or two letters, exact, while at least three
 //     remain.
@@ -6968,10 +6971,15 @@ const PRERENDERED_HTML_SELECTS = [
 // at the cost of the odd extra match on a short word ("lear"). The partial
 // word is letters and digits only, so it carries no tsquery syntax. A partial
 // word right after a websearch `-` is negated, as a finished one would be.
-// The type-ahead tsvector, exactly as the `add-type-ahead-index` migration
+// Every text vector and query uses one of two configurations, both folding
+// accents with `unaccent`: `boxel_english` where words are stemmed (the
+// field, rank, passage and rendered-markdown vectors) and `boxel_simple`
+// where they are not (type-ahead, and a prefix still being typed).
+//
+// The type-ahead tsvector, exactly as the `one-text-search-config` migration
 // indexes it (the planner uses the index only for an identical expression).
 const TYPE_AHEAD_TSVECTOR = (alias: string) =>
-  `to_tsvector('simple', coalesce(${alias}.search_doc ->> '${TYPE_AHEAD_KEY}', ''))`;
+  `to_tsvector('boxel_simple', coalesce(${alias}.search_doc ->> '${TYPE_AHEAD_KEY}', ''))`;
 
 // Every word of a type-ahead query as a prefix (`word:*`), ANDed. The words
 // are letters and digits only, so they carry no tsquery syntax. Undefined when
@@ -7016,7 +7024,7 @@ function typeAheadTsQuery(text: string): Expression | undefined {
   }
   let narrowed = meaningful.some((w) => [...w].length >= MIN_PREFIX_LETTERS);
   return [
-    `to_tsquery('simple',`,
+    `to_tsquery('boxel_simple',`,
     param(
       meaningful
         .map((word) =>
@@ -7053,7 +7061,7 @@ function renderedTsQuery(term: MatchTerm): Expression {
     return matchTsQuery(term);
   }
   if (term.typoQuery === undefined) {
-    return [`websearch_to_tsquery('english',`, param(term.matches), `)`];
+    return [`websearch_to_tsquery('boxel_english',`, param(term.matches), `)`];
   }
   let partialAlternatives = [partial, ...(term.typoPartial ?? '').split(' | ')]
     .map((w) => w.trim())
@@ -7062,7 +7070,7 @@ function renderedTsQuery(term: MatchTerm): Expression {
   let tsquery = [term.typoQuery, `(${partialAlternatives})`]
     .filter(Boolean)
     .join(' & ');
-  return [`to_tsquery('english',`, param(tsquery), `)`];
+  return [`to_tsquery('boxel_english',`, param(tsquery), `)`];
 }
 
 // A word still being typed takes typo corrections only from this many
@@ -7099,7 +7107,7 @@ function matchTsQuery(term: MatchTerm): Expression {
     words = words.slice(0, -1);
   }
   let alternatives: Expression = [
-    `to_tsquery('simple',`,
+    `to_tsquery('boxel_simple',`,
     param(`${partial}:*`),
     `) || to_tsquery('boxel_english',`,
     param(partial),
@@ -7108,7 +7116,7 @@ function matchTsQuery(term: MatchTerm): Expression {
   let letters = [...partial];
   for (let drop = 1; drop <= 2 && letters.length - drop >= 3; drop++) {
     alternatives.push(
-      `|| to_tsquery('simple',`,
+      `|| to_tsquery('boxel_simple',`,
       param(letters.slice(0, -drop).join('')),
       `)`,
     );

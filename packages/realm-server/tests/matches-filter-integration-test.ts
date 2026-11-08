@@ -95,13 +95,13 @@ async function seedRow(
     `,`,
     `CASE WHEN`,
     param(fieldText),
-    `::text IS NULL THEN NULL ELSE setweight(to_tsvector('english',`,
+    `::text IS NULL THEN NULL ELSE setweight(to_tsvector('boxel_english',`,
     param(fieldText),
     `), 'C') END`,
     // The rank vector: the title at A, the field text's start at C.
-    `, setweight(to_tsvector('english', coalesce(`,
+    `, setweight(to_tsvector('boxel_english', coalesce(`,
     param(String(searchDoc._title ?? '')),
-    `::text, '')), 'A') || setweight(to_tsvector('english', left(coalesce(`,
+    `::text, '')), 'A') || setweight(to_tsvector('boxel_english', left(coalesce(`,
     param(fieldText),
     `::text, ''), 600)), 'C')`,
     `,`,
@@ -118,7 +118,7 @@ async function seedRow(
   // vector is computed the same way the writer computes it.
   await query(dbAdapter, [
     `INSERT INTO prerendered_html (url, file_alias, realm_url, type, markdown, generation, is_deleted, rendered_at, markdown_tsv)`,
-    `SELECT v.*, CASE WHEN v.markdown IS NULL THEN NULL ELSE to_tsvector('english', markdown_search_text(v.markdown)) END FROM (VALUES (`,
+    `SELECT v.*, CASE WHEN v.markdown IS NULL THEN NULL ELSE to_tsvector('boxel_english', markdown_search_text(v.markdown)) END FROM (VALUES (`,
     param(url),
     `,`,
     param(url),
@@ -596,6 +596,41 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('accents fold everywhere text is searched', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}tea.json`,
+        markdown: 'Orange Vanilla Crème Brûlée tea, steeped slowly.',
+        searchDoc: {
+          _title: 'Crème Brûlée Tea',
+          _typeahead: 'Crème Brûlée Tea',
+        },
+      });
+      let tea = [`${testRealmURL}tea.json`];
+      for (let matches of ['creme', 'crème', 'CRÈME']) {
+        assert.deepEqual(
+          (await relevanceUrls({ filter: { matches } })).filter((u) =>
+            u.includes('tea'),
+          ),
+          tea,
+          `matches "${matches}" finds Crème on the page and in the fields`,
+        );
+      }
+      for (let matches of ['cre', 'crè', 'brul', 'brû']) {
+        assert.deepEqual(
+          (await prefixUrls(matches)).filter((u) => u.includes('tea')),
+          tea,
+          `the unfinished word "${matches}" folds its accents as the document did`,
+        );
+      }
+      for (let typeahead of ['creme', 'crème', 'brule', 'brûl', 'BRU']) {
+        assert.deepEqual(
+          await relevanceUrls({ filter: { typeahead } }),
+          tea,
+          `type-ahead "${typeahead}" finds Crème Brûlée`,
+        );
+      }
+    });
+
     test('prefix matches rank by relevance', async function (assert) {
       await seedRow(dbAdapter, {
         url: `${testRealmURL}zebra-dense.json`,
@@ -902,7 +937,7 @@ module(basename(import.meta.filename), function () {
         param(start + 60),
         `,`,
         param(text),
-        `, to_tsvector('english',`,
+        `, to_tsvector('boxel_english',`,
         param(text),
         `))`,
       ]);
@@ -1174,7 +1209,7 @@ module(basename(import.meta.filename), function () {
       // interpolated, so the SQL stays quoting-safe whatever their contents; only
       // the predicate *shape* — which is test-controlled, not data — is composed
       // inline.
-      let tsPredicate = `to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english', $2)`;
+      let tsPredicate = `to_tsvector('boxel_english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english', $2)`;
       let joinShapeExplain = (predicate: string) =>
         `EXPLAIN (FORMAT JSON)
          SELECT i.url

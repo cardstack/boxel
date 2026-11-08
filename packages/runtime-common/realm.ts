@@ -4619,13 +4619,17 @@ export class Realm {
           'drop old expression fts index (removal 1793936584289)',
           `DROP INDEX CONCURRENTLY IF EXISTS prerendered_html_markdown_fts_idx`,
         );
+        await run(
+          'drop the simple type-ahead index (removal 1794200000001)',
+          `DROP INDEX CONCURRENTLY IF EXISTS boxel_index_type_ahead_idx`,
+        );
       }
       if (reqURL.searchParams.has('repair')) {
         let total = 0;
         for (;;) {
           let rows = (await original(
             `WITH b AS (SELECT url, realm_url, type FROM prerendered_html WHERE markdown_tsv IS NULL AND markdown IS NOT NULL LIMIT 500)
-             UPDATE prerendered_html AS p SET markdown_tsv = to_tsvector('english', markdown_search_text(p.markdown))
+             UPDATE prerendered_html AS p SET markdown_tsv = to_tsvector('boxel_english', markdown_search_text(p.markdown))
              FROM b WHERE p.url = b.url AND p.realm_url = b.realm_url AND p.type = b.type RETURNING 1 AS x`,
           )) as unknown[];
           total += rows.length;

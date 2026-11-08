@@ -4395,7 +4395,7 @@ export class Batch {
       prerenderedNames[index] === 'markdown_tsv'
         ? [
             this.#dbAdapter.kind === 'pg'
-              ? `CASE WHEN markdown IS NULL THEN NULL ELSE to_tsvector('english', markdown_search_text(markdown)) END AS markdown_tsv`
+              ? `CASE WHEN markdown IS NULL THEN NULL ELSE to_tsvector('boxel_english', markdown_search_text(markdown)) END AS markdown_tsv`
               : 'NULL AS markdown_tsv',
           ]
         : expression,
