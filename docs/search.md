@@ -293,7 +293,7 @@ let { data: ranked } = await indexer.search({
 });
 ```
 
-A negative `weight` inverts a signal, as in `relevance`: it ranks the other way round with the weight's size, so `{ by: 'unitsSold30d', weight: -1 }` favours the least sold, and a negative `near` signal favours the least similar.
+A negative `weight` inverts a signal, as in `relevance`: it ranks the other way around with the weight's size, so `{ by: 'unitsSold30d', weight: -1 }` favors the least sold, and a negative `near` signal favors the least similar.
 
 A `boost` is a "should" clause: `{ boost: <filter>, weight }` lifts the cards the filter admits without dropping the rest. Every match ties for first place in it, so each gains `weight / (k + 1)` and a card that doesn't match gains nothing. With a negative weight it lifts the cards that don't match. A boost ranks only inside a `blend`, and takes the query's type when its filter names none.
 
@@ -362,7 +362,7 @@ rerank: {
 }
 ```
 
-**Look-alikes.** `compare.near` makes each row's comparison set its own nearest cards in the realm by a vector field: its `k` closest (default 20, at most 100), at least `minSimilarity` similar. `peers` and `stats` then describe those neighbours, and `peers.similarity` holds how alike each is. This is how a product is compared with the products that look like it, rather than with its whole category:
+**Look-alikes.** `compare.near` makes each row's comparison set its own nearest cards in the realm by a vector field: its `k` closest (default 20, at most 100), at least `minSimilarity` similar. `peers` and `stats` then describe those neighbors, and `peers.similarity` holds how alike each is. This is how a product is compared with the products that look like it, rather than with its whole category:
 
 ```js
 rerank: {
@@ -377,7 +377,7 @@ rerank: {
 }
 ```
 
-Look-alikes are read through a nearest-neighbour index, which a vector field opts into: `@field imageEmbedding = contains(ImageEmbedding, { search: { neighbors: true } })`. The first lookup by a declared field builds one HNSW index for that field and dimension, concurrently; until it is ready, lookups scan exactly. A field that has not opted in is refused with the declaration to add, and keeps exact `near` search and no index. The index is approximate (about 98% of the exact neighbours on a real catalogue), which suits a comparison set; `near` filters and sorts stay exact. Each lookup stays within the realm. Under a realm policy, a neighbour the grants do not admit is left out. Postgres with pgvector only.
+Look-alikes are read through a nearest-neighbor index, which a vector field opts into: `@field imageEmbedding = contains(ImageEmbedding, { search: { neighbors: true } })`. The first lookup by a declared field builds one HNSW index for that field and dimension, concurrently; until it is ready, lookups scan exactly. A field that has not opted in is refused with the declaration to add, and keeps exact `near` search and no index. The index is approximate (about 98% of the exact neighbors on a real catalog), which suits a comparison set; `near` filters and sorts stay exact. Each lookup stays within the realm. Under a realm policy, a neighbor the grants do not admit is left out. Postgres with pgvector only.
 
 Aggregates a card stores, such as a category's median price, are fields like any other (`category.medianPrice`, when the link is searchable). Under a realm policy, the grants that scope the caller's query also scope `compare.filter`. A comparison set runs on Postgres only.
 
@@ -443,7 +443,7 @@ sort: [
 
 ### Collapsing to one per group (`collapse`)
 
-`collapse` keeps the best cards of each group: of the cards that share a value at `by`, only the first `keep` (default 1) by the query's own sort come back. Use it to show one size of a product rather than five, or one card per type. A card with no value at `by` is a group of its own. Each card that comes back carries `meta._collapseSize`, how many matches its group holds (itself and any other kept cards included), so a result can say "and 12 more" without a second query. `meta.page.total` counts what remains, and pages page over it. Facets still count every match, so after a collapse the two disagree: one-per-brand might show 40 results while the Colour facet still says "Black (120)", counting every black product including the ones the collapse hid.
+`collapse` keeps the best cards of each group: of the cards that share a value at `by`, only the first `keep` (default 1) by the query's own sort come back. Use it to show one size of a product rather than five, or one card per type. A card with no value at `by` is a group of its own. Each card that comes back carries `meta._collapseSize`, how many matches its group holds (itself and any other kept cards included), so a result can say "and 12 more" without a second query. `meta.page.total` counts what remains, and pages page over it. Facets still count every match, so after a collapse the two disagree: one-per-brand might show 40 results while the Color facet still says "Black (120)", counting every black product including the ones the collapse hid.
 
 `on` names the type whose field `by` is; without it, the filter's anchor (`on` or `type`) is used. A string is shorthand for `{ by }`.
 
@@ -580,7 +580,7 @@ The Query object may have a `facets` property: up to 8 counts of what the matche
 | `size`          | How many values come back (default 50, at most 1000).                                                                                                                                    |
 | `own: 'ignore'` | Counts without the facet's own selection, so a multi-select list keeps its other values while one is picked.                                                                             |
 | `stats: true`   | Adds count, distinct count and min, max, sum and average (numbers) or min and max (text) in `meta.facetStats[by]`.                                                                       |
-| `ranges`        | Counts the matches in each `[from, to)` bucket, labelled by `key` or `from-to` (`*` for an open end).                                                                                    |
+| `ranges`        | Counts the matches in each `[from, to)` bucket, labeled by `key` or `from-to` (`*` for an open end).                                                                                     |
 | `interval`      | Counts by `day`, `week` (from Monday), `month` or `year` of a date value.                                                                                                                |
 | `prefix`        | Keeps the values that start with it, ignoring case.                                                                                                                                      |
 | `missing: true` | Adds the count of matches with no value (`meta.facetStats[by].missing`).                                                                                                                 |

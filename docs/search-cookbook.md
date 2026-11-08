@@ -2,7 +2,7 @@
 
 What people ask for, and the query that answers it. Many requests don't map to an obvious operator: "hidden gem" is a blend with an inverted signal, "cheap for its kind" is a rerank against a comparison set, "dupes of this" is a one-card `let` binding. Find the phrase, then adapt the type and field names to your cards.
 
-Every query here is in the V2 grammar described in [search.md](search.md), with `productRef` standing for a product card type with the usual shop fields (`productType`, `priceMin`, `rating`, `reviewCount`, `unitsSold30d`, `imageEmbedding`, …). Each one is checked against the query grammar, and all but the four marked as needing an embedding or a saved list ran against a real catalogue and found results.
+Every query here is in the V2 grammar described in [search.md](search.md), with `productRef` standing for a product card type with the usual shop fields (`productType`, `priceMin`, `rating`, `reviewCount`, `unitsSold30d`, `imageEmbedding`, …). Each one is checked against the query grammar, and all but the four marked as needing an embedding or a saved list ran against a real catalog and found results.
 
 ## Find a pattern
 
@@ -12,16 +12,16 @@ Every query here is in the V2 grammar described in [search.md](search.md), with 
 | "black or white", "chair or bench", "either"                                 | [Either of two](#either-of-two)                                              |
 | "new this year", "just in", "recently added", "new this month"               | [New lately](#new-lately)                                                    |
 | "almost sold out", "low stock", "last few"                                   | [Almost gone](#almost-gone)                                                  |
-| "no colour listed", "without a price", "incomplete"                          | [Missing information](#missing-information)                                  |
+| "no color listed", "without a price", "incomplete"                           | [Missing information](#missing-information)                                  |
 | "from my wishlist", "from my saved", "in my list"                            | [From my saved list](#from-my-saved-list)                                    |
-| "reclinr", "cushon covr", "any typo"                                         | [Misspelt](#misspelt)                                                        |
+| "reclinr", "cushon covr", "any typo"                                         | [Misspelled](#misspelled)                                                    |
 | "search box", "autocomplete", "type-ahead"                                   | [As they type](#as-they-type)                                                |
 | "coffee table but not glass", "iphone 11 but not pro"                        | [An exact phrase, minus a word](#an-exact-phrase-minus-a-word)               |
 | "oak in the name", "title says"                                              | [In the title only](#in-the-title-only)                                      |
 | "removable covers", "mentions in the bullet points"                          | [In the details](#in-the-details)                                            |
 | "model AMG105", "SKU starting with", "part number"                           | [A model number](#a-model-number)                                            |
 | "best match", "most relevant"                                                | [Words, ranked by how well they match](#words-ranked-by-how-well-they-match) |
-| "crowd favourite", "everyone loves", "popular and good"                      | [Crowd favourite](#crowd-favourite)                                          |
+| "crowd favorite", "everyone loves", "popular and good"                       | [Crowd favorite](#crowd-favorite)                                            |
 | "hidden gem", "underrated", "not mainstream", "sleeper hit"                  | [Hidden gem](#hidden-gem)                                                    |
 | "new and popular", "up and coming"                                           | [New and rising](#new-and-rising)                                            |
 | "cheap but good", "value", "bang for the buck"                               | [Cheap but good](#cheap-but-good)                                            |
@@ -30,7 +30,7 @@ Every query here is in the V2 grammar described in [search.md](search.md), with 
 | "brass preferred", "ideally", "bonus if"                                     | [Prefer one thing, drop nothing](#prefer-one-thing-drop-nothing)             |
 | "staff pick", "featured", "recommended by the shop"                          | [Staff picks first](#staff-picks-first)                                      |
 | "best value", "worth the price"                                              | [Value for money](#value-for-money)                                          |
-| "quietly loved", "people save it", "cult favourite"                          | [Loved, not hyped](#loved-not-hyped)                                         |
+| "quietly loved", "people save it", "cult favorite"                           | [Loved, not hyped](#loved-not-hyped)                                         |
 | "selling fast", "flying off the shelves"                                     | [Selling fast for its age](#selling-fast-for-its-age)                        |
 | "safe bet", "reliable", "can't go wrong"                                     | [Safe bet](#safe-bet)                                                        |
 | "rating you can trust", "adjusted rating"                                    | [Fair rating with few reviews](#fair-rating-with-few-reviews)                |
@@ -47,7 +47,7 @@ Every query here is in the V2 grammar described in [search.md](search.md), with 
 | "more like this", "similar", "like that one"                                 | [More like this one](#more-like-this-one)                                    |
 | "not like this", "less of these", "different from"                           | [Less like that one](#less-like-that-one)                                    |
 | "something so my dog stops", "a problem, not a product", "for a dark corner" | [Describe it, don't name it](#describe-it-dont-name-it)                      |
-| "housewarming gift", "calm bedroom", "cosy"                                  | [A mood or occasion](#a-mood-or-occasion)                                    |
+| "housewarming gift", "calm bedroom", "cozy"                                  | [A mood or occasion](#a-mood-or-occasion)                                    |
 | "dupe", "looks like but cheaper", "designer look for less"                   | [Dupes of a product](#dupes-of-a-product)                                    |
 | "same thing but cheaper", "cheaper twin"                                     | [Cheaper than its look-alikes](#cheaper-than-its-look-alikes)                |
 | "one bed, one lamp, one rug", "a bundle", "one per kind"                     | [One of each](#one-of-each)                                                  |
@@ -55,7 +55,7 @@ Every query here is in the V2 grammar described in [search.md](search.md), with 
 | "everywhere", "all my workspaces", "across realms"                           | [Across my workspaces](#across-my-workspaces)                                |
 | "cheapest brand", "average price by brand"                                   | [Which brand is cheapest on average](#which-brand-is-cheapest-on-average)    |
 | "how much do they cost", "price range", "what's typical"                     | [Price range](#price-range)                                                  |
-| "export", "spreadsheet", "all the prices"                                    | [A table to analyse](#a-table-to-analyse)                                    |
+| "export", "spreadsheet", "all the prices"                                    | [A table to analyze](#a-table-to-analyze)                                    |
 
 ## Narrowing
 
@@ -138,7 +138,7 @@ In stock and a small inventory; `inStock` alone keeps the products that just ran
 
 ### Missing information
 
-**Say:** "no colour listed", "without a price", "incomplete"
+**Say:** "no color listed", "without a price", "incomplete"
 
 ```js
 const query = {
@@ -175,7 +175,7 @@ _Needs a value computed first (an embedding, a saved list, or several realms), s
 
 Text matching, beyond typing the words in.
 
-### Misspelt
+### Misspelled
 
 **Say:** "reclinr", "cushon covr", "any typo"
 
@@ -278,9 +278,9 @@ A `textRelevance` sort ranks by the words; it needs a positive `matches` term to
 
 A `blend` fuses several signals by rank (RRF), so signals on different scales combine without tuning. A negative weight inverts a signal; `k` sets how sharply the top beats the rest.
 
-### Crowd favourite
+### Crowd favorite
 
-**Say:** "crowd favourite", "everyone loves", "popular and good"
+**Say:** "crowd favorite", "everyone loves", "popular and good"
 
 ```js
 const query = {
@@ -455,7 +455,7 @@ Rating over the log of the price: a $20 lamp is not judged 10× better than a $2
 
 ### Loved, not hyped
 
-**Say:** "quietly loved", "people save it", "cult favourite"
+**Say:** "quietly loved", "people save it", "cult favorite"
 
 ```js
 const query = {
@@ -521,7 +521,7 @@ const query = {
 };
 ```
 
-A bell curve centred on the budget: $40 scores 1, $25 or $55 about 0.37. Better than a hard range when the budget is soft.
+A bell curve centered on the budget: $40 scores 1, $25 or $55 about 0.37. Better than a hard range when the budget is soft.
 
 ### Fresh first, gently
 
@@ -743,7 +743,7 @@ const query = {
 };
 ```
 
-A negative weight on similarity favours the least alike. Pair one positive and one negative seed for "like A, not B".
+A negative weight on similarity favors the least alike. Pair one positive and one negative seed for "like A, not B".
 
 ### Describe it, don't name it
 
@@ -772,7 +772,7 @@ _Needs a value computed first (an embedding, a saved list, or several realms), s
 
 ### A mood or occasion
 
-**Say:** "housewarming gift", "calm bedroom", "cosy"
+**Say:** "housewarming gift", "calm bedroom", "cozy"
 
 ```js
 const query = {
@@ -962,7 +962,7 @@ const query = {
 
 `stats` gives min, max and average; `ranges` gives counts per bucket for a price slider.
 
-### A table to analyse
+### A table to analyze
 
 **Say:** "export", "spreadsheet", "all the prices"
 
