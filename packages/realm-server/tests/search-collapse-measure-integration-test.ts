@@ -170,6 +170,7 @@ const asDate = (d: Date) => d.toISOString().slice(0, 10);
 const corpus: Record<string, Record<string, unknown>> = {
   a: {
     title: 'A',
+    _title: 'A',
     speakers: ['Kleppmann'],
     channel: 'Strange Loop',
     hnScore: 10,
@@ -1090,7 +1091,10 @@ module(basename(import.meta.filename), function (hooks) {
     let { rows, meta } = await reranked({
       filter: { type: on },
       sort: byScoreDesc,
-      rerank: { expr: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0)' },
+      // `title` beside the engine's synthetic `_title`, as every card has.
+      rerank: {
+        expr: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
+      },
     });
     assert.deepEqual(
       rows.map((r) => r[0]),

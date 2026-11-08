@@ -5792,10 +5792,19 @@ async function scoreWithBxl(
   let bxl = await import('@cardstack/bxl');
   formulaExtensions ??= bxl.loadAllFormulaExtensions().catch(() => undefined);
   await formulaExtensions;
+  // The docs' own field names become the formula's labels, so `rating`
+  // reads `.rating`. The engine's synthetic keys (`_title`, `_cardType`) are
+  // left out, as is any name that reads the same as one already taken once
+  // case and punctuation are ignored, so no label is ambiguous.
   let keys = new Set<string>();
+  let taken = new Set<string>();
   for (let doc of docs) {
     for (let key of Object.keys(doc)) {
-      if (/^[A-Za-z_$][\w$]*$/.test(key)) keys.add(key);
+      if (!/^[A-Za-z$][\w$]*$/.test(key) || keys.has(key)) continue;
+      let folded = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (taken.has(folded)) continue;
+      taken.add(folded);
+      keys.add(key);
     }
   }
   let prepared;
