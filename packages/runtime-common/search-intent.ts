@@ -62,6 +62,11 @@ export type FieldSearchOption = FieldSearchIntent | false;
 export interface CardSearchIntent {
   // The field whose role is `title`, when it isn't `cardInfo.name`.
   title?: string;
+  // Keep word statistics for this type's cards (how many rows hold each
+  // word), so its text relevance weighs rare words above common ones,
+  // saturates repetition and normalizes for length. Opt-in because the
+  // realm maintains the statistics; a type without it ranks by proximity.
+  wordStatistics?: boolean;
   // The main field for each ranking signal.
   rank?: Partial<Record<SearchRankSignal, string>>;
   language?: string;
@@ -333,6 +338,9 @@ export function cardSearchIntentOf(
     }
     if (intent.language !== undefined) {
       merged.language = intent.language;
+    }
+    if (intent.wordStatistics !== undefined) {
+      merged.wordStatistics = intent.wordStatistics;
     }
     if (intent.rank) {
       merged.rank = { ...merged.rank, ...intent.rank };

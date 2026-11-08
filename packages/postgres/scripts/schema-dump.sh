@@ -6,6 +6,8 @@ tmpFile='./schema_tmp.sql'
 # search doc. boxel_index_vectors is excluded: it exists only where Postgres has
 # pgvector, and the SQLite index scores `near` sorts from the search doc.
 # boxel_index_spill is excluded: the SQLite index never spills (ADR 021 §1.8).
+# boxel_term_stats and boxel_realm_text_stats are excluded: BM25 is
+# Postgres-only; the SQLite index scores a match 1 or 0.
 # Directory where SQLite schema files are written (relative to this script's location)
 SCHEMA_DIR="../host/config/schema"
 
@@ -71,6 +73,8 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=boxel_index_passages \
   --exclude-table-and-children=boxel_index_spill \
   --exclude-table-and-children=boxel_index_words \
+  --exclude-table-and-children=boxel_term_stats \
+  --exclude-table-and-children=boxel_realm_text_stats \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \

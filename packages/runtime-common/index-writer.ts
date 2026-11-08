@@ -3998,7 +3998,7 @@ export class Batch {
             param(passage.end),
             ',',
             param(passage.text),
-            `, to_tsvector('english',`,
+            `, to_tsvector('boxel_english',`,
             param(passage.text),
             '))',
           ]);

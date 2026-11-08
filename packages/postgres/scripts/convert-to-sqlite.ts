@@ -293,6 +293,8 @@ function prepareDump(sql: string): string {
     .replace(/\s*SET\s[^;].*;/gm, '')
     .replace(/\s*CREATE\sTYPE\s[^;]*;/gm, '')
     .replace(/\s*CREATE\sEXTENSION\s[^;]*;/gm, '')
+    .replace(/\s*(CREATE|ALTER)\sTEXT\sSEARCH\s[^;]*;/gm, '')
+    .replace(/\s*COMMENT\sON\sTEXT\sSEARCH\s[^;]*;/gm, '')
     .replace(/\s*COMMENT\sON\sEXTENSION\s[^;]*;/gm, '')
     .replace(/^\\(un)?restrict\s.*$/gm, '');
   return result;

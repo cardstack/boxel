@@ -89,6 +89,7 @@ import {
   collectPositiveMatchTerms,
   splitTypeAheadQuery,
   type MatchTerm,
+  type WordStatistics,
   filterOperators,
   isCardTypeFilter,
   isMatchesFilter,
@@ -1469,7 +1470,9 @@ export class IndexQueryEngine {
           opts,
         ));
       }
-      filter = await this.#resolveTypos(filter, realmURL);
+      let anonymize = Boolean(asWritten.anonymizeStatistics);
+      filter = await this.#resolveTypos(filter, realmURL, anonymize);
+      filter = await this.#prepareWordStatistics(filter, realmURL, anonymize);
       sort = await this.#expandRelevanceSorts(sort, filter);
       // A formula that leads the sort ran in SQL; each row carries its value.
       let leadingExpr = sort?.[0];
@@ -3595,9 +3598,180 @@ export class IndexQueryEngine {
   // word list (fields declared `typos: true`), as tsquery text the term then
   // matches with (`typoQuery`). A word of three letters or fewer, or one the
   // list already holds, stays as typed. Postgres only.
+  // Word statistics for each positive, whole-word `matches` term whose type
+  // declares `searchDefaults.wordStatistics`: its query lexemes (the
+  // tsquery's own, so stemming and typo corrections agree with the match)
+  // and each one's IDF from the realm's word statistics. A realm whose
+  // statistics are missing or stale gets them rebuilt in the background,
+  // and ranks by proximity until they exist.
+  async #prepareWordStatistics(
+    filter: Filter | undefined,
+    realmURL: URL,
+    anonymize = false,
+  ): Promise<Filter | undefined> {
+    if (!filter || this.#dbAdapter.kind !== 'pg') {
+      return filter;
+    }
+    let optedIn = new Map<string, Promise<boolean>>();
+    let declares = (type: CodeRef | undefined) => {
+      if (!type) return Promise.resolve(false);
+      let key = JSON.stringify(type);
+      let known = optedIn.get(key);
+      if (!known) {
+        known = this.getDefinition(type)
+          .then((d) => d?.search?.wordStatistics === true)
+          .catch(() => false);
+        optedIn.set(key, known);
+      }
+      return known;
+    };
+    let realm: { docCount: number } | undefined | null = null;
+    let walk = async (node: any, anchor: CodeRef | undefined): Promise<any> => {
+      if (!node || typeof node !== 'object') return node;
+      let here = (node.on ?? node.type ?? anchor) as CodeRef | undefined;
+      if (Array.isArray(node.every)) {
+        return {
+          ...node,
+          every: await Promise.all(node.every.map((n: any) => walk(n, here))),
+        };
+      }
+      if (Array.isArray(node.any)) {
+        return {
+          ...node,
+          any: await Promise.all(node.any.map((n: any) => walk(n, here))),
+        };
+      }
+      if (
+        typeof node.matches === 'string' &&
+        node.matches.trim() !== '' &&
+        !node.prefix &&
+        !node.within &&
+        (await declares(here))
+      ) {
+        if (realm === null) {
+          realm = await this.#realmWordStatistics(realmURL);
+        }
+        // Counts are shared with a caller the policy scopes only when the
+        // realm is large enough that they describe no one in particular.
+        if (!realm || (anonymize && realm.docCount < STATS_MIN_ROWS)) {
+          return node;
+        }
+        let rows = (await this.#query([
+          'SELECT q.lexeme AS lexeme, COALESCE(ts.df, 0) AS df FROM (SELECT DISTINCT (regexp_matches(querytree(',
+          ...matchTsQuery(node),
+          `)::text, '''([^'']+)''', 'g'))[1] AS lexeme) AS q`,
+          'LEFT JOIN boxel_term_stats AS ts ON ts.realm_url =',
+          param(realmURL.href),
+          'AND ts.lexeme = q.lexeme',
+        ])) as { lexeme: string; df: number | string }[];
+        if (!rows.length) return node;
+        let n = realm.docCount;
+        return {
+          ...node,
+          wordStatistics: {
+            lexemes: rows.map((r) => r.lexeme),
+            idfs: rows.map((r) => {
+              // a count below the floor reads as the floor
+              let df = anonymize
+                ? Math.max(Number(r.df), STATS_MIN_COUNT)
+                : Number(r.df);
+              return Math.log(1 + (n - df + 0.5) / (df + 0.5));
+            }),
+          } satisfies WordStatistics,
+        };
+      }
+      return node;
+    };
+    return (await walk(filter, undefined)) as Filter;
+  }
+
+  // The realm's word-statistics row count, read briefly from a cache. When
+  // the statistics are missing or older than WORD_STATISTICS_MAX_AGE, a
+  // rebuild starts in the background (one at a time per realm, under an
+  // advisory lock), off the request path and outside any index commit.
+  #wordStats = new Map<
+    string,
+    { at: number; value: { docCount: number } | undefined }
+  >();
+  #rebuilding = new Set<string>();
+  async #realmWordStatistics(
+    realmURL: URL,
+  ): Promise<{ docCount: number } | undefined> {
+    let cached = this.#wordStats.get(realmURL.href);
+    if (cached && Date.now() - cached.at < 30_000) return cached.value;
+    let value: { docCount: number } | undefined;
+    let age = Infinity;
+    try {
+      let [row] = (await this.#query([
+        'SELECT doc_count, EXTRACT(EPOCH FROM (now() - rebuilt_at)) AS age FROM boxel_realm_text_stats WHERE realm_url =',
+        param(realmURL.href),
+      ])) as { doc_count: number; age: number }[];
+      if (row && Number(row.doc_count) > 0) {
+        value = { docCount: Number(row.doc_count) };
+        age = Number(row.age);
+      }
+    } catch {
+      return undefined; // before the migration
+    }
+    if (age > WORD_STATISTICS_MAX_AGE_SECONDS) {
+      void this.#rebuildWordStatistics(realmURL);
+    }
+    this.#wordStats.set(realmURL.href, { at: Date.now(), value });
+    return value;
+  }
+
+  // Rebuilds a realm's word statistics: each lexeme's document frequency
+  // over the rank vectors, and the row count. One transaction holding a
+  // transaction-level advisory lock, so concurrent searches start at most
+  // one rebuild per realm and none waits on it.
+  async #rebuildWordStatistics(realmURL: URL) {
+    if (this.#rebuilding.has(realmURL.href)) return;
+    this.#rebuilding.add(realmURL.href);
+    try {
+      await this.#dbAdapter.withTransaction(async (q) => {
+        let [lock] = (await q([
+          'SELECT pg_try_advisory_xact_lock(hashtext(',
+          param(`boxel_term_stats:${realmURL.href}`),
+          ')) AS ok',
+        ])) as { ok: boolean }[];
+        if (!lock?.ok) return;
+        await q([
+          'DELETE FROM boxel_term_stats WHERE realm_url =',
+          param(realmURL.href),
+        ]);
+        await q([
+          'INSERT INTO boxel_term_stats (realm_url, lexeme, df)',
+          'SELECT i.realm_url, u.lexeme, COUNT(*)',
+          'FROM boxel_index AS i CROSS JOIN LATERAL unnest(i.rank_tsv) AS u',
+          'WHERE i.realm_url =',
+          param(realmURL.href),
+          'AND i.rank_tsv IS NOT NULL AND i.is_deleted IS NOT TRUE',
+          'GROUP BY i.realm_url, u.lexeme',
+        ]);
+        await q([
+          'INSERT INTO boxel_realm_text_stats (realm_url, doc_count, rebuilt_at)',
+          'SELECT',
+          param(realmURL.href),
+          ', COUNT(*), now() FROM boxel_index WHERE realm_url =',
+          param(realmURL.href),
+          'AND rank_tsv IS NOT NULL AND is_deleted IS NOT TRUE',
+          'ON CONFLICT (realm_url) DO UPDATE SET doc_count = EXCLUDED.doc_count, rebuilt_at = EXCLUDED.rebuilt_at',
+        ]);
+      });
+      this.#wordStats.delete(realmURL.href);
+    } catch (e) {
+      log.warn(
+        `could not rebuild word statistics for ${realmURL.href}: ${(e as Error).message}`,
+      );
+    } finally {
+      this.#rebuilding.delete(realmURL.href);
+    }
+  }
+
   async #resolveTypos(
     filter: Filter | undefined,
     realmURL: URL,
+    anonymize = false,
   ): Promise<Filter | undefined> {
     if (!filter || this.#dbAdapter.kind !== 'pg') {
       return filter;
@@ -3626,6 +3800,7 @@ export class IndexQueryEngine {
       let corrections = await this.#typoCorrectionsFor(
         [...finished, ...partialWords],
         realmURL,
+        anonymize,
       );
       let alternativesOf = (word: string) =>
         [...new Set([word, ...(corrections.get(word) ?? [])])]
@@ -3663,6 +3838,7 @@ export class IndexQueryEngine {
       let corrections = await this.#typoCorrectionsFor(
         words.filter((w) => [...w].length >= MIN_TYPO_PARTIAL_LETTERS),
         realmURL,
+        anonymize,
       );
       // As `typeAheadTsQuery`: a word of three letters or more matches as a
       // prefix (so does a shorter one once another word narrows). Each word
@@ -3691,7 +3867,7 @@ export class IndexQueryEngine {
         ...node,
         [key]: await Promise.all(
           (node[key] as Filter[]).map((child) =>
-            this.#resolveTypos(child, realmURL),
+            this.#resolveTypos(child, realmURL, anonymize),
           ),
         ),
       } as Filter;
@@ -3699,7 +3875,7 @@ export class IndexQueryEngine {
     if ('not' in node) {
       return {
         ...node,
-        not: await this.#resolveTypos(node.not, realmURL),
+        not: await this.#resolveTypos(node.not, realmURL, anonymize),
       } as Filter;
     }
     return filter;
@@ -3712,7 +3888,24 @@ export class IndexQueryEngine {
   async #typoCorrectionsFor(
     words: string[],
     realmURL: URL,
+    anonymize = false,
   ): Promise<Map<string, string[]>> {
+    // A caller the policy scopes is offered only corrections that at least
+    // STATS_MIN_COUNT rows hold, in a realm of at least STATS_MIN_ROWS, so a
+    // suggestion never points at a word only a few cards contain.
+    if (anonymize) {
+      let realm = await this.#realmWordStatistics(realmURL);
+      if (!realm || realm.docCount < STATS_MIN_ROWS) {
+        return new Map();
+      }
+    }
+    let common = anonymize
+      ? `AND EXISTS (
+                SELECT 1 FROM boxel_term_stats AS ts
+                 WHERE ts.realm_url = $2 AND ts.df >= ${STATS_MIN_COUNT}
+                   AND ts.lexeme = ANY(tsvector_to_array(to_tsvector('boxel_english', bw.word)))
+              )`
+      : '';
     let rows = (await this.#dbAdapter.execute(
       `SELECT q.w AS word, c.word AS correction
          FROM unnest($1::text[]) AS q(w)
@@ -3724,6 +3917,7 @@ export class IndexQueryEngine {
                 SELECT 1 FROM boxel_index_words AS known
                  WHERE known.realm_url = $2 AND known.word = q.w
               )
+              ${common}
             ORDER BY similarity(bw.word, q.w) DESC, bw.word
             LIMIT 10
          ) AS c`,
@@ -4212,11 +4406,13 @@ export class IndexQueryEngine {
         // out-of-line value, however large the cards are. A card without
         // one yet (indexed before it existed) ranks lowest. Matching reads
         // the full vectors; ranking never reads the rendered page.
-        pg: [
-          `ts_rank_cd(COALESCE(${rankVector('i', staged)}, ''::tsvector), `,
-          ...pgTsQuery,
-          `, 32)`,
-        ],
+        pg: matches.every((m) => m.wordStatistics)
+          ? wordStatisticsScore(matches, staged)
+          : [
+              `ts_rank_cd(COALESCE(${rankVector('i', staged)}, ''::tsvector), `,
+              ...pgTsQuery,
+              `, 32)`,
+            ],
         sqlite: [`CASE WHEN (`, ...sqliteLike, `) THEN 1 ELSE 0 END`],
       }),
       `)`,
@@ -5168,7 +5364,7 @@ export class IndexQueryEngine {
     filter: MatchesFilter,
     fields: string[],
   ): CardExpression {
-    let pgText: Expression = ["to_tsvector('english', concat_ws(' '"];
+    let pgText: Expression = ["to_tsvector('boxel_english', concat_ws(' '"];
     for (let path of fields) {
       pgText.push(
         ', spill_unmark(i.search_doc #>',
@@ -6489,6 +6685,47 @@ function rankVector(alias: string, staged: boolean): string {
     : `${alias}.rank_tsv`;
 }
 
+// Text relevance from word statistics (BM25-shaped), all in Postgres's C
+// text-search code: for each query lexeme, its IDF times `ts_rank` of the
+// row's rank vector for that lexeme alone. `ts_rank` weighs each position by
+// its tier (A 1, B 2/3, C 1/2, D 1/3), saturates as a word repeats, and with
+// normalization 1 divides by the log of the vector's length. Rescaled to 0–1
+// by score / (score + 1); blends read ranks, so the scale only matters to
+// `meta._matchRelevance`.
+const TIER_WEIGHTS = '{0.333333,0.5,0.666667,1}';
+// The small-count rules for realm-wide word statistics shown to a caller a
+// realm policy scopes (`anonymizeStatistics`): the realm must hold at least
+// STATS_MIN_ROWS rows, and a count below STATS_MIN_COUNT reads as that
+// floor (k-anonymity's suppression of small cells).
+export const STATS_MIN_ROWS = 200;
+export const STATS_MIN_COUNT = 5;
+// How stale a realm's word statistics may be before a search rebuilds them.
+const WORD_STATISTICS_MAX_AGE_SECONDS = 600;
+function wordStatisticsScore(
+  matches: MatchTerm[],
+  staged: boolean,
+): Expression {
+  let idf = new Map<string, number>();
+  for (let m of matches) {
+    m.wordStatistics!.lexemes.forEach((l, i) =>
+      idf.set(l, Math.max(idf.get(l) ?? 0, m.wordStatistics!.idfs[i])),
+    );
+  }
+  if (idf.size === 0) return ['0'];
+  let vector = `COALESCE(${rankVector('i', staged)}, ''::tsvector)`;
+  let sum: Expression = ['(SELECT s / (s + 1) FROM (SELECT'];
+  [...idf].forEach(([lexeme, weight], i) => {
+    sum.push(
+      i > 0 ? '+' : '',
+      `${weight.toFixed(6)} * ts_rank('${TIER_WEIGHTS}'::float4[], ${vector}, quote_literal(`,
+      param(lexeme),
+      `)::tsquery, 1)`,
+    );
+  });
+  sum.push(') AS z(s))');
+  return sum;
+}
+
 function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
   return opts?.pendingStagingId === undefined
     ? 'prerendered_html'
@@ -6761,11 +6998,11 @@ const MIN_TYPO_PARTIAL_LETTERS = 5;
 
 function matchTsQuery(term: MatchTerm): Expression {
   let typoPartial: Expression = term.typoPartial
-    ? [`|| to_tsquery('english',`, param(term.typoPartial), `)`]
+    ? [`|| to_tsquery('boxel_english',`, param(term.typoPartial), `)`]
     : [];
   if (term.typoQuery !== undefined && !term.prefix) {
     // The words widened to their corrections (`#resolveTypos`).
-    return [`to_tsquery('english',`, param(term.typoQuery), `)`];
+    return [`to_tsquery('boxel_english',`, param(term.typoQuery), `)`];
   }
   let { words, partial } = term.prefix
     ? splitTypeAheadQuery(term.matches)
@@ -6780,9 +7017,9 @@ function matchTsQuery(term: MatchTerm): Expression {
     ([...partial].length < MIN_PREFIX_LETTERS && words.trim() === '')
   ) {
     if (term.typoQuery) {
-      return [`to_tsquery('english',`, param(term.typoQuery), `)`];
+      return [`to_tsquery('boxel_english',`, param(term.typoQuery), `)`];
     }
-    return [`websearch_to_tsquery('english',`, param(term.matches), `)`];
+    return [`websearch_to_tsquery('boxel_english',`, param(term.matches), `)`];
   }
   let negated = /(^|\s)-$/.test(words);
   if (negated) {
@@ -6791,7 +7028,7 @@ function matchTsQuery(term: MatchTerm): Expression {
   let alternatives: Expression = [
     `to_tsquery('simple',`,
     param(`${partial}:*`),
-    `) || to_tsquery('english',`,
+    `) || to_tsquery('boxel_english',`,
     param(partial),
     `)`,
   ];
@@ -6814,8 +7051,8 @@ function matchTsQuery(term: MatchTerm): Expression {
   }
   return [
     term.typoQuery
-      ? `(to_tsquery('english',`
-      : `(websearch_to_tsquery('english',`,
+      ? `(to_tsquery('boxel_english',`
+      : `(websearch_to_tsquery('boxel_english',`,
     param(term.typoQuery || words),
     `) &&`,
     ...partialQuery,

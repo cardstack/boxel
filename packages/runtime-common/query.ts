@@ -1,7 +1,3 @@
-import {
-  BxlScoreSqlError,
-  compileBxlScoreToSql,
-} from '@cardstack/bxl/compiler';
 import { isEqual } from 'lodash-es';
 import qs from 'qs';
 
@@ -11,6 +7,8 @@ import {
   type JsonValue,
 } from './json-validation.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
+import { lowerQuery, usesNewSyntax } from './query-syntax.ts';
+import { exprSortSql } from './formula-sql.ts';
 import {
   type CodeRef,
   isCodeRef,
@@ -388,6 +386,11 @@ interface QueryCommon {
   // The query's card type, once: the filter, every sort entry and the
   // collapse inherit it.
   type?: CodeRef;
+  // Set by realm-policy scoping for a caller who cannot read the whole
+  // realm: realm-wide word statistics (BM25's IDF, typo corrections) are
+  // used only under the small-count rules (`STATS_MIN_ROWS`,
+  // `STATS_MIN_COUNT` in the engine). Not part of the wire grammar.
+  anonymizeStatistics?: boolean;
   filter?: Filter;
   sort?: Sort;
   facets?: Facet[];
@@ -644,26 +647,7 @@ export function isExprSort(sort: object): sort is ExprSortExpression {
   return (sort as { by?: unknown }).by === EXPR_SORT_KEY;
 }
 
-// A formula's SQL, or the reason it is outside the score profile. Fields
-// are read from the search doc as numbers (booleans as 1 and 0) or, inside
-// DAYS, as dates.
-export function exprSortSql(expr: string): string {
-  try {
-    return compileBxlScoreToSql(expr, {
-      fieldToSql(parts, usage) {
-        let v = `spill_unmark(i.search_doc #> '{${parts.join(',')}}'::text[])`;
-        return usage === 'timestamp'
-          ? `(CASE WHEN (${v} #>> '{}') ~ '^\\d{4}-\\d{2}-\\d{2}' THEN (${v} #>> '{}')::timestamptz END)`
-          : `(CASE jsonb_typeof(${v}) WHEN 'number' THEN (${v} #>> '{}')::double precision WHEN 'boolean' THEN (CASE WHEN ${v} = 'true'::jsonb THEN 1 ELSE 0 END)::double precision END)`;
-      },
-    }).sql;
-  } catch (e) {
-    if (e instanceof BxlScoreSqlError) {
-      throw new InvalidQueryError(`formula: ${e.message}`);
-    }
-    throw e;
-  }
-}
+export { exprSortSql };
 
 // The CardTypeFilter is used when you solely want to filter for all cards that
 // adopt from some particular card type--no other predicates are included in
@@ -876,6 +860,14 @@ export function isTypeAheadFilter(filter: Filter): filter is TypeAheadFilter {
 }
 
 // One positive `matches` term, as a `_matchRelevance` sort scores it.
+// A term's word statistics, set by the engine before it builds SQL when the
+// type it searches declares `searchDefaults.wordStatistics`: each query
+// lexeme with its inverse document frequency in the realm.
+export interface WordStatistics {
+  lexemes: string[];
+  idfs: number[];
+}
+
 export type MatchTerm = Pick<
   MatchesFilter,
   | 'matches'
@@ -886,6 +878,7 @@ export type MatchTerm = Pick<
   | 'typoQuery'
   | 'typoPartial'
 > & {
+  wordStatistics?: WordStatistics;
   // A type-ahead term (`{ typeahead }`), which ranks by title tier.
   typeahead?: boolean;
 };
@@ -977,6 +970,13 @@ export function collectPositiveMatchTerms(
               ? { typoQuery: filter.typoQuery }
               : {}),
             ...(filter.typoPartial ? { typoPartial: filter.typoPartial } : {}),
+            ...((filter as { wordStatistics?: WordStatistics }).wordStatistics
+              ? {
+                  wordStatistics: (
+                    filter as { wordStatistics?: WordStatistics }
+                  ).wordStatistics,
+                }
+              : {}),
           },
         ]
       : [];
@@ -1024,14 +1024,6 @@ export function buildQueryParamValue(query: Query): string {
   return qs.stringify(query, { strictNullHandling: true, encode: false });
 }
 
-// The request grammar's newer spellings lower before they are checked; the
-// lowering (query-syntax.ts) registers itself here, since it imports this
-// module.
-let lowerForCheck: ((query: any) => any) | undefined;
-export function registerQueryLowering(lower: (query: any) => any) {
-  lowerForCheck = lower;
-}
-
 export function assertQuery(
   query: any,
   pointer: string[] = [''],
@@ -1041,12 +1033,10 @@ export function assertQuery(
       `${pointer.join('/') || '/'}: missing query object`,
     );
   }
-  if (lowerForCheck && pointer.length === 1 && pointer[0] === '') {
-    let lowered = lowerForCheck(query);
-    if (lowered !== query) {
-      assertQuery(lowered, ['', '']);
-      return;
-    }
+  // The request grammar's newer spellings are checked in their lowered form.
+  if (pointer.length === 1 && pointer[0] === '' && usesNewSyntax(query)) {
+    assertQuery(lowerQuery(query).query, ['', '']);
+    return;
   }
 
   if ('realm' in query && 'realms' in query) {

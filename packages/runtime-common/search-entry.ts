@@ -1210,6 +1210,7 @@ export function policyScopedQuery(
     ...query,
     itemQuery: {
       ...query.itemQuery,
+      anonymizeStatistics: true,
       filter: composePolicyScopedFilter(callerFilter, grantFilters),
       ...(Object.keys(lets).length ? { let: lets } : {}),
       // A comparison set the grants scope: an explicit one, and a row's
