@@ -110,6 +110,11 @@ export interface IncrementalArgs extends WorkerArgs {
   // `chooseIncrementalCoalesceDecision`. Non-optional for the same reason
   // `deferPrerenderHtml` is.
   readsOwnWrite: boolean;
+  // Reindex exactly `changes` and nothing that depends on them: no dependent
+  // is visited, stamped or re-rendered. A repair of rows whose own index data
+  // is broken asks for this, so each repaired card costs one visit. False on
+  // every other path; non-optional for the same reason as `readsOwnWrite`.
+  withoutDependents: boolean;
   // Whether anything this pass does is announced to the realm's subscribers
   // on behalf of the writes behind it: the `prerender_html` event of the
   // render job it spawns, and its own `incremental` event when no publisher
@@ -303,6 +308,7 @@ function parseIncrementalArgsForCoalesce(
     carriedPrerenderHtmlChanges,
     readsOwnWrite,
     realmEvents,
+    withoutDependents,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -328,6 +334,7 @@ function parseIncrementalArgsForCoalesce(
       : [],
     readsOwnWrite: readsOwnWrite === true,
     realmEvents: realmEvents !== false,
+    withoutDependents: withoutDependents === true,
   };
 }
 
@@ -410,6 +417,10 @@ function chooseIncrementalCoalesceDecision(
           // OR, because one write that announces is enough for the pass to
           // announce what it does.
           realmEvents: existingArgs.realmEvents || incomingArgs.realmEvents,
+          // AND: a caller that did not ask to skip dependents is owed them,
+          // so the merged pass skips them only when every caller asked.
+          withoutDependents:
+            existingArgs.withoutDependents && incomingArgs.withoutDependents,
         },
       },
     };
@@ -448,7 +459,10 @@ function chooseIncrementalCoalesceDecision(
         incrementalChangesCover(existingArgs.changes, incomingArgs.changes) &&
         // A running job's args can no longer change, so a publish that
         // announces cannot ride on one whose render job won't.
-        (existingArgs.realmEvents || !incomingArgs.realmEvents)
+        (existingArgs.realmEvents || !incomingArgs.realmEvents) &&
+        // A running pass that skips dependents does not cover a caller
+        // owed them.
+        (!existingArgs.withoutDependents || incomingArgs.withoutDependents)
       ) {
         return { type: 'join', jobId: candidate.id };
       }
@@ -626,6 +640,7 @@ function followUpIncrementalArgs(
     coalescedCallers: [],
     deferPrerenderHtml: false,
     carriedPrerenderHtmlChanges: [],
+    withoutDependents: false,
     readsOwnWrite: false,
     realmEvents,
   });
@@ -940,6 +955,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         operation,
         url: new URL(url),
       })),
+      withoutDependents: args.withoutDependents === true,
     });
 
     log.debug(

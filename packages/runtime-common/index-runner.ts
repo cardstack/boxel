@@ -604,8 +604,11 @@ export class IndexRunner {
     current: IndexRunner,
     {
       changes,
+      withoutDependents = false,
     }: {
       changes: { url: URL; operation: 'update' | 'delete' }[];
+      // See IncrementalArgs.withoutDependents.
+      withoutDependents?: boolean;
     },
   ): Promise<IncrementalResult> {
     current.#dependencyResolver.reset();
@@ -698,7 +701,7 @@ export class IndexRunner {
     // prerender-server affinity rather than leaking them.
     try {
       try {
-        await current.batch.invalidate(urls);
+        await current.batch.invalidate(urls, { withoutDependents });
         discoverMs = Date.now() - discoverStart;
         current.#notifyInvalidationsReady(
           current.batch.invalidations,

@@ -116,6 +116,8 @@ export interface IncrementalIndexOptions {
   // one it already had. A module the writer did not read — a removal, a
   // change the file watcher picked up — is not listed, and holds the gate.
   modulesWithoutSchemaChange?: string[];
+  // See IncrementalArgs.withoutDependents.
+  withoutDependents?: boolean;
 }
 
 // What names a pass this process is waiting on in a diagnostic: its job type,
@@ -682,6 +684,7 @@ export class RealmIndexUpdater {
           ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
           : {}),
         ...(opts?.readsOwnWrite ? { readsOwnWrite: true } : {}),
+        ...(opts?.withoutDependents ? { withoutDependents: true } : {}),
       };
       let clientRequestId = opts?.clientRequestId ?? null;
       let jobArgs = makeIncrementalArgsWithCallerMetadata(
@@ -814,6 +817,7 @@ export class RealmIndexUpdater {
       | 'onDeferredPrerenderHtml'
       | 'readsOwnWrite'
       | 'modulesWithoutSchemaChange'
+      | 'withoutDependents'
     >,
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);

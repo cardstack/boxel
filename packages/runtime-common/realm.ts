@@ -4218,6 +4218,8 @@ export class Realm {
       broadcastRealmEvents?: boolean;
       // See `IncrementalIndexOptions.modulesWithoutSchemaChange`.
       modulesWithoutSchemaChange?: string[];
+      // See `IncrementalArgs.withoutDependents`.
+      withoutDependents?: boolean;
     },
   ): Promise<
     IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
@@ -4241,6 +4243,7 @@ export class Realm {
         opts?.announcesPass !== false && opts?.broadcastRealmEvents !== false,
       realmEvents: opts?.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
+      ...(opts?.withoutDependents ? { withoutDependents: true } : {}),
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
@@ -4753,7 +4756,9 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let json: { data?: { attributes?: { urls?: unknown } } };
+    let json: {
+      data?: { attributes?: { urls?: unknown; dependents?: unknown } };
+    };
     try {
       json = await request.json();
     } catch (e: any) {
@@ -4764,6 +4769,17 @@ export class Realm {
     }
 
     let rawURLs = json.data?.attributes?.urls;
+    // `dependents: false` reindexes exactly these URLs: nothing that depends
+    // on them is visited, stamped or re-rendered. For a repair of rows whose
+    // own index data is broken, where the dependents' data is not.
+    let rawDependents = (json.data?.attributes as { dependents?: unknown })
+      ?.dependents;
+    if (rawDependents !== undefined && typeof rawDependents !== 'boolean') {
+      return badRequest({
+        message: `dependents must be true or false`,
+        requestContext,
+      });
+    }
     if (rawURLs === undefined) {
       return badRequest({
         message: `The request body was missing urls`,
@@ -4810,7 +4826,10 @@ export class Realm {
     let { invalidations, generation, invalidatedTypes, sharedPass } =
       await this.updateIndexAndCollectInvalidations(
         urls.map((url) => ({ url, operation: 'update' as const })),
-        { initiatedBy: requestContext.authenticatedUser ?? null },
+        {
+          initiatedBy: requestContext.authenticatedUser ?? null,
+          ...(rawDependents === false ? { withoutDependents: true } : {}),
+        },
       );
     this.broadcastIncrementalInvalidationEvent(invalidations, {
       generation,
@@ -18451,6 +18470,7 @@ export class Realm {
       deferPrerenderHtml: false,
       carriedPrerenderHtmlChanges: [],
       readsOwnWrite: false,
+      withoutDependents: false,
       realmEvents: true,
     };
     let job = await this.#queue.publish({

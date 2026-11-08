@@ -759,6 +759,8 @@ export interface IncrementalIndexEnqueueArgs {
   deferPrerenderHtml?: boolean;
   carriedPrerenderHtmlChanges?: IncrementalChange[];
   readsOwnWrite?: boolean;
+  // See IncrementalArgs.withoutDependents.
+  withoutDependents?: boolean;
 }
 
 export function makeIncrementalArgsWithCallerMetadata(
@@ -792,6 +794,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     carriedPrerenderHtmlChanges: args.carriedPrerenderHtmlChanges ?? [],
     readsOwnWrite: args.readsOwnWrite === true,
     realmEvents: caller?.realmEvents !== false,
+    withoutDependents: args.withoutDependents === true,
   };
 }
 

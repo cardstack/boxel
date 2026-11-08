@@ -283,6 +283,38 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
+  test('without dependents, a hub reaches only itself', async function (assert) {
+    let entries = [{ path: 'hub.json', deps: [] as string[] }];
+    for (let i = 0; i < 30; i++) {
+      entries.push({ path: `mid/${i}.json`, deps: ['hub.json'] });
+      for (let j = 0; j < 20; j++) {
+        entries.push({ path: `leaf/${i}-${j}.json`, deps: [`mid/${i}.json`] });
+      }
+    }
+    await seed(entries);
+    for (let splitPrerenderHtml of [false, true]) {
+      let batch = await indexWriter.createBatch(
+        new URL(testRealm),
+        virtualNetwork,
+        undefined,
+        { splitPrerenderHtml },
+      );
+      await batch.invalidate([new URL('hub.json', testRealm)], {
+        withoutDependents: true,
+      });
+      assert.deepEqual(
+        batch.invalidations.map((u) => u.replace(testRealm, '')),
+        ['hub.json'],
+        `split=${splitPrerenderHtml}: only the hub is visited`,
+      );
+      assert.deepEqual(
+        [...batch.renderOnlyInvalidations],
+        [],
+        `split=${splitPrerenderHtml}: nothing is stamped or re-rendered`,
+      );
+    }
+  });
+
   test('an edit nothing depends on', async function (assert) {
     await seed([
       { path: 'lonely.json', deps: [] },

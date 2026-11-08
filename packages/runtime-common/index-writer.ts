@@ -4938,7 +4938,14 @@ export class Batch {
     ]);
   }
 
-  async invalidate(urls: URL[]): Promise<void> {
+  async invalidate(
+    urls: URL[],
+    opts?: {
+      // Visit exactly `urls`: no dependent is visited, stamped or
+      // re-rendered (see IncrementalArgs.withoutDependents).
+      withoutDependents?: boolean;
+    },
+  ): Promise<void> {
     if (this.#prerenderHtmlOnly) {
       // The dependency fan-out already ran once in the spawning index pass
       // and is threaded in as `changes` — seed it, don't recompute it.
@@ -4964,8 +4971,16 @@ export class Batch {
     this.#currentInvalidationId = uuidv4();
     this.#writeSeq = 0;
     this.#writePositions.clear();
-    await this.#fanOut(urls);
+    // Only the triggering change skips its dependents; a validation round's
+    // extension to peer-committed URLs keeps its full fan-out.
+    this.#withoutDependents = opts?.withoutDependents === true;
+    try {
+      await this.#fanOut(urls);
+    } finally {
+      this.#withoutDependents = false;
+    }
   }
+  #withoutDependents = false;
 
   // Adds `urls` to the pass as render-only dependents, with every renderer
   // that reaches them through render or index edges, leaving out what the
@@ -5027,10 +5042,12 @@ export class Batch {
         }
       }
     }
-    for (let dependent of await this.#dependentsOf(aliases, fanOut)) {
-      invalidations.add(dependent);
+    if (!this.#withoutDependents) {
+      for (let dependent of await this.#dependentsOf(aliases, fanOut)) {
+        invalidations.add(dependent);
+      }
     }
-    if (renderFanOut) {
+    if (renderFanOut && !this.#withoutDependents) {
       for (let dependent of await this.#dependentsOf(aliases, renderFanOut)) {
         renderInvalidations.add(dependent);
       }
