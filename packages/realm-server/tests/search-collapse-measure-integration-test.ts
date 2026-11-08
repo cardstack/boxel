@@ -688,7 +688,7 @@ module(basename(import.meta.filename), function (hooks) {
       let: {
         saved: { from: { filter: { eq: { id: saved } } }, select: 'items.id' },
       },
-      filter: { every: [{ type: on }, { in: { id: '$saved' } }] },
+      filter: { every: [{ type: on }, { in: { id: { $let: 'saved' } } }] },
       sort: byScore,
     });
     assert.deepEqual(titles, ['d', 'b', 'f']);
@@ -704,7 +704,9 @@ module(basename(import.meta.filename), function (hooks) {
           select: 'channel',
         },
       },
-      filter: { every: [{ type: on }, { on, in: { channel: '$hot' } }] },
+      filter: {
+        every: [{ type: on }, { on, in: { channel: { $let: 'hot' } } }],
+      },
       sort: byScore,
     });
     assert.deepEqual(titles, ['d', 'e']);
@@ -722,7 +724,7 @@ module(basename(import.meta.filename), function (hooks) {
       filter: {
         every: [
           { type: on },
-          { not: { in: { id: '$saved' } } },
+          { not: { in: { id: { $let: 'saved' } } } },
           { on, range: { hnScore: { gte: 10 } } },
         ],
       },
@@ -749,7 +751,11 @@ module(basename(import.meta.filename), function (hooks) {
           by: '_blend',
           of: [
             { on, by: 'hnScore' },
-            { by: '_when', when: { on, in: { channel: '$loop' } }, weight: 3 },
+            {
+              by: '_when',
+              when: { on, in: { channel: { $let: 'loop' } } },
+              weight: 3,
+            },
           ],
         },
       ],
@@ -762,7 +768,9 @@ module(basename(import.meta.filename), function (hooks) {
           select: 'channel',
         },
       },
-      filter: { every: [{ type: on }, { on, in: { channel: '$nobody' } }] },
+      filter: {
+        every: [{ type: on }, { on, in: { channel: { $let: 'nobody' } } }],
+      },
     });
     assert.deepEqual(none.titles, []);
     assert.deepEqual(none.meta.lets, {
@@ -777,7 +785,10 @@ module(basename(import.meta.filename), function (hooks) {
         (err: unknown) =>
           err instanceof InvalidQueryError && pattern.test(err.message),
       );
-    bad({ filter: { in: { id: '$missing' } } }, /names no binding in let/);
+    bad(
+      { filter: { in: { id: { $let: 'missing' } } } },
+      /names no binding in let/,
+    );
     bad({ let: { x: { select: 'a' } } }, /from must be a query/);
     bad(
       { let: { x: { from: { filter: { type: on } }, select: 'a b' } } },
@@ -797,7 +808,7 @@ module(basename(import.meta.filename), function (hooks) {
     bad(
       {
         let: {
-          x: { from: { filter: { in: { id: '$y' } } }, select: 'a' },
+          x: { from: { filter: { in: { id: { $let: 'y' } } } }, select: 'a' },
           y: { from: { filter: { type: on } }, select: 'a' },
         },
       },
@@ -812,7 +823,7 @@ module(basename(import.meta.filename), function (hooks) {
           select: 'item.channel',
         },
       },
-      filter: { 'item.on': on, in: { 'item.channel': '$hot' } },
+      filter: { 'item.on': on, in: { 'item.channel': { $let: 'hot' } } },
     });
     assert.deepEqual(parsed.itemQuery.let, {
       hot: {
@@ -820,7 +831,10 @@ module(basename(import.meta.filename), function (hooks) {
         select: 'channel',
       },
     });
-    assert.deepEqual(parsed.itemQuery.filter, { on, in: { channel: '$hot' } });
+    assert.deepEqual(parsed.itemQuery.filter, {
+      on,
+      in: { channel: { $let: 'hot' } },
+    });
     let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
     assert.strictEqual((wire.let as any).hot.select, 'item.channel');
   });
@@ -839,7 +853,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         filter: {
           every: [
-            { 'item.on': on, in: { 'item.channel': '$hot' } },
+            { 'item.on': on, in: { 'item.channel': { $let: 'hot' } } },
             { linkedFrom: { card: `${testRealm}List/saved`, field: 'items' } },
           ],
         },
@@ -1347,7 +1361,7 @@ module(basename(import.meta.filename), function (hooks) {
     };
     let same = await search({
       let: { top },
-      filter: { on, eq: { channel: '$top.channel' } },
+      filter: { on, eq: { channel: { $let: 'top', path: 'channel' } } },
       sort: byScore,
     });
     assert.deepEqual(same.titles, ['d', 'e'], "an eq reads the card's channel");
@@ -1356,7 +1370,10 @@ module(basename(import.meta.filename), function (hooks) {
     });
     let lower = await search({
       let: { top },
-      filter: { on, range: { hnScore: { lt: '$top.hnScore' } } },
+      filter: {
+        on,
+        range: { hnScore: { lt: { $let: 'top', path: 'hnScore' } } },
+      },
       sort: byScore,
     });
     assert.deepEqual(
@@ -1388,7 +1405,10 @@ module(basename(import.meta.filename), function (hooks) {
     };
     let bounded = await search({
       let: { none },
-      filter: { on, range: { hnScore: { lt: '$none.hnScore' } } },
+      filter: {
+        on,
+        range: { hnScore: { lt: { $let: 'none', path: 'hnScore' } } },
+      },
     });
     assert.deepEqual(bounded.titles, [], 'a null bound matches nothing');
     assert.deepEqual(bounded.meta.lets, {
@@ -1396,7 +1416,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
     let missing = await search({
       let: { none },
-      filter: { on, eq: { channel: '$none.channel' } },
+      filter: { on, eq: { channel: { $let: 'none', path: 'channel' } } },
       sort: byScore,
     });
     assert.deepEqual(
@@ -1417,15 +1437,17 @@ module(basename(import.meta.filename), function (hooks) {
     bad({ let: { top: { ...top, select: 'a' } } }, /or \{ from, one: true \}/);
     bad({ let: { top: { ...top, one: 1 } } }, /or \{ from, one: true \}/);
     bad(
-      { let: { top }, filter: { in: { id: '$top' } } },
-      /names no binding in let/,
+      { let: { top }, filter: { in: { id: { $let: 'top' } } } },
+      /is one card/,
     );
     bad(
       {
         let: {
           top,
           x: {
-            from: { filter: { on, eq: { channel: '$top.channel' } } },
+            from: {
+              filter: { on, eq: { channel: { $let: 'top', path: 'channel' } } },
+            },
             select: 'a',
           },
         },
@@ -1436,8 +1458,8 @@ module(basename(import.meta.filename), function (hooks) {
       let: { top },
       filter: {
         every: [
-          { on, eq: { channel: '$top.channel' } },
-          { on, range: { hnScore: { lt: '$top.hnScore' } } },
+          { on, eq: { channel: { $let: 'top', path: 'channel' } } },
+          { on, range: { hnScore: { lt: { $let: 'top', path: 'hnScore' } } } },
         ],
       },
       sort: [{ on, by: 'hnScore', direction: 'desc' }],
@@ -1452,7 +1474,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
       filter: {
         'item.on': on,
-        range: { 'item.hnScore': { lt: '$top.hnScore' } },
+        range: { 'item.hnScore': { lt: { $let: 'top', path: 'hnScore' } } },
       },
     });
     assert.deepEqual(parsed.itemQuery.let, {
@@ -1487,6 +1509,28 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(blend.of[0].on, on, 'a field signal inherits the type');
     assert.strictEqual(blend.of[1].by, '_expr', 'formula lowers to _expr');
     assert.deepEqual(parsed.itemQuery.collapse, { by: 'channel', on });
+    let bound = parseSearchEntryQueryFromPayload({
+      type: on,
+      let: {
+        top: {
+          from: {
+            type: on,
+            filter: { eq: { channel: 'GOTO' } },
+            sort: [{ by: 'hnScore', direction: 'desc' }],
+          },
+          one: true,
+        },
+      },
+      filter: { range: { hnScore: { lte: { $let: 'top', path: 'hnScore' } } } },
+    });
+    assert.deepEqual(
+      (bound.itemQuery.let as any).top.from,
+      {
+        filter: { on, every: [{ eq: { channel: 'GOTO' } }] },
+        sort: [{ by: 'hnScore', direction: 'desc', on }],
+      },
+      "a binding's own query lowers with its own type",
+    );
     let topWindow = parseSearchEntryQueryFromPayload({
       type: on,
       sort: [{ formula: 'IF(ISNUMBER(SEARCH("a", title)), 1, 0)' }],

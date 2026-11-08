@@ -1233,7 +1233,7 @@ export function policyScopedQuery(
       };
       return {
         ...(node.on ? { on: node.on } : {}),
-        in: { id: `$${name}` },
+        in: { id: { $let: name } },
       };
     }
     return node;

@@ -233,11 +233,25 @@ export const MAX_LET_VALUES = 1000;
 const LET_NAME = /^[A-Za-z_][\w]*$/;
 
 // The binding an `in` value names, or undefined for a plain list.
+// A binding reference is an object, never a string: `{ "$let": "saved" }`
+// reads a list binding, `{ "$let": "sofa", "path": "priceMin" }` a value of a
+// one-card binding. Any string, "$"-led or not, is a literal.
+export interface LetReference {
+  $let: string;
+  path?: string;
+}
+export function isLetReference(value: unknown): value is LetReference {
+  return (
+    value != null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as LetReference).$let === 'string' &&
+    Object.keys(value).every((k) => k === '$let' || k === 'path')
+  );
+}
 export function letReference(value: unknown): string | undefined {
-  return typeof value === 'string' &&
-    value.startsWith('$') &&
-    LET_NAME.test(value.slice(1))
-    ? value.slice(1)
+  return isLetReference(value) && value.path === undefined
+    ? value.$let
     : undefined;
 }
 
@@ -281,14 +295,30 @@ export function mapLetReferences<T extends { filter?: Filter; sort?: Sort }>(
 }
 
 // A one-card binding's value reference, `"$name.path"`, or undefined.
-const CARD_REFERENCE =
-  /^\$([A-Za-z_]\w*)\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)$/;
 export function cardReference(
   value: unknown,
 ): { name: string; path: string } | undefined {
-  if (typeof value !== 'string') return undefined;
-  let m = CARD_REFERENCE.exec(value);
-  return m ? { name: m[1], path: m[2].replace(/^item\./, '') } : undefined;
+  return isLetReference(value) && typeof value.path === 'string'
+    ? { name: value.$let, path: value.path.replace(/^item\./, '') }
+    : undefined;
+}
+
+// Every binding reference in a query's filter, sort and comparison filter.
+function letReferencesIn(query: any): LetReference[] {
+  let found: LetReference[] = [];
+  let walk = (v: unknown) => {
+    if (isLetReference(v)) {
+      found.push(v);
+    } else if (Array.isArray(v)) {
+      v.forEach(walk);
+    } else if (v && typeof v === 'object') {
+      Object.values(v).forEach(walk);
+    }
+  };
+  walk(query.filter);
+  walk(query.sort);
+  walk(query.rerank?.compare?.filter);
+  return found;
 }
 
 // Where a reference stands decides what it must be: a `near` target is a
@@ -750,7 +780,8 @@ export interface InFilter extends TypedFilter {
   // fields), a placeholder standing in for the whole list that resolves to an
   // array before the query is executed; `assertQuery` accepts only the
   // resolved array form.
-  in: { [fieldName: string]: JSONValue[] | string };
+  // `{ "$let": name }` reads a list binding (see `LetBinding`).
+  in: { [fieldName: string]: JSONValue[] | string | LetReference };
 }
 
 export interface ContainsFilter extends TypedFilter {
@@ -1056,7 +1087,27 @@ export function assertQuery(
 
   // Bindings first; then the rest of the query is checked with each
   // `"$name"` stood in by an empty list, the shape it resolves to.
-  let declared = new Set<string>();
+  // Every reference names a binding of the right kind: a list for
+  // { $let }, one card for { $let, path }.
+  let bindings = (query.let ?? {}) as Record<string, LetBinding>;
+  for (let ref of letReferencesIn(query)) {
+    let binding = bindings[ref.$let];
+    if (!binding) {
+      let near = nearestMember(ref.$let, Object.keys(bindings));
+      throw new InvalidQueryError(
+        `${pointer.join('/') || '/'}: { "$let": "${ref.$let}" } names no binding in let${near ? `; did you mean "${near}"?` : ''}`,
+        'unknown-binding',
+      );
+    }
+    if (Boolean(binding.one) !== (ref.path !== undefined)) {
+      throw new InvalidQueryError(
+        binding.one
+          ? `${pointer.join('/') || '/'}: "${ref.$let}" is one card; read a value of it with { "$let": "${ref.$let}", "path": … }`
+          : `${pointer.join('/') || '/'}: "${ref.$let}" is a list; read it whole with { "$let": "${ref.$let}" } in an \`in\``,
+        'binding-kind',
+      );
+    }
+  }
   if ('let' in query) {
     assertLetBindings(query.let, pointer.concat('let'));
     let cards = new Set(
@@ -1064,7 +1115,6 @@ export function assertQuery(
         .filter(([, b]) => b.one)
         .map(([n]) => n),
     );
-    declared = new Set(Object.keys(query.let).filter((n) => !cards.has(n)));
     // A one-card binding's references stand in as values of their role.
     if (cards.size) {
       let placeholder = (_n: string, _p: string, role: CardReferenceRole) =>
@@ -1098,19 +1148,10 @@ export function assertQuery(
     }
   }
   if (query.filter || query.sort) {
-    let unknown: string[] = [];
     let probe = mapLetReferences(
       { filter: query.filter, sort: query.sort } as any,
-      (field, name, node) => {
-        if (!declared.has(name)) unknown.push(name);
-        return { ...node, in: { [field]: [] } };
-      },
+      (field, _name, node) => ({ ...node, in: { [field]: [] } }),
     );
-    if (unknown.length) {
-      throw new InvalidQueryError(
-        `${pointer.join('/') || '/'}: "$${unknown[0]}" names no binding in let`,
-      );
-    }
     query = {
       ...query,
       ...(query.filter ? { filter: probe.filter } : {}),

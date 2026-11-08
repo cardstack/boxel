@@ -146,6 +146,11 @@ export function usesNewSyntax(query: unknown): boolean {
     collapse: query.collapse,
     facets: query.facets,
   });
+  if (!found && isObject(query.let)) {
+    found = Object.values(query.let).some(
+      (b) => isObject(b) && usesNewSyntax(b.from),
+    );
+  }
   return found;
 }
 
@@ -418,6 +423,19 @@ function lowerQueryInto(
         by: barePath(query.rerank.compare.by),
       },
     };
+  }
+  // let: each binding's own query is in the same grammar, with its own type
+  if (isObject(query.let)) {
+    let bindings: Record<string, any> = {};
+    for (let [name, binding] of Object.entries(query.let)) {
+      bindings[name] =
+        isObject(binding) &&
+        isObject(binding.from) &&
+        usesNewSyntax(binding.from)
+          ? { ...binding, from: lowerQueryInto(binding.from, opts).query }
+          : binding;
+    }
+    query.let = bindings;
   }
   return { query, notes };
 }

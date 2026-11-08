@@ -1036,10 +1036,21 @@ module(basename(import.meta.filename), function () {
             },
             filter: {
               on: momentRef,
-              near: { embedding: { to: '$a.embedding', minSimilarity: 0.5 } },
+              near: {
+                embedding: {
+                  to: { $let: 'a', path: 'embedding' },
+                  minSimilarity: 0.5,
+                },
+              },
             },
-            sort: [{ on: momentRef, by: 'embedding', near: '$a.embedding' }],
-          } as Query,
+            sort: [
+              {
+                on: momentRef,
+                by: 'embedding',
+                near: { $let: 'a', path: 'embedding' },
+              },
+            ],
+          } as unknown as Query, // a binding reference resolves before the engine reads it
           {},
           { kind: 'renderSet' },
         );
