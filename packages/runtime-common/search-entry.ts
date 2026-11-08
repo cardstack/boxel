@@ -11,6 +11,7 @@ import {
   type FacetCount,
   type LetBinding,
   type ResultExplanation,
+  MAX_LET_BINDINGS,
   WHEN_SIGNAL_KEY,
 } from './query.ts';
 import {
@@ -1276,6 +1277,15 @@ export function policyScopedQuery(
     query.itemQuery.rerank?.compare?.filter,
     '/rerank/compare/filter',
   );
+  // The bindings the rewrite adds are capped apart from the caller's own, so
+  // a query that runs without a policy runs with one, and a policy cannot be
+  // made to run an unbounded number of binding queries.
+  if (count > MAX_LET_BINDINGS) {
+    throw new InvalidQueryError(
+      `/filter: under a realm policy, a query reads at most ${MAX_LET_BINDINGS} cards' links with linkedFrom, and this one reads ${count}`,
+      'limit-exceeded',
+    );
+  }
   let rerank = query.itemQuery.rerank;
   return {
     ...query,

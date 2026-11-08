@@ -967,6 +967,51 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("under a policy, linkedFrom's bindings are capped apart from the caller's", function (assert) {
+    let grant = { on, eq: { channel: 'GOTO' } };
+    let list = (n: number) => ({
+      linkedFrom: { card: `${testRealm}List/l${n}`, field: 'items' },
+    });
+    let lets = Object.fromEntries(
+      [1, 2, 3, 4].map((n) => [
+        `b${n}`,
+        {
+          from: {
+            filter: { 'item.on': on, range: { 'item.hnScore': { gte: n } } },
+          },
+          select: 'item.channel',
+        },
+      ]),
+    );
+    let scoped = policyScopedQuery(
+      parseSearchEntryQueryFromPayload({
+        let: lets,
+        filter: { every: [list(1), list(2), list(3), list(4)] },
+      }),
+      [grant],
+    );
+    assert.strictEqual(
+      Object.keys(scoped.itemQuery.let!).length,
+      8,
+      "four of the caller's and four for linkedFrom",
+    );
+    assert.throws(
+      () =>
+        policyScopedQuery(
+          parseSearchEntryQueryFromPayload({
+            let: lets,
+            filter: { every: [list(1), list(2), list(3), list(4), list(5)] },
+          }),
+          [grant],
+        ),
+      (e: unknown) =>
+        e instanceof InvalidQueryError &&
+        e.code === 'limit-exceeded' &&
+        /at most 4 cards' links/.test(e.message),
+      'a fifth is refused',
+    );
+  });
+
   test('explain gives each result its signals, ranks and shares', async function (assert) {
     let rows = async (query: Query) =>
       (
