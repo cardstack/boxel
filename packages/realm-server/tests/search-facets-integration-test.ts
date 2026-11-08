@@ -11,6 +11,8 @@ import {
   assertQuery,
   combineSearchEntryResults,
   internalKeyFor,
+  parseSearchEntryQueryFromPayload,
+  policyScopedQuery,
   rri,
   type Definition,
   type DefinitionLookup,
@@ -505,6 +507,32 @@ module(basename(import.meta.filename), function (hooks) {
       { [here]: 'CRDT', [elsewhere]: null, [gone]: null },
       'grants that admit concepts label them',
     );
+  });
+
+  test('under a policy, a facet that ignores its own selection keeps the grant', async function (assert) {
+    // The caller may read Strange Loop talks only. Faceting channel with
+    // own: 'ignore' drops the caller's own channel predicate, and must not
+    // drop the grant's, or the counts reveal the channels it hides.
+    let grant = { on, eq: { channel: 'Strange Loop' } };
+    let scoped = policyScopedQuery(
+      parseSearchEntryQueryFromPayload({
+        filter: { 'item.on': on, eq: { 'item.channel': 'Strange Loop' } },
+        facets: [{ by: 'item.channel', own: 'ignore' }],
+        fields: { entry: ['item'] },
+      }),
+      [grant],
+    );
+    let { meta } = await engine.searchCards(
+      new URL(testRealm),
+      scoped.itemQuery,
+      { grantFilter: scoped.grantFilter, labelFilter: scoped.labelFilter },
+    );
+    assert.deepEqual(
+      meta.facets?.channel,
+      [{ value: 'Strange Loop', count: 2 }],
+      'only the channel the grant admits is counted',
+    );
+    assert.strictEqual(meta.page.total, 2);
   });
 
   test('merging realms adds counts, keeps link labels and combines stats', function (assert) {

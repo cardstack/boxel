@@ -449,6 +449,11 @@ export type QueryOptions = WIPOptions & {
   // facet's value is labeled with the linked card's title only when that
   // card meets them, as it would have to for the caller to read it.
   labelFilter?: Filter;
+  // Set for a caller a realm policy scopes: the policy's grants, applied to
+  // every read of the query (rows, facets, bindings, comparison sets) as a
+  // base condition beside the caller's filter, so no rewrite of the caller's
+  // filter can drop them.
+  grantFilter?: Filter;
   // Restrict the result set to this subset of URLs (SQL `i.url IN (...)`) —
   // instance rows by their `.json` file URL, file rows by their canonical URL.
   cardUrls?: string[];
@@ -1576,6 +1581,19 @@ export class IndexQueryEngine {
             separatedByCommas(opts.cardUrls.map((url) => [param(url)])),
           ),
         ]);
+      }
+
+      // A policy's grants are a base condition, not part of the caller's
+      // filter: a facet that ignores its own selection drops predicates from
+      // the filter, and a grant must survive that.
+      if (opts.grantFilter) {
+        conditions.push(
+          this.filterCondition(opts.grantFilter, baseCardRef, 'positive', {
+            inAny: false,
+            prerenderedTable: prerenderedTableFromOpts(opts),
+            indexTable: tableFromOpts(opts),
+          }),
+        );
       }
 
       // Everything but the filter: the wide pass of a paged search reads its

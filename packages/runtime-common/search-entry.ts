@@ -205,6 +205,12 @@ export interface SearchEntryQuery {
   // Set by `policyScopedQuery`: the policy's grants, which a linked card
   // must meet for its title to label a link facet's value. Internal.
   labelFilter?: Filter;
+  // Set by `policyScopedQuery`: the policy's grants, kept apart from the
+  // caller's filter. The engine applies them to every read it makes for the
+  // query, beside the caller's filter rather than inside it, so a rewrite
+  // of the caller's filter (a facet's `own: 'ignore'`) cannot drop them.
+  // Internal.
+  grantFilter?: Filter;
 }
 
 function invalidQuery(message: string, code?: string): SearchRequestError {
@@ -1273,6 +1279,7 @@ export function policyScopedQuery(
     ...query,
     anonymizeStatistics: true,
     labelFilter: composePolicyScopedFilter(undefined, grantFilters),
+    grantFilter: composePolicyScopedFilter(undefined, grantFilters),
     itemQuery: {
       ...query.itemQuery,
       filter: composePolicyScopedFilter(callerFilter, grantFilters),
