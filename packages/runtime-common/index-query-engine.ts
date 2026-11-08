@@ -2500,11 +2500,17 @@ export class IndexQueryEngine {
     let fetchK = k;
     let vec = `::vector(${dims})`;
     let pairs = await this.#dbAdapter.withTransaction(async (q) => {
+      // A failed SET aborts the whole transaction in Postgres, so the
+      // settings go in a savepoint: on an older pgvector, which has neither,
+      // the savepoint is rolled back and the read runs as a plain index scan,
+      // which may return fewer.
+      await q(['SAVEPOINT hnsw_settings']);
       try {
         await q(['SET LOCAL hnsw.iterative_scan = relaxed_order']);
         await q([`SET LOCAL hnsw.ef_search = ${Math.max(40, fetchK * 2)}`]);
+        await q(['RELEASE SAVEPOINT hnsw_settings']);
       } catch {
-        // an older pgvector: plain index scans, which may return fewer
+        await q(['ROLLBACK TO SAVEPOINT hnsw_settings']);
       }
       return await q([
         `SELECT s.url AS src, n.url AS nb, n.sim AS sim
