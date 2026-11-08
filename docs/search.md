@@ -322,6 +322,23 @@ rerank: {
 }
 ```
 
+**Look-alikes.** `compare.near` makes each row's comparison set its own nearest cards in the realm by a vector field: its `k` closest (default 20, at most 100), at least `minSimilarity` similar. `peers` and `stats` then describe those neighbours, and `peers.similarity` holds how alike each is. This is how a product is compared with the products that look like it, rather than with its whole category:
+
+```js
+rerank: {
+  // how much cheaper than the 20 products that look most like it
+  expr: '1 - priceMin / stats.priceMin.median',
+  compare: { near: 'imageEmbedding', k: 20, minSimilarity: 0.75 },
+}
+// its near-identical twin, if it has one, and how much more that costs
+rerank: {
+  expr: 'IF(COUNT(peers.priceMin) > 0, MIN(peers.priceMin) - priceMin, 0)',
+  compare: { near: 'imageEmbedding', k: 3, minSimilarity: 0.9 },
+}
+```
+
+Look-alikes are read through a nearest-neighbour index, which a vector field opts into: `@field imageEmbedding = contains(ImageEmbedding, { search: { neighbors: true } })`. The first lookup by a declared field builds one HNSW index for that field and dimension, concurrently; until it is ready, lookups scan exactly. A field that has not opted in is refused with the declaration to add, and keeps exact `near` search and no index. The index is approximate (about 98% of the exact neighbours on a real catalogue), which suits a comparison set; `near` filters and sorts stay exact. Each lookup stays within the realm. Under a realm policy, a neighbour the grants do not admit is left out. Postgres with pgvector only.
+
 Aggregates a card stores, such as a category's median price, are fields like any other (`category.medianPrice`, when the link is searchable). Under a realm policy, the grants that scope the caller's query also scope `compare.filter`. A comparison set runs on Postgres only.
 
 ### Why a result ranks where it does (`explain`)
