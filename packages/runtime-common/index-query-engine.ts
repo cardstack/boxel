@@ -132,6 +132,7 @@ import {
   type RenderErrorSummary,
   type SerializedError,
 } from './error.ts';
+import { queryHasLabels, resolveQueryLabels } from './query-syntax.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -486,10 +487,16 @@ export interface QueryResultsMeta {
   // For a query with `rerank`: the window it re-ranked and how many of its
   // rows the formula gave a number.
   rerank?: { window: number; scored: number };
+  // where the query's formula ran: `sql` over every match, or `top` over the
+  // rerank window, with why it could not run in SQL
+  formula?: { placement: 'sql' | 'top'; reason?: string };
 }
 
 // Per re-ranked row: its formula value.
 export const RERANK_KEY = '_rerank';
+// The value of the query's formula for a row, wherever it ran: its `_expr`
+// sort in SQL, or its rerank over the top window. `meta.formula` says which.
+export const FORMULA_KEY = '_formula';
 
 // Per result row, under `explain`: the row's `_explain` column.
 export const EXPLAIN_KEY = '_explain';
@@ -1332,6 +1339,26 @@ export class IndexQueryEngine {
       .sort();
   }
 
+  // The field names at one level of a type, for label resolution.
+  #fieldsAt = async (
+    type: CodeRef,
+    prefix: string[],
+  ): Promise<string[] | undefined> => {
+    let definition = await this.getDefinition(type).catch(() => undefined);
+    if (!definition) return undefined;
+    if (!prefix.length) return Object.keys(definition.fields);
+    let field = await getFieldDef(definition, prefix.join('.'), async (ref) =>
+      isResolvedCodeRef(ref)
+        ? await this.#definitionLookup.lookupDefinition(ref)
+        : undefined,
+    ).catch(() => undefined);
+    if (!field || !isResolvedCodeRef(field.fieldOrCard)) return undefined;
+    let inner = await this.#definitionLookup
+      .lookupDefinition(field.fieldOrCard)
+      .catch(() => undefined);
+    return inner ? Object.keys(inner.fields) : undefined;
+  };
+
   private async getDefinition(codeRef: CodeRef): Promise<Definition> {
     if (!isResolvedCodeRef(codeRef)) {
       throw new Error(
@@ -1361,6 +1388,14 @@ export class IndexQueryEngine {
     meta: QueryResultsMeta;
     results: Partial<IndexRowWithHtml>[];
   }> {
+    // Fields written as labels (`PriceMin`, `"Units Sold 30d"`, `Brand.Name`)
+    // resolve to their paths against the anchoring type first.
+    if (queryHasLabels({ filter, sort, collapse, facets, rerank })) {
+      ({ filter, sort, collapse, facets, rerank } = (await resolveQueryLabels(
+        { filter, sort, collapse, facets, rerank },
+        this.#fieldsAt,
+      )) as Query);
+    }
     // One-card bindings resolve first: their values stand in for each
     // reference, and the query runs on without them.
     if (lets && Object.values(lets).some((b) => b.one)) {
@@ -1414,6 +1449,22 @@ export class IndexQueryEngine {
       }
       filter = await this.#resolveTypos(filter, realmURL);
       sort = await this.#expandRelevanceSorts(sort, filter);
+      // A formula that leads the sort ran in SQL; each row carries its value.
+      let leadingExpr = sort?.[0];
+      let formulaMeta: QueryResultsMeta['formula'];
+      if (
+        leadingExpr &&
+        isExprSort(leadingExpr) &&
+        this.#dbAdapter.kind === 'pg'
+      ) {
+        selectClauseExpression = [
+          ...selectClauseExpression,
+          ', ANY_VALUE(',
+          this.#exprSql(leadingExpr.expr),
+          `) AS "${FORMULA_KEY}"`,
+        ];
+        formulaMeta = { placement: 'sql' };
+      }
       // A facet of plain values is counted with the page (one statement on
       // Postgres); any other shape, or one counted without its own
       // selection, gets its own queries (`#extendedFacet`).
@@ -1844,6 +1895,7 @@ export class IndexQueryEngine {
             : {}),
           ...(Object.keys(facetStats).length ? { facetStats } : {}),
           ...(letMeta ? { lets: letMeta } : {}),
+          ...(formulaMeta ? { formula: formulaMeta } : {}),
         },
       };
     } catch (error) {
@@ -2125,6 +2177,7 @@ export class IndexQueryEngine {
           results.push({
             ...row,
             [RERANK_KEY]: w.value,
+            [FORMULA_KEY]: w.value,
           } as Partial<IndexRowWithHtml>);
         }
       }
@@ -2137,6 +2190,7 @@ export class IndexQueryEngine {
           window: rows.length,
           scored: values.filter((v) => v != null).length,
         },
+        formula: { placement: 'top', reason: topWindowReason(rerank.expr) },
       },
     };
   }
@@ -2932,7 +2986,7 @@ export class IndexQueryEngine {
                         : this.generalFieldSortColumn(s.by),
                       ')',
                       sortDirection(s.direction),
-                      'NULLS LAST',
+                      nullsPlacement(s),
                     ],
         ),
         // `url` then `type` are the final sort keys for deterministic results
@@ -3014,7 +3068,7 @@ export class IndexQueryEngine {
           : this.generalFieldSortColumn(s.by),
         `) AS ${alias}`,
       );
-      outerKeys.push([alias, sortDirection(s.direction), 'NULLS LAST']);
+      outerKeys.push([alias, sortDirection(s.direction), nullsPlacement(s)]);
     });
     // `url` then `type` are the final tiebreakers, matching `orderExpression`
     // for deterministic results (a dual-indexed card `.json`'s two rows share
@@ -5926,16 +5980,47 @@ async function getField(
       definition.codeRef &&
       'name' in definition.codeRef &&
       definition.codeRef.name === 'CardDef';
+    let first = cleansedPath.split('.')[0];
+    let fold = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let nearest = Object.keys(definition.fields)
+      .map((name) => ({ name, d: editDistance(fold(name), fold(first)) }))
+      .sort((a, b) => a.d - b.d)[0];
     throw new InvalidQueryError(
       `Your filter refers to a nonexistent field "${cleansedPath}" on type ${stringify(
         definition.codeRef,
       )}` +
         (onBaseType
           ? `. A type anchor applies only to the filter object it is on: put "on" (on the wire, "item.on") beside the field's operator, not in a sibling clause`
-          : ''),
+          : nearest && nearest.d <= Math.max(2, first.length / 3)
+            ? `; did you mean "${nearest.name}"?`
+            : ''),
+      'unknown-field',
     );
   }
   return field;
+}
+
+// Where a field sort puts cards with no value: last unless it says first.
+function nullsPlacement(s: unknown): string {
+  return (s as { missing?: string }).missing === 'first'
+    ? 'NULLS FIRST'
+    : 'NULLS LAST';
+}
+
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[b.length];
 }
 
 function currentField(pathTraveled: string) {
@@ -6290,6 +6375,17 @@ function explainRows(rows: Record<string, unknown>[], sort: Sort | undefined) {
 // A binding the engine can run as a join: one card named by id, selecting a
 // link field's ids (`items.id`). Its `linkedFrom` reads that card's links in
 // the same statement as the query that uses them.
+// Why a rerank formula runs over the top window rather than in SQL: the
+// score profile's own refusal, or none when it would have compiled there.
+function topWindowReason(expr: string): string {
+  try {
+    exprSortSql(expr);
+    return 'asked for the top window';
+  } catch (e) {
+    return (e as Error).message.replace(/^_expr: /, '');
+  }
+}
+
 function joinableLet(
   binding: LetBinding,
 ): { card: string; field: string } | undefined {

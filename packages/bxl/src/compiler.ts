@@ -18,7 +18,10 @@ import {
   type BxlProfile,
 } from './bxl/ast/index.ts';
 
-export { compileReadableSyntax } from './bxl/compiler/readable-syntax.ts';
+export {
+  compileReadableSyntax,
+  BXL_FORMULA_FUNCTIONS,
+} from './bxl/compiler/readable-syntax.ts';
 
 export {
   assertValidBxlProfile,

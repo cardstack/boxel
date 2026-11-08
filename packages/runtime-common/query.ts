@@ -472,6 +472,8 @@ type SortExpressionWithCodeRef = {
   by: string;
   on: CodeRef;
   direction?: 'asc' | 'desc';
+  // Where cards with no value at `by` go: last (the default) or first.
+  missing?: 'first' | 'last';
   // Ranks by cosine similarity between the VectorField at `by` and this
   // target, most similar first (`direction` defaults to `desc`). Cards with
   // no vector at `by` sort last. See `NearSortTarget`.
@@ -1355,6 +1357,14 @@ function assertSortExpression(
   // general sort field is anchored by the column it maps to rather than by
   // `on`, so it takes the same `asc`/`desc` constraint. Checked ahead of the
   // branching below so neither shape can reach a `return` with it unchecked.
+  if ('missing' in sort) {
+    let m = (sort as { missing?: unknown }).missing;
+    if (m !== 'first' && m !== 'last') {
+      throw new InvalidQueryError(
+        `${pointer.concat('missing').join('/') || '/'}: missing is 'first' or 'last'`,
+      );
+    }
+  }
   if ('direction' in sort) {
     if (sort.direction !== 'asc' && sort.direction !== 'desc') {
       throw new InvalidQueryError(
@@ -1419,7 +1429,8 @@ function assertSortExpression(
       return;
     }
     throw new InvalidQueryError(
-      `${pointer.concat('on').join('/') || '/'}: missing on object`,
+      `${pointer.concat('on').join('/') || '/'}: missing on object: "${sort.by}" is a card field, so the query must name its type (a top-level "type", or "on" on the filter or this entry)`,
+      'sort-needs-type',
     );
   }
   assertCardType(sort.on, pointer.concat('on'));

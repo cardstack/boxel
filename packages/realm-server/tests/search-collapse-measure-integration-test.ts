@@ -1457,4 +1457,54 @@ module(basename(import.meta.filename), function (hooks) {
       one: true,
     });
   });
+  test('the newer spellings lower to the JSON the engine runs', async function (assert) {
+    let parsed = parseSearchEntryQueryFromPayload({
+      type: on,
+      filter: { eq: { 'item.channel': 'GOTO' } },
+      sort: [
+        {
+          blend: [
+            { by: 'item.hnScore', weight: 2 },
+            { formula: 'hnScore * 2' },
+          ],
+        },
+      ],
+      collapse: 'item.channel',
+    });
+    assert.deepEqual(parsed.itemQuery.filter, {
+      on,
+      every: [{ eq: { channel: 'GOTO' } }],
+    });
+    let blend = (parsed.itemQuery.sort as any)[0];
+    assert.strictEqual(blend.by, '_blend', 'blend lowers to _blend');
+    assert.deepEqual(blend.of[0].on, on, 'a field signal inherits the type');
+    assert.strictEqual(blend.of[1].by, '_expr', 'formula lowers to _expr');
+    assert.deepEqual(parsed.itemQuery.collapse, { by: 'channel', on });
+    let topWindow = parseSearchEntryQueryFromPayload({
+      type: on,
+      sort: [{ formula: 'IF(ISNUMBER(SEARCH("a", title)), 1, 0)' }],
+    });
+    assert.strictEqual(
+      topWindow.itemQuery.rerank?.expr,
+      'IF(ISNUMBER(SEARCH("a", title)), 1, 0)',
+      'a formula outside the score profile runs over the top window',
+    );
+    assert.throws(
+      () =>
+        parseSearchEntryQueryFromPayload({
+          type: on,
+          sort: [{ formula: 'SUMM(hnScore, 1)' }],
+        }),
+      (e: any) => e.queryCode === 'unknown-function' && /SUMM/.test(e.message),
+    );
+    let { titles } = await search({
+      filter: { on, eq: { Channel: 'GOTO' } },
+      sort: [{ on, by: 'HnScore', direction: 'desc' }],
+    });
+    assert.deepEqual(titles, ['d', 'e'], 'labels resolve against the type');
+    await assert.rejects(
+      search({ filter: { on, eq: { Chanel: 'GOTO' } } }),
+      (e: any) => e.code === 'unknown-field' && /channel/.test(e.message),
+    );
+  });
 });

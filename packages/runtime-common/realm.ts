@@ -15901,7 +15901,9 @@ export class Realm {
     } catch (e) {
       if (e instanceof SearchRequestError) {
         return createResponse({
-          body: JSON.stringify(buildSearchErrorBody(e.message)),
+          body: JSON.stringify(
+            buildSearchErrorBody(e.message, 400, e.queryCode),
+          ),
           init: {
             status: 400,
             headers: { 'content-type': mimeType },
@@ -16610,7 +16612,9 @@ export class Realm {
       }
       if (e instanceof SearchRequestError) {
         return createResponse({
-          body: JSON.stringify(buildSearchErrorBody(e.message)),
+          body: JSON.stringify(
+            buildSearchErrorBody(e.message, 400, e.queryCode),
+          ),
           init: {
             status: 400,
             headers: { 'content-type': SupportedMimeType.CardJson },

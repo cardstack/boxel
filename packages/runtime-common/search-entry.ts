@@ -19,6 +19,8 @@ import {
   type SearchOpts,
 } from './search-utils.ts';
 import { RequestTimings } from './request-timings.ts';
+import { lowerQuery, usesNewSyntax } from './query-syntax.ts';
+import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import type {
   EntryCollectionDocument,
   EntryIncludedResource,
@@ -181,8 +183,12 @@ export interface SearchEntryQuery {
   typeAnchors?: CodeRef[];
 }
 
-function invalidQuery(message: string): SearchRequestError {
-  return new SearchRequestError('invalid-query', `Invalid query: ${message}`);
+function invalidQuery(message: string, code?: string): SearchRequestError {
+  return new SearchRequestError(
+    'invalid-query',
+    `Invalid query: ${message}`,
+    code,
+  );
 }
 
 function invalidHtmlQuery(message: string): SearchRequestError {
@@ -558,6 +564,8 @@ function translateSort(
         out.on = v;
       } else if (key === 'direction') {
         out.direction = v;
+      } else if (key === 'missing') {
+        out.missing = v;
       } else if (key === 'near') {
         out.near = v;
       } else if (
@@ -723,6 +731,124 @@ function translateCollapse(collapse: unknown, rootAnchor: unknown): unknown {
   return out;
 }
 
+// A request in the newer spellings (query-syntax.ts) lowers to today's wire
+// query before anything else reads it: its query members are unwired
+// (`item.on` → `on`), lowered, and wired again; the entry-only members
+// (`fields`, `realms`, `cardUrls`, `scope`) ride along untouched.
+const QUERY_MEMBERS = new Set([
+  'type',
+  'filter',
+  'sort',
+  'page',
+  'facets',
+  'collapse',
+  'let',
+  'explain',
+  'rerank',
+]);
+// The wire's spellings back to the card grammar's: `item.on` → `on`, and
+// `item.` off every field path (operator keys, `by`, `select`, `collapse`,
+// a comparison's `by` and `near`, `fields`). Values stay as written.
+const WIRE_PATH_OPS = new Set([
+  'eq',
+  'in',
+  'range',
+  'contains',
+  'near',
+  'pattern',
+  'regex',
+]);
+const unprefix = (p: unknown) =>
+  typeof p === 'string' && p.startsWith(ITEM_PREFIX)
+    ? p.slice(ITEM_PREFIX.length)
+    : p;
+function unwireAnchors(node: unknown, key?: string): unknown {
+  if (Array.isArray(node)) {
+    return key === 'fields'
+      ? node.map(unprefix)
+      : node.map((n) => unwireAnchors(n));
+  }
+  if (node == null || typeof node !== 'object') {
+    return ['by', 'select', 'collapse'].includes(key ?? '')
+      ? unprefix(node)
+      : node;
+  }
+  let out: Record<string, unknown> = {};
+  for (let [k, v] of Object.entries(node as Record<string, unknown>)) {
+    let name = k === 'item.on' ? 'on' : k === 'item.type' ? 'type' : k;
+    if (name === 'on' || name === 'type') {
+      out[name] = v; // a code ref is a value
+    } else if (
+      WIRE_PATH_OPS.has(k) &&
+      v &&
+      typeof v === 'object' &&
+      !Array.isArray(v) &&
+      // a sort's near target is a vector, not a map of paths
+      !(k === 'near' && 'dims' in (v as object))
+    ) {
+      out[k] = Object.fromEntries(
+        Object.entries(v as Record<string, unknown>).map(([p, x]) => [
+          unprefix(p) as string,
+          x,
+        ]),
+      );
+    } else if (k === 'compare' && v && typeof v === 'object') {
+      let c = unwireAnchors(v) as Record<string, unknown>;
+      out[k] = { ...c, ...(c.near ? { near: unprefix(c.near) } : {}) };
+    } else {
+      out[k] = unwireAnchors(v, k);
+    }
+  }
+  return out;
+}
+
+function lowerEntryPayload(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  let query: Record<string, any> = {};
+  let rest: Record<string, unknown> = {};
+  for (let [k, v] of Object.entries(record)) {
+    if (QUERY_MEMBERS.has(k)) query[k] = unwireAnchors(v);
+    else rest[k] = v;
+  }
+  if (!usesNewSyntax(query)) {
+    return record;
+  }
+  // The htmlQuery binding rides in the filter's top-level eq unprefixed; it
+  // is the entry's, not the query's, so it stays out of the lowering.
+  let htmlQuery: unknown;
+  let topEq = query.filter?.eq;
+  if (topEq && typeof topEq === 'object' && 'htmlQuery' in topEq) {
+    let { htmlQuery: h, ...eq } = topEq;
+    htmlQuery = h;
+    query.filter = Object.keys(eq).length
+      ? { ...query.filter, eq }
+      : (({ eq: _e, ...f }) => f)(query.filter);
+  }
+  let lowered;
+  try {
+    lowered = lowerQuery(query, {
+      knownFunctions: BXL_FORMULA_FUNCTIONS,
+    });
+  } catch (e) {
+    if (e instanceof InvalidQueryError) {
+      throw invalidQuery(e.message, e.code);
+    }
+    throw e;
+  }
+  let wire = searchEntryWireQueryFromQuery(lowered.query as Query) as Record<
+    string,
+    any
+  >;
+  if (htmlQuery !== undefined) {
+    wire.filter = {
+      ...(wire.filter ?? {}),
+      eq: { ...(wire.filter?.eq ?? {}), htmlQuery },
+    };
+  }
+  return { ...wire, ...rest };
+}
+
 // `let` in the wire grammar: each binding's query is a wire query (field
 // paths through `item.`, its type as `item.on`), and `select` is a path
 // through `item.` too.
@@ -771,7 +897,7 @@ export function parseSearchEntryQueryFromPayload(
   ) {
     throw invalidQuery(`request body must be a JSON object`);
   }
-  let record = payload as Record<string, unknown>;
+  let record = lowerEntryPayload(payload as Record<string, unknown>);
   for (let key of Object.keys(record)) {
     if (!SEARCH_ENTRY_QUERY_MEMBERS.includes(key)) {
       throw invalidQuery(`unknown member "${key}" in entry query`);
@@ -908,7 +1034,7 @@ export function parseSearchEntryQueryFromPayload(
     assertQuery(itemQuery);
   } catch (e) {
     if (e instanceof InvalidQueryError) {
-      throw invalidQuery(e.message);
+      throw invalidQuery(e.message, e.code);
     }
     throw e;
   }
@@ -1474,6 +1600,7 @@ export interface SearchEntryWireSortExpression {
   by: string;
   'item.on'?: CodeRef;
   direction?: 'asc' | 'desc';
+  missing?: 'first' | 'last';
   // a near sort's target vector (see `NearSortTarget`)
   near?: unknown;
   // a `_blend` sort's signals, fusion method and constant, and a signal's
@@ -1607,6 +1734,7 @@ function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
     by: `${ITEM_PREFIX}${entry.by}`,
     ...('on' in entry && entry.on ? { [ITEM_ANCHOR]: entry.on } : {}),
     ...(entry.direction ? { direction: entry.direction } : {}),
+    ...(entry.missing ? { missing: entry.missing } : {}),
     ...('near' in entry && entry.near != null ? { near: entry.near } : {}),
     ...(entry.weight != null ? { weight: entry.weight } : {}),
     ...(entry.weights != null ? { weights: entry.weights } : {}),
@@ -2075,6 +2203,8 @@ export function buildEntryResource(args: {
   explanation?: ResultExplanation;
   // Under `rerank`, the row's formula value — `meta._rerank`.
   rerankValue?: number | null;
+  // The query's formula value — `meta._formula`.
+  formulaValue?: number | null;
 }): EntryResource {
   let {
     url,
@@ -2087,6 +2217,7 @@ export function buildEntryResource(args: {
     blendScore,
     explanation,
     rerankValue,
+    formulaValue,
   } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
@@ -2112,7 +2243,8 @@ export function buildEntryResource(args: {
     nearSimilarity !== undefined ||
     blendScore !== undefined ||
     explanation !== undefined ||
-    rerankValue !== undefined
+    rerankValue !== undefined ||
+    formulaValue !== undefined
   ) {
     resource.meta = {
       ...(generation !== undefined ? { generation } : {}),
@@ -2125,6 +2257,14 @@ export function buildEntryResource(args: {
       ...(blendScore !== undefined ? { _blendScore: blendScore } : {}),
       ...(explanation !== undefined ? { _explain: explanation } : {}),
       ...(rerankValue !== undefined ? { _rerank: rerankValue } : {}),
+      ...(formulaValue !== undefined
+        ? {
+            _formula:
+              typeof formulaValue === 'string'
+                ? Number(formulaValue)
+                : formulaValue,
+          }
+        : {}),
     };
   }
   return resource;

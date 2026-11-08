@@ -16,11 +16,18 @@ export type SearchRequestErrorCode =
 
 export class SearchRequestError extends Error {
   code: SearchRequestErrorCode;
+  // the query grammar's own code for the mistake, when it has one
+  queryCode?: string;
 
-  constructor(code: SearchRequestErrorCode, message: string) {
+  constructor(
+    code: SearchRequestErrorCode,
+    message: string,
+    queryCode?: string,
+  ) {
     super(message);
     this.code = code;
     this.name = 'SearchRequestError';
+    if (queryCode) this.queryCode = queryCode;
   }
 }
 
@@ -264,12 +271,13 @@ export async function fanOutRealmSearch<R extends { url?: string }, Doc>(
 }
 
 export type SearchErrorBody = {
-  errors: { status: string; title: string; message: string }[];
+  errors: { status: string; title: string; message: string; code?: string }[];
 };
 
 export function buildSearchErrorBody(
   message: string,
   status = 400,
+  code?: string,
 ): SearchErrorBody {
   return {
     errors: [
@@ -277,6 +285,7 @@ export function buildSearchErrorBody(
         status: String(status),
         title: 'Invalid Query',
         message,
+        ...(code ? { code } : {}),
       },
     ],
   };
@@ -285,9 +294,13 @@ export function buildSearchErrorBody(
 export function buildSearchErrorResponse(
   message: string,
   status = 400,
+  code?: string,
 ): Response {
-  return new Response(JSON.stringify(buildSearchErrorBody(message, status)), {
-    status,
-    headers: { 'content-type': SupportedMimeType.CardJson },
-  });
+  return new Response(
+    JSON.stringify(buildSearchErrorBody(message, status, code)),
+    {
+      status,
+      headers: { 'content-type': SupportedMimeType.CardJson },
+    },
+  );
 }

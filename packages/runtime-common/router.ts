@@ -518,6 +518,7 @@ export class Router {
                 status: '400',
                 title: 'Invalid Query',
                 message: `Invalid query: ${err.message}`,
+                ...(err.code ? { code: err.code } : {}),
               },
             ],
           }),

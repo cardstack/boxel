@@ -13,6 +13,7 @@ import {
   BLEND_SCORE_KEY,
   EXPLAIN_KEY,
   RERANK_KEY,
+  FORMULA_KEY,
   fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -518,6 +519,11 @@ export class RealmIndexQueryEngine {
         | ResultExplanation
         | undefined;
       // And, under `rerank`, the row's formula value.
+      // And the query's formula value, wherever the formula ran.
+      let formulaValue = (row as Record<string, unknown>)[FORMULA_KEY] as
+        | number
+        | null
+        | undefined;
       let rerankValue = (row as Record<string, unknown>)[RERANK_KEY] as
         | number
         | null
@@ -608,6 +614,7 @@ export class RealmIndexQueryEngine {
             blendScore,
             explanation,
             rerankValue,
+            formulaValue,
           }),
         );
         continue;
@@ -761,6 +768,7 @@ export class RealmIndexQueryEngine {
           blendScore,
           explanation,
           rerankValue,
+          formulaValue,
         }),
       );
     }

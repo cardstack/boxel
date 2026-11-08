@@ -6,9 +6,15 @@
 // endpoints turn it into a 400 and let anything else surface as a 500, so a
 // grammar violation reported as a plain `Error` reads to a caller as a server
 // fault rather than a bad request.
+//
+// `code` names the mistake for a caller that reacts to it (an editor, a
+// test): `unknown-field`, `anchor-without-predicate`, `sort-needs-type`, ….
+// It rides in the 400 body as `errors[0].code`.
 export class InvalidQueryError extends Error {
-  constructor(message: string) {
+  code?: string;
+  constructor(message: string, code?: string) {
     super(message);
     this.name = 'InvalidQueryError';
+    if (code) this.code = code;
   }
 }

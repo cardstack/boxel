@@ -1271,7 +1271,10 @@ async function respondToInvalidSearch(
   e: SearchRequestError,
 ): Promise<void> {
   if (e.code === 'invalid-query' || e.code === 'invalid-render') {
-    await setContextResponse(ctxt, buildSearchErrorResponse(e.message));
+    await setContextResponse(
+      ctxt,
+      buildSearchErrorResponse(e.message, 400, e.queryCode),
+    );
   } else {
     await sendResponseForBadRequest(ctxt, e.message);
   }
