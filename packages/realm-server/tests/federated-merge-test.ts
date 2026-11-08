@@ -227,6 +227,86 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('facets across realms', function () {
+    // A realm whose facet answers its top `size` colours by count.
+    function colours(
+      url: string,
+      counts: Record<string, number>,
+      calls: SearchEntryQuery[] = [],
+    ) {
+      return {
+        url,
+        searchEntries: async (q: SearchEntryQuery) => {
+          calls.push(q);
+          let size = (q.itemQuery.facets?.[0] as any)?.size ?? 50;
+          let top = Object.entries(counts)
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, size)
+            .map(([value, count]) => ({ value, count }));
+          return {
+            data: [],
+            meta: {
+              page: { total: Object.values(counts).reduce((a, b) => a + b, 0) },
+              facets: { color: top },
+            },
+          };
+        },
+      };
+    }
+    let facetQuery = (size: number) =>
+      query({ facets: [{ by: 'item.color', size }] });
+
+    test('a value second in every realm but first overall comes first', async function (assert) {
+      let calls: SearchEntryQuery[] = [];
+      let doc = await searchEntryRealms(
+        [
+          colours(A, { red: 10, blue: 9, green: 1 }, calls),
+          colours(B, { green: 10, blue: 9, red: 1 }),
+        ],
+        facetQuery(1),
+      );
+      assert.strictEqual(
+        (calls[0].itemQuery.facets?.[0] as any).size,
+        12,
+        'each realm is asked for 1.5 × 1 + 10 values',
+      );
+      assert.deepEqual(doc.meta.facets?.color, [{ value: 'blue', count: 18 }]);
+      assert.strictEqual(
+        doc.meta.facetErrors?.color,
+        0,
+        'every realm answered all its values, so the counts are exact',
+      );
+    });
+
+    test('a realm that may have cut values off bounds the error', async function (assert) {
+      let many = Object.fromEntries(
+        Array.from({ length: 20 }, (_, i) => [
+          `c${String(i).padStart(2, '0')}`,
+          30 - i,
+        ]),
+      );
+      let doc = await searchEntryRealms(
+        [colours(A, many), colours(B, { c00: 1 })],
+        facetQuery(2),
+      );
+      assert.deepEqual(
+        doc.meta.facets?.color?.map((c) => c.value),
+        ['c00', 'c01'],
+      );
+      // A returned 13 of its 20 values, the smallest with 18: a value
+      // missing from its answer has at most 18 there.
+      assert.strictEqual(doc.meta.facetErrors?.color, 18);
+    });
+
+    test('per realm, the default, keeps the asked size too', async function (assert) {
+      let doc = await searchEntryRealms(
+        [colours(A, { red: 3, blue: 2 }), colours(B, { blue: 4 })],
+        facetQuery(1),
+      );
+      assert.deepEqual(doc.meta.facets?.color, [{ value: 'blue', count: 6 }]);
+    });
+  });
+
   test('federation.results takes byRealm or merged', function (assert) {
     assert.throws(
       () => query({ federation: { results: 'interleaved' } }),

@@ -83,6 +83,10 @@ export interface EntryCollectionDocument {
       // sections in order of their best card) or merged (one global order
       // and page).
       federation?: { results: 'byRealm' | 'merged' };
+      // Per value facet of a search over several realms: how far any count
+      // may be short of the true one, because a realm answered only its top
+      // values. 0 when every realm answered all of its values.
+      facetErrors?: Record<string, number>;
       // Per realm, in the order `data` holds them: the realm, how many of
       // its rows are on this page, and the section's score (its best card's,
       // when the sort scores rows).

@@ -13,6 +13,8 @@ import {
   type ResultExplanation,
   MAX_LET_BINDINGS,
   WHEN_SIGNAL_KEY,
+  DEFAULT_FACET_SIZE,
+  MAX_FACET_SIZE,
 } from './query.ts';
 import {
   emitSearchTiming,
@@ -2404,8 +2406,25 @@ export async function searchEntryRealms(
   // Merged: each realm answers its top `offset + size` rows, with the values
   // it sorted them by; the merge orders the union by the query's sort and
   // keeps one global page. Per realm: each realm pages on its own.
-  let perRealmQuery = (q: SearchEntryQuery): SearchEntryQuery =>
-    results === 'merged'
+  // A value facet over several realms: each realm answers its top
+  // 1.5 × size + 10 values (as Elasticsearch's shard_size does), the merge
+  // sums them and keeps `size`, and `meta.facetErrors` bounds how far any
+  // count may be short. Range, interval and stats buckets need no top N.
+  let overrequested = new Map<string, { size: number; asked: number }>();
+  let facets = searchEntryQuery.itemQuery.facets?.map((f) => {
+    if (realms.length < 2 || f.ranges || f.interval) return f;
+    let size = f.size ?? DEFAULT_FACET_SIZE;
+    let asked = Math.min(Math.ceil(1.5 * size + 10), MAX_FACET_SIZE);
+    overrequested.set(f.by, { size, asked });
+    return { ...f, size: asked };
+  });
+  let withFacets = (q: SearchEntryQuery): SearchEntryQuery =>
+    facets && overrequested.size
+      ? { ...q, itemQuery: { ...q.itemQuery, facets } }
+      : q;
+  let perRealmQuery = (q0: SearchEntryQuery): SearchEntryQuery => {
+    let q = withFacets(q0);
+    return results === 'merged'
       ? {
           ...q,
           exposeSortValues: true,
@@ -2422,6 +2441,7 @@ export async function searchEntryRealms(
           },
         }
       : q;
+  };
   // `realms` is positional with the requested realm list: an entry is nullish
   // exactly when that realm could not be resolved to an instance.
   let asked = searchEntryQuery.realms ?? [];
@@ -2561,6 +2581,24 @@ export async function searchEntryRealms(
       count: s.doc.data.length,
       ...(s.score !== undefined ? { score: s.score } : {}),
     }));
+  }
+  if (overrequested.size && combined.meta.facets) {
+    let errors: Record<string, number> = {};
+    for (let [by, { size, asked }] of overrequested) {
+      let merged = combined.meta.facets[by];
+      if (!merged) continue;
+      combined.meta.facets[by] = merged.slice(0, size);
+      // A realm that answered all `asked` values may hold more: any value
+      // missing from its answer counts at most its smallest count there.
+      errors[by] = answered.reduce((sum, { doc }) => {
+        let counts = doc.meta?.facets?.[by] ?? [];
+        return (
+          sum +
+          (counts.length >= asked ? (counts[counts.length - 1]?.count ?? 0) : 0)
+        );
+      }, 0);
+    }
+    combined.meta.facetErrors = errors;
   }
   combined.meta.federation = { results };
   combined.meta.realms = statuses;
