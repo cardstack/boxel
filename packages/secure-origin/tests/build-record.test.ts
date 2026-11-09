@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
-import { movedModules, restyledModules } from '../build/build-record.ts';
+import {
+  movedModules,
+  recordMismatch,
+  restyledModules,
+  shippedModule,
+} from '../build/build-record.ts';
 import { layersNamed, unorderedLayers } from '../build/layer-order.ts';
 import { runTimeStyleRefusals } from '../build/pret-ui-lint.ts';
 import {
@@ -57,13 +62,28 @@ test('a moved hash names the module, and one only a record ships names how', () 
   assert.deepEqual(movedModules(before, before), []);
 });
 
-test('a module whose run-time styling mark changes is named with what it does', () => {
-  let shipped = (module: string, stylesAtRunTime?: string[]) => ({
+function shipped(module: string, stylesAtRunTime?: string[]) {
+  return {
     package: 'some-package@1.0.0',
     module,
     size: 1,
     ...(stylesAtRunTime ? { stylesAtRunTime } : {}),
+  };
+}
+
+function records(files: Record<string, object[]>): string {
+  return JSON.stringify({
+    entries: {},
+    files: Object.fromEntries(
+      Object.entries(files).map(([name, modules]) => [
+        name,
+        { bytes: 1, modules },
+      ]),
+    ),
   });
+}
+
+test('a module whose run-time styling mark changes is named with what it does', () => {
   let before = record([
     shipped('kept.js', ['creates a <style> element']),
     shipped('cleaned.js', ['sets a style attribute']),
@@ -81,28 +101,95 @@ test('a module whose run-time styling mark changes is named with what it does', 
     shipped('added.js', ['creates a <style> element']),
   ]);
   assert.deepEqual(restyledModules(before, after), [
-    'some-package@1.0.0 added.js creates a <style> element',
-    'some-package@1.0.0 cleaned.js (no longer marked)',
-    'some-package@1.0.0 widened.js creates a <style> element and sets a style attribute',
-  ]);
-  assert.deepEqual(restyledModules(after, record([])), [
-    'some-package@1.0.0 added.js (no longer marked)',
-    'some-package@1.0.0 kept.js (no longer marked)',
-    'some-package@1.0.0 widened.js (no longer marked)',
+    'some-package@1.0.0 added.js in the probe: creates a <style> element',
+    'some-package@1.0.0 cleaned.js in the probe (no longer marked)',
+    'some-package@1.0.0 widened.js in the probe: creates a <style> element and sets a style attribute',
   ]);
   assert.deepEqual(restyledModules(before, before), []);
 });
 
-test("rendered code's run-time styling is named, and a comment's is not", () => {
+test("the pages' copy of a module and the probe's are compared apart", () => {
+  let probeMarked = {
+    'probe/probe.js': [shipped('a.js', ['creates a <style> element'])],
+  };
+  let both = records({
+    ...probeMarked,
+    'shared.js': [shipped('a.js', ['creates a <style> element'])],
+  });
+  let probeOnly = records({ ...probeMarked, 'shared.js': [shipped('a.js')] });
+  assert.deepEqual(restyledModules(probeOnly, both), [
+    'some-package@1.0.0 a.js: creates a <style> element',
+  ]);
+  assert.deepEqual(restyledModules(both, probeOnly), [
+    'some-package@1.0.0 a.js (no longer marked)',
+  ]);
+  let moved = records({
+    ...probeMarked,
+    'shell.js': [shipped('a.js', ['creates a <style> element'])],
+  });
   assert.deepEqual(
-    stylesAtRunTime(
+    restyledModules(both, moved),
+    [],
+    'a move between chunks of one build',
+  );
+});
+
+test('a record check names styling marks, then moved hashes, then the diff', () => {
+  let before = record([
+    { ...shipped('styled.js'), sha256: 'a' },
+    { ...shipped('moved.js'), sha256: 'b' },
+  ]);
+  let after = record([
+    { ...shipped('styled.js', ['creates a <style> element']), sha256: 'a' },
+    { ...shipped('moved.js'), sha256: 'c' },
+  ]);
+  let message = recordMismatch(before, after);
+  let styled = message.indexOf('styled.js in the probe: creates a <style>');
+  let moved = message.indexOf('moved.js (changed)');
+  let diff = message.indexOf('differs from build-record.json');
+  assert.ok(styled > message.indexOf('ADR 019 §1.5'), message);
+  assert.ok(styled >= 0 && styled < moved && moved < diff, message);
+});
+
+test("a shipped module is marked from its rendered code, which it can't lack", () => {
+  let name = { package: 'some-package@1.0.0', module: 'a.js' };
+  assert.deepEqual(
+    shippedModule(name, {
+      code: "document.createElement('style')",
+      renderedLength: 31,
+    }),
+    { ...name, size: 31, stylesAtRunTime: ['creates a <style> element'] },
+  );
+  assert.deepEqual(shippedModule(name, { code: 'x()', renderedLength: 3 }), {
+    ...name,
+    size: 3,
+  });
+  assert.throws(
+    () => shippedModule(name, { code: null, renderedLength: 3 }),
+    /without its code/,
+  );
+});
+
+test('run-time styling is found whatever the case, with or without a namespace', () => {
+  let does = (code: string) => stylesAtRunTime(code).map(({ does }) => does);
+  assert.deepEqual(
+    does(
       'let s = document.createElement("style");\ns.setAttribute(`style`, x);',
     ),
     ['creates a <style> element', 'sets a style attribute'],
   );
+  assert.deepEqual(does("document.createElement('STYLE')"), [
+    'creates a <style> element',
+  ]);
+  assert.deepEqual(does('document.createElementNS(svgNS, "style")'), [
+    'creates a <style> element',
+  ]);
+  assert.deepEqual(does("el.setAttributeNS(null, 'style', v)"), [
+    'sets a style attribute',
+  ]);
   assert.deepEqual(
-    stylesAtRunTime(
-      "// document.createElement('style')\nel.style.setProperty('--a', '1');",
+    does(
+      "el.style.setProperty('--a', '1'); el.setAttribute('title', 'style'); document.createElement('div')",
     ),
     [],
   );

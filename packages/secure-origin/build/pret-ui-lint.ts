@@ -20,7 +20,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import TemplateLinter from 'ember-template-lint';
 
 import { PACKAGE_ROOT } from './module-package.ts';
-import { stylesAtRunTime, withoutCommentLines } from './run-time-style.ts';
+import { stylesAtRunTime } from './run-time-style.ts';
 
 export const PRETUI_ROOT = join(PACKAGE_ROOT, '..', 'pretui');
 const PRETUI = '@cardstack/pretui/';
@@ -28,23 +28,24 @@ const SOURCE_EXTENSIONS = ['.gts', '.ts', '.js'];
 
 const IMPORT_SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*)(['"])([^'"\n]+)\1/g;
 
-const REMEDY: Record<string, string> = {
-  'creates a <style> element':
-    'creates a <style> element at run time, which the policy refuses as inline style',
-  'sets a style attribute':
-    'sets a style attribute at run time, which the policy refuses; set properties through the CSSOM (`element.style.setProperty`)',
-};
+// A comment that mentions a `<style>` element is not one, so comment lines
+// are left out.
+function withoutCommentLines(source: string): string {
+  return source
+    .split('\n')
+    .filter((line) => !/^\s*(\/\/|\/\*|\*)/.test(line))
+    .join('\n');
+}
 
 // What a module's source refuses that the template lint can't see.
 export function runTimeStyleRefusals(source: string): string[] {
-  let unscoped = /<style\b(?![^>]*\bscoped\b)[^>]*>/.test(
-    withoutCommentLines(source),
-  )
+  let code = withoutCommentLines(source);
+  let unscoped = /<style\b(?![^>]*\bscoped\b)[^>]*>/.test(code)
     ? [
         'has a <style> element that is not scoped, which the policy refuses as inline style',
       ]
     : [];
-  return [...unscoped, ...stylesAtRunTime(source).map((does) => REMEDY[does])];
+  return [...unscoped, ...stylesAtRunTime(code).map(({ refusal }) => refusal)];
 }
 
 function isFile(file: string): boolean {

@@ -132,12 +132,13 @@ unchanged, with no `unsafe-inline` and no `unsafe-eval`. Templates MUST NOT
 bind or set a `style` attribute, and this includes every Pret UI and boxel-ui
 template the pages render. The package's template lint MUST enable
 `no-inline-styles` with `allowDynamicStyles: false`, and the package's lint
-MUST apply the same rule to each Pret UI module the package imports. Code that
-styles an element at run time MUST use the CSSOM
-(`element.style.setProperty`). That rule binds code a page runs. A module MAY
-ship code that creates a `<style>` element or sets a `style` attribute at run
-time when no page runs that code, and the build record names each such module
-(§1.8). Scoped CSS MUST be emitted as files. Entry
+MUST apply the same rule to each Pret UI module the package imports. That
+lint MUST also refuse, in each of those modules, code that creates a `<style>`
+element or sets a `style` attribute at run time. Code that styles an element
+at run time MUST use the CSSOM (`element.style.setProperty`). That rule binds
+code a page runs. Any other module MAY ship code that creates a `<style>`
+element or sets a `style` attribute at run time when no page runs that code,
+and the build record marks it (§1.8). Scoped CSS MUST be emitted as files. Entry
 documents MUST hold no inline script or style. A test MUST load each built
 page under the policy and fail on any `securitypolicyviolation` event. The
 secure origin MUST NOT be served by a development server that injects styles
@@ -181,11 +182,15 @@ ships shows, in
 the pull request that makes it, exactly what changes on the origin.
 
 The record MUST also mark each module whose code in the build output creates
-a `<style>` element or sets a `style` attribute at run time. When a module's
-mark changes, the failure MUST name that module and §1.5 before anything
-else. The policy test loads each page but can't take every path a page can,
-so the mark is what shows a reviewer each shipped module that could break a
-page under the policy.
+a `<style>` element or sets a `style` attribute through a DOM call that names
+it (`createElement`, `setAttribute` and their namespaced forms, in any case),
+and each build's copy of a module separately. A name the code computes, or
+markup written as a string, isn't marked. When a mark changes, the failure
+MUST name that module and §1.5 before anything else. The policy test loads
+each page but can't take every path a page can, so the mark is what shows a
+reviewer a shipped module that could break a page under the policy. The build
+probe MUST ship one such module that nothing runs, so the record always holds
+a mark and the check fails when marking stops working.
 
 ### 1.9. One implementation of the sign-in screens
 
@@ -212,8 +217,8 @@ boxel-icons (`@cardstack/boxel-icons`), as ADR 009 §1.3 sets out. Where Pret
 UI's counterpart can't ship yet, the package MAY keep its own, and the fix
 SHOULD be made in Pret UI so the package's copy can go. The usual reasons a
 Pret UI module can't ship are a bound `style` attribute in its template or in
-a boxel-ui component it renders, a `<style>` element added at run time or
-left unscoped, and an import of the base realm.
+a boxel-ui component it renders, a `<style>` element left unscoped, or one
+added at run time (§1.5), and an import of the base realm.
 
 ## 2. Rationale
 
