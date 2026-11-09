@@ -167,6 +167,16 @@ export function isIdleRenderTimeout(result: IndexVisitRenderResult): boolean {
   );
 }
 
+// How many renders an index pass keeps in flight (`INDEX_VISIT_DEPTH`,
+// default 4, at most 16). The prerenderer admits several file renders per
+// realm; one at a time leaves its other tabs idle. 1 is the old serial loop.
+function indexVisitDepth(): number {
+  let raw =
+    typeof process !== 'undefined' ? process.env?.INDEX_VISIT_DEPTH : undefined;
+  let n = Number(raw ?? 4);
+  return Number.isInteger(n) && n >= 1 ? Math.min(n, 16) : 4;
+}
+
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
@@ -1131,18 +1141,33 @@ export class IndexRunner {
     let n = invalidations.length;
     let renders = new Map<number, Promise<VisitRenderOutcome>>();
     let idleTimeouts: string[] = [];
-    // Start the render for the next non-skipped URL at or after `from`,
-    // keeping exactly one render in flight ahead of the finish cursor.
+    // Keep up to `depth` renders in flight from the finish cursor on, each on
+    // its own tab (the prerenderer admits several file renders per realm).
+    // With one in flight, a pass is a serial loop of browser round-trips and
+    // every other tab the realm may use sits idle. A file that isn't a card
+    // instance (a module) renders alone: nothing past it starts until it is
+    // the only render in flight, so a render that clears the loader after a
+    // module change still runs before the cards that follow it.
+    let depth = indexVisitDepth();
+    let isInstance = (url: URL) => url.pathname.endsWith('.json');
     let prefetch = (from: number) => {
-      for (let j = from; j < n; j++) {
+      for (let j = from; j < n && renders.size < depth; j++) {
         if (renders.has(j)) {
-          return;
+          if (!isInstance(invalidations[j])) {
+            return;
+          }
+          continue;
         }
         if (skipReason(invalidations[j])) {
           continue;
         }
+        if (!isInstance(invalidations[j]) && renders.size > 0) {
+          return;
+        }
         renders.set(j, this.#renderVisit(invalidations[j]));
-        return;
+        if (!isInstance(invalidations[j])) {
+          return;
+        }
       }
     };
     prefetch(0);
@@ -1155,7 +1180,7 @@ export class IndexRunner {
         prefetch(i + 1);
         continue;
       }
-      let outcome = await renders.get(i)!;
+      let outcome = await (renders.get(i) ?? this.#renderVisit(url));
       renders.delete(i);
       // Kick off the next render now so its round-trip overlaps the finish
       // work below.
