@@ -322,7 +322,7 @@ function itemIdOf(item: unknown): string {
   if (typeof held === 'string' && held) {
     return held;
   }
-  let minted = `i${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+  let minted = `i${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`;
   if (item && typeof item === 'object') {
     (item as any)[itemIdSymbol] = minted;
   }
