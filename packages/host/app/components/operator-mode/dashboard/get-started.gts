@@ -90,6 +90,10 @@ interface Signature {
   };
 }
 
+function countOf<T>(values: T[], value: T) {
+  return values.filter((other) => other === value).length;
+}
+
 // The dashboard's onboarding checklist. Every tick comes from something the
 // user has actually done, read from state the host already keeps, so the list
 // can't drift from what happened. A button in the page's header opens and
@@ -361,6 +365,17 @@ export default class GetStarted extends Component<Signature> {
       : 'Publishing needs a workspace you own. Create one to publish it.';
   }
 
+  // The note waits for the info of every workspace the user owns: until a
+  // workspace's info loads, it may yet turn out publishable.
+  private get showsPublishUnavailableNote() {
+    return (
+      this.workspacesToPublish.length === 0 &&
+      this.realmServer.userRealmIdentifiers
+        .filter((url) => this.realm.isRealmOwner(url))
+        .every((url) => this.realm.isInfoLoaded(url))
+    );
+  }
+
   // With one workspace to publish the button opens it in host mode to
   // publish; with more, a menu asks which.
   private get onlyWorkspaceToPublish() {
@@ -369,20 +384,24 @@ export default class GetStarted extends Component<Signature> {
   }
 
   // Workspaces that share a name are told apart by the last segment of
-  // their address.
+  // their address, or by the whole address when that segment is shared too.
   private get publishMenuItems(): MenuEntry[] {
-    let names = this.workspacesToPublish.map(
-      (url) => this.realm.info(url).name,
-    );
-    return this.workspacesToPublish.map((url, index) => {
-      let name = names[index];
-      let isRepeated = names.filter((other) => other === name).length > 1;
-      return {
-        label: isRepeated
-          ? `${name} (${realmIdentifierSegments(url).at(-1) ?? url})`
-          : name,
-        onSelect: () => this.openToPublish(url),
-      };
+    let workspaces = this.workspacesToPublish;
+    let names = workspaces.map((url) => this.realm.info(url).name);
+    let withSegment = workspaces.map((url, index) => {
+      let segment = realmIdentifierSegments(url).at(-1);
+      return segment ? `${names[index]} (${segment})` : undefined;
+    });
+    return workspaces.map((url, index) => {
+      let label = names[index];
+      if (countOf(names, label) > 1) {
+        let short = withSegment[index];
+        label =
+          short && countOf(withSegment, short) === 1
+            ? short
+            : `${label} (${this.realm.realmURLTextOf(url) ?? url})`;
+      }
+      return { label, onSelect: () => this.openToPublish(url) };
     });
   }
 
@@ -482,12 +501,12 @@ export default class GetStarted extends Component<Signature> {
                     <span class='step-hint'>{{step.hint}}</span>
                     {{#if (eq step.id 'publish')}}
                       {{#unless step.done}}
-                        {{#unless this.workspacesToPublish.length}}
+                        {{#if this.showsPublishUnavailableNote}}
                           <span
                             class='step-note'
                             data-test-get-started-publish-unavailable
                           >{{this.publishUnavailableNote}}</span>
-                        {{/unless}}
+                        {{/if}}
                       {{/unless}}
                     {{/if}}
                   </span>

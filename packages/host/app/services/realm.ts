@@ -1274,6 +1274,13 @@ export default class RealmService extends Service {
     return this.isRealmOwner(url) && this.info(url).publishable === true;
   };
 
+  // Whether the realm's info has loaded. Until it has, `info()` answers a
+  // placeholder whose `publishable: null` reads the same as a realm that
+  // isn't marked publishable.
+  isInfoLoaded = (realm: RealmIdentifier): boolean => {
+    return this.knownRealm(this.toLookupURL(realm))?.info !== undefined;
+  };
+
   url = (url: string): string | undefined => {
     return this.knownRealm(url)?.url;
   };

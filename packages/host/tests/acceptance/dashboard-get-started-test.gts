@@ -15,7 +15,11 @@ import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-cons
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { visitOperatorMode } from '../helpers';
+import {
+  realmConfigCardJSON,
+  setupAcceptanceTestRealm,
+  visitOperatorMode,
+} from '../helpers';
 import {
   realmURL,
   markHosted,
@@ -234,6 +238,29 @@ module('Acceptance | dashboard get started', function (hooks) {
       );
   });
 
+  test("the publish step's note waits for the info of the workspaces the user owns", async function (assert) {
+    await visitAsNewUser();
+    // Holds Workspace A's info back, as a slow load does.
+    let resource = (getService('realm') as any).realms.get(realmURL);
+    let info = resource.info;
+    resource.fetchInfo = () => new Promise(() => {});
+    resource.info = undefined;
+    await openSteps();
+
+    assert.dom('[data-test-get-started-step="publish"]').exists();
+    assert
+      .dom('[data-test-get-started-publish-unavailable]')
+      .doesNotExist('no note while the info loads');
+
+    delete resource.fetchInfo;
+    resource.info = info;
+    await settled();
+
+    assert
+      .dom('[data-test-get-started-publish-unavailable]')
+      .exists('the note shows once the info has loaded');
+  });
+
   module('with workspaces to publish', function (hooks) {
     setupMoreWorkspaces(hooks, mockMatrixUtils);
 
@@ -291,6 +318,47 @@ module('Acceptance | dashboard get started', function (hooks) {
       assert.deepEqual(
         findAll(MENU_ITEMS).map((item) => item.textContent?.trim()),
         ['Workspace B (workspace-b)', 'Workspace B (workspace-a)'],
+      );
+    });
+
+    test('workspaces that share a name and the last part of their address are told apart by the whole address', async function (assert) {
+      const otherRealmURL = 'http://test-realm/otheruser/workspace-b/';
+      const permissions = ['read', 'write', 'realm-owner'] as const;
+      await setupAcceptanceTestRealm({
+        realmURL: otherRealmURL,
+        mockMatrixUtils,
+        permissions: { '@testuser:localhost': [...permissions] },
+        contents: {
+          'realm.json': realmConfigCardJSON({ name: 'Workspace B' }),
+        },
+      });
+      mockMatrixUtils.setRealmSessionPermissions(otherRealmURL, [
+        ...permissions,
+      ]);
+      mockMatrixUtils.setActiveRealms([
+        realmURL,
+        ownedRealmURL,
+        sharedRealmURL,
+        otherRealmURL,
+      ]);
+      await visitAsNewUser();
+      markPublishable(ownedRealmURL);
+      markPublishable(otherRealmURL);
+      let now = Date.now();
+      markUpdated(otherRealmURL, new Date(now - 60_000));
+      markUpdated(ownedRealmURL, new Date(now));
+      await settled();
+      await openSteps();
+      await waitFor(PUBLISH_ACTION);
+
+      await click(PUBLISH_ACTION);
+
+      assert.deepEqual(
+        findAll(MENU_ITEMS).map((item) => item.textContent?.trim()),
+        [
+          'Workspace B (test-realm/testuser/workspace-b)',
+          'Workspace B (test-realm/otheruser/workspace-b)',
+        ],
       );
     });
 
