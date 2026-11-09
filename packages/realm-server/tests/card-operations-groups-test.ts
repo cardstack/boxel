@@ -112,7 +112,9 @@ function stub(opts: StubOptions = {}): Stub {
       };
     },
     assertWriteSize() {},
-    async drainIndexing() {},
+    drainIndexing() {
+      return undefined;
+    },
     async isIgnored() {
       return false;
     },
