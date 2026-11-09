@@ -2,6 +2,7 @@ import {
   expect,
   test,
   type Browser,
+  type Frame,
   type FrameLocator,
   type Page,
 } from '@playwright/test';
@@ -601,6 +602,14 @@ export async function showAllCards(page: Page) {
   }
 }
 
+// The secure origin's sign-in page, where every sign-out ends up.
+export function isSecureSignInURL(url: URL): boolean {
+  return (
+    url.origin === new URL(secureOriginURL).origin &&
+    url.pathname.endsWith('/sign-in')
+  );
+}
+
 export async function logout(page: Page) {
   await page
     .locator('[data-test-room-settled]')
@@ -610,7 +619,39 @@ export async function logout(page: Page) {
     page.locator('[data-test-ai-assistant-message-pending]'),
   ).toHaveCount(0);
   await page.locator('[data-test-profile-icon-button]').click();
-  await page.locator('[data-test-signout-button]').click();
+
+  // Signing out is not finished when the click returns. The app first ends
+  // its own session, then replaces the page with the secure origin's
+  // sign-out, which goes on to the secure origin's sign-in. A navigation the
+  // test starts before then is interrupted by that late sign-out navigation
+  // ("page.goto: … is interrupted by another navigation", or
+  // net::ERR_ABORTED). So wait here until the round trip has landed.
+  let startedAt = Date.now();
+  let navigations: string[] = [];
+  let onNavigated = (frame: Frame) => {
+    if (frame === page.mainFrame()) {
+      navigations.push(`+${Date.now() - startedAt}ms ${frame.url()}`);
+    }
+  };
+  page.on('framenavigated', onNavigated);
+  try {
+    await page.locator('[data-test-signout-button]').click();
+    await page.waitForURL(isSecureSignInURL, { timeout: 30_000 });
+  } catch (e) {
+    throw new Error(
+      `logout: the sign-out did not reach the secure origin's sign-in page ` +
+        `after ${Date.now() - startedAt}ms. Page is at ${page.url()}. ` +
+        `Main-frame navigations since the click: ` +
+        `${navigations.join(' → ') || '(none)'}. ` +
+        `Cause: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  } finally {
+    page.off('framenavigated', onNavigated);
+  }
+  console.log(
+    `[logout] reached the secure sign-in page in ${Date.now() - startedAt}ms ` +
+      `(${navigations.length} main-frame navigations)`,
+  );
 }
 
 export async function createRoom(page: Page) {
@@ -924,9 +965,7 @@ export async function signInOnSecureOrigin(
   password: string,
 ) {
   let secureOrigin = new URL(secureOriginURL).origin;
-  await page.waitForURL(
-    (url) => url.origin === secureOrigin && url.pathname.endsWith('/sign-in'),
-  );
+  await page.waitForURL(isSecureSignInURL);
   await page.locator('[data-test-secure-username]').fill(username);
   await page.locator('[data-test-secure-password]').fill(password);
   await page.locator('[data-test-secure-password-submit]').click();
@@ -1104,11 +1143,7 @@ export async function createSubscribedUserAndLogin(
 
 // A signed-out app sends the user to the secure origin's sign-in page.
 export async function assertLoggedOut(page: Page) {
-  await page.waitForURL(
-    (url) =>
-      url.origin === new URL(secureOriginURL).origin &&
-      url.pathname.endsWith('/sign-in'),
-  );
+  await page.waitForURL(isSecureSignInURL);
   await expect(
     page.locator('[data-test-secure-sign-in-form]'),
     'the secure origin’s sign-in form is displayed',

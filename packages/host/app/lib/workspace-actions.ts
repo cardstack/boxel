@@ -10,6 +10,7 @@ import CopyIcon from '@cardstack/boxel-icons/copy';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import IconTrash from '@cardstack/boxel-icons/trash-2';
+import PublishIcon from '@cardstack/boxel-icons/world-upload';
 
 import { format as formatDate } from 'date-fns';
 import { didCancel, dropTask, task } from 'ember-concurrency';
@@ -37,6 +38,7 @@ import {
 } from '@cardstack/host/lib/realm-utils';
 import { publishedRealmURLsFromInfo } from '@cardstack/host/lib/utils';
 import { wallpaperImage } from '@cardstack/host/lib/workspace-list';
+import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -67,6 +69,7 @@ export class WorkspaceActions {
   @service declare private recentFilesService: RecentFilesService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private hostModeService: HostModeService;
 
   @tracked showDeleteModal = false;
   @tracked deleteError: string | undefined;
@@ -266,6 +269,15 @@ export class WorkspaceActions {
         action: this.openRealmConfig,
       }),
     );
+    if (this.canPublish) {
+      items.push(
+        new MenuItem({
+          label: 'Publish',
+          icon: PublishIcon,
+          action: this.openToPublish,
+        }),
+      );
+    }
     if (this.isRealmOwner) {
       items.push(
         new MenuItem({
@@ -371,6 +383,15 @@ export class WorkspaceActions {
 
   private get isRealmOwner() {
     return this.realm.isRealmOwner(this.realmIdentifier);
+  }
+
+  private get canPublish() {
+    return this.realm.canPublish(this.realmIdentifier);
+  }
+
+  // Publishing happens in host mode, which shows the site it publishes.
+  @action private openToPublish() {
+    this.hostModeService.openToPublishTask.perform(this.realmIdentifier);
   }
 
   private get canDuplicateWorkspace() {

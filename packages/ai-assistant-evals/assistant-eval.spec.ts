@@ -3,6 +3,12 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
+  isAbsoluteIdentifier,
+  rri,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common/realm-identifiers';
+
+import {
   allRoomEvents,
   loginWithPassword,
   type MatrixEvent,
@@ -13,6 +19,7 @@ import { grade, type RunResult, type Verdict } from './run-result.ts';
 import {
   RealmClient,
   RealmResponseError,
+  realmPaths,
   type CardDocument,
 } from './realm-api.ts';
 import {
@@ -197,6 +204,7 @@ function workspaceEndpoint(modelSlug: string, now: Date) {
 
 async function createWorkspace(
   page: Page,
+  client: RealmClient,
   displayName: string,
   endpoint: string,
 ) {
@@ -240,12 +248,18 @@ async function createWorkspace(
     .first();
   await indexCard.waitFor({ timeout: 60_000 });
   let indexId = await indexCard.getAttribute('data-test-stack-card');
-  if (!indexId?.endsWith('index')) {
+  // A card id does not say where its realm root is; the realm answers that.
+  let realmUrl = indexId ? await client.realmOf(indexId) : undefined;
+  if (
+    !indexId ||
+    !realmUrl ||
+    realmPaths(realmUrl).local(rri(indexId)) !== 'index'
+  ) {
     throw new Error(
       `expected the workspace index card to open, got ${indexId}`,
     );
   }
-  return indexId.slice(0, -'index'.length);
+  return realmUrl;
 }
 
 async function openRoom(page: Page) {
@@ -827,11 +841,16 @@ async function findRenderedCard(
     seeded = [],
     required,
     missingReason = 'no card the assistant produced is rendered, in the stack or the preview panel',
-  }: { seeded?: string[]; required?: string[]; missingReason?: string },
+  }: {
+    seeded?: RealmResourceIdentifier[];
+    required?: RealmResourceIdentifier[];
+    missingReason?: string;
+  },
 ) {
   let excluded = new Set(required ? [] : seeded);
   let counted = required ? new Set(required) : undefined;
-  let cardIds: string[] = [];
+  let realm = realmPaths(realmUrl);
+  let cardIds: RealmResourceIdentifier[] = [];
   try {
     await expect
       .poll(
@@ -861,15 +880,17 @@ async function findRenderedCard(
           cardIds = [
             ...new Set(
               rendered
+                .flatMap(({ id, shown }) =>
+                  id ? [{ id: rri(id), shown }] : [],
+                )
                 .filter(({ id, shown }) =>
                   counted
-                    ? !!id && counted.has(id) && shown
-                    : !!id &&
-                      id.startsWith(realmUrl) &&
-                      !id.endsWith('index') &&
+                    ? counted.has(id) && shown
+                    : realm.inRealm(id) &&
+                      realm.local(id) !== 'index' &&
                       !excluded.has(id),
                 )
-                .map(({ id }) => id as string),
+                .map(({ id }) => id),
             ),
           ];
           return cardIds.length;
@@ -1031,7 +1052,7 @@ function skillsUsed(events: MatrixEvent[]): string[] {
     ...new Set(
       enabled
         .map((f) => f.sourceUrl ?? f.url ?? '')
-        .filter((url) => /^https?:\/\//.test(url)),
+        .filter((id) => isAbsoluteIdentifier(id)),
     ),
   ];
 }
@@ -1223,7 +1244,7 @@ async function runModel(
   // run ends early.
   let realmClient: RealmClient | undefined;
   let expected: ExpectedSeed[] = [];
-  let seededCards: string[] = [];
+  let seededCards: RealmResourceIdentifier[] = [];
   let step = 'start';
   let setStep = (next: string) => {
     step = next;
@@ -1250,6 +1271,7 @@ async function runModel(
     let label = evaluation ? `Eval ${slugify(evaluation.name)}` : 'Models';
     result.realmUrl = await createWorkspace(
       page,
+      realmClient,
       `${label} ${requestedModel} ${stamp}`,
       workspaceEndpoint(slug, now),
     );

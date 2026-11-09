@@ -3,6 +3,13 @@
 // to whatever realm server the URLs name; the dev stack's self-signed
 // certificate is accepted for localhost.
 
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+import {
+  ri,
+  rri,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common/realm-identifiers';
+
 import { matrixUrl } from './matrix-api.ts';
 import { REALM_SERVER_URL } from './eval-config.ts';
 
@@ -39,10 +46,12 @@ export const MIME = {
 
 export interface CardDocument {
   data: {
-    id?: string;
+    id?: RealmResourceIdentifier;
     lid?: string;
     type: 'card';
     attributes?: Record<string, any>;
+    // A link's `self` and `adoptsFrom.module` may be references relative to
+    // the card, which `resolveRRIReference` joins onto its id.
     relationships?: Record<
       string,
       { links?: { self?: string | null }; data?: unknown }
@@ -58,6 +67,14 @@ export interface CardDocument {
 
 export function ensureTrailingSlash(url: string) {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+// The paths of a realm, named by the URL the realm server serves it at, so
+// `fileURL` yields the URLs the runner reads and writes and `fileRRI` the ids
+// of what they hold. Local paths are decoded; both encode them again the way
+// the realm and the rendered `data-test-card` ids spell them.
+export function realmPaths(realmUrl: string): RealmPaths {
+  return new RealmPaths(ri(ensureTrailingSlash(realmUrl)));
 }
 
 // A non-ok realm response, carrying the status so a caller can tell a 404
@@ -252,11 +269,12 @@ export class RealmClient {
     return response.ok;
   }
 
-  // Every file in the realm, as paths relative to its root. The realm answers a
-  // directory URL with a JSON:API document whose relationships are its entries,
-  // each marked `file` or `directory` in its meta.
+  // Every file in the realm, as decoded paths relative to its root. The realm
+  // answers a directory URL with a JSON:API document whose relationships are
+  // its entries, each marked `file` or `directory` in its meta.
   async listFiles(realmUrl: string): Promise<string[]> {
     realmUrl = ensureTrailingSlash(realmUrl);
+    let realm = realmPaths(realmUrl);
     let walk = async (url: string): Promise<string[]> => {
       let response = await this.#fetch(realmUrl, url, {
         headers: { accept: MIME.jsonApi },
@@ -283,7 +301,7 @@ export class RealmClient {
         if (entry.meta?.kind === 'directory') {
           paths.push(...(await walk(related)));
         } else {
-          paths.push(related.slice(realmUrl.length));
+          paths.push(realm.local(rri(related)));
         }
       }
       return paths;

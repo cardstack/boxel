@@ -235,7 +235,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
 
           await this.args.createCard?.(
             this.config.taskSource,
-            new URL(this.config.taskSource.module),
+            this.config.taskSource.module,
             {
               realmURL: this.args.realmURL,
               doc,

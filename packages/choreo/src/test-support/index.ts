@@ -18,8 +18,9 @@
  *
  * `setupChoreo()` is the one setup call a Choreo suite makes. It is
  * `setupMotion()`, and Choreo's document-wide state — the beacon registry, the
- * far-match barrier, the gesture samples — is reset alongside glimmer-motion's
- * own, because loading this module adds those resets to `resetMotion()`.
+ * far-match barrier, the gesture samples, the run clock's once-a-page warning
+ * — is reset alongside glimmer-motion's own, because loading this module adds
+ * those resets to `resetMotion()`.
  *
  * They are document-wide by design: a beacon in the chrome has to be visible to
  * a region in an outlet, and the barrier exists to see across regions. That is
@@ -38,11 +39,12 @@ import { frame, visualElementStore } from 'motion-dom';
 import { resetBeacons } from '../beacons.ts';
 import { resetBarrier } from '../far.ts';
 import { resetGestures } from '../gesture.ts';
-import { activeRuns } from '../run.ts';
+import { activeRuns, resetRunWarnings } from '../run.ts';
 
 registerMotionReset(resetBeacons);
 registerMotionReset(resetGestures);
 registerMotionReset(resetBarrier);
+registerMotionReset(resetRunWarnings);
 
 const nextFrame = () =>
   new Promise<void>((resolve) => frame.postRender(() => resolve()));
