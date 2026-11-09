@@ -4,5 +4,5 @@ Design notes shared by **Panel**, **Toolbar**, **Tooltip**, **Skeleton**, **Pagi
 
 Surfaces, the panel signature, navigation.
 Translated from pretui-design-system (components/structure + css/structure.css).
-Realm adaptations: Tooltip is CSS-only (hover/focus-within — prerender-safe);
+Realm adaptations: Tooltip is a manual popover, placed only while open;
 Menu closes via backdrop, not a document listener.

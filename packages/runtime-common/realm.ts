@@ -298,7 +298,10 @@ import type {
   ReadPlan,
   RunOperationOptions,
 } from './card-operations/dispatch.ts';
-import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   actingUserResolver,
@@ -348,6 +351,7 @@ import {
   type TargetRealm,
 } from './card-operations/explain.ts';
 import type { CallApiSender } from './card-operations/call-api.ts';
+import { requestDefinitionLookup } from './card-operations/request-definition-lookup.ts';
 import {
   assertTravelsInEnvelope,
   assertVersionableEntry,
@@ -442,7 +446,7 @@ import {
   getFileWithFallbacks,
   type TextFileRef,
 } from './stream.ts';
-import { transpileJS } from './transpile.ts';
+import { TRANSPILE_VERSION, transpileJS } from './transpile.ts';
 import { moduleSchemaChanged } from './module-schema-change.ts';
 import { recordModuleCompile } from './module-compile-stats.ts';
 import type {
@@ -1299,7 +1303,11 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // previous generation, and the index event that follows the swap refreshes
 // live clients.
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
-const MODULE_ETAG_VARIANT = 'module';
+// Carries the transpiler version, so compiled output stored or cached under an
+// earlier version no longer matches the validator a request builds and is
+// compiled over. A realm adds its canonical name, which its compiled output
+// names its modules by.
+const MODULE_ETAG_VARIANT = `module-v${TRANSPILE_VERSION}`;
 
 // A compile this long holds up every other request the process has, so it is
 // logged at info rather than debug.
@@ -2884,6 +2892,12 @@ export class Realm {
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
+  // The definition lookup an operation reads through: a cache miss renders at
+  // user priority, ahead of background re-index work, and a render that does
+  // not finish in time refuses with a retryable 503 rather than holding the
+  // request open. See `requestDefinitionLookup`. One instance for the realm's
+  // lifetime, since the gate and the named queries key maps on it.
+  #requestDefinitionLookup: ReturnType<typeof requestDefinitionLookup>;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #directoryViewRefresher = new DirectoryViewRefresher(
     async (directory) => {
@@ -2976,6 +2990,8 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
+  #canonicalPaths: RealmPaths;
+  #moduleEtagVariant: string;
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
   #policyWriteAuditor: PolicyWriteAuditor | undefined;
@@ -3148,6 +3164,7 @@ export class Realm {
   constructor(
     {
       url,
+      canonicalName,
       adapter,
       secretSeed,
       dbAdapter,
@@ -3170,6 +3187,12 @@ export class Realm {
       history,
     }: {
       url: string;
+      // The name the realm's resources have wherever they are referred to
+      // (ADR 002): its registered prefix, such as `@cardstack/catalog/`, or
+      // its own URL when it has none. It is constant for the realm, so the
+      // identities its compiled modules carry are written in it, whatever
+      // URL a client reaches the realm by.
+      canonicalName: RealmIdentifier;
       adapter: RealmAdapter;
       secretSeed: string;
       dbAdapter: DBAdapter;
@@ -3223,6 +3246,8 @@ export class Realm {
     opts?: Options,
   ) {
     this.paths = new RealmPaths(new URL(url), virtualNetwork);
+    this.#canonicalPaths = new RealmPaths(canonicalName);
+    this.#moduleEtagVariant = `${MODULE_ETAG_VARIANT}-${canonicalName}`;
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
@@ -3312,6 +3337,9 @@ export class Realm {
 
     // Wrap to retain realm context for definition lookups
     this.#definitionLookup = definitionLookup.forRealm(this);
+    this.#requestDefinitionLookup = requestDefinitionLookup(
+      this.#definitionLookup,
+    );
 
     this.__fetchForTesting = _fetch;
 
@@ -8123,7 +8151,7 @@ export class Realm {
     if (!this.#operationCore) {
       this.#operationCore = {
         realmURL: this.url,
-        definitionLookup: this.#definitionLookup,
+        definitionLookup: this.#requestDefinitionLookup,
         indexQueryEngine: this.#realmIndexQueryEngine,
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
@@ -8613,7 +8641,7 @@ export class Realm {
           if (!isResolvedCodeRef(absolute)) {
             return undefined;
           }
-          return await this.#definitionLookup.lookupDefinition(absolute);
+          return await this.#requestDefinitionLookup.lookupDefinition(absolute);
         },
         // The same parse every card response reads its realm info from, minus
         // the half that response carries. An executor never opens the realm's
@@ -9981,7 +10009,7 @@ export class Realm {
         await this.#fileFingerprint(fileRef),
         fileRef.lastModifiedMs ?? fileRef.lastModified,
       ) ?? fileRef.lastModified,
-      MODULE_ETAG_VARIANT,
+      this.#moduleEtagVariant,
     );
     if (etag && request.headers.get('if-none-match') === etag) {
       let headers: Record<string, string> = {
@@ -10070,7 +10098,7 @@ export class Realm {
         await this.#fileFingerprint(fileRef),
         fileRef.lastModifiedMs ?? fileRef.lastModified,
       ) ?? fileRef.lastModified,
-      MODULE_ETAG_VARIANT,
+      this.#moduleEtagVariant,
     );
     // What the caller asked for is served from here on, so a caller who isn't
     // signed in is counted against the realm's limit for it, a cache hit
@@ -10673,7 +10701,13 @@ export class Realm {
       }
       this.#transpileCallCount += 1;
       compileStart = performance.now();
-      transpiled = await transpileJS(source, debugFilename);
+      // The module's exported classes are tagged with its canonical
+      // identifier, without the executable extension.
+      transpiled = await transpileJS(source, debugFilename, {
+        moduleIdentifier: trimExecutableExtension(
+          this.#canonicalPaths.fileRRI(fileRef.path),
+        ),
+      });
     } catch (err: any) {
       // A compile that fails can hold the thread as long as one that
       // succeeds, so it is recorded too. Nothing is recorded when the failure
@@ -16197,10 +16231,16 @@ export class Realm {
           if (!isOperationFailure(err)) {
             throw err;
           }
+          // A definition the policy names that is not indexed yet is told to
+          // this caller, who may not read the realm, without naming it.
+          let error =
+            err.error.code === 'target-not-indexed'
+              ? refusalForNonReader(err.error)
+              : err.error;
           return createResponse({
-            body: JSON.stringify(errorsDocument(err.error), null, 2),
+            body: JSON.stringify(errorsDocument(error), null, 2),
             init: {
-              status: err.error.status,
+              status: error.status,
               headers: { 'content-type': SupportedMimeType.CardJson },
             },
             requestContext,
@@ -17533,13 +17573,24 @@ export class Realm {
   // card here does. `cardURL` is taken in this realm's own spelling of its
   // URL, which is the one the declaration is resolved against.
   async unshareableFormatsFor(cardURL: URL): Promise<PrerenderedHtmlFormat[]> {
-    let { unshareableFormats } = await readPlan(
-      this.operationCore,
-      cardURL,
-      undefined,
-      this.#readPlanByURL,
-    );
-    return unshareableFormats;
+    try {
+      let { unshareableFormats } = await readPlan(
+        this.operationCore,
+        cardURL,
+        undefined,
+        this.#readPlanByURL,
+      );
+      return unshareableFormats;
+    } catch (err: unknown) {
+      // A type whose definition is not indexed yet withholds every format, as
+      // a type that cannot be resolved does: nothing can say which of its
+      // formats it withholds, and the page is served without markup rather
+      // than refused.
+      if (isOperationFailure(err) && err.error.code === 'target-not-indexed') {
+        return [...PRERENDERED_HTML_FORMATS];
+      }
+      throw err;
+    }
   }
 
   // CS-10054: read host routing rules from the indexed RealmConfig card.
@@ -17743,8 +17794,9 @@ export class Realm {
     }
     let chain: string[];
     try {
-      chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-        .types;
+      chain = (
+        await this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef)
+      ).types;
     } catch {
       return [];
     }
@@ -17817,8 +17869,9 @@ export class Realm {
       let chain = chains.get(key);
       if (!chain) {
         try {
-          chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-            .types;
+          chain = (
+            await this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef)
+          ).types;
         } catch {
           chain = [];
         }
@@ -17908,7 +17961,7 @@ export class Realm {
           : undefined;
       },
       lookupDefinitionEntry: (codeRef) =>
-        this.#definitionLookup.lookupDefinitionEntry(codeRef),
+        this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef),
       toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
       isPolicyCard: (types) => this.#isPolicyCard(types),
       // The index and the definition cache record an adoption chain in this

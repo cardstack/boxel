@@ -52,6 +52,54 @@ test("another workspace package's source may not", () => {
   );
 });
 
+test('the base realm, the host and runtime-common may not', () => {
+  for (let path of [
+    ['base', 'card-api.gts'],
+    ['host', 'app', 'app.ts'],
+    ['runtime-common', 'index.ts'],
+  ]) {
+    assert.match(
+      refusal(join(PACKAGE_ROOT, '..', ...path)) ?? '',
+      /is from a package not in the import allowlist$/,
+      path.join('/'),
+    );
+  }
+});
+
+test("Pret UI, boxel-ui and boxel-icons' build may ship", () => {
+  for (let path of [
+    ['pretui', 'components', 'accordion.gts'],
+    ['boxel-ui', 'src', 'components', 'accordion', 'index.gts'],
+    [
+      'boxel-icons',
+      'dist',
+      '@cardstack',
+      'boxel-icons',
+      'v1',
+      'icons',
+      'key-round.js',
+    ],
+  ]) {
+    assert.equal(
+      refusal(join(PACKAGE_ROOT, '..', ...path)),
+      undefined,
+      path.join('/'),
+    );
+  }
+});
+
+test('a package a listed package depends on may not, unless it is listed', () => {
+  // boxel-icons depends on `@embroider/addon-shim`, which no shipped module
+  // needs, so the list doesn't name it.
+  let boxelIcons = createRequire(
+    join(PACKAGE_ROOT, '..', 'boxel-icons', 'package.json'),
+  );
+  assert.match(
+    refusal(boxelIcons.resolve('@embroider/addon-shim')) ?? '',
+    /^@embroider\/addon-shim@\S+ .* is from a package not in the import allowlist$/,
+  );
+});
+
 test('only the bundler modules named may ship', () => {
   assert.equal(refusal('\0rolldown/runtime.js'), undefined);
   assert.match(refusal('\0some-plugin/virtual.js') ?? '', /is not allowed/);

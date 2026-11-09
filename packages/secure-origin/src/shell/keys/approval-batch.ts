@@ -37,28 +37,39 @@ export interface SlotOption {
   covers: string[];
 }
 
-// Each slot token the batch's operations use, in the order they first appear.
-export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
+// Each slot token the batch's operations use, in the order they first appear,
+// with what can fill it when the batch is approved for `use`.
+export function slotChoices(
+  batch: ApprovalBatch,
+  use: ApprovalUse,
+): SlotChoice[] {
   let choices: SlotChoice[] = [];
   for (let slot of allSlots(batch)) {
     if (choices.some((c) => c.slot === slot.slot)) {
       continue;
     }
     let kind = slot.key;
+    // One choice fills the slot in every operation of the batch, so it offers
+    // only the keys the realm server names as filling each of them.
+    let fillers = new Set(batch.fillers?.[use]?.[slot.slot] ?? []);
     let options: SlotOption[] =
       kind === 'userKey'
-        ? batch.keys.map(({ id, name, covers, state }) => ({
-            id,
-            name,
-            covers,
-            ...(state === 'rejected' ? { rejected: true } : {}),
-          }))
-        : batch.shares.map(({ id, label, keyName, covers }) => ({
-            id,
-            name: label,
-            detail: keyName,
-            covers,
-          }));
+        ? batch.keys
+            .filter((key) => fillers.has(key.id))
+            .map(({ id, name, covers, state }) => ({
+              id,
+              name,
+              covers,
+              ...(state === 'rejected' ? { rejected: true } : {}),
+            }))
+        : batch.shares
+            .filter((share) => fillers.has(share.id))
+            .map(({ id, label, keyName, covers }) => ({
+              id,
+              name: label,
+              detail: keyName,
+              covers,
+            }));
     // Those already allowed where the batch sends come first.
     options = [...options].sort(
       (a, b) =>
@@ -313,7 +324,8 @@ export const INTERACTIVE_CONFIRMATION = {
 
 // The batch as the page shows it for `use`. An operation approved for
 // pipelines only needs approving only for interactive use, so for pipelines
-// it is left out.
+// it is left out. The realm server leaves out the same operations when it
+// names what fills each slot for pipelines (`fillers.pipelines`).
 export function batchFor(
   batch: ApprovalBatch,
   use: ApprovalUse,

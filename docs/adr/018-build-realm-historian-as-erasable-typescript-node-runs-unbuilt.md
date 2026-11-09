@@ -77,7 +77,7 @@ exports. The ESLint rules move both failures to the lint step, which finds
 them on every PR, and the realm server's own files are held to the same
 rules by the same configuration. TypeScript's `erasableSyntaxOnly` and
 `verbatimModuleSyntax` flags would catch the same two failures in the
-type-check, and the secure origin's pages set them (ADR 008 §1.10). They
+type-check, and the secure origin's pages set them (ADR 019 §1.10). They
 apply to every file in the type-check program, though, and this package's
 program reaches `packages/base`, `packages/boxel-ui` and `packages/pretui`
 through `@cardstack/runtime-common`. `verbatimModuleSyntax` rejects every
@@ -139,7 +139,7 @@ whose transitive dependencies the package carries without loading them.
 
 ## 4. Sources
 
-- ADR 008 §1.10, the same rule for `packages/secure-origin`.
+- ADR 019 §1.10, the same rule for `packages/secure-origin`.
 - `packages/realm-server/tsconfig.json`, the module configuration to copy,
   and `eslint/erasable-syntax-selectors.cjs` with the
   `@typescript-eslint/parameter-properties` rule in `.eslintrc.js`, the

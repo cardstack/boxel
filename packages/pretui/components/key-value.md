@@ -32,7 +32,7 @@ Element: HTMLDListElement
 
 **The keys' typography has its own properties**, `--pretui-kv-label-*` (see Theming). Set them on the KeyValue, through a class, or on any ancestor; they win over `@labelStyle`. A caller restyles the keys this way rather than reaching into the `<dt>` with `:deep()`.
 
-**`<:value>` is the escape hatch that makes it useful.** `@items` types values as strings, but the block yields the whole item, so a row's value can be a **Token**, a **StatusChip**, an **Avatar** or a link. Note the type still says `string` — the block is how you get past that, and the item's own `value` property is then effectively a key you read yourself.
+**`<:value>` is the escape hatch that makes it useful.** `@items` types values as strings, but the block yields the whole item, so a row's value can be a **Token**, a **StatusChip**, an **Avatar** or a link. An item may carry fields of its own beyond `key` and `value` (a code, an id, a flag), and the block is given the item typed as passed, so it reads them without a cast.
 
 ## Prior art
 

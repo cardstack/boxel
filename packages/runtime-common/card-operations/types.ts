@@ -17,6 +17,7 @@ import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from '../prerendered-html-format.ts';
+import type { CallApiKeyKind } from '../call-api-key-kind.ts';
 import type {
   BaseOperationName,
   CallApiMethod,
@@ -1490,6 +1491,9 @@ export interface CallApiSlot {
   // The dotted path to the string that carries it — `headers.authorization`,
   // `json.auth.token`.
   at: string;
+  // The kind of key the declaration says fills it. Absent, the kinds that fit
+  // follow from where it stands (`slotKeyKinds`).
+  keyKind?: CallApiKeyKind;
 }
 
 export type CallApiBodyTemplate =
@@ -1802,6 +1806,55 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
   return err instanceof OperationFailure;
 }
 
+// The answer of a definition read, or undefined when the type cannot be
+// resolved: its module is missing or fails to build, or names no such export.
+// A refusal the read itself raised passes through instead. Such a refusal
+// names its own answer — a definition the realm has not produced yet, to be
+// retried — and an `undefined` in its place would be reported as a type that
+// does not exist.
+export async function unresolvableAsUndefined<T>(
+  read: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await read();
+  } catch (err: unknown) {
+    if (isOperationFailure(err)) {
+      throw err;
+    }
+    return undefined;
+  }
+}
+
+// How long a caller turned away over a definition that is still being built is
+// told to wait before it tries again. A definition render that misses the
+// cache takes a few seconds; longer than that and the caller is only waiting
+// on the queue.
+export const DEFINITION_RETRY_AFTER_SECONDS = 5;
+
+// A refusal over a type definition the realm cannot produce yet: its module is
+// being rebuilt, or its render is queued behind other work and did not finish
+// within the request's deadline. Nothing was done, and nothing the caller sent
+// is wrong, so it carries `target-not-indexed` — the code that says waiting
+// resolves it — as a 503 with `meta.retryAfterSeconds`, which the operations
+// response turns into a `Retry-After`.
+export function definitionNotReady(
+  id: string | undefined,
+  codeRef: unknown,
+  reason = 'is not available yet',
+): OperationFailure {
+  return new OperationFailure({
+    ...(id ? { id } : {}),
+    status: 503,
+    code: 'target-not-indexed',
+    title: 'Definition not ready',
+    detail: `the definition of ${JSON.stringify(codeRef)} ${reason}; retry shortly`,
+    meta: {
+      awaitingIndex: true,
+      retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+    },
+  });
+}
+
 // A refusal as a caller the realm ACL would not let read the realm is told it.
 //
 // Such a caller is not told which cards exist. A card no grant admits and a
@@ -1820,11 +1873,30 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
 // the predicate throws. A caller who may read the realm is told it as the 500
 // it is.
 //
+// A refusal over something not indexed yet keeps its status and its retry
+// hint and loses the rest: the detail of a definition's names its type, which
+// is the realm's module path and export name, and the id names a card. Such a
+// caller may be told to wait, not what they are waiting for.
+//
 // A refusal of any other kind passes through. Such a caller is refused, as
 // the target is resolved, every invocation the gate did not admit outright, a
 // write whose predicate is still to run included. So nothing past that point
 // is about a target they were not admitted to.
 export function refusalForNonReader(error: OperationError): OperationError {
+  if (error.code === 'target-not-indexed') {
+    let { entry, awaitingIndex, retryAfterSeconds } = error.meta ?? {};
+    return {
+      status: error.status,
+      code: error.code,
+      title: error.title,
+      detail: 'what this request needs is not indexed yet; retry shortly',
+      meta: {
+        ...(entry !== undefined ? { entry } : {}),
+        ...(awaitingIndex !== undefined ? { awaitingIndex } : {}),
+        ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+      },
+    };
+  }
   if (
     error.code !== 'target-not-found' &&
     error.code !== 'operation-not-permitted' &&

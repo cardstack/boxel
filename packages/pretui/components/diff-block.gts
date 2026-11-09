@@ -4,6 +4,7 @@ import CheckIcon from '@cardstack/boxel-icons/check';
 import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import { DiffStat } from './diff-stat';
 import { languageForFilename, tokenizeCode } from './code-block';
@@ -19,9 +20,12 @@ export interface DiffLine {
   n?: number;
 }
 
-// Above this many cells the middle of a diff is not aligned line by line: it
-// reads as everything removed, then everything added. A file the runner
+// The middle of a diff is aligned line by line while it takes at most this
+// many changed lines (costing the file's length times the changes), or while
+// it fits a longest-common-subsequence table of this many cells. Past both
+// it reads as everything removed, then everything added: a file the runner
 // rewrites wholesale says so honestly, and the tab never stalls on it.
+const MAX_DIFF_EDITS = 2_000;
 const MAX_DIFF_CELLS = 4_000_000;
 
 function splitLines(text: string | undefined): string[] {
@@ -36,14 +40,136 @@ function splitLines(text: string | undefined): string[] {
   return lines;
 }
 
+// The shortest edit from `a` to `b` (Myers' O((N+M)D) algorithm), as kept,
+// removed and added lines; undefined when it takes more than MAX_DIFF_EDITS
+// changed lines.
+function alignLines(a: string[], b: string[]): DiffLine[] | undefined {
+  let n = a.length;
+  let m = b.length;
+  // every edit script takes at least |n - m| changes
+  if (Math.abs(n - m) > MAX_DIFF_EDITS) {
+    return undefined;
+  }
+  let max = Math.min(n + m, MAX_DIFF_EDITS);
+  let offset = max + 1;
+  // v[offset + k]: the furthest x reached on diagonal k (k = x - y)
+  let v = new Int32Array(2 * max + 3);
+  // trace[d]: v after d edits, for diagonals -d..d
+  let trace: Int32Array[] = [];
+  let edits = -1;
+  for (let d = 0; d <= max && edits < 0; d++) {
+    for (let k = -d; k <= d; k += 2) {
+      let down =
+        k === -d || (k !== d && v[offset + k - 1]! < v[offset + k + 1]!);
+      let x = down ? v[offset + k + 1]! : v[offset + k - 1]! + 1;
+      let y = x - k;
+      while (x < n && y < m && a[x] === b[y]) {
+        x++;
+        y++;
+      }
+      v[offset + k] = x;
+      if (x >= n && y >= m) {
+        edits = d;
+      }
+    }
+    trace.push(v.slice(offset - d, offset + d + 1));
+  }
+  if (edits < 0) {
+    return undefined;
+  }
+  let reversed: DiffLine[] = [];
+  let x = n;
+  let y = m;
+  for (let d = edits; d > 0; d--) {
+    let prev = trace[d - 1]!;
+    let at = (k: number) => prev[k + d - 1]!;
+    let k = x - y;
+    let down = k === -d || (k !== d && at(k - 1) < at(k + 1));
+    let prevK = down ? k + 1 : k - 1;
+    let prevX = at(prevK);
+    let prevY = prevX - prevK;
+    while (x > prevX && y > prevY) {
+      reversed.push({ text: a[--x]! });
+      y--;
+    }
+    if (down) {
+      reversed.push({ op: 'add', text: b[--y]! });
+    } else {
+      reversed.push({ op: 'del', text: a[--x]! });
+    }
+  }
+  while (x > 0 && y > 0) {
+    reversed.push({ text: a[--x]! });
+    y--;
+  }
+  // in each run of changes a removal reads before the line that replaces it
+  let lines: DiffLine[] = [];
+  let added: DiffLine[] = [];
+  for (let line of reversed.reverse()) {
+    if (line.op === 'add') {
+      added.push(line);
+    } else if (line.op === 'del') {
+      lines.push(line);
+    } else {
+      lines.push(...added.splice(0), line);
+    }
+  }
+  lines.push(...added);
+  return lines;
+}
+
+// The same alignment by longest common subsequence, for a middle with more
+// changes than MAX_DIFF_EDITS that still fits MAX_DIFF_CELLS.
+function alignByTable(a: string[], b: string[]): DiffLine[] | undefined {
+  let n = a.length;
+  let m = b.length;
+  if (n * m > MAX_DIFF_CELLS) {
+    return undefined;
+  }
+  // lcs[i][j]: the longest common run of a[i..] and b[j..]
+  let width = m + 1;
+  let lcs = new Uint32Array((n + 1) * width);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i * width + j] =
+        a[i] === b[j]
+          ? lcs[(i + 1) * width + j + 1]! + 1
+          : Math.max(lcs[(i + 1) * width + j]!, lcs[i * width + j + 1]!);
+    }
+  }
+  let lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) {
+      lines.push({ text: a[i]! });
+      i++;
+      j++;
+    } else if (
+      i < n &&
+      (j === m || lcs[(i + 1) * width + j]! >= lcs[i * width + j + 1]!)
+    ) {
+      // a removal reads before the line that replaces it
+      lines.push({ op: 'del', text: a[i]! });
+      i++;
+    } else {
+      lines.push({ op: 'add', text: b[j]! });
+      j++;
+    }
+  }
+  return lines;
+}
+
 /**
  * The lines that changed from `before` to `after`, with `context` unchanged
  * lines around each change and a `skip` line for each run left out. An
  * absent `before` is a new file: every line is added.
  *
  * Common lines at either end are trimmed before the middle is aligned by
- * longest common subsequence, so an edit to a long file costs its changed
- * region, not the whole file.
+ * the shortest edit between them, so an edit to a long file costs its
+ * length times the lines that changed, not its length squared. A middle
+ * with more changes than that allows is aligned by a longest common
+ * subsequence table while the table is small enough.
  */
 export function lineDiff(
   before: string | undefined,
@@ -63,48 +189,13 @@ export function lineDiff(
     endA--;
     endB--;
   }
-  let middle: DiffLine[] = [];
-  let n = endA - start;
-  let m = endB - start;
-  if (n * m > MAX_DIFF_CELLS) {
-    for (let i = start; i < endA; i++) {
-      middle.push({ op: 'del', text: a[i]! });
-    }
-    for (let j = start; j < endB; j++) {
-      middle.push({ op: 'add', text: b[j]! });
-    }
-  } else {
-    // lcs[i][j]: the longest common run of a[start+i..] and b[start+j..]
-    let width = m + 1;
-    let lcs = new Uint32Array((n + 1) * width);
-    for (let i = n - 1; i >= 0; i--) {
-      for (let j = m - 1; j >= 0; j--) {
-        lcs[i * width + j] =
-          a[start + i] === b[start + j]
-            ? lcs[(i + 1) * width + j + 1]! + 1
-            : Math.max(lcs[(i + 1) * width + j]!, lcs[i * width + j + 1]!);
-      }
-    }
-    let i = 0;
-    let j = 0;
-    while (i < n || j < m) {
-      if (i < n && j < m && a[start + i] === b[start + j]) {
-        middle.push({ text: a[start + i]! });
-        i++;
-        j++;
-      } else if (
-        i < n &&
-        (j === m || lcs[(i + 1) * width + j]! >= lcs[i * width + j + 1]!)
-      ) {
-        // a removal reads before the line that replaces it
-        middle.push({ op: 'del', text: a[start + i]! });
-        i++;
-      } else {
-        middle.push({ op: 'add', text: b[start + j]! });
-        j++;
-      }
-    }
-  }
+  let was = a.slice(start, endA);
+  let now = b.slice(start, endB);
+  let middle = alignLines(was, now) ??
+    alignByTable(was, now) ?? [
+      ...was.map((text) => ({ op: 'del' as const, text })),
+      ...now.map((text) => ({ op: 'add' as const, text })),
+    ];
   if (!middle.some((line) => line.op)) {
     return [];
   }
@@ -156,7 +247,6 @@ export function lineDiff(
   }
   return out;
 }
-
 
 /** which file a line number counts in: the old file for a removed line, the
  * new file for an added or unchanged one */
@@ -348,9 +438,7 @@ export class DiffBlock extends Component<DiffBlockSignature> {
   }
   /** the hunk that starts at a line index, for its bar */
   private hunkAt(index: number): DiffHunk | undefined {
-    return this.reviews
-      ? this.hunks.find((h) => h.start === index)
-      : undefined;
+    return this.reviews ? this.hunks.find((h) => h.start === index) : undefined;
   }
   private hunkOf(index: number): DiffHunk | undefined {
     return this.hunks.find((h) => index >= h.start && index <= h.end);
@@ -542,6 +630,17 @@ export class DiffBlock extends Component<DiffBlockSignature> {
           };
     });
   }
+  // the gutter fits the widest number in the whole diff, so the column
+  // lines up and keeps its width when the diff expands
+  @cached
+  get numberStyle() {
+    let widest = 0;
+    for (let line of this.args.lines) {
+      widest = Math.max(widest, line.n ?? 0);
+    }
+    let digits = Math.max(3, String(widest).length);
+    return htmlSafe(`--pretui-diff-n-width: ${digits}ch`);
+  }
   get added(): number {
     return this.args.lines.filter((line) => line.op === 'add' && !line.skip)
       .length;
@@ -568,6 +667,7 @@ export class DiffBlock extends Component<DiffBlockSignature> {
       class='pretui-diff'
       data-language={{this.language}}
       data-numbered={{if @lineNumbers 'true'}}
+      style={{if @lineNumbers this.numberStyle}}
       data-wrap={{if @wrap 'true'}}
       data-view={{if this.split 'split' 'unified'}}
       {{this.watchWidth @view}}
@@ -951,9 +1051,12 @@ export class DiffBlock extends Component<DiffBlockSignature> {
         /* the number gutter: the line's place in the file, out of the way */
         .pretui-diff-n {
           display: inline-block;
-          width: 3ch;
+          min-width: var(--pretui-diff-n-width, 3ch);
           margin-inline-end: 1ch;
           text-align: end;
+          /* a number never breaks, even where long lines wrap */
+          white-space: nowrap;
+          overflow-wrap: normal;
           /* muted, not subtle: the number sits on the add and remove tints,
              where the subtle ink falls under 4.5:1 */
           color: var(--muted-foreground);

@@ -46,6 +46,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { getPromptParts } from '@cardstack/runtime-common/ai';
+import { restoreExternalFields } from '@cardstack/runtime-common/ai/external-fields';
 import {
   type AppBoxelDashboardContent,
   type DashboardAgent,
@@ -1271,13 +1272,9 @@ export default class MatrixService extends Service {
   // earlier write from another tab's write.
   private dashboardEchoesPending: string[] = [];
 
-  // Nothing renders the state while the flag is off, so no request is made.
   // A failed read must not keep the user from logging in: the state starts
   // empty and the next sync echo or write fills it.
   private async fetchDashboardStateAtBoot(): Promise<unknown> {
-    if (!ENV.featureFlags?.DASHBOARD_V2) {
-      return null;
-    }
     try {
       return await this.client.getAccountDataFromServer(
         APP_BOXEL_DASHBOARD_EVENT_TYPE,
@@ -1917,7 +1914,7 @@ export default class MatrixService extends Service {
   // lifetime. The realm server emits it to the owner's session room whenever
   // their set of accessible realms changes server-side (create/delete/archive/
   // unarchive) — including from another tab, the CLI, or an AI agent — so a
-  // session viewing the workspace chooser updates live. Wired from the
+  // session viewing the dashboard updates live. Wired from the
   // post-login path rather than the constructor so merely constructing this
   // service never forces the lazy RealmServerService to instantiate (and fire
   // its boot fetches). The subscription lives on RealmServerService and
@@ -1934,7 +1931,7 @@ export default class MatrixService extends Service {
   }
 
   // React to a realm-server `realms-list-updated` push: re-derive the
-  // available-realms list so a session viewing the workspace chooser reflects a
+  // available-realms list so a session viewing the dashboard reflects a
   // realm created/deleted/archived/unarchived out of band (another tab, the
   // CLI, an AI agent) without a reload. Only trusted-server sessions need this —
   // their list is assembled authoritatively from `_realm-auth`, so an
@@ -3515,6 +3512,9 @@ export default class MatrixService extends Service {
       }
     }
 
+    // An event too large for Matrix carries some fields in Matrix media; they
+    // are put back before anything reads the event.
+    await this.restoreExternalFields(event);
     await this.addRoomEvent(event, oldEventId);
 
     // Drop the persisted pending entry only once matrix-js-sdk has finalized
@@ -3540,6 +3540,31 @@ export default class MatrixService extends Service {
       event.content?.isStreamingFinished
     ) {
       this.toolService.queueEventForToolProcessing(event);
+    }
+  }
+
+  private async restoreExternalFields(event: TempEvent) {
+    let errors = await restoreExternalFields(event.content, async (mxcUrl) => {
+      let url = this.client.mxcUrlToHttp(
+        mxcUrl,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      );
+      if (!url) {
+        throw new Error(`no download URL for ${mxcUrl}`);
+      }
+      let response = await this.fetchMatrixHostedFile(url);
+      if (!response.ok) {
+        throw new Error(`download failed with status ${response.status}`);
+      }
+      return await response.text();
+    });
+    for (let error of errors) {
+      console.error(`event ${event.event_id}: ${error}`);
     }
   }
 

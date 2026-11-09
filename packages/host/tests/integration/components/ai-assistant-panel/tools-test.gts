@@ -29,6 +29,7 @@ import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
+  APP_BOXEL_EXTERNAL_FIELDS_KEY,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
@@ -4518,17 +4519,22 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   });
 
   // A tool call the bot already ran, and the result card it stored in the
-  // room for it.
+  // room for it. With `inMedia`, the request is carried in Matrix media, as
+  // an event over the size limit carries it.
   function simulateToolResult(
     roomId: string,
     {
       requestId,
       toolName,
       resultDoc,
+      args = {},
+      inMedia = false,
     }: {
       requestId: string;
       toolName: string;
       resultDoc: LooseSingleCardDocument;
+      args?: Record<string, unknown>;
+      inMedia?: boolean;
     },
   ) {
     let resultUrl = `mxc://mock-server/${requestId}-result`;
@@ -4541,14 +4547,33 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       }
       return resultDoc;
     };
+    let toolRequests = [
+      { id: requestId, name: toolName, arguments: JSON.stringify(args) },
+    ];
+    let requestsField: Record<string, unknown> = {
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
+    };
+    if (inMedia) {
+      let requestsUrl = `mxc://mock-server/${requestId}-requests`;
+      let mediaId = requestsUrl.slice('mxc://mock-server/'.length);
+      let originalFetch =
+        matrixService.fetchMatrixHostedFile.bind(matrixService);
+      matrixService.fetchMatrixHostedFile = async (url) =>
+        url.endsWith(`/${mediaId}`)
+          ? new Response(JSON.stringify(toolRequests))
+          : originalFetch(url);
+      requestsField = {
+        [APP_BOXEL_EXTERNAL_FIELDS_KEY]: {
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: requestsUrl,
+        },
+      };
+    }
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: `Running ${toolName}`,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
-        { id: requestId, name: toolName, arguments: '{}' },
-      ],
+      ...requestsField,
     });
     simulateRemoteMessage(
       roomId,
@@ -4653,6 +4678,101 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-tool-result-container]')
       .doesNotExist('the correctness result card is not rendered');
+  });
+
+  test('a check of several targets lists its errors and counts the rest', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let target = (n: number) => `${testRealmURL}Product/${n}`;
+
+    simulateToolResult(roomId, {
+      requestId: 'batched-correctness-check',
+      toolName: 'checkCorrectness',
+      args: {
+        description: 'Check 3 cards and 1 file',
+        attributes: {
+          targets: [
+            { type: 'file', ref: `${testRealmURL}product.gts` },
+            { type: 'card', ref: target(1) },
+            { type: 'card', ref: target(2) },
+            { type: 'card', ref: target(3) },
+          ],
+        },
+      },
+      resultDoc: baseCommandResultDoc('CorrectnessResultCard', {
+        correct: false,
+        errors: [`${target(2)}: price must be a number`],
+        warnings: [],
+        targetResults: [
+          {
+            targetType: 'card',
+            targetRef: target(2),
+            errors: [`${target(2)}: price must be a number`],
+            warnings: [],
+          },
+        ],
+        checkedCount: 4,
+        passedCount: 3,
+      }),
+    });
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-tool-call-apply="applied-with-error"]',
+    );
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row-toggle]',
+    );
+    await waitFor('[data-test-message-idx="0"] [data-test-check-outcome]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
+      .hasText(
+        'Checked 3 cards and 1 file · errors',
+        'the row counts what it checked',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-check-outcome]')
+      .containsText(
+        `${target(2)}: price must be a number`,
+        'the error is listed',
+      )
+      .containsText(
+        'No errors in the other 2 cards and 1 file',
+        'the passing targets are counted',
+      );
+  });
+
+  test('a check request carried in Matrix media is shown like an inline one', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let target = (n: number) => `${testRealmURL}Product/${n}`;
+
+    simulateToolResult(roomId, {
+      requestId: 'media-correctness-check',
+      toolName: 'checkCorrectness',
+      inMedia: true,
+      args: {
+        description: 'Check 2 cards',
+        attributes: {
+          targets: [
+            { type: 'card', ref: target(1) },
+            { type: 'card', ref: target(2) },
+          ],
+        },
+      },
+      resultDoc: baseCommandResultDoc('CorrectnessResultCard', {
+        correct: true,
+        errors: [],
+        warnings: [],
+        targetResults: [],
+        checkedCount: 2,
+        passedCount: 2,
+      }),
+    });
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row-title]',
+    );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
+      .containsText('Checked 2 cards', 'the request was read from media');
   });
 
   test('a view-visually result shows the image the assistant looked at', async function (assert) {

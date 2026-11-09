@@ -64,7 +64,9 @@
 //   tooltip 80   a tooltip describes whatever is under the pointer, and that
 //                may be an item inside a dropdown or a popover. It is small,
 //                transient and non-interactive, so nothing is lost by it
-//                being the highest non-modal tier.
+//                being the highest non-modal tier. FALLBACK ONLY: Tooltip is
+//                a manual popover in the top layer, so an open tip paints
+//                over the Toaster too, and nothing reads this token.
 //   dialog  90   Dialog and Drawer. FALLBACK ONLY: both use native
 //                `<dialog>` + `showModal()`, which promotes them to the top
 //                layer, above every z-index on the page regardless of value.
@@ -75,7 +77,9 @@
 //                modal — so it is the only tier deliberately above `dialog`.
 //                Toaster's fixed region and SkipLink take it; a bare Toast is
 //                in flow and takes no tier, so whatever positions one owns
-//                its z-index.
+//                its z-index. A z-index can't rise above the top layer, so
+//                Dialog, Drawer, CommandPalette and an open Tooltip still
+//                paint over the Toaster.
 //
 // The numbers are gapped so a host can interleave its own chrome (a global
 // nav at 65, an assistant panel at 85) without editing Pretui.

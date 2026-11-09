@@ -1,4 +1,4 @@
-import { modifier } from './modifier.ts';
+import { modifier } from 'ember-modifier';
 
 // Makes a textarea as tall as what it holds, lines it wraps included, where
 // the browser doesn't already size it by its content (`field-sizing:
@@ -8,7 +8,10 @@ import { modifier } from './modifier.ts';
 // to. The height is set through the CSSOM, which the secure origin's style
 // policy allows.
 export const fitContent = modifier(
-  (element: HTMLTextAreaElement, _value: string | null | undefined) => {
+  (element: HTMLTextAreaElement, positional: [string | null | undefined]) => {
+    // Read so that a change to the value runs the modifier again: a
+    // function-based modifier tracks only the arguments it reads.
+    void positional[0];
     if (
       getComputedStyle(element).getPropertyValue('field-sizing') === 'content'
     ) {

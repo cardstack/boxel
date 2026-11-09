@@ -1,0 +1,24 @@
+<!doctype html>
+<!--
+  The build probe: a page no user is sent to, which the realm server never
+  serves. It renders one Pret UI component that wraps boxel-ui and one
+  boxel-icons icon, so the production build compiles Pret UI and boxel-ui from
+  their source and reads boxel-icons' build exactly as a page drawn from them
+  will, the import allowlist and the build record see what that ships, and the
+  realm server's policy test loads it under the origin's policy.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Boxel</title>
+    <link
+      rel="stylesheet"
+      href="/__SECURE_ORIGIN_BASE__/variables.css"
+      vite-ignore
+    />
+    <script type="module" src="./src/probe/main.ts"></script>
+  </head>
+  <body></body>
+</html>

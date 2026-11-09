@@ -33,6 +33,9 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
+import { Alert } from '@cardstack/pretui/components/alert';
+import { EmptyState } from '@cardstack/pretui/components/empty-state';
+
 import {
   deleteKey,
   listBindings,
@@ -53,15 +56,16 @@ import {
   type KeyPolicyNotice,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import RefreshCw from '../../components/icons/refresh-cw.gts';
-import ShareIcon from '../../components/icons/share-2.gts';
-import Trash from '../../components/icons/trash-2.gts';
+import { Button } from '@cardstack/pretui/components/button';
+import RefreshCw from '@cardstack/boxel-icons/refresh-cw';
+import ShareIcon from '@cardstack/boxel-icons/share-2';
+import Trash from '@cardstack/boxel-icons/trash-2';
 import IconPlus from '../../components/icons/icon-plus.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
 import { keySharePath, keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
+import { pageTitle, withWayBack } from './trail.ts';
 
 import AnonymousUseFields, {
   anonymousCapOf,
@@ -109,19 +113,19 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
     {{#if this.state.loadFailed}}
       <LoadFailed
-        @heading='Your keys'
+        @heading={{this.title}}
         @failure={{this.state.loadFailed}}
         @onRetry={{this.retry}}
       />
     {{else}}
-      <EditPage @heading='Your keys' data-test-key-page>
+      <EditPage @heading={{this.title}} data-test-key-page>
         <:intro>Keys you add here are encrypted, and nothing can read them back.
           Cards can send a key only to the places you approve for it.</:intro>
         <:default>
           {{#if this.state.error}}
-            <div class='keys-error' role='alert' data-test-keys-error>
-              {{this.state.error}}
-            </div>
+            <Alert @tone='danger' role='alert'>
+              <span data-test-keys-error>{{this.state.error}}</span>
+            </Alert>
           {{/if}}
           {{#if this.state.loading}}
             <BusyMessage @title='Loading…' />
@@ -176,8 +180,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           {{#unless (eq key.kind 'oauth-connection')}}
                             <Button
                               class='action'
-                              @kind='secondary'
-                              @size='extra-small'
+                              @variant='secondary'
+                              @size='xs'
                               aria-describedby='key-name-{{key.id}}'
                               data-test-key-share
                               {{on 'click' (fn this.share key)}}
@@ -187,8 +191,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                               />Share with Workspace</Button>
                             <Button
                               class='action'
-                              @kind='secondary'
-                              @size='extra-small'
+                              @variant='secondary'
+                              @size='xs'
                               aria-describedby='key-name-{{key.id}}'
                               data-test-key-replace
                               {{on 'click' (fn this.startReplace key)}}
@@ -200,8 +204,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           {{#if (this.usableWithCard key)}}
                             <Button
                               class='action'
-                              @kind='secondary'
-                              @size='extra-small'
+                              @variant='secondary'
+                              @size='xs'
                               aria-describedby='key-name-{{key.id}}'
                               data-test-key-use
                               {{on 'click' (fn this.useWithCard key)}}
@@ -249,14 +253,14 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           <div class='panel-actions'>
                             <Button
                               type='button'
-                              @kind='secondary'
-                              @size='small'
+                              @variant='secondary'
+                              @size='s'
                               {{on 'click' this.cancel}}
                             >Cancel</Button>
                             <Button
                               type='submit'
-                              @kind='primary'
-                              @size='small'
+                              @variant='primary'
+                              @size='s'
                               @disabled={{this.replaceDisabled}}
                               @loading={{this.form.saving}}
                               data-test-key-replace-save
@@ -284,14 +288,14 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           <div class='panel-actions'>
                             <Button
                               type='button'
-                              @kind='secondary'
-                              @size='small'
+                              @variant='secondary'
+                              @size='s'
                               {{on 'click' this.cancel}}
                             >Cancel</Button>
                             <Button
                               type='submit'
-                              @kind='primary'
-                              @size='small'
+                              @variant='primary'
+                              @size='s'
                               @disabled={{this.anonymousUseDisabled}}
                               @loading={{this.form.saving}}
                               data-test-key-anonymous-use-save
@@ -330,14 +334,14 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           <div class='panel-actions'>
                             <Button
                               type='button'
-                              @kind='secondary'
-                              @size='small'
+                              @variant='secondary'
+                              @size='s'
                               {{on 'click' this.cancel}}
                             >Cancel</Button>
                             <Button
                               type='button'
-                              @kind='destructive'
-                              @size='small'
+                              @variant='destructive'
+                              @size='s'
                               @disabled={{this.loadingShares}}
                               @loading={{this.form.saving}}
                               data-test-key-delete-confirm-button
@@ -347,30 +351,30 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                         </div>
                       {{/if}}
                     </div>
-                    <button
-                      type='button'
+                    <Button
                       class='remove'
-                      aria-label='Delete {{key.name}}'
+                      @variant='ghost'
+                      @display='icon'
+                      @icon={{Trash}}
+                      @label='Delete {{key.name}}'
                       data-test-key-delete
                       {{on 'click' (fn this.startDelete key)}}
-                    ><Trash
-                        width='18'
-                        height='18'
-                        aria-hidden='true'
-                      /></button>
+                    >Delete {{key.name}}</Button>
                   </li>
                 {{/each}}
               </ul>
             {{else}}
-              <p class='empty' data-test-key-list-empty>You haven’t added any
-                keys.</p>
+              <EmptyState
+                @size='s'
+                @title='You haven’t added any keys.'
+                data-test-key-list-empty
+              />
             {{/if}}
             <div class='add-actions'>
               <Button
                 class='add-new'
-                @kind='secondary'
-                @size='tall'
-                @rectangular={{true}}
+                @variant='secondary'
+                @size='l'
                 data-test-key-page-add
                 {{on 'click' this.add}}
               ><IconPlus
@@ -381,9 +385,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                 />Add a key</Button>
               <Button
                 class='add-new'
-                @kind='secondary'
-                @size='tall'
-                @rectangular={{true}}
+                @variant='secondary'
+                @size='l'
                 data-test-key-page-connect
                 {{on 'click' this.connect}}
               ><IconPlus
@@ -399,12 +402,6 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     {{/if}}
 
     <style scoped>
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
-      }
       .list {
         list-style: none;
         margin: 0;
@@ -418,28 +415,19 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         gap: var(--boxel-sp-xs);
         align-items: start;
       }
+      /* Icon-only, as tall as the tile's header, with an 18px icon. */
       .remove {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        --pretui-button-h: 4rem;
         width: var(--boxel-icon-lg);
-        height: 4rem;
-        padding: 0;
-        border: 0;
-        border-radius: var(--boxel-border-radius);
-        background: none;
+        font-size: 0.9rem;
         color: var(--muted-foreground);
-        cursor: pointer;
       }
       .remove:focus-visible,
       .remove:hover {
         color: var(--destructive, var(--boxel-danger));
       }
-      .remove:focus-visible {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-      }
       .action {
-        gap: var(--boxel-sp-5xs, 0.25rem);
+        --pretui-button-gap: var(--boxel-sp-5xs, 0.25rem);
       }
       .action-icon {
         width: 0.75rem;
@@ -484,19 +472,13 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
       }
-      .empty {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        color: var(--muted-foreground);
-      }
       .add-actions {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
       }
       .add-new {
-        gap: var(--boxel-sp-3xs);
+        --pretui-button-gap: var(--boxel-sp-3xs);
         width: fit-content;
       }
       .plus {
@@ -504,6 +486,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       }
     </style>
   </template>
+
+  private title = pageTitle('keys');
 
   private state = trackedObject({
     loading: true,
@@ -640,7 +624,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   // it in its fragment.
   private reconnect = (key: UserKey) =>
     navigation.assign(
-      `${pageURL('connect')}#${new URLSearchParams({ reconnect: key.id })}`,
+      withWayBack(
+        `${pageURL('connect')}#${new URLSearchParams({ reconnect: key.id })}`,
+      ),
     );
 
   // Sharing a key into a realm is a change of its own, made on the share
@@ -674,10 +660,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     share: { id: string },
   ) =>
     navigation.assign(
-      `${pageURL(keyUsePath(key.id))}#${new URLSearchParams({
-        realm: workspace.url,
-        share: share.id,
-      })}`,
+      withWayBack(
+        `${pageURL(keyUsePath(key.id))}#${new URLSearchParams({
+          realm: workspace.url,
+          share: share.id,
+        })}`,
+      ),
     );
 
   // Removing a grant revokes the approvals that send under it, so both lists
@@ -789,11 +777,13 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       return;
     }
     navigation.assign(
-      `${pageURL('share-limits')}#${new URLSearchParams({
-        realm: notice.realm,
-        share: notice.share,
-        then: 'keys',
-      })}`,
+      withWayBack(
+        `${pageURL('share-limits')}#${new URLSearchParams({
+          realm: notice.realm,
+          share: notice.share,
+          then: 'keys',
+        })}`,
+      ),
     );
   };
 

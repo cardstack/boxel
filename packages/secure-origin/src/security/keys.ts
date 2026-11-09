@@ -35,7 +35,14 @@ export interface WindowContext {
     base: string;
     method?: string;
     destination?: DestinationDisplay;
-    slots: { name: string; key: string; bound?: SlotBound | null }[];
+    // `kinds`: the kinds of key that can fill the slot (`static`,
+    // `google-service-account`, `oauth`).
+    slots: {
+      name: string;
+      key: string;
+      kinds?: string[];
+      bound?: SlotBound | null;
+    }[];
   };
 }
 
@@ -809,6 +816,7 @@ export interface BatchShare {
   label: string;
   keyId: string;
   keyName: string;
+  keyKind: string;
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
@@ -836,6 +844,11 @@ export interface ApprovalBatch {
   remainingPipelinesOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
+  // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
+  // one) that can fill each slot token in every operation of the batch that
+  // sends it, as the realm server decides, by use: for `pipelines`, without
+  // the operations approved for pipelines only. The page offers only these.
+  fillers: Record<'interactive' | 'pipelines', Record<string, string[]>>;
 }
 
 export async function approvalBatch(
@@ -963,17 +976,23 @@ export async function readableRealms(
 
 // The card definitions used in a realm that send the user's own key in a
 // request, by name, or with `slot: 'apiKey'` those that send the realm's key,
-// which a share there is approved for.
+// which a share there is approved for. With `key`, only those that key can
+// fill: of a kind the request takes, at a destination its credential is good
+// at.
 export async function realmCardsWithRequests(
   config: Config,
   realm: string,
-  slot: 'userKey' | 'apiKey' = 'userKey',
+  { slot = 'userKey', key }: { slot?: 'userKey' | 'apiKey'; key?: string } = {},
 ): Promise<{ module: string; name: string; displayName: string }[]> {
   let json = await authorizedRequest(config, '_secure-window/cards', {
     body: {
       data: {
         type: 'secure-window-cards',
-        attributes: slot === 'userKey' ? { realm } : { realm, slot },
+        attributes: {
+          realm,
+          ...(slot === 'userKey' ? {} : { slot }),
+          ...(key === undefined ? {} : { key }),
+        },
       },
     },
   });

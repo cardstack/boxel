@@ -349,8 +349,8 @@ class RealmResource {
               }
               // Renaming a realm edits its RealmConfig card (realm.json),
               // which surfaces as an incremental re-index that invalidates the
-              // config card. Refresh realm info then, so the workspace chooser
-              // label and index card title update without a reload. Other
+              // config card. Refresh realm info then, so the dashboard's
+              // workspace name and index card title update without a reload. Other
               // re-indexes (full, or incremental of unrelated cards) are
               // deliberately left alone — refetching on those would, among
               // other things, clobber client-managed publish state. Instance
@@ -463,7 +463,7 @@ class RealmResource {
       }
       // A realm that wasn't part of the boot-time batch (e.g. a workspace
       // created mid-session) still needs its lifecycle timestamps: the
-      // workspace chooser's menu footer and its createdAt sort read them, and
+      // dashboard's menu footer and its catalog order read them, and
       // only the federated `/_info` batch carries them — the per-realm
       // `/_info` fallback below is the lean variant without timestamps. Ask
       // the batch for just this realm first; it populates `this.info` via
@@ -545,8 +545,8 @@ class RealmResource {
   }
 
   // Re-fetches realm info after a re-index and mutates the existing tracked
-  // `info` object in place so consumers (workspace chooser label, index card
-  // title) reactively pick up changes such as a renamed realm. Mutating in
+  // `info` object in place so consumers (the dashboard's workspace name, index
+  // card title) reactively pick up changes such as a renamed realm. Mutating in
   // place — rather than replacing the object — keeps the reference stable for
   // `@cached` getters that hold onto it.
   private refreshInfo() {
@@ -800,8 +800,8 @@ export default class RealmService extends Service {
   private bulkInfoPromise: Promise<void> | undefined;
   // Lazily-loaded tile counts, keyed by trailing-slashed realm URL. A
   // TrackedMap so a tile re-renders when its counts land. `inFlightIndexCounts`
-  // dedupes concurrent requests for the same realm — the workspace chooser can
-  // ask on every render pass.
+  // dedupes concurrent requests for the same realm — the dashboard can ask on
+  // every render pass.
   private indexCountsByRealm = new TrackedMap<string, RealmIndexCounts>();
   private inFlightIndexCounts = new Set<string>();
   // Realms whose displayed counts are known to be behind the index. Values stay
@@ -1265,6 +1265,20 @@ export default class RealmService extends Service {
 
   isRealmOwner = (url: string): boolean => {
     return this.knownRealm(url)?.isRealmOwner ?? false;
+  };
+
+  // Whether the user can publish the realm: they own it, and it's marked
+  // publishable (a published copy isn't). A writer can also publish to the
+  // realm's domain override, which this leaves out.
+  canPublish = (url: string): boolean => {
+    return this.isRealmOwner(url) && this.info(url).publishable === true;
+  };
+
+  // Whether the realm's info has loaded. Until it has, `info()` answers a
+  // placeholder whose `publishable: null` reads the same as a realm that
+  // isn't marked publishable.
+  isInfoLoaded = (realm: RealmIdentifier): boolean => {
+    return this.knownRealm(this.toLookupURL(realm))?.info !== undefined;
   };
 
   url = (url: string): string | undefined => {

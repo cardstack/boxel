@@ -50,6 +50,10 @@ jobs:
       - name: Check docs/ holds only linked docs and ADRs
         run: node scripts/check-docs-dir.mts
 
+      - name: Check env-vars.sh asks mkcert only when it has to
+        if: ${{ !cancelled() }}
+        run: node scripts/check-env-vars-mkcert.mts
+
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
         run: pnpm run lint

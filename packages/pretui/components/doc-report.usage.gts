@@ -39,7 +39,7 @@ class DocReportUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='DocReport'
-      @description='The deliverable at the end of a research run: a document, not a chat message. Two things make it a component rather than a div of prose — it is capped, so a 4000-word report cannot swallow the transcript, and the cards it cites are pills you can preview without leaving the report. The cap is a mask gradient rather than a hard edge, so the reader can see that there IS more instead of guessing. The body is a slot, never a string, because a report is markdown, tables and embedded cards, whatever the run produced. Prose supplies the reading measure and the inline-code treatment; Tooltip supplies the pill preview, and being CSS-only on hover AND focus-within it works from the keyboard — which the design mirror’s hover-only fit-preview did not.'
+      @description='The deliverable at the end of a research run: a document, not a chat message. Two things make it a component rather than a div of prose — it is capped, so a 4000-word report cannot swallow the transcript, and the cards it cites are pills you can preview without leaving the report. The cap is a mask gradient rather than a hard edge, so the reader can see that there IS more instead of guessing. The body is a slot, never a string, because a report is markdown, tables and embedded cards, whatever the run produced. Prose supplies the reading measure and the inline-code treatment; Tooltip supplies the pill preview, and since it opens on keyboard focus as well as hover, it works from the keyboard — which the design mirror’s hover-only fit-preview did not.'
     >
       <:example>
         <DocReport
@@ -109,8 +109,8 @@ class DocReportUsage extends GlimmerComponent {
     </FreestyleUsage>
     <style scoped>
       .demo-log {
-        margin: var(--space-4, 11px) 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        margin: var(--boxel-sp-sm) 0 0;
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .demo-log strong {

@@ -6,11 +6,11 @@
 // in its own fields, so for one only the name is drawn here.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
-import { autofocus } from '../../modifiers/autofocus.ts';
+import { Field } from '@cardstack/pretui/components/field';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import Tag from '@cardstack/boxel-icons/tag';
+import { Input } from '@cardstack/pretui/components/input';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface Signature {
   Args: {
@@ -29,44 +29,50 @@ interface Signature {
 
 const KeyFields: TemplateOnlyComponent<Signature> = <template>
   {{#if @onName}}
-    <FieldContainer
-      @tag='label'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Name'
       @icon={{Tag}}
       data-test-key-field='name'
+      as |controlId|
     >
-      <BoxelInput
+      <Input
+        @controlId={{controlId}}
         @type='text'
-        @autocomplete='off'
+        autocomplete='off'
         @placeholder='A name you’ll recognize, such as “Weather service”'
         @value={{@name}}
         @onInput={{@onName}}
         name='key-name'
         data-test-key-name
-        {{autofocus}}
+        {{focusWhen true}}
       />
-    </FieldContainer>
+    </Field>
   {{/if}}
   {{yield to='beforeValue'}}
   {{#if @onValue}}
-    <FieldContainer
-      @tag='label'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label={{if @valueLabel @valueLabel 'Key'}}
       @icon={{KeyRound}}
       data-test-key-field='value'
+      as |controlId|
     >
-      <BoxelInput
+      <Input
+        @controlId={{controlId}}
         @type='password'
-        @autocomplete='off'
+        autocomplete='off'
         @placeholder={{if @valueLabel 'Paste the secret' 'Paste the key'}}
         @value={{@value}}
         @onInput={{@onValue}}
         name='key-value'
         spellcheck='false'
         data-test-key-value
-        {{autofocus (if @onName false true)}}
+        {{focusWhen (if @onName false true)}}
       />
-    </FieldContainer>
+    </Field>
   {{/if}}
 </template>;
 

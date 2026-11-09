@@ -1,6 +1,5 @@
 // Pretui — Alert: an inline message with a tone, a title and an optional action.
 import Component from '@glimmer/component';
-import { htmlSafe } from '@ember/template';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import CheckIcon from '@cardstack/boxel-icons/check';
 import InfoIcon from '@cardstack/boxel-icons/info-small';
@@ -26,6 +25,8 @@ const ALERT_VARIANTS: Record<string, AlertTone> = {
 // Each tone names its fill and the fill's paired foreground (the ink that
 // reads on the disc). The text is `--foreground`: the `-ink` tokens are only
 // guaranteed on `--background`, `--card` and `--muted`, not on the tint.
+// The secure origin's policy test (`secure-origin-policy-test.ts`) measures each
+// tone's text on its tint from these hues; keep its list in step with them.
 const ALERT_COLORS: Record<AlertTone, { hue: string; onHue: string }> = {
   info: {
     hue: 'var(--info)',
@@ -88,14 +89,10 @@ export class Alert extends Component<AlertSignature> {
   get role() {
     return this.tone === 'danger' ? 'alert' : 'status';
   }
-  get hueStyle() {
-    let { hue, onHue } = ALERT_COLORS[this.tone];
-    return htmlSafe(`--pretui-alert-hue: ${hue}; --pretui-alert-on-hue: ${onHue}`,
-    );
-  }
-  // The same properties again, kept on top of a caller's `style`: a caller's
-  // `style` attribute replaces the component's own, and the tint, hairline
-  // and glyph disc all read these properties.
+  // The tint, hairline and glyph disc all read these properties. They are
+  // written through the CSSOM, on top of any `style` a caller passes, rather
+  // than in a `style` attribute, which a strict Content Security Policy
+  // refuses.
   get keptStyle(): KeptProperty[] {
     let { hue, onHue } = ALERT_COLORS[this.tone];
     return [
@@ -110,7 +107,7 @@ export class Alert extends Component<AlertSignature> {
     return `${this.args.toneLabel ?? ALERT_TONE_LABELS[this.tone]}:`;
   }
   <template>
-    <div class='pretui-alert' role={{this.role}} style={{this.hueStyle}} {{keepStyle this.keptStyle}} data-test-pretui-alert ...attributes>
+    <div class='pretui-alert' role={{this.role}} {{keepStyle this.keptStyle}} data-test-pretui-alert ...attributes>
       <span class='pretui-alert-glyph' aria-hidden='true'>
         <this.Glyph width='12' height='12' />
       </span>

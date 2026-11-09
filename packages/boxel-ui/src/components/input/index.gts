@@ -151,6 +151,17 @@ export default class BoxelInput extends Component<Signature> {
     return this.isInvalid && this.args.errorMessage;
   }
 
+  // The error message describes the input as well as being its
+  // `aria-errormessage`, which screen readers announce unevenly, so the error
+  // is read with the field either way.
+  private get describedBy() {
+    let ids = [
+      this.shouldShowErrorMessage ? `error-message-${this.guid}` : undefined,
+      this.args.helperText ? `helper-text-${this.guid}` : undefined,
+    ].filter(Boolean);
+    return ids.length > 0 ? ids.join(' ') : undefined;
+  }
+
   @action
   private onKeyPress(event: Event) {
     this.args.onKeyPress?.(event as KeyboardEvent);
@@ -192,11 +203,7 @@ export default class BoxelInput extends Component<Signature> {
           disabled={{@disabled}}
           readonly={{@readonly}}
           autocomplete={{@autocomplete}}
-          aria-describedby={{if
-            @helperText
-            (concat 'helper-text-' this.guid)
-            false
-          }}
+          aria-describedby={{this.describedBy}}
           aria-invalid={{if this.isInvalid 'true'}}
           aria-errormessage={{if
             this.shouldShowErrorMessage

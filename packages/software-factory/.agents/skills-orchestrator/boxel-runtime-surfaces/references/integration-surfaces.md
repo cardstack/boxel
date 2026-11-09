@@ -155,45 +155,68 @@ OpenRouter calls go through `/_request-forward` to the external
 
 ---
 
-## 4. Boxel UI (`@cardstack/boxel-ui`)
+## 4. Pret UI (`@cardstack/pretui`)
 
-UI kit. Three sub-paths.
+UI kit. One module per component, plus a helpers module. Icons come from
+`@cardstack/boxel-icons`; boxel-ui is deprecated and supplies only what Pret
+UI has no counterpart for yet.
 
-### `/components`
+### `/components/<name>`
 
-`Button`, `BoxelButton`, `Pill`, `Avatar`, `BoxelInput`, `BoxelSelect`,
-`BoxelDropdown`, `Menu`, `ColorPalette`, `ColorPicker`, `Header`,
-`FieldContainer`, `CardContainer`, `Modal`, `Drawer`, `Toast`, `Accordion`,
-`FilterList`, `RadioInput`, `SkeletonPlaceholder`, `TabbedHeader`,
-`ViewSelector`, `ViewItem`, `BasicFitted`, `KanbanPlane`,
-`KanbanDragManager`, `KanbanColumnConfig`, `KanbanPlacement`,
-`autoPlaceKanban`, `cardsInColumn`, `kanbanColumnCount`, `resolveInsertion`.
+Imported per file
+(`import { Button } from '@cardstack/pretui/components/button'`).
+Controls: `Button`, `IconButton`, `ButtonGroup`, `Input`, `Textarea`,
+`Select`, `MultiSelect`, `RadioGroup`, `Checkbox`, `Switch`, `DatePicker`,
+`SegmentedControl`, `Tabs`. Display: `Chip`, `Avatar`, `Badge`, `Skeleton`,
+`Table`, `DataGrid`, `Stat`, `Chart`. Formatting: `FormatDate`,
+`FormatNumber` (currency, percent and units), `RelativeTime`, `FormatBytes`.
+Overlays: `Dialog` (`AlertDialog` for a destructive confirmation), `Drawer`,
+`Popover`, `Tooltip`, `Menu` (items are plain `{ label, onSelect }` entries),
+`Toast`. Structure: `Card`, `Field`, `Accordion`, `Grid`, `Masonry`, `Feed`,
+`AppShell`, `DashboardGrid`, `SplitPanes`, `CopyFit` (a record tile for a
+`Grid` or a result list; it sets its own size container, so it is not a
+fitted template's root), `Board` (kanban). Color: `ColorPalette`,
+`ColorPicker`. Read a component's write-up with
+`boxel file read @cardstack/pretui/components/<name>.md` from `Bash`.
 
-Use `KanbanPlane` for lane-based drag/drop boards instead of hand-rolled DOM
-drag code. Persist placements by stable card id + column key + sort order,
-map to `KanbanPlacement.index` only at render time, and render child cards
-through `@fields` at fitted format.
+Format values for display with the formatting components. Their args are
+`Intl` options, not boxel-ui's format strings, so read each contract. For a
+string built in JS, `formatBytes(value, options).text` from
+`/components/format-bytes` formats a file size; the boxel-ui formatters below
+cover the rest.
+
+Use `Board` for lane-based drag/drop boards instead of hand-rolled DOM drag
+code. Persist placements by stable card id + column key + sort order, map to
+`KanbanPlacement.index` only at render time, and render child cards through
+`@fields` at fitted format. The placement types and helpers `Board` takes
+(`KanbanColumnConfig`, `KanbanPlacement`, `autoPlaceKanban`, `cardsInColumn`,
+`kanbanColumnCount`, `resolveInsertion`) still come from
+`@cardstack/boxel-ui/components`.
 
 ### `/helpers`
 
-Templates: `cn` (class names), `cssVar`, `optional`, `pick`.
-Format: `formatDateTime`, `formatNumber`, `formatCurrency`,
-`formatRelativeTime`, `formatDuration`, `formatCountdown`, `formatFileSize`,
-`formatList`, `formatNames`, `formatOrdinal`, `formatPeriod`, `formatAge`,
-`currencyFormat` (legacy), `dayjsFormat` (deprecated).
-Markdown: `markdownEscape`.
-Menus: `MenuItem`, `MenuItemOptions`.
+Logic: `eq`, `not`, `bool`, `and`, `or`, `coalesce`, `gt`, `gte`, `lt`,
+`lte`, `add`, `subtract`, `multiply`, `divide`.
+Templates: `element` (dynamic tag).
 
-The logic helpers (`eq`, `not`, `bool`, `and`, `or`, `coalesce`, `gt`,
-`gte`, `lt`, `lte`, `add`, `subtract`, `multiply`, `divide`) and `element`
-(dynamic tag) come from `@cardstack/pretui/helpers`.
+### Icons — `@cardstack/boxel-icons/<name>`
 
-### `/icons`
+`import CheckIcon from '@cardstack/boxel-icons/check'`: the Lucide/Tabler-style
+set the catalog uses. Pret UI has no icon set of its own.
 
-Boxel UI's curated icon set. Imported as
-`import IconName from '@cardstack/boxel-ui/icons/<name>'`. Also
-`@cardstack/boxel-icons/<name>` for the broader Lucide/Tabler-style set used
-in catalog.
+### Still on `@cardstack/boxel-ui`
+
+What Pret UI has no counterpart for yet; each moves when one lands.
+`/components`: `CardContainer`, `FittedCard` (the slot layout for a card's
+fitted template; it queries the host's `fitted-card` container), `FilterList`,
+and the kanban placement types and helpers above.
+`/helpers`: `cn` (class names), `cssVar`, `optional`, `pick`;
+`markdownEscape`; `MenuItemOptions` (the return type of a card's
+`[getMenuItems]`); the formatters `formatDuration`, `formatCountdown`,
+`formatList`, `formatNames`, `formatOrdinal`, `formatPeriod` and `formatAge`;
+`formatDateTime`, `formatNumber`, `formatCurrency` and `formatRelativeTime`
+for strings built in JS (templates use the formatting components above);
+`currencyFormat` (legacy) and `dayjsFormat` (deprecated).
 
 ---
 
@@ -348,8 +371,8 @@ strikethrough, footnotes, extended autolinks.
 | If you want to…                     | Look here                                                                          |
 | ----------------------------------- | ---------------------------------------------------------------------------------- |
 | Define a card schema                | §1 (base APIs) + §2 (runtime types)                                                |
-| Render a UI                         | §4 (Boxel UI) + §5 (Ember/Glimmer)                                                 |
-| Build a drag/drop kanban board      | §4 (`KanbanPlane`)                                                                 |
+| Render a UI                         | §4 (Pret UI) + §5 (Ember/Glimmer)                                                  |
+| Build a drag/drop kanban board      | §4 (`Board`)                                                                       |
 | Add a file/image field              | §1 (FileDef subtypes)                                                              |
 | Call an LLM                         | §3 (host tools) + §6 (AI services)                                                 |
 | Generate an AI image                | §6 (OpenRouter image generation); write output bytes with `WriteBinaryFileCommand` |

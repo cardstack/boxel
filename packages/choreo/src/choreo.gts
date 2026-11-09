@@ -1216,6 +1216,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // rather than sending it back to the top — read before cancel stops them
     const loops = prior?.loopPhases() ?? this.coveredLoops;
     this.coveredLoops = undefined;
+    // a run in flight is motion on screen: its replacement carries that on
+    // through its first frame rather than standing still on it — read
+    // before cancel ends the run
+    const continuing = prior?.inFlight ?? false;
     prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {
@@ -1280,6 +1284,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       },
       raisedLayer: this.raisedLayer,
       tetherLayer: this.tetherLayer,
+      continuing,
       // ember-animated's continuity, in the terms motion-dom offers: it sums a
       // corrective curve onto the one it interrupted, which transfers velocity
       // implicitly; a spring takes a velocity outright, so the run that is

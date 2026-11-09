@@ -101,7 +101,7 @@ module('Acceptance | workspace card', function (hooks) {
 
   test('a realm indexed by Workspace renders its shell and switches segments', async function (assert) {
     await visit('/');
-    assert.dom('[data-test-workspace-chooser]').exists();
+    assert.dom('[data-test-dashboard]').exists();
     await click(WORKSPACE_BUTTON);
 
     await waitFor(`${STACK} nav.tabs`);
