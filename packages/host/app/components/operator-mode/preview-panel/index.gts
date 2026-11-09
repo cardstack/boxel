@@ -48,6 +48,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import type RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
+import type WorkspacePinsService from '@cardstack/host/services/workspace-pins';
 
 import FormatChooser from '../code-submode/format-chooser';
 
@@ -79,6 +80,7 @@ export default class PreviewPanel extends Component<Signature> {
   @service declare private toolService: ToolService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private workspacePins: WorkspacePinsService;
 
   private scrollPositions = new Map<string, number>();
   private cardTracker = new ElementTracker();
@@ -165,6 +167,9 @@ export default class PreviewPanel extends Component<Signature> {
         cardCrudFunctions: {},
         menuContext: 'code-mode-preview',
         toolContext: this.toolService.toolContext,
+        workspacePin: this.cardId
+          ? this.workspacePins.pinStateFor(this.cardId)
+          : undefined,
       }),
     );
   }

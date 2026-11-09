@@ -87,6 +87,7 @@ import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
+import type WorkspacePinsService from '../../services/workspace-pins';
 import type {
   CardContext,
   CardCrudFunctions,
@@ -148,6 +149,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
+  @service declare private workspacePins: WorkspacePinsService;
 
   @tracked private selectedCards = new TrackedSet<string>();
 
@@ -626,6 +628,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         toolContext: this.args.toolContext,
         format: this.cardFormat,
         useBaseTemplate: this.args.item.useBaseTemplate,
+        workspacePin: this.url
+          ? this.workspacePins.pinStateFor(this.url as string)
+          : undefined,
       }) ?? [],
     );
 

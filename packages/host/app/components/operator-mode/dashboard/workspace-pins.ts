@@ -1,6 +1,7 @@
 import { cached } from '@glimmer/tracking';
 
 import {
+  baseRRI,
   RealmPaths,
   relationshipEntries,
   resolveRRIReference,
@@ -18,6 +19,7 @@ import { getSearchEntriesResource } from '@cardstack/host/resources/search-entri
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const PIN_FIELD = 'entryPoints';
+const WORKSPACE_TYPE = { module: baseRRI('workspace'), name: 'Workspace' };
 
 // A workspace's pins are the `entryPoints` links of its Workspace card, the
 // realm's index card, which its Home shows and lets editors change. They're
@@ -56,14 +58,24 @@ export class WorkspacePins {
   get cardIds(): RealmResourceIdentifier[] {
     return pinnedCardIds(this.#resource.entries[0]?.item);
   }
+
+  // Whether the realm's index card is a Workspace, and so can hold pins:
+  // undefined until the first search answers.
+  get isWorkspace(): boolean | undefined {
+    if (this.#resource.entries.length > 0) {
+      return true;
+    }
+    return this.#resource.isLoading ? undefined : false;
+  }
 }
 
-// The index card alone, with only its pins: a sparse item carries the links
+// The index card alone, when it's a Workspace, with only its pins: a sparse item carries the links
 // without expanding the cards they point to.
 function indexCardQuery(realm: string, realmURL: string): SearchEntryWireQuery {
   return {
     realms: [realm],
     cardUrls: [indexCardURL(realmURL)],
+    filter: { 'item.on': WORKSPACE_TYPE },
     scope: 'cards',
     fields: { entry: [`item.${PIN_FIELD}`] },
   };

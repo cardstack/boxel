@@ -348,6 +348,145 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     assert.dom(pins).hasAttribute('aria-label', 'Open Notes');
   });
 
+  const PIN = '[data-test-boxel-menu-item-text="Pin to Workspace"]';
+  const UNPIN = '[data-test-boxel-menu-item-text="Unpin from Workspace"]';
+  const COPY_URL = '[data-test-boxel-menu-item-text="Copy Card URL"]';
+  const WORKSPACE_A_PINS =
+    '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-pinned-card]';
+
+  async function openCardMenu(cardId: string) {
+    await click(
+      `[data-test-stack-card="${cardId}"] [data-test-more-options-button]`,
+    );
+    await waitFor(COPY_URL);
+  }
+
+  async function openDashboard(favorites: string[]) {
+    (getService('matrix-service') as MatrixService).workspaceFavorites =
+      favorites;
+    await click('[data-test-workspace-chooser-toggle]');
+    await waitFor('[data-test-dashboard]');
+  }
+
+  test("a card's menu pins it to its workspace, and its desk shows it without a reload", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}notes`, format: 'isolated' }]],
+    });
+
+    await openCardMenu(`${realmURL}notes`);
+    await waitFor(PIN);
+    assert.dom(UNPIN).doesNotExist();
+    await click(PIN);
+
+    await openDashboard([realmURL]);
+    await waitUntil(() => findAll(WORKSPACE_A_PINS).length === 1);
+    assert
+      .dom(WORKSPACE_A_PINS)
+      .hasAttribute('data-test-pinned-card', `${realmURL}notes`);
+  });
+
+  test("a pinned card's menu unpins it, and its desk drops it without a reload", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './notes' } },
+        }),
+      ),
+    );
+    await visitWithFavorites([realmURL]);
+    await waitUntil(() => findAll(WORKSPACE_A_PINS).length === 1);
+    await click(`[data-test-pinned-card="${realmURL}notes"]`);
+
+    await openCardMenu(`${realmURL}notes`);
+    await waitFor(UNPIN);
+    assert.dom(PIN).doesNotExist();
+    await click(UNPIN);
+
+    await openDashboard([realmURL]);
+    await waitFor(
+      '[data-test-favorites-list] [data-test-workspace="Workspace A"]',
+    );
+    await waitUntil(() => findAll(WORKSPACE_A_PINS).length === 0);
+    assert.dom(WORKSPACE_A_PINS).doesNotExist();
+  });
+
+  test("the code mode preview's menu pins a card to its workspace", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${realmURL}notes.json`,
+    });
+
+    await click('[data-test-more-options-button]');
+    await waitFor(PIN);
+    await click(PIN);
+
+    await openDashboard([realmURL]);
+    await waitUntil(() => findAll(WORKSPACE_A_PINS).length === 1);
+    assert
+      .dom(WORKSPACE_A_PINS)
+      .hasAttribute('data-test-pinned-card', `${realmURL}notes`);
+  });
+
+  test("a card's menu offers no pin to a user who can't write to its workspace", async function (assert) {
+    const readOnlyRealmURL = 'http://test-realm/testuser/read-only/';
+    await setupAcceptanceTestRealm({
+      realmURL: readOnlyRealmURL,
+      mockMatrixUtils,
+      permissions: { '@testuser:localhost': ['read'] },
+      contents: {
+        'realm.json': realmConfigCardJSON({ name: 'Read-only Workspace' }),
+        'notes.json': cardJSON('Notes'),
+        'index.json': workspaceIndexJSON({}),
+      },
+    });
+    await visitOperatorMode({
+      stacks: [[{ id: `${readOnlyRealmURL}notes`, format: 'isolated' }]],
+    });
+
+    await openCardMenu(`${readOnlyRealmURL}notes`);
+    await settled();
+    assert.dom(PIN).doesNotExist();
+    assert.dom(UNPIN).doesNotExist();
+  });
+
+  test("a card's menu offers no pin when its realm's index card isn't a Workspace", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('index.json', JSON.stringify(cardJSON('Home')));
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}notes`, format: 'isolated' }]],
+    });
+
+    await openCardMenu(`${realmURL}notes`);
+    await settled();
+    assert.dom(PIN).doesNotExist();
+    assert.dom(UNPIN).doesNotExist();
+  });
+
+  test("the Workspace card's own menu offers no pin", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
+    await visitOperatorMode({
+      stacks: [
+        [{ id: `${realmURL}index`, format: 'isolated' }],
+        [{ id: `${realmURL}notes`, format: 'isolated' }],
+      ],
+    });
+    // The other card in the workspace can be pinned, so the workspace's pins
+    // have loaded by the time the index card's menu is read.
+    await openCardMenu(`${realmURL}notes`);
+    await waitFor(PIN);
+
+    await openCardMenu(`${realmURL}index`);
+    assert.dom(PIN).doesNotExist();
+    assert.dom(UNPIN).doesNotExist();
+  });
+
   test('a desk with no pins shows no collage and no pin count', async function (assert) {
     await visitWithFavorites([pinnedRealmURL, unpinnedRealmURL]);
     // `settled()` in `visitWithFavorites` waits for both desks' pin
