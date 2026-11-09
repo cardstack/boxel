@@ -5,6 +5,7 @@ import { Client } from 'pg';
 import {
   ConnectionScheduler,
   SessionProbe,
+  TrackActivitiesOffError,
   markConnectionHeld,
   postgresConfig,
   startSessionSampling,
@@ -138,6 +139,75 @@ module(basename(import.meta.filename), function () {
       );
       await sampling.stop();
     });
+
+    test('keeps the last reading through failed samples until it is two intervals old', async function (assert) {
+      let reading: SessionStats = {
+        idleInTransaction: 0,
+        idleInTransactionMaxMs: 0,
+        advisoryWaiters: 1,
+        advisoryWaitMaxMs: 700_000,
+      };
+      // The first sample succeeds and every later one fails.
+      let calls = 0;
+      let sampling = startSessionSampling(
+        {
+          sample: async () => {
+            calls++;
+            if (calls === 1) {
+              return reading;
+            }
+            throw new Error('database unreachable');
+          },
+          close: async () => {},
+        },
+        { intervalMs: 100 },
+      );
+      await until(
+        async () => calls,
+        (n) => n >= 2,
+      );
+      assert.deepEqual(
+        sampling.latest(),
+        reading,
+        'a failed sample leaves the last good reading in place',
+      );
+      let dropped = await until(
+        async () => sampling.latest(),
+        (latest) => latest === undefined,
+      );
+      assert.strictEqual(
+        dropped,
+        undefined,
+        'and it is dropped once two intervals pass without a good one',
+      );
+      await sampling.stop();
+    });
+
+    test('does not start a sample while the last is still running', async function (assert) {
+      let started = 0;
+      let finish!: () => void;
+      let hung = new Promise<void>((resolve) => (finish = resolve));
+      let sampling = startSessionSampling(
+        {
+          sample: async () => {
+            started++;
+            await hung;
+            return {
+              idleInTransaction: 0,
+              idleInTransactionMaxMs: 0,
+              advisoryWaiters: 0,
+              advisoryWaitMaxMs: 0,
+            };
+          },
+          close: async () => {},
+        },
+        { intervalMs: 20 },
+      );
+      await wait(200);
+      assert.strictEqual(started, 1, 'ten intervals passed, one sample ran');
+      finish();
+      await sampling.stop();
+    });
   });
 
   module('SessionProbe', function (hooks) {
@@ -148,8 +218,15 @@ module(basename(import.meta.filename), function () {
     let clients: Client[] = [];
     let probe: SessionProbe;
 
+    // The test database runs with `track_activities` off, which records no
+    // session state. A superuser may turn it on for its own session, so the
+    // probe and every session it should see connect with it on.
+    function trackedConfig() {
+      return { ...postgresConfig(), options: '-c track_activities=on' };
+    }
+
     hooks.beforeEach(function () {
-      probe = new SessionProbe({ config: postgresConfig() });
+      probe = new SessionProbe({ config: trackedConfig() });
     });
 
     hooks.afterEach(async function () {
@@ -161,11 +238,26 @@ module(basename(import.meta.filename), function () {
     });
 
     async function connect(): Promise<Client> {
-      let client = new Client(postgresConfig());
+      let client = new Client(trackedConfig());
       clients.push(client);
       await client.connect();
       return client;
     }
+
+    test('refuses to report on a server that does not track session state', async function (assert) {
+      let untracked = new SessionProbe({ config: postgresConfig() });
+      try {
+        await untracked.sample();
+        assert.true(false, 'the sample should have failed');
+      } catch (e) {
+        assert.true(
+          e instanceof TrackActivitiesOffError,
+          `rejected with ${String(e)}`,
+        );
+      } finally {
+        await untracked.close();
+      }
+    });
 
     test('reports nothing stuck on a quiet database', async function (assert) {
       assert.deepEqual(await probe.sample(), {
