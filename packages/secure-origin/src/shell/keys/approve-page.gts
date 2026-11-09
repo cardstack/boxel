@@ -774,6 +774,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         line-height: var(--boxel-line-height-sm);
         font-weight: 400;
         white-space: normal;
+        overflow-wrap: anywhere;
         color: var(--muted-foreground);
       }
       .method,

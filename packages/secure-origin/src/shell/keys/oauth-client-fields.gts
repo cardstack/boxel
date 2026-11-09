@@ -210,15 +210,17 @@ export default class OAuthClientFields extends Component<Signature> {
           app for signing in.</span>
       </div>
     </Field>
-    <Disclosure class='advanced' @label='Advanced' data-test-oauth-advanced>
-      <RadioChoices
-        @label='How Boxel sends the app’s secret'
-        @icon={{KeyRound}}
-        @name='token-auth'
-        @choices={{TOKEN_AUTHS}}
-        @selected={{@form.tokenAuth}}
-        @onSelect={{this.setTokenAuth}}
-      />
+    <Disclosure @label='Advanced' data-test-oauth-advanced>
+      <div class='advanced'>
+        <RadioChoices
+          @label='How Boxel sends the app’s secret'
+          @icon={{KeyRound}}
+          @name='token-auth'
+          @choices={{TOKEN_AUTHS}}
+          @selected={{@form.tokenAuth}}
+          @onSelect={{this.setTokenAuth}}
+        />
+      </div>
     </Disclosure>
 
     <style scoped>
@@ -227,9 +229,12 @@ export default class OAuthClientFields extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-5xs);
       }
-      /* The section opens under its trigger with the rows' own gap. */
+      /* The section opens under its trigger with the rows' own gap. The gap
+         is the content's own padding, so a closed section adds no space, and
+         it leaves room inside the disclosure's clipped region for the
+         choices' focus rings. */
       .advanced {
-        row-gap: var(--boxel-sp-xs);
+        padding-block: var(--boxel-sp-xs) var(--boxel-sp-5xs);
       }
       .callback {
         display: flex;
