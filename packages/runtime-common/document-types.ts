@@ -100,6 +100,11 @@ export interface EntryCollectionDocument {
           status: 'ok' | 'refused' | 'timeout' | 'unavailable';
           code?: string;
           total?: number;
+          // `total` is a lower bound for this realm: the query asked for
+          // `page.total: 'capped'` or `'none'` and the realm holds more.
+          totalIsEstimate?: boolean;
+          // Whether this realm holds rows past the ones it answered with.
+          hasMore?: boolean;
           ms?: number;
         }
       >;

@@ -11,6 +11,7 @@ import {
   type FacetCount,
   type LetBinding,
   type ResultExplanation,
+  type PageTotalMode,
   MAX_LET_BINDINGS,
   WHEN_SIGNAL_KEY,
   DEFAULT_FACET_SIZE,
@@ -1915,7 +1916,12 @@ export type SearchEntryWireFilter = {
 export interface SearchEntryWireQuery {
   filter?: SearchEntryWireFilter;
   sort?: SearchEntryWireSortExpression[];
-  page?: { number?: number; size: number; generation?: number };
+  page?: {
+    number?: number;
+    size: number;
+    generation?: number;
+    total?: PageTotalMode;
+  };
   // field paths through `item.`, as in a sort
   facets?: (Facet & { by: string })[];
   // named lists computed first (see `LetBinding`); paths through `item.`
@@ -2419,7 +2425,7 @@ export async function searchEntryRealms(
   let startedAt = ownsTimings ? Date.now() : 0;
   let results = searchEntryQuery.federation?.results ?? 'byRealm';
   let page = searchEntryQuery.itemQuery.page as
-    | { number?: number; size: number }
+    | { number?: number; size: number; total?: PageTotalMode }
     | undefined;
   // Merged: each realm answers its top `offset + size` rows, with the values
   // it sorted them by; the merge orders the union by the query's sort and
@@ -2453,6 +2459,8 @@ export async function searchEntryRealms(
                   page: {
                     number: 0,
                     size: ((page.number ?? 0) + 1) * page.size,
+                    // Each realm counts only as far as the caller asked.
+                    ...(page.total ? { total: page.total } : {}),
                   },
                 }
               : {}),
@@ -2495,6 +2503,12 @@ export async function searchEntryRealms(
           status: {
             status: 'ok' as const,
             total: doc.meta?.page?.total ?? 0,
+            ...(doc.meta?.page?.totalIsEstimate
+              ? { totalIsEstimate: true }
+              : {}),
+            ...(doc.meta?.page?.hasMore !== undefined
+              ? { hasMore: doc.meta.page.hasMore }
+              : {}),
             ms: Date.now() - t0,
           },
         };
