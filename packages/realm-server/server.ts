@@ -26,6 +26,7 @@ const { ensureDirSync } = fsExtra;
 import {
   httpLogging,
   instanceIdHeader,
+  isVanishedFileBody,
   searchAdmission,
   orderConnectionsByRealm,
   methodOverrideSupport,
@@ -1060,6 +1061,16 @@ export class RealmServer {
       .use(serveFromRealm);
 
     app.on('error', (err, ctx) => {
+      // A file response body whose file was deleted after the response was
+      // built: the file is simply gone, which is not a server fault. Only an
+      // error marked on that body is passed over; the same code raised
+      // anywhere else is reported like any other error.
+      if (isVanishedFileBody(err)) {
+        this.log.warn(
+          `${ctx.method} ${ctx.url}: file vanished while its response was being sent (${err.code})`,
+        );
+        return;
+      }
       console.error(`Unhandled server error`, err);
       Sentry.withScope((scope) => {
         scope.setSDKProcessingMetadata({ request: ctx.request });

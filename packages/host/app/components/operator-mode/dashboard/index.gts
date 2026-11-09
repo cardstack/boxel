@@ -576,10 +576,12 @@ export default class Dashboard extends Component<Signature> {
             <:head as |getStarted|>
               <header class='page-head'>
                 <div class='greeting-line'>
+                  {{! Percy hides the greeting: it changes with the hour. }}
                   <h1
                     class='greeting'
                     {{this.trackHour}}
                     data-test-dashboard-greeting
+                    data-test-percy-hide
                   >{{this.greeting}}</h1>
                   {{#if getStarted.isReady}}
                     {{! Light mode on the dark dashboard, so the neutral open state

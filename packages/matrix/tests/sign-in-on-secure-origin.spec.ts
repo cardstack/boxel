@@ -172,11 +172,10 @@ test.describe('Sign in on the secure origin', () => {
       }
     });
 
+    // logout() returns once the page is on the secure origin's sign-in. It
+    // goes there through the secure origin's sign-out, never back through
+    // the app, which signed out would only send the user there.
     await logout(page);
-
-    // Through the secure origin's sign-out straight on to its sign-in, never
-    // back through the app, which signed out would only send the user there.
-    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     await expect(page.locator('[data-test-secure-sign-in-form]')).toBeVisible();
     expect(
       loaded.map((url) => {
@@ -293,7 +292,6 @@ test.describe('Sign in on the secure origin', () => {
     // Once the app signs out, its device is gone, and nothing renews the
     // window's session.
     await logout(page);
-    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     let ended = (await sql.executeSQL(
       `SELECT app_device_id, expires_at <= NOW() AS ended FROM secure_sessions
         WHERE user_id = '${userId}' AND client = 'window'`,
@@ -342,7 +340,6 @@ test.describe('Sign in on the secure origin', () => {
       .toBe(true);
 
     await logout(page);
-    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     // Back on the app, held there rather than sent on to sign in again.
     await page.route(
       (url) => url.origin === new URL(secureOriginURL).origin,

@@ -51,7 +51,7 @@ Summary: {{issue.summary}}
      `requirements.txt`, etc.). For each meaningful dependency — skip
      framework boilerplate — record: what the app uses it for, and the
      Boxel-side answer (a host tool, the AI proxy / one-shot LLM /
-     image-generation surface, boxel-ui, plain TS carried into the card
+     image-generation surface, Pret UI, plain TS carried into the card
      module, or NEEDS-HUMAN-DECISION when nothing maps).
    - **Specialized logic**: locate the algorithms and domain logic that
      make the app work — image pipelines, prompt templates sent to AI

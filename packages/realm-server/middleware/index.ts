@@ -821,6 +821,28 @@ export async function sendResponseForError(
   );
 }
 
+// A file body whose read fails because the file is no longer there: it was
+// deleted, by this host or another, after the response that streams it was
+// built. That is a file that is simply gone rather than a server fault, so the
+// error is marked where the stream becomes the response body, and the
+// server's error listener tells it apart from every other error by the mark.
+const VANISHED_FILE_BODY = Symbol('vanished-file-body');
+
+function markVanishedFileBody(error: unknown) {
+  let code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === 'ENOENT' || code === 'ENOTDIR') {
+    (error as { [VANISHED_FILE_BODY]?: true })[VANISHED_FILE_BODY] = true;
+  }
+}
+
+export function isVanishedFileBody(error: unknown): boolean {
+  return Boolean(
+    (error as { [VANISHED_FILE_BODY]?: true } | undefined)?.[
+      VANISHED_FILE_BODY
+    ],
+  );
+}
+
 export async function setContextResponse(
   ctxt: Koa.Context,
   response: ResponseWithNodeStream,
@@ -840,6 +862,9 @@ export async function setContextResponse(
   }
 
   if (nodeStream) {
+    // Attached before anything else listens, so the mark is on the error by
+    // the time any wrapping stream passes it on to Koa.
+    nodeStream.once('error', markVanishedFileBody);
     let declaredLength = headers.get('content-length');
     ctxt.body =
       declaredLength != null && ctxt.method !== 'HEAD'

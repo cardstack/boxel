@@ -698,6 +698,25 @@ module(basename(import.meta.filename), function (hooks) {
       'with nothing approved for pipelines only, both uses offer the same keys',
     );
 
+    // Asked for the operations an approval covers, only where those send
+    // counts, and the batch still holds every operation.
+    let scoped = await batchOf(OWNER, onType(INBOX), {
+      operations: ['listPRs'],
+    });
+    assert.deepEqual(
+      names(scoped, 'interactive'),
+      ['hostless robot', 'pasted', 'vendor robot'],
+      `for a call to ${vendor} alone, an OAuth client whose API hosts reach it fills the slot`,
+    );
+    assert.deepEqual(
+      operationsIn(scoped).map((o) => o.name),
+      operationsIn(found).map((o) => o.name),
+    );
+    let malformed = await batch(OWNER, onType(INBOX), {
+      operations: 'listPRs',
+    });
+    assert.strictEqual(malformed.status, 400, JSON.stringify(malformed.body));
+
     // Approved for pipelines only, the call to the other host is left out of
     // what pipelines approve, so the slot is then sent only to the vendor.
     let approved = await approveFrom(OWNER, found, ['elsewhere'], () => ({

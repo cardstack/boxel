@@ -2,7 +2,7 @@
 // harness stamps the scoped-css attribute and delivers no stylesheet.
 import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
-import { render, settled } from '@ember/test-helpers';
+import { render, settled, triggerEvent } from '@ember/test-helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { IconButton } from './icon-button';
@@ -254,9 +254,11 @@ module('Pretui | components/icon-button', function (hooks) {
         >★</IconButton>
       </template>,
     );
+    await triggerEvent(el('[data-test-pretui-tooltip]'), 'mouseenter');
     assert.strictEqual(
-      el('[data-test-pretui-tooltip] [role="tooltip"]').dataset['side'],
+      el('[data-test-pretui-tooltip-bubble]').dataset['side'],
       'right',
+      'the open tip sits to the right',
     );
   });
 
