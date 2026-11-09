@@ -1,6 +1,8 @@
+import * as Sentry from '@sentry/node';
 import Provider, { errors } from 'oidc-provider';
 import type { Configuration, KoaContextWithOIDC } from 'oidc-provider';
 import { logger } from '@cardstack/runtime-common';
+import { OAuthProviderConfigError } from './config.ts';
 import type { OAuthProviderConfig } from './config.ts';
 import type { OAuthResource } from './registry.ts';
 import { registryScopes } from './registry.ts';
@@ -10,14 +12,24 @@ export const log = logger('boxel:oauth-provider');
 export const OAUTH_PROVIDER_PATH_PREFIX = '/_oauth-provider';
 export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 
-// The fields discovery publishes. The library's document also lists every
-// endpoint it mounts, `jwks_uri`, and OpenID Connect metadata. Boxel's
-// provider is not an OpenID provider and signs nothing, and an endpoint is
-// listed only once the realm server serves it, so the document is cut down
-// to these. Each change that serves an endpoint adds its fields here.
+// The fields discovery copies from the library's document. That document
+// also lists every endpoint it mounts, `jwks_uri`, and OpenID Connect
+// metadata. Boxel's provider is not an OpenID provider and signs nothing, and
+// an endpoint is listed only once the realm server serves it, so the document
+// is cut down to these.
+//
+// An endpoint's field is never copied from the library: it builds endpoint
+// URLs from the request's host and path, not from the issuer, so a request
+// with another `Host` would publish endpoints on that host. A change that
+// serves an endpoint sets its field from the issuer and the route instead.
+//
+// `grant_types_supported` is listed because a client that finds it missing
+// assumes the implicit grant is supported (RFC 8414 §2). The library derives
+// it from `responseTypes`, so it holds only `authorization_code`.
 const DISCOVERY_FIELDS = [
   'issuer',
   'response_types_supported',
+  'grant_types_supported',
   'code_challenge_methods_supported',
   'scopes_supported',
 ] as const;
@@ -118,7 +130,20 @@ export function createOAuthProvider({
     },
   };
 
-  let provider = new Provider(issuer, configuration);
+  let provider: Provider;
+  try {
+    provider = new Provider(issuer, configuration);
+  } catch (error) {
+    // The library's key check throws with the whole key as the error's
+    // cause, private parameters included, and a boot error is printed and
+    // sent to Sentry in full. Its message names the key by position and the
+    // parameter at fault, never a value, so only the message is kept.
+    throw new OAuthProviderConfigError(
+      `The OAuth provider refused its configuration: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`,
+    );
+  }
 
   // Runs around the library's own routing: after it builds the discovery
   // document, publish only the fields Boxel serves, with the registry's
@@ -136,8 +161,14 @@ export function createOAuthProvider({
     }
   });
 
-  provider.on('server_error', (_ctx: unknown, error: Error) => {
-    log.error(`OAuth provider error: ${error.name}: ${error.message}`);
+  // An unexpected error in the library's own handling. The library answers
+  // the request itself, so the realm server's error handler never sees it.
+  provider.on('server_error', (ctx: KoaContextWithOIDC, error: Error) => {
+    log.error('OAuth provider error', error);
+    Sentry.withScope((scope) => {
+      scope.setSDKProcessingMetadata({ request: ctx.request });
+      Sentry.captureException(error);
+    });
   });
 
   log.info(

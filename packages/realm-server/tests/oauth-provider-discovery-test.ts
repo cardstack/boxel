@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
+import { inspect } from 'util';
 import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 import supertest from 'supertest';
@@ -23,6 +24,7 @@ import {
   OAuthProviderConfigError,
   readOAuthProviderConfig,
 } from '../lib/oauth-provider/config.ts';
+import { createOAuthProvider } from '../lib/oauth-provider/provider.ts';
 import {
   buildRegistry,
   oauthIssuer,
@@ -122,11 +124,12 @@ function setupServer(hooks: NestedHooks, { provider }: { provider: boolean }) {
       }
     },
   });
-  // Every request carries the server's own host, so the realm at the root
-  // claims every path it would if the provider's routes didn't come first.
+  // Every request carries the server's own host unless a test names another,
+  // so the realm at the root claims every path it would if the provider's
+  // routes didn't come first.
   return {
-    get: (path: string) =>
-      supertest(server!).get(path).set('Host', serverURL.host),
+    get: (path: string, host = serverURL.host) =>
+      supertest(server!).get(path).set('Host', host),
     options: (path: string) =>
       supertest(server!).options(path).set('Host', serverURL.host),
   };
@@ -251,6 +254,36 @@ module(basename(import.meta.filename), function () {
         );
       }
     });
+
+    test('a key the library refuses fails clearly, without printing the key', function (assert) {
+      let config = testOAuthProviderConfig();
+      // An RSA key missing one private parameter: well-formed enough for the
+      // configuration's own check, refused by the library's.
+      let { dp: _dp, ...key } = config.jwks.keys[0];
+      let thrown: unknown;
+      try {
+        createOAuthProvider({
+          issuer: 'https://a.test',
+          config: { ...config, jwks: { keys: [key] } },
+          registry: buildRegistry('https://a.test'),
+        });
+      } catch (error) {
+        thrown = error;
+      }
+      assert.true(thrown instanceof OAuthProviderConfigError, 'throws');
+      // What a boot failure prints, cause and all.
+      let printed = inspect(thrown, { depth: Infinity });
+      assert.true(
+        /jwks\.keys\[0\]\.dp/.test(printed),
+        `says which key and parameter (${(thrown as Error).message})`,
+      );
+      for (let parameter of ['d', 'p', 'q', 'dq', 'qi']) {
+        assert.false(
+          printed.includes(String(key[parameter])),
+          `prints no ${parameter}`,
+        );
+      }
+    });
   });
 
   module('the registry', function () {
@@ -346,6 +379,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(response.body, {
         issuer: 'http://127.0.0.1:0',
         response_types_supported: ['code'],
+        grant_types_supported: ['authorization_code'],
         code_challenge_methods_supported: ['S256'],
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
       });
@@ -354,6 +388,12 @@ module(basename(import.meta.filename), function () {
         '*',
         'any origin may read it',
       );
+    });
+
+    test("names the issuer from the server's URL, whatever host the request names", async function (assert) {
+      let response = await request.get(DISCOVERY, 'other-host.example.test');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.body.issuer, 'http://127.0.0.1:0');
     });
 
     test('serves no OpenID discovery, signing keys, or endpoint not yet built', async function (assert) {
