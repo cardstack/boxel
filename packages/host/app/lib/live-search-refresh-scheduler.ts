@@ -48,6 +48,15 @@ export class LiveSearchRefreshScheduler {
       this.#timer = undefined;
       let token = this.#token;
       this.#token = undefined;
+      // A page nobody can see doesn't re-run its searches: the refresh waits
+      // until the page is shown, then runs once with everything the caller
+      // accumulated meanwhile. A background tab otherwise re-queries on every
+      // window of a busy realm's events for results no one is looking at.
+      if (this.#hidden()) {
+        waiter.endAsync(token as Parameters<typeof waiter.endAsync>[0]);
+        this.#flushWhenVisible();
+        return;
+      }
       try {
         this.#flush();
       } finally {
@@ -56,10 +65,35 @@ export class LiveSearchRefreshScheduler {
     }, delay);
   }
 
+  #onVisible: (() => void) | undefined;
+
+  #hidden(): boolean {
+    return typeof document !== 'undefined' && document.hidden === true;
+  }
+
+  #flushWhenVisible(): void {
+    if (this.#onVisible) {
+      return;
+    }
+    this.#onVisible = () => {
+      if (this.#hidden()) {
+        return;
+      }
+      document.removeEventListener('visibilitychange', this.#onVisible!);
+      this.#onVisible = undefined;
+      this.#flush();
+    };
+    document.addEventListener('visibilitychange', this.#onVisible);
+  }
+
   // Drops the armed flush without running it. For teardown and for a query
   // change, where the events the window accumulated describe a result set
   // that no longer exists.
   cancel(): void {
+    if (this.#onVisible) {
+      document.removeEventListener('visibilitychange', this.#onVisible);
+      this.#onVisible = undefined;
+    }
     if (this.#timer === undefined) {
       return;
     }
