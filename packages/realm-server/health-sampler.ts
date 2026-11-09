@@ -41,9 +41,14 @@ export interface HealthSamplerOptions {
   // one, and how many of those are held back only by their tenant's share.
   // Waiting alone says the pool is the bottleneck; waiting at share says the
   // scheduler is keeping one realm's searches from crowding out another's.
+  // `holders` is how many of the checked-out connections are pinned by work
+  // that checks out more while it holds them, against `holderLimit`; holders
+  // at their limit with work waiting is the pool's deadlock guard engaging.
   connectionStats?: () => {
     inUse: number;
     limit: number;
+    holders?: number;
+    holderLimit?: number;
     waiting: number;
     waitingAtShare: number;
   };
@@ -108,6 +113,9 @@ export function startHealthSampler(
         `realmSearchLoadMax=${(busiest?.sustained ?? 0).toFixed(2)} ` +
         (connections
           ? `dbConnections=${connections.inUse}/${connections.limit} ` +
+            (connections.holders !== undefined
+              ? `dbHolders=${connections.holders}/${connections.holderLimit} `
+              : '') +
             `dbWaiting=${connections.waiting} ` +
             `dbWaitingAtShare=${connections.waitingAtShare} `
           : '') +

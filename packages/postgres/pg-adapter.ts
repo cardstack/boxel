@@ -189,6 +189,30 @@ function configuredPoolTenantShare(): number {
     : DEFAULT_POOL_TENANT_SHARE;
 }
 
+// Postgres' `idle_in_transaction_session_timeout` for the pool's sessions, in
+// milliseconds, when set: a session that sits in an open transaction with no
+// statement running for longer than this is terminated by the server, and the
+// server log says so. Off by default, because some holders legitimately keep
+// a transaction open across slow non-database work (a lock section waiting
+// on its index pass, a coordinated populate waiting on its prerender), so a
+// value has to sit above the longest of those. It is a backstop and a signal,
+// not a fix for a deadlock in this process: a holder blocked waiting for a
+// second checkout is not in a query, so its terminated session only surfaces
+// when it next uses the connection.
+function configuredIdleInTransactionTimeoutMs(): number | undefined {
+  let rawValue = process.env.PG_IDLE_IN_TRANSACTION_TIMEOUT_MS;
+  if (!rawValue) {
+    return undefined;
+  }
+  let value = Number(rawValue);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+// A checkout that has waited this long for the scheduler is logged once with
+// the scheduler's state, so pool starvation reads as starvation in the logs
+// rather than as a request that never answered.
+const SLOW_CHECKOUT_WARN_MS = 30_000;
+
 export type NotificationHandler = (notification: Notification) => void;
 
 export interface NotificationSubscription {
@@ -322,6 +346,7 @@ export class PgAdapter implements DBAdapter {
       tenantShare: configuredPoolTenantShare(),
     });
     log.debug(`connecting to DB ${this.url}`);
+    let idleInTransactionTimeoutMs = configuredIdleInTransactionTimeoutMs();
     this.pool = new Pool({
       user,
       host,
@@ -329,6 +354,9 @@ export class PgAdapter implements DBAdapter {
       password,
       port,
       max,
+      ...(idleInTransactionTimeoutMs
+        ? { idle_in_transaction_session_timeout: idleInTransactionTimeoutMs }
+        : {}),
     });
     // An idle client whose connection dies — a failover, a restart, an
     // administrator terminating the backend — emits `error` on the pool, and
@@ -362,12 +390,16 @@ export class PgAdapter implements DBAdapter {
   get connectionStats(): {
     inUse: number;
     limit: number;
+    holders: number;
+    holderLimit: number;
     waiting: number;
     waitingAtShare: number;
   } {
     return {
       inUse: this.#scheduler.inUse,
       limit: this.#scheduler.limit,
+      holders: this.#scheduler.holders,
+      holderLimit: this.#scheduler.holderLimit,
       waiting: this.#scheduler.waiting,
       waitingAtShare: this.#scheduler.waitingAtShare,
     };
@@ -790,9 +822,27 @@ export class PgAdapter implements DBAdapter {
 
   // Wait for the scheduler's go-ahead, then check a client out of the pool.
   // The turn is handed back by the caller after the client is released, or
-  // here if the checkout itself fails.
-  async #checkout(): Promise<{ client: PoolClient; releaseTurn: () => void }> {
-    let releaseTurn = await this.#scheduler.acquire();
+  // here if the checkout itself fails. `holding` is for a caller that keeps
+  // the client while it checks out more (see `ConnectionScheduler`).
+  async #checkout(opts?: {
+    holding?: boolean;
+  }): Promise<{ client: PoolClient; releaseTurn: () => void }> {
+    let started = Date.now();
+    let slow = setTimeout(() => {
+      let stats = this.connectionStats;
+      log.warn(
+        `a ${opts?.holding ? 'holding ' : ''}checkout has waited ${Date.now() - started}ms for a connection: ` +
+          `inUse=${stats.inUse}/${stats.limit} holders=${stats.holders}/${stats.holderLimit} ` +
+          `waiting=${stats.waiting} waitingAtShare=${stats.waitingAtShare}`,
+      );
+    }, SLOW_CHECKOUT_WARN_MS);
+    slow.unref?.();
+    let releaseTurn: () => void;
+    try {
+      releaseTurn = await this.#scheduler.acquire(opts);
+    } finally {
+      clearTimeout(slow);
+    }
     try {
       return { client: await this.pool.connect(), releaseTurn };
     } catch (e) {
@@ -1353,7 +1403,7 @@ export class PgAdapter implements DBAdapter {
   ): Promise<T> {
     await this.started;
 
-    let { client, releaseTurn } = await this.#checkout();
+    let { client, releaseTurn } = await this.#checkout({ holding: true });
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
