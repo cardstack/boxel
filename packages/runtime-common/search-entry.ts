@@ -60,6 +60,7 @@ import {
   BLEND_SORT_KEY,
   isNearSort,
   isBlendSort,
+  defaultSortDirection,
 } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import { parseUsedRenderType } from './search-resource-helpers.ts';
@@ -2529,11 +2530,10 @@ export async function searchEntryRealms(
       answered.map((a) => a.doc),
       realms.length,
     );
+    // Each entry in the direction the engine sorted it: scores (an `_expr`
+    // formula, a blend, a near similarity, text relevance) default to `desc`.
     let directions = (searchEntryQuery.itemQuery.sort ?? []).map((s: any) =>
-      (s.direction ??
-        (isBlendSort(s) || isRelevanceSort(s) ? 'desc' : 'asc')) === 'desc'
-        ? -1
-        : 1,
+      (s.direction ?? defaultSortDirection(s)) === 'desc' ? -1 : 1,
     );
     combined.data.sort((a, b) =>
       compareSortValues(

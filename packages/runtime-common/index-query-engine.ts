@@ -645,6 +645,21 @@ export function isMatchRelevanceSort(sort: { by: string }): boolean {
   return sort.by === MATCH_RELEVANCE_SORT_KEY;
 }
 
+// The direction a sort entry takes when it names none. Scores the engine
+// computes (an `_expr` formula, a blend, a near similarity, text relevance)
+// read "higher is better" and default to `desc`; a field sorts `asc`. The
+// federated merge orders rows from several realms by the same rule.
+export function defaultSortDirection(sort: object): 'asc' | 'desc' {
+  let s = sort as { by: string };
+  return isExprSort(s) ||
+    isBlendSort(s) ||
+    isNearSort(s) ||
+    isMatchRelevanceSort(s) ||
+    isRelevanceSort(s)
+    ? 'desc'
+    : 'asc';
+}
+
 // A `near` sort ranks by cosine similarity between a VectorField and a target
 // vector (see `NearSortTarget` in query.ts). Like `_matchRelevance`, the score
 // belongs to the query and reads "higher is better": `_search` projects it as

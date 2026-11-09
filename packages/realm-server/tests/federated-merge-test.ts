@@ -7,8 +7,26 @@ import {
   searchEntryRealms,
   type SearchEntryQuery,
 } from '@cardstack/runtime-common/search-entry';
-import { InvalidQueryError } from '@cardstack/runtime-common';
+import {
+  IndexQueryEngine,
+  IndexWriter,
+  InvalidQueryError,
+  VirtualNetwork,
+  internalKeyFor,
+  rri,
+  type Definition,
+  type DefinitionLookup,
+  type EntryResource,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import { SearchBoundError } from '@cardstack/runtime-common/search-bounds';
+import type { PgAdapter } from '@cardstack/postgres';
+
+import {
+  closeTestPgAdapter,
+  createTestPgAdapter,
+  prepareTestDB,
+} from './helpers/index.ts';
 
 // The federated merge across realms on one server, before the one-query
 // path: how a search over several realms answers, per realm or merged.
@@ -78,6 +96,150 @@ const blend = [
     k: 60,
   },
 ];
+
+// Realms on the real engine: each realm's rows are indexed in Postgres under
+// its own realm URL, and a realm answers a federated search the way a realm's
+// engine does, carrying the scores and sort values the engine puts on each row.
+const noteRef: ResolvedCodeRef = {
+  module: 'http://a/note' as ResolvedCodeRef['module'],
+  name: 'Note',
+};
+const noteDef = {
+  type: 'card-def',
+  codeRef: noteRef,
+  displayName: 'Note',
+  fields: { title: 'f0', score: 'f1' },
+  fieldDefs: {
+    f0: {
+      type: 'contains',
+      isPrimitive: true,
+      isComputed: false,
+      fieldOrCard: { module: '@cardstack/base/string', name: 'default' },
+      search: { role: 'title' },
+    },
+    f1: {
+      type: 'contains',
+      isPrimitive: true,
+      isComputed: false,
+      fieldOrCard: { module: '@cardstack/base/number', name: 'default' },
+      serializerName: 'number',
+    },
+  },
+} as unknown as Definition;
+
+function noteLookup(): DefinitionLookup {
+  const lookup = {
+    async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
+      if (codeRef.module === noteRef.module && codeRef.name === noteRef.name) {
+        return noteDef;
+      }
+      throw new Error(`unexpected definition lookup: ${codeRef.module}`);
+    },
+    async lookupCachedDefinition() {
+      return undefined;
+    },
+    forRealm() {
+      return lookup;
+    },
+  } as unknown as DefinitionLookup;
+  return lookup;
+}
+
+type Note = { id: string; text: string; score: number };
+
+function engineRealms(hooks: NestedHooks, corpus: Record<string, Note[]>) {
+  let ctx = {} as {
+    adapter: PgAdapter;
+    engine: IndexQueryEngine;
+    realm: (url: string) => {
+      url: string;
+      searchEntries: (q: SearchEntryQuery) => Promise<any>;
+    };
+  };
+  hooks.beforeEach(async function () {
+    prepareTestDB();
+    ctx.adapter = await createTestPgAdapter();
+    let network = new VirtualNetwork();
+    ctx.engine = new IndexQueryEngine(ctx.adapter, noteLookup(), network);
+    let noteKey = internalKeyFor(noteRef, undefined, network);
+    for (let [realmURL, notes] of Object.entries(corpus)) {
+      let batch = await new IndexWriter(ctx.adapter).createBatch(
+        new URL(realmURL),
+        network,
+        undefined,
+        { splitPrerenderHtml: false },
+      );
+      for (let note of notes) {
+        let cardURL = new URL(`${realmURL}${note.id}.json`);
+        await batch.updateEntry(cardURL, {
+          type: 'instance',
+          resource: {
+            id: rri(cardURL.href),
+            type: 'card',
+            attributes: {},
+            meta: { adoptsFrom: { module: rri(noteRef.module), name: 'Note' } },
+          },
+          lastModified: Date.now(),
+          resourceCreatedAt: Date.now(),
+          searchData: {
+            title: note.text,
+            score: note.score,
+            _searchText: { A: note.text },
+          },
+          markdown: note.text,
+          deps: new Set(),
+          displayNames: ['Note'],
+          types: [noteKey],
+          isolatedHtml: `<div>${note.id}</div>`,
+        });
+      }
+      await batch.done();
+    }
+    ctx.realm = (url: string) => ({
+      url,
+      searchEntries: async (q: SearchEntryQuery) => {
+        let { results, meta } = await ctx.engine.search(
+          new URL(url),
+          q.itemQuery,
+          q.exposeSortValues ? { exposeSortValues: true } : {},
+          { kind: 'dataOnly' },
+        );
+        let scores = [
+          '_matchRelevance',
+          '_nearSimilarity',
+          '_blendScore',
+          '_collapseSize',
+          '_explain',
+          '_rerank',
+          '_expression',
+          '_sortValues',
+        ];
+        return {
+          data: results.map((row: any) => ({
+            type: 'entry' as const,
+            id: row.url,
+            relationships: {},
+            meta: Object.fromEntries(
+              scores
+                .filter((k) => row[k] !== undefined)
+                .map((k) => [
+                  k,
+                  k === '_sortValues' || k === '_explain' || row[k] == null
+                    ? row[k]
+                    : Number(row[k]),
+                ]),
+            ) as EntryResource['meta'],
+          })),
+          meta,
+        };
+      },
+    });
+  });
+  hooks.afterEach(async function () {
+    await closeTestPgAdapter(ctx.adapter);
+  });
+  return ctx;
+}
 
 module(basename(import.meta.filename), function () {
   module('per realm, the default', function () {
@@ -188,6 +350,41 @@ module(basename(import.meta.filename), function () {
         'b:b3',
         'a:a4',
       ]);
+    });
+  });
+
+  module('merged, on the real engine', function (hooks) {
+    // How often "loop" appears sets each note's text relevance.
+    let ctx = engineRealms(hooks, {
+      [A]: [
+        { id: 'a1', text: 'loop loop loop loop loop', score: 1 },
+        { id: 'a2', text: 'loop', score: 4 },
+      ],
+      [B]: [
+        { id: 'b1', text: 'loop loop loop loop', score: 2 },
+        { id: 'b2', text: 'loop loop', score: 3 },
+      ],
+    });
+    let short = (doc: { data: { id: string }[] }) =>
+      doc.data.map((e) => e.id.replace(/^http:\/\/(\w)\/(\w+)\.json$/, '$2'));
+
+    test('a merged textRelevance sort puts the best match first, as each realm does', async function (assert) {
+      let doc = await searchEntryRealms(
+        [ctx.realm(A), ctx.realm(B)],
+        query({
+          federation: { results: 'merged' },
+          filter: { matches: 'loop' },
+          sort: [{ by: 'item.textRelevance' }],
+          page: { number: 0, size: 4 },
+        }),
+      );
+      assert.deepEqual(short(doc), ['a1', 'b1', 'b2', 'a2']);
+      let scores = doc.data.map((e) => e.meta?._matchRelevance as number);
+      assert.deepEqual(
+        [...scores].sort((x, y) => y - x),
+        scores,
+        'highest relevance first, with no direction given',
+      );
     });
   });
 

@@ -690,7 +690,7 @@ The response is an `entry` collection document: each entry resolves to prerender
 A `_federated-search` request names its realms in `realms`, all on the realm server it is sent to. `federation.results` chooses the shape of the answer:
 
 - **`byRealm`** (the default): each realm's rows stay together, paged on their own, as the search sheet shows them in sections. `meta.sections` lists the sections in order, `{ realm, count, score? }`: under a sort that scores rows (relevance, blend, text relevance, `near`), by each realm's best score, with realms that matched nothing last; otherwise in the order asked.
-- **`merged`**: one list, ordered by the query's own sort across realms (field sorts included), and paged once. Each realm is asked for its first `offset + size` rows and the union is sliced to the page. Scores that each realm computes over its own matches (blend, relevance and text relevance) compare only approximately across realms.
+- **`merged`**: one list, ordered by the query's own sort across realms (field sorts included), and paged once. Each realm is asked for its first `offset + size` rows and the union is sliced to the page. Scores that each realm computes over its own matches (blend, relevance and text relevance) compare only approximately across realms. A sort entry with no `direction` goes the way it does in one realm: scores (`expression`, `near`, blend, relevance, text relevance) highest first, fields lowest first.
 
 ```js
 {
