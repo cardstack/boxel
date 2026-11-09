@@ -602,6 +602,14 @@ export async function showAllCards(page: Page) {
   }
 }
 
+// The secure origin's sign-in page, where every sign-out ends up.
+export function isSecureSignInURL(url: URL): boolean {
+  return (
+    url.origin === new URL(secureOriginURL).origin &&
+    url.pathname.endsWith('/sign-in')
+  );
+}
+
 export async function logout(page: Page) {
   await page
     .locator('[data-test-room-settled]')
@@ -618,7 +626,6 @@ export async function logout(page: Page) {
   // test starts before then is interrupted by that late sign-out navigation
   // ("page.goto: … is interrupted by another navigation", or
   // net::ERR_ABORTED). So wait here until the round trip has landed.
-  let secureOrigin = new URL(secureOriginURL).origin;
   let startedAt = Date.now();
   let navigations: string[] = [];
   let onNavigated = (frame: Frame) => {
@@ -629,10 +636,7 @@ export async function logout(page: Page) {
   page.on('framenavigated', onNavigated);
   try {
     await page.locator('[data-test-signout-button]').click();
-    await page.waitForURL(
-      (url) => url.origin === secureOrigin && url.pathname.endsWith('/sign-in'),
-      { timeout: 30_000 },
-    );
+    await page.waitForURL(isSecureSignInURL, { timeout: 30_000 });
   } catch (e) {
     throw new Error(
       `logout: the sign-out did not reach the secure origin's sign-in page ` +
@@ -961,9 +965,7 @@ export async function signInOnSecureOrigin(
   password: string,
 ) {
   let secureOrigin = new URL(secureOriginURL).origin;
-  await page.waitForURL(
-    (url) => url.origin === secureOrigin && url.pathname.endsWith('/sign-in'),
-  );
+  await page.waitForURL(isSecureSignInURL);
   await page.locator('[data-test-secure-username]').fill(username);
   await page.locator('[data-test-secure-password]').fill(password);
   await page.locator('[data-test-secure-password-submit]').click();
@@ -1141,11 +1143,7 @@ export async function createSubscribedUserAndLogin(
 
 // A signed-out app sends the user to the secure origin's sign-in page.
 export async function assertLoggedOut(page: Page) {
-  await page.waitForURL(
-    (url) =>
-      url.origin === new URL(secureOriginURL).origin &&
-      url.pathname.endsWith('/sign-in'),
-  );
+  await page.waitForURL(isSecureSignInURL);
   await expect(
     page.locator('[data-test-secure-sign-in-form]'),
     'the secure origin’s sign-in form is displayed',
