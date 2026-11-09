@@ -21,6 +21,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
+import type CardService from '@cardstack/host/services/card-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import CardRenderer from '../card-renderer';
@@ -35,6 +36,16 @@ import type { BaseDef, CardContext } from '@cardstack/base/card-api';
 export type { HydrationMode };
 
 type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
+
+// What a trimmed (sparse) row with no prerendered HTML shows before it
+// hydrates: the base `CardDef` fields its serialization carries, rendered by
+// `CardDef`'s own template, so the row loads no module of its own type until
+// the hydration gesture asks for the real card.
+export interface StandInFields {
+  name?: string;
+  summary?: string;
+  cardThumbnailURL?: string;
+}
 
 // The card context can be torn down out from under a consumer mid-render (realm
 // refresh / unmount); reading it then throws this owner-destroyed error. Match
@@ -80,6 +91,9 @@ interface Signature {
     // The inert prerendered HTML for an HTML-backed row. Absent for a full
     // live row, which carries no HTML and resolves to its live instance.
     component?: HTMLComponent;
+    // A trimmed row with no prerendered HTML: rendered as a plain `CardDef`
+    // from these fields, and hydrated on the gesture like an HTML-backed row.
+    standIn?: StandInFields;
     // The ancestor type the HTML was rendered as; the live card renders under
     // the same type so a hydrated row matches its prerendered siblings.
     renderType?: ResolvedCodeRef;
@@ -118,6 +132,7 @@ export default class HydratableCard extends Component<Signature> {
     | CardContext
     | undefined;
   @service declare private store: StoreService;
+  @service declare private cardService: CardService;
 
   // Flips true once a hydration gesture fires; `getCard` then fetches
   // `links.self`, deposits the instance in the Store, and tracks it live. A
@@ -145,8 +160,9 @@ export default class HydratableCard extends Component<Signature> {
       return undefined;
     }
     // No inert HTML → nothing to gate on; a full live row always resolves
-    // immediately and ungated (there is no gesture to wait for).
-    if (this.args.component == null) {
+    // immediately and ungated (there is no gesture to wait for). A trimmed row
+    // has its stand-in to stay inert as, so it waits for the gesture below.
+    if (this.args.component == null && this.args.standIn == null) {
       return this.args.cardId;
     }
     // HTML-backed → resolve the CURRENT `@cardId` once the gesture has fired,
@@ -276,6 +292,44 @@ export default class HydratableCard extends Component<Signature> {
     return this.args.displayContainer ?? true;
   }
 
+  // The stand-in `CardDef` for a trimmed row, built from its fields once the
+  // card API is at hand (it already is, wherever cards render). Keyed by the
+  // fields object, so a recycled component builds the new row's stand-in.
+  @tracked private standInCard:
+    | { for: StandInFields; card: BaseDef }
+    | undefined;
+
+  private get standIn(): BaseDef | undefined {
+    let fields = this.args.standIn;
+    if (!fields || this.args.component != null) {
+      return undefined;
+    }
+    if (this.standInCard?.for !== fields) {
+      void this.buildStandIn(fields);
+      return undefined;
+    }
+    return this.standInCard.card;
+  }
+
+  private async buildStandIn(fields: StandInFields) {
+    let api = await this.cardService.getAPI();
+    if (
+      isDestroyed(this) ||
+      isDestroying(this) ||
+      this.args.standIn !== fields
+    ) {
+      return;
+    }
+    let card = new api.CardDef({
+      cardInfo: new api.CardInfoField({
+        name: fields.name ?? null,
+        summary: fields.summary ?? null,
+        cardThumbnailURL: fields.cardThumbnailURL ?? null,
+      }),
+    });
+    this.standInCard = { for: fields, card };
+  }
+
   @action private hydrate() {
     if (this.args.isError) {
       return;
@@ -310,6 +364,19 @@ export default class HydratableCard extends Component<Signature> {
         }}
         data-hydration={{this.hydrationState}}
         data-test-hydratable-card={{@cardId}}
+        ...attributes
+      />
+    {{else if this.standIn}}
+      {{! A trimmed row: its own fields under CardDef's template until the
+          gesture loads the real card. }}
+      <CardRenderer
+        @card={{this.standIn}}
+        @format={{this.format}}
+        @displayContainer={{this.displayContainer}}
+        {{hydrationTrigger this.mode this.hydrate}}
+        data-hydration={{this.hydrationState}}
+        data-test-hydratable-card={{@cardId}}
+        data-test-hydratable-stand-in
         ...attributes
       />
     {{else if @isError}}

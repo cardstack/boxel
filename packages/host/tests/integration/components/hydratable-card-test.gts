@@ -156,6 +156,46 @@ module('Integration | Component | hydratable-card', function (hooks) {
     );
   });
 
+  // A trimmed (sparse) row with no prerendered HTML renders as a plain CardDef
+  // from the fields it carries, loading nothing of its own type, and hover
+  // swaps in the real card like any inert row.
+  test('stand-in — a trimmed row renders as CardDef until hover loads its type', async function (assert) {
+    let standIn = { name: 'Hassan from the index' };
+    await render(
+      <template>
+        <TestContext>
+          <HydratableCard
+            @cardId={{HASSAN}}
+            @standIn={{standIn}}
+            @mode='hover'
+          />
+        </TestContext>
+      </template>,
+    );
+    await settled();
+
+    assert
+      .dom('[data-test-hydratable-stand-in]')
+      .containsText('Hassan from the index', "shows the row's own title");
+    assert.dom('[data-hydration="hover"]').exists('waits for the gesture');
+    assert.dom('[data-test-live-card]').doesNotExist('no live card yet');
+    assert.notOk(
+      isCardInstance(storeService.peek(HASSAN)),
+      'the card is not loaded before the gesture',
+    );
+
+    await triggerEvent('[data-test-hydratable-card]', 'mouseenter');
+
+    assert.dom('[data-test-live-card]').hasText('Live: Hassan', 'now live');
+    assert
+      .dom('[data-test-hydratable-stand-in]')
+      .doesNotExist('the stand-in is gone');
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'the card entered the Store',
+    );
+  });
+
   // Hover mode treats keyboard focus the same as pointer hover: a `focusin`
   // hydrates exactly like `mouseenter`, so keyboard users reach the live card
   // too. (`focusin` bubbles, so focus landing inside the card subtree counts.)

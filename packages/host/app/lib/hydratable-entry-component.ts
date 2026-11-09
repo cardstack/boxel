@@ -14,6 +14,7 @@ import type {
 
 import HydratableCard, {
   type HydrationMode,
+  type StandInFields,
 } from '../components/search/hydratable-card';
 
 import type { HTMLComponent } from './html-component';
@@ -38,6 +39,9 @@ export interface HydratableEntryArgs {
   // The inert prerendered HTML for an HTML-backed row; absent for a full live
   // row, which resolves to its live instance with nothing to stay inert as.
   component?: HTMLComponent;
+  // A trimmed (sparse) row with no prerendered HTML: what it renders as a plain
+  // `CardDef` until the hydration gesture loads its own type.
+  standIn?: StandInFields;
   // The ancestor type the live/hydrated card renders as, so it matches its
   // prerendered-HTML siblings. Files render natively (undefined).
   renderType?: ResolvedCodeRef;
@@ -67,6 +71,7 @@ class _HydratableEntryComponent {
     readonly cardId: string,
     readonly name: string | undefined,
     readonly component: HTMLComponent | undefined,
+    readonly standIn: StandInFields | undefined,
     readonly renderType: ResolvedCodeRef | undefined,
     readonly type: StoreReadType | undefined,
     readonly format: Format,
@@ -84,6 +89,7 @@ setComponentTemplate(
       @cardId={{this.cardId}}
       @name={{this.name}}
       @component={{this.component}}
+      @standIn={{this.standIn}}
       @renderType={{this.renderType}}
       @type={{this.type}}
       @format={{this.format}}
@@ -131,6 +137,7 @@ export function hydratableEntryComponent(
     args.cardId,
     args.name,
     args.component,
+    args.standIn,
     args.renderType,
     args.type,
     args.format,

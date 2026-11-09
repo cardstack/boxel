@@ -28,7 +28,10 @@ import {
   type SearchEntryRendering,
 } from './search-entries';
 
-import type { HydrationMode } from '../components/search/hydratable-card';
+import type {
+  HydrationMode,
+  StandInFields,
+} from '../components/search/hydratable-card';
 
 // The diagnostic/labeling attributes the prerendered HTML carries so consumers
 // (e.g. the operator-mode overlay) can label and icon a card before its
@@ -204,6 +207,31 @@ export class RenderableSearchEntry {
     return this.html ? this.html.format : this.fallbackFormat;
   }
 
+  // A trimmed card row (a sparse serialization, `meta.sparseFields`) with no
+  // prerendered HTML can't render live as its own type from the fields it
+  // carries, and loading its module up front would cost what the trimmed
+  // fieldset was asked for to avoid. It renders as a plain `CardDef` from the
+  // base fields it has, until the hydration gesture loads the real card.
+  private get standIn(): StandInFields | undefined {
+    let item = this.item;
+    if (!item || item.type !== 'card' || this.isError) {
+      return undefined;
+    }
+    let meta = item.meta as { sparseFields?: unknown } | undefined;
+    if (!Array.isArray(meta?.sparseFields)) {
+      return undefined;
+    }
+    let attributes = (item.attributes ?? {}) as Record<string, unknown>;
+    let cardInfo = (attributes.cardInfo ?? {}) as Record<string, unknown>;
+    let text = (value: unknown) =>
+      typeof value === 'string' && value ? value : undefined;
+    return {
+      name: text(cardInfo.name) ?? text(attributes.cardTitle) ?? this.name,
+      summary: text(cardInfo.summary),
+      cardThumbnailURL: text(cardInfo.cardThumbnailURL),
+    };
+  }
+
   // Built once, lazily: an inert row never reaches here, and an unchanged row
   // keeps the same component object across live re-runs (its view-model is
   // memoized by raw-entry identity), so the rendered list stays render-stable.
@@ -223,6 +251,7 @@ export class RenderableSearchEntry {
         cardId: this.id,
         name: this.name,
         component: inert,
+        standIn: inert ? undefined : this.standIn,
         renderType: this.renderType,
         type: this.type,
         format: this.format,
