@@ -312,6 +312,51 @@ export const queryableValue = Symbol.for('cardstack-queryable-value');
 // uses it (`needs-vectorizer`).
 export const assertDeclarable = Symbol.for('cardstack-assert-declarable');
 
+// A containsMany item's stable id, for items whose type holds a vector (see
+// `holdsVector`). Stored in the item's attributes under `_itemId`, kept on
+// the item instance under this symbol.
+export const ITEM_ID_KEY = '_itemId';
+const itemIdSymbol = Symbol.for('cardstack-item-id');
+function itemIdOf(item: unknown): string {
+  let held = (item as any)?.[itemIdSymbol];
+  if (typeof held === 'string' && held) {
+    return held;
+  }
+  let minted = `i${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+  if (item && typeof item === 'object') {
+    (item as any)[itemIdSymbol] = minted;
+  }
+  return minted;
+}
+// Whether a compound field type holds a vector field, at any depth of
+// contained fields: its items then carry stable ids.
+const vectorHolders = new WeakMap<object, boolean>();
+function holdsVector(type: unknown, depth = 0): boolean {
+  if (!type || typeof type !== 'function' || depth > 6) {
+    return false;
+  }
+  let known = vectorHolders.get(type);
+  if (known !== undefined) {
+    return known;
+  }
+  vectorHolders.set(type, false);
+  let found = Object.values(getFields(type as any)).some((field: any) => {
+    if (
+      field?.fieldType !== 'contains' &&
+      field?.fieldType !== 'containsMany'
+    ) {
+      return false;
+    }
+    let card = field.card;
+    return (
+      (card && (card as any)[fieldSerializer] === 'vector') ||
+      holdsVector(card, depth + 1)
+    );
+  });
+  vectorHolders.set(type, found);
+  return found;
+}
+
 function checkDeclarable(field: unknown, fieldName: string, options?: Options) {
   // a thunk (a function that is not a class) resolves later; only a class
   // can be checked here
@@ -1051,12 +1096,24 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
               return resource;
             });
 
+      // An item whose type holds a vector carries a stable id, minted the
+      // first time it is saved: its vector lives in the card's sidecar keyed
+      // by that id, never by position, so reordering or editing items moves
+      // no vector.
+      let keyed = holdsVector(this.card);
       let result: JSONAPIResource = {
         attributes: {
           [this.name]:
             serialized === null
               ? null
-              : serialized.map((resource) => resource.attributes),
+              : serialized.map((resource, index) =>
+                  keyed
+                    ? {
+                        [ITEM_ID_KEY]: itemIdOf(values![index]),
+                        ...resource.attributes,
+                      }
+                    : resource.attributes,
+                ),
         },
       };
       if (Object.keys(relationships).length > 0) {
@@ -1167,13 +1224,26 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
               relativeTo,
             );
             assertNoDeserializeOverride(cardClass);
-            return cardClass[deserialize](
+            let item = await cardClass[deserialize](
               resource,
               relativeTo,
               doc,
               store,
               opts,
             );
+            // An item that holds a vector keeps its stable id: its vector
+            // lives in the card's sidecar, keyed by this id.
+            if (
+              entry &&
+              typeof entry === 'object' &&
+              typeof (entry as Record<string, unknown>)[ITEM_ID_KEY] ===
+                'string'
+            ) {
+              (item as any)[itemIdSymbol] = (entry as Record<string, unknown>)[
+                ITEM_ID_KEY
+              ];
+            }
+            return item;
           }
         }),
       ),
