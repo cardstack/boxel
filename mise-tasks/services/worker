@@ -49,6 +49,7 @@ NODE_ENV=development \
   node worker-manager.ts \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
+  --userIndexCount="${WORKER_USER_INDEX_COUNT:-0}" \
   --port="${WORKER_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
