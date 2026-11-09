@@ -84,8 +84,9 @@ through `@cardstack/runtime-common`. `verbatimModuleSyntax` rejects every
 ECMAScript import in a package whose `package.json` has no `"type":
 "module"`, which is every file in `packages/base` and `packages/boxel-ui`,
 and `erasableSyntaxOnly` rejects the parameter properties Pret UI compiles
-with Babel. The secure origin can set the flags because it imports none of
-those packages.
+with Babel. The secure origin's program reads Pret UI's and boxel-ui's
+source as well, and its type-check keeps the flags by discarding every
+diagnostic outside the package's own files.
 
 No build step keeps the image and the local service the same artifact: the
 Dockerfile copies the sources and runs them unbuilt, as the worker image runs
@@ -123,6 +124,11 @@ whose transitive dependencies the package carries without loading them.
   and `packages/boxel-ui` as ES modules in their manifests and removing Pret
   UI's parameter properties, is a change to how three other packages build
   for the sake of one package's type-check.
+- **The flags, with the type-check's output filtered to the package's own
+  files, as the secure origin does.** The type-check would catch the two
+  failures in the package's files, but behind a script that discards what
+  the flags report about every other package, where the ESLint rules
+  already hold every package to the same syntax with nothing to discard.
 - **Compiled TypeScript with a build step.** Allows every TypeScript feature,
   at the cost of a build in the image, in local start and in CI, and of two
   artifacts (sources and output) that can disagree.
@@ -139,7 +145,9 @@ whose transitive dependencies the package carries without loading them.
 
 ## 4. Sources
 
-- ADR 019 §1.10, the same rule for `packages/secure-origin`.
+- ADR 019 §1.10, the same rule for `packages/secure-origin`, and
+  `packages/secure-origin/build/type-check.ts`, which keeps its flags by
+  discarding other packages' diagnostics.
 - `packages/realm-server/tsconfig.json`, the module configuration to copy,
   and `eslint/erasable-syntax-selectors.cjs` with the
   `@typescript-eslint/parameter-properties` rule in `.eslintrc.js`, the
