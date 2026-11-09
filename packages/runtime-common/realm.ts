@@ -5088,9 +5088,9 @@ export class Realm {
 
   // The file write locks, taken once the indexing the commit's gate would wait
   // for has settled, when `drains` says the commit will wait for it. That gate
-  // runs inside the locks, so on its own it waits there, and a stalled pass
+  // runs inside the locks, so on its own it waits there, and a long pass
   // then parks every other writer of these files behind this one for as long
-  // as the stall lasts. Draining first leaves the gate nothing to wait for in
+  // as it runs. Draining first leaves the gate nothing to wait for in
   // the common case; see `withLocksAfterDrain` for the re-check that keeps it
   // so.
   #withFileWriteLocksAfterDrain<T>(
@@ -5487,7 +5487,7 @@ export class Realm {
       // This gate runs with the write's file locks held. The writers that
       // take those locks drain before taking them (`withLocksAfterDrain`),
       // so what is left to wait for here is a pass that registered after
-      // their re-check, not the bulk of a stall.
+      // their re-check, not the bulk of a long pass.
       stageCursor?.mark('drain');
     }
     // Audited once the drain has settled what the realm resolves against and

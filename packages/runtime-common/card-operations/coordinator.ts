@@ -461,9 +461,9 @@ export async function commitBatch(
   //
   // The wait happens before the write locks are taken, not while holding them
   // (see `withLocksAfterDrain`): what it waits on is other writers' indexing,
-  // which needs no exclusivity over this batch's files, and a stalled pass
-  // would otherwise park every other writer of those files behind this one for
-  // as long as the stall lasts. Inside the locks only a synchronous re-check
+  // which needs no exclusivity over this batch's files, and a long pass — a
+  // module's fan-out across every card built from it — would otherwise park
+  // every other writer of those files behind this one for as long as it runs. Inside the locks only a synchronous re-check
   // remains, so the state staging reads is still the state the drain left.
   //
   // A batch that does not wait for its own indexing does not wait for
