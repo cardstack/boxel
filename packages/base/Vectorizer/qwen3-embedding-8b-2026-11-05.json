@@ -16,8 +16,8 @@
       "distance": "cosine",
       "price": "about $0.01 per million tokens",
       "sameSpaceAs": [],
-      "dataHandling": "Text is sent to OpenRouter and served by DeepInfra (US).",
-      "notes": "OpenRouter publishes no weights revision; the revision is the date the space was fixed. The standard text space (StandardTextVector) is this vectorizer at 1024 dimensions; OnTube's text vectors are its 256-dimension space."
+      "dataHandling": "Text is sent to OpenRouter and served only by DeepInfra (US), with fallbacks off.",
+      "notes": "OpenRouter publishes no weights revision; the revision is the date the space was fixed (pending confirmation). Calls pin the host: provider { only: ['deepinfra/us'], allow_fallbacks: false }. The standard text space (StandardTextVector) is this vectorizer at 1024 dimensions. OnTube's text vectors are its 256-dimension space, written 2026-11-03 with that pin (stored as int8, scale 1/127; no float originals kept). Chosen 2026-11-05 by a 150-query benchmark: nDCG@10 0.603 (Cohere Embed 5 Pro 0.640, Qwen3 0.6B 0.548, Titan V2 0.498)."
     },
     "meta": {
       "adoptsFrom": {
