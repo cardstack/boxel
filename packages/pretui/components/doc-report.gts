@@ -18,8 +18,8 @@ import { iconFor } from '../icon-registry';
 // The body is a slot, never a string: a report is markdown, tables, embedded
 // cards, whatever the run produced (Law 7). `Prose` supplies the reading
 // measure and the inline-code treatment; `Tooltip` supplies the pill preview
-// and, being CSS-only on hover AND focus-within, works from the keyboard —
-// which the design mirror's hover-only fit-preview did not.
+// and, since it opens on keyboard focus as well as hover, works from the
+// keyboard — which the design mirror's hover-only fit-preview did not.
 
 export interface DocCard {
   /** stable id — the {{#each}} key */
