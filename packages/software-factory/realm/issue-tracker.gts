@@ -49,7 +49,11 @@ import Settings from '@cardstack/boxel-icons/settings';
 import ListFilter from '@cardstack/boxel-icons/list-filter';
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
-import { realmURL, type ResolvedCodeRef } from '@cardstack/runtime-common';
+import {
+  codeRef,
+  realmURL,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import { KanbanBoard } from './kanban-board.gts';
 import { KanbanColumnField } from './kanban-column.gts';
@@ -79,11 +83,9 @@ import { KnowledgeArticle } from './knowledge-article.gts';
 import { StatusPill } from './status-pill.gts';
 import { IssueOptionField } from './issue-option.gts';
 
-const issueCodeRef: ResolvedCodeRef = {
-  // @ts-expect-error this is not a CJS file, import.meta is allowed
-  module: new URL('./issue-tracker', import.meta.url).href,
-  name: 'Issue',
-};
+// @ts-expect-error this is not a CJS file, import.meta is allowed
+const here: string = import.meta.url;
+const issueCodeRef: ResolvedCodeRef = codeRef(here, './issue-tracker', 'Issue');
 
 // ── Issue ──────────────────────────────────────────────────────────────────
 type IssueWithProject = {
@@ -3014,7 +3016,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     let fieldValue = columnKey !== 'uncategorized' ? columnKey : undefined;
     let cardId = await this.args.createCard?.(
       issueCodeRef,
-      new URL(issueCodeRef.module),
+      issueCodeRef.module,
       {
         realmURL: boardRealmURL,
         doc: {

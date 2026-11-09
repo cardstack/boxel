@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
 import { ingestCard } from '../../src/commands/realm/ingest-card.js';
 import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.js';
 import type { ProfileManager } from '../../src/lib/profile-manager.js';
@@ -43,7 +44,8 @@ export class Tool extends CardDef {
       meta: { adoptsFrom: { module: '../garage', name: 'Garage' } },
       relationships: {
         'tools.0': { links: { self: '../Tool/t1' } },
-        'tools.1': { links: { self: '../Tool/t2' } },
+        // Prefix form, resolved on the network to this realm.
+        'tools.1': { links: { self: '@cardstack/garage/Tool/t2' } },
         // Cross-realm decoy: different host, same `/garage/` path tail, path
         // resolves to a file that exists locally. Must be skipped, not copied.
         decoy: {
@@ -136,6 +138,7 @@ describe('ingest-card from an instance URL', () => {
       realm: ROOT,
       authenticator: makeFakeAuthenticator(),
       profileManager: makeFakeProfileManager(),
+      network: new PrefixRealmNetwork({ '@cardstack/garage/': ROOT }),
     });
   });
 

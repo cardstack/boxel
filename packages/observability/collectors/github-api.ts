@@ -13,6 +13,7 @@ export async function githubRequest(
   url: string,
   token: string,
   body?: unknown,
+  headers?: Record<string, string>,
 ): Promise<Response> {
   return fetch(url, {
     method,
@@ -22,6 +23,7 @@ export async function githubRequest(
       'x-github-api-version': '2022-11-28',
       'user-agent': 'boxel-actions-queue-collector',
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -52,4 +54,63 @@ export async function githubError(
   ) as Error & { status: number };
   err.status = res.status;
   return err;
+}
+
+type GetRequest = (
+  method: 'GET',
+  url: string,
+  token: string,
+  body: undefined,
+  headers?: Record<string, string>,
+) => Promise<Response>;
+
+// GitHub does not count a 304 Not Modified against the rate limit. A GET sent
+// with the ETag of the last response for its URL therefore costs a request
+// only when the resource changed since then, and a 304 gives back the body
+// kept from that response.
+export class ConditionalGets {
+  #request: GetRequest;
+  #entries = new Map<string, { etag: string; body: unknown; used: boolean }>();
+
+  constructor(request: GetRequest = githubRequest) {
+    this.#request = request;
+  }
+
+  async get(url: string, token: string): Promise<unknown> {
+    const entry = this.#entries.get(url);
+    const res = await this.#request(
+      'GET',
+      url,
+      token,
+      undefined,
+      entry ? { 'if-none-match': entry.etag } : undefined,
+    );
+    if (res.status === 304 && entry) {
+      entry.used = true;
+      return entry.body;
+    }
+    if (!res.ok) {
+      this.#entries.delete(url);
+      throw await githubError('GET', url, res);
+    }
+    const body: unknown = await res.json();
+    const etag = res.headers.get('etag');
+    if (etag) this.#entries.set(url, { etag, body, used: true });
+    else this.#entries.delete(url);
+    return body;
+  }
+
+  // Forgets each URL that no get() asked for since the last sweep. A run that
+  // finished is not asked for again, so without this its job list would stay
+  // in memory for the life of the process.
+  sweep(): void {
+    for (const [url, entry] of this.#entries) {
+      if (entry.used) entry.used = false;
+      else this.#entries.delete(url);
+    }
+  }
+
+  get size(): number {
+    return this.#entries.size;
+  }
 }

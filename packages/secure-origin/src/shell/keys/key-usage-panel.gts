@@ -56,7 +56,6 @@ export default class KeyUsagePanel extends Component<Signature> {
       data-test-key-usage-panel
     >
       <Disclosure
-        class='disclosure'
         @size='s'
         @open={{not this.isClosed}}
         @onOpenChange={{this.toggle}}
@@ -66,40 +65,43 @@ export default class KeyUsagePanel extends Component<Signature> {
             for
             {{@key.name}}</VisuallyHidden></:trigger>
         <:default>
-          {{#if this.loading}}
-            <BusyMessage @title='Loading usage…' />
-          {{else if this.failed}}
-            <Alert @tone='danger' role='alert' data-test-key-usage-error>
-              <:default>This key’s usage couldn’t be loaded:
-                {{this.failed.message}}</:default>
-              <:action><Button
-                  @variant='secondary'
-                  @size='xs'
-                  data-test-key-usage-retry
-                  {{on 'click' this.load}}
-                >Try again</Button></:action>
-            </Alert>
-          {{else if this.open}}
-            <Card class='panel-body' data-test-key-usage-body>
-              <div class='panel-grid'>
-                <UsageSummary @usage={{this.open.usage}} />
-                <div class='limits'>
-                  <h4 class='heading'>Limits</h4>
-                  <LimitsForm
-                    @limits={{this.open.usage.limits}}
-                    @onSave={{this.saveLimits}}
-                  />
+          <div class='panel-content'>
+            {{#if this.loading}}
+              <BusyMessage @title='Loading usage…' />
+            {{else if this.failed}}
+              <Alert @tone='danger' role='alert' data-test-key-usage-error>
+                <:default>This key’s usage couldn’t be loaded:
+                  {{this.failed.message}}</:default>
+                <:action><Button
+                    @variant='secondary'
+                    @size='xs'
+                    data-test-key-usage-retry
+                    {{on 'click' this.load}}
+                  >Try again</Button></:action>
+              </Alert>
+            {{else if this.open}}
+              <Card class='panel-body' data-test-key-usage-body>
+                <div class='panel-grid'>
+                  <UsageSummary @usage={{this.open.usage}} />
+                  <div class='limits'>
+                    <h4 class='heading'>Limits</h4>
+                    <LimitsForm
+                      @limits={{this.open.usage.limits}}
+                      @onSave={{this.saveLimits}}
+                    />
+                  </div>
                 </div>
-              </div>
-            </Card>
-          {{/if}}
+              </Card>
+            {{/if}}
+          </div>
         </:default>
       </Disclosure>
     </div>
     <style scoped>
-      /* The panel opens under its trigger with the panel's own gap. */
-      .disclosure {
-        row-gap: var(--boxel-sp-xs);
+      /* The panel opens under its trigger with the panel's own gap. The gap
+         is the content's own padding, so a closed panel adds no space. */
+      .panel-content {
+        padding-top: var(--boxel-sp-xs);
       }
       /* In the panel's text size, not the smaller one the disclosure sets
          for its trigger. */

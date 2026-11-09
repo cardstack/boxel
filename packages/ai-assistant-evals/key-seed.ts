@@ -19,6 +19,8 @@ import { promisify } from 'node:util';
 
 import jsonwebtoken from 'jsonwebtoken';
 
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-identifiers';
+
 import { REALM_SERVER_URL } from './eval-config.ts';
 import { loginWithPassword } from './matrix-api.ts';
 import { MIME, RealmClient } from './realm-api.ts';
@@ -49,11 +51,11 @@ const SESSION_SECONDS = 60 * 60;
 
 export interface PipelineApprovalTarget {
   realm: string;
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
   operation: string;
   // The copied card, which an operation approved per instance names.
-  instance: string;
+  instance: RealmResourceIdentifier;
   keyFrom: KeyFrom;
 }
 

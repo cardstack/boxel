@@ -363,6 +363,24 @@ module('Integration | approve pages', function (hooks) {
         'POST /graphql · key in the Authorization header',
         'method, path and where the key goes',
       );
+    let request =
+      '[data-test-approve-operation="listPRs"] [data-test-approve-request-toggle]';
+    assert
+      .dom(`${request} [data-test-pretui-collapsible-trigger]`)
+      .hasText(
+        'POST /graphql · key in the Authorization header for List your open pull requests',
+        'its button names the operation, so requests alike are told apart',
+      );
+    assert
+      .dom(request)
+      .hasAttribute('data-state', 'closed', 'the full request starts closed');
+    await click(`${request} [data-test-pretui-collapsible-trigger]`);
+    assert
+      .dom(request)
+      .hasAttribute('data-state', 'open', 'and opens from its line');
+    assert
+      .dom(`${request} [data-test-approve-request]`)
+      .includesText('Where the key goes', 'to the full request');
     assert
       .dom('[data-test-approve-slot]')
       .exists({ count: 1 }, 'one key choice covers the whole batch');

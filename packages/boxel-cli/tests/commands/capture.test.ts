@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Command } from 'commander';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,6 +10,11 @@ import {
   capture,
 } from '../../src/commands/capture.ts';
 import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.ts';
+import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import {
+  PREFIX_REALMS_ENDPOINT,
+  clearPrefixRealmNetworkCache,
+} from '@cardstack/runtime-common/prefix-realm-network';
 
 const REALM_URL = 'http://realms.example.test/owner/workspace/';
 const CARD_URL = `${REALM_URL}Person/fadhlan`;
@@ -259,6 +264,59 @@ describe('boxel capture: single capture', () => {
     });
     expect(outside.ok).toBe(false);
     expect(outside.captures[0].error).toContain('not within --realm');
+  });
+
+  it("resolves a prefix-form --realm on the realm server's prefix map", async () => {
+    clearPrefixRealmNetworkCache();
+    vi.stubEnv('REALM_SERVER_URL', 'http://realms.example.test/');
+    vi.stubGlobal('fetch', (async (input: string | URL | Request) => {
+      let url = input instanceof Request ? input.url : String(input);
+      if (!url.endsWith(`/${PREFIX_REALMS_ENDPOINT}`)) {
+        return new Response('not found', { status: 404 });
+      }
+      return Response.json({
+        data: [
+          {
+            type: 'prefix-realm',
+            id: '@cardstack/workspace/',
+            attributes: { realmURL: REALM_URL },
+          },
+        ],
+      });
+    }) as typeof globalThis.fetch);
+    try {
+      let { authenticator, requests } = makeFake({
+        postResponses: [
+          () =>
+            readyResponse({
+              status: 'ready',
+              captures: [
+                {
+                  name: null,
+                  url: null,
+                  width: 1,
+                  height: 1,
+                  deviceScaleFactor: null,
+                  base64: PNG_BASE64,
+                },
+              ],
+            }),
+        ],
+      });
+      let result = await capture(CARD_URL, {
+        authenticator,
+        out: tempDir(),
+        realm: '@cardstack/workspace/',
+        profileManager: new ProfileManager(tempDir()),
+      });
+      expect(result.ok).toBe(true);
+      let post = requests.find((r) => r.method === 'POST');
+      expect(JSON.stringify(post?.body)).toContain(REALM_URL);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+      clearPrefixRealmNetworkCache();
+    }
   });
 
   it('downloads from the served URL when the response carries no base64', async () => {

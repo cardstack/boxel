@@ -16,6 +16,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import Calendar from '@cardstack/boxel-icons/calendar';
+import { pathSegmentsOfIdentifier } from '@cardstack/runtime-common';
 
 import { CrmApp } from '../crm-app';
 import { Contact } from './contact';
@@ -30,11 +31,10 @@ export class Issues extends CardDef {
   static displayName = 'Issues';
 }
 
-function extractId(href: string): string {
-  const urlObj = new URL(href);
-  const pathname = urlObj.pathname;
-  const parts = pathname.split('/');
-  const lastPart = parts[parts.length - 1];
+// The last path segment of a card id, in either RRI form.
+function extractId(id: string): string {
+  const segments = pathSegmentsOfIdentifier(id);
+  const lastPart = segments[segments.length - 1] ?? '';
   return lastPart.replace('.json', '');
 }
 

@@ -129,14 +129,14 @@ Two constraints are load-bearing:
 - **It must not run as a scheduled GitHub Actions workflow.** It would queue
   behind the backlog it measures and go blind during the incident it exists
   for. Hosted, it belongs on a schedule outside Actions.
-- **A sample costs one request per active run, plus three.** The hourly spend
-  therefore scales with how busy the repository is, against a token's 5,000
-  requests an hour. At the observed peak of ~50 concurrent runs a 60-second
-  interval spends around 3,200 an hour, which is comfortable; 30 seconds
-  exceeds the budget above roughly forty concurrent runs, so higher resolution
-  needs the per-sample cost reduced rather than the interval shortened.
-  Sampling stops rather than reporting partial depth when the remaining budget
-  nears its reserve.
+- **A sample costs one request per active run whose jobs changed, plus three
+  per repository.** The collector sends each job-list request with the ETag of
+  the last answer, and GitHub does not count a `304 Not Modified` against the
+  token's 5,000 requests an hour. About 45% of the job lists are unchanged
+  between two samples, so a 60-second interval can keep up with about 120
+  active runs for an hour (the busiest hour seen had up to 114). A 30-second
+  interval doubles the cost. Sampling stops rather than reporting partial depth
+  when the remaining budget gets to its reserve.
 
 The dashboard reads `{service="actions-collector", env="$env"}`, so a hosted
 deployment needs to log under that service name.

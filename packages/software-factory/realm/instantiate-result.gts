@@ -9,7 +9,7 @@ import {
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
 import CodeRefField from '@cardstack/base/code-ref';
-import { RealmPaths } from '@cardstack/runtime-common';
+import { RealmPaths, rri } from '@cardstack/runtime-common';
 import { ValidationResult } from './validation-result.gts';
 import {
   ResultFittedCard,
@@ -40,14 +40,12 @@ export class InstantiateCardEntry extends FieldDef {
     if (!this.instanceId) {
       return '(no instance)';
     }
-    let cardRealmURLString = (this as any)[realmURL];
-    if (cardRealmURLString) {
+    let cardRealmURL = this[realmURL];
+    if (cardRealmURL) {
       try {
-        return new RealmPaths(new URL(cardRealmURLString)).local(
-          new URL(this.instanceId),
-        );
+        return new RealmPaths(cardRealmURL).local(rri(this.instanceId));
       } catch {
-        // instance URL is invalid or outside the realm — fall through
+        // the instance is outside the realm — fall through
       }
     }
     return this.instanceId;
