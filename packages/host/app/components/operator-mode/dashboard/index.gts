@@ -576,8 +576,7 @@ export default class Dashboard extends Component<Signature> {
             <:head as |getStarted|>
               <header class='page-head'>
                 <div class='greeting-line'>
-                  {{! Percy hides the greeting's text: it changes with the
-                      hour of the run. }}
+                  {{! Percy hides the greeting: it changes with the hour. }}
                   <h1
                     class='greeting'
                     {{this.trackHour}}

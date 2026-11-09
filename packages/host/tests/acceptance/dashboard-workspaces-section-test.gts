@@ -13,8 +13,6 @@ import { getService } from '@universal-ember/test-support';
 import pluralize from 'pluralize';
 import { module, test } from 'qunit';
 
-import { TrackedObject } from 'tracked-built-ins';
-
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -27,6 +25,7 @@ import {
   realmURL,
   clickScopeOption,
   markHosted,
+  markUpdated,
   descriptionOf,
   pressKey,
   sectionOrder,
@@ -35,15 +34,6 @@ import {
   operatorModeState,
 } from '../helpers/dashboard';
 import { stubWindowOpen } from '../helpers/window-open';
-
-// A write to a workspace is what moves its update time.
-function markUpdated(url: string, updatedAt: Date) {
-  let realmResource = (getService('realm') as any).realms.get(url);
-  realmResource.info = new TrackedObject({
-    ...realmResource.info,
-    updatedAt: updatedAt.toISOString(),
-  });
-}
 
 const RECENT_TILES = '[data-test-workspace-recent-list] [data-test-workspace]';
 

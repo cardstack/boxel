@@ -12,7 +12,9 @@ import {
   setupMockMatrix,
   type Config as MockMatrixConfig,
 } from './mock-matrix';
+
 import { setupApplicationTest } from './setup';
+import { getTestRealmRegistry } from './test-realm-registry';
 
 import {
   type RealmContents,
@@ -23,6 +25,8 @@ import {
   setupUserSubscription,
   realmConfigCardJSON,
 } from '.';
+
+import type { MockUtils } from './mock-matrix/_utils';
 
 export type DashboardRealm = Awaited<
   ReturnType<typeof setupAcceptanceTestRealm>
@@ -54,6 +58,69 @@ export function markHosted(
   realmResource.info = new TrackedObject({
     ...realmResource.info,
     lastPublishedAt,
+  });
+}
+
+// A write to a workspace is what moves its update time.
+export function markUpdated(url: string, updatedAt: Date) {
+  let realmResource = (getService('realm') as any).realms.get(url);
+  realmResource.info = new TrackedObject({
+    ...realmResource.info,
+    updatedAt: updatedAt.toISOString(),
+  });
+}
+
+// Changes a workspace's info as the realm reports it, so a reload of the
+// info keeps the change.
+export function overrideRealmInfo(
+  url: string,
+  change: Record<string, unknown>,
+) {
+  let realm = getTestRealmRegistry().get(url)?.realm;
+  if (!realm) {
+    throw new Error(`no test realm at ${url}`);
+  }
+  let getRealmInfo = realm.getRealmInfo.bind(realm);
+  realm.getRealmInfo = async () => ({ ...(await getRealmInfo()), ...change });
+  let realmResource = (getService('realm') as any).realms.get(url);
+  realmResource.info = new TrackedObject({ ...realmResource.info, ...change });
+}
+
+// The realm server marks a workspace publishable; a published copy isn't.
+export function markPublishable(url: string) {
+  overrideRealmInfo(url, { publishable: true });
+}
+
+export const ownedRealmURL = 'http://test-realm/testuser/workspace-b/';
+export const sharedRealmURL = 'http://test-realm/testuser/workspace-c/';
+
+// Adds Workspace B, which the test user owns too, and Workspace C, which is
+// only shared with them, to the dashboard's Workspace A.
+export function setupMoreWorkspaces(
+  hooks: NestedHooks,
+  mockMatrixUtils: MockUtils,
+) {
+  hooks.beforeEach(async function () {
+    for (let [url, name, permissions] of [
+      [ownedRealmURL, 'Workspace B', ['read', 'write', 'realm-owner']],
+      [sharedRealmURL, 'Workspace C', ['read', 'write']],
+    ] as const) {
+      await setupAcceptanceTestRealm({
+        realmURL: url,
+        mockMatrixUtils,
+        permissions: { '@testuser:localhost': [...permissions] },
+        contents: { 'realm.json': realmConfigCardJSON({ name }) },
+      });
+      // A session minted again later, as reauthenticating does, carries
+      // the same permissions.
+      mockMatrixUtils.setRealmSessionPermissions(url, [...permissions]);
+    }
+    mockMatrixUtils.setRealmSessionPermissions(realmURL, [
+      'read',
+      'write',
+      'realm-owner',
+    ]);
+    mockMatrixUtils.setActiveRealms([realmURL, ownedRealmURL, sharedRealmURL]);
   });
 }
 
