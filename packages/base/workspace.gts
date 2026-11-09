@@ -8,7 +8,12 @@ import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
-import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
+import {
+  TrackedArray,
+  TrackedMap,
+  TrackedObject,
+  TrackedSet,
+} from 'tracked-built-ins';
 
 import {
   BoxelInput,
@@ -59,14 +64,16 @@ import {
   executableExtensions,
   inferContentType,
   isCardInstance,
-  isFileDefInstance,
   excludeCardInstanceFileRows,
+  searchEntryWireQueryFromQuery,
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
   type Query,
   type Filter,
   type CodeRef,
+  type RenderableSearchEntryLike,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import { ResizeHandle } from './components/resize-handle';
@@ -91,7 +98,6 @@ import {
   StringField,
   type BaseDef,
   type BoxComponent,
-  type FileDef,
 } from './card-api';
 import { MarkdownDef } from './markdown-file-def'; // realm README
 // Content-only markdown renderer: the README's prose with no file shell chrome
@@ -266,7 +272,30 @@ export function classifyActivityVerb(
 // static RemixCard import — matching how loadJobs references it via codeRef.
 const REMIX_TYPE_NAME = 'Remix';
 // The subset of RemixCard the feed reads: the source it was cloned from.
-type RemixCardLike = CardDef & { remixedFrom?: CardDef };
+// One Activity log line, built from a search entry (no instance behind it).
+type FeedRow = {
+  id: string;
+  // The entry's own renderer: the prerendered face, inert until hovered.
+  component: RenderableSearchEntryLike['component'];
+  when: string | undefined;
+  absolute: string | undefined;
+  absoluteIso: string | undefined;
+  note: string | undefined;
+  verb: ActivityVerb;
+  dayLabel: string;
+  showDay: boolean;
+  title: string | undefined; // card / file identity for the log line
+  typeName: string;
+  typeIconHtml: SafeString | undefined;
+  // A remix's source card URL, whose title the row shows as "from …".
+  remixedFrom: string | undefined;
+  // A file row opens through `viewCard`'s `type: 'file'` path.
+  kind: 'card' | 'file';
+};
+
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
 
 // The Activity feed verb for a card. A RemixCard instance is the record of a
 // clone, so it is a first-class "Remixed" event regardless of write timing;
@@ -1277,101 +1306,121 @@ class Isolated extends Component<typeof Workspace> {
                   first.</p>
               </div>
               <div class='feed'>
-                {{#each this.visibleFeed as |item|}}
-                  {{#if item.showDay}}
-                    {{! a heading, not a div: the rows' zebra striping counts
+                {{#if @context.searchResultsComponent}}
+                  <@context.searchResultsComponent
+                    @query={{this.feedQuery}}
+                    @mode='hover'
+                    @overlays={{false}}
+                    @displayContainer={{false}}
+                    as |results|
+                  >
+                    {{#each (this.feedRows results.entries) as |item|}}
+                      {{#if item.showDay}}
+                        {{! a heading, not a div: the rows' zebra striping counts
                       divs, so a div here would shift it at every day }}
-                    <h3 class='feed-day'>
-                      <span
-                        class='feed-day-label kicker'
-                      >{{item.dayLabel}}</span>
-                      <span class='feed-day-rule' />
-                    </h3>
-                  {{/if}}
-                  <div class='feed-row' data-test-feed-row>
-                    <time
-                      class='feed-when data'
-                      datetime={{item.absoluteIso}}
-                      data-test-feed-when
-                    >
-                      {{if item.when item.when '—'}}
-                      {{#if item.absolute}}<span
-                          class='boxel-sr-only'
-                        >({{item.absolute}})</span>{{/if}}
-                    </time>
-                    <div class='feed-card'>
-                      <item.component @format='embedded' class='feed-face' />
-                      <Button
-                        @kind='text-only'
-                        @size='auto'
-                        class='tile-open'
-                        aria-label='Open {{if item.title item.title "card"}}'
-                        {{on 'click' (this.openFeedItem item)}}
-                      />
-                    </div>
-                    <div class='feed-note'>
-                      {{! Rich event entry: verb + type (icon) meta row,
+                        <h3 class='feed-day'>
+                          <span
+                            class='feed-day-label kicker'
+                          >{{item.dayLabel}}</span>
+                          <span class='feed-day-rule' />
+                        </h3>
+                      {{/if}}
+                      <div class='feed-row' data-test-feed-row>
+                        <time
+                          class='feed-when data'
+                          datetime={{item.absoluteIso}}
+                          data-test-feed-when
+                        >
+                          {{if item.when item.when '—'}}
+                          {{#if item.absolute}}<span
+                              class='boxel-sr-only'
+                            >({{item.absolute}})</span>{{/if}}
+                        </time>
+                        <div class='feed-card'>
+                          <item.component class='feed-face' />
+                          <Button
+                            @kind='text-only'
+                            @size='auto'
+                            class='tile-open'
+                            aria-label='Open {{if
+                              item.title
+                              item.title
+                              "card"
+                            }}'
+                            {{on 'click' (this.openFeedItem item)}}
+                          />
+                        </div>
+                        <div class='feed-note'>
+                          {{! Rich event entry: verb + type (icon) meta row,
                         title anchor, then the change note. The right column
                         reads as a log line without the embedded card. }}
-                      <div class='feed-meta'>
-                        <span
-                          class='feed-verb kicker
-                            {{if (eq item.verb "Created") "created"}}
-                            {{if (eq item.verb "Remixed") "remixed"}}'
-                          data-test-feed-verb={{item.verb}}
-                        >{{item.verb}}</span>
-                        <span class='feed-type kicker'>
-                          <item.typeIcon
-                            width='12'
-                            height='12'
-                            class='feed-type-icon'
-                          />
-                          {{item.typeName}}</span>
+                          <div class='feed-meta'>
+                            <span
+                              class='feed-verb kicker
+                                {{if (eq item.verb "Created") "created"}}
+                                {{if (eq item.verb "Remixed") "remixed"}}'
+                              data-test-feed-verb={{item.verb}}
+                            >{{item.verb}}</span>
+                            <span class='feed-type kicker'>
+                              {{#if item.typeIconHtml}}
+                                <span
+                                  class='feed-type-icon'
+                                  aria-hidden='true'
+                                >{{item.typeIconHtml}}</span>
+                              {{/if}}
+                              {{item.typeName}}</span>
+                          </div>
+                          {{#if item.title}}
+                            <p
+                              class='feed-title'
+                              data-test-feed-title
+                            >{{item.title}}</p>
+                          {{/if}}
+                          {{#let (this.remixSourceTitle item) as |source|}}
+                            {{#if source}}
+                              <p
+                                class='feed-remix-source'
+                                data-test-feed-remix-source
+                              >from {{source}}</p>
+                            {{/if}}
+                          {{/let}}
+                          {{#if item.note}}
+                            <p class='feed-note-text'>{{item.note}}</p>
+                          {{/if}}
+                        </div>
                       </div>
-                      {{#if item.title}}
-                        <p
-                          class='feed-title'
-                          data-test-feed-title
-                        >{{item.title}}</p>
-                      {{/if}}
-                      {{#let (this.remixSourceTitle item) as |source|}}
-                        {{#if source}}
-                          <p
-                            class='feed-remix-source'
-                            data-test-feed-remix-source
-                          >from {{source}}</p>
+                    {{else if results.isLoading}}
+                      {{! first answer still on its way: no empty state yet }}
+                    {{else}}
+                      <div class='empty-state'>
+                        <p class='empty-note'>No activity yet. Changes to cards
+                          and files in this space will appear here.</p>
+                        {{#if @canEdit}}
+                          <Button
+                            @kind='secondary'
+                            @size='extra-small'
+                            {{on 'click' this.createNew}}
+                          >New card</Button>
                         {{/if}}
-                      {{/let}}
-                      {{#if item.note}}
-                        <p class='feed-note-text'>{{item.note}}</p>
-                      {{/if}}
-                    </div>
-                  </div>
-                {{else}}
-                  <div class='empty-state'>
-                    <p class='empty-note'>No activity yet. Changes to cards and
-                      files in this space will appear here.</p>
-                    {{#if @canEdit}}
-                      <Button
-                        @kind='secondary'
-                        @size='extra-small'
-                        {{on 'click' this.createNew}}
-                      >New card</Button>
+                      </div>
+                    {{/each}}
+                    {{#if (this.moreFeed results.meta)}}
+                      {{! reveal-on-scroll: the sentinel asks for the next page }}
+                      <div
+                        class='feed-more'
+                        {{this.watchFeedEnd (this.feedTotal results.meta)}}
+                      >
+                        <span class='feed-more-note data'>Showing
+                          {{results.entries.length}}
+                          of
+                          {{this.feedTotal results.meta}}</span>
+                      </div>
+                    {{else if (this.feedAtCap results.meta)}}
+                      <p class='feed-end-note data'>Showing the last
+                        {{this.activityFeedCap}}
+                        changes.</p>
                     {{/if}}
-                  </div>
-                {{/each}}
-                {{#if this.moreFeed}}
-                  {{! reveal-on-scroll: the sentinel appends the next chunk }}
-                  <div class='feed-more' {{this.watchFeedEnd}}>
-                    <span class='feed-more-note data'>Showing
-                      {{this.visibleFeed.length}}
-                      of
-                      {{this.feedItems.length}}</span>
-                  </div>
-                {{else if this.feedAtCap}}
-                  <p class='feed-end-note data'>Showing the last
-                    {{this.activityFeedCap}}
-                    changes.</p>
+                  </@context.searchResultsComponent>
                 {{/if}}
               </div>
             </section>
@@ -2732,13 +2781,10 @@ class Isolated extends Component<typeof Workspace> {
   });
 
   setSegment = (segment: Segment) => () => {
+    // The Activity feed's search is rendered only inside the Activity
+    // segment, so it runs only once that is opened — index-time prerenders
+    // (which render Home) never reach it.
     this.segment = segment;
-    if (segment === 'activity') {
-      // Lazy: the whole-realm reverse-chron search only runs when the
-      // Activity segment is actually opened — keeps index-time prerenders
-      // (which render Home) off the expensive path.
-      this.loadFeed.perform();
-    }
   };
 
   @cached
@@ -2822,11 +2868,12 @@ class Isolated extends Component<typeof Workspace> {
 
   // ── Typeahead search ──────────────────────────────────────
   @tracked private searchTerm = '';
+  // Read from a `select` table (id, title, type): no result is loaded as a
+  // card until the user opens it.
   private searchResults: {
     id: string;
     title: string;
     type: string;
-    card: CardDef;
   }[] = new TrackedArray();
 
   // What the search status region says, held as settled state rather than
@@ -2906,8 +2953,8 @@ class Isolated extends Component<typeof Workspace> {
     this.searchAnnouncement = '';
   });
 
-  openResult = (result: { card: CardDef }) => () => {
-    this.args.viewCard?.(result.card);
+  openResult = (result: { id: string }) => () => {
+    this.args.viewCard?.(new URL(result.id));
     this.searchTerm = '';
     this.hideResults.cancelAll();
     this.searchResults.splice(0, this.searchResults.length);
@@ -2939,24 +2986,28 @@ class Isolated extends Component<typeof Workspace> {
         clauses.push({ not: { on: baseCardRef, eq: { _cardType: name } } });
       }
     }
-    let instances = await this.searchRealm({
-      // Use the bounded realm-local search path.
-      filter: { every: clauses },
-      // Closest title first (type-ahead tiers), then the most recently
-      // changed.
-      sort: RELEVANCE_SORT,
-    } as Query);
-    let hits = (instances ?? []).filter(
-      (i) => isCardInstance(i) && i.id,
-    ) as CardDef[];
-    this.searchTotal = hits.length;
+    // The dropdown shows a title and a type per hit, so ask for exactly those
+    // as a table, one dropdown's worth, with the true match count beside it.
+    let table = await this.selectRealm(
+      {
+        filter: { every: clauses },
+        // Closest title first (type-ahead tiers), then the most recently
+        // changed.
+        sort: RELEVANCE_SORT,
+        page: { size: SEARCH_RESULTS_CAP },
+      } as Query,
+      ['cardTitle', '_cardType'],
+    );
+    this.searchTotal = table?.total ?? 0;
     this.searchResults.splice(0, this.searchResults.length);
-    for (let card of hits.slice(0, SEARCH_RESULTS_CAP)) {
+    for (let [id, title, type] of table?.rows ?? []) {
+      if (typeof id !== 'string') {
+        continue;
+      }
       this.searchResults.push({
-        id: card.id!,
-        title: card.cardTitle ?? 'Untitled',
-        type: (card.constructor as typeof CardDef).displayName,
-        card,
+        id,
+        title: typeof title === 'string' && title ? title : 'Untitled',
+        type: typeof type === 'string' ? type : '',
       });
     }
     // Settled: this is the one place a real count (including a genuine zero)
@@ -3288,16 +3339,14 @@ class Isolated extends Component<typeof Workspace> {
 
   // The feed mixes cards and files; a file opens through `viewCard`'s
   // `type: 'file'` path (keyed by its URL) rather than as a card on the stack.
-  openFeedItem =
-    (item: { card: CardDef | FileDef; kind: 'card' | 'file' }) => () => {
-      if (item.kind === 'file') {
-        this.args.viewCard?.((item.card as FileDef).id, undefined, {
-          type: 'file',
-        });
-      } else {
-        this.args.viewCard?.(item.card as CardDef);
-      }
-    };
+  // Feed rows hold ids, not instances: the card or file loads when opened.
+  openFeedItem = (item: { id: string; kind: 'card' | 'file' }) => () => {
+    if (item.kind === 'file') {
+      this.args.viewCard?.(new URL(item.id), undefined, { type: 'file' });
+    } else {
+      this.args.viewCard?.(new URL(item.id));
+    }
+  };
 
   moreSites = (sites: unknown[]) => (sites.length > 1 ? sites.length - 1 : 0);
 
@@ -3433,6 +3482,54 @@ class Isolated extends Component<typeof Workspace> {
       return [];
     }
   }; //
+
+  // A table of indexed values (Query V2 `select`) from this realm's `_search`:
+  // one row per match, `id` first and then each column, read off the search
+  // doc. Nothing is loaded or rendered, and the total is the true match count
+  // rather than the length of a page. For panels that show strings.
+  private selectRealm = async (
+    query: Query,
+    columns: string[],
+    opts: { type?: CodeRef } = {},
+  ): Promise<{ rows: unknown[][]; total: number } | undefined> => {
+    let realm = this.primaryRealm;
+    if (!realm) {
+      return undefined;
+    }
+    let wire = {
+      ...searchEntryWireQueryFromQuery({
+        page: { size: SEARCH_PAGE_SIZE },
+        ...query,
+      }),
+      // `select` reads one type's fields, so the table needs its type.
+      type: opts.type ?? baseCardRef,
+      select: columns.map((c) => `item.${c}`),
+    };
+    try {
+      let response = await fetch(`${realm}_search`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+          'X-HTTP-Method-Override': 'QUERY',
+        },
+        body: JSON.stringify(wire),
+      });
+      if (!response.ok) {
+        throw new Error(`status ${response.status}: ${await response.text()}`);
+      }
+      let doc = (await response.json()) as {
+        rows?: unknown[][];
+        meta?: { page?: { total?: number } };
+      };
+      let rows = doc.rows ?? [];
+      return { rows, total: doc.meta?.page?.total ?? rows.length };
+    } catch (e) {
+      // Same posture as `searchRealm`: a passive panel reads fine as empty.
+      console.warn(`Workspace select failed for realm ${realm}`, e);
+      return undefined;
+    }
+  };
 
   // The four library-group rows keep stable identities (@cached, no tracked
   // count on the object — counts render via `countFor`), so the selected row
@@ -3587,9 +3684,6 @@ class Isolated extends Component<typeof Workspace> {
         this.loadJobs.perform();
         this.loadLatest.perform();
         this.loadConfig.perform(); // host/routing data for space details
-        if (this.segment === 'activity') {
-          this.loadFeed.perform();
-        }
       }
 
       return () => {
@@ -3822,9 +3916,7 @@ class Isolated extends Component<typeof Workspace> {
     this.loadFilterList.perform();
     this.loadJobs.perform();
     this.loadLatest.perform();
-    if (this.segment === 'activity') {
-      this.loadFeed.perform();
-    }
+    // The Activity feed re-runs on its own: its search component is live.
   });
 
   // The Activity log: everything in the realm — cards and uploaded files —
@@ -3832,85 +3924,25 @@ class Isolated extends Component<typeof Workspace> {
   // timestamp rail, the card or file preview, and a change note
   // (`cardInfo.notes` — the convention slot a human or AI fills in when saving
   // a change; files carry none).
-  private feedItems: {
-    id: string;
-    component: BoxComponent;
-    when: string | undefined;
-    absolute: string | undefined;
-    absoluteIso: string | undefined;
-    note: string | undefined;
-    verb: ActivityVerb;
-    dayLabel: string;
-    showDay: boolean;
-    title: string | undefined; // card / file identity for the log line
-    typeName: string;
-    typeIcon: typeof CardDef.icon;
-    // The instance behind the tile-open overlay. A file row opens through
-    // `viewCard`'s `type: 'file'` path, so the two kinds are distinguished.
-    card: CardDef | FileDef;
-    kind: 'card' | 'file';
-  }[] = new TrackedArray();
-
-  // Reveal-on-scroll pagination over the fetched window.
+  //
+  // One entry search answers it (`feedQuery`, rendered through the host's
+  // `searchResultsComponent`): each row carries the server's prerendered
+  // embedded HTML, inert until hovered, and the card's raw serialization for
+  // its timestamps, title and note. So no card is hydrated and no card module
+  // is loaded to draw the feed. It asks for one screen at a time
+  // (`feedShown`), and the component re-runs it itself when the realm changes.
+  //
+  // Reveal-on-scroll pagination: the page the query asks for.
   @tracked private feedShown = FEED_REVEAL_CHUNK;
   private activityFeedCap = ACTIVITY_FEED_CAP; // for the "last N changes" note
 
-  private get visibleFeed() {
-    return this.feedItems.slice(0, this.feedShown);
-  }
-
-  private get moreFeed() {
-    return this.feedItems.length > this.feedShown;
-  }
-
-  private get feedAtCap() {
-    return this.feedItems.length >= ACTIVITY_FEED_CAP;
-  }
-
-  // The source a remix was cloned from, read live off the card so it fills in
-  // when the linked instance finishes loading (the linksTo getter lazily loads
-  // and tracks). Undefined for non-remix rows and remixes with no source set.
-  remixSourceTitle = (item: {
-    verb: ActivityVerb;
-    card: CardDef | FileDef;
-  }): string | undefined => {
-    if (item.verb !== 'Remixed' || !isCardInstance(item.card)) {
-      // Only a card is ever classified 'Remixed'; the guard also narrows the
-      // card/file union so the cast below starts from CardDef.
+  private get feedQuery(): SearchEntryWireQuery | undefined {
+    let realm = this.primaryRealm; // Keep the live activity query realm-local.
+    if (!realm) {
+      // Do not fall back to the store's full accessible realm set.
       return undefined;
     }
-    return (item.card as RemixCardLike).remixedFrom?.cardTitle ?? undefined;
-  };
-
-  watchFeedEnd = modifier((element: Element) => {
-    let root = element.closest('.scroll-container');
-    let observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          this.feedShown = Math.min(
-            this.feedShown + FEED_REVEAL_CHUNK,
-            this.feedItems.length,
-          );
-          // re-arm: observe() always delivers a fresh async notification
-          // after the next layout, so a still-visible sentinel fires again
-          observer.unobserve(element);
-          observer.observe(element);
-        }
-      },
-      { root, rootMargin: '160px 0px' },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
-
-  private loadFeed = restartableTask(async () => {
-    let store = this.args.context?.store;
-    let realm = this.primaryRealm; // Keep the live activity query realm-local.
-    if (!store || !realm) {
-      // Do not fall back to the store's full accessible realm set.
-      return;
-    }
-    let instances = await store.search(
+    let wire = searchEntryWireQueryFromQuery(
       {
         // The feed mixes cards and uploaded files. The self-referential
         // exclusion is qualified to card rows (`on: baseCardRef`) on purpose:
@@ -3930,69 +3962,95 @@ class Isolated extends Component<typeof Workspace> {
           ],
         },
         sort: [{ by: 'lastModified', direction: 'desc' }],
-        // Bound server results before instance hydration.
-        page: { size: ACTIVITY_FEED_CAP },
+        page: { size: Math.min(this.feedShown, ACTIVITY_FEED_CAP) },
       } as Query,
-      [realm],
-      // Opt into the mixed instance + file scope; the loop discriminates each
-      // row by kind. An untyped query would otherwise be pinned to cards only.
-      { scope: 'all' },
-    ); // Search only the Card Grid instance's realm.
-    this.feedItems.splice(0, this.feedItems.length);
-    let seen = new Set<string>();
+      // The prerendered face plus the fields the log line reads; the mixed
+      // instance + file scope, since an untyped query would otherwise be
+      // pinned to cards only.
+      {
+        // Only the fields the log line reads (title, note, a file's name, a
+        // remix's source link): a full serialization also ships every card
+        // each row links to, which on a large realm was a thousand cards and
+        // megabytes for one screen of rows.
+        fields: [
+          'html',
+          'item.cardTitle',
+          'item.cardInfo',
+          'item.name',
+          'item.remixedFrom',
+        ],
+        scope: 'all',
+      },
+    );
+    return {
+      ...wire,
+      realms: [realm],
+      // The feed shows each row's embedded face.
+      filter: {
+        ...wire.filter,
+        eq: {
+          ...(wire.filter as { eq?: Record<string, unknown> } | undefined)?.eq,
+          htmlQuery: { eq: { format: 'embedded' } },
+        },
+      } as SearchEntryWireQuery['filter'],
+    };
+  }
+
+  // The log lines for one answer of `feedQuery`, read off each entry's
+  // serialization: when, verb, type, title and note.
+  feedRows = (entries: RenderableSearchEntryLike[]): FeedRow[] => {
+    let rows: FeedRow[] = [];
     let prevDay: string | undefined;
-    for (let instance of instances ?? []) {
-      // build the full fetched window (≤100); the template reveals in 20s
-      let card = isCardInstance(instance) ? instance : undefined;
-      let file = !card && isFileDefInstance(instance) ? instance : undefined;
-      let entry = card ?? file;
-      if (!entry || !entry.id || seen.has(entry.id)) {
-        continue;
-      }
-      seen.add(entry.id);
-      // A single malformed row (a throwing `cardTitle`/`name` getter, an
-      // unreadable timestamp) must not cost the rows after it — skip it and
-      // keep going. The restartable task would otherwise swallow the throw and
-      // truncate the feed at the failing row. This guards only the row build:
-      // `getComponent` just returns the component, so a preview that throws
-      // does so later, when Glimmer renders it in the template.
+    for (let entry of entries) {
+      // A single malformed row must not cost the rows after it.
       try {
-        // Timestamps read the same way for both kinds: a file carries its
-        // `lastModified` / `resourceCreatedAt` on `meta` from the serialization
-        // source (FileDef's first-class getters), so `getCardMeta` answers
-        // uniformly for cards and files.
-        let modMs = toMs(getCardMeta(entry, 'lastModified'));
-        let createdMs = toMs(getCardMeta(entry, 'resourceCreatedAt'));
-        let ctor = entry.constructor as typeof BaseDef; // type identity for the log line
-        // A file is a Created/Updated event by write timing; only a card can be
-        // a first-class Remix.
-        let verb = card
-          ? activityVerbFor(
-              (ctor as typeof CardDef).displayName,
-              modMs,
-              createdMs,
-            )
-          : classifyActivityVerb(modMs, createdMs);
+        let kind: 'card' | 'file' =
+          entry.type === 'file-meta' ? 'file' : 'card';
+        let item = entry.item as
+          | {
+              attributes?: Record<string, unknown>;
+              relationships?: Record<string, { links?: { self?: string } }>;
+              meta?: { lastModified?: number; resourceCreatedAt?: number };
+            }
+          | undefined;
+        let attributes = item?.attributes ?? {};
+        let cardInfo = attributes.cardInfo as
+          | { name?: string | null; notes?: string | null }
+          | undefined;
+        let modMs = toMs(item?.meta?.lastModified);
+        let createdMs = toMs(item?.meta?.resourceCreatedAt);
+        let typeName = entry.displayName ?? '';
+        let verb =
+          kind === 'card'
+            ? activityVerbFor(typeName, modMs, createdMs)
+            : classifyActivityVerb(modMs, createdMs);
         let day = modMs !== undefined ? dayLabelFor(modMs) : '';
-        this.feedItems.push({
+        let title =
+          kind === 'file'
+            ? stringOrUndefined(attributes.name)
+            : (stringOrUndefined(attributes.cardTitle) ??
+              stringOrUndefined(cardInfo?.name));
+        let remixedFrom = item?.relationships?.remixedFrom?.links?.self;
+        rows.push({
           id: entry.id,
-          component: ctor.getComponent(entry),
+          component: entry.component,
           when: modMs !== undefined ? relativeTime(modMs) : undefined,
           absolute:
             modMs !== undefined ? new Date(modMs).toLocaleString() : undefined,
           absoluteIso:
             modMs !== undefined ? new Date(modMs).toISOString() : undefined,
-          note: card?.cardInfo?.notes ?? undefined,
+          note: stringOrUndefined(cardInfo?.notes),
           verb,
           dayLabel: day,
           showDay: Boolean(day) && day !== prevDay,
-          title: card
-            ? (card.cardTitle ?? undefined)
-            : (file!.name ?? undefined),
-          typeName: (ctor as typeof CardDef).displayName,
-          typeIcon: (ctor as typeof CardDef).icon,
-          card: entry,
-          kind: card ? 'card' : 'file',
+          title: title ?? entry.name,
+          typeName,
+          typeIconHtml: entry.iconHtml ? htmlSafe(entry.iconHtml) : undefined,
+          remixedFrom:
+            verb === 'Remixed' && remixedFrom
+              ? new URL(remixedFrom, entry.id).href
+              : undefined,
+          kind,
         });
         prevDay = day || prevDay;
       } catch (err) {
@@ -4003,6 +4061,62 @@ class Isolated extends Component<typeof Workspace> {
         );
       }
     }
+    return rows;
+  };
+
+  private feedTotal = (meta: { page?: { total?: number } } | undefined) =>
+    Math.min(meta?.page?.total ?? 0, ACTIVITY_FEED_CAP);
+
+  private moreFeed = (meta: { page?: { total?: number } } | undefined) =>
+    this.feedTotal(meta) > this.feedShown;
+
+  private feedAtCap = (meta: { page?: { total?: number } } | undefined) =>
+    (meta?.page?.total ?? 0) >= ACTIVITY_FEED_CAP;
+
+  // The source a remix was cloned from. A remix row is rare, so its source's
+  // title is the one thing the feed loads a card for: once per source, kept
+  // here, and filled in when it arrives.
+  private remixSources = new TrackedMap<string, string | null>();
+
+  remixSourceTitle = (row: FeedRow): string | undefined => {
+    let source = row.remixedFrom;
+    if (!source) {
+      return undefined;
+    }
+    if (!this.remixSources.has(source)) {
+      this.remixSources.set(source, null);
+      void this.loadRemixSource(source);
+    }
+    return this.remixSources.get(source) ?? undefined;
+  };
+
+  private loadRemixSource = async (source: string) => {
+    try {
+      let card = await this.args.context?.store.get(source);
+      if (card && isCardInstance(card)) {
+        this.remixSources.set(source, card.cardTitle ?? null);
+      }
+    } catch {
+      // No source title; the row reads fine without its "from" line.
+    }
+  };
+
+  watchFeedEnd = modifier((element: Element, [total]: [number]) => {
+    let root = element.closest('.scroll-container');
+    let observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          this.feedShown = Math.min(this.feedShown + FEED_REVEAL_CHUNK, total);
+          // re-arm: observe() always delivers a fresh async notification
+          // after the next layout, so a still-visible sentinel fires again
+          observer.unobserve(element);
+          observer.observe(element);
+        }
+      },
+      { root, rootMargin: '160px 0px' },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
   });
 }
 
