@@ -228,7 +228,7 @@ A card can carry an embedding in a `VectorField` (`@cardstack/base/vector`; Qwen
 - **Ranking**: a sort entry with a `near` target ranks by cosine similarity to it, most similar first (`direction` defaults to `desc`). Cards with no vector at the path sort last. Each result carries `meta._nearSimilarity` (1 = same direction, -1 = opposite), the way a `textRelevance` sort carries `meta._matchRelevance`. The k most similar cards are a near sort plus `page: { size: k }`.
 - **Threshold**: a `near` filter, keyed by the field path like `range`, keeps cards whose vector has at least `minSimilarity` to `to`. Without `minSimilarity` it keeps every card that has a vector of `to`'s dimension there. It nests under `every`/`any`/`not`, so it combines with other filters and with realm policy.
 
-`near` targets are a number array or a vector in its stored form (`{ dims, encoding, scale?, data }`). A plural path (`segments.embedding`) scores a card by its nearest vector. Search is exact. On Postgres it needs the pgvector extension; without it a `near` query is refused with an error that says so. The SQLite index (host tests) scores singular paths only.
+`near` targets are a number array or a vector in its stored form (`{ dims, encoding, scale?, data }`). A plural path (`segments.embedding`) scores a card by its nearest vector. A comparison reads only the vectors stored in the space the field's type declares, wherever the target came from (numbers, a card's vector, a rerank's look-alikes), so a vector left in another space, or stored before spaces were recorded, never compares just because its size matches. A target read from a card in another space is refused (`vector-space-mismatch`). Search is exact. On Postgres it needs the pgvector extension; without it a `near` query is refused with an error that says so. The SQLite index (host tests) scores singular paths only.
 
 ```js
 let { data: nearest } = await indexer.search({
@@ -739,6 +739,7 @@ A query the grammar refuses gets a 400 whose body carries a code a caller can ac
 | `engine-only`                                                    | A member only the engine sets.                                                                                 |
 | `invalid-expression`, `expression-placement`, `unknown-function` | An expression that is not a string, cannot run where the query puts it, or calls a function BXL does not know. |
 | `unknown-binding`, `binding-kind`                                | A `{ "$let" }` reference to a binding that does not exist, of the wrong kind, or a list anywhere but an `in`.  |
+| `vector-space-mismatch`                                          | A `near` target in another vector space than the field is declared in.                                         |
 | `policy-linked-from`                                             | A `linkedFrom` where a realm policy cannot scope it.                                                           |
 | `invalid-page`, `invalid-json`, `invalid-filter`                 | A malformed page, body or filter node.                                                                         |
 | `not-selectable`, `select-excludes-fields`                       | A `select` path the index does not carry, or `select` beside `fields`.                                         |

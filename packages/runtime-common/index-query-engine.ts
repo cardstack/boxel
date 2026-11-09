@@ -206,6 +206,22 @@ function spaceCondition(alias: string, target: unknown): Expression {
   return space == null ? [] : [`AND ${alias}.space =`, param(space)];
 }
 
+// The space a near filter's field is declared in, keyed by the filter's
+// `{ to, minSimilarity }` entry (the filter compiler is synchronous, so
+// `#assertNearFilters` reads it first).
+const nearFilterDeclaredSpaces = new WeakMap<object, string>();
+
+// Restricts a vector-table alias to the space its field is declared in, so a
+// vector stored in another space (a stale one, or one from before spaces
+// were recorded, `space = ''`) never compares with the target, even when it
+// has the same size.
+function declaredSpaceCondition(
+  alias: string,
+  space: string | undefined,
+): Expression {
+  return space == null ? [] : [`AND ${alias}.space =`, param(space)];
+}
+
 export class FilterRefersToNonsearchableFieldError extends Error {
   type: CodeRef;
   // The full filter path as written (e.g. `bestFriend.friends.name`).
@@ -610,6 +626,9 @@ interface FilterContext {
   inAny: boolean;
   prerenderedTable: string;
   indexTable: string;
+  // The realm the search runs over, where a signal needs it (the spaces a
+  // near signal's field is declared in).
+  realmURL?: URL;
 }
 const DEFAULT_FILTER_CONTEXT: FilterContext = {
   inAny: false,
@@ -1731,7 +1750,7 @@ export class IndexQueryEngine {
       let baseConditions = [...conditions];
 
       if (filter) {
-        await this.#assertNearFilters(filter, baseCardRef);
+        await this.#assertNearFilters(filter, baseCardRef, realmURL);
         conditions.push(
           this.filterCondition(filter, baseCardRef, 'positive', {
             inAny: false,
@@ -1785,7 +1804,10 @@ export class IndexQueryEngine {
           ];
         }
       }
-      let { nearColumns, nearJoins } = await this.#nearSortExpressions(sort);
+      let { nearColumns, nearJoins } = await this.#nearSortExpressions(
+        sort,
+        realmURL,
+      );
       let { blendColumns, blendJoins } = await this.#blendSortExpressions(
         sort,
         sortsByMatchRelevance ? collectPositiveMatchTerms(filter) : [],
@@ -1794,6 +1816,7 @@ export class IndexQueryEngine {
           inAny: false,
           prerenderedTable: prerenderedTableFromOpts(opts),
           indexTable: tableFromOpts(opts),
+          realmURL,
         },
         Boolean(explain),
       );
@@ -2672,6 +2695,13 @@ export class IndexQueryEngine {
     }
     void this.#ensureNeighborIndex(field, dims);
 
+    let declaredSpace = await this.#declaredSpaceOf(
+      realmURL,
+      anchor!,
+      field,
+      undefined,
+      'rerank: compare.near',
+    );
     let k = Math.min(compare.k ?? DEFAULT_NEAR_PEERS, MAX_NEAR_PEERS);
     // The neighbours a row may have: those its comparison filter and, for a
     // caller a policy scopes, its grants admit. They are applied inside the
@@ -2714,7 +2744,7 @@ export class IndexQueryEngine {
                FROM boxel_index_vectors AS v
               WHERE v.field_path = '${field}' AND v.dims = ${dims}
                 AND v.realm_url = s.realm_url AND v.url <> s.url
-                AND v.type = 'instance'`,
+                AND v.type = 'instance' AND v.space = s.space`,
         ...(allowed
           ? [
               'AND v.url IN (SELECT jsonb_array_elements_text(',
@@ -2725,8 +2755,9 @@ export class IndexQueryEngine {
         `ORDER BY v.embedding${vec} <=> s.embedding${vec}
               LIMIT ${fetchK}
            ) AS n
-          WHERE s.field_path = '${field}' AND s.dims = ${dims} AND s.ordinal = 0
-            AND s.realm_url =`,
+          WHERE s.field_path = '${field}' AND s.dims = ${dims} AND s.ordinal = 0`,
+        ...declaredSpaceCondition('s', declaredSpace),
+        'AND s.realm_url =',
         param(realmURL.href),
         'AND s.url IN (',
         ...rowUrls.flatMap((url, i) => (i ? [',', param(url)] : [param(url)])),
@@ -4362,6 +4393,84 @@ export class IndexQueryEngine {
     return cached.spaces;
   }
 
+  // The space a type declares one of its vector fields in, read from the
+  // `_vectorFields` its cards' search docs carry (a card from before that was
+  // recorded stored its vectors as a plain `vector <size>`). A near
+  // comparison reads only the vectors stored in it, so one in another space
+  // (stale, or `''` from before spaces were recorded) never compares with
+  // the target just because its size matches. A target read from a card
+  // carries its own space, and one in another space is refused. Undefined
+  // off Postgres. Cached for a few seconds, so a query naming the field
+  // several times asks once, and a reindex that moves a field to a new space
+  // is seen soon after.
+  #declaredSpaces = new Map<
+    string,
+    { at: number; space: Promise<string | undefined> }
+  >();
+  async #declaredSpaceOf(
+    realmURL: URL,
+    on: CodeRef,
+    fieldPath: string,
+    target: unknown,
+    what: string,
+  ): Promise<string | undefined> {
+    if (this.#dbAdapter.kind !== 'pg') {
+      return undefined;
+    }
+    let typeKey = internalKeyFor(on, undefined, this.#virtualNetwork);
+    let key = `${realmURL.href} ${typeKey} ${fieldPath}`;
+    let cached = this.#declaredSpaces.get(key);
+    if (!cached || Date.now() - cached.at > 5_000) {
+      cached = {
+        at: Date.now(),
+        space: this.#dbAdapter
+          .execute(
+            `SELECT d.space FROM (
+               SELECT bi.search_doc -> '_vectorFields' -> $3 ->> 'space' AS space,
+                      jsonb_exists(bi.search_doc, '_vectorFields') AS recorded
+                 FROM boxel_index AS bi
+                WHERE bi.realm_url = $1 AND bi.type = 'instance'
+                  AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
+                  AND COALESCE(bi.types, '[]'::jsonb) @> $2::jsonb
+                LIMIT 20
+             ) AS d
+             ORDER BY d.space IS NULL, d.recorded DESC
+             LIMIT 1`,
+            { bind: [realmURL.href, JSON.stringify([typeKey]), fieldPath] },
+          )
+          .then(([row]) =>
+            row?.space != null
+              ? String(row.space)
+              : // no card records its fields: they stored plain vectors
+                row && !row.recorded
+                ? ''
+                : undefined,
+          )
+          .catch(() => undefined),
+      };
+      this.#declaredSpaces.set(key, cached);
+    }
+    let declared = await cached.space;
+    let dims = Array.isArray(target)
+      ? vectorDimensions(target as number[])
+      : undefined;
+    // A card from before `_vectorFields` stored a plain vector of its size.
+    if (declared === '') {
+      return dims ? `vector ${dims}` : undefined;
+    }
+    let targetSpace =
+      target && typeof target === 'object'
+        ? vectorTargetSpaces.get(target)
+        : undefined;
+    if (declared != null && targetSpace != null && targetSpace !== declared) {
+      throw new InvalidQueryError(
+        `${what}: the target vector is in the space "${targetSpace}", but "${fieldPath}" is declared in "${declared}"; vectors from different spaces can't be compared`,
+        'vector-space-mismatch',
+      );
+    }
+    return declared;
+  }
+
   // A near target read from a card carries its space: comparing it with a
   // field whose vectors are all in other spaces is refused, never answered
   // with distances that mean nothing.
@@ -4406,7 +4515,11 @@ export class IndexQueryEngine {
   // Validates every near filter in the tree up front (field lookups are
   // async, the filter compiler is not), resolving each node's `on` the way
   // `filterCondition` does.
-  async #assertNearFilters(filter: Filter | undefined, onRef: CodeRef) {
+  async #assertNearFilters(
+    filter: Filter | undefined,
+    onRef: CodeRef,
+    realmURL?: URL,
+  ) {
     if (!filter) {
       return;
     }
@@ -4415,8 +4528,18 @@ export class IndexQueryEngine {
       (filter as { type?: CodeRef }).type ??
       onRef;
     if (isNearFilter(filter)) {
-      for (let path of Object.keys(filter.near)) {
+      for (let [path, entry] of Object.entries(filter.near)) {
         await this.#assertNearField(on, path, `near filter on "${path}"`);
+        if (realmURL && entry && typeof entry === 'object') {
+          let space = await this.#declaredSpaceOf(
+            realmURL,
+            on,
+            removeBrackets(path),
+            (entry as { to: number[] }).to,
+            `near filter on "${path}"`,
+          );
+          if (space != null) nearFilterDeclaredSpaces.set(entry, space);
+        }
       }
     } else if ('pattern' in filter || 'regex' in filter) {
       let operator = 'regex' in filter ? 'regex' : 'pattern';
@@ -4441,14 +4564,14 @@ export class IndexQueryEngine {
       }
     } else if ('every' in filter) {
       for (let child of filter.every) {
-        await this.#assertNearFilters(child, on);
+        await this.#assertNearFilters(child, on, realmURL);
       }
     } else if ('any' in filter) {
       for (let child of filter.any) {
-        await this.#assertNearFilters(child, on);
+        await this.#assertNearFilters(child, on, realmURL);
       }
     } else if ('not' in filter) {
-      await this.#assertNearFilters(filter.not, on);
+      await this.#assertNearFilters(filter.not, on, realmURL);
     }
   }
 
@@ -4851,7 +4974,8 @@ export class IndexQueryEngine {
     filter: NearFilter,
     typeConditionRef?: CodeRef,
   ): CardExpression {
-    let [path, { to, minSimilarity }] = Object.entries(filter.near)[0];
+    let [path, entry] = Object.entries(filter.near)[0];
+    let { to, minSimilarity } = entry;
     let fieldPath = removeBrackets(path);
     let target = vectorToSqlLiteral(to);
     let dims = vectorDimensions(to);
@@ -4866,6 +4990,7 @@ export class IndexQueryEngine {
         'AND nvf.dims =',
         param(dims),
         ...spaceCondition('nvf', to),
+        ...declaredSpaceCondition('nvf', nearFilterDeclaredSpaces.get(entry)),
         ...(minSimilarity == null
           ? []
           : [
@@ -5109,7 +5234,11 @@ export class IndexQueryEngine {
     if (isWhenSignal(component)) {
       // 1 for a card the filter admits, NULL (no signal) otherwise, so every
       // match ties for first place. Inverted, the cards it doesn't admit.
-      await this.#assertNearFilters(component.when, baseCardRef);
+      await this.#assertNearFilters(
+        component.when,
+        baseCardRef,
+        filterContext.realmURL,
+      );
       let condition = this.filterCondition(
         component.when,
         baseCardRef,
@@ -5146,6 +5275,18 @@ export class IndexQueryEngine {
           `AND ${joinAlias}.dims =`,
           param(vectorDimensions(component.near)),
           ...spaceCondition(joinAlias, component.near),
+          ...declaredSpaceCondition(
+            joinAlias,
+            filterContext.realmURL
+              ? await this.#declaredSpaceOf(
+                  filterContext.realmURL,
+                  component.on,
+                  removeBrackets(component.by),
+                  component.near,
+                  `blend signal "${component.by}" near a vector`,
+                )
+              : undefined,
+          ),
         );
         return [
           `MAX(1 - (${joinAlias}.embedding <=> CAST(`,
@@ -5182,7 +5323,10 @@ export class IndexQueryEngine {
   // SQLite (the browser index the host tests run on) has no vector type, so
   // it scores the search doc's own "vec:[…]" string with json_each. That is a
   // fallback for small test indexes, not for real data.
-  async #nearSortExpressions(sort: Sort | undefined): Promise<{
+  async #nearSortExpressions(
+    sort: Sort | undefined,
+    realmURL: URL,
+  ): Promise<{
     nearColumns: CardExpression;
     nearJoins: CardExpression;
   }> {
@@ -5216,6 +5360,16 @@ export class IndexQueryEngine {
           `AND ${v}.dims =`,
           param(dims),
           ...spaceCondition(v, s.near),
+          ...declaredSpaceCondition(
+            v,
+            await this.#declaredSpaceOf(
+              realmURL,
+              s.on,
+              removeBrackets(s.by),
+              s.near,
+              `sort by "${s.by}" near a vector`,
+            ),
+          ),
         );
         nearColumns.push(
           `, MAX(1 - (${v}.embedding <=> CAST(`,

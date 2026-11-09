@@ -1172,6 +1172,118 @@ module(basename(import.meta.filename), function () {
     );
 
     pgvectorTest(
+      "near compares only vectors in the field's declared space",
+      async function (assert) {
+        const space = 'x@1 p 3';
+        let declared = {
+          _vectorFields: {
+            embedding: { space, list: false, computed: false },
+          },
+        };
+        await index({
+          a: { title: 'a', views: 10, embedding: vec([1, 0, 0]), ...declared },
+          b: {
+            title: 'b',
+            views: 50,
+            embedding: vec([0.9, 0.1, 0]),
+            ...declared,
+          },
+          c: {
+            title: 'c',
+            views: 20,
+            embedding: vec([1, 0.01, 0]),
+            ...declared,
+          },
+          d: { title: 'd', views: 5, embedding: vec([0, 1, 0]), ...declared },
+        });
+        let stored = await adapter.execute(
+          `SELECT DISTINCT space FROM boxel_index_vectors WHERE realm_url = $1`,
+          { bind: [testRealm] },
+        );
+        assert.deepEqual(
+          stored.map((r) => r.space),
+          [space],
+          'each vector is stored in its declared space',
+        );
+        // c's vector is left from before spaces were recorded: the same size,
+        // but in no space the field declares.
+        await adapter.execute(
+          `UPDATE boxel_index_vectors SET space = '' WHERE url = $1`,
+          { bind: [url('c')] },
+        );
+        let similarity = async (query: Query) =>
+          Object.fromEntries(
+            (
+              await engine.search(
+                new URL(testRealm),
+                query,
+                {},
+                {
+                  kind: 'dataOnly',
+                },
+              )
+            ).results.map((r: any) => [
+              r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
+              r._nearSimilarity == null
+                ? null
+                : Number(Number(r._nearSimilarity).toFixed(3)),
+            ]),
+          );
+        let sorted = await similarity({
+          filter: { type: momentRef },
+          sort: [{ on: momentRef, by: 'embedding', near: [1, 0, 0] }],
+        });
+        assert.strictEqual(sorted.c, null, 'a numeric target skips c');
+        assert.strictEqual(sorted.a, 1);
+        assert.deepEqual(
+          await nearIds({
+            filter: {
+              on: momentRef,
+              near: { embedding: { to: [1, 0, 0], minSimilarity: 0.5 } },
+            },
+            sort: [{ on: momentRef, by: 'title' }],
+          }),
+          ['a.json', 'b.json'],
+          'so does a near filter',
+        );
+        assert.deepEqual(
+          await nearIds({
+            filter: { type: momentRef },
+            sort: [
+              {
+                by: '_blend',
+                of: [{ on: momentRef, by: 'embedding', near: [1, 0, 0] }],
+              },
+            ],
+          }),
+          ['a.json', 'b.json', 'd.json', 'c.json'],
+          'and a near signal in a blend: c has no signal, so it comes last',
+        );
+        // The look-alike join pairs a card only with vectors in its space.
+        let { results } = await engine.search(
+          new URL(testRealm),
+          {
+            filter: { type: momentRef },
+            rerank: {
+              expression: 'stats.similarity.count',
+              compare: { near: 'embedding', k: 3 },
+            },
+          } as Query,
+          {},
+          { kind: 'dataOnly' },
+        );
+        let counts = Object.fromEntries(
+          results.map((r: any) => [
+            r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
+            r._rerank == null ? null : Number(r._rerank),
+          ]),
+        );
+        assert.strictEqual(counts.a, 2, "a's look-alikes are b and d, not c");
+        assert.notOk(counts.c, 'c has no look-alikes of its own');
+      },
+    );
+
+    pgvectorTest(
       'rerank compares each card with its own look-alikes',
       async function (assert) {
         await index({
