@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import {
   logger,
   MODULE_CACHE_POPULATED_CHANNEL,
@@ -35,6 +35,8 @@ export function hashCoalesceKeyForAdvisoryLock(key: string): string {
   return digest.readBigInt64BE(0).toString();
 }
 
+const LEASES_TABLE = 'module_populate_leases';
+
 // Implements PopulateCoordinator (CS-10953). Owns:
 //   - a subscription on `module_cache_populated` via the shared multiplexed
 //     notification client (`PgAdapter.subscribe`), same pattern as
@@ -43,7 +45,10 @@ export function hashCoalesceKeyForAdvisoryLock(key: string): string {
 //   - a `tryAcquireAndRun` method that opens a pinned pool connection,
 //     attempts a non-blocking advisory xact-lock keyed on the hash of
 //     the coalesce key, and (if won) runs `fn` inside the BEGIN/COMMIT
-//     window with a `pg_notify` emit between persist and commit.
+//     window with a `pg_notify` emit between persist and commit;
+//   - a `tryLeaseAndRun` method that claims a row in
+//     `module_populate_leases` keyed on the same hash, runs `fn` holding no
+//     connection, then deletes the row and emits the same `pg_notify`.
 //
 // The pinned connection holds the advisory lock, emits the NOTIFY, and
 // is handed to `fn` as a querier so `fn` can run its own DB work
@@ -55,8 +60,9 @@ export function hashCoalesceKeyForAdvisoryLock(key: string): string {
 // deadlock once N approached the ceiling (the schema editor alone fans
 // out to ~31 distinct cold base modules). The in-process #inFlight
 // coalescer still fans same-key callers into one coordinated load per
-// process; `fn` callbacks that are not DB-bound (e.g. a prerender) may
-// ignore the querier and use the shared dbAdapter.
+// process. Work that waits outside the database, such as a prerender, goes
+// through `tryLeaseAndRun` instead: its lease row keeps peers out without a
+// transaction, so the winner holds no connection for the length of the wait.
 //
 // `pg_try_advisory_xact_lock` is non-blocking by design: a blocking
 // `pg_advisory_xact_lock` would hold a pool client for the full
@@ -212,6 +218,66 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
     });
   }
 
+  // PopulateCoordinator — winner path for work that waits outside the
+  // database. The claim is one autocommitted statement: it inserts the lease,
+  // or takes over one whose holder let it expire, and returns a row only when
+  // this claim won. Nothing is held between the claim and the release, so a
+  // burst of distinct-key winners all prerendering at once occupies no pool
+  // connections while they wait.
+  async tryLeaseAndRun<T>(
+    coalesceKey: string,
+    leaseMs: number,
+    fn: () => Promise<T>,
+  ): Promise<{ acquired: true; result: T } | { acquired: false }> {
+    const leaseKey = hashCoalesceKeyForAdvisoryLock(coalesceKey);
+    const holderId = randomUUID();
+    const claimed = await this.#deps.dbAdapter.execute(
+      `INSERT INTO ${LEASES_TABLE} (lease_key, holder_id, expires_at)
+         VALUES ($1, $2, clock_timestamp() + $3::double precision * interval '1 millisecond')
+       ON CONFLICT (lease_key) DO UPDATE
+         SET holder_id = excluded.holder_id, expires_at = excluded.expires_at
+         WHERE ${LEASES_TABLE}.expires_at <= clock_timestamp()
+       RETURNING holder_id`,
+      { bind: [leaseKey, holderId, leaseMs] },
+    );
+    if (claimed.length === 0) {
+      return { acquired: false };
+    }
+    let result: T;
+    try {
+      result = await fn();
+    } finally {
+      await this.#releaseLease(leaseKey, holderId);
+    }
+    return { acquired: true, result };
+  }
+
+  // Delete this claim's lease and notify its waiters in one statement, so the
+  // notification goes out exactly when the lease is gone. Waiters are notified
+  // whether `fn` resolved or threw: either way they re-read the cache, and
+  // after a throw they find the persisted error row or claim the lease
+  // themselves rather than sitting out their timeout. The holder id keeps a
+  // holder whose lease expired and was claimed over from deleting the new
+  // holder's lease.
+  //
+  // A failed release is logged, not thrown: `fn`'s own outcome is the
+  // caller's answer, and the lease frees itself when it expires.
+  async #releaseLease(leaseKey: string, holderId: string): Promise<void> {
+    try {
+      await this.#deps.dbAdapter.execute(
+        `WITH released AS (
+           DELETE FROM ${LEASES_TABLE} WHERE lease_key = $1 AND holder_id = $2
+         )
+         SELECT pg_notify($3, $1)`,
+        { bind: [leaseKey, holderId, MODULE_CACHE_POPULATED_CHANNEL] },
+      );
+    } catch (err: unknown) {
+      log.warn(
+        `releasing populate lease ${leaseKey} failed; it frees itself when it expires: ${String(err)}`,
+      );
+    }
+  }
+
   // PopulateCoordinator — loser path. Resolves on either NOTIFY or
   // timeout; the caller's outer loop re-reads the cache regardless.
   async waitForKey(coalesceKey: string, timeoutMs: number): Promise<void> {
@@ -268,10 +334,10 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
   }
 
   // After a reconnect, wake only the waiters whose winner no longer holds its
-  // advisory lock: that winner finished (and its notification was lost) or
-  // died, so the waiter's re-read either finds the row or does the work
-  // itself. A winner still holding the lock is still working and notifies on
-  // the reconnected connection. Waking its waiters early would cost them: a
+  // advisory lock or a live lease: that winner finished (and its notification
+  // was lost) or died, so the waiter's re-read either finds the row or does
+  // the work itself. A winner still holding either is still working and
+  // notifies on the reconnected connection. Waking its waiters early would cost them: a
   // definition lookup spends one of its few iterations, and a module
   // transpile, which does not wait again, starts a duplicate of the
   // winner's work.
@@ -291,13 +357,17 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
           WHERE locktype = 'advisory'
             AND objsubid = 1
             AND granted
-            AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
+            AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+         UNION
+         SELECT lease_key AS key
+           FROM ${LEASES_TABLE}
+          WHERE expires_at > clock_timestamp()`,
       );
       held = new Set(rows.map((row) => String(row.key)));
     } catch (err: unknown) {
       // The waiters keep their timeout, as they would without a reconnect.
       log.warn(
-        `could not read advisory locks after reconnect; waiters keep their timeout: ${String(err)}`,
+        `could not read advisory locks and leases after reconnect; waiters keep their timeout: ${String(err)}`,
       );
       return;
     }

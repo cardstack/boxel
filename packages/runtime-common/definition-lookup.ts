@@ -66,11 +66,11 @@ export const MODULE_CACHE_INVALIDATED_CHANNEL = 'module_cache_invalidated';
 // encoding overhead and pathological URL lengths don't blow the limit.
 const NOTIFY_PAYLOAD_BUDGET = 7000;
 // Postgres NOTIFY channel for cross-instance prerender-coalesce wakeups
-// (CS-10953). The winner of a `pg_try_advisory_xact_lock` for a given
-// inFlightKey emits this notify (with the inFlightKey as payload) inside
-// the same transaction as its persistDefinitionCacheEntry, so peer waiters
-// see the signal only on commit (the cache row is visible to their
-// re-read by the time their wait resolves). Loser path on
+// The winner for a given coalesce key emits this notify (with
+// the key's hash as payload) once its populate is over: a definition
+// populate after its persist has committed, a lock-holding populate in the
+// same transaction as its persist. Either way the cache row is visible to
+// a peer's re-read by the time its wait resolves. Loser path on
 // missed-NOTIFY falls back to a bounded-timeout re-read.
 export const MODULE_CACHE_POPULATED_CHANNEL = 'module_cache_populated';
 // Cached module errors expire after this interval. When a stale error entry
@@ -80,14 +80,20 @@ const ERROR_CACHE_TTL_MS = 30_000; // 30 seconds
 // CS-10953 cross-process populate-coalesce loser-path wait timeout. The
 // loser blocks on a peer's NOTIFY; on timeout (peer crashed mid-prerender,
 // missed wakeup, etc.), the loop re-reads the cache and may take another
-// shot at the lock. Set well above realistic prerender wall time
+// shot at the lease. Set well above realistic prerender wall time
 // (single-module prerenders are sub-second to a few seconds; the absolute
 // upper bound is the prerender request timeout, currently 150s in
 // production) so a healthy peer's prerender always wakes the loser
 // before this fires.
 const COALESCE_NOTIFY_WAIT_MS = 180_000; // 180 seconds
+// How long a populate's lease keeps peers from prerendering the same module.
+// Below COALESCE_NOTIFY_WAIT_MS so a peer that waits out a holder that died
+// mid-prerender finds the lease expired and claims it on its next iteration,
+// and above the prerender request timeout so a healthy holder is never
+// claimed over.
+const COALESCE_LEASE_MS = COALESCE_NOTIFY_WAIT_MS - 15_000;
 // Bounded retry loop in the coordinated path. Each iteration re-reads
-// the cache, contends for the lock, and (if losing) waits on NOTIFY. A
+// the cache, contends for the lease, and (if losing) waits on NOTIFY. A
 // pathological peer crash-loop or NOTIFY drop sequence could in
 // principle cycle the loser indefinitely; capping at a small number and
 // throwing surfaces it instead of silently hanging.
@@ -289,13 +295,16 @@ export function isFilterRefersToNonexistentTypeError(
 // prerenderer; peer processes block on NOTIFY and re-read the populated
 // row instead of redundant prerender round-trips.
 //
-// Two methods rather than one because the winner's transaction (lock +
-// fn + NOTIFY + commit) and the loser's NOTIFY-or-timeout wait are
-// fundamentally different shapes: the winner runs a critical section
-// pinned to one connection; the loser is a passive subscriber that the
-// winner's NOTIFY (or a timeout) wakes.
+// The winner and the loser are fundamentally different shapes: the
+// winner claims the key (an advisory lock or a lease), runs its work and
+// emits NOTIFY; the loser is a passive subscriber that the winner's NOTIFY
+// (or a timeout) wakes. The two winner methods differ in what the claim
+// costs while the work runs: `tryAcquireAndRun` pins one connection for a
+// lock transaction, which suits short DB-bound work that can run on that
+// connection; `tryLeaseAndRun` holds no connection, which suits work that
+// waits on something outside the database.
 //
-// `tryAcquireAndRun` returns a discriminated union rather than throwing
+// The winner methods return a discriminated union rather than throwing
 // on contention because contention is the expected loser path, not an
 // error condition.
 //
@@ -320,12 +329,34 @@ export interface PopulateCoordinator {
   // matters because each distinct coalesce key wins its own lock, so a
   // burst of N distinct-key winners would otherwise pin N connections
   // AND each need another for its own queries, deadlocking the pool when
-  // N approaches the pool ceiling. Callers that don't need the querier
-  // (their inner work is a prerender or otherwise not DB-bound) may
-  // ignore it and continue using the shared dbAdapter.
+  // N approaches the pool ceiling. Work that waits on something outside
+  // the database belongs in `tryLeaseAndRun`, since the lock connection
+  // stays pinned for as long as `fn` runs.
   tryAcquireAndRun<T>(
     coalesceKey: string,
     fn: (querier: Querier) => Promise<T>,
+  ): Promise<{ acquired: true; result: T } | { acquired: false }>;
+  // Try to claim the cross-process lease for `coalesceKey`, good for
+  // `leaseMs`. If claimed, run `fn` holding no database connection, then
+  // delete the lease and emit the same NOTIFY `tryAcquireAndRun` does, whether
+  // `fn` resolved or threw. If another claim is live, return
+  // `{ acquired: false }` immediately.
+  //
+  // For work that waits on something outside the database, such as a
+  // prerender. A lock transaction would pin a pooled connection for that
+  // whole wait, and the prerender's own module fetches back into the realm
+  // server need pool connections of their own. `fn` checks out connections
+  // through the shared dbAdapter one statement at a time, so it never holds
+  // one while asking for another.
+  //
+  // `leaseMs` bounds how long a holder that died mid-`fn` keeps the key from
+  // its peers. Size it above the longest `fn` that still counts as healthy and
+  // below the peers' `waitForKey` timeout, so a peer that waited out a dead
+  // holder finds its lease expired and claims it.
+  tryLeaseAndRun<T>(
+    coalesceKey: string,
+    leaseMs: number,
+    fn: () => Promise<T>,
   ): Promise<{ acquired: true; result: T } | { acquired: false }>;
   // Wait until a NOTIFY for `coalesceKey` arrives on the populate
   // channel, or `timeoutMs` elapses — whichever comes first. Resolves in
@@ -681,11 +712,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     let pending: Promise<DefinitionCacheEntry | undefined>;
     // Two paths inside #inFlight:
-    //   - With a populate coordinator (CS-10953): coordinated path adds
-    //     a pg_try_advisory_xact_lock around the prerender so at most
-    //     one realm-server process per coalesceKey reaches the
-    //     prerenderer; peer processes block on NOTIFY and re-read the
-    //     populated row. Inert at N=1.
+    //   - With a populate coordinator: coordinated path claims
+    //     a lease on the coalesceKey around the prerender so at most one
+    //     realm-server process per coalesceKey reaches the prerenderer;
+    //     peer processes block on NOTIFY and re-read the populated row.
+    //     Inert at N=1.
     //   - Without a coordinator (default): original uncoordinated path
     //     runs the prerender and persist directly. This is the path
     //     used by every test that doesn't construct a coordinator and
@@ -718,26 +749,36 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   // CS-10953 cross-process prerender coalescer. Wraps the uncoordinated
-  // body in a pg_try_advisory_xact_lock + NOTIFY-wait loop so at most
-  // one process per coalesceKey reaches the prerenderer.
+  // body in a lease + NOTIFY-wait loop so at most one process per
+  // coalesceKey reaches the prerenderer.
   //
   // Iteration shape:
-  //   1. Read the cache (cheap; avoids contending the lock on hits).
-  //   2. Try the advisory lock via the coordinator.
-  //   3. Winner: run the uncoordinated body inside the lock — re-reads
-  //      cache (double-check), prerenders, persists. Coordinator emits
-  //      NOTIFY on commit. Return the result.
+  //   1. Read the cache (cheap; avoids contending the lease on hits).
+  //   2. Try to claim the lease via the coordinator.
+  //   3. Winner: run the uncoordinated body under the lease — re-reads
+  //      cache (double-check), prerenders, persists. Coordinator deletes
+  //      the lease and emits NOTIFY. Return the result.
   //   4. Loser: wait for peer's NOTIFY (or timeout). Loop back.
+  //
+  // The lease, not a lock transaction, is what keeps peers out, so the
+  // winner holds no pooled connection while it waits on the prerender.
+  // That prerender fetches the module and its dependencies back from realm
+  // servers that need pool connections of their own to answer; a burst of
+  // cold modules holding one connection apiece for the length of their
+  // prerenders would starve those fetches, and every other page load with
+  // them. Each statement the body runs checks out one connection and
+  // returns it, so no step of a populate waits for a connection while
+  // holding another.
   //
   // The outer `for` is bounded by COALESCE_MAX_ITERATIONS so a
   // pathological peer crash-loop or NOTIFY-drop sequence surfaces as
   // an error instead of silently hanging.
   //
   // Error semantics:
-  //   - If the uncoordinated body throws, the coordinator rolls back
-  //     (releasing the advisory lock) and rethrows. CS-10948-era error
-  //     caching means transient errors are persisted as error rows with
-  //     a TTL, so subsequent callers read the cached error rather than
+  //   - If the uncoordinated body throws, the coordinator deletes the
+  //     lease, emits NOTIFY so waiting peers retry at once, and rethrows.
+  //     Error caching persists transient errors as error rows with a
+  //     TTL, so subsequent callers read the cached error rather than
   //     re-running the prerender — the retry loop terminates naturally.
   //   - Generation-changed (invalidate ran during prerender): the body
   //     returns the post-invalidate cache state (undefined or fresher
@@ -758,11 +799,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   ): Promise<DefinitionCacheEntry | undefined> {
     let coalesceKey = inFlightKey(args);
     for (let iteration = 0; iteration < COALESCE_MAX_ITERATIONS; iteration++) {
-      // Optimistic pre-lock cache read. On a hit we skip the lock
-      // contention entirely; on a miss we proceed to the try-lock.
+      // Optimistic pre-claim cache read. On a hit we skip the lease
+      // contention entirely; on a miss we proceed to the claim.
       // Mirrors the uncoordinated body's first read — when we win the
-      // lock, the body re-reads inside the lock and short-circuits if a
-      // peer committed in between (the double-check).
+      // lease, the body re-reads under it and short-circuits if a peer
+      // persisted in between (the double-check).
       let cached = await this.readFromDatabaseCache(
         args.moduleURL,
         args.cacheScope,
@@ -773,8 +814,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         return cached;
       }
 
-      let outcome = await coordinator.tryAcquireAndRun(coalesceKey, async () =>
-        this.loadDefinitionCacheEntryUncached(args),
+      let outcome = await coordinator.tryLeaseAndRun(
+        coalesceKey,
+        COALESCE_LEASE_MS,
+        async () => this.loadDefinitionCacheEntryUncached(args),
       );
       if (outcome.acquired) {
         // Winner. Result might be undefined if all populationCandidates
