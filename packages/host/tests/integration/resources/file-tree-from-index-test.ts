@@ -3,7 +3,12 @@ import { settled } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRRI, type CodeRef } from '@cardstack/runtime-common';
+import {
+  baseRRI,
+  resetSearchBoundsForTests,
+  setSearchBoundsForTests,
+  type CodeRef,
+} from '@cardstack/runtime-common';
 
 import {
   fileTreeFromIndex,
@@ -125,6 +130,52 @@ module('Integration | file-tree-from-index resource', function (hooks) {
       ],
       'all markdown files are in the tree when unscoped',
     );
+  });
+
+  test('the tree includes every file when the matches span several search pages', async function (assert) {
+    // A one-row server page, both for a request that names no page and as the
+    // ceiling an explicit page is clamped to, so the three markdown files take
+    // three pages and only a tree that walks every page lists them all.
+    setSearchBoundsForTests({
+      serverMaxPageSize: 1,
+      serverAbsoluteMaxPageSize: 1,
+    });
+    let store = getService('store');
+    let requestedPages: (number | undefined)[] = [];
+    let originalSearchEntries = store.searchEntries.bind(store);
+    store.searchEntries = ((
+      ...args: Parameters<typeof store.searchEntries>
+    ) => {
+      requestedPages.push(args[0].page?.number);
+      return originalSearchEntries(...args);
+    }) as typeof store.searchEntries;
+
+    try {
+      let tree = getTreeForTest(
+        getService('loader-service'),
+        () => markdownRef,
+        () => undefined,
+      );
+      await tree.loaded;
+
+      assert.deepEqual(
+        filePaths(tree.entries),
+        [
+          'notes/plain.md',
+          'recipes/pasta/SKILL.md',
+          'skills/realm-sync/SKILL.md',
+        ],
+        'files past the first page are in the tree',
+      );
+      assert.deepEqual(
+        requestedPages,
+        [0, 1, 2],
+        'the tree requests each page once, in order, and stops at the total',
+      );
+    } finally {
+      store.searchEntries = originalSearchEntries;
+      resetSearchBoundsForTests();
+    }
   });
 
   test('a burst of realm events coalesces into a single tree re-run', async function (assert) {
