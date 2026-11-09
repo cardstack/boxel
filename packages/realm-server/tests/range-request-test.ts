@@ -2,7 +2,8 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import type { FileRef, RealmAdapter } from '@cardstack/runtime-common';
+import type { FileRef, Realm, RealmAdapter } from '@cardstack/runtime-common';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   setupPermissionedRealmCached,
   withRealmPath,
@@ -20,6 +21,7 @@ module(basename(import.meta.filename), function () {
     let request: RealmRequest;
     let serverRequest: SuperTest<Test>;
     let adapter: RealmAdapter;
+    let testRealm: Realm;
 
     setupPermissionedRealmCached(hooks, {
       fixture: 'simple',
@@ -31,6 +33,7 @@ module(basename(import.meta.filename), function () {
       onRealmSetup: (args) => {
         serverRequest = args.request;
         adapter = args.testRealmAdapter;
+        testRealm = args.testRealm;
         request = withRealmPath(args.request, realmURL);
       },
     });
@@ -128,6 +131,74 @@ module(basename(import.meta.filename), function () {
         bytes,
         'the whole body arrives',
       );
+    });
+
+    // A path stat on a network filesystem can also say a file is there after
+    // another host has deleted it; only opening the file finds it gone. The
+    // request's file ref is opened as the stat describes and its file is then
+    // deleted, so the read meets the file missing only when it opens it. The
+    // upload's own indexing is settled first, so the deletion reaches only the
+    // request under test.
+    async function withFileGoneAfterStat<T>(
+      path: string,
+      run: () => Promise<T>,
+    ): Promise<T> {
+      await testRealm.indexing();
+      let openFile = adapter.openFile.bind(adapter);
+      let deleted = false;
+      adapter.openFile = async (openedPath) => {
+        let ref: FileRef | undefined = await openFile(openedPath);
+        if (ref && !deleted && openedPath === path) {
+          deleted = true;
+          await adapter.remove(openedPath as LocalPath);
+        }
+        return ref;
+      };
+      try {
+        return await run();
+      } finally {
+        adapter.openFile = openFile;
+        QUnit.assert.true(
+          deleted,
+          'the read opened the file the stat described',
+        );
+      }
+    }
+
+    function assertRealmNotFound(
+      assert: Assert,
+      response: {
+        status: number;
+        headers: Record<string, string>;
+        body: Buffer;
+      },
+    ) {
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      // A body stream that fails before anything is sent is answered by the
+      // HTTP layer as a plain-text 404 instead.
+      assert.true(
+        response.headers['content-type']?.startsWith('application/json'),
+        `the realm's own not-found answers (${response.headers['content-type']})`,
+      );
+      let doc = JSON.parse(response.body.toString('utf8'));
+      assert.strictEqual(doc.errors?.[0]?.status, 404);
+    }
+
+    test('a GET of a file deleted after its stat answers not-found', async function (assert) {
+      await uploadSample('/gone-after-stat.png');
+      let response = await withFileGoneAfterStat('gone-after-stat.png', () =>
+        getSample('/gone-after-stat.png').timeout(5000),
+      );
+      assertRealmNotFound(assert, response);
+    });
+
+    test('the card+source read of a file deleted after its stat answers not-found', async function (assert) {
+      await uploadSample('/gone-after-stat-source.png');
+      let response = await withFileGoneAfterStat(
+        'gone-after-stat-source.png',
+        () => getSource('/gone-after-stat-source.png').timeout(5000),
+      );
+      assertRealmNotFound(assert, response);
     });
 
     test('the card+source read declares the length of the bytes it sends, not a stale stat', async function (assert) {

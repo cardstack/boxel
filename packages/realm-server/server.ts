@@ -1060,6 +1060,16 @@ export class RealmServer {
       .use(serveFromRealm);
 
     app.on('error', (err, ctx) => {
+      // A response body streamed from a file that was deleted after the
+      // response was built. Koa answers it as a 404 when nothing has been
+      // sent yet, and otherwise ends the response; either way the file is
+      // simply gone, which is not a server fault.
+      if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+        this.log.warn(
+          `${ctx.method} ${ctx.url}: file vanished while its response was being sent (${err.code})`,
+        );
+        return;
+      }
       console.error(`Unhandled server error`, err);
       Sentry.withScope((scope) => {
         scope.setSDKProcessingMetadata({ request: ctx.request });
