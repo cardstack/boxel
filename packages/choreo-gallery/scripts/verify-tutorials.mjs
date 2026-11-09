@@ -6,6 +6,11 @@ import { chromium } from 'playwright';
 const base = process.argv[2] ?? 'http://localhost:4600';
 const browser = await chromium.launch({
   headless: true,
+  // Playwright starts Chromium with its sandbox off unless asked. On macOS the
+  // sandbox needs no privileges, so it is on. On Linux whether it starts
+  // depends on the browser build and the host's user-namespace policy, so the
+  // script keeps it off there rather than fail on a host that blocks it.
+  chromiumSandbox: process.platform === 'darwin',
   ...(process.env.BROWSER_CHANNEL
     ? { channel: process.env.BROWSER_CHANNEL }
     : {}),

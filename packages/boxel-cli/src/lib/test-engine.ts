@@ -516,7 +516,16 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     setHtml(html);
 
     let chromium = await loadChromium();
-    browser = await chromium.launch({ headless: true });
+    // The QUnit page runs card code from a realm. Playwright starts Chromium
+    // with its sandbox off unless `chromiumSandbox` asks for it. On macOS the
+    // sandbox needs no privileges, so it is on. On Linux the bundled Chromium
+    // has no setuid sandbox helper, so it needs unprivileged user namespaces,
+    // which Ubuntu 23.10+ blocks for it by default. There the launch keeps the
+    // sandbox off rather than fail on a default install.
+    browser = await chromium.launch({
+      headless: true,
+      chromiumSandbox: process.platform === 'darwin',
+    });
     let page = await browser.newPage();
 
     if (options.debug) {

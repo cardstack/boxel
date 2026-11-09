@@ -96,6 +96,11 @@ const allDemoCount = paths.filter((p) => /^demos\/[^/]+\.json$/.test(p)).length;
 const browser = await chromium.launch({
   headless: true,
   channel: process.env.BROWSER_CHANNEL ?? 'chrome',
+  // Playwright starts Chromium with its sandbox off unless asked. On macOS the
+  // sandbox needs no privileges, so it is on. On Linux whether it starts
+  // depends on the browser build and the host's user-namespace policy, so the
+  // sweep keeps it off there rather than fail on a host that blocks it.
+  chromiumSandbox: process.platform === 'darwin',
   args: [
     '--mute-audio',
     '--autoplay-policy=no-user-gesture-required',

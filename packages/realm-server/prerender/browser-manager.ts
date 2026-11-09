@@ -29,16 +29,25 @@ export class BrowserManager {
     await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
-    // Always launch the prerender renderer with the Chromium sandbox off — it
-    // always has, and we require it to. This task runs only in a container
-    // where the sandbox can't initialize, so Chrome won't start with it on
-    // (and the V8 `--prof` diagnostic needs the renderer able to write its log
-    // to disk, which the sandbox blocks). The security boundary is the task
-    // itself: the prerenderer is a separate, segregated ECS task, isolated
-    // from the realm-server. Forced unconditionally rather than gated on CI /
-    // PUPPETEER_DISABLE_SANDBOX so a missing env var can't silently break the
-    // launch.
-    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    // The renderer runs card code from any realm, so the sandbox stays on
+    // wherever Chrome is known to start it. That is macOS, where the sandbox
+    // needs no privileges: local development.
+    //
+    // It is off in two cases:
+    // - Off the Mac. The deployed prerenderer is a Linux ECS task, where
+    //   Chrome's sandbox has not been shown to start, and a prerenderer that
+    //   cannot launch Chrome renders nothing. There the boundary is the task
+    //   itself: a separate ECS task, isolated from the realm-server. Linux CI
+    //   and dev machines launch the way the deployed task does, so CI tests
+    //   the configuration that ships.
+    // - Whenever the V8 `--prof` diagnostic is on. The renderer has to write its
+    //   log to disk, which the sandbox blocks.
+    //
+    // The gate is the platform, not an env var, so a missing variable can't
+    // break the deployed launch.
+    if (process.platform !== 'darwin' || v8ProfEnabled()) {
+      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
 
     // When the realm-server speaks HTTPS (local dev with a mkcert leaf
     // cert), Chromium needs to be told to accept it. mkcert's root CA

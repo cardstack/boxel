@@ -117,6 +117,13 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
+          // Playwright starts Chromium with its sandbox off unless asked. On
+          // macOS the sandbox needs no privileges, so it is on. On Linux the
+          // bundled Chromium has no setuid sandbox helper, so it needs
+          // unprivileged user namespaces, which Ubuntu 23.10+ blocks for it by
+          // default. There the suite keeps the sandbox off rather than depend
+          // on the host's settings.
+          chromiumSandbox: process.platform === 'darwin',
           args: [
             // Simulate resolving a custom workspace domain to a realm server.
             '--host-resolver-rules=MAP published.realm 127.0.0.1:4205',

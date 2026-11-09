@@ -188,6 +188,16 @@ const STANDBY_LAUNCH_ATTEMPT_TIMEOUT_MS = 45_000;
 const STANDBY_LAUNCH_MAX_ATTEMPTS = 3;
 const STANDBY_LAUNCH_RETRY_BACKOFF_MS = 2_000;
 
+// The standby page runs the host app, so Chrome keeps its sandbox wherever it
+// is known to start it: macOS, where the sandbox needs no privileges. On Linux
+// the harness runs in CI and in containers, and some of those run as root,
+// where Chrome refuses to start sandboxed. The sandbox is off there so the
+// support bring-up doesn't depend on the host's privileges.
+const STANDBY_SANDBOX_ARGS =
+  process.platform === 'darwin'
+    ? []
+    : ['--no-sandbox', '--disable-setuid-sandbox'];
+
 async function launchStandbyBrowser(deadline: number): Promise<Browser> {
   let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   let verbose = process.env.TEST_HARNESS_STANDBY_VERBOSE === '1';
@@ -214,8 +224,7 @@ async function launchStandbyBrowser(deadline: number): Promise<Browser> {
         timeout,
         dumpio,
         args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
+          ...STANDBY_SANDBOX_ARGS,
           '--disable-dev-shm-usage',
           '--disable-gpu',
         ],
