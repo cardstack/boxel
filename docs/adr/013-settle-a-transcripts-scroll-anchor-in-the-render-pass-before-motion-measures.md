@@ -104,7 +104,7 @@ Two blocks of a transcript MUST NOT be drawn over each other in any frame. That 
 
 ### 1.21. Measuring doesn't move the scroll
 
-The render-pass barrier MUST NOT leave a scroller at a different scroll position because its regions measured. While they put their runs at rest to measure, and until the runs stand again, it MUST hold the scroll height of the nearest scroller above each region in the pass to at least the bottom of its view, so that the browser clamps nothing. It MUST hold a scroller only where doing so moves nothing the regions measure: a scroller laid out in normal flow (block or flow-root) whose own box keeps its size.
+The render-pass barrier MUST NOT leave a scroller at a different scroll position because its regions measured. While they put their runs at rest to measure, and until the runs stand again, it MUST hold the scroll height of the nearest scroller above each region in the pass to at least the bottom of its view, so that the browser clamps nothing. A region with no scrolling element above it scrolls with the document, and the document is the scroller held. It MUST hold a scroller only where doing so moves nothing the regions measure: a scroller laid out in normal flow (block or flow-root) whose own box keeps its size.
 
 ## 2. Rationale
 

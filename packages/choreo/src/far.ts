@@ -205,14 +205,18 @@ function runBarrier() {
  * again and that scroller is not held. A stylesheet that picks the
  * scroller's children by their place among siblings (`:last-child`,
  * `:nth-last-child()`, `:only-child`) sees the strut as the last child while
- * it stands, and the real last child measures without such a rule. A
- * scroller at the top cannot be clamped, so it needs none.
+ * it stands, and the real last child measures without such a rule. The
+ * document's content lies in `<body>`, so when the document scrolls, the
+ * strut goes there and `<body>`'s layout is the one that counts. A scroller
+ * at the top cannot be clamped, so it needs none.
  */
 function strut(scroller: HTMLElement): HTMLElement | undefined {
   if (scroller.scrollTop <= 0) {
     return undefined;
   }
-  const { display } = getComputedStyle(scroller);
+  const parent =
+    scroller === document.scrollingElement ? document.body : scroller;
+  const { display } = getComputedStyle(parent);
   if (display !== 'block' && display !== 'flow-root') {
     return undefined;
   }
@@ -220,7 +224,7 @@ function strut(scroller: HTMLElement): HTMLElement | undefined {
   const el = document.createElement('div');
   el.setAttribute('aria-hidden', 'true');
   el.style.cssText = `display:block;height:${scroller.scrollTop + clientHeight}px;margin:0;padding:0;border:0;visibility:hidden;pointer-events:none`;
-  scroller.appendChild(el);
+  parent.appendChild(el);
   if (
     scroller.clientHeight !== clientHeight ||
     scroller.clientWidth !== clientWidth

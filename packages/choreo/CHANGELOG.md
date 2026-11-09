@@ -42,7 +42,8 @@ versions may change behavior until `1.0.0`.
   at the end was clamped to the shorter height, and a scroll owner such as a stick-to-bottom
   transcript took the clamp for the reader scrolling up. While the regions measure, the render
   pass now holds the scroll height of the nearest block-flow scroller above each region with a
-  hidden block after its content, and takes the block out once the runs stand again. A scroller
+  hidden block after its content, and takes the block out once the runs stand again. A region with
+  no scrolling element above it holds the document, with the block at the end of `<body>`. A scroller
   that is a flex or grid container, or whose own size would change with the block in, is not
   held. While the block stands, a stylesheet rule that picks the scroller's children by their
   place among siblings (`:last-child`) doesn't match the real last child.
