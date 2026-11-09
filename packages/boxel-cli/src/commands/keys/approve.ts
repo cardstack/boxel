@@ -779,12 +779,35 @@ export async function keysApprove(
         : `The secure window closed without approving ${batch.card.name}'s requests`,
     );
   }
+  // The window fills each slot with what the person chose there, from the
+  // keys its own batch offers, which need not include the one named here. A
+  // slot it filled otherwise is named with the key or share that fills it,
+  // rather than reported as approved with `name`.
+  let otherwise = approved.flatMap((b) => {
+    let named = planned
+      .find((p) => p.operation.name === b.operation)
+      ?.fills.find((f) => f.slot === b.slot);
+    let id = b.keyId ?? b.shareId;
+    if (!named || id === named.id) {
+      return [];
+    }
+    let filler =
+      batch.keys.find((k) => k.id === id)?.name ??
+      batch.shares.find((s) => s.id === id)?.label ??
+      'another key';
+    return [`${b.operationLabel ?? b.operation} (${b.slot}) with ${filler}`];
+  });
   let result: ApproveResult = { approved, via: 'window' };
   emit(ctx, result, () => {
     let count = new Set(approved.map((b) => b.operation)).size;
     console.log(
       `${FG_GREEN}Approved ${count} ${count === 1 ? 'call' : 'calls'} that ${batch.card.name} makes, in the secure window.${RESET}`,
     );
+    if (otherwise.length > 0) {
+      console.log(
+        `${FG_YELLOW}The secure window approved ${otherwise.join(', ')}, not ${name}.${RESET}`,
+      );
+    }
   });
   return result;
 }
