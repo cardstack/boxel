@@ -1151,6 +1151,94 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-approve-save]').hasText('Approve 1 call');
   });
 
+  test('opened by the CLI for some operations with a key that fills only those, the page starts on that key', async function (assert) {
+    apiOnlyAccount();
+    visitShell(
+      `approve#${new URLSearchParams({
+        card: CARD,
+        operation: 'listPRs',
+        key: 'key-api-only',
+        operations: 'listPRs',
+        cli_port: '51234',
+        cli_state: 'c'.repeat(32),
+      })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+      )
+      .isChecked('the key the CLI named starts chosen');
+  });
+
+  test('a request that changed while shown keeps a key that fills only the ticked operations', async function (assert) {
+    apiOnlyAccount();
+    let served = routes['POST _key-bindings/batch']!;
+    let refused = false;
+    serve({
+      'POST _key-bindings': () => {
+        if (refused) {
+          return json(201, { data: [], meta: { batchId: 'b' } });
+        }
+        refused = true;
+        return refusal(
+          409,
+          'operation "listPRs" sends another request than the one shown for slot userKey; show it again',
+        );
+      },
+      'POST _key-bindings/batch': served,
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-approve-tick="upload"]');
+    await waitFor('[data-test-approve-key="GitHub API account"]');
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+    );
+    await click('[data-test-approve-save]');
+    await waitFor('[data-test-keys-error]');
+    assert
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+      )
+      .isChecked('the key the user chose stays chosen');
+    assert.dom('[data-test-approve-tick="upload"] input').isNotChecked();
+  });
+
+  test('an answer for operations ticked before the latest tick is ignored', async function (assert) {
+    apiOnlyAccount();
+    let served = routes['POST _key-bindings/batch']!;
+    let release: (() => void) | undefined;
+    serve({
+      'POST _key-bindings/batch': async (request) => {
+        if (request.body.data.attributes.operations) {
+          await new Promise<void>((resolve) => (release = resolve));
+        }
+        return served(request);
+      },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    // Not awaited: the click settles only once the batch answers.
+    void click('[data-test-approve-tick="upload"]');
+    await waitUntil(() => release !== undefined);
+    await click('[data-test-approve-tick="upload"]');
+    assert
+      .dom('[data-test-approve-save]')
+      .isEnabled('every operation is ticked again');
+    release!();
+    await settled();
+    assert
+      .dom('[data-test-approve-key="GitHub API account"]')
+      .doesNotExist(
+        'the answer for the upload unticked came too late to count',
+      );
+    assert.dom('[data-test-approve-save]').isEnabled();
+  });
+
   test('Approve waits for the keys the ticked operations offer', async function (assert) {
     apiOnlyAccount();
     let served = routes['POST _key-bindings/batch']!;

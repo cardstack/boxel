@@ -1252,9 +1252,29 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     this.weigh();
   };
 
-  // Each answer is numbered, so only the latest one asked counts; reading
-  // the batch again starts the count over.
+  // Each request is numbered, so only the answer to the latest one counts;
+  // reading the batch again leaves every answer asked for before it stale.
   private weighings = 0;
+
+  // What fills each slot in the ticked operations, when only some of the
+  // batch's are ticked (`tickedOperationNames`); undefined when the batch's
+  // own fillers answer.
+  private tickedFillers = async (
+    batch: ApprovalBatch,
+    ticked: Set<string>,
+  ): Promise<BatchFillers | undefined> => {
+    let operations = tickedOperationNames(batch, ticked);
+    if (!operations || !this.opened.target) {
+      return undefined;
+    }
+    let { fillers } = await approvalBatch(this.args.api.config, {
+      target: this.opened.target,
+      review: this.args.review,
+      interactive: true,
+      operations,
+    });
+    return fillers;
+  };
 
   // Asks what fills each slot in the ticked operations alone, when only some
   // are ticked, and keeps a chosen key while it is still offered. Without an
@@ -1263,10 +1283,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private weigh = async () => {
     let state = this.choosing;
     let attempt = ++this.weighings;
-    let operations = state
-      ? tickedOperationNames(state.batch, this.form.ticked)
-      : undefined;
-    if (!state || !operations || !this.opened.target) {
+    if (!state || !tickedOperationNames(state.batch, this.form.ticked)) {
       this.form.weighed = undefined;
       this.form.weighing = false;
       this.keepOfferedChoices();
@@ -1275,12 +1292,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     this.form.weighing = true;
     let weighed: BatchFillers | undefined;
     try {
-      ({ fillers: weighed } = await approvalBatch(this.args.api.config, {
-        target: this.opened.target,
-        review: this.args.review,
-        interactive: true,
-        operations,
-      }));
+      weighed = await this.tickedFillers(state.batch, this.form.ticked);
     } catch (e) {
       if (attempt === this.weighings && isSignedOut(e)) {
         this.args.api.signedOut();
@@ -1345,24 +1357,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           cliInteractive: this.fromCli.interactive,
         });
       }
-      // Each slot starts on a key it offers for the use the choice starts
-      // on, or keeps the one the user chose while it still does.
-      let shown = batchFor(batch, this.form.use);
-      this.form.chosen = Object.fromEntries(
-        slotChoices(shown, this.form.use).map((c) => {
-          let kept = keep?.chosen[c.slot];
-          return [
-            c.slot,
-            kept && c.options.some((o) => o.id === kept)
-              ? kept
-              : initialChoice(
-                  shown,
-                  c,
-                  c.kind === 'userKey' ? this.opened.key : this.opened.share,
-                ),
-          ];
-        }),
-      );
       let keys = operations.map(operationKey);
       let named = this.fromCli.operations;
       // Opened for a share, only the operations that send the realm's key
@@ -1379,9 +1373,37 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           : forShare
             ? new Set(operations.filter(forShare).map(operationKey))
             : new Set(keys);
+      // Each slot starts on a key it offers, in the ticked operations, for
+      // the use the choice starts on, or keeps the one the user chose while
+      // it still does. Without an answer for the ticked operations, it offers
+      // the batch's own fillers, which fit every operation.
+      let weighed: BatchFillers | undefined;
+      try {
+        weighed = await this.tickedFillers(batch, this.form.ticked);
+      } catch (e) {
+        if (isSignedOut(e)) {
+          throw e;
+        }
+      }
+      this.form.weighed = weighed;
+      let shown = batchFor(withTickedFillers(batch, weighed), this.form.use);
+      this.form.chosen = Object.fromEntries(
+        slotChoices(shown, this.form.use).map((c) => {
+          let kept = keep?.chosen[c.slot];
+          return [
+            c.slot,
+            kept && c.options.some((o) => o.id === kept)
+              ? kept
+              : initialChoice(
+                  shown,
+                  c,
+                  c.kind === 'userKey' ? this.opened.key : this.opened.share,
+                ),
+          ];
+        }),
+      );
       this.page.state = { name: 'choosing', batch, context };
       this.args.api.visit.loaded();
-      await this.weigh();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
