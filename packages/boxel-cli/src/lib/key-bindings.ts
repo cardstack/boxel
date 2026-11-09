@@ -1,4 +1,7 @@
-import { realmServerRequest } from './secure-session.ts';
+import {
+  realmServerRequest,
+  SecureSessionRequestError,
+} from './secure-session.ts';
 import { canonicalRealmUrl } from './user-keys.ts';
 
 // A realm as the CLI names it to the realm server: a prefix-form id
@@ -115,13 +118,37 @@ export interface ApprovalBatch {
   remainingPipelinesOnly?: number;
   keys: BatchKey[];
   shares: BatchShare[];
+  // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
+  // one) the realm server offers for each slot token, by use: of a kind the
+  // slot takes in every operation of the batch that sends it, with a
+  // credential good where each of those sends. One choice fills a slot token
+  // for the whole batch, so these are the only ones the secure window's
+  // approve page offers for it. Asked with `operations`, only those
+  // operations count. A realm server that doesn't name them leaves the choice
+  // to approval, which holds a key to the slot's declared kind.
+  fillers?: Record<BatchUse, Record<string, string[]>>;
+  // The operations `fillers` weigh, when the realm server weighed only the
+  // ones `approvalBatch` was asked for; absent, they weigh every operation of
+  // the batch. Set here, not by the realm server.
+  fillersFor?: string[];
 }
+
+// Where the requests a batch approves run: from any card a reader opens, or
+// only from pipelines. For `pipelines`, an operation approved for pipelines
+// only is left out of the batch's `fillers`, as the window leaves it out of
+// what it approves for pipelines.
+export type BatchUse = 'interactive' | 'pipelines';
 
 // What the batch is asked for: a card type in a realm, or one card.
 export type BatchTarget =
   | { kind: 'type'; module: string; name: string; realm: string }
   | { kind: 'instance'; url: string };
 
+// `operations` names the operations an approval covers when it covers only
+// some of the batch's, so the keys offered for each slot (`fillers`) weigh
+// only where those send. A realm server that doesn't take `operations`
+// refuses it as an attribute it doesn't know; the batch is then asked without
+// it, and its `fillers` weigh every operation.
 export async function approvalBatch(
   realmServerUrl: string,
   token: string,
@@ -129,28 +156,53 @@ export async function approvalBatch(
     target,
     review = false,
     interactive = false,
-  }: { target: BatchTarget; review?: boolean; interactive?: boolean },
+    operations,
+  }: {
+    target: BatchTarget;
+    review?: boolean;
+    interactive?: boolean;
+    operations?: string[];
+  },
   fetchFn: FetchFn = fetch,
 ): Promise<ApprovalBatch> {
-  let json = await realmServerRequest(realmServerUrl, '_key-bindings/batch', {
-    method: 'POST',
-    token,
-    fetchFn,
-    body: {
-      data: {
-        type: 'key-binding-batch',
-        attributes: {
-          target:
-            target.kind === 'type'
-              ? { ...target, realm: realmArgument(target.realm) }
-              : target,
-          review,
-          ...(interactive ? { interactive: true } : {}),
+  let ask = (scoped: boolean) =>
+    realmServerRequest(realmServerUrl, '_key-bindings/batch', {
+      method: 'POST',
+      token,
+      fetchFn,
+      body: {
+        data: {
+          type: 'key-binding-batch',
+          attributes: {
+            target:
+              target.kind === 'type'
+                ? { ...target, realm: realmArgument(target.realm) }
+                : target,
+            review,
+            ...(interactive ? { interactive: true } : {}),
+            ...(scoped ? { operations } : {}),
+          },
         },
       },
-    },
-  });
-  return json.data.attributes as ApprovalBatch;
+    });
+  if (operations === undefined) {
+    return (await ask(false)).data.attributes as ApprovalBatch;
+  }
+  try {
+    return {
+      ...((await ask(true)).data.attributes as ApprovalBatch),
+      fillersFor: operations,
+    };
+  } catch (e) {
+    if (
+      e instanceof SecureSessionRequestError &&
+      e.status === 400 &&
+      e.message.includes("'operations' can't be asked about here")
+    ) {
+      return (await ask(false)).data.attributes as ApprovalBatch;
+    }
+    throw e;
+  }
 }
 
 export interface OperationApproval {

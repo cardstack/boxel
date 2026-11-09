@@ -167,7 +167,8 @@ export interface ApprovalBatch {
   // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
   // one) that can fill each slot token, in every operation of the batch that
   // sends it (`keyOfferedForSlot`), by use. One choice fills a slot token for the
-  // whole batch, so these are the only ones the window offers for it. For
+  // whole batch, so these are the only ones the window offers for it. Asked
+  // with `operations`, only those operations count. For
   // `pipelines`, an operation approved for pipelines only is left out, as the
   // window leaves it out of what it approves for pipelines, so a slot it
   // sends to one more destination can take more keys.
@@ -183,6 +184,11 @@ export interface ApprovalBatchRequest {
   review?: boolean;
   // Also answer slots approved for pipelines only.
   interactive?: boolean;
+  // The operations an approval covers, by name, when it covers only some of
+  // the batch's: `fillers` then weigh only these, so a key that fits where
+  // they send is offered even if another operation sends the same slot token
+  // somewhere it can't reach. The batch itself still holds every operation.
+  operations?: string[];
 }
 
 // What a binding is read as here, with the snapshot of its last approval.
@@ -246,7 +252,12 @@ function approvable(
 export async function approvalBatch(
   deps: Deps,
   user: string,
-  { target, review = false, interactive = false }: ApprovalBatchRequest,
+  {
+    target,
+    review = false,
+    interactive = false,
+    operations,
+  }: ApprovalBatchRequest,
 ): Promise<ApprovalBatch> {
   let { dbAdapter } = deps;
   let resolved = await resolveWindowRequest(deps, user, { target });
@@ -371,10 +382,14 @@ export async function approvalBatch(
     destinations.filter((d) => grants.some((g) => destinationCovers(g, d)));
   // How each slot token is sent, by the operations of the batch `include`
   // keeps.
+  let covered = (operation: BatchOperation) =>
+    operations === undefined || operations.includes(operation.name);
   let sendsOf = (include: (operation: BatchOperation) => boolean) => {
     let found = new Map<string, { key: BatchSlot['key']; sends: SlotSend[] }>();
     for (let group of sorted) {
-      for (let operation of group.operations.filter(include)) {
+      for (let operation of group.operations.filter(
+        (o) => covered(o) && include(o),
+      )) {
         for (let slot of operation.slots) {
           let entry = found.get(slot.slot) ?? { key: slot.key, sends: [] };
           entry.sends.push(sendOf.get(slot)!);
