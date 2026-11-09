@@ -140,15 +140,20 @@ export class Collapsible extends Component<CollapsibleSignature> {
         data-test-pretui-collapsible-trigger
         {{on 'click' this.toggle}}
       >
-        {{#unless @hideCaret}}
-          <span class='pretui-collapsible-caret' aria-hidden='true'></span>
-        {{/unless}}
-        <span class='pretui-collapsible-label'>
-          {{#if (has-block 'trigger')}}
-            {{yield this.open to='trigger'}}
-          {{else}}
-            {{@label}}
-          {{/if}}
+        {{! The caret and the label sit on a shared baseline, so a label
+            that wraps keeps the caret beside its first line; the pair is
+            centred in the trigger as one. }}
+        <span class='pretui-collapsible-head'>
+          {{#unless @hideCaret}}
+            <span class='pretui-collapsible-caret' aria-hidden='true'></span>
+          {{/unless}}
+          <span class='pretui-collapsible-label'>
+            {{#if (has-block 'trigger')}}
+              {{yield this.open to='trigger'}}
+            {{else}}
+              {{@label}}
+            {{/if}}
+          </span>
         </span>
       </button>
 
@@ -222,8 +227,15 @@ export class Collapsible extends Component<CollapsibleSignature> {
           opacity: 0.45;
           cursor: default;
         }
-        .pretui-collapsible[data-disabled='true'] .pretui-collapsible-trigger:hover {
+        .pretui-collapsible[data-disabled='true']
+          .pretui-collapsible-trigger:hover {
           background: none;
+        }
+        .pretui-collapsible-head {
+          display: inline-flex;
+          align-items: baseline;
+          gap: 0.5em;
+          min-inline-size: 0;
         }
         .pretui-collapsible-label {
           min-inline-size: 0;
@@ -242,21 +254,24 @@ export class Collapsible extends Component<CollapsibleSignature> {
           transition: transform var(--pretui-dur-snap, 180ms)
             var(--pretui-ease-snap, ease);
         }
-        .pretui-collapsible-trigger[data-state='open'] .pretui-collapsible-caret {
+        .pretui-collapsible-trigger[data-state='open']
+          .pretui-collapsible-caret {
           transform: rotate(45deg) translate(-0.05em, -0.15em);
         }
         .pretui-collapsible-fold {
           display: grid;
           grid-template-rows: 0fr;
           visibility: hidden;
-          transition: grid-template-rows var(--pretui-dur-morph, 300ms)
+          transition:
+            grid-template-rows var(--pretui-dur-morph, 300ms)
               var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02)),
             visibility 0s linear var(--pretui-dur-morph, 300ms);
         }
         .pretui-collapsible-fold[data-state='open'] {
           grid-template-rows: 1fr;
           visibility: visible;
-          transition: grid-template-rows var(--pretui-dur-morph, 300ms)
+          transition:
+            grid-template-rows var(--pretui-dur-morph, 300ms)
               var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02)),
             visibility 0s;
         }
