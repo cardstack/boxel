@@ -22,6 +22,7 @@ import {
   generateLinearEasing,
   mix,
   spring as springGenerator,
+  time,
 } from 'motion-dom';
 import { easingDefinitionToFunction } from 'motion-utils';
 
@@ -77,6 +78,15 @@ const loopKey = (cue: Cue) =>
     .sort()
     .join(',');
 
+/** where releaseForMeasure stands a transform a tween is carrying */
+const TRANSFORM_REST: Record<string, PropValue> = {
+  scale: 1,
+  scaleX: 1,
+  scaleY: 1,
+  x: 0,
+  y: 0,
+};
+
 /** a tween a replacement pass carries on: see Run.midfade */
 export interface Fade {
   /** score ms until it starts (0 when it is already running) */
@@ -98,6 +108,12 @@ export interface Run {
   finished: Promise<void>;
   /** nothing left to play: the run completed or was cancelled */
   isDone(): boolean;
+  /**
+   * The run completed and every cue it has is an ambient loop, still going
+   * round. Such a run is done but not over: its loops play on until a pass
+   * replaces it.
+   */
+  isLooping(): boolean;
   /**
    * Where each of this run's ambient loops is in its cycle. A replacement
    * run starts the same loop on the same sprite from there, so an edited
@@ -140,6 +156,8 @@ export interface Run {
   reassert(): void;
   /** put every element this run has touched back to its resting layout NOW */
   releaseForMeasure(): void;
+  /** stand back up rested tween values the replacement drives itself (see ChoreoRun.restoreRested) */
+  restoreRested(drives: (ve: VisualElement, key: string) => boolean): void;
   /**
    * One build backwards — Keynote's rule. Land PARKED at the previous
    * gate with everything ahead re-closed, and HOLD: a retreat never
@@ -175,6 +193,12 @@ interface RunOptions {
   cameraAim?: { x: number; y: number } | null;
   /** the element the camera transform drives (the region's scene wrapper) */
   cameraFrame?: HTMLElement;
+  /**
+   * The run replaces one in flight (`ChoreoRun.inFlight`). What it moves is
+   * already moving on screen, so its first frame advances like any other
+   * instead of standing still.
+   */
+  continuing?: boolean;
   /**
    * Nothing in this region is staying — every participant it can see is a
    * leaver. See the note in `park`: it decides whether a gate this run stops
@@ -245,11 +269,18 @@ function isSpring(transition: Record<string, unknown> | undefined): boolean {
 }
 
 /**
+ * Controls that wrap a platform Animation rather than a motion-dom one: the
+ * frame clock's hold-back has no tween to move in them, and no private
+ * fields to find.
+ */
+const platformControlled = new WeakSet<AnimationPlaybackControls>();
+
+/**
  * A platform Animation in the controls shape the transport speaks, so
  * setPaused / speed / stopTrack drive it exactly like an engine animation.
  */
 function platformControls(animation: Animation): AnimationPlaybackControls {
-  return {
+  const controls = {
     cancel: () => animation.cancel(),
     pause: () => animation.pause(),
     play: () => animation.play(),
@@ -270,6 +301,8 @@ function platformControls(animation: Animation): AnimationPlaybackControls {
       animation.currentTime = seconds * 1000;
     },
   } as unknown as AnimationPlaybackControls;
+  platformControlled.add(controls);
+  return controls;
 }
 
 function carryVelocity(
@@ -404,14 +437,20 @@ interface Track {
 }
 
 let warnedPrivateFields = false;
-/** @maxFrameStep reads motion-dom's private animation fields; say once when they are gone */
+
+/** let the next run that misses motion-dom's private fields say so again (a test's reset) */
+export function resetRunWarnings() {
+  warnedPrivateFields = false;
+}
+
+/** the run's frame clock reads motion-dom's private animation fields; say once when they are gone */
 function warnPrivateFieldsMoved() {
   if (warnedPrivateFields) {
     return;
   }
   warnedPrivateFields = true;
   console.warn(
-    '@cardstack/choreo: motion-dom no longer exposes the animation fields @maxFrameStep reads (_animation, startTime, holdTime); a long frame will skip tweens ahead instead of slowing them',
+    "@cardstack/choreo: motion-dom no longer exposes the animation fields a run's frame clock reads (_animation, startTime, holdTime); a run compiled in a long task will open its tweens that far in, and with @maxFrameStep a long frame will skip them ahead instead of slowing them",
   );
 }
 
@@ -467,7 +506,9 @@ export class ChoreoRun implements Run {
       value: unknown;
       ve: VisualElement;
     }[];
-  } = { borrowed: [], moved: [] };
+    /** transforms in-flight tweens carry, rested for the measure */
+    tweened: { key: string; value: unknown; ve: VisualElement }[];
+  } = { borrowed: [], moved: [], tweened: [] };
   private owned: { el: HTMLElement; key: string; ve: VisualElement }[] = [];
   private cancelled = false;
   private ended = false;
@@ -480,14 +521,32 @@ export class ChoreoRun implements Run {
    * run started by a render pass would otherwise open with that whole step
    * on its own clock: every cue the clock starts, gates, or drives frame by
    * frame (a camera, a wire, a later cue's start) would begin that far in.
+   * The tweens the run started get the same fresh start from holdBack. A
+   * run that opens `continuing` skips it.
    */
   private freshClock = false;
-  /** the frame timestamp holdBack saw last, while a maxFrameStep applies */
+  /**
+   * The run replaces one in flight and has not painted yet. Its first frame
+   * continues a motion already on screen, so it advances like any other
+   * frame, the clock and its tweens alike: standing still there would draw
+   * the last frame twice. A later start (a resume, a gate) is from rest.
+   */
+  private continuing = false;
+  /** the frame timestamp holdBack saw last; undefined before its first frame */
   private lastStamp: number | undefined;
+  /**
+   * motion-dom's clock as the run (re)started ticking. That clock holds one
+   * reading until the microtask queue next drains, and startTicking reads it
+   * in the same synchronous call that started or resumed the run's tweens,
+   * so this is the time they were dated from, however long the task ran
+   * before it.
+   */
+  private startedAt = 0;
   private autoTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(compiled: Compiled, options: RunOptions) {
     this.options = options;
+    this.continuing = options.continuing ?? false;
     this.reduced = options.reduced ?? false;
     this.camera = options.camera ?? { x: 0, y: 0, zoom: 1 };
     this.camera3d = options.camera3d ?? {
@@ -573,6 +632,21 @@ export class ChoreoRun implements Run {
 
   get time(): number {
     return this.master / this.scale / 1000;
+  }
+
+  /**
+   * The run's motion is under way on screen: it is playing, its clock has
+   * not reached its end, and it has painted a frame since it started or
+   * resumed, or carries on a run that had. A run compiled and replaced
+   * before any frame was never seen moving, so its replacement starts from
+   * rest.
+   */
+  get inFlight(): boolean {
+    return (
+      this.ticking &&
+      this.master < this.total &&
+      (this.lastStamp !== undefined || this.continuing)
+    );
   }
 
   set time(seconds: number) {
@@ -716,6 +790,19 @@ export class ChoreoRun implements Run {
   }
   isDone(): boolean {
     return this.ended || this.cancelled;
+  }
+  isLooping(): boolean {
+    return (
+      this.ended &&
+      !this.cancelled &&
+      this.tracks.length > 0 &&
+      this.tracks.every(
+        (t) =>
+          t.cue.loop &&
+          t.loopAnimation !== undefined &&
+          t.loopAnimation.playState !== 'idle',
+      )
+    );
   }
   /**
    * A text delivery is still standing in for its sprite's text. The clock
@@ -925,60 +1012,83 @@ export class ChoreoRun implements Run {
       return;
     }
     this.ticking = true;
-    this.freshClock = true;
+    this.freshClock = !this.continuing;
     this.lastStamp = undefined;
-    if (this.options.maxFrameStep) {
-      // read runs before update: the animations tick after the hold-back
-      frame.read(this.holdBack, true);
-    }
+    this.startedAt = time.now();
+    // read runs before update: the animations tick after the hold-back.
+    // Without a cap, the fresh start is its only business: one frame.
+    frame.read(this.holdBack, !!this.options.maxFrameStep);
     frame.update(this.tick, true);
   }
 
   private stopTicking() {
     if (this.ticking) {
       this.ticking = false;
+      this.continuing = false;
       cancelFrame(this.tick);
       cancelFrame(this.holdBack);
     }
   }
 
+  /** what one painted frame advances a running clock: the frame loop's delta, capped */
+  private frameStep(data: FrameData) {
+    const step = this.options.maxFrameStep;
+    return step ? Math.min(data.delta, step) : data.delta;
+  }
+
   /**
-   * maxFrameStep for the animations themselves. The run's own clock is
-   * capped in tick; the tweens and springs it started run on motion-dom's
-   * frame clock, which takes the real time since their start, so a long
-   * frame would still skip that much of them. Before they update, each one
-   * driven on the main thread has its start moved on by the time past the
-   * cap: it resumes from where the last frame left it, plus one step.
-   * Animations on the compositor (WAAPI) kept playing through the long
-   * frame and are left alone.
+   * The fresh start and maxFrameStep for the animations themselves. The
+   * run's own clock gets both in tick; the tweens and springs it started
+   * run on motion-dom's frame clock, which takes the real time since their
+   * start, so they would open and skip on their own. Before they update,
+   * each one driven on the main thread has its start moved:
+   *
+   * - on the first frame the run paints, to this frame, less the progress
+   *   it had as the run started. A tween the pass began was dated from
+   *   motion-dom's clock, which holds one reading through a synchronous
+   *   stretch of work, so a pass late in a long one would date it back to
+   *   that reading and its first frame would show that much of it gone; it
+   *   opens at zero instead. A tween resuming with the run is dated from
+   *   the same reading less its held time, and keeps it. Every way the
+   *   clock stops (a pause, a gate, a seek) holds the run's tweens first,
+   *   and no gate stands inside a parallel, so no tween is still running
+   *   when the clock starts again. A `continuing` run moves them one
+   *   ordinary frame further, as its clock moves;
+   * - after that, with a cap, on by the time past the cap since the last
+   *   frame: it resumes from where the last frame left it, plus one step.
+   *   Without a cap this runs on the first frame only.
+   *
+   * Animations on the compositor (WAAPI) start on the frame that commits
+   * them and kept playing through a long frame; they are left alone.
    */
   private holdBack = (data: FrameData) => {
     const step = this.options.maxFrameStep;
     const last = this.lastStamp;
     this.lastStamp = data.timestamp;
-    if (!step) {
-      return;
+    // the first frame of a run continuing one in flight is an ordinary one
+    const opening =
+      last === undefined && this.continuing ? this.frameStep(data) : 0;
+    if (last === undefined) {
+      this.continuing = false;
     }
-    // The first frame: an animation the render pass started takes its start
-    // from motion-dom's clock, which holds one time for a whole task, so a
-    // pass late in a long render would date it back to the task's start and
-    // its first frame would skip that far. Its start moves to this frame.
-    // After that: the time past the cap since the last frame.
     for (const t of this.tracks) {
       for (const c of t.controls ?? []) {
+        if (platformControlled.has(c)) {
+          continue;
+        }
         // the wrapper's resolved animation, read without the getter that
         // flushes pending keyframes. These are motion-dom's private fields
-        // (VENDORED.md lists them for a bump to check): past the first frame
-        // every control has resolved, so a control without them means the
-        // fields moved and the cap no longer reaches the tweens.
+        // (VENDORED.md lists them for a bump to check). Setting a control's
+        // speed as the run starts it resolves it, so from the first frame a
+        // control without them means the fields moved, and neither the fresh
+        // start nor the cap reaches the tweens.
         const inner = (c as unknown as { _animation?: object })._animation as
           | { holdTime?: number | null; startTime?: number | null }
           | undefined;
         if (
-          last !== undefined &&
-          (!inner ||
-            (!('animation' in inner) &&
-              !('startTime' in inner && 'holdTime' in inner)))
+          !inner ||
+          (!('animation' in inner) &&
+            !('startTime' in inner && 'holdTime' in inner))
         ) {
           warnPrivateFieldsMoved();
         }
@@ -991,10 +1101,9 @@ export class ChoreoRun implements Run {
           continue;
         }
         if (last === undefined) {
-          if (data.timestamp - inner.startTime > step) {
-            inner.startTime = data.timestamp;
-          }
-        } else if (data.timestamp - last > step) {
+          const progress = Math.max(0, this.startedAt - inner.startTime);
+          inner.startTime = data.timestamp - progress - opening;
+        } else if (step && data.timestamp - last > step) {
           inner.startTime += data.timestamp - last - step;
         }
       }
@@ -1006,12 +1115,7 @@ export class ChoreoRun implements Run {
       this.stopTicking();
       return;
     }
-    const step = this.options.maxFrameStep;
-    const delta = this.freshClock
-      ? 0
-      : step
-        ? Math.min(data.delta, step)
-        : data.delta;
+    const delta = this.freshClock ? 0 : this.frameStep(data);
     this.freshClock = false;
     const next = this.master + delta * this.rate;
     const gate = this.gates.find(
@@ -2874,7 +2978,7 @@ export class ChoreoRun implements Run {
       this.dropCameraAnimation(t);
     }
     const touched = new Set<VisualElement>();
-    this.retired = { borrowed: [], moved: [] };
+    this.retired = { borrowed: [], moved: [], tweened: [] };
     for (const { ve, el, key, prior } of this.borrowedValues.splice(0)) {
       this.retired.borrowed.push({
         el,
@@ -2901,6 +3005,63 @@ export class ChoreoRun implements Run {
       ve.getValue(key)?.jump(rest ?? 0);
       touched.add(ve);
     }
+    // A transform a tween or spring is still carrying (an entrance's scale,
+    // a slide's y) is part of the picture, not of the layout: measured with
+    // it on, the final box would be the one it paints mid-way, and a move
+    // the next score plays from it would land short and snap. So it rests
+    // for the measurement too. A kept run stands it back up (reassert); a
+    // replacement either moves the sprite from its painted box, carries it
+    // on to rest (the region's continuity cues), or, when a new tween drives
+    // the same value, stands it back up for that tween to carry on from
+    // (restoreRested). A cancelled run is past measuring: its values stay
+    // where they are painted for whatever takes them over.
+    const now = this.master;
+    const rested = new Set<string>();
+    for (const t of this.cancelled ? [] : this.tracks) {
+      const { cue } = t;
+      const ve = cue.sprite.node.visualElement;
+      if (
+        !ve ||
+        t.passed ||
+        t.end <= now ||
+        cue.loop ||
+        (cue.kind !== 'tween' && cue.kind !== 'spring') ||
+        !cue.target
+      ) {
+        continue;
+      }
+      for (const key of Object.keys(cue.target)) {
+        const rest = TRANSFORM_REST[key];
+        const seen = `${cue.sprite.node.layoutKey}:${key}`;
+        if (rest === undefined || rested.has(seen) || !ve.hasValue(key)) {
+          continue;
+        }
+        rested.add(seen);
+        const value = ve.getValue(key)!;
+        this.retired.tweened.push({ key, value: value.get(), ve });
+        value.jump(rest);
+        touched.add(ve);
+      }
+    }
+    touched.forEach((ve) => ve.render());
+  }
+
+  /**
+   * Stand back up the in-flight tween values the last measure rested, where
+   * the replacement score drives the same value with a tween or spring of
+   * its own: that tween starts from the value on the element, which has to
+   * be the one painted, not its rest. Values nothing new drives stay
+   * rested, for a continuation to carry on (restoring those too would
+   * compound a continuation's scaleX/scaleY with a restored scale).
+   */
+  restoreRested(drives: (ve: VisualElement, key: string) => boolean) {
+    const touched = new Set<VisualElement>();
+    for (const { key, value, ve } of this.retired.tweened) {
+      if (value !== undefined && drives(ve, key)) {
+        ve.getValue(key)?.jump(value as PropValue);
+        touched.add(ve);
+      }
+    }
     touched.forEach((ve) => ve.render());
   }
 
@@ -2920,8 +3081,14 @@ export class ChoreoRun implements Run {
    * run's own clock, so a keep is invisible rather than a restart.
    */
   reassert() {
-    const { borrowed, moved } = this.retired;
-    this.retired = { borrowed: [], moved: [] };
+    const { borrowed, moved, tweened } = this.retired;
+    this.retired = { borrowed: [], moved: [], tweened: [] };
+    // first, so a value a move also writes ends on the move's own
+    for (const { key, value, ve } of tweened) {
+      if (value !== undefined) {
+        ve.getValue(key)?.jump(value as PropValue);
+      }
+    }
     for (const { el, key, prior, value, ve } of borrowed) {
       if (value !== undefined) {
         ve.getValue(key, value as PropValue)!.jump(value as PropValue);

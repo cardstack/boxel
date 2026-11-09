@@ -978,12 +978,15 @@ export interface OperationSourceResult {
   // opens.
   // `lastModifiedMs` is the opened content's modification time, which tells a
   // facade whether the validators it built from the handle's stat describe
-  // these bytes.
-  openBody?: () => {
-    body: OperationSourceBody;
-    size?: number;
-    lastModifiedMs?: number;
-  };
+  // these bytes. Undefined when the open finds the file gone: another host's
+  // delete can be invisible to the handle's stat until the file is opened.
+  openBody?: () =>
+    | {
+        body: OperationSourceBody;
+        size?: number;
+        lastModifiedMs?: number;
+      }
+    | undefined;
 }
 
 export type OperationSourceBody =

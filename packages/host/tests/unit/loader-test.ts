@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import { identify, Loader, VirtualNetwork } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
 import {
   beginTimerBlock,
   enableRenderTimerStub,
@@ -22,6 +23,8 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+let { resolvedBaseRealmURL } = ENV;
 
 // Bounds a promise a regression could leave pending forever. QUnit's own
 // timeout would fail the test too, but as a timeout on the whole test rather
@@ -48,6 +51,21 @@ async function settleWithin<T>(promise: Promise<T>, label: string): Promise<T> {
   } finally {
     clearTimeout(timer!);
   }
+}
+
+// A loader whose fetch answers every request with `source`, naming
+// `canonicalPath` as the module's canonical path when one is given.
+function loaderServing(source: string, canonicalPath?: string): Loader {
+  return new Loader(
+    async () =>
+      new Response(source, {
+        status: 200,
+        headers: {
+          'content-type': 'text/javascript',
+          ...(canonicalPath ? { 'X-Boxel-Canonical-Path': canonicalPath } : {}),
+        },
+      }),
+  );
 }
 
 module('Unit | loader', function (hooks) {
@@ -153,6 +171,8 @@ module('Unit | loader', function (hooks) {
           'foo.js': `
           export function checkImportMeta() { return import.meta.url; }
           export function myLoader() { return import.meta.loader; }
+          export function resolveSibling() { return import.meta.resolve('./g'); }
+          export function resolveBare() { return import.meta.resolve('@cardstack/base/card-api'); }
         `,
           'reexporter.js': `
           export { g } from './g';
@@ -263,6 +283,77 @@ module('Unit | loader', function (hooks) {
     assert.strictEqual(module.counter, 1);
   });
 
+  test('a namespace is non-extensible, prototype-less and tagged as a Module', async function (assert) {
+    let module = await loader.import<Record<string, unknown>>(
+      `${testRealmURL}person`,
+    );
+    assert.false(
+      Object.isExtensible(module),
+      'the namespace is not extensible',
+    );
+    assert.strictEqual(Object.getPrototypeOf(module), null);
+    assert.strictEqual(Reflect.get(module, Symbol.toStringTag), 'Module');
+    assert.strictEqual(
+      Object.prototype.toString.call(module),
+      '[object Module]',
+    );
+    assert.deepEqual(Object.keys(module), ['Person', 'counter', 'increment']);
+    assert.strictEqual(
+      Object.preventExtensions(module),
+      module,
+      'preventExtensions is accepted on a complete namespace',
+    );
+  });
+
+  test('a namespace refuses defineProperty, delete and a new prototype', async function (assert) {
+    let module = await loader.import<Record<string, unknown>>(
+      `${testRealmURL}person`,
+    );
+    assert.throws(() => {
+      Object.defineProperty(module, 'extra', { value: 1 });
+    }, TypeError);
+    assert.throws(() => {
+      Object.defineProperty(module, 'Person', { value: 1 });
+    }, TypeError);
+    assert.false('extra' in module);
+    assert.throws(() => {
+      delete module.Person;
+    }, TypeError);
+    assert.ok(module.Person, 'the export is still there');
+    assert.true(delete module.notAnExport, 'deleting an absent key is a no-op');
+    assert.throws(() => {
+      Object.setPrototypeOf(module, {});
+    }, TypeError);
+    assert.strictEqual(
+      Object.setPrototypeOf(module, null),
+      module,
+      'setting the prototype to null is accepted',
+    );
+    assert.strictEqual(Object.getPrototypeOf(module), null);
+  });
+
+  test('live bindings read through a complete namespace', async function (assert) {
+    let module = await loader.import<{
+      counter: number;
+      increment: () => void;
+    }>(`${testRealmURL}person`);
+    assert.false(Object.isExtensible(module));
+    let before = module.counter;
+    module.increment();
+    assert.strictEqual(module.counter, before + 1);
+  });
+
+  test('a namespace lists its export names sorted, then its symbols', async function (assert) {
+    let module = await loaderServing(
+      `export let b = 1;
+       export function a() {}
+       export const C = 3;`,
+    ).import<Record<string, unknown>>('https://key-order.example/m');
+    assert.deepEqual(Object.keys(module), ['C', 'a', 'b']);
+    let ownKeys = Reflect.ownKeys(module);
+    assert.strictEqual(ownKeys[ownKeys.length - 1], Symbol.toStringTag);
+  });
+
   test('supports import.meta', async function (assert) {
     let { checkImportMeta, myLoader } = await loader.import<{
       checkImportMeta: () => string;
@@ -270,6 +361,32 @@ module('Unit | loader', function (hooks) {
     }>(`${testRealmURL}foo`);
     assert.strictEqual(checkImportMeta(), `${testRealmURL}foo.js`);
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
+  });
+
+  test('import.meta.resolve resolves a relative and a bare specifier', async function (assert) {
+    let { resolveSibling, resolveBare } = await loader.import<{
+      resolveSibling: () => string;
+      resolveBare: () => string;
+    }>(`${testRealmURL}foo`);
+    assert.strictEqual(resolveSibling(), `${testRealmURL}g`);
+    assert.strictEqual(resolveBare(), `${resolvedBaseRealmURL}card-api`);
+  });
+
+  // A response whose canonical path is in another directory pulls a module's
+  // `import.meta.url` apart from the URL it was requested by. A path-like
+  // specifier resolves against the first, as a dynamic `import()` does.
+  test('import.meta.resolve resolves against import.meta.url, not the request URL', async function (assert) {
+    let module = await loaderServing(
+      `export let url = import.meta.url;
+       export let sibling = import.meta.resolve('./g');
+       export let parent = import.meta.resolve('../g');`,
+      '/served/m.js',
+    ).import<{ url: string; sibling: string; parent: string }>(
+      'https://resolve-base.example/requested/m',
+    );
+    assert.strictEqual(module.url, 'https://resolve-base.example/served/m.js');
+    assert.strictEqual(module.sibling, 'https://resolve-base.example/served/g');
+    assert.strictEqual(module.parent, 'https://resolve-base.example/g');
   });
 
   // A runtime `import()` of a shim-registered bare specifier resolves

@@ -999,11 +999,16 @@ export interface FileRef {
   // opened content. `lastModifiedMs` is the opened content's modification
   // time, at the same precision as the ref's own `lastModifiedMs`, so the two
   // can be compared to tell whether the ref's stat described these bytes.
-  openContent?: () => {
-    content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
-    size?: number;
-    lastModifiedMs?: number;
-  };
+  // Undefined when the open finds the file gone, which a stat on a network
+  // filesystem can miss: another host's delete is not visible to it until the
+  // file is opened.
+  openContent?: () =>
+    | {
+        content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
+        size?: number;
+        lastModifiedMs?: number;
+      }
+    | undefined;
 
   [key: symbol]: object;
 }
@@ -9966,6 +9971,7 @@ export class Realm {
             // than per request (see #fileFingerprint).
             etagBase: await this.#fileFingerprint(fileRef),
             createdAt: source.created,
+            notThere: declinedNotThere,
           },
         ),
       };
@@ -11818,6 +11824,9 @@ export class Realm {
         ? {
             openContent: () => {
               let opened = source.openBody!();
+              if (!opened) {
+                return undefined;
+              }
               return {
                 content: opened.body as FileRef['content'],
                 ...(opened.size != null ? { size: opened.size } : {}),
@@ -11856,6 +11865,11 @@ export class Realm {
       // an answer — so the key being there at all, rather than its value, is
       // what decides whether this looks the value up itself.
       createdAt?: number | null;
+      // The route's answer for a path with nothing to serve, for a route that
+      // builds one up front (see `#bytesNotThere`). Given when the file turns
+      // out to be gone once it is opened; a route without one gets a plain
+      // not-found.
+      notThere?: Response;
     },
   ): Promise<ResponseWithNodeStream> {
     servedAnonymous(requestContext);
@@ -12025,8 +12039,18 @@ export class Realm {
     // version of the file the stream does not read, and a declared length
     // larger than the body leaves the client waiting for bytes that never
     // arrive, one that is smaller cuts the body short.
-    let openedContent =
-      request.method === 'GET' ? ref.openContent?.() : undefined;
+    let opensContent = request.method === 'GET' && ref.openContent != null;
+    let openedContent = opensContent ? ref.openContent!() : undefined;
+    if (opensContent && !openedContent) {
+      // The file was deleted after the stat this ref was built from, so there
+      // is nothing to send. Answered here, before a body is committed to,
+      // rather than as a body stream that fails once the response is under
+      // way.
+      return (
+        options?.notThere ??
+        notFound(request, requestContext, `${ref.path} not found`)
+      );
+    }
     if (openedContent) {
       if (openedContent.size != null) {
         headers['content-length'] = String(openedContent.size);
@@ -12772,8 +12796,18 @@ export class Realm {
           etagVariant: SOURCE_ETAG_VARIANT,
           etagBase: await contentHashFromRanges(handle),
           createdAt: source.created,
+          notThere,
         });
       } else {
+        // Opened before it is read, so a file the stat still lists but another
+        // host has deleted is answered as missing rather than as a read that
+        // fails. The read below consumes the content this opened.
+        if (served.openContent && !served.openContent()) {
+          return (
+            notThere ??
+            notFound(request, requestContext, `${localName} not found`)
+          );
+        }
         let cachedRef = await this.materializeFileRef(served);
         // Test-only gate: park here (bytes read, cache not yet written) so the
         // source-cache race test can fire invalidateCache before the set.

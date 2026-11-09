@@ -19,6 +19,8 @@ import { Pool, Client, type PoolClient, type Notification } from 'pg';
 import {
   ConnectionScheduler,
   markConnectionHeld,
+  type ConnectionHold,
+  waitingOnLock,
   withSharedWork,
 } from './connection-scheduler.ts';
 import { boxelDatabaseConfig, postgresConfig } from './pg-config.ts';
@@ -187,6 +189,22 @@ function configuredPoolTenantShare(): number {
     : DEFAULT_POOL_TENANT_SHARE;
 }
 
+// How many connections past `PG_POOL_MAX` the scheduler may grant to unwedge
+// a pool whose every connection is held by work waiting on a nested checkout
+// (see `ConnectionScheduler`). Unset, it is the scheduler's default: a quarter
+// of the pool's max, and at least four. What a wedge needs is how deep holds
+// nest, not how many there are, so this rarely needs raising; set it when a
+// fixed connection budget has to cover `PG_POOL_MAX + PG_POOL_OVERFLOW` for
+// every process. `0` turns it off, leaving a wedged pool wedged.
+function configuredPoolOverflow(): number | undefined {
+  let rawValue = process.env.PG_POOL_OVERFLOW;
+  if (!rawValue) {
+    return undefined;
+  }
+  let value = Number(rawValue);
+  return Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
 export type NotificationHandler = (notification: Notification) => void;
 
 export interface NotificationSubscription {
@@ -318,6 +336,7 @@ export class PgAdapter implements DBAdapter {
     this.#scheduler = new ConnectionScheduler({
       limit: max,
       tenantShare: configuredPoolTenantShare(),
+      overflow: configuredPoolOverflow(),
     });
     log.debug(`connecting to DB ${this.url}`);
     this.pool = new Pool({
@@ -326,7 +345,10 @@ export class PgAdapter implements DBAdapter {
       database,
       password,
       port,
-      max,
+      // Room for the overflow the scheduler grants past `max` once every
+      // connection is held by a hold waiting on nested work. It never grants
+      // more than this, so the pool's own queue still never forms.
+      max: this.#scheduler.ceiling,
     });
     // An idle client whose connection dies — a failover, a restart, an
     // administrator terminating the backend — emits `error` on the pool, and
@@ -355,11 +377,15 @@ export class PgAdapter implements DBAdapter {
   }
 
   // The connection scheduler's state when read, for the health sampler:
-  // connections checked out against the pool's max, acquisitions waiting,
-  // how many of those wait only because their tenant is at its share, and how
-  // long the longest-waiting of them has waited.
+  // connections checked out against the pool's max, how many of those are
+  // held by `withConnection` callers, acquisitions waiting, how many of those
+  // wait only because their tenant is at its share, and how long the
+  // longest-waiting of them has waited. `inUse` above `limit` is the overflow
+  // granted once every connection was held by a hold waiting on nested work or
+  // on a lock.
   get connectionStats(): {
     inUse: number;
+    holds: number;
     limit: number;
     waiting: number;
     waitingAtShare: number;
@@ -367,6 +393,7 @@ export class PgAdapter implements DBAdapter {
   } {
     return {
       inUse: this.#scheduler.inUse,
+      holds: this.#scheduler.holds,
       limit: this.#scheduler.limit,
       waiting: this.#scheduler.waiting,
       waitingAtShare: this.#scheduler.waitingAtShare,
@@ -791,9 +818,13 @@ export class PgAdapter implements DBAdapter {
 
   // Wait for the scheduler's go-ahead, then check a client out of the pool.
   // The turn is handed back by the caller after the client is released, or
-  // here if the checkout itself fails.
-  async #checkout(): Promise<{ client: PoolClient; releaseTurn: () => void }> {
-    let releaseTurn = await this.#scheduler.acquire();
+  // here if the checkout itself fails. `hold` is for a checkout kept across
+  // the caller's other work rather than given back once one statement
+  // returns (see `ConnectionScheduler`).
+  async #checkout(opts?: {
+    hold?: ConnectionHold;
+  }): Promise<{ client: PoolClient; releaseTurn: () => void }> {
+    let releaseTurn = await this.#scheduler.acquire(opts);
     try {
       return { client: await this.pool.connect(), releaseTurn };
     } catch (e) {
@@ -884,11 +915,15 @@ export class PgAdapter implements DBAdapter {
   // out an additional pool client briefly. Under N concurrent same-URL
   // writers, N-1 block on the advisory lock before doing anything — so
   // this method does not itself amplify pool pressure. Under N concurrent
-  // different-URL writers, each pins one client; if the pool ceiling is
-  // less than realistic write concurrency, callbacks that need additional
-  // pool clients could deadlock waiting on the pool. For current scope
-  // (low realistic write concurrency, pool size >= concurrent writers +
-  // headroom) this is acceptable.
+  // different-URL writers, each pins one client, and a callback that needs
+  // another waits for it behind the rest of the pool's demand. When every
+  // connection is held either way — a holder waiting on its nested checkout,
+  // or a writer waiting on the advisory lock — the connection scheduler
+  // grants the nested checkout past the pool's limit. That is bounded by the
+  // scheduler's overflow, though, and it cannot see a holder waiting on
+  // anything but a checkout or this lock. A callback that keeps its DB work on
+  // the pinned querier needs none of it, and that is still the way to write
+  // one.
   //
   // Re-entrancy: callers MUST NOT re-enter the lock for the same URL while
   // already holding it — a second `pg_advisory_xact_lock` on the same key
@@ -1194,13 +1229,15 @@ export class PgAdapter implements DBAdapter {
       let holdStart: number | undefined;
       try {
         for (const { key, mode } of lockPlan) {
-          await queryFn([
-            mode === 'shared'
-              ? `SELECT pg_advisory_xact_lock_shared(`
-              : `SELECT pg_advisory_xact_lock(`,
-            param(key),
-            `::bigint)`,
-          ]);
+          await waitingOnLock(() =>
+            queryFn([
+              mode === 'shared'
+                ? `SELECT pg_advisory_xact_lock_shared(`
+                : `SELECT pg_advisory_xact_lock(`,
+              param(key),
+              `::bigint)`,
+            ]),
+          );
         }
         holdStart = Date.now();
         const releasedEarly = new Deferred<void>();
@@ -1278,11 +1315,13 @@ export class PgAdapter implements DBAdapter {
     return await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
       try {
-        await queryFn([
-          `SELECT pg_advisory_xact_lock(`,
-          param(lockKey),
-          `::bigint)`,
-        ]);
+        await waitingOnLock(() =>
+          queryFn([
+            `SELECT pg_advisory_xact_lock(`,
+            param(lockKey),
+            `::bigint)`,
+          ]),
+        );
         const result = await fn(queryFn);
         await queryFn(['COMMIT']);
         return result;
@@ -1354,7 +1393,11 @@ export class PgAdapter implements DBAdapter {
   ): Promise<T> {
     await this.started;
 
-    let { client, releaseTurn } = await this.#checkout();
+    // `fn` runs holding this client, so any connection it checks out through
+    // the adapter is one it needs before it can give this one back. The hold
+    // is made before the checkout so the scheduler knows it as a hold.
+    let holding = markConnectionHeld();
+    let { client, releaseTurn } = await this.#checkout({ hold: holding });
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
@@ -1362,9 +1405,6 @@ export class PgAdapter implements DBAdapter {
       let { rows } = await client.query(sql);
       return rows;
     };
-    // `fn` runs holding this client, so any connection it checks out through
-    // the adapter is one it needs before it can give this one back.
-    let holding = markConnectionHeld();
     let released = false;
     try {
       return await holding.run(() => fn(query));

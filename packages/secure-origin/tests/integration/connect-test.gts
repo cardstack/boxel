@@ -1171,6 +1171,15 @@ module('Integration | connecting an account', function (hooks) {
       assert.dom('[data-test-key-field="value"]').includesText('Client secret');
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       assert
+        .dom('[data-test-oauth-advanced]')
+        .hasAttribute('data-state', 'closed', 'Advanced starts closed');
+      await click(
+        '[data-test-oauth-advanced] [data-test-pretui-collapsible-trigger]',
+      );
+      assert
+        .dom('[data-test-oauth-advanced]')
+        .hasAttribute('data-state', 'open');
+      assert
         .dom('[data-test-pretui-radio-option="client_secret_post"] input')
         .isChecked('the secret goes in the request body unless told otherwise');
 

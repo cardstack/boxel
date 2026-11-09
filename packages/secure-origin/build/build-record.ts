@@ -11,10 +11,18 @@
 // when its code does, so the hash is what shows that a change to it changes
 // the origin (ADR 019 §1.8).
 //
+// A module whose rendered code creates a `<style>` element or sets a `style`
+// attribute at run time is marked with what it does (`stylesAtRunTime`). The
+// policy refuses both, so a page that runs such code breaks under it, while
+// a module that only ships it is allowed (ADR 019 §1.5). The policy test
+// loads each page but can't run every path a page might take, so the mark is
+// what shows a reviewer each module that could. The rendered code is what
+// the bundle keeps of the module, so code tree-shaking drops isn't marked.
+//
 // A build writes the record. With SECURE_ORIGIN_BUILD_RECORD=check it instead
 // fails when the output differs from the committed record, which is how CI
-// keeps the two in step. When a hash moved, the failure names those modules
-// first.
+// keeps the two in step. The failure names first the modules whose mark
+// changed, then those whose hash moved (`recordMismatch`).
 //
 // The production build is two environments (`vite.config.ts`): the pages
 // the origin serves, and the build probe, written to `probe/`. The record
@@ -33,8 +41,9 @@ import { join, relative } from 'node:path';
 import type { Plugin, Rollup } from 'vite';
 
 import { modulePackage, PACKAGE_ROOT } from './module-package.ts';
-import { outputPrefix } from './probe.ts';
+import { outputPrefix, PROBE_ENVIRONMENT } from './probe.ts';
 import { portableSource, REPO_ROOT } from './relative-module-names.ts';
+import { stylesAtRunTime } from './run-time-style.ts';
 
 type Bundle = Rollup.OutputBundle;
 
@@ -45,9 +54,14 @@ interface ModuleName {
   sha256?: string;
 }
 
+interface ShippedModule extends ModuleName {
+  size: number;
+  stylesAtRunTime?: string[];
+}
+
 interface FileRecord {
   bytes: number;
-  modules?: (ModuleName & { size: number })[];
+  modules?: ShippedModule[];
   sources?: ModuleName[];
 }
 
@@ -57,6 +71,7 @@ interface BuildRecord {
 }
 
 const ADR = 'ADR 019 §1.8';
+const POLICY = 'ADR 019 §1.5';
 
 // Each environment's part of the record, named by path in the output. Each
 // environment's build loads the config, and so this module, afresh, with
@@ -151,24 +166,37 @@ export function buildRecord({
           writeFileSync(RECORD_FILE, record);
           return;
         }
-        let moved = movedModules(committed, record);
-        throw new Error(
-          [
-            ...(moved.length > 0
-              ? [
-                  `These modules from other packages in this repository change what the secure origin ships, so this is a change to the origin's trusted code (${ADR}):`,
-                  ...moved.map((line) => `  ${line}`),
-                  '',
-                ]
-              : []),
-            "The secure origin's build output differs from build-record.json:",
-            lineDiff(committed, record),
-            'Run `pnpm build` in packages/secure-origin and commit build-record.json.',
-          ].join('\n'),
-        );
+        throw new Error(recordMismatch(committed, record));
       },
     },
   };
+}
+
+// Why a build's record isn't the committed one: first each module whose
+// run-time styling mark changed (§1.5), then each module from another package
+// in this repository whose hash moved (§1.8), then the lines that differ.
+export function recordMismatch(committed: string, record: string): string {
+  let styled = restyledModules(committed, record);
+  let moved = movedModules(committed, record);
+  return [
+    ...(styled.length > 0
+      ? [
+          `These modules' run-time styling marks changed. A marked module creates a <style> element or sets a style attribute at run time, which the secure origin's policy refuses, so a page that runs that code breaks under it (${POLICY}):`,
+          ...styled.map((line) => `  ${line}`),
+          '',
+        ]
+      : []),
+    ...(moved.length > 0
+      ? [
+          `These modules from other packages in this repository change what the secure origin ships, so this is a change to the origin's trusted code (${ADR}):`,
+          ...moved.map((line) => `  ${line}`),
+          '',
+        ]
+      : []),
+    "The secure origin's build output differs from build-record.json:",
+    lineDiff(committed, record),
+    'Run `pnpm build` in packages/secure-origin and commit build-record.json.',
+  ].join('\n');
 }
 
 function combine(parts: BuildRecord[]): BuildRecord {
@@ -215,6 +243,51 @@ export function movedModules(before: string, after: string): string[] {
     }
   }
   return moved;
+}
+
+// Each module whose run-time styling, as the record marks it, differs between
+// two records: one that gains or changes a mark names what it does, and one
+// that loses its mark, or no longer ships, says so. The pages and the build
+// probe are built apart, and each tree-shakes a module it shares with the
+// other on its own, so each build's copy is compared on its own. A module
+// moving between chunks of one build doesn't change its mark.
+export function restyledModules(before: string, after: string): string[] {
+  let marks = (source: string) => {
+    let found = new Map<string, Set<string>>();
+    let record: Partial<BuildRecord>;
+    try {
+      record = JSON.parse(source);
+    } catch {
+      return found;
+    }
+    for (let [fileName, file] of Object.entries(record.files ?? {})) {
+      let build = fileName.startsWith(outputPrefix(PROBE_ENVIRONMENT))
+        ? ' in the probe'
+        : '';
+      for (let shipped of file.modules ?? []) {
+        if (shipped.stylesAtRunTime?.length) {
+          let name = `${shipped.package} ${shipped.module}${build}`;
+          let does = found.get(name) ?? new Set();
+          shipped.stylesAtRunTime.forEach((what) => does.add(what));
+          found.set(name, does);
+        }
+      }
+    }
+    return new Map(
+      [...found].map(([name, does]) => [name, [...does].sort().join(' and ')]),
+    );
+  };
+  let was = marks(before);
+  let is = marks(after);
+  let changed: string[] = [];
+  for (let name of [...new Set([...was.keys(), ...is.keys()])].sort()) {
+    if (!is.has(name)) {
+      changed.push(`${name} (no longer marked)`);
+    } else if (was.get(name) !== is.get(name)) {
+      changed.push(`${name}: ${is.get(name)}`);
+    }
+  }
+  return changed;
 }
 
 // Each entry document, by its path in the output, and every file it loads:
@@ -271,10 +344,7 @@ function describeFiles(
         bytes,
         modules: Object.entries(output.modules)
           .filter(([, info]) => info.renderedLength > 0)
-          .map(([id, info]) => ({
-            ...moduleName(id),
-            size: info.renderedLength,
-          }))
+          .map(([id, info]) => shippedModule(moduleName(id), info))
           .sort(byModule),
       };
     } else if (stylesheetModules.has(fileName)) {
@@ -290,6 +360,27 @@ function describeFiles(
     }
   }
   return files;
+}
+
+// A module as a chunk's record lists it: its name, rendered size, and what
+// its rendered code does of `STYLES_AT_RUN_TIME`. A module that renders code
+// the bundler doesn't hand over fails the build, so a mark can't go missing
+// for want of code to read.
+export function shippedModule(
+  name: ModuleName,
+  info: Pick<Rollup.RenderedModule, 'code' | 'renderedLength'>,
+): ShippedModule {
+  if (info.code === null) {
+    throw new Error(
+      `The bundler rendered ${info.renderedLength} bytes of ${name.package} ${name.module} without its code, so the build record can't read what it does at run time (${POLICY})`,
+    );
+  }
+  let styles = stylesAtRunTime(info.code).map(({ does }) => does);
+  return {
+    ...name,
+    size: info.renderedLength,
+    ...(styles.length > 0 ? { stylesAtRunTime: styles } : {}),
+  };
 }
 
 function isCss(id: string): boolean {

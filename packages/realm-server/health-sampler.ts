@@ -42,11 +42,15 @@ export interface HealthSamplerOptions {
   // one, and how many of those are held back only by their tenant's share.
   // Waiting alone says the pool is the bottleneck; waiting at share says the
   // scheduler is keeping one realm's searches from crowding out another's.
+  // Holds are the connections `withConnection` callers keep across other
+  // work; connections in use above the limit are what the scheduler granted
+  // past it once every connection was such a hold waiting on nested work.
   // The oldest wait is what tells a stuck pool from a busy one: under load the
   // queue keeps moving and it stays short; with every connection held by work
   // that is not finishing it climbs for as long as that lasts.
   connectionStats?: () => {
     inUse: number;
+    holds: number;
     limit: number;
     waiting: number;
     waitingAtShare: number;
@@ -121,7 +125,8 @@ export function startHealthSampler(
           ? `dbConnections=${connections.inUse}/${connections.limit} ` +
             `dbWaiting=${connections.waiting} ` +
             `dbWaitingAtShare=${connections.waitingAtShare} ` +
-            `dbOldestWaitMs=${connections.oldestWaitMs.toFixed(0)} `
+            `dbOldestWaitMs=${connections.oldestWaitMs.toFixed(0)} ` +
+            `dbHolds=${connections.holds} `
           : '') +
         (sessions
           ? `dbIdleInTx=${sessions.idleInTransaction} ` +

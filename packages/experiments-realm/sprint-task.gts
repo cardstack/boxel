@@ -18,6 +18,7 @@ import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
+import { pathSegmentsOfIdentifier } from '@cardstack/runtime-common';
 import { User } from './user';
 import { Task, TaskStatusField, getDueDateStatus } from './task';
 
@@ -126,11 +127,10 @@ export class Issues extends CardDef {
   static displayName = 'Issues';
 }
 
-function extractId(href: string): string {
-  const urlObj = new URL(href);
-  const pathname = urlObj.pathname;
-  const parts = pathname.split('/');
-  const lastPart = parts[parts.length - 1];
+// The last path segment of a card id, in either RRI form.
+function extractId(id: string): string {
+  const segments = pathSegmentsOfIdentifier(id);
+  const lastPart = segments[segments.length - 1] ?? '';
   return lastPart.replace('.json', '');
 }
 

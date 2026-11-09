@@ -46,13 +46,17 @@ import {
   keysShow,
   type KeysCommandDeps,
 } from '../../src/commands/keys/manage.ts';
+import { keysApprove } from '../../src/commands/keys/approve.ts';
+import { listOwnBindings } from '../../src/lib/key-bindings.ts';
 
 // ============================================================================
 // OAuth clients and connections from the terminal, against the stub OAuth
 // vendor: a person adds a client, shares it into a realm, lists the clients
 // they can connect through (the platform's among them), connects through
 // one in the browser, approves an operation for the connection, and the
-// operation calls the vendor's API with a token the realm server minted.
+// operation calls the vendor's API with a token the realm server minted. A
+// connection whose client's API hosts don't reach where an operation sends
+// isn't approved for it.
 // ============================================================================
 
 const realmServerUrl = `${TEST_REALM_SERVER_URL}/`;
@@ -407,5 +411,31 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
     });
     let authorized = provider.authorizeRequests.at(-1)!;
     expect(authorized.get('client_id')).toBe(TEAM_CLIENT.clientId);
+  });
+
+  it("refuses to approve a connection for an operation that sends where its client's API hosts don't reach", async () => {
+    // The team client's API hosts are on the vendor's other origin, and the
+    // operation sends to its first one, so the approval batch doesn't offer
+    // the connection for the slot, and neither does the CLI.
+    let host = new URL(provider.url).hostname.replace(/\./g, '\\.');
+    await expect(
+      keysApprove('team account', {
+        ...deps,
+        operation: 'service#Service.me',
+        realm,
+        interactive: true,
+        yes: true,
+      }),
+    ).rejects.toThrow(
+      new RegExp(
+        `^team account can't fill the slot userKey of .+: it isn't a kind of key that slot takes, or its credential isn't good at ${host}\\S*, where the operations approved send it\\. Name another key or share$`,
+      ),
+    );
+    let bindings = await listOwnBindings(
+      realmServerUrl,
+      pm.getSecureSession()!.token,
+      { realm },
+    );
+    expect(bindings.map((b) => b.interactive)).toEqual([false]);
   });
 });

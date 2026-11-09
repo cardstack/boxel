@@ -17,8 +17,10 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-identifiers';
+
 import { addRealmToAccountData, loginWithPassword } from './matrix-api.ts';
-import { RealmClient, waitForCard } from './realm-api.ts';
+import { RealmClient, realmPaths, waitForCard } from './realm-api.ts';
 import {
   REALM_SERVER_URL,
   WRITER_PASSWORD,
@@ -121,17 +123,18 @@ async function main() {
   files.sort(
     (a, b) => Number(a.endsWith('.json')) - Number(b.endsWith('.json')),
   );
-  let cards: string[] = [];
+  let paths = realmPaths(realm.url);
+  let cards: RealmResourceIdentifier[] = [];
   for (let file of files) {
     let path = relative(EVAL_REALM_DIR, file).split('\\').join('/');
     await client.putSource(
       realm.url,
-      `${realm.url}${path}`,
+      paths.fileURL(path).href,
       await readFile(file, 'utf8'),
     );
     console.log(`[setup] wrote ${path}`);
     if (path.endsWith('.json')) {
-      cards.push(`${realm.url}${path.replace(/\.json$/, '')}`);
+      cards.push(paths.fileRRI(path.replace(/\.json$/, '')));
     }
   }
   for (let card of cards) {
@@ -154,7 +157,7 @@ async function main() {
     (path) => !wanted.has(path) && owned.has(path.split('/')[0]),
   );
   for (let path of stale) {
-    await client.deleteFile(realm.url, `${realm.url}${path}`);
+    await client.deleteFile(realm.url, paths.fileURL(path).href);
     console.log(`[setup] removed ${path}, no longer in eval-realm/`);
   }
 

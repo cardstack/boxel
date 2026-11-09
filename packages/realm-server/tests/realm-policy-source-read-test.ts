@@ -7,9 +7,11 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
+  FileRef,
   QueuePublisher,
   QueueRunner,
   Realm,
+  RealmAdapter,
 } from '@cardstack/runtime-common';
 import {
   isOperationFailure,
@@ -204,6 +206,7 @@ const MODULE_SOURCE = `${EDUCATION}classroom.gts`;
 const GONE_HANDBOOK = `${EDUCATION}public/gonebook.pdf`;
 const GONE_LOGO = `${EDUCATION}public/gone.png`;
 const GONE_BULLETIN_SOURCE = `${EDUCATION}bulletins/b9.json`;
+const GONE_ROOM_204_SOURCE = `${EDUCATION}classrooms/room-999.json`;
 const GONE_PRIVATE_HANDBOOK = `${EDUCATION}private/gonebook.pdf`;
 const GONE_MODULE_SOURCE = `${EDUCATION}classless.gts`;
 const TS_MODULE = `${EDUCATION}format.ts`;
@@ -240,6 +243,7 @@ const DRAFT_ROOM_SOURCE = `${EDUCATION}drafts/room.json`;
 
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
+  let educationAdapter: RealmAdapter;
   let org: Realm;
   let server: Server;
   let request: SuperTest<Test>;
@@ -338,7 +342,11 @@ module(basename(import.meta.filename), function (hooks) {
     });
     server = result.testRealmHttpServer;
     request = supertest(server);
-    education = result.realms.find((realm) => realm.url === EDUCATION)!;
+    let educationIndex = result.realms.findIndex(
+      (realm) => realm.url === EDUCATION,
+    );
+    education = result.realms[educationIndex];
+    educationAdapter = result.realmAdapters[educationIndex];
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
@@ -1137,6 +1145,67 @@ module(basename(import.meta.filename), function (hooks) {
           `${label}: the Bulletin is refused as a missing card is`,
         );
       }
+    });
+
+    // A file the stat still lists after another host has deleted it, which
+    // only opening the file finds gone: the adapter's `openContent` reports
+    // nothing to open.
+    async function withGoneOnOpen<T>(
+      path: string,
+      run: () => Promise<T>,
+    ): Promise<T> {
+      let openFile = educationAdapter.openFile.bind(educationAdapter);
+      educationAdapter.openFile = async (openedPath) => {
+        let ref: FileRef | undefined = await openFile(openedPath);
+        if (ref?.openContent && openedPath === path) {
+          Object.defineProperty(ref, 'openContent', {
+            value: () => undefined,
+          });
+        }
+        return ref;
+      };
+      try {
+        return await run();
+      } finally {
+        educationAdapter.openFile = openFile;
+      }
+    }
+
+    test('a file a grant admits that is gone once opened is refused as a missing file is', async function (assert) {
+      for (let { label, accept } of BYTE_ROUTES) {
+        let gone = await withGoneOnOpen('public/handbook.pdf', () =>
+          get(HANDBOOK, accept, AS.teacher()),
+        );
+        assert.strictEqual(gone.status, 404, `${label}: the .pdf is not there`);
+        assertSameAnswer(
+          assert,
+          gone,
+          await get(GONE_HANDBOOK, accept, AS.teacher()),
+          { actual: nameOf(HANDBOOK), expected: nameOf(GONE_HANDBOOK) },
+          `${label}: the .pdf is refused as a missing file is`,
+        );
+      }
+      // A card's .json is read through the source cache's path, which opens
+      // the file before it reads it.
+      await policy('classroomSource');
+      let card = await withGoneOnOpen('classrooms/room-204.json', () =>
+        get(ROOM_204_SOURCE, SupportedMimeType.CardSource, AS.teacher()),
+      );
+      assert.strictEqual(card.status, 404, 'the card is not there');
+      assertSameAnswer(
+        assert,
+        card,
+        await get(
+          GONE_ROOM_204_SOURCE,
+          SupportedMimeType.CardSource,
+          AS.teacher(),
+        ),
+        {
+          actual: nameOf(ROOM_204_SOURCE),
+          expected: nameOf(GONE_ROOM_204_SOURCE),
+        },
+        'the card is refused as a missing card is',
+      );
     });
 
     test('a caller the realm ACL declined is not redirected to what a name resolves to', async function (assert) {
