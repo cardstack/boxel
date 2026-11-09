@@ -26,6 +26,7 @@ import {
   unregisterRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
 import { setupApplicationTest } from '../helpers/setup';
+import { stubWindowOpen } from '../helpers/window-open';
 
 const ME = '@testuser:localhost';
 const POLICY_NOTICES_PATH = '/_key-policy-notices';
@@ -96,17 +97,13 @@ module('Acceptance | key notices badge', function (hooks) {
 
   let unread: Unread = { policy: 0, limit: 0 };
   let api: ReturnType<typeof stubNotices> | undefined;
-  let opened: string[];
+  let windowOpen: ReturnType<typeof stubWindowOpen>;
 
   hooks.beforeEach(async function () {
     unread.policy = 0;
     unread.limit = 0;
     api = stubNotices(unread);
-    opened = [];
-    window.open = ((url?: string | URL) => {
-      opened.push(String(url));
-      return { opener: window as unknown };
-    }) as typeof window.open;
+    windowOpen = stubWindowOpen(window);
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       permissions: { [ME]: ['read', 'write', 'realm-owner'] },
@@ -179,7 +176,7 @@ module('Acceptance | key notices badge', function (hooks) {
 
     await click('[data-test-profile-api-keys-button]');
     assert.deepEqual(
-      opened,
+      windowOpen.calls.map((call) => call.url),
       [new URL('keys', `${ENV.secureOriginURL.replace(/\/+$/, '')}/`).href],
       'the secure origin’s key page opens in the secure window',
     );
