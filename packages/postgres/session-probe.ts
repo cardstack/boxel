@@ -63,7 +63,8 @@ export class SessionProbe {
   #closed = false;
 
   constructor(opts: { config?: ClientConfig; timeoutMs?: number } = {}) {
-    this.#config = opts.config ?? postgresConfig();
+    // The same connection settings the adapter's pool uses.
+    this.#config = opts.config ?? postgresConfig({ database: 'boxel' });
     this.#timeoutMs = opts.timeoutMs ?? 5000;
   }
 
