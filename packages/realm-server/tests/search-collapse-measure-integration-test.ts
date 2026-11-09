@@ -799,6 +799,58 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a let list cut at its value limit says so', async function (assert) {
+    let batch = await new IndexWriter(adapter).createBatch(
+      new URL(testRealm),
+      virtualNetwork,
+      undefined,
+      { splitPrerenderHtml: false },
+    );
+    let cardURL = new URL(url('h'));
+    await batch.updateEntry(cardURL, {
+      type: 'instance',
+      resource: {
+        id: rri(cardURL.href),
+        type: 'card',
+        attributes: {},
+        meta: { adoptsFrom: { module: rri(talkRef.module), name: 'Talk' } },
+      },
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      // a panel of 1,001 speakers, past the 1,000 values a list holds
+      searchData: {
+        title: 'H',
+        hnScore: 2,
+        speakers: Array.from({ length: 1001 }, (_, i) => `Speaker ${i}`),
+      },
+      markdown: 'H',
+      deps: new Set(),
+      displayNames: ['Talk'],
+      types: [talkKey],
+      isolatedHtml: '<div>h</div>',
+    });
+    await batch.done();
+    let { titles, meta } = await search({
+      let: {
+        names: { from: { filter: { type: on } }, select: 'speakers' },
+      },
+      filter: { on, in: { speakers: { $let: 'names' } } },
+      sort: byScore,
+    });
+    assert.deepEqual(titles, ['a', 'h'], 'the query ran with the first 1,000');
+    assert.deepEqual(meta.lets, {
+      names: { strategy: 'list', values: 1000, truncated: true },
+    });
+    assert.deepEqual(
+      meta.warnings?.map((w) => w.code),
+      ['binding-truncated'],
+    );
+    assert.ok(
+      /"names" found more than 1,000 values/.test(meta.warnings![0].message),
+      meta.warnings![0].message,
+    );
+  });
+
   test('a let binding reaches a _when signal, and an empty list matches nothing', async function (assert) {
     let { titles } = await search({
       let: {

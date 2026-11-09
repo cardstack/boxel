@@ -528,9 +528,18 @@ export interface QueryResultsMeta {
   incomplete?: boolean;
   // For a query with `let` bindings: how each was resolved. `join` ran in
   // the same statement; `list` ran its query first and passed `values` on.
+  // `truncated`: a list binding found more values than a list holds
+  // (MAX_LET_VALUES), or more rows than it reads (MAX_LET_ROWS), so the
+  // query ran with the first of them; `meta.warnings` says so too
+  // (`binding-truncated`).
   lets?: Record<
     string,
-    { strategy: 'join' | 'list' | 'card'; values?: number; found?: boolean }
+    {
+      strategy: 'join' | 'list' | 'card';
+      values?: number;
+      found?: boolean;
+      truncated?: true;
+    }
   >;
   // Filled by the host's search resource, never by the engine: under
   // `explain`, each result's `meta._explain` by card id.
@@ -555,7 +564,8 @@ export interface QueryResultsMeta {
     peersTruncated?: boolean;
   };
   // Problems that left the result usable but not as asked, by code:
-  // `rerank-timeout` when a rerank ran out of time and kept the query's order.
+  // `rerank-timeout` when a rerank ran out of time and kept the query's order,
+  // `binding-truncated` when a list binding was cut short.
   warnings?: { code: string; message: string }[];
   // where the query's expression ran: `sql` over every match, or `top` over
   // the rerank window, with why it could not run in SQL
@@ -1622,14 +1632,14 @@ export class IndexQueryEngine {
     }
     try {
       let letMeta: QueryResultsMeta['lets'];
+      let letWarnings: NonNullable<QueryResultsMeta['warnings']> = [];
       if (lets && Object.keys(lets).length) {
-        ({ filter, sort, letMeta } = await this.#resolveLets(
-          realmURL,
-          lets,
+        ({
           filter,
           sort,
-          opts,
-        ));
+          letMeta,
+          warnings: letWarnings,
+        } = await this.#resolveLets(realmURL, lets, filter, sort, opts));
       }
       let anonymize = Boolean(opts.anonymizeStatistics);
       filter = await this.#resolveTypos(filter, realmURL, anonymize);
@@ -2098,6 +2108,7 @@ export class IndexQueryEngine {
             : {}),
           ...(Object.keys(facetStats).length ? { facetStats } : {}),
           ...(letMeta ? { lets: letMeta } : {}),
+          ...(letWarnings.length ? { warnings: letWarnings } : {}),
           ...(formulaMeta ? { expression: formulaMeta } : {}),
         },
       };
@@ -3105,8 +3116,10 @@ export class IndexQueryEngine {
     filter: Filter | undefined;
     sort: Sort | undefined;
     letMeta: NonNullable<QueryResultsMeta['lets']>;
+    warnings: NonNullable<QueryResultsMeta['warnings']>;
   }> {
     let letMeta: NonNullable<QueryResultsMeta['lets']> = {};
+    let warnings: NonNullable<QueryResultsMeta['warnings']> = [];
     let readBy = new Map<string, Set<string>>();
     mapLetReferences({ filter, sort }, (field, name, node) => {
       let fields = readBy.get(name) ?? new Set<string>();
@@ -3128,9 +3141,26 @@ export class IndexQueryEngine {
         letMeta[name] = { strategy: 'join' };
         continue;
       }
-      let values = await this.#letValues(realmURL, binding, opts);
+      let { values, truncated } = await this.#letValues(
+        realmURL,
+        binding,
+        opts,
+      );
       resolved.set(name, { values });
-      letMeta[name] = { strategy: 'list', values: values.length };
+      letMeta[name] = {
+        strategy: 'list',
+        values: values.length,
+        ...(truncated ? { truncated: true as const } : {}),
+      };
+      if (truncated) {
+        warnings.push({
+          code: 'binding-truncated',
+          message:
+            truncated === 'values'
+              ? `let: "${name}" found more than ${MAX_LET_VALUES.toLocaleString('en-US')} values, so the query ran with the first ${MAX_LET_VALUES.toLocaleString('en-US')}; narrow its query`
+              : `let: "${name}" matched more than the ${MAX_LET_ROWS.toLocaleString('en-US')} rows a binding reads, so its list holds the values of the first ${MAX_LET_ROWS.toLocaleString('en-US')}; narrow its query`,
+        });
+      }
     }
     let out = mapLetReferences({ filter, sort }, (field, name, node) => {
       let r = resolved.get(name)!;
@@ -3139,18 +3169,23 @@ export class IndexQueryEngine {
         ? ({ ...on, linkedFrom: r.join } as Filter)
         : ({ ...on, in: { [field]: r.values } } as Filter);
     });
-    return { filter: out.filter, sort: out.sort, letMeta };
+    return { filter: out.filter, sort: out.sort, letMeta, warnings };
   }
 
   // A binding's values: its query's rows over this realm, read at `select`
   // in each row's search doc. A list contributes each value and a link its
-  // id; nulls are dropped and the values deduplicated.
+  // id; nulls are dropped and the values deduplicated. `truncated` says the
+  // list was cut: at MAX_LET_VALUES values, or at the MAX_LET_ROWS rows a
+  // binding reads when its query matched more and asked for no smaller page.
   async #letValues(
     realmURL: URL,
     binding: LetBinding,
     opts: QueryOptions,
-  ): Promise<JSONTypes.Value[]> {
-    let { results } = await this._search(
+  ): Promise<{
+    values: JSONTypes.Value[];
+    truncated?: 'values' | 'rows';
+  }> {
+    let { results, meta } = await this._search(
       realmURL,
       {
         filter: binding.from.filter,
@@ -3169,8 +3204,9 @@ export class IndexQueryEngine {
     );
     let seen = new Set<string>();
     let values: JSONTypes.Value[] = [];
+    let cut = false;
     let collect = (value: unknown, path: string[]) => {
-      if (value == null || values.length >= MAX_LET_VALUES) {
+      if (value == null || cut) {
         return;
       }
       if (Array.isArray(value)) {
@@ -3192,6 +3228,10 @@ export class IndexQueryEngine {
       }
       let key = JSON.stringify(leaf);
       if (!seen.has(key)) {
+        if (values.length >= MAX_LET_VALUES) {
+          cut = true;
+          return;
+        }
         seen.add(key);
         values.push(leaf as JSONTypes.Value);
       }
@@ -3207,7 +3247,17 @@ export class IndexQueryEngine {
       }
       collect(doc, binding.select!.split('.'));
     }
-    return values;
+    let rowsCut =
+      binding.from.page?.size === undefined &&
+      Number(meta.page?.total ?? 0) > results.length;
+    return {
+      values,
+      ...(cut
+        ? { truncated: 'values' as const }
+        : rowsCut
+          ? { truncated: 'rows' as const }
+          : {}),
+    };
   }
 
   // The narrow pass of a collapsed search: every match's key and sort

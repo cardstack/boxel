@@ -481,7 +481,7 @@ let { data, meta } = await indexer.search({
 The engine resolves each binding one of two ways and reports which in `meta.lets`:
 
 - **Join.** A binding whose `from` is one card by id and whose `select` is a link field's ids (`items.id`), read only by `in`s on `id`, runs as [`linkedFrom`](#filters) in the same statement: `{ "saved": { "strategy": "join" } }`.
-- **List.** Any other runs its query first, and its values (at most 1,000) stand in for the reference: `{ "hot": { "strategy": "list", "values": 12 } }`.
+- **List.** Any other runs its query first, and its values (at most 1,000) stand in for the reference: `{ "hot": { "strategy": "list", "values": 12 } }`. A list cut short says so: past 1,000 distinct values, or past the 1,000 rows a binding reads when its query matched more and set no `page.size`, the query runs with the first of them, `meta.lets` adds `"truncated": true`, and `meta.warnings` holds `{ code: 'binding-truncated' }`.
 
 **One card.** A binding with `one: true` in place of `select` is the first card its query finds, whole. The query reads that card's values with `{ "$let": "name", "path": "priceMin" }` wherever a value goes: an `eq` value, a `range` bound, a `near` target in a filter or a sort. A `rerank` expression reads the card under the binding's name (`name.path`). A link reads as its id, and a path through it as whatever its `searchable` option put in the search doc. A path the card has no value at reads null, as does every path when the query finds no card; an `eq` then finds the cards with no value, and a `range` bound or `near` target that reads null matches nothing. `meta.lets` reports `{ "strategy": "card", "found": true }`.
 
