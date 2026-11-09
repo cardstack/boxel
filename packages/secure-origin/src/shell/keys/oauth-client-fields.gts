@@ -248,7 +248,7 @@ export default class OAuthClientFields extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
       }
       .hint {
-        color: var(--muted-foreground, var(--boxel-450));
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
       }
       /* The addresses read as code; the field takes the face it inherits. */
@@ -312,7 +312,7 @@ const CallbackAddress: TemplateOnlyComponent<{ Args: {} }> = <template>
       font-size: var(--boxel-font-size-sm);
     }
     .hint {
-      color: var(--muted-foreground, var(--boxel-450));
+      color: var(--muted-foreground);
       font-size: var(--boxel-font-size-xs);
     }
   </style>
@@ -368,7 +368,7 @@ export class OAuthProviderChoice extends Component<{
         padding-inline-start: var(--boxel-sp-lg);
       }
       .hint {
-        color: var(--muted-foreground, var(--boxel-450));
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
       }
     </style>

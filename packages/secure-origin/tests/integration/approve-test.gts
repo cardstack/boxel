@@ -366,6 +366,12 @@ module('Integration | approve pages', function (hooks) {
     let request =
       '[data-test-approve-operation="listPRs"] [data-test-approve-request-toggle]';
     assert
+      .dom(`${request} [data-test-pretui-collapsible-trigger]`)
+      .hasText(
+        'POST /graphql · key in the Authorization header for List your open pull requests',
+        'its button names the operation, so requests alike are told apart',
+      );
+    assert
       .dom(request)
       .hasAttribute('data-state', 'closed', 'the full request starts closed');
     await click(`${request} [data-test-pretui-collapsible-trigger]`);

@@ -84,6 +84,7 @@ import BusyMessage from '../../components/busy-message.gts';
 import { Button } from '@cardstack/pretui/components/button';
 import { Checkbox } from '@cardstack/pretui/components/checkbox';
 import { Disclosure } from '@cardstack/pretui/components/disclosure';
+import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import Warning from '../../components/icons/warning.gts';
 import { Field } from '@cardstack/pretui/components/field';
@@ -499,7 +500,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             {{#each operation.slots as |slot|}}
                               <span class='placement'>· key
                                 {{placementPhrase slot.snapshot}}</span>
-                            {{/each}}</span></:trigger>
+                            {{/each}}</span><VisuallyHidden>
+                            for
+                            {{operation.label}}</VisuallyHidden></:trigger>
                         <:default>
                           {{#each operation.slots as |slot|}}
                             {{#if (this.showsDiff slot)}}
@@ -693,7 +696,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         display: block;
       }
       .budget-more {
-        margin-top: var(--boxel-sp-xxs);
+        margin-top: var(--boxel-sp-2xs);
       }
       .limits-link {
         display: inline;
