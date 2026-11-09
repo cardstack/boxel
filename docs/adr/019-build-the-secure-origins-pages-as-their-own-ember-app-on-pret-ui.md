@@ -134,7 +134,10 @@ template the pages render. The package's template lint MUST enable
 `no-inline-styles` with `allowDynamicStyles: false`, and the package's lint
 MUST apply the same rule to each Pret UI module the package imports. Code that
 styles an element at run time MUST use the CSSOM
-(`element.style.setProperty`). Scoped CSS MUST be emitted as files. Entry
+(`element.style.setProperty`). That rule binds code a page runs. A module MAY
+ship code that creates a `<style>` element or sets a `style` attribute at run
+time when no page runs that code, and the build record names each such module
+(§1.8). Scoped CSS MUST be emitted as files. Entry
 documents MUST hold no inline script or style. A test MUST load each built
 page under the policy and fail on any `securitypolicyviolation` event. The
 secure origin MUST NOT be served by a development server that injects styles
@@ -176,6 +179,13 @@ package in this repository whose modules the build ships. So a change to
 Ember, to an allowed package, or to a Pret UI or boxel-ui module the origin
 ships shows, in
 the pull request that makes it, exactly what changes on the origin.
+
+The record MUST also mark each module whose code in the build output creates
+a `<style>` element or sets a `style` attribute at run time. When a module's
+mark changes, the failure MUST name that module and §1.5 before anything
+else. The policy test loads each page but can't take every path a page can,
+so the mark is what shows a reviewer each shipped module that could break a
+page under the policy.
 
 ### 1.9. One implementation of the sign-in screens
 

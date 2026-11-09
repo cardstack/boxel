@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
-import { movedModules } from '../build/build-record.ts';
+import { movedModules, restyledModules } from '../build/build-record.ts';
 import { layersNamed, unorderedLayers } from '../build/layer-order.ts';
 import { runTimeStyleRefusals } from '../build/pret-ui-lint.ts';
 import {
   portableSource,
   stableTemplateIds,
 } from '../build/relative-module-names.ts';
+import { stylesAtRunTime } from '../build/run-time-style.ts';
 
 function record(modules: object[]): string {
   return JSON.stringify({
@@ -54,6 +55,57 @@ test('a moved hash names the module, and one only a record ships names how', () 
     '@cardstack/pretui@0.0.0 components/accordion.gts (changed)',
   ]);
   assert.deepEqual(movedModules(before, before), []);
+});
+
+test('a module whose run-time styling mark changes is named with what it does', () => {
+  let shipped = (module: string, stylesAtRunTime?: string[]) => ({
+    package: 'some-package@1.0.0',
+    module,
+    size: 1,
+    ...(stylesAtRunTime ? { stylesAtRunTime } : {}),
+  });
+  let before = record([
+    shipped('kept.js', ['creates a <style> element']),
+    shipped('cleaned.js', ['sets a style attribute']),
+    shipped('widened.js', ['creates a <style> element']),
+    shipped('plain.js'),
+  ]);
+  let after = record([
+    shipped('kept.js', ['creates a <style> element']),
+    shipped('cleaned.js'),
+    shipped('widened.js', [
+      'creates a <style> element',
+      'sets a style attribute',
+    ]),
+    shipped('plain.js'),
+    shipped('added.js', ['creates a <style> element']),
+  ]);
+  assert.deepEqual(restyledModules(before, after), [
+    'some-package@1.0.0 added.js creates a <style> element',
+    'some-package@1.0.0 cleaned.js (no longer marked)',
+    'some-package@1.0.0 widened.js creates a <style> element and sets a style attribute',
+  ]);
+  assert.deepEqual(restyledModules(after, record([])), [
+    'some-package@1.0.0 added.js (no longer marked)',
+    'some-package@1.0.0 kept.js (no longer marked)',
+    'some-package@1.0.0 widened.js (no longer marked)',
+  ]);
+  assert.deepEqual(restyledModules(before, before), []);
+});
+
+test("rendered code's run-time styling is named, and a comment's is not", () => {
+  assert.deepEqual(
+    stylesAtRunTime(
+      'let s = document.createElement("style");\ns.setAttribute(`style`, x);',
+    ),
+    ['creates a <style> element', 'sets a style attribute'],
+  );
+  assert.deepEqual(
+    stylesAtRunTime(
+      "// document.createElement('style')\nel.style.setProperty('--a', '1');",
+    ),
+    [],
+  );
 });
 
 test('one template compiled at two paths gives the same portable source', () => {

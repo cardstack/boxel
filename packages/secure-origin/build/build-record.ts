@@ -11,10 +11,18 @@
 // when its code does, so the hash is what shows that a change to it changes
 // the origin (ADR 019 §1.8).
 //
+// A module whose rendered code creates a `<style>` element or sets a `style`
+// attribute at run time is marked with what it does (`stylesAtRunTime`). The
+// policy refuses both, so a page that runs such code breaks under it, while
+// a module that only ships it is allowed (ADR 019 §1.5). The policy test
+// loads each page but can't run every path a page might take, so the mark is
+// what shows a reviewer each module that could. The rendered code is what
+// the bundle keeps of the module, so code tree-shaking drops isn't marked.
+//
 // A build writes the record. With SECURE_ORIGIN_BUILD_RECORD=check it instead
 // fails when the output differs from the committed record, which is how CI
-// keeps the two in step. When a hash moved, the failure names those modules
-// first.
+// keeps the two in step. The failure names first the modules whose mark
+// changed, then those whose hash moved.
 //
 // The production build is two environments (`vite.config.ts`): the pages
 // the origin serves, and the build probe, written to `probe/`. The record
@@ -35,6 +43,7 @@ import type { Plugin, Rollup } from 'vite';
 import { modulePackage, PACKAGE_ROOT } from './module-package.ts';
 import { outputPrefix } from './probe.ts';
 import { portableSource, REPO_ROOT } from './relative-module-names.ts';
+import { stylesAtRunTime } from './run-time-style.ts';
 
 type Bundle = Rollup.OutputBundle;
 
@@ -45,9 +54,14 @@ interface ModuleName {
   sha256?: string;
 }
 
+interface ShippedModule extends ModuleName {
+  size: number;
+  stylesAtRunTime?: string[];
+}
+
 interface FileRecord {
   bytes: number;
-  modules?: (ModuleName & { size: number })[];
+  modules?: ShippedModule[];
   sources?: ModuleName[];
 }
 
@@ -57,6 +71,7 @@ interface BuildRecord {
 }
 
 const ADR = 'ADR 019 §1.8';
+const POLICY = 'ADR 019 §1.5';
 
 // Each environment's part of the record, named by path in the output. Each
 // environment's build loads the config, and so this module, afresh, with
@@ -152,8 +167,16 @@ export function buildRecord({
           return;
         }
         let moved = movedModules(committed, record);
+        let styled = restyledModules(committed, record);
         throw new Error(
           [
+            ...(styled.length > 0
+              ? [
+                  `These modules style elements at run time in a way the secure origin's policy refuses, so a page that runs one breaks under it (${POLICY}):`,
+                  ...styled.map((line) => `  ${line}`),
+                  '',
+                ]
+              : []),
             ...(moved.length > 0
               ? [
                   `These modules from other packages in this repository change what the secure origin ships, so this is a change to the origin's trusted code (${ADR}):`,
@@ -217,6 +240,43 @@ export function movedModules(before: string, after: string): string[] {
   return moved;
 }
 
+// Each module whose run-time styling, as the record marks it, differs between
+// two records: one that gains or changes a mark names what it does, and one
+// that loses its mark, or no longer ships, says so.
+export function restyledModules(before: string, after: string): string[] {
+  let marks = (source: string) => {
+    let found = new Map<string, string>();
+    let record: Partial<BuildRecord>;
+    try {
+      record = JSON.parse(source);
+    } catch {
+      return found;
+    }
+    for (let file of Object.values(record.files ?? {})) {
+      for (let shipped of file.modules ?? []) {
+        if (shipped.stylesAtRunTime?.length) {
+          found.set(
+            `${shipped.package} ${shipped.module}`,
+            shipped.stylesAtRunTime.join(' and '),
+          );
+        }
+      }
+    }
+    return found;
+  };
+  let was = marks(before);
+  let is = marks(after);
+  let changed: string[] = [];
+  for (let name of [...new Set([...was.keys(), ...is.keys()])].sort()) {
+    if (!is.has(name)) {
+      changed.push(`${name} (no longer marked)`);
+    } else if (was.get(name) !== is.get(name)) {
+      changed.push(`${name} ${is.get(name)}`);
+    }
+  }
+  return changed;
+}
+
 // Each entry document, by its path in the output, and every file it loads:
 // itself, its script, the chunks that script imports, and their stylesheets.
 function entryDocuments(bundle: Bundle): Record<string, string[]> {
@@ -271,10 +331,14 @@ function describeFiles(
         bytes,
         modules: Object.entries(output.modules)
           .filter(([, info]) => info.renderedLength > 0)
-          .map(([id, info]) => ({
-            ...moduleName(id),
-            size: info.renderedLength,
-          }))
+          .map(([id, info]): ShippedModule => {
+            let styles = stylesAtRunTime(info.code ?? '');
+            return {
+              ...moduleName(id),
+              size: info.renderedLength,
+              ...(styles.length > 0 ? { stylesAtRunTime: styles } : {}),
+            };
+          })
           .sort(byModule),
       };
     } else if (stylesheetModules.has(fileName)) {
