@@ -1,9 +1,11 @@
 import {
+  applyServerSearchPageBound,
   buildSearchErrorResponse,
   baseRealm,
   DURING_PRERENDER_HEADER,
   emptySearchEntryDocument,
   ensureTrailingSlash,
+  isItemLegSearch,
   markPolicyScoped,
   parseRealmsFromPayload,
   parseSearchEntryQueryFromPayload,
@@ -291,6 +293,14 @@ function registerSearchRoutes() {
           return buildSearchErrorResponse(e.message);
         }
         throw e;
+      }
+
+      // Mirror the realm-server's `handle-search` page bounds: a live item-leg
+      // search with no page is clamped to the default page, and an explicit
+      // page above the absolute maximum is clamped to it. A render's search
+      // is exempt, as it is there.
+      if (isItemLegSearch(parsed.fieldset) && !duringRender) {
+        parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
       }
 
       // Mirror the realm-server's `handle-search`: read the client's
