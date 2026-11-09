@@ -39,11 +39,11 @@ Pretui's honest scorecard:
 - **Hoverable** (SC 1.4.13): the bubble takes the pointer, and a transparent bridge spans the gap, so the pointer can move from the trigger onto it.
 - **Persistent:** passes — there is no timeout.
 - **Keyboard:** keyboard focus opens it; focus from a mouse press doesn't, so a clicked trigger doesn't keep its tip up after the pointer leaves.
-- `white-space: nowrap` means long content doesn't wrap, and a tip wider than the viewport runs past its edge.
+- Long content stays on one line unless the caller sets `--pretui-tooltip-measure`, so without it a long tip overflows rather than reflows, and a tip wider than the viewport runs past its edge.
 
 ## Theming
 
-`--tooltip` and `--tooltip-foreground` (the always-dark pair a theme must define for _both_ modes, not just light), `--shadow-lg`, and the `--boxel-font-size-xs`, `--boxel-sp-*` and `--boxel-border-radius-sm` steps. The 0.375rem offset is fixed. A theme that defines only a light value for `--tooltip` will produce a light-on-light tooltip in dark mode — this is the one token here that is easy to get wrong.
+`--tooltip` and `--tooltip-foreground` (the always-dark pair a theme must define for _both_ modes, not just light), `--shadow-lg`, and the `--boxel-font-size-xs`, `--boxel-sp-*` and `--boxel-border-radius-sm` steps. `--pretui-tooltip-measure` caps the bubble's width (unset by default, so a tip stays on one line); set it on the Tooltip for a long label, and the text wraps into balanced lines at that width. The 0.375rem offset is fixed. A theme that defines only a light value for `--tooltip` will produce a light-on-light tooltip in dark mode — this is the one token here that is easy to get wrong.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

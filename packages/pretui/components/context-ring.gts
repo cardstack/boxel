@@ -57,7 +57,7 @@ export class ContextRing extends Component<ContextRingSignature> {
   }
   /** the accessible name and the tooltip that teaches what the percentage
    * counts; past @warnAt it says so in words, so the warning never rests on
-   * the ring's colour alone */
+   * the ring's color alone */
   get label(): string {
     if (this.over) {
       let { used, limit } = this.args;
@@ -96,12 +96,9 @@ export class ContextRing extends Component<ContextRingSignature> {
     <style scoped>
       @layer PretComponent {
         /* the usual label fits on one line; the longer "nearly full" and
-           over-the-window labels wrap into balanced lines instead of running
-           past the composer or leaving one word on a line of its own */
-        .pretui-contextring-tip :deep(.pretui-tooltip) {
-          white-space: normal;
-          text-wrap: balance;
-          max-inline-size: 20rem;
+           over-the-window labels wrap instead of running past the composer */
+        .pretui-contextring-tip {
+          --pretui-tooltip-measure: 20rem;
         }
         .pretui-contextring {
           display: inline-flex;
