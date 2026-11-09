@@ -109,6 +109,50 @@ module('lease', (hooks) => {
     );
   });
 
+  test('a renewal still pending at its deadline is reported lost', async (assert) => {
+    let first = manager('first');
+    let lost: LeaseLostError | undefined;
+    await first.start((error) => (lost = error));
+    // Another transaction locks the lease row, so the next renewal waits on
+    // it.
+    let unlock!: () => void;
+    let unlocked = new Promise<void>((resolve) => (unlock = resolve));
+    let locked!: () => void;
+    let isLocked = new Promise<void>((resolve) => (locked = resolve));
+    let blocker = database.another().withTransaction(async (tx) => {
+      await tx([
+        `SELECT shard FROM realm_historian_leases WHERE shard = '0' FOR UPDATE`,
+      ]);
+      locked();
+      await unlocked;
+    });
+    await isLocked;
+    let lockedAt = Date.now();
+    try {
+      await waitUntil(() => lost !== undefined, {
+        timeoutMs: EXPIRY_MS * 2,
+        what: 'the loss report',
+      });
+    } finally {
+      // The manager's teardown waits for the blocked renewal.
+      unlock();
+      await blocker;
+    }
+    let waited = Date.now() - lockedAt;
+    assert.true(
+      waited < EXPIRY_MS,
+      `the loss was reported before the lease could expire (after ${waited}ms)`,
+    );
+    assert.deepEqual(lost!.shards, [0]);
+    assert.deepEqual(first.held, [], 'the task holds nothing after the loss');
+    await sleep(RENEW_MS * 3);
+    assert.deepEqual(
+      first.held,
+      [],
+      'the renewal that finishes late claims nothing',
+    );
+  });
+
   test('the tasks of one service share the shards evenly', async (assert) => {
     let first = manager('first', { shardCount: 4, taskCount: 2 });
     let second = manager('second', { shardCount: 4, taskCount: 2 });
