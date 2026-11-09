@@ -177,11 +177,12 @@ Three alerts in the realm-server availability group read these fields:
 | Realm Server DB Transaction Left Idle | `dbIdleInTxMaxMs` above 10 minutes                       |
 | Realm Server DB Advisory Lock Wait    | `dbAdvisoryWaitMaxMs` above 10 minutes                   |
 
-Some work holds a transaction idle on purpose. Publishing a realm keeps its lock
-transaction open while it waits for the source realm's indexing and copies the
-realm, and every writer to that realm waits behind it. On production that has run
-to about 7 minutes. The two session alerts sit above that, so a slow publish does
-not fire them.
+Some work holds a transaction idle on purpose. A card write keeps its lock
+transaction open while it writes its files and waits for them to index, and every
+writer to those files waits behind it. A write of more than 256 files takes the
+whole realm's lock instead. On production the longest of these holds run to about
+8 minutes (the `writeLock … holdMs=` lines). The two session alerts sit above that,
+so a slow bulk write does not fire them.
 
 None of these drives a health check. On ECS, a failing health check replaces the
 task, and pool saturation is routine and clears without help. A check that probed
