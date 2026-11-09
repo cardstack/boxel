@@ -34,8 +34,8 @@ Boxel is the client of other services' OAuth.
 
 In this ADR, a _resource_ is an API protected by OAuth, named by one URL that
 is the audience of its tokens. It may be one endpoint, such as `/mcp`, or many
-routes, such as the Boxel API (every realm and realm-server route but those it
-refuses, §1.6). An _OAuth grant_ is the stored result of one consent. A
+routes, such as the Boxel API (the realm and realm-server routes its registry
+entry maps, §1.3). An _OAuth grant_ is the stored result of one consent. A
 resource's _controller_ is the code that reads its OAuth tokens. A _verified
 caller_ is what a controller builds from a token.
 
@@ -74,9 +74,11 @@ be sealed with the secrets-at-rest envelope: they hold no other secret.
 Resources MUST be declared in a registry in code, which the provider reads
 through `oidc-provider`'s `getResourceServerInfo` on every authorization and
 token request. The registry MUST NOT change at run time. Each entry MUST name
-its scopes, the kinds of client it accepts (§1.4), and, for a resource that
-covers many routes, the routes that refuse its tokens (§1.6). A resource that
-needs more than its scopes describe MUST be a new entry, not a wider scope.
+its scopes, the kinds of client it accepts (§1.4), and, for each scope, the
+routes and methods it admits. A controller MUST refuse an OAuth token on a
+route its entry doesn't map to one of the token's scopes, so a route added
+later refuses OAuth tokens until an entry maps it. A resource that needs more
+than its scopes describe MUST be a new entry, not a wider scope.
 Each resource MUST publish protected-resource metadata (RFC 9728) naming the
 issuer and its scopes.
 
@@ -93,7 +95,7 @@ A client MUST be either pre-registered in code, with a fixed client ID and no
 registration endpoint or table, or registered openly, by a client ID metadata
 document (CIMD) or by dynamic client registration (DCR). Each registry entry
 MUST say whether it accepts open registration or only pre-registered clients.
-A flow that names a resource the client isn't accepted at MUST be refused
+The Boxel API's entry MUST accept only pre-registered clients. A flow that names a resource the client isn't accepted at MUST be refused
 whole, before consent. The device authorization grant MUST be allowed only
 for pre-registered clients. A client registered openly MUST be a public client
 (`token_endpoint_auth_method: none`).
@@ -103,7 +105,7 @@ registered one exactly, except for the port of a loopback address (RFC 8252
 §7.3). A CIMD client ID or a redirect URI MUST NOT be on a host where Boxel
 serves its own pages or users' files: the realm server, the secure origin, the
 published-site domains, and every app origin the realm server lists for the
-deployment (ADR 005 §1.7).
+deployment (ADR 005 §1.7), other than a loopback address.
 
 Consent MUST take what the access means (each resource's name, what it covers
 and what each scope allows) from the registry. Consent MUST name a CIMD client
@@ -123,15 +125,16 @@ A resource MUST check an OAuth token only through the provider's shared
 lookup. Only its controller MAY call the lookup, and it MUST call it at most
 once per request. `/mcp`'s controller is its entry point. The Boxel API's
 controllers are `Realm.#verifySession`, `multiRealmAuthorization` and
-`jwtMiddleware`. A controller MUST read an OAuth token only from the
+`jwtMiddleware`. A route that checks a session token itself, such as
+`/_download-realm`, MUST refuse an OAuth token. A controller MUST read an OAuth token only from the
 `Authorization: Bearer` header, and MUST answer one sent anywhere else with
 `400` without looking it up. The token MUST NOT leave the controller: it MUST
 NOT be forwarded to another service or route, or logged.
 
 The lookup MUST refuse a token that is unknown or expired, whose audience is
 another resource, whose OAuth grant has ended, expired or no longer holds the
-resource, or whose grant was created before the user's sessions were last
-revoked. The token endpoint MUST apply the same grant checks on every code and
+resource, or whose grant was created before the user's OAuth grants were
+last revoked. The token endpoint MUST apply the same grant checks on every code and
 refresh exchange.
 
 The Boxel API's controllers MUST come out of an OAuth token with the same user
@@ -143,11 +146,14 @@ realm-server session, a realm session, a delegated session or a Matrix login.
 
 ### 1.6. What an OAuth token never reaches
 
-A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). An OAuth
-token MUST be refused, at every resource, on key management, reads included,
-on every route that needs a secure session, on every route that mints a
-token, and on the routes that change a realm's permissions. A registry entry's
-list of refusing routes MUST cover these, and each MUST be tested.
+A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). No entry
+MAY map a scope to key management, reads included, to a route that needs a
+secure session, to a route that mints a token, or to a route that changes a
+realm's permissions. Each of these refusals MUST be tested.
+
+An OAuth token MUST NOT widen a realm's access through its policy (ADR 006
+§1.3): a write that changes `realm.json`'s `policy`, or the `RealmPolicy` card
+it names, MUST be refused.
 
 ### 1.7. Consent
 
@@ -189,10 +195,11 @@ A refresh token MUST be issued only on an OAuth grant the user chose, on the
 consent page, to keep. Refresh tokens MUST rotate on every use, and presenting
 a used refresh token again MUST end its grant, with one exception. Within 30
 seconds of a refresh token's first use, measured from that use and recorded
-atomically, presenting it again MUST rotate it again. The refresh tokens
-issued from one token this way are siblings: once one of them is used, the
-others MUST be revoked, and presenting a revoked sibling MUST end the grant as
-reuse does.
+atomically, presenting it again MUST rotate it again, but only while no
+refresh token issued from it has been used. Otherwise, presenting it again
+MUST end the grant as reuse does. The refresh tokens issued from one token are
+siblings: once one of them is used, the others MUST be revoked, and presenting
+a revoked sibling MUST end the grant.
 
 A renewing grant MUST expire 30 days after its consent at most, and a refresh
 MUST NOT succeed past its grant's expiry. By default, an access token SHOULD
@@ -200,6 +207,11 @@ last 10 minutes on a renewing grant and 60 minutes on a non-renewing one, and
 a non-renewing grant SHOULD expire 60 minutes after its consent. A registry
 entry MAY shorten a lifetime, and MUST NOT lengthen one. Revoking any token of
 an OAuth grant MUST end the whole grant.
+
+An operator's revocation of a user's sessions, and the first revocation after
+a password change (ADR 005 §1.6), MUST also revoke the user's OAuth grants.
+The later revocation that covers Matrix OpenID tokens MUST NOT, since an
+OpenID token can't create a grant (§1.7).
 
 ## 2. Rationale
 
@@ -209,7 +221,7 @@ therefore runs on the secure origin, under a secure session. The issuer stays
 on the realm server, because the secure origin serves only its own pages
 (ADR 019 §1.1).
 
-Every token Boxel accepts today is a signed JWT that stays valid until it
+Every other token Boxel accepts is a signed JWT that stays valid until it
 expires. An outside app's access should end when the user disconnects it, and
 when an operator revokes the user's sessions. An opaque token costs one indexed
 lookup per request, which already replaces the revocation read a session
@@ -224,7 +236,22 @@ a token for the whole API.
 
 The resources ship with the provider, and each needs a controller in code that
 validates its tokens. A resource added without code would protect nothing, so
-the registry is code, reviewed like any other change.
+the registry is code, reviewed like any other change. Each scope admits only
+the routes its entry maps, because many routes check nothing a scope could
+narrow. A route that deletes a realm checks ownership, not what the token
+allows. A list of refused routes would also let a route added later accept
+OAuth tokens until someone listed it.
+
+An outside app acts on content the user didn't write, so widening who can
+reach a realm stays with the user in Boxel itself, whether by its permissions
+or by its policy.
+
+A password change revokes the user's sessions twice. The second revocation,
+about an hour later, ends sessions a signed-out Matrix device could still mint
+with an OpenID token it obtained before. A grant needs a secure session, which
+no OpenID token can give, so grants keep their own cutoff. Otherwise a user who
+reconnects their apps right after the change would lose them again an hour
+later.
 
 MCP clients are written by other companies, and a user connects any of them
 by its server URL, so they can't be listed in code ahead of time. Open
@@ -241,7 +268,7 @@ the secure origin's pages never send, so Boxel adds the ticket check itself.
 Without it, a user sent an attacker's consent link could approve a flow that
 finishes in the attacker's browser. The finish route is a GET navigation,
 because the secure origin's pages post forms only to themselves (ADR 005
-§1.4), and a cross-site POST would drop the library's `SameSite=Lax` cookie.
+§1.4).
 The ticket travels in its URL, but it is spent on first presentation, so one
 that reaches a log is already dead. With open registration, error redirects
 would let anyone use Boxel's domain as a redirect to their own site (RFC 9700
@@ -249,9 +276,11 @@ would let anyone use Boxel's domain as a redirect to their own site (RFC 9700
 
 A refresh can fail on the way back: the client's request is used, but the
 response is lost, or the client refreshes twice at once. The grace window
-keeps that connection instead of ending it as reuse. Revoking siblings once
-one is used keeps one live chain, so a stolen token and the real one can't
-both keep refreshing: the side that refreshes second ends the grant.
+keeps that connection instead of ending it as reuse. The window admits a
+retry only before any child is used, which stops a thief who refreshes and
+then refreshes again. Revoking siblings once one is used stops a thief whose
+child is still unused. Either way one live chain remains, and the side that
+refreshes second ends the grant.
 
 The library's defaults suit a general OpenID provider. Its development
 interactions are on by default and sign in any account ID typed into them, so
@@ -296,12 +325,18 @@ more.
 - **A registry edited at run time.** It would add a way to create an audience,
   or widen a scope, without review, for resources whose controllers ship in
   code anyway.
+- **A list of routes that refuse a resource's tokens.** It fails open: a route
+  added later accepts OAuth tokens until someone lists it, and a scope can't
+  narrow a route that checks nothing a scope describes.
+- **Grants that share the session-revocation cutoff.** The follow-up
+  revocation after a password change would end grants made in the hour after
+  it, though nothing it covers can create one.
 - **Pre-registered clients only.** Outside MCP clients could not connect.
 - **Boxel's own apps registered by DCR or CIMD.** DCR shows them as
   unverified, which teaches users to click through the label. CIMD needs a
   client ID off Boxel's own hosts.
 - **Private-use redirect schemes, such as `cursor://`.** Any app on the device
-  can claim a scheme (RFC 8252 §8.5), so the redirect proves nothing about the
+  can claim a scheme (RFC 8252 §8.1), so the redirect proves nothing about the
   client. A client that offers only such a scheme can't connect.
 - **One grant per user and client, merged or replaced on each consent.**
   Merged, a scope stays until the user disconnects, and two machines running
