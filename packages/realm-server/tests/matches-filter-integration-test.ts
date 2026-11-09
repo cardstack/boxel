@@ -568,6 +568,42 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('type-ahead ranks a title that starts with the typed word above one where it starts a longer word', async function (assert) {
+      let row = (name: string, title: string) =>
+        seedRow(dbAdapter, {
+          url: `${testRealmURL}${name}.json`,
+          markdown: title,
+          searchDoc: { _title: title, _typeahead: title },
+        });
+      await row('lamport', 'Lamport on writing');
+      await row('lamps', 'Lamps, Bases & Shades');
+      await row('desk', 'Desk lamp');
+      await row('lamp', 'Lamp');
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { typeahead: 'lamp' },
+          sort: [{ by: '_matchRelevance', direction: 'desc' }],
+        }),
+        [
+          `${testRealmURL}lamp.json`,
+          `${testRealmURL}lamps.json`,
+          `${testRealmURL}lamport.json`,
+          `${testRealmURL}desk.json`,
+        ],
+        'exact, then the word or its plural first, then a longer word, then a later word',
+      );
+      assert.deepEqual(
+        (
+          await relevanceUrls({
+            filter: { typeahead: 'lamps' },
+            sort: [{ by: '_matchRelevance', direction: 'desc' }],
+          })
+        )[0],
+        `${testRealmURL}lamps.json`,
+        'the plural typed finds the plural title first',
+      );
+    });
+
     test('type-ahead ranks by title: exact, then starts-with, then word prefix, then the rest', async function (assert) {
       let row = (name: string, title: string, typeahead: string) =>
         seedRow(dbAdapter, {

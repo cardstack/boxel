@@ -5660,11 +5660,14 @@ export class IndexQueryEngine {
   }
 
   // A type-ahead term's relevance for one row: a tier from the row's inline
-  // title (3 when the title is what was typed, 2 when it starts with it, 1
-  // when every typed word prefixes a title word, 0 when the row matched
-  // through its alternative names or type words), plus its rank vector's
-  // score for the typed words as a fraction. The tiers outrank any text
-  // score, so title hits lead and content can't push them down.
+  // title (4 when the title is what was typed; 3 when it starts with the
+  // typed words as whole words, its last word perhaps in the plural, so
+  // "lamp" finds "Lamps, Bases & Shades" here; 2 when it only starts with the
+  // typed text, as "Lamport on writing" does; 1 when every typed word
+  // prefixes a title word; 0 when the row matched through its alternative
+  // names or type words), plus its rank vector's score for the typed words as
+  // a fraction below 1. The tiers outrank any text score, so title hits lead
+  // and content can't push them down.
   #typeAheadRelevance(terms: MatchTerm[], staged: boolean): CardExpression {
     let title = staged
       ? `lower(i.search_doc ->> '${CARD_TITLE_KEY}')`
@@ -5678,11 +5681,19 @@ export class IndexQueryEngine {
       let tsquery: Expression | undefined = term.typoQuery
         ? [`to_tsquery('boxel_simple',`, param(term.typoQuery), `)`]
         : typeAheadTsQuery(term.matches);
+      // The typed words as whole words at the title's start: the last one as
+      // typed or as its singular, then optionally a plural ending, then the
+      // end of the word. The words are letters and digits only.
+      let singular =
+        /s$/.test(typed) && [...typed].length > 3 ? typed.slice(0, -1) : typed;
+      let wholeWords = `^(${typed}|${singular})(e?s)?([^[:alnum:]]|$)`;
       scores.push([
         dbExpression({
           pg: [
             `(CASE WHEN ${title} =`,
             param(typed),
+            `THEN 4 WHEN ${title} ~`,
+            param(wholeWords),
             `THEN 3 WHEN ${title} LIKE`,
             param(`${escapeSqliteLikePattern(typed)}%`),
             `THEN 2`,
@@ -5706,7 +5717,15 @@ export class IndexQueryEngine {
           sqlite: [
             `(CASE WHEN lower(i.search_doc ->> '${CARD_TITLE_KEY}') =`,
             param(typed),
-            `THEN 3 WHEN lower(i.search_doc ->> '${CARD_TITLE_KEY}') LIKE`,
+            `THEN 4`,
+            // Whole words at the start, approximately: followed by a space
+            // or a comma, or a plural "s".
+            ...[' %', ',%', 's', 's %', 's,%'].flatMap((ending) => [
+              `WHEN lower(i.search_doc ->> '${CARD_TITLE_KEY}') LIKE`,
+              param(`${escapeSqliteLikePattern(typed)}${ending}`),
+              `ESCAPE '\\' THEN 3`,
+            ]),
+            `WHEN lower(i.search_doc ->> '${CARD_TITLE_KEY}') LIKE`,
             param(`${escapeSqliteLikePattern(typed)}%`),
             `ESCAPE '\\' THEN 2 ELSE 1 END)`,
           ],
