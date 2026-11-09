@@ -84,6 +84,24 @@ import {
 import { SEARCH_TEXT_KEY } from './search-intent.ts';
 import { CARD_TITLE_KEY, TYPE_AHEAD_KEY } from './search-doc-keys.ts';
 
+// The two production rows (instance and file) a render visit of `url` reads
+// its prior capture state from: a row keyed by the URL itself, or one whose
+// `file_alias` is the URL. Two branches, so each is answered by an index
+// (the primary key, and `prerendered_html_realm_file_alias_index`): written
+// as one OR across the two columns, Postgres scanned the whole table on every
+// visit (147 ms and ~500 MB of buffers on a 265k-row table). A row matching
+// both comes back twice, the same row, which the caller keys by type.
+export function priorCaptureStatesQuery(realmURL: URL, url: URL): Expression {
+  let branch = (column: 'url' | 'file_alias') => [
+    `SELECT type, captures, diagnostics FROM prerendered_html WHERE realm_url =`,
+    param(realmURL.href),
+    `AND ${column} =`,
+    param(url.href),
+    `AND type IN ('instance', 'file')`,
+  ];
+  return [...branch('url'), 'UNION ALL', ...branch('file_alias')];
+}
+
 export class IndexWriter {
   #dbAdapter: DBAdapter;
   constructor(dbAdapter: DBAdapter) {
@@ -2446,20 +2464,9 @@ export class Batch {
     // This runs once per visit, so it selects only what the two rows'
     // capture bookkeeping needs — the HTML columns are large and irrelevant
     // here.
-    let rows = (await this.#query([
-      `SELECT type, captures, diagnostics FROM prerendered_html WHERE`,
-      ...every([
-        ['realm_url =', param(this.realmURL.href)],
-        any([
-          [`url =`, param(url.href)],
-          [`file_alias =`, param(url.href)],
-        ]),
-        any([
-          ['type =', param('instance')],
-          ['type =', param('file')],
-        ]),
-      ]),
-    ] as Expression)) as unknown as Pick<
+    let rows = (await this.#query(
+      priorCaptureStatesQuery(this.realmURL, url),
+    )) as unknown as Pick<
       PrerenderedHtmlTable,
       'type' | 'captures' | 'diagnostics'
     >[];
