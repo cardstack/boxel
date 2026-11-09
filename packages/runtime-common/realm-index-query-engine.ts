@@ -38,6 +38,7 @@ import {
   isScopedReference,
   codeRefFromInternalKey,
 } from './index.ts';
+import { withDefaultPriority } from './definition-lookup.ts';
 import type { Realm } from './realm.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import { FILE_META_RESERVED_KEYS } from './realm.ts';
@@ -365,6 +366,30 @@ export class RealmIndexQueryEngine {
   #realmURL: URL | undefined;
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
+  #dbAdapter: DBAdapter;
+  // One engine per definition-lookup priority, made on first use: an engine
+  // holds no per-request state, so a priority's engine serves every search
+  // that runs at it.
+  #enginesByPriority = new Map<number, IndexQueryEngine>();
+
+  // The engine a search runs on: its definition reads render any cache miss
+  // at the search's priority (see `withDefaultPriority`).
+  #engineFor(opts: { priority?: number } | undefined): IndexQueryEngine {
+    let priority = opts?.priority;
+    if (priority === undefined) {
+      return this.#indexQueryEngine;
+    }
+    let engine = this.#enginesByPriority.get(priority);
+    if (!engine) {
+      engine = new IndexQueryEngine(
+        this.#dbAdapter,
+        withDefaultPriority(this.#definitionLookup, priority),
+        this.#realm.virtualNetwork,
+      );
+      this.#enginesByPriority.set(priority, engine);
+    }
+    return engine;
+  }
   #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
 
@@ -389,6 +414,7 @@ export class RealmIndexQueryEngine {
       definitionLookup,
       realm.virtualNetwork,
     );
+    this.#dbAdapter = dbAdapter;
     this.#definitionLookup = definitionLookup;
     this.#realm = realm;
     this.#fetch = fetch;
@@ -462,14 +488,10 @@ export class RealmIndexQueryEngine {
       ...(grantsForType ? { grantsForType } : {}),
       ...(expressionOverTopWindow ? { expressionOverTopWindow } : {}),
     };
-    let plans = await this.#indexQueryEngine.planColumns(type, columns);
+    let engine = this.#engineFor(opts);
+    let plans = await engine.planColumns(type, columns);
     let run = () =>
-      this.#indexQueryEngine.searchColumns(
-        new URL(this.#realm.url),
-        query,
-        engineOpts,
-        plans,
-      );
+      engine.searchColumns(new URL(this.#realm.url), query, engineOpts, plans);
     let { meta, rows } = opts?.timings
       ? await opts.timings.time('sql', run)
       : await run();
@@ -543,7 +565,7 @@ export class RealmIndexQueryEngine {
       sqlOpts = engineOpts;
     }
     let runSql = () =>
-      this.#indexQueryEngine.search(
+      this.#engineFor(opts).search(
         new URL(this.#realm.url),
         query,
         sqlOpts,
@@ -1506,7 +1528,7 @@ export class RealmIndexQueryEngine {
       if (realm === this.realmURL.href) {
         try {
           if (await this.queryTargetsFileMeta(query.filter, opts)) {
-            let { files, meta } = await this.#indexQueryEngine.searchFiles(
+            let { files, meta } = await this.#engineFor(opts).searchFiles(
               this.realmURL,
               query,
               opts,
@@ -1516,7 +1538,7 @@ export class RealmIndexQueryEngine {
             );
             addToTotal(meta?.page?.total);
           } else {
-            let collection = await this.#indexQueryEngine.searchCards(
+            let collection = await this.#engineFor(opts).searchCards(
               this.realmURL,
               query,
               opts,

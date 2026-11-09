@@ -43,6 +43,7 @@ import {
   type SearchShapeDescriptor,
   type SearchShapeLinkMode,
   mergeAbortSignals,
+  interactivePriority,
 } from '@cardstack/runtime-common';
 import {
   attributeSearchRequest,
@@ -758,7 +759,15 @@ export default function handleSearch(opts: {
     if (unshareableFormats.length > 0 && !cacheOnlyDefinitions) {
       searchOpts.unshareableFormats = unshareableFormats;
     }
-    if (jobPriority !== null) searchOpts.priority = jobPriority;
+    // A render's search carries its job's priority. A search with no job
+    // behind it is a person waiting on the response, so any card definition it
+    // has to render goes ahead of the indexing backlog (`interactivePriority`)
+    // instead of queueing behind it in the prerender pool.
+    if (jobPriority !== null) {
+      searchOpts.priority = jobPriority;
+    } else if (prerenderJobId === null) {
+      searchOpts.priority = interactivePriority;
+    }
 
     // The inner cache key: the membership query is the key's `query` member
     // (canonicalized by the cache), and every other body-changing request

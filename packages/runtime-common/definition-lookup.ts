@@ -360,6 +360,39 @@ export interface PopulateDefinitionCacheEntryArgs {
   priority?: number;
 }
 
+// A view of `lookup` whose cache misses render at `priority` unless the caller
+// names one. A search's filter compiles through dozens of definition reads,
+// none of which take options; binding the request's priority here means every
+// one of them inherits it, so a person's search doesn't wait behind a
+// re-index's module renders for a definition it needs.
+export function withDefaultPriority(
+  lookup: DefinitionLookup,
+  priority: number,
+): DefinitionLookup {
+  let withPriority = <T extends { priority?: number } | undefined>(opts: T) =>
+    opts?.priority !== undefined ? opts : { ...opts, priority };
+  return new Proxy(lookup, {
+    get(target, prop, receiver) {
+      let value = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function') {
+        return value;
+      }
+      switch (prop) {
+        case 'lookupDefinition':
+        case 'lookupDefinitionEntry':
+        case 'getCachedDefinitions':
+          return (first: unknown, opts?: DefinitionLookupOptions) =>
+            value.call(target, first, withPriority(opts));
+        case 'forRealm':
+          return (realm: LocalRealm) =>
+            withDefaultPriority(target.forRealm(realm), priority);
+        default:
+          return value.bind(target);
+      }
+    },
+  });
+}
+
 export interface DefinitionLookup {
   lookupDefinition(
     codeRef: ResolvedCodeRef,

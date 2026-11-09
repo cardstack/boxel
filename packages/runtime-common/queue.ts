@@ -49,6 +49,11 @@ import type { Deferred } from './deferred.ts';
 // nothing else.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
+// A person waiting on a response: a direct search from the app, with no job
+// behind it. Above `userInitiatedPriority` (which indexing jobs carry), so a
+// card definition a search needs is rendered ahead of a re-index's backlog
+// instead of queueing behind it in the prerender pool.
+export const interactivePriority = 20;
 // ── Job heartbeats ─────────────────────────────────────────────────────────
 //
 // A job's `timeout` bounds how long it may go *without progress*, not how long
