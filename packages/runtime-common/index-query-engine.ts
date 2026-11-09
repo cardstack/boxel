@@ -3761,7 +3761,7 @@ export class IndexQueryEngine {
     }
 
     if ('eq' in filter) {
-      return this.eqCondition(filter, on, typeConditionRef, polarity);
+      return this.eqCondition(filter, on, typeConditionRef, polarity, context);
     } else if ('in' in filter) {
       return this.inCondition(filter, on, typeConditionRef, polarity, context);
     } else if ('contains' in filter) {
@@ -3997,12 +3997,13 @@ export class IndexQueryEngine {
     on: CodeRef,
     typeConditionRef?: CodeRef,
     polarity: FilterPolarity = 'positive',
+    context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     let typeRef = typeConditionRef;
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.eq).map(([key, value]) => {
-        return this.fieldEqFilter(key, value, on, polarity);
+        return this.fieldEqFilter(key, value, on, polarity, context);
       }),
     ]);
   }
@@ -6279,6 +6280,7 @@ export class IndexQueryEngine {
     value: JSONTypes.Value,
     onRef: CodeRef,
     polarity: FilterPolarity = 'positive',
+    context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     if (
       currentField(key) === CARD_INSTANCE_FILE_KEY &&
@@ -6337,7 +6339,11 @@ export class IndexQueryEngine {
           type: onRef,
           path: key,
           value: [jsonContainsQuery(key, onRef, [param(value)])],
-          pluralValue: [query, '=', v],
+          pluralValue: this.#pluralPathMatch(key, [value], context) ?? [
+            query,
+            '=',
+            v,
+          ],
           errorHint: 'filter',
         }),
       ];
@@ -6349,6 +6355,47 @@ export class IndexQueryEngine {
         value: [query, '=', v],
         errorHint: 'filter',
       }),
+    ];
+  }
+
+  // A positive match on a path that runs through a list (`concepts.id`
+  // inside a linksToMany, `segments.speaker`), served by the search_doc GIN
+  // index as a SQL/JSON path test: `$."concepts"."id" ? (@ == "a" || …)`,
+  // whose lax mode reads every list on the way. The json_tree form it
+  // replaces walks every row of the type (over a minute on 40k cards). A row
+  // whose list was spilled out of its doc (ADR 021) is matched on the
+  // restored list instead. Strings only, where the path test and the tree's
+  // text comparison agree; anything else keeps the tree. Postgres only.
+  #pluralPathMatch(
+    key: string,
+    values: JSONTypes.Value[],
+    context: FilterContext,
+  ): CardExpression | undefined {
+    if (this.#dbAdapter.kind !== 'pg' || values.length === 0) {
+      return undefined;
+    }
+    if (!values.every((v) => typeof v === 'string')) {
+      return undefined;
+    }
+    let segments = key.split('.');
+    if (segments.some((x) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(x))) {
+      return undefined;
+    }
+    let path = '$' + segments.map((x) => `."${x}"`).join('');
+    let test = `${path} ? (${values.map((v) => `@ == ${JSON.stringify(v)}`).join(' || ')})`;
+    let root = segments[0];
+    return [
+      `(i.url, i.realm_url, i.type) IN (SELECT pm.url, pm.realm_url, pm.type FROM ${context.indexTable} AS pm WHERE pm.search_doc @? CAST(`,
+      param(test),
+      `AS jsonpath) UNION ALL SELECT ps.url, ps.realm_url, ps.type FROM ${context.indexTable} AS ps WHERE ps.search_doc @? CAST(`,
+      param(`$."${root}"."$spilled"`),
+      'AS jsonpath) AND jsonb_path_exists(jsonb_build_object(',
+      param(root),
+      ', spill_unmark(ps.search_doc -> ',
+      param(root),
+      ')), CAST(',
+      param(test),
+      'AS jsonpath)))',
     ];
   }
 
@@ -6411,7 +6458,13 @@ export class IndexQueryEngine {
           type: onRef,
           path: key,
           value: matched,
-          pluralValue: [query, 'IN', '(', ...inList, ')'],
+          pluralValue: this.#pluralPathMatch(key, nonNullValues, context) ?? [
+            query,
+            'IN',
+            '(',
+            ...inList,
+            ')',
+          ],
           errorHint: 'filter',
         }),
       ]);
