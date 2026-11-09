@@ -2,13 +2,13 @@
  * A size-animating Move on an element whose layout position depends on its
  * own size: the operator-mode stack card. Each card is `position: absolute`
  * with no `left`, in a `display: flex; justify-content: center` region, so
- * its static position is centred, and its x is a function of its width.
+ * its static position is centered, and its x is a function of its width.
  *
  * A card opened over another is inserted at one size and, once it loads,
  * grows to another in a later pass; the card under it shrinks. Every box
  * either card ever has lies inside the stage, so no frame may show either
  * card outside it. Two things sent the cards off it: the move translated
- * from the final box while layout re-centred the card under its animated
+ * from the final box while layout re-centered the card under its animated
  * width (each re-pass added the error again), and the entrance's scale,
  * cut short by the pass that moved the card, was measured into its boxes
  * and never finished.
@@ -127,7 +127,7 @@ function record(selector: string) {
 
 const offStage = (f: Frame) => f.x < -1 || f.x + f.width > STAGE + 1;
 
-module('Integration | choreo | centred size move', function (hooks) {
+module('Integration | choreo | centered size move', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks, { width: STAGE });
   setupChoreo(hooks);
@@ -186,13 +186,13 @@ module('Integration | choreo | centred size move', function (hooks) {
       assert.deepEqual(
         [last.x, last.width],
         [20, 960],
-        'the opened card lands centred at its full width',
+        'the opened card lands centered at its full width',
       );
       const lastUnder = under.seen[under.seen.length - 1]!;
       assert.deepEqual(
         [lastUnder.x, lastUnder.width],
         [167, 667],
-        'the covered card lands centred at its covered width',
+        'the covered card lands centered at its covered width',
       );
       assert.deepEqual(
         strandedTransforms(),
