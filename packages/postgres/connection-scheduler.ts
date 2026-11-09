@@ -71,6 +71,26 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   It cannot finish, and so cannot give back the connection it is nested in,
 //   until it gets one; holding it to a share its own tenant's outer holders
 //   have used up would deadlock that tenant.
+// - Nested work may also go past the limit, but only when the pool is stuck:
+//   every connection granted belongs to a hold (an acquisition made with
+//   `holding: true`, as `withConnection` makes), so none of them is certain to
+//   come back on its own. Each of those holds may be waiting on a nested
+//   acquisition of its own, and if all of them are, no connection is ever
+//   released and nothing queued here is ever served. Granting a nested
+//   acquisition past the limit lets its hold finish and give its connection
+//   back. A plain connection outstanding is one that returns without waiting
+//   on anything here, so while there is one the scheduler waits for it
+//   instead.
+//
+//   The connections past the limit go to one hold's work at a time. The first
+//   goes to the earliest nested waiter, and until every connection past the
+//   limit is given back, the rest go only to work nested inside the same hold
+//   that waiter is nested in. Spread across several holds, they could leave
+//   each of them one connection short, stuck again with the pool larger;
+//   kept to one, its work can always finish, since what it needs past the
+//   limit at any moment is at most how deep its own holds nest. The pool may
+//   run up to `limit + overflow` connections for this, and goes past `limit`
+//   only while it is stuck this way.
 //
 // Oversubscription is judged on demand — connections granted plus
 // acquisitions waiting — rather than on connections in use, because holding a
@@ -89,8 +109,12 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 // next query arrived.
 export class ConnectionScheduler {
   #limit: number;
+  #overflow: number;
   #tenantShare: number;
   #inUse = 0;
+  // The part of `#inUse` granted to holds: connections that stay out until
+  // the work holding them finishes, which may itself be waiting here.
+  #holdsInUse = 0;
   // Connections each key holds, for lowest-held-first ordering.
   #held = new Map<TenantKey, number>();
   // The part of `#held` a key's share is judged on: everything but ordered
@@ -98,12 +122,22 @@ export class ConnectionScheduler {
   #heldTowardShare = new Map<TenantKey, number>();
   #queues = new Map<TenantKey, TenantQueues>();
   #nested: Waiter[] = [];
+  // The hold whose nested work the connections past the limit are going to,
+  // while any are out (see the policy).
+  #overflowFor: HoldMarker | undefined;
   #waiting = 0;
   #arrivals = 0;
   #unsubscribe: () => void;
 
-  constructor(opts: { limit: number; tenantShare: number }) {
+  // `overflow` is how far past `limit` nested work may go while the pool is
+  // stuck (see the policy above); it defaults to `limit`. The connections past
+  // the limit all serve one hold's nested work, so reaching it takes that work
+  // nesting holds inside holds, or running them side by side, as many deep as
+  // the pool has connections.
+  constructor(opts: { limit: number; tenantShare: number; overflow?: number }) {
     this.#limit = normalizeCount(opts.limit);
+    this.#overflow =
+      opts.overflow === undefined ? this.#limit : normalizeCount(opts.overflow);
     this.#tenantShare = normalizeCount(opts.tenantShare);
     // A tenant whose last scope closes may leave another tenant's waiters
     // eligible; nothing else would wake them.
@@ -118,9 +152,22 @@ export class ConnectionScheduler {
     return this.#tenantShare;
   }
 
-  // Connections currently granted.
+  // The most connections ever granted at once: `limit`, plus the overflow
+  // nested work may take while the pool is stuck. The pool beneath must allow
+  // this many, or a grant past `limit` would queue inside the pool instead.
+  get ceiling(): number {
+    return this.#limit + this.#overflow;
+  }
+
+  // Connections currently granted. Above `limit` only while the pool is stuck
+  // on holds waiting for nested work.
   get inUse(): number {
     return this.#inUse;
+  }
+
+  // The part of `inUse` granted to holds.
+  get holds(): number {
+    return this.#holdsInUse;
   }
 
   // Acquisitions waiting for a connection, whether for want of a free one or
@@ -143,25 +190,37 @@ export class ConnectionScheduler {
 
   // Resolves with a release once this caller may check out a connection. The
   // tenant and nesting are read from the async context the call is made in.
-  acquire(): Promise<() => void> {
+  // `holding` says the caller keeps the connection while it does other work
+  // that may need connections of its own, as `withConnection` does, rather
+  // than giving it back once its statement returns.
+  acquire(opts?: { holding?: boolean }): Promise<() => void> {
     let scope = scopeStorage.getStore();
     let key: TenantKey = scope?.tenant ?? UNTAGGED;
     let nested = holdsConnection(scope?.holding);
+    let holding = opts?.holding === true;
     // Shared and ordered work are both ordered as their tenant but never held
     // to its share, so both wait in the queue the share does not apply to.
     let ordered = scope?.ordered === true;
     let shared = scope?.shared === true || ordered;
     // This arrival counts toward the demand it is judged against.
     if (
-      this.#inUse < this.#limit &&
-      (nested || shared || this.#eligible(key, 1))
+      (this.#inUse < this.#limit &&
+        (nested || shared || this.#eligible(key, 1))) ||
+      // A nested waiter already queued is one the overflow may not go to yet
+      // (the drain would have granted it otherwise), so this arrival does not
+      // jump ahead of anyone it could have been granted behind.
+      (nested && this.#mayOverflowTo(scope?.holding))
     ) {
-      return Promise.resolve(this.#grant(key, ordered));
+      return Promise.resolve(
+        this.#grant(key, ordered, holding, scope?.holding),
+      );
     }
     return new Promise((resolve) => {
       let waiter: Waiter = {
         key,
         ordered,
+        holding,
+        nestedIn: nested ? scope?.holding : undefined,
         arrival: this.#arrivals++,
         resolve,
       };
@@ -200,8 +259,34 @@ export class ConnectionScheduler {
     return !anotherTenantOpen(key);
   }
 
-  #grant(key: TenantKey, ordered: boolean): () => void {
+  // Whether nested work, nested in `nestedIn`, may be granted a connection
+  // past the limit: the pool is stuck, with every connection out held by a
+  // hold, it has overflow left, and the work belongs to the hold the overflow
+  // is going to, if any is. A plain connection outstanding will come back
+  // without anything here having to happen first, and is what the nested work
+  // waits for instead.
+  #mayOverflowTo(nestedIn: HoldMarker | undefined): boolean {
+    return (
+      this.#inUse >= this.#limit &&
+      this.#inUse === this.#holdsInUse &&
+      this.#inUse < this.ceiling &&
+      (!this.#overflowFor || nestedWithin(nestedIn, this.#overflowFor))
+    );
+  }
+
+  #grant(
+    key: TenantKey,
+    ordered: boolean,
+    holding: boolean,
+    nestedIn?: HoldMarker,
+  ): () => void {
+    if (this.#inUse >= this.#limit && !this.#overflowFor) {
+      this.#overflowFor = nestedIn;
+    }
     this.#inUse++;
+    if (holding) {
+      this.#holdsInUse++;
+    }
     increment(this.#held, key);
     if (!ordered) {
       increment(this.#heldTowardShare, key);
@@ -213,6 +298,12 @@ export class ConnectionScheduler {
       }
       released = true;
       this.#inUse--;
+      if (holding) {
+        this.#holdsInUse--;
+      }
+      if (this.#inUse <= this.#limit) {
+        this.#overflowFor = undefined;
+      }
       decrement(this.#held, key);
       if (!ordered) {
         decrement(this.#heldTowardShare, key);
@@ -222,13 +313,25 @@ export class ConnectionScheduler {
   }
 
   #drain(): void {
-    while (this.#inUse < this.#limit) {
-      let next = this.#nested.shift() ?? this.#takeNextTenantWaiter();
+    for (;;) {
+      let next: Waiter | undefined;
+      if (this.#inUse < this.#limit) {
+        next = this.#nested.shift() ?? this.#takeNextTenantWaiter();
+      } else {
+        let index = this.#nested.findIndex((waiter) =>
+          this.#mayOverflowTo(waiter.nestedIn),
+        );
+        if (index !== -1) {
+          next = this.#nested.splice(index, 1)[0];
+        }
+      }
       if (!next) {
         return;
       }
       this.#waiting--;
-      next.resolve(this.#grant(next.key, next.ordered));
+      next.resolve(
+        this.#grant(next.key, next.ordered, next.holding, next.nestedIn),
+      );
     }
   }
 
@@ -384,6 +487,19 @@ interface HoldMarker {
   parent?: HoldMarker;
 }
 
+// Whether work nested in `marker` runs inside `hold`, at any depth.
+function nestedWithin(
+  marker: HoldMarker | undefined,
+  hold: HoldMarker,
+): boolean {
+  for (let m = marker; m; m = m.parent) {
+    if (m === hold) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function holdsConnection(marker: HoldMarker | undefined): boolean {
   for (let m = marker; m; m = m.parent) {
     if (m.held) {
@@ -396,6 +512,9 @@ function holdsConnection(marker: HoldMarker | undefined): boolean {
 interface Waiter {
   key: TenantKey;
   ordered: boolean;
+  holding: boolean;
+  // The innermost hold a nested waiter's work runs inside.
+  nestedIn?: HoldMarker;
   arrival: number;
   resolve: (release: () => void) => void;
 }
