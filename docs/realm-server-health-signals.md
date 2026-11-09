@@ -165,15 +165,23 @@ across the whole database: Postgres shows another role's session state only to a
 role with `pg_read_all_stats`. So every replica reports the same sessions, and the
 fields are absent from a line when the probe has had no successful reading in the
 last minute. A probe that starts failing logs one `pg-session-probe` warning, and
-another line when it recovers.
+another line when it recovers. A server with `track_activities` off records no
+session state at all, so on one the probe fails every sample rather than report
+zeros it cannot see.
 
 Three alerts in the realm-server availability group read these fields:
 
 | Alert                                 | Fires when                                               |
 | ------------------------------------- | -------------------------------------------------------- |
 | Realm Server DB Pool Stuck            | `dbOldestWaitMs` above 60s in every minute for 5 minutes |
-| Realm Server DB Transaction Left Idle | `dbIdleInTxMaxMs` above 5 minutes                        |
-| Realm Server DB Advisory Lock Wait    | `dbAdvisoryWaitMaxMs` above 5 minutes                    |
+| Realm Server DB Transaction Left Idle | `dbIdleInTxMaxMs` above 10 minutes                       |
+| Realm Server DB Advisory Lock Wait    | `dbAdvisoryWaitMaxMs` above 10 minutes                   |
+
+Some work holds a transaction idle on purpose. Publishing a realm keeps its lock
+transaction open while it waits for the source realm's indexing and copies the
+realm, and every writer to that realm waits behind it. On production that has run
+to about 7 minutes. The two session alerts sit above that, so a slow publish does
+not fire them.
 
 None of these drives a health check. On ECS, a failing health check replaces the
 task, and pool saturation is routine and clears without help. A check that probed

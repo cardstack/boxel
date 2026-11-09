@@ -720,7 +720,7 @@
           "title": "Realm Server DB Pool Stuck",
           "condition": "B",
           "annotations": {
-            "summary": "{{ if $values }}A realm-server process had a database acquisition waiting more than 60s for a pool connection in every 1-minute bin of the last 5 minutes (the rule reduces the window with min, so one bin under the threshold keeps it quiet). Sourced from dbOldestWaitMs on the periodic health line: the wait of the oldest acquisition still queued. A pool that is only busy keeps its queue moving, so this stays short however many acquisitions wait (dbWaiting); it climbs when the pool's connections are held by work that is not finishing, and every database-touching request on that process hangs behind it. The load balancer's check and /_liveness do not touch the pool and stay green. Read dbIdleInTxMaxMs and dbAdvisoryWaitMaxMs on the same line: a long idle transaction is a holder that stopped driving its work, a long advisory wait is a writer queued behind a lock holder. pg_stat_activity names the sessions. Replacing the task drops its connections and clears a wedge it cannot leave on its own.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about the database pool. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
+            "summary": "{{ if $values }}A realm-server process had a database acquisition waiting more than 60s for a pool connection in every 1-minute bin of the last 5 minutes (the rule reduces the window with min, so one bin under the threshold keeps it quiet). Sourced from dbOldestWaitMs on the periodic health line: the wait of the oldest acquisition still queued. A pool that is only busy keeps its queue moving, so this stays short however many acquisitions wait (dbWaiting); it climbs when the pool's connections are held by work that is not finishing, and every database-touching request on that process hangs behind it. The load balancer's check and /_liveness do not touch the pool and stay green. Read dbIdleInTxMaxMs and dbAdvisoryWaitMaxMs on the same line: a long idle transaction is a holder that stopped driving its work, a long advisory wait is a writer queued behind a lock holder. pg_stat_activity names the sessions. The value is the highest across tasks; to find the task, run filter @message like /dbOldestWaitMs=/ | parse @message /dbOldestWaitMs=(?<v>\\d+)/ | stats max(v) by @logStream, bin(1m) in Logs Insights. Replacing that task drops its connections and clears a wedge it cannot leave on its own.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about the database pool. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
           },
           "data": [
             {
@@ -839,7 +839,7 @@
           "title": "Realm Server DB Transaction Left Idle",
           "condition": "B",
           "annotations": {
-            "summary": "{{ if $values }}A database session of the realm-server's role sat idle inside an open transaction for more than 5 minutes at some point in the last 5 minutes. Sourced from dbIdleInTxMaxMs on the periodic health line, which a realm-server process reads from pg_stat_activity on a connection of its own every 30s; the reading covers the whole database, so every replica reports the same session. A request's transaction is idle between its statements for milliseconds. One idle for minutes is a client that stopped driving its transaction, and its locks, advisory locks included, stay taken until it ends. Find it in pg_stat_activity (state 'idle in transaction', oldest state_change) and read client_addr and query, its last statement, to see which task holds it and what it was doing.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about idle transactions. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
+            "summary": "{{ if $values }}A database session of the realm-server's role sat idle inside an open transaction for more than 10 minutes at some point in the last 5 minutes. Sourced from dbIdleInTxMaxMs on the periodic health line, which a realm-server process reads from pg_stat_activity on a connection of its own every 30s; the reading covers the whole database, so every replica reports the same session. A request's transaction is idle between its statements for milliseconds. Publishing a realm holds its lock transaction idle on purpose while it waits for the source realm's indexing and copies the realm, for up to about 7 minutes on production; the threshold sits above that. Past it, a client has most likely stopped driving its transaction, and its locks, advisory locks included, stay taken until it ends. Find it in pg_stat_activity (state 'idle in transaction', oldest state_change) and read client_addr and query, its last statement, to see which task holds it and what it was doing.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about idle transactions. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
           },
           "data": [
             {
@@ -915,7 +915,7 @@
                 "conditions": [
                   {
                     "evaluator": {
-                      "params": [300000, 0],
+                      "params": [600000, 0],
                       "type": "gt"
                     },
                     "operator": {
@@ -958,7 +958,7 @@
           "title": "Realm Server DB Advisory Lock Wait",
           "condition": "B",
           "annotations": {
-            "summary": "{{ if $values }}A database session of the realm-server's role was blocked acquiring an advisory lock for more than 5 minutes at some point in the last 5 minutes. Sourced from dbAdvisoryWaitMaxMs on the periodic health line, read from pg_stat_activity (wait_event 'advisory') on a connection of the probe's own every 30s; dbAdvisoryWaiters on the same line counts the blocked sessions. Each one holds a pooled connection while it waits, so enough of them starve the pool. The holder is the session the waiters queue behind: in pg_locks it holds the granted advisory lock with the waiters' classid/objid, and it is usually idle in transaction.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about advisory lock waits. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
+            "summary": "{{ if $values }}A database session of the realm-server's role was blocked acquiring an advisory lock for more than 10 minutes at some point in the last 5 minutes. Sourced from dbAdvisoryWaitMaxMs on the periodic health line, read from pg_stat_activity (wait_event 'advisory') on a connection of the probe's own every 30s; dbAdvisoryWaiters on the same line counts the blocked sessions. Each one holds a pooled connection while it waits, so enough of them starve the pool. A writer waits as long as the holder keeps the lock: a realm publish holds it for up to about 7 minutes on production, which the threshold sits above. The holder is the session the waiters queue behind: in pg_locks it holds the granted advisory lock with the waiters' classid/objid, and it is usually idle in transaction.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about advisory lock waits. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
           },
           "data": [
             {
@@ -1034,7 +1034,7 @@
                 "conditions": [
                   {
                     "evaluator": {
-                      "params": [300000, 0],
+                      "params": [600000, 0],
                       "type": "gt"
                     },
                     "operator": {
