@@ -153,8 +153,11 @@ async function readAndUpload(
   }
   // A skill's links are authored relative to the file, as an attached skill's
   // are, and get the same treatment: each one becomes a URL the model can pass
-  // back to this tool unchanged. Other files are uploaded as stored, so a model
-  // that reads a user's markdown and writes it back keeps its links as they were.
+  // back to this tool unchanged. What counts as a skill file goes by path alone
+  // (a SKILL.md, or a .md in a references/ folder), so it includes a user's own
+  // skills and any references/ folder. The prompt tells the model to read a
+  // skill file with realm.fs.readText before changing it, so an edit starts
+  // from the stored text, not this copy. Other files are uploaded as stored.
   let content = isSkillFileUrl(url)
     ? absolutizeSkillLinks(result.content, url)
     : result.content;

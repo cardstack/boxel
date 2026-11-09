@@ -11209,6 +11209,42 @@ module('absolutizeSkillLinks', () => {
     );
   });
 
+  test('leaves a [x](y) inside a fenced block or code span as written', () => {
+    let body = [
+      'Read [the rules](references/rules.md).',
+      '```ts',
+      'return [...super[getMenuItems](params)];',
+      '```',
+      '~~~',
+      'Links look like [text](url).',
+      '~~~',
+      'Write a link as `[text](url)`, or ``[a](b)`` with [a link](x.md) after.',
+      'See [`boxel/`](boxel/SKILL.md).',
+    ].join('\n');
+    assert.strictEqual(
+      absolutizeSkillLinks(body, INDEX),
+      [
+        'Read [the rules](https://localhost:4201/skills/references/rules.md).',
+        '```ts',
+        'return [...super[getMenuItems](params)];',
+        '```',
+        '~~~',
+        'Links look like [text](url).',
+        '~~~',
+        'Write a link as `[text](url)`, or ``[a](b)`` with [a link](https://localhost:4201/skills/x.md) after.',
+        'See [`boxel/`](https://localhost:4201/skills/boxel/SKILL.md).',
+      ].join('\n'),
+    );
+  });
+
+  test('a fenced block that is never closed runs to the end of the body', () => {
+    let body = '[a](a.md)\n```\n[b](b.md)\n';
+    assert.strictEqual(
+      absolutizeSkillLinks(body, INDEX),
+      '[a](https://localhost:4201/skills/a.md)\n```\n[b](b.md)\n',
+    );
+  });
+
   test('leaves the body untouched when the id is not an absolute url', () => {
     let body = '[boxel](skills/boxel/SKILL.md)';
     assert.strictEqual(

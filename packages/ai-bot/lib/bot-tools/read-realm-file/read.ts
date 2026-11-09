@@ -62,9 +62,9 @@ export const readRealmFileTool: Tool = {
           items: { type: 'string' },
           description:
             'Identifiers of the files to read, each exactly as it appears ' +
-            'in the skill: a full URL, or a realm-prefix form such as ' +
-            '`@cardstack/base/card-api.gts`. A link in a skill is already ' +
-            "absolute — don't shorten or rewrite it. List each file once, " +
+            'where it is linked: a full URL, or a realm-prefix form such as ' +
+            '`@cardstack/base/card-api.gts`. A relative link resolves ' +
+            'against the URL of the file that contains it. List each file once, ' +
             `at most ${READ_REALM_FILE_MAX_URLS} per call. The realm each ` +
             'file lives in is worked out for you.',
         },

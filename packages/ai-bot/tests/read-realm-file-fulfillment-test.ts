@@ -366,9 +366,10 @@ module('fulfillReadRealmFileCalls', () => {
     );
   });
 
-  test("a skill file's relative links reach the model absolute, other files' as stored", async () => {
+  test('a SKILL.md or a references/*.md, found by path, reaches the model with its links absolute; other markdown as stored', async () => {
     let { client } = fakeClient();
     let notesUrl = 'https://localhost:4201/user/jane/notes.md';
+    let referenceUrl = 'https://localhost:4201/user/jane/references/notes.md';
     let body = 'See [the rules](references/rules.md) and [home](../index.md).';
     let fetch = (async () =>
       new Response(body, {
@@ -377,7 +378,7 @@ module('fulfillReadRealmFileCalls', () => {
     let uploaded: string[] = [];
 
     await fulfillReadRealmFileCalls(
-      [readRealmFileCall('c1', { urls: [FILE_URL, notesUrl] })],
+      [readRealmFileCall('c1', { urls: [FILE_URL, referenceUrl, notesUrl] })],
       baseDeps(client, {
         fetch,
         uploadText: async (content: string) => {
@@ -394,10 +395,16 @@ module('fulfillReadRealmFileCalls', () => {
       'the SKILL.md is uploaded with links resolved against its own URL',
     );
     assert.true(
-      uploaded.includes(body),
-      'a markdown file that is not part of a skill is uploaded unchanged',
+      uploaded.includes(
+        'See [the rules](https://localhost:4201/user/jane/references/references/rules.md) and [home](https://localhost:4201/user/jane/index.md).',
+      ),
+      'any .md in a references/ folder counts as a skill file, so its links are resolved too',
     );
-    assert.strictEqual(uploaded.length, 2);
+    assert.true(
+      uploaded.includes(body),
+      'other markdown is uploaded unchanged',
+    );
+    assert.strictEqual(uploaded.length, 3);
   });
 
   test('a partial read attaches what succeeded and names what failed', async () => {
