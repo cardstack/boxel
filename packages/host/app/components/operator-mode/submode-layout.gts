@@ -743,8 +743,8 @@ export default class SubmodeLayout extends Component<Signature> {
         max-width: 100%;
         container-type: inline-size;
         /* Lock outer box to exactly var(--stack-padding-top) — the
-           same value .operator-mode-stack uses for its padding-top
-           offset. Any content the bar contains (workspace button,
+           same value the stack's cards wrapper (.stack-cards in
+           stack.gts) uses for its top margin. Any content the bar contains (workspace button,
            submode switcher, portaled expanded-card-header pill,
            etc.) renders WITHIN this fixed height; nothing the slot
            contents do can push the bar taller. This is what lets

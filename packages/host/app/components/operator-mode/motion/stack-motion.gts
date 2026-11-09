@@ -6,6 +6,7 @@ import { Choreo } from '@cardstack/choreo';
 import {
   DURATION,
   EASE,
+  EASE_IN,
   MAX_FRAME_STEP,
   motionEnabled,
 } from '../../ai-assistant/motion/tokens';
@@ -106,9 +107,10 @@ const slideUpOnTop: PropSource = (sprite, changeset) =>
 const fadeInOnTopWhenReduced: PropSource = (sprite, changeset) =>
   reducesMotion() ? fadeInOnTop(sprite, changeset) : [1, 1];
 
-// A leaving card drops a little below where it is painted as it fades
-// (a card closed mid-glide drops from where it is, not to a fixed place);
-// under reduced motion it fades where it stood.
+// A leaving card drops a little below where it is painted as it fades, so
+// a card closed mid-glide drops from where it is, not to a fixed place. It
+// eases in, as a leaving element should (ADR 007 §1.5). Under reduced
+// motion it fades where it stood.
 const DROP = 18;
 const dropOut: PropSource = (sprite) => {
   const { x, y } = paintedTranslation(sprite);
@@ -223,7 +225,7 @@ export default class StackMotion extends Component<Signature> {
             @opacity={{0}}
             @transform={{dropOut}}
             @duration={{DURATION.exit}}
-            @ease={{EASE}}
+            @ease={{EASE_IN}}
           />
           <c.Tween
             @of={{c.kept STACK_ITEM_ROLE}}
