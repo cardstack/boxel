@@ -639,7 +639,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   type='submit'
                   @variant='primary'
                   @disabled={{this.submitDisabled}}
-                  @loading={{this.form.saving}}
+                  @loading={{this.approveBusy}}
                   data-test-approve-save
                 >{{this.saveLabel}}</Button>
               </div>
@@ -1183,6 +1183,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private get saveLabel() {
     let count = this.tickedOperations.length;
     return `Approve ${count} ${count === 1 ? 'call' : 'calls'}`;
+  }
+
+  // Approve shows its spinner while the approval saves and while the keys the
+  // ticked operations offer are still being read, so a press in that moment
+  // meets a cue rather than a dead button.
+  private get approveBusy() {
+    return this.form.saving || this.form.weighing;
   }
 
   private get submitDisabled() {

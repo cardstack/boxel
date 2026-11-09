@@ -1258,9 +1258,11 @@ module('Integration | approve pages', function (hooks) {
     void click('[data-test-approve-tick="upload"]');
     await waitUntil(() => release !== undefined);
     assert.dom('[data-test-approve-save]').isDisabled();
+    assert.dom('[data-test-approve-save]').hasAttribute('aria-busy', 'true');
     release!();
     await waitFor('[data-test-approve-key="GitHub API account"]');
     assert.dom('[data-test-approve-save]').isEnabled();
+    assert.dom('[data-test-approve-save]').doesNotHaveAttribute('aria-busy');
   });
 
   test('when the keys the ticked operations offer can’t be read, the slot offers the ones that fit the whole batch', async function (assert) {
