@@ -95,12 +95,13 @@ export class ContextRing extends Component<ContextRingSignature> {
     </Tooltip>
     <style scoped>
       @layer PretComponent {
-        /* the over-the-window label is a sentence, too long for the
-           tooltip's single line: it wraps to a readable measure instead of
-           running past the composer */
+        /* the usual label fits on one line; the longer "nearly full" and
+           over-the-window labels wrap into balanced lines instead of running
+           past the composer or leaving one word on a line of its own */
         .pretui-contextring-tip :deep(.pretui-tooltip) {
           white-space: normal;
-          max-inline-size: 16rem;
+          text-wrap: balance;
+          max-inline-size: 20rem;
         }
         .pretui-contextring {
           display: inline-flex;
