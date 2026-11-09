@@ -1408,7 +1408,11 @@ class Isolated extends Component<typeof Workspace> {
                       {{! reveal-on-scroll: the sentinel asks for the next page }}
                       <div
                         class='feed-more'
-                        {{this.watchFeedEnd (this.feedTotal results.meta)}}
+                        {{this.watchFeedEnd
+                          (this.feedTotal results.meta)
+                          results.entries.length
+                          results.isLoading
+                        }}
                       >
                         <span class='feed-more-note data'>Showing
                           {{results.entries.length}}
@@ -4101,23 +4105,37 @@ class Isolated extends Component<typeof Workspace> {
     }
   };
 
-  watchFeedEnd = modifier((element: Element, [total]: [number]) => {
-    let root = element.closest('.scroll-container');
-    let observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          this.feedShown = Math.min(this.feedShown + FEED_REVEAL_CHUNK, total);
-          // re-arm: observe() always delivers a fresh async notification
-          // after the next layout, so a still-visible sentinel fires again
-          observer.unobserve(element);
-          observer.observe(element);
-        }
-      },
-      { root, rootMargin: '160px 0px' },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
+  // Asks for the next page only once the page asked for has arrived: each
+  // ask re-runs the feed search, so a sentinel still in view while rows load
+  // would otherwise ask again and again, restarting the search each time. The
+  // modifier re-runs when the loaded count or loading state changes, and a
+  // fresh observer reports a sentinel still in view, so paging continues one
+  // page at a time.
+  watchFeedEnd = modifier(
+    (
+      element: Element,
+      [total, loaded, isLoading]: [number, number, boolean],
+    ) => {
+      if (isLoading || loaded < Math.min(this.feedShown, total)) {
+        return;
+      }
+      let root = element.closest('.scroll-container');
+      let observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            observer.disconnect();
+            this.feedShown = Math.min(
+              this.feedShown + FEED_REVEAL_CHUNK,
+              total,
+            );
+          }
+        },
+        { root, rootMargin: '160px 0px' },
+      );
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
+  );
 }
 
 export class Workspace extends CardDef {
