@@ -847,9 +847,16 @@ export interface ApprovalBatch {
   // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
   // one) that can fill each slot token in every operation of the batch that
   // sends it, as the realm server decides, by use: for `pipelines`, without
-  // the operations approved for pipelines only. The page offers only these.
-  fillers: Record<'interactive' | 'pipelines', Record<string, string[]>>;
+  // the operations approved for pipelines only. Asked with `operations`, only
+  // those operations count, and a slot none of them sends isn't named. The
+  // page offers only these.
+  fillers: BatchFillers;
 }
+
+export type BatchFillers = Record<
+  'interactive' | 'pipelines',
+  Record<string, string[]>
+>;
 
 export async function approvalBatch(
   config: Config,
@@ -858,6 +865,10 @@ export async function approvalBatch(
     review: boolean;
     // Also answer operations approved for pipelines only.
     interactive?: boolean;
+    // The operations an approval covers, by name, when it covers only some
+    // of the batch's: `fillers` then weigh only these. The batch still holds
+    // every operation.
+    operations?: string[];
   },
 ): Promise<ApprovalBatch> {
   let json = await authorizedRequest(config, '_key-bindings/batch', {

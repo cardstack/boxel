@@ -15,7 +15,10 @@
 // grant where a group sends makes that a new grant: the group says so by its
 // full host, and the Approve button, the one confirmation, says which hosts
 // each key is sent to for the first time. An operation's label never stands
-// in for a host. Unticking an operation leaves it unapproved.
+// in for a host. Unticking an operation leaves it unapproved. A slot offers
+// the keys that fill it in the ticked operations: while only some are
+// ticked, the page asks the realm server for the batch's fillers weighed by
+// those (`operations`), and Approve waits for the answer.
 //
 // A key of the user's own and a key they share with the workspace are never
 // drawn alike. Each slot is a tinted section of its own (`KeyAudience`),
@@ -77,6 +80,7 @@ import {
   shareUsage,
   windowContext,
   type ApprovalBatch,
+  type BatchFillers,
   type BatchOperation,
   type BatchSlot,
 } from '../../security/keys.ts';
@@ -116,6 +120,8 @@ import {
   requestFields,
   sharesForVisitors,
   slotChoices,
+  tickedOperationNames,
+  withTickedFillers,
   type ApprovalUse,
   type NewGrant,
   type SlotChoice,
@@ -894,6 +900,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private form = trackedObject({
     chosen: {} as Record<string, string | undefined>,
     ticked: new Set<string>(),
+    // What fills each slot in the ticked operations, when only some are
+    // ticked (`withTickedFillers`), and whether that is still being asked.
+    weighed: undefined as BatchFillers | undefined,
+    weighing: false,
     use: 'interactive' as ApprovalUse,
     // A share's daily budget as typed, by share id.
     budgets: {} as Record<string, string>,
@@ -957,7 +967,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   // The batch as shown for the choice of where requests run.
   private get batch(): ApprovalBatch | undefined {
     return this.choosing
-      ? batchFor(this.choosing.batch, this.form.use)
+      ? batchFor(
+          withTickedFillers(this.choosing.batch, this.form.weighed),
+          this.form.use,
+        )
       : undefined;
   }
 
@@ -1176,6 +1189,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     let ticked = this.tickedOperations;
     return (
       this.form.saving ||
+      this.form.weighing ||
       ticked.length === 0 ||
       ticked.some((o) => o.slots.some((s) => !this.form.chosen[s.slot])) ||
       this.budgetShares.some((share) => !this.budgetValid(share))
@@ -1235,6 +1249,50 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       ticked.add(key);
     }
     this.form.ticked = ticked;
+    this.weigh();
+  };
+
+  // Each answer is numbered, so only the latest one asked counts; reading
+  // the batch again starts the count over.
+  private weighings = 0;
+
+  // Asks what fills each slot in the ticked operations alone, when only some
+  // are ticked, and keeps a chosen key while it is still offered. Without an
+  // answer the page offers the batch's own fillers, which fit every
+  // operation, ticked or not.
+  private weigh = async () => {
+    let state = this.choosing;
+    let attempt = ++this.weighings;
+    let operations = state
+      ? tickedOperationNames(state.batch, this.form.ticked)
+      : undefined;
+    if (!state || !operations || !this.opened.target) {
+      this.form.weighed = undefined;
+      this.form.weighing = false;
+      this.keepOfferedChoices();
+      return;
+    }
+    this.form.weighing = true;
+    let weighed: BatchFillers | undefined;
+    try {
+      ({ fillers: weighed } = await approvalBatch(this.args.api.config, {
+        target: this.opened.target,
+        review: this.args.review,
+        interactive: true,
+        operations,
+      }));
+    } catch (e) {
+      if (attempt === this.weighings && isSignedOut(e)) {
+        this.args.api.signedOut();
+        return;
+      }
+    }
+    if (attempt !== this.weighings) {
+      return;
+    }
+    this.form.weighed = weighed;
+    this.form.weighing = false;
+    this.keepOfferedChoices();
   };
 
   // Read again after a request changed while it was shown, the batch keeps
@@ -1245,6 +1303,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     ticked: Set<string>;
   }) => {
     this.page.state = { name: 'loading' };
+    this.weighings++;
+    this.form.weighed = undefined;
+    this.form.weighing = false;
     let { config } = this.args.api;
     try {
       let request = contextRequest(this.opened);
@@ -1320,6 +1381,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             : new Set(keys);
       this.page.state = { name: 'choosing', batch, context };
       this.args.api.visit.loaded();
+      await this.weigh();
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
