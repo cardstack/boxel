@@ -234,6 +234,84 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('a PATCH waiting for in-flight indexing does not hold its file locks', async function (assert) {
+      assert.timeout(15000);
+      // The wait is for other writers' indexing, which needs no exclusivity
+      // over this card's file. Another writer of the same file — one that
+      // does not wait — gets through while the first is still waiting, and the
+      // first then stages over what it wrote.
+      let gate = new Deferred<void>();
+      let drained = false;
+      gate.promise.then(() => (drained = true));
+      let restore = stubGate(
+        realm,
+        'incrementalIndexingAffectingStaging',
+        () => (drained ? undefined : gate.promise),
+      );
+      try {
+        let waiting = false;
+        let waitingPatch = request
+          .patch('/person-1')
+          .send({
+            data: {
+              type: 'card',
+              attributes: { lastName: 'Waited' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .then((response) => {
+            waiting = true;
+            return response;
+          });
+        await resolveAfter(WAIT_OBSERVATION_MS);
+
+        let other = await request
+          .patch('/person-1')
+          .send({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Durian' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set(SKIP_INDEX_WAIT_HEADER, 'true');
+        assert.strictEqual(
+          other.status,
+          200,
+          `the other writer of the file is answered — ${JSON.stringify(other.body)}`,
+        );
+        assert.false(
+          waiting,
+          'while the first writer is still waiting for the indexing',
+        );
+
+        gate.fulfill();
+        let response = await waitingPatch;
+        assert.strictEqual(
+          response.status,
+          200,
+          `HTTP 200 once the indexing settled — ${JSON.stringify(response.body)}`,
+        );
+        assert.deepEqual(
+          [
+            response.body.data.attributes?.firstName,
+            response.body.data.attributes?.lastName,
+          ],
+          ['Durian', 'Waited'],
+          'and the waiting write staged over the bytes the other one wrote',
+        );
+      } finally {
+        gate.fulfill();
+        restore();
+      }
+    });
+
     test('a PATCH does not wait for indexing that cannot move what it resolves', async function (assert) {
       assert.timeout(15000);
       // Every in-flight pass parked forever, qualifying or not. A write that

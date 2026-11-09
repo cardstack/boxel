@@ -351,6 +351,7 @@ import {
   type TargetRealm,
 } from './card-operations/explain.ts';
 import type { CallApiSender } from './card-operations/call-api.ts';
+import { withLocksAfterDrain } from './drain-before-locks.ts';
 import { requestDefinitionLookup } from './card-operations/request-definition-lookup.ts';
 import {
   assertTravelsInEnvelope,
@@ -5049,14 +5050,18 @@ export class Realm {
   // already held blocks on its own pinned pool connection. A batch does the
   // same thing one level up, holding the locks across every read it stages
   // from and the commit it hands them to.
+  //
+  // A writer that waits for in-flight indexing before it stages does that wait
+  // before taking the locks, not while holding them (see
+  // `#withFileWriteLocksAfterDrain`).
   async write(
     path: LocalPath,
     contents: string | Uint8Array,
     options?: WriteOptions,
   ): Promise<FileWriteResult> {
-    let results = await this.#dbAdapter.withFileWriteLocks(
-      this.url,
+    let results = await this.#withFileWriteLocksAfterDrain(
       [path],
+      options?.waitForIndex !== false,
       (releaseLocks) =>
         this._batchWriteUnlocked(new Map([[path, contents]]), {
           ...options,
@@ -5070,15 +5075,36 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this.#dbAdapter.withFileWriteLocks(
-      this.url,
+    return this.#withFileWriteLocksAfterDrain(
       [...files.keys()],
+      options?.waitForIndex !== false,
       (releaseLocks) =>
         this._batchWriteUnlocked(files, {
           ...options,
           onDurable: releaseLocks,
         }),
     );
+  }
+
+  // The file write locks, taken once the indexing the commit's gate would wait
+  // for has settled, when `drains` says the commit will wait for it. That gate
+  // runs inside the locks, so on its own it waits there, and a stalled pass
+  // then parks every other writer of these files behind this one for as long
+  // as the stall lasts. Draining first leaves the gate nothing to wait for in
+  // the common case; see `withLocksAfterDrain` for the re-check that keeps it
+  // so.
+  #withFileWriteLocksAfterDrain<T>(
+    paths: LocalPath[],
+    drains: boolean,
+    fn: (releaseLocks: () => void) => Promise<T>,
+  ): Promise<T> {
+    return withLocksAfterDrain({
+      drain: () =>
+        drains ? this.incrementalIndexingAffectingStaging() : undefined,
+      lock: (locked) =>
+        this.#dbAdapter.withFileWriteLocks(this.url, paths, locked),
+      run: fn,
+    });
   }
 
   private async _batchWriteUnlocked(
@@ -5457,6 +5483,11 @@ export class Realm {
       // reached twice rather than two stages, and they accumulate together —
       // a write that queued behind indexing it did not ask for spent that
       // time here however many gates it passed through.
+      //
+      // This gate runs with the write's file locks held. The writers that
+      // take those locks drain before taking them (`withLocksAfterDrain`),
+      // so what is left to wait for here is a pass that registered after
+      // their re-check, not the bulk of a stall.
       stageCursor?.mark('drain');
     }
     // Audited once the drain has settled what the realm resolves against and
@@ -6698,9 +6729,14 @@ export class Realm {
     // left out rather than refused: the precheck inside the lock is what
     // reports it, and locking nothing for a file this request cannot name
     // excludes nobody.
-    return await this.#dbAdapter.withFileWriteLocks(
-      this.url,
+    //
+    // Read before the locks, so a caller asking to wait for indexing has the
+    // in-flight passes its commit would wait for settled before it holds them.
+    let waitForIndex =
+      new URL(request.url).searchParams.get('waitForIndex') === 'true';
+    return await this.#withFileWriteLocksAfterDrain(
       atomicWritePaths,
+      waitForIndex,
       async () => {
         let atomicCheckErrors =
           await this.checkBeforeAtomicWrite(atomicOperations);
@@ -6809,8 +6845,6 @@ export class Realm {
             // currentWriteType === 'instance'` gate is always awaited,
             // so an instance's fileSerialization sees its module already
             // indexed.
-            let waitForIndex =
-              new URL(request.url).searchParams.get('waitForIndex') === 'true';
             writeResults = await this._batchWriteUnlocked(files, {
               clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
               serializeFile: true,
@@ -8591,9 +8625,7 @@ export class Realm {
             writeSizeType(localPath, content),
             localPath,
           ),
-        drainIndexing: async () => {
-          await this.incrementalIndexingAffectingStaging();
-        },
+        drainIndexing: () => this.incrementalIndexingAffectingStaging(),
         isIgnored: (url) => this.isIgnored(url),
         // Narrowed to the two documents a program reads values from, each
         // handed over whole. An error row is reported as no row: it describes
