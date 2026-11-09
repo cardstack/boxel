@@ -1,4 +1,4 @@
-import { waitFor, waitUntil, click } from '@ember/test-helpers';
+import { waitFor, waitUntil, click, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import {
@@ -211,6 +211,38 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     await click(`[data-test-past-session-options-button="${roomId}"]`);
     assert.dom('[data-test-past-sessions]').exists();
     await click('[data-test-message-field]');
+    assert.dom('[data-test-past-sessions]').doesNotExist();
+  });
+
+  test('a past-sessions list opened while the panel loads its rooms stays open', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let panelService = getService('ai-assistant-panel-service');
+    panelService.closePanel();
+    await settled();
+
+    // Open the list before the panel has selected its room, as a click on the
+    // Past Sessions button does while it shows its loading spinner.
+    let opening = panelService.openPanel();
+    panelService.displayPastSessions();
+    await opening;
+    await settled();
+
+    assert.dom(`[data-test-room="${roomId}"]`).exists();
+    assert.dom('[data-test-past-sessions]').exists();
+    assert.dom(`[data-test-enter-room="${roomId}"]`).exists();
+  });
+
+  test('the past-sessions list is closed when the panel opens', async function (assert) {
+    await renderAiAssistantPanel();
+    let panelService = getService('ai-assistant-panel-service');
+    await click('[data-test-past-sessions-button]');
+    assert.dom('[data-test-past-sessions]').exists();
+
+    panelService.closePanel();
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-settled]');
+
     assert.dom('[data-test-past-sessions]').doesNotExist();
   });
 

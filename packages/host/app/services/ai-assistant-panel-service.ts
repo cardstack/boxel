@@ -240,6 +240,11 @@ export default class AiAssistantPanelService extends Service {
     // user may have switched or the persisted room may have changed while
     // closed. (ensureRoomsLoaded()'s "leave the current room alone" guard is
     // only for the passive session-start hook.)
+    //
+    // The panel opens with the past-sessions list closed. The room that
+    // loadRoomsTask then selects leaves the list as it is, so a list the user
+    // opens while the rooms load stays open.
+    this.hidePastSessions();
     return this.loadRoomsTask.perform();
   }
 
@@ -724,15 +729,17 @@ export default class AiAssistantPanelService extends Service {
           }
         }
       }
+      // The panel selects this room on its own, so it doesn't close a
+      // past-sessions list the user opened while the rooms were loading.
       if (roomToEnter) {
-        this.enterRoom(roomToEnter.roomId);
+        this.enterRoom(roomToEnter.roomId, false);
         return;
       }
     }
 
     let latestRoom = this.latestRoom;
     if (latestRoom) {
-      this.enterRoom(latestRoom.roomId);
+      this.enterRoom(latestRoom.roomId, false);
       return;
     }
 
