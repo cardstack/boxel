@@ -337,9 +337,9 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
   // advisory lock or a live lease: that winner finished (and its notification
   // was lost) or died, so the waiter's re-read either finds the row or does
   // the work itself. A winner still holding either is still working and
-  // notifies on the reconnected connection. Waking its waiters early would cost them: a
-  // definition lookup spends one of its few iterations, and a module
-  // transpile, which does not wait again, starts a duplicate of the
+  // notifies on the reconnected connection. Waking its waiters early would
+  // cost them: a definition lookup spends one of its few iterations, and a
+  // module transpile, which does not wait again, starts a duplicate of the
   // winner's work.
   //
   // A bigint advisory lock appears in pg_locks as its high 32 bits in

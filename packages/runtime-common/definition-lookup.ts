@@ -65,7 +65,7 @@ export const MODULE_CACHE_INVALIDATED_CHANNEL = 'module_cache_invalidated';
 // Postgres caps NOTIFY payloads at 8000 bytes; stay well under so JSON
 // encoding overhead and pathological URL lengths don't blow the limit.
 const NOTIFY_PAYLOAD_BUDGET = 7000;
-// Postgres NOTIFY channel for cross-instance prerender-coalesce wakeups
+// Postgres NOTIFY channel for cross-instance prerender-coalesce wakeups.
 // The winner for a given coalesce key emits this notify (with
 // the key's hash as payload) once its populate is over: a definition
 // populate after its persist has committed, a lock-holding populate in the
