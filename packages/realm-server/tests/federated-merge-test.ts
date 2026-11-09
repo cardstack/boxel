@@ -415,7 +415,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(short(doc), ['a2', 'b2', 'b1', 'a1']);
       assert.deepEqual(
-        doc.data.map((e) => e.meta?._rerank),
+        doc.data.map((e) => (e.meta as Record<string, unknown>)?._rerank),
         [4, 3, 2, 1],
       );
       assert.true(
