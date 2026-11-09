@@ -16,7 +16,8 @@ import { spaceDimensions } from './vector-space.ts';
 // `field` is the vector field's schema path; `item` is the stable id of the
 // list item that holds it (absent or empty for a single field); `space` is
 // the full space string (vector-space.ts); `values` is the vectorizer's
-// output as float32, little-endian, base64. The indexer loads a card's
+// output as float32, little-endian, base64, or, for a vector that was only
+// ever kept quantized, int8 with `encoding: "int8"` and its `scale`. The indexer loads a card's
 // sidecar into `boxel_index_vectors` with the card's row.
 //
 // `.vectors.jsonl` is a reserved suffix. A sidecar belongs to its card: it is
@@ -51,6 +52,10 @@ export interface VectorSidecarLine {
   sourceHash?: string;
   credits?: number;
   at?: string;
+  // float32 (the default) or int8 with its scale, for a vector that was
+  // quantized when it was written.
+  encoding?: 'float32' | 'int8';
+  scale?: number;
   values: string;
 }
 
@@ -125,15 +130,32 @@ export function parseVectorSidecar(text: string): {
       );
       continue;
     }
+    // Values are the vectorizer's output as float32. A vector that only ever
+    // existed as int8 (quantized when it was written) may stay int8 with its
+    // scale: widening it to float32 would quadruple its size and add no
+    // precision.
+    let encoding = line.encoding ?? 'float32';
+    if (encoding !== 'float32' && encoding !== 'int8') {
+      fail('invalid-sidecar-line', 'encoding is float32 or int8');
+      continue;
+    }
+    if (
+      encoding === 'int8' &&
+      (typeof line.scale !== 'number' || !Number.isFinite(line.scale))
+    ) {
+      fail('invalid-sidecar-line', 'an int8 line needs its scale');
+      continue;
+    }
     let components: Float32Array;
     try {
       components = decodeVector({
         dims: 0,
-        encoding: 'float32',
+        encoding,
+        ...(encoding === 'int8' ? { scale: line.scale } : {}),
         data: line.values,
       } as any);
     } catch {
-      fail('invalid-sidecar-line', 'values are not base64 float32');
+      fail('invalid-sidecar-line', `values are not base64 ${encoding}`);
       continue;
     }
     let dims = components.length;
