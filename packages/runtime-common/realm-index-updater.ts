@@ -780,6 +780,15 @@ export class RealmIndexUpdater {
         this.#incrementalIndexingDeferreds.delete(indexingDeferred);
       }
     })();
+    // A caller that awaits `settled` still sees the failure. One that fires
+    // and forgets (a file-watcher pass) must not leave the rejection
+    // unhandled: a pass cancelled through `_cancel-indexing-job` used to take
+    // the whole realm server down with it.
+    settled.catch((e: any) =>
+      this.#log.warn(
+        `incremental index of ${this.realmURL.href} did not complete: ${e?.message ?? e}`,
+      ),
+    );
     return { settled };
   }
 
