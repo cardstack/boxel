@@ -32,11 +32,12 @@ import {
   windowContext,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
+import { Button } from '@cardstack/pretui/components/button';
+import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import Tag from '@cardstack/boxel-icons/tag';
+import { Input } from '@cardstack/pretui/components/input';
 import { navigation } from '../navigation.js';
 import {
   addressAbove,
@@ -61,7 +62,7 @@ import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { cliOpenedFor, contextRequest, openedFor } from './opened-for.ts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 // The app that starts out chosen: the only one offered, or the one app that
 // is the workspace's or Boxel's, which the realm server lists ahead of the
@@ -112,14 +113,16 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
               />
             {{/if}}
             {{#if this.choosing.connection}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Connection'
                 @icon={{KeyRound}}
                 data-test-connect-connection
               >
                 <KeyTile @key={{this.choosing.connection}} />
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.choosing.clients.length}}
               <ClientPicker
@@ -129,22 +132,25 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
                 @realmName={{this.choosing.context.realm.name}}
               />
               {{#unless this.choosing.connection}}
-                <FieldContainer
-                  @tag='label'
+                <Field
+                  @reserveMessage={{false}}
+                  @orientation='horizontal'
                   @label='Name'
                   @icon={{Tag}}
                   data-test-connect-field='name'
+                  as |controlId|
                 >
-                  <BoxelInput
+                  <Input
+                    @controlId={{controlId}}
                     @type='text'
-                    @autocomplete='off'
+                    autocomplete='off'
                     @placeholder='A name you’ll recognize, such as “Work GitHub”'
                     @value={{this.form.name}}
                     @onInput={{this.setName}}
                     name='connection-name'
                     data-test-connect-name
                   />
-                </FieldContainer>
+                </Field>
               {{/unless}}
             {{else}}
               <div class='no-clients' data-test-connect-no-clients>
@@ -163,16 +169,16 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
               </div>
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
             {{#if this.backToKeys}}
               <Button
                 type='button'
-                @kind='secondary'
+                @variant='secondary'
                 data-test-connect-back
                 {{on 'click' this.back}}
               >Back to your keys</Button>
@@ -180,7 +186,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{#if this.choosing.clients.length}}
               <Button
                 type='submit'
-                @kind='primary'
+                @variant='primary'
                 @disabled={{this.submitDisabled}}
                 @loading={{this.form.connecting}}
                 data-test-connect-submit
@@ -209,12 +215,6 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
         overflow-wrap: anywhere;
-      }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
       }
     </style>
   </template>

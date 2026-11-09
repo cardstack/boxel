@@ -68,10 +68,10 @@ export function isAbsoluteIdentifier(identifier: string): boolean {
 const RRI_SYNTHETIC_ORIGIN = 'https://rri.invalid';
 
 // Resolve a (possibly relative) reference against `relativeTo`, in RRI space,
-// without consulting realm mappings — the inverse of `relativeReference` in
-// `url.ts`. Identifiers are already in canonical RRI form once they reach here
-// (a card's own id / a relationship `links.self`), so this is pure
-// form-preserving path math:
+// without consulting realm mappings — the inverse of `relativeReference`.
+// Identifiers are already in canonical RRI form once they reach here (a card's
+// own id / a relationship `links.self`), so this is pure form-preserving path
+// math:
 //   - an absolute reference (any `<scheme>:` URL, or `@scope/name` prefix form)
 //     is already canonical — returned unchanged;
 //   - a relative reference is joined onto the base. A URL-form base uses the

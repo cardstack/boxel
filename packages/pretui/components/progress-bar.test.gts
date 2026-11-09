@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { ProgressBar } from './progress-bar';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;
@@ -288,7 +289,7 @@ module('Pretui | components/progress-bar', function (hooks) {
       assert.strictEqual(el.getAttribute('aria-valuemax'), '0', `${sel}: the range is empty`);
       let fill = el.querySelector('.pretui-progress-fill') as HTMLElement;
       assert.strictEqual(px(fill, 'width'), '0%', `${sel}: the fill is empty, neither full nor NaN%`);
-      assert.strictEqual(px(fill, 'min-width'), '0', `${sel}: an empty fill has no minimum`);
+      assert.strictEqual(px(fill, 'min-width'), '0px', `${sel}: an empty fill has no minimum`);
       assert.strictEqual(
         el.querySelector('.pretui-progress-count')?.textContent?.trim(),
         '0%',
@@ -346,7 +347,7 @@ module('Pretui | components/progress-bar', function (hooks) {
 
   test('gives a zero-width fill no minimum, so an empty bar reads as empty', async function (assert) {
     await render(<template><ProgressBar @value={{0}} /></template>);
-    assert.strictEqual(px(q('.pretui-progress-fill'), 'min-width'), '0');
+    assert.strictEqual(px(q('.pretui-progress-fill'), 'min-width'), '0px');
   });
 
   test('switches to steps for a small discrete total with a count', async function (assert) {
@@ -374,5 +375,16 @@ module('Pretui | components/progress-bar', function (hooks) {
   test('honours an explicit @steps against the count heuristic', async function (assert) {
     await render(<template><ProgressBar @value={{1}} @max={{4}} @steps={{true}} /></template>);
     assert.strictEqual(all('.pretui-progress-step').length, 4, 'stepped without a count');
+  });
+
+  test('sets the fill and the hue through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(<template><ProgressBar @value={{40}} @hue='var(--warning)' /></template>),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.strictEqual(bar().style.getPropertyValue('--pretui-progress-hue'), 'var(--warning)');
+    let fill = q('.pretui-progress-fill');
+    assert.strictEqual(fill.style.getPropertyValue('width'), '40%');
+    assert.strictEqual(fill.style.getPropertyValue('min-width'), '0.25rem');
   });
 });

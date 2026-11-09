@@ -1,7 +1,7 @@
 // Pretui — Meter: a discrete bar meter that always ships a label (Law 4).
 import Component from '@glimmer/component';
-import { htmlSafe } from '@ember/template';
-import { hueStyle } from '../internal/ink';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
+import { cssValue } from '../pretui-css';
 
 export interface MeterSignature {
   Args: {
@@ -16,13 +16,19 @@ export interface MeterSignature {
 }
 
 export class Meter extends Component<MeterSignature> {
-  get bars(): { on: boolean; style: ReturnType<typeof htmlSafe> }[] {
+  // Each bar's height and the meter's hue are written through the CSSOM by
+  // `keepStyle`, so the meter renders no `style` attribute (the secure
+  // origin's policy refuses one).
+  get bars(): { on: boolean; height: KeptProperty[] }[] {
     let segments = this.segmentsCount;
     let heights = this.args.heights ?? [6, 10, 14];
-    let out = [];
+    let out: { on: boolean; height: KeptProperty[] }[] = [];
     for (let i = 0; i < segments; i++) {
       let h = heights[i] ?? heights[heights.length - 1];
-      out.push({ on: i < this.levelNow, style: htmlSafe(`height: ${h / 16}rem`) });
+      out.push({
+        on: i < this.levelNow,
+        height: [{ property: 'height', value: `${h / 16}rem`, strength: 'arg' }],
+      });
     }
     return out;
   }
@@ -43,8 +49,16 @@ export class Meter extends Component<MeterSignature> {
     let level = Number.isFinite(this.args.level) ? Math.ceil(this.args.level) : 0;
     return Math.max(0, Math.min(level, this.segmentsCount));
   }
-  get style() {
-    return hueStyle('--pretui-meter-hue', this.args.hue);
+  // `@hue` is a caller string, so it goes through the kit-wide allowlist
+  // first.
+  get hue(): KeptProperty[] {
+    return [
+      {
+        property: '--pretui-meter-hue',
+        value: cssValue(this.args.hue),
+        strength: 'arg',
+      },
+    ];
   }
   /**
    * A FALLBACK ROLE LIST, which `role` has always accepted: the first token
@@ -64,7 +78,7 @@ export class Meter extends Component<MeterSignature> {
   <template>
     <span
       class='pretui-meter'
-      style={{this.style}}
+      {{keepStyle this.hue}}
       role={{this.meterRole}}
       aria-valuenow={{this.levelNow}}
       aria-valuemin='0'
@@ -75,7 +89,7 @@ export class Meter extends Component<MeterSignature> {
     >
       <span class='pretui-meter-bars'>
         {{#each this.bars as |bar|}}
-          <span class='pretui-meter-bar' data-on={{if bar.on 'true'}} style={{bar.style}}></span>
+          <span class='pretui-meter-bar' data-on={{if bar.on 'true'}} {{keepStyle bar.height}}></span>
         {{/each}}
       </span>
       {{#if @label}}<span class='pretui-meter-label'>{{@label}}</span>{{/if}}

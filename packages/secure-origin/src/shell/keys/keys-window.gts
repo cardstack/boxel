@@ -1,7 +1,9 @@
 // The secure window's key pages, around whichever one is open: a bar with the
 // Boxel logo, what the window is for and a Close button, and the page under
 // it while the window has a session of its own, beneath the trail of key
-// pages the window came through to reach it (`breadcrumbs.gts`).
+// pages the window came through to reach it (`trail.ts`): each page above
+// this one is a link back to it as it was opened, and this page is last,
+// unlinked. A page reached from none has no trail.
 //
 // The key pages never sign in, as they never sign out: the window's session
 // is the one signing in to Boxel on this origin leaves here. Without one, or
@@ -28,6 +30,7 @@ import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
+import { Breadcrumb } from '@cardstack/pretui/components/breadcrumb';
 
 import {
   liveSession,
@@ -36,7 +39,7 @@ import {
 } from '../../security/session.js';
 import type { Session } from '../../security/session.js';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import BoxelIcon from '../../components/icons/boxel-icon.gts';
 import IconX from '../../components/icons/icon-x.gts';
 import { handToCli } from '../../security/cli-handoff.js';
@@ -45,8 +48,8 @@ import { navigation } from '../navigation.js';
 import { pageAwaitsData } from '../telemetry.ts';
 import type { PageVisit } from '../../telemetry/instrument.ts';
 
-import Breadcrumbs from './breadcrumbs.gts';
 import EditPage from './edit-page.gts';
+import { goBackTo, trail, type Crumb } from './trail.ts';
 
 export type Config = ReturnType<typeof readConfig>;
 
@@ -96,8 +99,8 @@ export default class KeysWindow extends Component<Signature> {
         <span class='bar-title' data-test-keys-window-title>{{@title}}</span>
         <Button
           class='close'
-          @kind='text-only'
-          @size='small'
+          @variant='ghost'
+          @size='s'
           aria-label='Close'
           data-test-keys-close
           {{on 'click' this.close}}
@@ -106,7 +109,15 @@ export default class KeysWindow extends Component<Signature> {
           >Close</span></Button>
       </header>
       {{#if (this.is 'signed-in')}}
-        <Breadcrumbs />
+        {{#if this.hasTrail}}
+          <Breadcrumb
+            class='trail'
+            data-theme='dark'
+            @items={{this.crumbs}}
+            @onSelect={{this.goBack}}
+            data-test-breadcrumbs
+          />
+        {{/if}}
       {{/if}}
       <div class='body' data-test-keys-panel>
         {{#if (this.is 'checking')}}
@@ -128,7 +139,7 @@ export default class KeysWindow extends Component<Signature> {
               then open your keys from there.</:intro>
             <:actions>
               <Button
-                @kind='primary'
+                @variant='primary'
                 data-test-keys-signed-out-close
                 {{on 'click' this.close}}
               >Close this window</Button>
@@ -175,8 +186,12 @@ export default class KeysWindow extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
       .close {
-        --boxel-button-text-color: var(--boxel-light);
-        gap: var(--boxel-sp-4xs);
+        color: var(--boxel-light);
+      }
+      /* The trail sits on the purple, so it takes the dark theme's inks, as
+         AuthContainer does on the same background. */
+      .trail {
+        padding: 0 var(--boxel-sp) var(--boxel-sp-xs);
       }
       .close-icon {
         --icon-color: var(--boxel-light);
@@ -185,17 +200,25 @@ export default class KeysWindow extends Component<Signature> {
       }
       /* On the white panel the theme's teal is 1.31:1, too faint for an
          indicator, so focus rings, whether drawn in --ring or as the global
-         --boxel-outline, take the primary ink (4.95:1) there. A checkbox's
-         edge is the muted foreground unticked, which marks the box clearly,
-         and the primary ink ticked, around the teal fill. The bar keeps the
-         teal, which reads on the purple. */
+         --boxel-outline, take the primary ink (4.95:1) there. Pret UI's
+         checkboxes and radio buttons are edged in the muted foreground
+         unchosen, which marks them clearly where the theme's input edge is
+         too faint, and in the primary ink chosen, around a checkbox's teal
+         fill; a chosen radio is filled with the primary ink, under its white
+         dot, and a chosen radio tile is ringed in it. The bar keeps
+         the teal, which reads on the purple. */
       .body {
         --ring: var(--primary-ink);
         --boxel-outline-color: var(--ring);
         --boxel-outline: var(--boxel-outline-width) var(--boxel-outline-style)
           var(--boxel-outline-color);
-        --boxel-checkbox-border-color: var(--muted-foreground);
-        --boxel-checkbox-checked-border-color: var(--primary-ink);
+        --pretui-control-border: var(--muted-foreground);
+        --pretui-control-checked-border: var(--primary-ink);
+        --pretui-radio-checked-fill: var(--primary-ink);
+        --pretui-choice-card-tone: var(--primary-ink);
+        /* Pret UI's controls set their text in the panel's sizes. */
+        --text-ui-md: var(--boxel-font-size-sm);
+        --text-ui-sm: var(--boxel-font-size-xs);
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -221,6 +244,8 @@ export default class KeysWindow extends Component<Signature> {
   private visit = pageAwaitsData();
   private stopListening: (() => void) | undefined;
   private signedInAs: string | undefined;
+  // Read from the address once, when the window first shows the trail.
+  private trailCrumbs: Crumb[] | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -235,6 +260,22 @@ export default class KeysWindow extends Component<Signature> {
   }
 
   private is = (state: State) => this.page.state === state;
+
+  private get crumbs(): Crumb[] {
+    return (this.trailCrumbs ??= trail());
+  }
+
+  private get hasTrail() {
+    return this.crumbs.length > 1;
+  }
+
+  // A crumb goes where `goBackTo` sends it, back through the browser's
+  // history or by loading its address in this page's place, never by
+  // following its link, which would add a page to the history.
+  private goBack = (crumb: Crumb, event: MouseEvent) => {
+    event.preventDefault();
+    goBackTo(crumb, this.crumbs);
+  };
 
   private get api(): KeysWindowAPI {
     return {

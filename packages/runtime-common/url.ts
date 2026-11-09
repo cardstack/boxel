@@ -8,9 +8,8 @@ import {
 } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
-// `resolveRRIReference` reads only an identifier's spelling, so it lives with
-// the other form helpers; it is re-exported here beside `relativeReference`,
-// its inverse.
+// Defined beside the other identifier helpers, a leaf module that
+// dependency-light consumers such as boxel-cli can import.
 export { resolveRRIReference } from './realm-identifiers.ts';
 
 export function maybeURL(

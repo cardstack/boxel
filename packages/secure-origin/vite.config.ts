@@ -10,6 +10,7 @@ import { buildInputs } from './build/build-inputs.ts';
 import { buildRecord } from './build/build-record.ts';
 import { importAllowlist } from './build/import-allowlist.ts';
 import { layerOrderFirst } from './build/layer-order.ts';
+import { modulePackage } from './build/module-package.ts';
 import { probeOutDir } from './build/probe.ts';
 import { relativeModuleNames } from './build/relative-module-names.ts';
 
@@ -141,40 +142,41 @@ export default defineConfig(({ mode }) => ({
         // Chunks the pages share get fixed names, so the build record and the
         // files the realm server serves don't change name with whichever
         // module sorts first. `shared` holds Ember and the components the
-        // pages are built from, where more than one entry reaches them, so the
-        // credential frame loads none of the shell's own components; `layers`
+        // pages are built from, where more than one entry keeps them, so the
+        // credential frame loads none of the shell's own components, nor the
+        // part of a dependency only the shell uses; `layers`
         // holds only the order of the pages' cascade layers
         // (`src/styles/layers.css`), which every entry imports and
         // `layerOrderFirst` links ahead of the page's other stylesheets.
-        manualChunks(id, { getModuleInfo }) {
-          if (id.split('?')[0].endsWith('/src/styles/layers.css')) {
-            return 'layers';
-          }
-          if (
-            !id.includes('/node_modules/') &&
-            !/\/src\/(components|helpers|modifiers)\//.test(id)
-          ) {
-            return undefined;
-          }
-          let entries = new Set<string>();
-          let seen = new Set<string>();
-          let pending = [id];
-          while (pending.length > 0) {
-            let moduleId = pending.pop()!;
-            if (seen.has(moduleId)) {
-              continue;
-            }
-            seen.add(moduleId);
-            let info = getModuleInfo(moduleId);
-            if (info?.isEntry) {
-              entries.add(moduleId);
-            }
-            pending.push(
-              ...(info?.importers ?? []),
-              ...(info?.dynamicImporters ?? []),
-            );
-          }
-          return entries.size > 1 ? 'shared' : undefined;
+        codeSplitting: {
+          groups: [
+            {
+              name: 'layers',
+              test: (id: string) =>
+                id.split('?')[0].endsWith('/src/styles/layers.css'),
+              priority: 2,
+            },
+            {
+              name: 'shared',
+              // Dependencies, Pret UI, boxel-ui and boxel-icons (this
+              // repository's other packages) included, and this package's
+              // components, helpers and modifiers.
+              test: (id: string) => {
+                let found = modulePackage(id);
+                return (
+                  id.includes('/node_modules/') ||
+                  (found.virtual === undefined && found.workspace) ||
+                  /\/src\/(components|helpers|modifiers)\//.test(id)
+                );
+              },
+              // Counted on the modules each entry keeps once unused exports
+              // are dropped, so a module the shell reaches through a barrel
+              // the credential fields also import (boxel-ui's `components`)
+              // stays in the shell's chunk.
+              minShareCount: 2,
+              priority: 1,
+            },
+          ],
         },
       },
     },

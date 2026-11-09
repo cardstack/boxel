@@ -7,7 +7,7 @@ Multi-line free text. Reach for it when the value is prose — a note, a descrip
 ```
 @value?, @placeholder?, @invalid?, @disabled?, @controlId?
 @onInput?(value: string)
-@helperText?, @errorMessage?, @required?, @optional?
+@helperText?, @errorMessage?, @describedBy?, @required?, @optional?
 ```
 
 Identical to **Input** minus its type arg, and that symmetry is deliberate: the two are interchangeable at a call site, so a **FormField** can swap one for the other without the surrounding code changing. `@onInput` receives the string, not the event; `@controlId` comes down from the labelling wrapper.

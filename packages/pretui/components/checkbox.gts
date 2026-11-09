@@ -7,6 +7,8 @@ import { emit, firstDefined } from '../pretui-primitives';
 export interface CheckboxSignature {
   Args: {
     label?: string;
+    /** the input's id, so a Field's label points at it */
+    controlId?: string;
     checked?: boolean;
     defaultChecked?: boolean;
     disabled?: boolean;
@@ -16,6 +18,10 @@ export interface CheckboxSignature {
     selected?: boolean;
     isDisabled?: boolean;
     onChange?: (checked: boolean) => void;
+  };
+  Blocks: {
+    /** the label's content, when it needs markup; wins over @label */
+    default: [];
   };
   Element: HTMLLabelElement;
 }
@@ -49,11 +55,12 @@ export class Checkbox extends Component<CheckboxSignature> {
       <input
         type='checkbox'
         class='pretui-checkbox'
+        id={{@controlId}}
         checked={{this.on}}
         disabled={{this.disabled}}
         {{on 'change' this.handleChange}}
       />
-      {{#if @label}}{{@label}}{{/if}}
+      {{#if (has-block)}}{{yield}}{{else if @label}}{{@label}}{{/if}}
     </label>
     <style scoped>
       @layer PretComponent {
@@ -91,7 +98,11 @@ export class Checkbox extends Component<CheckboxSignature> {
         .pretui-checkbox:checked {
           background: var(--primary);
           box-shadow:
-            0 0 0 1px color-mix(in oklch, var(--primary) 70%, var(--border)),
+            0 0 0 1px
+              var(
+                --pretui-control-checked-border,
+                color-mix(in oklch, var(--primary) 70%, var(--border))
+              ),
             var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
         }
         .pretui-checkbox:checked::before {
@@ -116,6 +127,16 @@ export class Checkbox extends Component<CheckboxSignature> {
         .pretui-checkbox:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
+        }
+        /* forced colors drop the painted edge and tick, so the platform's
+           checkbox, drawn in the system colors, stands in there */
+        @media (forced-colors: active) {
+          .pretui-checkbox {
+            appearance: auto;
+          }
+          .pretui-checkbox:checked::before {
+            content: none;
+          }
         }
       }
     </style>

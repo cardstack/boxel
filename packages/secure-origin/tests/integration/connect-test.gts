@@ -350,16 +350,16 @@ module('Integration | connecting an account', function (hooks) {
       assert.dom(`${own} [data-test-client-owner]`).hasText('Your app');
 
       assert
-        .dom(`${platform} input`)
+        .dom(`[data-test-pretui-choice-card]:has(${platform}) input`)
         .isChecked('Boxel’s app, listed ahead of the user’s own, is chosen');
       assert.dom('[data-test-connect-name]').hasValue('GitHub');
       assert.dom('[data-test-connect-back]').doesNotExist();
-      await click(`${own} input`);
+      await click(`[data-test-pretui-choice-card]:has(${own}) input`);
       assert
         .dom('[data-test-connect-name]')
         .hasValue('My Forge App', 'named after the app until a name is typed');
       await fillIn('[data-test-connect-name]', ' Work GitHub ');
-      await click(`${platform} input`);
+      await click(`[data-test-pretui-choice-card]:has(${platform}) input`);
       assert
         .dom('[data-test-connect-name]')
         .hasValue(' Work GitHub ', 'a typed name stays');
@@ -399,7 +399,9 @@ module('Integration | connecting an account', function (hooks) {
         .dom(`${shared} [data-test-client-no-permissions]`)
         .hasText('No extra permissions requested');
       assert.dom(`${shared} [data-test-client-permissions]`).doesNotExist();
-      assert.dom(`${shared} input`).isChecked();
+      assert
+        .dom(`[data-test-pretui-choice-card]:has(${shared}) input`)
+        .isChecked();
       await click('[data-test-connect-submit]');
       assert.deepEqual(connectRequest().data.attributes, {
         client: SHARE_REF,
@@ -451,7 +453,12 @@ module('Integration | connecting an account', function (hooks) {
           await waitFor('[data-test-connect-form]');
           assert.deepEqual(
             [...document.querySelectorAll('[data-test-client-choice]')]
-              .filter((choice) => choice.querySelector('input')?.checked)
+              .filter(
+                (choice) =>
+                  choice
+                    .closest('[data-test-pretui-choice-card]')
+                    ?.querySelector('input')?.checked,
+              )
               .map((choice) => choice.getAttribute('data-test-client-choice')),
             expected,
           );
@@ -476,7 +483,9 @@ module('Integration | connecting an account', function (hooks) {
       await waitFor('[data-test-connect-form]');
       assert.dom('[data-test-opened-for]').doesNotExist();
       assert
-        .dom('[data-test-client-choice="GitHub"] input')
+        .dom(
+          '[data-test-pretui-choice-card]:has([data-test-client-choice="GitHub"]) input',
+        )
         .isChecked('a single app is chosen already');
       assert.dom('[data-test-connect-name]').hasValue('GitHub');
       await click('[data-test-connect-back]');
@@ -495,7 +504,9 @@ module('Integration | connecting an account', function (hooks) {
       visitShell('connect');
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      await click('[data-test-client-choice="GitHub"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-client-choice="GitHub"]) input',
+      );
       await click('[data-test-connect-submit]');
       await waitFor('[data-test-keys-error]');
       assert
@@ -513,9 +524,11 @@ module('Integration | connecting an account', function (hooks) {
         await render(ConnectPage);
         await waitFor('[data-test-connect-form]');
         assert.deepEqual(
-          [...document.querySelectorAll('[data-test-breadcrumbs] li')].map(
-            (li) => li.textContent!.replace('›', '').trim(),
-          ),
+          [
+            ...document.querySelectorAll(
+              '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-label]',
+            ),
+          ].map((crumb) => crumb.textContent!.trim()),
           ['Share key', 'Your keys', 'Connect'],
         );
         assert
@@ -537,12 +550,18 @@ module('Integration | connecting an account', function (hooks) {
       );
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      assert.dom('[data-test-breadcrumbs] li:last-child').hasText('Reconnect');
-      assert.dom('[data-test-breadcrumb="0"]').hasText('Replace key');
+      assert
+        .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-current]')
+        .hasText('Reconnect');
+      assert
+        .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a')
+        .hasText('Replace key');
       assert
         .dom('[data-test-connect-back]')
         .doesNotExist('the trail is the way back');
-      await click('[data-test-breadcrumb="0"]');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/${replace}` },
       ]);
@@ -560,9 +579,11 @@ module('Integration | connecting an account', function (hooks) {
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
       assert.deepEqual(
-        [...document.querySelectorAll('[data-test-breadcrumbs] li')].map((li) =>
-          li.textContent!.replace('›', '').trim(),
-        ),
+        [
+          ...document.querySelectorAll(
+            '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-label]',
+          ),
+        ].map((crumb) => crumb.textContent!.trim()),
         ['Swap key', 'Your keys', 'Reconnect'],
       );
       await click('[data-test-connect-back]');
@@ -587,7 +608,9 @@ module('Integration | connecting an account', function (hooks) {
         .dom('[data-test-connect-name]')
         .doesNotExist('a connection keeps its name');
       assert
-        .dom('[data-test-client-choice="GitHub"] input')
+        .dom(
+          '[data-test-pretui-choice-card]:has([data-test-client-choice="GitHub"]) input',
+        )
         .isChecked('the app it was made through is chosen already');
       assert.dom('[data-test-connect-submit]').hasText('Reconnect');
       assert.strictEqual(
@@ -864,7 +887,9 @@ module('Integration | connecting an account', function (hooks) {
       visitShell(`connect#${fragment}`);
       await render(ConnectPage);
       await waitFor('[data-test-connect-form]');
-      await click('[data-test-client-choice="GitHub"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-client-choice="GitHub"]) input',
+      );
       let before = navigations.length;
       await click('[data-test-connect-submit]');
       await waitUntil(() => navigations.length > before);
@@ -938,7 +963,11 @@ module('Integration | connecting an account', function (hooks) {
       assert.dom('[data-test-connected-keys]').doesNotExist();
       assert
         .dom('[data-test-connected-approval]')
-        .hasClass(/primary/, 'going back to the approval leads');
+        .hasAttribute(
+          'data-tone',
+          'primary',
+          'going back to the approval leads',
+        );
       await click('[data-test-connected-approval]');
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/approve#${APPROVAL}` },
@@ -1136,13 +1165,13 @@ module('Integration | connecting an account', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       assert.dom('[data-test-oauth-client-id-input]').doesNotExist();
-      await click('[data-test-radio-choice="oauth-client"] input');
-      await click('[data-test-radio-choice="other"] input');
+      await click('[data-test-pretui-radio-option="oauth-client"] input');
+      await click('[data-test-pretui-radio-option="other"] input');
       assert.dom('[data-test-oauth-github-steps]').doesNotExist();
       assert.dom('[data-test-key-field="value"]').includesText('Client secret');
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       assert
-        .dom('[data-test-radio-choice="client_secret_post"] input')
+        .dom('[data-test-pretui-radio-option="client_secret_post"] input')
         .isChecked('the secret goes in the request body unless told otherwise');
 
       await fillIn('[data-test-key-name]', 'Forge app');
@@ -1160,7 +1189,9 @@ module('Integration | connecting an account', function (hooks) {
         'https://forge.example/token',
       );
       await fillIn('[data-test-oauth-scopes]', ' read repo ');
-      await click('[data-test-radio-choice="client_secret_basic"] input');
+      await click(
+        '[data-test-pretui-radio-option="client_secret_basic"] input',
+      );
       await fillIn(
         '[data-test-oauth-api-hosts]',
         'https://api.forge.example/\n\n  https://uploads.forge.example/  \n',
@@ -1204,9 +1235,9 @@ module('Integration | connecting an account', function (hooks) {
       visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
-      await click('[data-test-radio-choice="oauth-client"] input');
+      await click('[data-test-pretui-radio-option="oauth-client"] input');
       assert
-        .dom('[data-test-radio-choice="github"] input')
+        .dom('[data-test-pretui-radio-option="github"] input')
         .isChecked('GitHub is the first choice');
       assert
         .dom('[data-test-oauth-github-steps]')
@@ -1241,10 +1272,10 @@ module('Integration | connecting an account', function (hooks) {
       visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
-      await click('[data-test-radio-choice="oauth-client"] input');
-      await click('[data-test-radio-choice="other"] input');
+      await click('[data-test-pretui-radio-option="oauth-client"] input');
+      await click('[data-test-pretui-radio-option="other"] input');
       assert.dom('[data-test-oauth-authorize-url]').exists();
-      await click('[data-test-radio-choice="client_credentials"] input');
+      await click('[data-test-pretui-radio-option="client_credentials"] input');
       assert.dom('[data-test-oauth-authorize-url]').doesNotExist();
       await fillIn('[data-test-key-name]', 'Robot app');
       await fillIn('[data-test-oauth-client-id-input]', 'robot-client-id');
