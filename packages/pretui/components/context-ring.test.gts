@@ -19,19 +19,21 @@ module('Pretui | components/context-ring', function (hooks) {
   test('names how full the context is, in words and counts', async function (assert) {
     await render(<template><ContextRing @used={{52000}} @limit={{200000}} /></template>);
     assert.strictEqual(root().getAttribute('role'), 'img');
-    assert.strictEqual(root().getAttribute('aria-label'), 'Context 26% used: 52k of 200k tokens');
-    assert.strictEqual(root().getAttribute('title'), root().getAttribute('aria-label'), 'the tooltip says the same');
+    assert.strictEqual(root().getAttribute('aria-label'), 'Context window 26% used: 52k of 200k tokens');
+    assert.dom('[role="tooltip"]').hasText('Context window 26% used: 52k of 200k tokens', 'the tooltip says the same');
     assert.strictEqual(root().dataset['warn'], undefined);
+    let tipId = document.querySelector('[role="tooltip"]')?.id;
+    assert.strictEqual(root().getAttribute('aria-labelledby'), tipId, 'the ring is named by its tooltip');
   });
 
   test('past the warning share it says "nearly full" in its name, not only in its colour', async function (assert) {
     await render(<template><ContextRing @used={{170000}} @limit={{200000}} @compact={{true}} /></template>);
     assert.strictEqual(root().dataset['warn'], 'true');
-    assert.strictEqual(root().getAttribute('aria-label'), 'Context 85% used, nearly full: 170k of 200k tokens');
-    assert.strictEqual(root().getAttribute('title'), root().getAttribute('aria-label'), 'compact mode keeps the warning in the tooltip');
+    assert.strictEqual(root().getAttribute('aria-label'), 'Context window 85% used, nearly full: 170k of 200k tokens');
+    assert.dom('[role="tooltip"]').hasText('Context window 85% used, nearly full: 170k of 200k tokens', 'compact mode keeps the warning in the tooltip');
 
     await render(<template><ContextRing @used={{60}} @limit={{100}} @warnAt={{0.5}} /></template>);
-    assert.strictEqual(root().getAttribute('aria-label'), 'Context 60% used, nearly full: 60 of 100 tokens', '@warnAt moves the threshold');
+    assert.strictEqual(root().getAttribute('aria-label'), 'Context window 60% used, nearly full: 60 of 100 tokens', '@warnAt moves the threshold');
   });
 
   test('a conversation larger than the window says it is over, not "100% used"', async function (assert) {
@@ -40,7 +42,7 @@ module('Pretui | components/context-ring', function (hooks) {
     assert.strictEqual(root().dataset['warn'], 'true', 'it keeps the attention colour');
     assert.strictEqual(
       root().getAttribute('aria-label'),
-      'Context full: 600k tokens, 472k more than the 128k this model holds. Earlier messages may be summarized when the next one is sent',
+      'Context window full: 600k tokens, 472k more than the 128k this model holds. Earlier messages may be summarized when the next one is sent',
     );
     assert.dom('[data-test-pretui-context-ring-pct]').hasText('Full');
 
@@ -52,7 +54,7 @@ module('Pretui | components/context-ring', function (hooks) {
     await render(<template><ContextRing @used={{128040}} @limit={{128000}} /></template>);
     assert.strictEqual(
       root().getAttribute('aria-label'),
-      'Context full: 128k tokens, 40 more than the 128k this model holds. Earlier messages may be summarized when the next one is sent',
+      'Context window full: 128k tokens, 40 more than the 128k this model holds. Earlier messages may be summarized when the next one is sent',
     );
   });
 
@@ -65,7 +67,7 @@ module('Pretui | components/context-ring', function (hooks) {
   test('in compact mode the tooltip alone says it is over', async function (assert) {
     await render(<template><ContextRing @used={{600000}} @limit={{128000}} @compact={{true}} /></template>);
     assert.dom('[data-test-pretui-context-ring-pct]').doesNotExist();
-    assert.true(root().getAttribute('title')?.startsWith('Context full: 600k tokens'));
+    assert.true(document.querySelector('[role="tooltip"]')?.textContent?.startsWith('Context window full: 600k tokens'));
   });
 
   test('an unknown limit is never over', async function (assert) {
