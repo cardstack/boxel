@@ -784,6 +784,8 @@ export class PgAdapter implements DBAdapter {
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
     await this.started;
+    // Work whose caller has already gone does not wait for a connection.
+    opts?.signal?.throwIfAborted();
     let { client, releaseTurn } = await this.#checkout();
     // A checked-out client's death is nobody's event: the pool removes its
     // own idle listener for the duration of the checkout, so the in-flight
@@ -794,12 +796,18 @@ export class PgAdapter implements DBAdapter {
       `executing sql: ${sql}, with bindings: ${loggableBindings(opts)}`,
     );
     try {
-      let { rows } = await client.query({
-        text: sql,
-        values: opts?.bind,
-      });
+      let { rows } = await this.#cancellable(client, opts?.signal, () =>
+        client.query({
+          text: sql,
+          values: opts?.bind,
+        }),
+      );
       return rows;
     } catch (e: any) {
+      if (opts?.signal?.aborted) {
+        // Cancelled on purpose: the caller has gone, and the statement with it.
+        throw opts.signal.reason ?? e;
+      }
       if (opts?.redactBindings) {
         // Postgres quotes the offending row or value in `detail` (and the
         // statement context in `where`) for constraint and type errors.
@@ -817,6 +825,54 @@ export class PgAdapter implements DBAdapter {
       stopRecording();
       client.release();
       releaseTurn();
+    }
+  }
+
+  // Run one statement on `client`, cancelling it in Postgres if `signal`
+  // aborts while it runs. The cancel goes over a connection of its own (the
+  // pool may be the very thing the abandoned work is holding), and it names
+  // the backend by pid, so this does not return until any cancel it sent has
+  // been answered: the client goes back to the pool only once no cancel aimed
+  // at it is still on its way, so the next statement it runs cannot be the one
+  // cancelled.
+  async #cancellable<T>(
+    client: PoolClient,
+    signal: AbortSignal | undefined,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    if (!signal) {
+      return await run();
+    }
+    signal.throwIfAborted();
+    let pid = (client as unknown as { processID?: number }).processID;
+    let cancelling: Promise<void> | undefined;
+    let onAbort = () => {
+      if (pid !== undefined) {
+        cancelling = this.#cancelBackend(pid);
+      }
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await run();
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+      if (cancelling) {
+        await cancelling;
+      }
+    }
+  }
+
+  async #cancelBackend(pid: number): Promise<void> {
+    let { user, host, database, password, port } = this.config;
+    let client = new Client({ user, host, database, password, port });
+    try {
+      await client.connect();
+      await client.query('SELECT pg_cancel_backend($1)', [pid]);
+      log.debug(`cancelled the statement running on backend ${pid}`);
+    } catch (e) {
+      log.warn(`could not cancel the statement on backend ${pid}: ${e}`);
+    } finally {
+      await client.end().catch(() => {});
     }
   }
 

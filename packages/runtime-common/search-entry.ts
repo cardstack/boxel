@@ -2492,10 +2492,14 @@ export async function searchEntryRealms(
           },
         };
       } catch (e: any) {
-        console.error(
-          `searchEntryRealms realm search failed: ${url ?? `index ${index}`}`,
-          e,
-        );
+        // A search its caller abandoned stops in every realm at once; that is
+        // not a realm failing.
+        if (!opts?.signal?.aborted) {
+          console.error(
+            `searchEntryRealms realm search failed: ${url ?? `index ${index}`}`,
+            e,
+          );
+        }
         return {
           url,
           status: { ...realmFailureStatus(e), ms: Date.now() - t0 },

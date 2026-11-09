@@ -522,11 +522,13 @@ export async function query(
   dbAdapter: DBAdapter,
   query: Expression,
   coerceTypes?: TypeCoercion,
+  signal?: AbortSignal,
 ) {
   let sql = await expressionToSql(dbAdapter.kind, query);
   return await dbAdapter.execute(sql.text, {
     coerceTypes,
     bind: sql.values,
+    ...(signal ? { signal } : {}),
   });
 }
 

@@ -151,7 +151,7 @@ export class TtlResponseCache<T> {
   readonly #sizeOf: (value: T) => number;
   readonly #retain: (value: T) => boolean;
   readonly #emitTelemetry: (summary: ResponseCacheSummary) => void;
-  #inFlight = new Map<string, Promise<T>>();
+  #inFlight = new Map<string, InFlight<T>>();
   // Insertion order is recency order: hits re-insert their entry, so the
   // head of the map is always the least-recently-used entry.
   #entries = new Map<string, { value: T; bytes: number; expiresAt: number }>();
@@ -214,9 +214,17 @@ export class TtlResponseCache<T> {
   // the decision while the request is still in progress. The realm-server's
   // search admission uses it to hand back the slot of a request that holds no
   // result document of its own.
+  //
+  // `signal` is this caller's own: it aborts when the caller stops waiting
+  // (its client went away). The compute is handed a signal of its own that
+  // aborts only once every caller waiting on it — the one that started it and
+  // each joiner — has aborted theirs, so one caller leaving never cancels
+  // work another is still waiting for. A caller without a signal is waiting
+  // for good, so a compute it started or joined is never abandoned.
   async getOrPopulate(args: {
     key: string;
-    populate: () => Promise<T>;
+    populate: (abandoned?: AbortSignal) => Promise<T>;
+    signal?: AbortSignal;
     onOutcome?: (outcome: ResponseCacheOutcome) => void;
   }): Promise<{ value: T; outcome: ResponseCacheOutcome }> {
     try {
@@ -228,7 +236,8 @@ export class TtlResponseCache<T> {
 
   async #getOrPopulate(args: {
     key: string;
-    populate: () => Promise<T>;
+    populate: (abandoned?: AbortSignal) => Promise<T>;
+    signal?: AbortSignal;
     onOutcome?: (outcome: ResponseCacheOutcome) => void;
   }): Promise<{ value: T; outcome: ResponseCacheOutcome }> {
     let { key } = args;
@@ -266,14 +275,37 @@ export class TtlResponseCache<T> {
     if (inFlight) {
       this.#counters.joins += 1;
       onOutcome('join');
-      let value = await inFlight;
+      inFlight.wait(args.signal);
+      let value = await inFlight.promise;
       this.#counters.joinBytes += this.#sizeOf(value);
       return { value, outcome: 'join' };
     }
 
     onOutcome('miss');
-    let promise = args.populate();
-    this.#inFlight.set(key, promise);
+    let abandoned = new AbortController();
+    let waiting = 0;
+    let wait = (signal: AbortSignal | undefined) => {
+      if (!signal) {
+        // Waits for good: the compute can never be abandoned now.
+        waiting = Infinity;
+        return;
+      }
+      waiting += 1;
+      let leave = () => {
+        waiting -= 1;
+        if (waiting === 0) {
+          abandoned.abort(signal.reason);
+        }
+      };
+      if (signal.aborted) {
+        leave();
+      } else {
+        signal.addEventListener('abort', leave, { once: true });
+      }
+    };
+    wait(args.signal);
+    let promise = args.populate(args.signal ? abandoned.signal : undefined);
+    this.#inFlight.set(key, { promise, wait });
     try {
       let value = await promise;
       this.#counters.misses += 1;
@@ -458,4 +490,11 @@ function defaultEmitTelemetry(
     cacheLogs.set(channel, log);
   }
   log.info(JSON.stringify({ channel, ...summary }));
+}
+
+// A compute in flight: its result, and how a caller waiting on it is counted
+// (see `getOrPopulate`).
+interface InFlight<T> {
+  promise: Promise<T>;
+  wait: (signal: AbortSignal | undefined) => void;
 }

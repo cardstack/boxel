@@ -705,6 +705,12 @@ A `_federated-search` request names its realms in `realms`, all on the realm ser
 
 `meta.realms` reports every realm asked, `{ status, code?, total?, ms? }`, where `status` is `ok`, `refused` (with the refusal `code`), `timeout` or `unavailable`. A realm that fails never fails the search; `meta.incomplete` is true when any realm did not answer `ok`. That includes a slow realm: each realm has its own deadline inside the request's time budget (the budget less a tenth of it, at most 2 s, kept for the merge), and a realm that has not answered by then is cut off and reported as `timeout` while the others' rows come back.
 
+### Bounds every query runs under
+
+These hold for every search, whoever runs it (a card's `getCards`, a query-backed field, the host's search pane, a `_search` or `_federated-search` request), with nothing to turn on:
+
+- **A search whose client leaves stops.** When the connection of a `_search` or `_federated-search` request closes before its response is written, the search is cancelled in every realm it was running in: its SQL is cancelled in Postgres (`pg_cancel_backend`), and nothing else is computed for it. A result shared by identical requests in flight together (the live-search cache) is stopped only once every request waiting for it has gone.
+
 ### Refusals
 
 A query the grammar refuses gets a 400 whose body carries a code a caller can act on, and a message naming the member, the nearest valid name where there is one, and what to write instead:

@@ -2021,6 +2021,7 @@ export {
 } from './supported-mime-type.ts';
 export {
   isUrlLike,
+  mergeAbortSignals,
   VirtualNetwork,
   type ResponseWithNodeStream,
 } from './virtual-network.ts';

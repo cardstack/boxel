@@ -8,6 +8,7 @@ import { logger } from '@cardstack/runtime-common';
 import {
   attributeSearchRequest,
   fetchRequestFromContext,
+  searchRequestSignal,
   setContextResponse,
   withSearchConnectionTenant,
 } from '../middleware/index.ts';
@@ -32,7 +33,13 @@ export function createServeFromRealm(
     if (ctxt.request.path === '/_boom') {
       throw new Error('boom');
     }
-    let request = await fetchRequestFromContext(ctxt);
+    // A search carries the signal that aborts when its client goes away, so
+    // the realm can stop the work it was doing for it.
+    let signal = searchRequestSignal(ctxt);
+    let request = await fetchRequestFromContext(
+      ctxt,
+      signal ? { signal } : undefined,
+    );
     // Phase 3 lazy mount: trigger findOrMountRealm before dispatching to
     // virtualNetwork.handle so non-pinned realms (source/published) mount
     // on first request. virtualNetwork.handle returns 404 for any URL

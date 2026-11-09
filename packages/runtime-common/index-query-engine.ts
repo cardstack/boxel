@@ -501,6 +501,9 @@ export type QueryOptions = WIPOptions & {
   // instance rows by their `.json` file URL, file rows by their canonical URL.
   cardUrls?: string[];
   timings?: RequestTimings;
+  // Cancels the search's statements when it aborts (the request's client went
+  // away, or its time budget ran out). See `ExecuteOptions.signal`.
+  signal?: AbortSignal;
 };
 
 // Selects which columns `search()` projects. `dataOnly` projects
@@ -875,8 +878,8 @@ export class IndexQueryEngine {
     this.#virtualNetwork = virtualNetwork;
   }
 
-  async #query(expression: Expression) {
-    return await query(this.#dbAdapter, expression, coerceTypes);
+  async #query(expression: Expression, signal?: AbortSignal) {
+    return await query(this.#dbAdapter, expression, coerceTypes, signal);
   }
 
   // Split the two phases so the search-timing line can attribute the SQL
@@ -886,13 +889,17 @@ export class IndexQueryEngine {
   // actual row fetch is tiny. `#query` is the DB round-trip itself. The data
   // and count queries run concurrently, so these accumulate into the
   // parallel-sum `busy` bucket rather than the wall-clock stages.
-  async #queryCards(query: CardExpression, timings?: RequestTimings) {
+  async #queryCards(
+    query: CardExpression,
+    timings?: RequestTimings,
+    signal?: AbortSignal,
+  ) {
     let expression = timings
       ? await timings.busyTime('compile', () => this.makeExpression(query))
       : await this.makeExpression(query);
     return timings
-      ? await timings.busyTime('sqlExec', () => this.#query(expression))
-      : this.#query(expression);
+      ? await timings.busyTime('sqlExec', () => this.#query(expression, signal))
+      : this.#query(expression, signal);
   }
 
   // A card's row, read as its data: the instance its index visit read, or the
@@ -1910,8 +1917,11 @@ export class IndexQueryEngine {
               limitClause,
             }),
             opts.timings,
+            opts.signal,
           ),
-          ...facetQueries().map((q) => this.#queryCards(q, opts.timings)),
+          ...facetQueries().map((q) =>
+            this.#queryCards(q, opts.timings, opts.signal),
+          ),
         ]);
         if (keys.length > 0) {
           totalResults = [{ total: keys[0].__page_total }];
@@ -1932,6 +1942,7 @@ export class IndexQueryEngine {
               countOnly: true,
             }),
             opts.timings,
+            opts.signal,
           );
           totalResults = [{ total: row?.total ?? 0 }];
         }
@@ -1974,6 +1985,7 @@ export class IndexQueryEngine {
               limitClause,
             }),
             opts.timings,
+            opts.signal,
           );
           facetResults = [];
         } else {
@@ -1990,8 +2002,10 @@ export class IndexQueryEngine {
             ...limitClause,
           ];
           [keys, ...facetResults] = await Promise.all([
-            this.#queryCards(keyQuery, opts.timings),
-            ...facetQueries().map((q) => this.#queryCards(q, opts.timings)),
+            this.#queryCards(keyQuery, opts.timings, opts.signal),
+            ...facetQueries().map((q) =>
+              this.#queryCards(q, opts.timings, opts.signal),
+            ),
           ]);
         }
         if (keys.length > 0) {
@@ -2014,9 +2028,11 @@ export class IndexQueryEngine {
           // A page past the last match has no row to carry the count (or, on
           // Postgres, the facets), so they come from their own queries.
           let fallbacks = await Promise.all([
-            this.#queryCards(queryCount, opts.timings),
+            this.#queryCards(queryCount, opts.timings, opts.signal),
             ...(pgFacets
-              ? facetQueries().map((q) => this.#queryCards(q, opts.timings))
+              ? facetQueries().map((q) =>
+                  this.#queryCards(q, opts.timings, opts.signal),
+                )
               : []),
           ]);
           totalResults = fallbacks[0];
@@ -2037,8 +2053,10 @@ export class IndexQueryEngine {
       } else {
         // Unpaged: every match is a row, so the rows are the count.
         [results, ...facetResults] = await Promise.all([
-          this.#queryCards(query, opts.timings),
-          ...facetQueries().map((q) => this.#queryCards(q, opts.timings)),
+          this.#queryCards(query, opts.timings, opts.signal),
+          ...facetQueries().map((q) =>
+            this.#queryCards(q, opts.timings, opts.signal),
+          ),
         ]);
         totalResults = [{ total: results.length }];
       }
@@ -2223,6 +2241,7 @@ export class IndexQueryEngine {
         'GROUP BY i.url, i.type',
       ],
       opts.timings,
+      opts.signal,
     )) as Record<string, unknown>[];
     let byKey = new Map(
       rows.map((row) => [`${row.__page_type} ${row.url}`, row]),
@@ -3682,6 +3701,7 @@ export class IndexQueryEngine {
         'GROUP BY i.file_alias',
       ],
       opts.timings,
+      opts.signal,
     );
     return new Set(rows.map((r) => String(r.card_id)));
   }
@@ -5835,6 +5855,7 @@ export class IndexQueryEngine {
           ') AS t',
         ],
         opts.timings,
+        opts.signal,
       );
       out.missing = Math.max(0, Number(row?.total ?? 0) - stats.count);
     }
@@ -5947,6 +5968,7 @@ export class IndexQueryEngine {
         `LIMIT ${Number(size)}`,
       ],
       opts.timings,
+      opts.signal,
     );
     let kept = rows.filter((row) => row.facet_value != null);
     let counts = facetCountsOf(kept);
@@ -6013,6 +6035,7 @@ export class IndexQueryEngine {
         'GROUP BY i.file_alias',
       ],
       opts.timings,
+      opts.signal,
     );
     let titles = new Map(
       rows
@@ -6035,6 +6058,7 @@ export class IndexQueryEngine {
         ...this.#facetValuesTable(facet, opts, condition),
       ],
       opts.timings,
+      opts.signal,
     );
     let stats: FacetStats = {
       count: Number(row?.count ?? 0),
@@ -6095,6 +6119,7 @@ export class IndexQueryEngine {
         ...this.#facetValuesTable(facet, opts, condition),
       ],
       opts.timings,
+      opts.signal,
     );
     return ranges.map((range, index) => ({
       value: facetRangeLabel(range),
@@ -6136,6 +6161,7 @@ export class IndexQueryEngine {
         `LIMIT ${Number(size)}`,
       ],
       opts.timings,
+      opts.signal,
     );
     return facetCountsOf(rows);
   }

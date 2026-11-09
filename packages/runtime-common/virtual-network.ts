@@ -1173,7 +1173,7 @@ export function shouldTimeoutRetryableFetch(url: URL): boolean {
 
 // Combine an optional caller-supplied signal with the per-attempt timeout
 // signal so a fetch is aborted when either fires.
-function mergeAbortSignals(
+export function mergeAbortSignals(
   a: AbortSignal | null | undefined,
   b: AbortSignal | null | undefined,
 ): AbortSignal | undefined {

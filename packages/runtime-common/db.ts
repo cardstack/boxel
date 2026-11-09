@@ -14,6 +14,10 @@ export interface ExecuteOptions {
   // print a placeholder in their place, and an error it throws drops the
   // detail in which Postgres quotes the offending row or value.
   redactBindings?: boolean;
+  // Cancels the statement when it aborts: Postgres is asked to cancel the
+  // backend running it (`pg_cancel_backend`), and the call rejects with the
+  // signal's reason. A signal already aborted runs nothing. SQLite ignores it.
+  signal?: AbortSignal;
 }
 
 // The bindings as an adapter's statement and error logs print them.

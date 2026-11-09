@@ -535,9 +535,10 @@ import {
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
 import RealmPermissionChecker from './realm-permission-checker.ts';
-import type {
-  ResponseWithNodeStream,
-  VirtualNetwork,
+import {
+  mergeAbortSignals,
+  type ResponseWithNodeStream,
+  type VirtualNetwork,
 } from './virtual-network.ts';
 
 import { RealmAuthDataSource } from './realm-auth-data-source.ts';
@@ -9282,6 +9283,7 @@ export class Realm {
         method: 'QUERY',
         headers: request.headers,
         body: await request.clone().text(),
+        signal: request.signal,
       });
       request.headers.delete('X-HTTP-Method-Override');
     }
@@ -16802,8 +16804,12 @@ export class Realm {
         declaredLinks,
         this.#decideLinkShape(request, rowClass)?.mode === 'links-only',
       );
-      let runSearch = (signal?: AbortSignal) =>
-        this.searchEntries(searchEntryQuery, {
+      // The request's own signal aborts when its client goes away (the
+      // realm server raises it for a search), and the time budget's when the
+      // budget runs out; either stops the search, its SQL included.
+      let runSearch = (budgetSignal?: AbortSignal) => {
+        let signal = mergeAbortSignals(budgetSignal, request.signal);
+        return this.searchEntries(searchEntryQuery, {
           cacheOnlyDefinitions: duringPrerender,
           // Inside a prerender the search skips the `loadLinks`
           // relationship-assembly pass entirely: the host re-resolves every
@@ -16820,6 +16826,7 @@ export class Realm {
           ...(duringPrerender ? {} : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
+      };
       // Cut an over-budget item-leg search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
       let doc = markPolicyScoped(

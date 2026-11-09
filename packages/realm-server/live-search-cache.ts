@@ -99,12 +99,15 @@ export class LiveSearchCache {
     realms: string[];
     query: Query;
     opts: unknown | undefined;
-    populate: () => Promise<string>;
+    populate: (abandoned?: AbortSignal) => Promise<string>;
+    // This request's own signal: aborts when its client goes away.
+    signal?: AbortSignal;
     onOutcome?: (outcome: LiveSearchOutcome) => void;
   }): Promise<{ body: string; outcome: LiveSearchOutcome }> {
     let { value, outcome } = await this.#cache.getOrPopulate({
       key: searchRequestKeyHash(args.realms, args.query, args.opts),
       populate: args.populate,
+      ...(args.signal ? { signal: args.signal } : {}),
       ...(args.onOutcome ? { onOutcome: args.onOutcome } : {}),
     });
     return { body: value, outcome };
