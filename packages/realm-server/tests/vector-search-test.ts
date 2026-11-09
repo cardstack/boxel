@@ -19,6 +19,7 @@ import {
   hasVectorIndex,
   internalKeyFor,
   rri,
+  setVectorSearchSettings,
   type Definition,
   type DefinitionLookup,
   type Query,
@@ -1625,6 +1626,484 @@ module(basename(import.meta.filename), function () {
           ['p', 3, true],
           'a second up changes nothing',
         );
+      },
+    );
+  });
+
+  module('approximate near search (Postgres + pgvector)', function (hooks) {
+    let adapter: PgAdapter;
+    let indexWriter: IndexWriter;
+    let engine: IndexQueryEngine;
+    let virtualNetwork: VirtualNetwork;
+    let momentKey: string;
+    let vectorsAvailable: boolean;
+    const otherRealm = testRealm.replace(/\/$/, '-other/');
+    const SPACE = 'seg/model@1 test 16';
+    const DIMS = 16;
+
+    function pgvectorTest(name: string, fn: (assert: Assert) => Promise<void>) {
+      test(name, async (assert) => {
+        if (!vectorsAvailable) {
+          assert.ok(true, 'skipped: this Postgres has no pgvector');
+          return;
+        }
+        await fn(assert);
+      });
+    }
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      indexWriter = new IndexWriter(adapter);
+      virtualNetwork = new VirtualNetwork();
+      engine = new IndexQueryEngine(
+        adapter,
+        makeDefinitionLookup(),
+        virtualNetwork,
+      );
+      momentKey = internalKeyFor(momentRef, undefined, virtualNetwork);
+      vectorsAvailable = await hasVectorIndex(adapter);
+      setVectorSearchSettings();
+    });
+
+    hooks.afterEach(async function () {
+      setVectorSearchSettings();
+      await closeTestPgAdapter(adapter);
+    });
+
+    // A seeded random number generator (mulberry32), so every run sees the
+    // same vectors.
+    function random(seed: number) {
+      return () => {
+        seed |= 0;
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296 - 0.5;
+      };
+    }
+    function randomVector(next: () => number) {
+      return Array.from({ length: DIMS }, () => next());
+    }
+
+    // `cards` cards in `realm`, each holding `perCard` segment vectors in
+    // SPACE, and its own `views`.
+    async function seed(realm: string, cards: number, perCard: number) {
+      let next = random(realm.length * 7919 + cards);
+      let batch = await indexWriter.createBatch(
+        new URL(realm),
+        virtualNetwork,
+        undefined,
+        { splitPrerenderHtml: false },
+      );
+      for (let c = 0; c < cards; c++) {
+        let cardURL = new URL(`${realm}Moment/m${c}.json`);
+        await batch.updateEntry(cardURL, {
+          type: 'instance',
+          resource: {
+            id: rri(cardURL.href),
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: { module: rri(momentRef.module), name: 'Moment' },
+            },
+          },
+          lastModified: Date.now(),
+          resourceCreatedAt: Date.now(),
+          searchData: {
+            title: `m${c}`,
+            topic: c % 10 === 0 ? 'rare' : 'common',
+            views: c,
+            segments: Array.from({ length: perCard }, () => ({
+              embedding: vec(randomVector(next)),
+            })),
+            _vectorFields: {
+              'segments.embedding': {
+                space: SPACE,
+                list: true,
+                computed: false,
+              },
+            },
+          },
+          deps: new Set(),
+          displayNames: ['Moment'],
+          types: [momentKey],
+          isolatedHtml: `<div>m${c}</div>`,
+        });
+      }
+      await batch.done();
+      await adapter.execute('ANALYZE boxel_index_vectors');
+    }
+
+    async function nearPage(
+      realm: string,
+      target: number[],
+      extra: Partial<Query> = {},
+    ) {
+      let { results, meta } = await engine.search(
+        new URL(realm),
+        {
+          filter: { type: momentRef },
+          sort: [{ on: momentRef, by: 'segments.embedding', near: target }],
+          page: { size: 10 },
+          ...extra,
+        },
+        {},
+        { kind: 'dataOnly' },
+      );
+      return {
+        meta,
+        rows: results.map((r: any) => ({
+          url: String(r.url),
+          sim: r._nearSimilarity == null ? null : Number(r._nearSimilarity),
+        })),
+      };
+    }
+
+    async function exactly<T>(fn: () => Promise<T>): Promise<T> {
+      setVectorSearchSettings({ exactThreshold: Number.MAX_SAFE_INTEGER });
+      try {
+        return await fn();
+      } finally {
+        setVectorSearchSettings();
+      }
+    }
+
+    pgvectorTest(
+      'over more vectors than the threshold, a near sort reads an approximate index and re-scores exactly',
+      async (assert) => {
+        await seed(testRealm, 100, 60); // 6,000 vectors
+        let [index] = await adapter.execute(
+          `SELECT count(*)::int AS n FROM pg_indexes WHERE indexname LIKE 'boxel_index_vectors_seg_model_16_%_hnsw'`,
+        );
+        assert.strictEqual(index.n, 1, "the space's partition has its index");
+        let next = random(42);
+        let recall = 0;
+        const QUERIES = 10;
+        for (let q = 0; q < QUERIES; q++) {
+          let target = randomVector(next);
+          let approximate = await nearPage(testRealm, target);
+          let exact = await exactly(() => nearPage(testRealm, target));
+          assert.strictEqual(approximate.meta.near?.path, 'hnsw');
+          assert.strictEqual(exact.meta.near?.path, 'exact');
+          assert.strictEqual(approximate.rows.length, 10, 'a full page');
+          let exactSims = new Map(exact.rows.map((r) => [r.url, r.sim]));
+          recall +=
+            approximate.rows.filter((r) => exactSims.has(r.url)).length / 10;
+          assert.ok(
+            approximate.rows.every(
+              (r, i) => i === 0 || approximate.rows[i - 1].sim! >= r.sim!,
+            ),
+            'the page is ordered by exact similarity',
+          );
+          assert.ok(
+            approximate.rows
+              .filter((r) => exactSims.has(r.url))
+              .every((r) => Math.abs(r.sim! - exactSims.get(r.url)!) < 1e-9),
+            'each similarity is the exact one, not the index estimate',
+          );
+          assert.strictEqual(
+            approximate.meta.page.total,
+            exact.meta.page.total,
+            'the total counts every match',
+          );
+        }
+        assert.ok(
+          recall / QUERIES >= 0.95,
+          `recall@10 against exact search is ${(recall / QUERIES).toFixed(3)}`,
+        );
+        let report = (await nearPage(testRealm, randomVector(next))).meta.near!;
+        assert.strictEqual(report.threshold, 5000);
+        assert.ok(report.candidates > 5000, 'it counted past the threshold');
+        assert.strictEqual(report.efSearch, 100);
+        assert.ok((report.rescored ?? 0) >= 10, 'and re-scored the candidates');
+      },
+    );
+
+    pgvectorTest(
+      'below the threshold a near sort is exact, as before',
+      async (assert) => {
+        await seed(testRealm, 20, 10); // 200 vectors
+        let target = randomVector(random(7));
+        let page = await nearPage(testRealm, target);
+        assert.deepEqual(
+          { path: page.meta.near?.path, reason: page.meta.near?.reason },
+          { path: 'exact', reason: 'below-threshold' },
+        );
+        assert.strictEqual(page.meta.near?.candidates, 200);
+        assert.notOk(page.meta.warnings, 'no warning');
+      },
+    );
+
+    pgvectorTest(
+      'a realm sharing a space with another gets a full page of its own rows',
+      async (assert) => {
+        await seed(testRealm, 100, 60);
+        await seed(otherRealm, 100, 60);
+        let next = random(99);
+        for (let q = 0; q < 3; q++) {
+          let target = randomVector(next);
+          let page = await nearPage(otherRealm, target);
+          assert.strictEqual(page.meta.near?.path, 'hnsw');
+          assert.strictEqual(page.rows.length, 10, 'a full page');
+          assert.ok(
+            page.rows.every(
+              (r) => r.url.startsWith(otherRealm) && r.sim != null,
+            ),
+            "only the realm's own cards, each with its similarity",
+          );
+          let exact = await exactly(() => nearPage(otherRealm, target));
+          let overlap = page.rows.filter((r) =>
+            exact.rows.some((e) => e.url === r.url),
+          ).length;
+          assert.ok(overlap >= 9, `${overlap} of the exact top 10`);
+        }
+      },
+    );
+
+    pgvectorTest(
+      'a filter that admits cards the approximate read missed sends the search down the exact path',
+      async (assert) => {
+        await seed(testRealm, 100, 60);
+        let target = randomVector(random(5));
+        // the cards furthest from the target are no approximate candidates
+        let exactAll = await exactly(() =>
+          nearPage(testRealm, target, { page: { size: 100 } }),
+        );
+        let far = exactAll.rows
+          .slice(-3)
+          .map((r) =>
+            r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
+          );
+        let filtered = await nearPage(testRealm, target, {
+          filter: {
+            on: momentRef,
+            any: far.map((title) => ({ eq: { title } })),
+          },
+        });
+        assert.deepEqual(
+          {
+            path: filtered.meta.near?.path,
+            reason: filtered.meta.near?.reason,
+          },
+          { path: 'exact', reason: 'filtered-out' },
+        );
+        assert.deepEqual(
+          filtered.rows.map((r) => r.url),
+          exactAll.rows.slice(-3).map((r) => r.url),
+          'every admitted card, each with its similarity, in order',
+        );
+        assert.ok(filtered.rows.every((r) => r.sim != null));
+      },
+    );
+
+    pgvectorTest(
+      'an approximate near filter checks each candidate exactly',
+      async (assert) => {
+        await seed(testRealm, 100, 60);
+        let next = random(11);
+        let target = randomVector(next);
+        let all = await exactly(() =>
+          nearPage(testRealm, target, { page: { size: 100 } }),
+        );
+        // a threshold that admits about a dozen cards
+        let minSimilarity = all.rows[11].sim!;
+        let query = {
+          filter: {
+            every: [
+              { type: momentRef },
+              {
+                on: momentRef,
+                near: {
+                  'segments.embedding': { to: target, minSimilarity },
+                },
+              },
+            ],
+          },
+          sort: [{ by: 'title', on: momentRef }],
+          page: { size: 100 },
+        } as Query;
+        let run = async () => {
+          let { results, meta } = await engine.search(
+            new URL(testRealm),
+            query,
+            {},
+            { kind: 'dataOnly' },
+          );
+          return { urls: results.map((r: any) => String(r.url)), meta };
+        };
+        let approximate = await run();
+        let exact = await exactly(run);
+        assert.strictEqual(approximate.meta.near?.path, 'hnsw');
+        assert.strictEqual(exact.meta.near?.path, 'exact');
+        assert.ok(
+          approximate.urls.every((u) => exact.urls.includes(u)),
+          'nothing below the threshold is admitted',
+        );
+        assert.ok(
+          approximate.urls.length >= Math.floor(exact.urls.length * 0.9),
+          `${approximate.urls.length} of the ${exact.urls.length} cards within it`,
+        );
+        // negated, the complement
+        let { meta } = await engine.search(
+          new URL(testRealm),
+          {
+            filter: {
+              every: [{ type: momentRef }, { not: query.filter!.every![1] }],
+            },
+            page: { size: 1 },
+          } as Query,
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(
+          meta.page.total,
+          100 - approximate.urls.length,
+          'under not, every other card',
+        );
+      },
+    );
+
+    pgvectorTest(
+      'a near signal in a blend ranks the candidates of an approximate read',
+      async (assert) => {
+        await seed(testRealm, 100, 60);
+        let target = randomVector(random(3));
+        let blend = {
+          by: '_blend',
+          of: [{ on: momentRef, by: 'segments.embedding', near: target }],
+        };
+        let approximate = await nearPage(testRealm, target, {
+          sort: [blend as any],
+        });
+        let exact = await exactly(() =>
+          nearPage(testRealm, target, { sort: [blend as any] }),
+        );
+        assert.strictEqual(approximate.meta.near?.path, 'hnsw');
+        let near = await exactly(() => nearPage(testRealm, target));
+        let overlap = approximate.rows.filter((r) =>
+          near.rows.some((e) => e.url === r.url),
+        ).length;
+        assert.ok(
+          overlap >= 9,
+          `the blend's top 10 hold ${overlap} of the nearest 10`,
+        );
+        assert.strictEqual(approximate.rows.length, exact.rows.length);
+      },
+    );
+
+    pgvectorTest(
+      'look-alikes over a large realm read the index and keep the exact neighbours',
+      async (assert) => {
+        // 300 cards with one vector each, past a lowered threshold
+        setVectorSearchSettings({ exactThreshold: 100 });
+        let next = random(17);
+        let batch = await indexWriter.createBatch(
+          new URL(testRealm),
+          virtualNetwork,
+          undefined,
+          { splitPrerenderHtml: false },
+        );
+        const space = 'look@1 test 16';
+        for (let c = 0; c < 300; c++) {
+          let cardURL = new URL(url(`l${c}`));
+          await batch.updateEntry(cardURL, {
+            type: 'instance',
+            resource: {
+              id: rri(cardURL.href),
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: { module: rri(momentRef.module), name: 'Moment' },
+              },
+            },
+            lastModified: Date.now(),
+            resourceCreatedAt: Date.now(),
+            searchData: {
+              title: `l${c}`,
+              views: c,
+              embedding: vec(randomVector(next)),
+              _vectorFields: {
+                embedding: { space, list: false, computed: false },
+              },
+            },
+            deps: new Set(),
+            displayNames: ['Moment'],
+            types: [momentKey],
+            isolatedHtml: `<div>l${c}</div>`,
+          });
+        }
+        await batch.done();
+        let lookalikes = async () => {
+          let { results } = await engine.search(
+            new URL(testRealm),
+            {
+              filter: { type: momentRef },
+              sort: [{ by: 'views', on: momentRef }],
+              page: { size: 20 },
+              rerank: {
+                expression: 'MAX(peers.similarity)',
+                compare: { near: 'embedding', k: 3 },
+              },
+            } as Query,
+            {},
+            { kind: 'renderSet' },
+          );
+          return results.map((r: any) => [
+            String(r.url),
+            Number(Number(r._rerank).toFixed(9)),
+          ]);
+        };
+        let approximate = await lookalikes();
+        setVectorSearchSettings({ exactThreshold: Number.MAX_SAFE_INTEGER });
+        let exact = await lookalikes();
+        assert.strictEqual(approximate.length, 20);
+        let same = approximate.filter(([u, v]) =>
+          exact.some(([eu, ev]) => eu === u && ev === v),
+        ).length;
+        assert.ok(
+          same >= 19,
+          `${same} of 20 cards have the exact nearest look-alike's similarity`,
+        );
+      },
+    );
+
+    pgvectorTest(
+      'the index migration drops the per-space indexes and builds them again',
+      async (assert) => {
+        await seed(testRealm, 5, 2);
+        let migration = (await import(
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore a CommonJS migration, required for its SQL
+          '../../postgres/migrations/1794254974149_vector-space-hnsw-indexes.js'
+        )) as { up: Function; down: Function };
+        let run = async (step: Function) => {
+          let statements: string[] = [];
+          await step({
+            noTransaction() {},
+            sql: (sql: string) => statements.push(sql),
+            db: { select: (sql: string) => adapter.execute(sql) },
+          });
+          for (let sql of statements) {
+            await adapter.execute(sql);
+          }
+        };
+        let indexes = async () =>
+          (
+            await adapter.execute(
+              `SELECT c.relname AS name, i.indisvalid AS valid
+                 FROM pg_class AS c JOIN pg_index AS i ON i.indexrelid = c.oid
+                WHERE c.relname LIKE 'boxel_index_vectors_%_hnsw'`,
+            )
+          ).map((r) => [String(r.name), r.valid]);
+        let built = await indexes();
+        assert.strictEqual(built.length, 1, 'the engine built one');
+        await run(migration.down);
+        assert.deepEqual(await indexes(), [], 'down drops it');
+        await run(migration.up);
+        assert.deepEqual(await indexes(), built, 'up builds it again');
+        await run(migration.up);
+        assert.deepEqual(await indexes(), built, 'and leaves a valid one be');
       },
     );
   });

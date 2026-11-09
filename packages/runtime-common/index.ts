@@ -1914,6 +1914,13 @@ export * from './infer-content-type.ts';
 export * from './index-query-engine.ts';
 export * from './index-writer.ts';
 export * from './vector-index.ts';
+export {
+  VECTOR_SEARCH_DEFAULTS,
+  setVectorSearchSettings,
+  vectorSearchSettings,
+  type VectorSearchSettings,
+} from './vector-store.ts';
+export type { NearReport } from './vector-query.ts';
 export * from './vector-space.ts';
 export * from './vector-sidecar.ts';
 export * from './search-doc-spill.ts';

@@ -8,12 +8,14 @@ import {
 import type { DBAdapter } from './db.ts';
 import { hasVectorIndex } from './vector-index.ts';
 import { spaceDimensions } from './vector-space.ts';
-import type {
-  LookalikeRequest,
-  NearTarget,
-  StoredVector,
-  VectorRow,
-  VectorStore,
+import {
+  vectorSearchSettings,
+  type LookalikeRequest,
+  type NearCandidateRequest,
+  type NearTarget,
+  type StoredVector,
+  type VectorRow,
+  type VectorStore,
 } from './vector-store.ts';
 
 const log = logger('vector-store-pg');
@@ -30,6 +32,54 @@ const partitionNameSql = `'boxel_index_vectors_'
   || '_' || $2::int || '_' || left(md5($1::text), 8)`;
 
 const DEFAULT_PARTITION = 'boxel_index_vectors_default';
+
+// pgvector's HNSW index covers up to 4,000 dimensions of `halfvec` (2,000 of
+// `vector`).
+const MAX_HALFVEC_INDEX_DIMS = 4_000;
+
+// The approximate index on a space's partition. It indexes a half-precision
+// copy of each vector (`embedding::halfvec(N)`, about half the size of a
+// full-precision index, measured at 40 MB per 50,000 256-d vectors); the
+// stored vector stays full precision, and every candidate is re-scored
+// against it.
+export function hnswIndexName(partition: string): string {
+  return `${partition}_hnsw`;
+}
+
+function hnswIndexDdl(partition: string, dims: number): string {
+  let { m, efConstruction } = vectorSearchSettings();
+  return `CREATE INDEX IF NOT EXISTS ${hnswIndexName(partition)} ON ${partition} USING hnsw ((embedding::halfvec(${dims})) halfvec_cosine_ops) WITH (m = ${m}, ef_construction = ${efConstruction})`;
+}
+
+// The settings an approximate read runs under, for its transaction only. A
+// failed SET aborts the whole transaction in Postgres, so they go in a
+// savepoint: on a pgvector without iterative scans (before 0.8) the
+// savepoint is rolled back and the read runs as a plain index scan, which
+// may return fewer rows than it asks for.
+async function hnswSettings(
+  q: (expression: Expression) => Promise<unknown>,
+  efSearch: number,
+) {
+  await q(['SAVEPOINT hnsw_settings']);
+  try {
+    await q(['SET LOCAL hnsw.iterative_scan = relaxed_order']);
+    await q([`SET LOCAL hnsw.ef_search = ${Math.round(efSearch)}`]);
+    await q(['RELEASE SAVEPOINT hnsw_settings']);
+  } catch {
+    await q(['ROLLBACK TO SAVEPOINT hnsw_settings']);
+  }
+}
+
+// Only these cards' vectors: the candidates an approximate read chose.
+function amongCandidates(alias: string, urls: string[] | undefined) {
+  return urls
+    ? [
+        `AND ${alias}.url IN (SELECT jsonb_array_elements_text(CAST(`,
+        param(JSON.stringify(urls)),
+        'AS jsonb)))',
+      ]
+    : [];
+}
 
 // A string as a SQL literal, for DDL (which takes no bind parameters).
 // Standard-conforming strings are on, so doubling quotes is the whole escape.
@@ -49,6 +99,15 @@ function sqlLiteral(value: string): string {
 // space string (vector-space.ts) it was made in. The engine never compares
 // two spaces, so every read here is bounded by space as well as by realm,
 // field and size.
+//
+// Partitions: the table is partitioned by space (one partition per
+// embedding model and size, as Elasticsearch and OpenSearch keep one index
+// per model and dimension), so a search reads only its space's pages, and
+// each partition carries its own HNSW index over a half-precision copy of its
+// vectors. A read is bounded by realm, card type, field and item within the
+// partition; the iterative scan applies those filters while it walks the
+// graph, so a realm sharing a space with a larger one still gets its full
+// page.
 //
 // Everything specific to Postgres and pgvector is in this file: the SQL that
 // reads and writes the table, the casts, the index DDL, and the `SET LOCAL`
@@ -97,24 +156,147 @@ export class PgVectorStore implements VectorStore {
     return this.#partitioned;
   }
 
-  // The spaces that have a partition, by space.
-  #spaces = new Map<string, { partition: string; dims: number | null }>();
+  // The spaces that have a partition, by space, and whether its HNSW index
+  // is ready (an index still being built concurrently is not).
+  #spaces = new Map<
+    string,
+    {
+      partition: string;
+      dims: number | null;
+      indexed: boolean;
+      rows: number | undefined;
+    }
+  >();
+  #spacesAt = 0;
   async #loadSpaces() {
-    let rows = await this.#dbAdapter.execute(
-      'SELECT space, partition_name, dims FROM boxel_vector_spaces',
-    );
+    let rows = await this.#dbAdapter
+      .execute(
+        `SELECT s.space, s.partition_name, s.dims,
+                max(p.reltuples) AS rows,
+                COALESCE(bool_or(i.indisvalid AND i.indisready), false) AS indexed
+           FROM boxel_vector_spaces AS s
+           LEFT JOIN pg_class AS p
+             ON p.relname = s.partition_name AND p.relkind = 'r'
+           LEFT JOIN pg_class AS c
+             ON c.relname = s.partition_name || '_hnsw' AND c.relkind = 'i'
+           LEFT JOIN pg_index AS i ON i.indexrelid = c.oid
+          GROUP BY s.space, s.partition_name, s.dims`,
+      )
+      .catch(() => []);
+    this.#spacesAt = Date.now();
     this.#spaces = new Map(
       rows.map((row) => [
         String(row.space),
         {
           partition: String(row.partition_name),
           dims: row.dims == null ? null : Number(row.dims),
+          indexed: Boolean(row.indexed),
+          // -1 until the partition is first analyzed
+          rows:
+            row.rows != null && Number(row.rows) >= 0
+              ? Number(row.rows)
+              : undefined,
         },
       ]),
     );
   }
 
-  // Gives each space its own partition before vectors are written in it.
+  async #space(space: string) {
+    if (Date.now() - this.#spacesAt > 30_000) {
+      if (!(await this.#isPartitioned())) {
+        this.#spaces = new Map();
+        this.#spacesAt = Date.now();
+        return undefined;
+      }
+      await this.#loadSpaces();
+    }
+    return this.#spaces.get(space);
+  }
+
+  async spaceSize(space: string): Promise<number | undefined> {
+    return (await this.#space(space))?.rows;
+  }
+
+  async nearIndex(space: string): Promise<boolean> {
+    let info = await this.#space(space);
+    return Boolean(info?.indexed && info.dims);
+  }
+
+  // A bounded count, read through the partition's (realm_url, field_path,
+  // space) index, and cached briefly: a realm's size changes only when it is
+  // indexed.
+  #counts = new Map<string, { at: number; n: Promise<number> }>();
+  async countVectors(opts: {
+    realmURL: string;
+    fieldPath: string;
+    space: string;
+    limit: number;
+  }): Promise<number> {
+    let key = `${opts.realmURL} ${opts.fieldPath} ${opts.space} ${opts.limit}`;
+    let cached = this.#counts.get(key);
+    if (!cached || Date.now() - cached.at > 30_000) {
+      let info = await this.#space(opts.space);
+      cached = {
+        at: Date.now(),
+        n: this.#dbAdapter
+          .execute(
+            `SELECT count(*)::int AS n FROM (SELECT 1 FROM ${info?.partition ?? 'boxel_index_vectors'} WHERE realm_url = $1 AND field_path = $2 AND space = $3 LIMIT $4) AS s`,
+            {
+              bind: [opts.realmURL, opts.fieldPath, opts.space, opts.limit],
+            },
+          )
+          .then((rows) => Number(rows[0]?.n ?? 0))
+          .catch(() => 0),
+      };
+      this.#counts.set(key, cached);
+    }
+    return cached.n;
+  }
+
+  // The vectors nearest the target, read from the space's partition through
+  // its HNSW index, nearest first by half-precision distance. Bounded to the
+  // realm and field; with `maxDistance`, to vectors within it. The iterative
+  // scan keeps walking the graph until `k` rows pass those filters (or it
+  // reaches pgvector's `hnsw.max_scan_tuples`).
+  async nearCandidates(
+    request: NearCandidateRequest,
+  ): Promise<{ url: string; distance: number }[]> {
+    let info = await this.#space(request.space);
+    if (!info?.indexed || !info.dims) {
+      throw new Error(`the space "${request.space}" has no vector index`);
+    }
+    let half = `halfvec(${info.dims})`;
+    let distance: Expression = [
+      `(v.embedding::${half} <=> CAST(`,
+      param(request.literal),
+      `AS ${half}))`,
+    ];
+    let k = Math.max(1, Math.round(request.k));
+    let rows = await this.#dbAdapter.withTransaction(async (q) => {
+      await hnswSettings(q, Math.max(vectorSearchSettings().efSearch, 1));
+      return await q([
+        'SELECT v.url AS url,',
+        ...distance,
+        `AS distance FROM ${info!.partition} AS v WHERE v.realm_url =`,
+        param(request.realmURL),
+        'AND v.field_path =',
+        param(request.fieldPath),
+        ...(request.maxDistance == null
+          ? []
+          : ['AND', ...distance, '<=', param(request.maxDistance)]),
+        'ORDER BY',
+        ...distance,
+        `LIMIT ${k}`,
+      ]);
+    });
+    return rows.map((row) => ({
+      url: String(row.url),
+      distance: Number(row.distance),
+    }));
+  }
+
+  // Gives each space its own partition, with its approximate index, before
+  // vectors are written in it.
   // Runs in a transaction of its own, before the index writer's swap writes
   // any vector: attaching a partition locks the DEFAULT partition, which a
   // swap that had already written vectors would hold. Creation is
@@ -184,6 +366,21 @@ export class PgVectorStore implements VectorStore {
             `RETURNING *) INSERT INTO ${name} SELECT * FROM moved`,
           ]);
         }
+        // Its approximate index, built while the table is still small and
+        // its own. A pgvector without `halfvec` (before 0.7), or a size past
+        // what the index covers, leaves the space exact-only.
+        if (dims > 0 && dims <= MAX_HALFVEC_INDEX_DIMS) {
+          await q(['SAVEPOINT hnsw_index']);
+          try {
+            await q([hnswIndexDdl(name, dims)]);
+            await q(['RELEASE SAVEPOINT hnsw_index']);
+          } catch (e) {
+            await q(['ROLLBACK TO SAVEPOINT hnsw_index']);
+            log.warn(
+              `the vectors of "${space}" have no approximate index: ${(e as Error).message}`,
+            );
+          }
+        }
         await q([
           `ALTER TABLE boxel_index_vectors ATTACH PARTITION ${name} FOR VALUES IN (${sqlLiteral(space)})`,
         ]);
@@ -215,6 +412,7 @@ export class PgVectorStore implements VectorStore {
       param(target.dims),
       ...spaceEquals('nvf', target.targetSpace),
       ...spaceEquals('nvf', target.declaredSpace),
+      ...amongCandidates('nvf', target.candidates),
       ...(minSimilarity == null
         ? []
         : [
@@ -229,8 +427,9 @@ export class PgVectorStore implements VectorStore {
 
   // One LEFT JOIN per near sort or signal, on the card's row and the field
   // path; MAX folds a plural field's vectors into the card's nearest one, and
-  // leaves NULL for a card with no vector at the path. Exact: every row the
-  // filter admits is scored.
+  // leaves NULL for a card with no vector at the path. Every vector compared
+  // is scored exactly, at full precision: all of a field's vectors in the
+  // realm and space, or, after an approximate read, the candidates' own.
   nearSimilarity(
     alias: string,
     target: NearTarget,
@@ -243,6 +442,7 @@ export class PgVectorStore implements VectorStore {
         param(target.dims),
         ...spaceEquals(alias, target.targetSpace),
         ...spaceEquals(alias, target.declaredSpace),
+        ...amongCandidates(alias, target.candidates),
       ],
       similarity: [
         `MAX(1 - (${alias}.embedding <=> CAST(`,
@@ -275,37 +475,46 @@ export class PgVectorStore implements VectorStore {
     return dimsRow ? Number(dimsRow.dims) : undefined;
   }
 
-  // Each source card's nearest cards by one field, in its realm and space.
-  // The field path and dimension are inlined, checked. The settings are for
-  // an HNSW index: the iterative scan keeps reading it until enough rows of
-  // this realm turn up.
+  // Each source card's nearest cards by one field, in its realm and space,
+  // nearest first. Exact, or, given `approximate`, read through the space's
+  // HNSW index (a wider net, `rescoreFactor` times `k`) and then re-scored
+  // exactly, keeping the `k` nearest by full-precision similarity.
   async lookalikes(
     request: LookalikeRequest,
   ): Promise<{ src: string; nb: string; sim: number }[]> {
-    let { realmURL, fieldPath: field, dims, k: fetchK, allowed } = request;
-    let vec = `::vector(${dims})`;
+    let { realmURL, fieldPath, dims, k, allowed } = request;
+    let info =
+      request.approximate && request.declaredSpace
+        ? await this.#space(request.declaredSpace)
+        : undefined;
+    let partition = info?.indexed ? info.partition : undefined;
+    let table = partition ?? 'boxel_index_vectors';
+    let settings = vectorSearchSettings();
+    let fetchK = partition
+      ? Math.max(k * settings.rescoreFactor, settings.minRescore)
+      : k;
+    let half = `::halfvec(${dims})`;
+    let order = partition
+      ? `v.embedding${half} <=> s.embedding${half}`
+      : 'v.embedding <=> s.embedding';
     let pairs = await this.#dbAdapter.withTransaction(async (q) => {
-      // A failed SET aborts the whole transaction in Postgres, so the
-      // settings go in a savepoint: on an older pgvector, which has neither,
-      // the savepoint is rolled back and the read runs as a plain index scan,
-      // which may return fewer.
-      await q(['SAVEPOINT hnsw_settings']);
-      try {
-        await q(['SET LOCAL hnsw.iterative_scan = relaxed_order']);
-        await q([`SET LOCAL hnsw.ef_search = ${Math.max(40, fetchK * 2)}`]);
-        await q(['RELEASE SAVEPOINT hnsw_settings']);
-      } catch {
-        await q(['ROLLBACK TO SAVEPOINT hnsw_settings']);
+      if (partition) {
+        await hnswSettings(q, Math.max(settings.efSearch, fetchK));
       }
       return await q([
         `SELECT s.url AS src, n.url AS nb, n.sim AS sim
-           FROM boxel_index_vectors AS s
+           FROM ${table} AS s
            CROSS JOIN LATERAL (
-             SELECT v.url, 1 - (v.embedding${vec} <=> s.embedding${vec}) AS sim
-               FROM boxel_index_vectors AS v
-              WHERE v.field_path = '${field}' AND v.dims = ${dims}
-                AND v.realm_url = s.realm_url AND v.url <> s.url
-                AND v.type = 'instance' AND v.space = s.space`,
+             SELECT c.url, 1 - (c.embedding <=> s.embedding) AS sim
+               FROM (
+                 SELECT v.url, v.embedding
+                   FROM ${table} AS v
+                  WHERE v.field_path =`,
+        param(fieldPath),
+        'AND v.dims =',
+        param(dims),
+        `AND v.realm_url = s.realm_url AND v.url <> s.url
+                    AND v.type = 'instance' AND v.space = s.space`,
         ...(allowed
           ? [
               'AND v.url IN (SELECT jsonb_array_elements_text(',
@@ -313,10 +522,17 @@ export class PgVectorStore implements VectorStore {
               '::jsonb))',
             ]
           : []),
-        `ORDER BY v.embedding${vec} <=> s.embedding${vec}
-              LIMIT ${fetchK}
+        `ORDER BY ${order}
+                  LIMIT ${fetchK}
+               ) AS c
+              ORDER BY c.embedding <=> s.embedding
+              LIMIT ${k}
            ) AS n
-          WHERE s.field_path = '${field}' AND s.dims = ${dims} AND s.ordinal = 0`,
+          WHERE s.field_path =`,
+        param(fieldPath),
+        'AND s.dims =',
+        param(dims),
+        'AND s.ordinal = 0',
         ...spaceEquals('s', request.declaredSpace),
         'AND s.realm_url =',
         param(realmURL),

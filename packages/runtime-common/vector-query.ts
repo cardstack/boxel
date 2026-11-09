@@ -11,7 +11,11 @@ import {
 } from './query.ts';
 import { vectorDimensions, vectorToSqlLiteral } from './serializers/vector.ts';
 import { VECTOR_INDEX_UNAVAILABLE_MESSAGE } from './vector-index.ts';
-import { vectorStoreFor, type VectorStore } from './vector-store.ts';
+import {
+  vectorSearchSettings,
+  vectorStoreFor,
+  type VectorStore,
+} from './vector-store.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 // Near search: ranking and filtering cards by how close one of their vectors
@@ -35,6 +39,19 @@ import type { VirtualNetwork } from './virtual-network.ts';
 //     and size that made it (vector-space.ts), and two spaces are never
 //     compared (`vector-space-mismatch`), as a vector database keeps one
 //     collection per embedding model.
+//   - two-phase retrieval: approximate nearest neighbours for candidates,
+//     then exact re-scoring (Vespa's first and second phase;
+//     Elasticsearch's kNN `num_candidates` with a `rescore`), and an exact
+//     scan below a size threshold, where an index buys nothing (Lucene and
+//     Elasticsearch fall back to exact search for small filtered sets).
+// Boxel's mapping of the two phases: the engine, not the database planner,
+// chooses. It counts the realm's vectors in the field and space (stopping
+// at the threshold); below `exactThreshold`, or with no index, it scans them
+// exactly. Above it, the space's HNSW index (vector-store-pg.ts) gives the
+// nearest few times a page's worth of vectors, and the query then compares
+// only those cards' vectors, exactly, so the order of what is returned is
+// exact; only which cards were candidates is approximate (about 98-99%
+// recall@10 at the defaults). `meta.near` reports the path taken.
 // Where Boxel diverges: a near search is a clause of the one declarative
 // query, never a separate vector call, so it filters, facets and pages with
 // the rest of the query. The SQL lives behind `VectorStore`
@@ -86,6 +103,80 @@ const nearFilterDeclaredSpaces = new WeakMap<object, string>();
 
 function removeBrackets(path: string) {
   return path.replace(/\[\]/g, '');
+}
+
+// The candidates an approximate near filter read, by the filter's
+// `{ to, minSimilarity }` entry and then by realm (one filter object may be
+// searched in several realms at once).
+const nearFilterCandidates = new WeakMap<object, Map<string, string[]>>();
+
+// How one near search ran, for `meta.near` and for tuning. `candidates` is
+// how many of the realm's vectors in the field and space were counted,
+// stopping one past `threshold` (or past `minShare` of the space, when that
+// is more). `reason` says why a search ran exactly.
+export interface NearReport {
+  path: 'exact' | 'hnsw';
+  candidates: number;
+  threshold: number;
+  efSearch?: number;
+  // how many cards the approximate read handed to exact re-scoring
+  rescored?: number;
+  reason?:
+    | 'below-threshold'
+    | 'small-share'
+    | 'no-index'
+    | 'no-space'
+    | 'unpaged'
+    | 'not-leading'
+    | 'asked'
+    | 'too-many-matches'
+    | 'filtered-out';
+}
+
+// One search's near plans: what it asked for, and what the approximate reads
+// left behind for the engine to check once the rows are in.
+export class NearContext {
+  // run every near search exactly (the engine's retry, below)
+  readonly exact: boolean;
+  // the page the query asks for; an unpaged near sort is exact
+  readonly page: { size: number; number?: number } | undefined;
+  reports: NearReport[] = [];
+  warnings: { code: string; message: string }[] = [];
+  // Set when the leading near sort compared only the candidates of an
+  // approximate read that was cut short: a page row without a similarity
+  // may then be a card the filter admits whose vector was not read.
+  leadingSortTruncated = false;
+
+  constructor(opts: {
+    exact?: boolean;
+    page?: { size: number; number?: number };
+  }) {
+    this.exact = Boolean(opts.exact);
+    this.page = opts.page;
+  }
+
+  // The report for `meta.near`: the first approximate search, else the
+  // first.
+  get report(): NearReport | undefined {
+    return this.reports.find((r) => r.path === 'hnsw') ?? this.reports[0];
+  }
+
+  // Whether the rows returned show the approximate read starved the page:
+  // a row with no similarity from the leading near sort, when there may
+  // have been more candidates. The engine then runs the query exactly.
+  starved(rows: Record<string, unknown>[]): boolean {
+    return (
+      this.leadingSortTruncated &&
+      rows.some((row) => row[NEAR_SIMILARITY_KEY] == null)
+    );
+  }
+
+  // the rows a page needs, through its last
+  get needed(): number | undefined {
+    return this.page
+      ? this.page.size * ((this.page.number ?? 0) + 1)
+      : undefined;
+  }
 }
 
 // What the query engine lends the near search: its database, its realm's
@@ -362,29 +453,83 @@ export class VectorQuery {
 
   // Validates a near filter up front (field lookups are async, the filter
   // compiler is not), and records the space each entry's field is declared
-  // in for `nearCondition`.
-  async assertNearFilter(filter: NearFilter, on: CodeRef, realmURL?: URL) {
+  // in for `nearCondition`. A filter with `minSimilarity` over a realm large
+  // enough reads its candidates from the space's index here (the vectors
+  // within the threshold, by half-precision distance with some slack), and
+  // `nearCondition` checks each exactly. One that admits more than
+  // `filterCandidates` cards is answered exactly instead.
+  async assertNearFilter(
+    filter: NearFilter,
+    on: CodeRef,
+    realmURL?: URL,
+    ctx?: NearContext,
+  ) {
     for (let [path, entry] of Object.entries(filter.near)) {
       await this.#assertNearField(on, path, `near filter on "${path}"`);
-      if (realmURL && entry && typeof entry === 'object') {
-        let space = await this.declaredSpaceOf(
-          realmURL,
-          on,
-          removeBrackets(path),
-          (entry as { to: number[] }).to,
-          `near filter on "${path}"`,
-        );
-        if (space != null) nearFilterDeclaredSpaces.set(entry, space);
+      if (!realmURL || !entry || typeof entry !== 'object') {
+        continue;
       }
+      let fieldPath = removeBrackets(path);
+      let { to, minSimilarity } = entry as {
+        to: number[];
+        minSimilarity?: number;
+      };
+      let space = await this.declaredSpaceOf(
+        realmURL,
+        on,
+        fieldPath,
+        to,
+        `near filter on "${path}"`,
+      );
+      if (space != null) nearFilterDeclaredSpaces.set(entry, space);
+      // what an earlier search of this filter object read is not this one's
+      nearFilterCandidates.get(entry)?.delete(realmURL.href);
+      if (minSimilarity == null) {
+        continue;
+      }
+      let plan = await this.#plan(
+        realmURL,
+        fieldPath,
+        space ?? targetSpaceOf(to),
+        ctx,
+      );
+      if (plan.path !== 'hnsw') {
+        this.#record(ctx, plan.report);
+        continue;
+      }
+      let settings = vectorSearchSettings();
+      let k = settings.filterCandidates;
+      let rows = await this.#store.nearCandidates({
+        realmURL: realmURL.href,
+        fieldPath,
+        space: plan.space,
+        literal: vectorToSqlLiteral(to),
+        k,
+        maxDistance: 1 - minSimilarity + settings.halfPrecisionSlack,
+      });
+      if (rows.length >= k) {
+        this.#record(ctx, {
+          ...plan.report,
+          path: 'exact',
+          reason: 'too-many-matches',
+        });
+        continue;
+      }
+      let urls = [...new Set(rows.map((r) => r.url))];
+      let byRealm = nearFilterCandidates.get(entry) ?? new Map();
+      byRealm.set(realmURL.href, urls);
+      nearFilterCandidates.set(entry, byRealm);
+      this.#record(ctx, { ...plan.report, rescored: urls.length });
     }
   }
 
   // A near filter: the card has a vector at the path of the target's
   // dimension and, given `minSimilarity`, at least that cosine similarity to
   // the target. Postgres asks the vector table (so it negates and nests like
-  // any predicate); SQLite scores the search doc's own vector, singular paths
-  // only.
-  nearCondition(filter: NearFilter): CardExpression {
+  // any predicate), comparing only the candidates `assertNearFilter` read
+  // when it read any; SQLite scores the search doc's own vector, singular
+  // paths only.
+  nearCondition(filter: NearFilter, realmURL?: URL): CardExpression {
     let [path, entry] = Object.entries(filter.near)[0];
     let { to, minSimilarity } = entry;
     return this.#store.nearFilterCondition(
@@ -394,13 +539,128 @@ export class VectorQuery {
         literal: vectorToSqlLiteral(to),
         targetSpace: targetSpaceOf(to),
         declaredSpace: nearFilterDeclaredSpaces.get(entry),
+        candidates:
+          minSimilarity != null && realmURL
+            ? nearFilterCandidates.get(entry)?.get(realmURL.href)
+            : undefined,
       },
       minSimilarity,
     );
   }
 
+  // Whether a near search over a realm's vectors in one field and space runs
+  // exactly or through the space's approximate index: exactly when asked, when
+  // the space has no index, when the realm holds no more than
+  // `exactThreshold` of them (counted, stopping just past it), or when they
+  // are less than `minShare` of the space's vectors.
+  async #plan(
+    realmURL: URL,
+    fieldPath: string,
+    space: string | undefined,
+    ctx: NearContext | undefined,
+    opts: { paged?: boolean; leading?: boolean } = {},
+  ): Promise<
+    | { path: 'exact'; report: NearReport }
+    | { path: 'hnsw'; space: string; report: NearReport }
+  > {
+    let threshold = vectorSearchSettings().exactThreshold;
+    let exact = (reason: NearReport['reason'], candidates = 0) => {
+      let report: NearReport = { path: 'exact', candidates, threshold, reason };
+      return { path: 'exact' as const, report };
+    };
+    if (!this.#pg || space == null) {
+      return exact('no-space');
+    }
+    let { minShare } = vectorSearchSettings();
+    let spaceSize = await this.#store.spaceSize(space);
+    let shareOf = spaceSize ? Math.ceil(spaceSize * minShare) : 0;
+    let candidates = await this.#store.countVectors({
+      realmURL: realmURL.href,
+      fieldPath,
+      space,
+      limit: Math.max(threshold, shareOf) + 1,
+    });
+    let large = candidates > threshold;
+    let reason: NearReport['reason'] | undefined = !large
+      ? 'below-threshold'
+      : candidates <= shareOf
+        ? 'small-share'
+        : ctx?.exact
+          ? 'asked'
+          : opts.paged === false
+            ? 'unpaged'
+            : opts.leading === false
+              ? 'not-leading'
+              : !(await this.#store.nearIndex(space))
+                ? 'no-index'
+                : undefined;
+    if (reason) {
+      if (large && reason !== 'asked' && reason !== 'small-share') {
+        ctx?.warnings.push({
+          code: 'near-exact-scan',
+          message: `a near search over "${fieldPath}" compared each of more than ${threshold.toLocaleString('en-US')} vectors exactly (${reason})`,
+        });
+      }
+      return exact(reason, candidates);
+    }
+    return {
+      path: 'hnsw',
+      space,
+      report: {
+        path: 'hnsw',
+        candidates,
+        threshold,
+        efSearch: vectorSearchSettings().efSearch,
+      },
+    };
+  }
+
+  #record(ctx: NearContext | undefined, report: NearReport) {
+    ctx?.reports.push(report);
+  }
+
+  // The cards whose vectors a paged near sort or signal compares, read
+  // through the space's index: the nearest `rescoreFactor` times the rows
+  // the page needs, widened (four times each read, up to `maxRescore`)
+  // until they cover that many cards, since a card with many vectors (a
+  // video's segments) may take several of the nearest. `truncated` when the
+  // last read was cut at its limit, so there may be more.
+  async #candidateCards(
+    realmURL: URL,
+    fieldPath: string,
+    space: string,
+    literal: string,
+    needed: number,
+  ): Promise<{ urls: string[]; truncated: boolean } | undefined> {
+    let settings = vectorSearchSettings();
+    let k = Math.max(needed * settings.rescoreFactor, settings.minRescore);
+    for (;;) {
+      k = Math.min(k, settings.maxRescore);
+      let rows = await this.#store.nearCandidates({
+        realmURL: realmURL.href,
+        fieldPath,
+        space,
+        literal,
+        k,
+      });
+      let urls = [...new Set(rows.map((r) => r.url))];
+      let truncated = rows.length >= k;
+      if (urls.length >= needed || !truncated) {
+        return { urls, truncated };
+      }
+      if (k >= settings.maxRescore) {
+        // even the widest read does not cover the page: compare exactly
+        return undefined;
+      }
+      k *= 4;
+    }
+  }
+
   // One near blend signal's aggregated value for a card, NULL when it has
-  // none; its joins are pushed onto `joins`.
+  // none; its joins are pushed onto `joins`. Over a large realm a paged
+  // query's signal compares only the candidates of an approximate read: the
+  // blend ranks every match, and a card that was not a candidate gets no
+  // rank from this signal (as a card with no vector gets none).
   async nearSignalScore(
     component: BlendComponent & {
       by: string;
@@ -410,45 +670,106 @@ export class VectorQuery {
     joinAlias: string,
     joins: CardExpression,
     realmURL: URL | undefined,
+    ctx?: NearContext,
   ): Promise<CardExpression> {
     let what = `blend signal "${component.by}" near a vector`;
     await this.#assertNearField(component.on, component.by, what);
     let fieldPath = removeBrackets(component.by);
     await this.#assertNearSpace(realmURL, fieldPath, component.near, what);
+    let declaredSpace =
+      this.#pg && realmURL
+        ? await this.declaredSpaceOf(
+            realmURL,
+            component.on,
+            fieldPath,
+            component.near,
+            what,
+          )
+        : undefined;
+    let literal = vectorToSqlLiteral(component.near);
+    let candidates = realmURL
+      ? await this.#candidatesFor(
+          realmURL,
+          fieldPath,
+          declaredSpace ?? targetSpaceOf(component.near),
+          literal,
+          ctx,
+          true,
+        )
+      : undefined;
     let { joins: signalJoins, similarity } = this.#store.nearSimilarity(
       joinAlias,
       {
         fieldPath,
         dims: vectorDimensions(component.near),
-        literal: vectorToSqlLiteral(component.near),
+        literal,
         targetSpace: targetSpaceOf(component.near),
-        declaredSpace:
-          this.#pg && realmURL
-            ? await this.declaredSpaceOf(
-                realmURL,
-                component.on,
-                fieldPath,
-                component.near,
-                what,
-              )
-            : undefined,
+        declaredSpace,
+        candidates: candidates?.urls,
       },
     );
     joins.push(...signalJoins);
     return similarity;
   }
 
+  // The approximate candidates for a paged near sort or signal, when the
+  // plan reads them, recording the plan either way.
+  async #candidatesFor(
+    realmURL: URL,
+    fieldPath: string,
+    space: string | undefined,
+    literal: string,
+    ctx: NearContext | undefined,
+    leading: boolean,
+  ): Promise<{ urls: string[]; truncated: boolean } | undefined> {
+    if (!this.#pg) {
+      return undefined;
+    }
+    let needed = ctx?.needed;
+    let plan = await this.#plan(realmURL, fieldPath, space, ctx, {
+      paged: needed !== undefined,
+      leading,
+    });
+    if (plan.path !== 'hnsw' || needed === undefined) {
+      this.#record(ctx, plan.report);
+      return undefined;
+    }
+    let found = await this.#candidateCards(
+      realmURL,
+      fieldPath,
+      plan.space,
+      literal,
+      needed,
+    );
+    if (!found) {
+      this.#record(ctx, {
+        ...plan.report,
+        path: 'exact',
+        reason: 'filtered-out',
+      });
+      return undefined;
+    }
+    this.#record(ctx, { ...plan.report, rescored: found.urls.length });
+    return found;
+  }
+
   // The projection columns and joins for the query's near sorts.
   //
   // Postgres reads the vectors the index writer copied into the vector
   // table, scoring cosine similarity. A card with no vector at the path
-  // sorts last. The search is exact: every row the filter admits is scored,
-  // so a near sort combines with any filter and never drops a match. While
-  // an index pass is staged (WIP reads), the table still holds the last
-  // committed vectors.
+  // sorts last. Over a realm with no more than `exactThreshold` vectors in
+  // the field's space, or for a near sort that does not lead the sort, every
+  // row the filter admits is scored, so a near sort combines with any filter
+  // and never drops a match. A leading, paged near sort over a larger realm
+  // scores only the candidate cards of an approximate read, exactly; when
+  // the page then holds a row without a similarity, the filter may have
+  // admitted cards the read left out, and the engine runs the query again
+  // exactly (`NearContext#starved`). While an index pass is staged (WIP
+  // reads), the table still holds the last committed vectors.
   async nearSortExpressions(
     sort: Sort | undefined,
     realmURL: URL,
+    ctx?: NearContext,
   ): Promise<{
     nearColumns: CardExpression;
     nearJoins: CardExpression;
@@ -466,14 +787,30 @@ export class VectorQuery {
       await this.#assertNearField(s.on, s.by, what);
       let fieldPath = removeBrackets(s.by);
       await this.#assertNearSpace(realmURL, fieldPath, s.near, what);
+      let declaredSpace = this.#pg
+        ? await this.declaredSpaceOf(realmURL, s.on, fieldPath, s.near, what)
+        : undefined;
+      let literal = vectorToSqlLiteral(s.near);
+      // Only a sort that leads, ranking most similar first, reads candidates.
+      let leading = index === 0 && (s.direction ?? 'desc') === 'desc';
+      let candidates = await this.#candidatesFor(
+        realmURL,
+        fieldPath,
+        declaredSpace ?? targetSpaceOf(s.near),
+        literal,
+        ctx,
+        leading,
+      );
+      if (candidates?.truncated && ctx) {
+        ctx.leadingSortTruncated = true;
+      }
       let { joins, similarity } = this.#store.nearSimilarity(`nv${index}`, {
         fieldPath,
         dims: vectorDimensions(s.near),
-        literal: vectorToSqlLiteral(s.near),
+        literal,
         targetSpace: targetSpaceOf(s.near),
-        declaredSpace: this.#pg
-          ? await this.declaredSpaceOf(realmURL, s.on, fieldPath, s.near, what)
-          : undefined,
+        declaredSpace,
+        candidates: candidates?.urls,
       });
       nearJoins.push(...joins);
       nearColumns.push(
@@ -486,8 +823,8 @@ export class VectorQuery {
   }
 
   // Each source card's look-alikes: its `k` nearest cards in the realm by
-  // the vector field `field`, at least `minSimilarity` similar, read through
-  // that field's nearest-neighbour index. The field must declare
+  // the vector field `field`, at least `minSimilarity` similar (exactly, or
+  // over a large realm through its space's index, then re-scored exactly). The field must declare
   // `search: { neighbors: true }` on the type the query is anchored on.
   // `allowed`, when it gives a set, keeps only the neighbours it names.
   async lookalikes(opts: {
@@ -527,7 +864,7 @@ export class VectorQuery {
     if (dims === undefined || opts.sourceUrls.length === 0) {
       return bySrc;
     }
-    if (!Number.isInteger(dims) || dims < 1 || dims > 2000) {
+    if (!Number.isInteger(dims) || dims < 1) {
       return bySrc;
     }
     let declaredSpace = await this.declaredSpaceOf(
@@ -541,7 +878,11 @@ export class VectorQuery {
     // nearest-neighbour read, before its ORDER BY and LIMIT, so rows the
     // caller cannot see never take an admitted neighbour's place.
     let allowed = await opts.allowed();
+    // A large realm reads each card's neighbours through the space's index
+    // and re-scores them exactly; a small one compares them all.
+    let plan = await this.#plan(realmURL, field, declaredSpace, undefined);
     let pairs = await this.#store.lookalikes({
+      approximate: plan.path === 'hnsw',
       realmURL: realmURL.href,
       fieldPath: field,
       dims,

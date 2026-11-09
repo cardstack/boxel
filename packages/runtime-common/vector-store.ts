@@ -16,6 +16,87 @@ import { PgVectorStore } from './vector-store-pg.ts';
 // interface hands back expressions to splice into that statement rather
 // than running a separate vector query and joining in application code.
 
+// Every default of approximate near search, in one place, each with where it
+// came from. `setVectorSearchSettings` overrides them (tests; a deployment
+// sets BOXEL_VECTOR_EXACT_THRESHOLD and BOXEL_VECTOR_EF_SEARCH).
+export interface VectorSearchSettings {
+  // Below this many of a realm's vectors in one field and space, a near
+  // search scans them exactly; above it, it reads an approximate index.
+  // Lucene and Elasticsearch make the same switch (an exact search when the
+  // filtered set is small); 5,000 256-d vectors scan exactly in a few
+  // milliseconds here, where the index's own overhead is about the same.
+  exactThreshold: number;
+  // Below this share of its space's vectors, a realm's vectors in a field
+  // are scanned exactly too, however many: the index walk would pass over
+  // most of what it reads, skipping other realms' and fields' vectors.
+  // Measured on the orb stack's 248,000-vector space: a realm holding 4% of
+  // it read its top 10 in 40 ms through the index against 4 ms exactly; one
+  // holding 15% in 10 ms against 86 ms.
+  minShare: number;
+  // The HNSW search beam (pgvector's `hnsw.ef_search`, default 40).
+  // Measured on 50,000 of OnTube's 256-d segment vectors: 100 gives 98.5%
+  // recall@10 against exact search at 1.7 ms a query.
+  efSearch: number;
+  // HNSW build settings: graph degree and build beam. pgvector's defaults
+  // (16 and 64), measured above.
+  m: number;
+  efConstruction: number;
+  // Approximate candidates read for a page, before exact re-scoring: at
+  // least `rescoreFactor` times the rows the page needs (through its last
+  // row), and at least `minRescore`. Elasticsearch's kNN search reads
+  // `num_candidates` (default 1.5 x k) before its rescore; Vespa re-ranks a
+  // first phase's top hits. A wider net is cheap here: the re-scoring reads
+  // only the candidates' own vectors.
+  rescoreFactor: number;
+  minRescore: number;
+  // The most candidates one approximate read takes (a page whose cards hold
+  // many vectors each may need several reads, each four times the last).
+  // Past it the search is exact. pgvector's iterative scans stop at
+  // `hnsw.max_scan_tuples` (20,000) anyway.
+  maxRescore: number;
+  // The most cards an approximate near filter admits before it is answered
+  // exactly instead: a threshold that admits more is not a nearest-neighbour
+  // question.
+  filterCandidates: number;
+  // How far a half-precision distance may sit from the full-precision one,
+  // so a vector at the edge of a filter's `minSimilarity` is still a
+  // candidate for the exact check (half precision keeps about three
+  // significant digits).
+  halfPrecisionSlack: number;
+}
+
+function envNumber(name: string): number | undefined {
+  let raw = typeof process !== 'undefined' ? process.env?.[name] : undefined;
+  let n = raw == null ? NaN : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+export const VECTOR_SEARCH_DEFAULTS: Readonly<VectorSearchSettings> = {
+  exactThreshold: envNumber('BOXEL_VECTOR_EXACT_THRESHOLD') ?? 5_000,
+  minShare: 0.1,
+  efSearch: envNumber('BOXEL_VECTOR_EF_SEARCH') ?? 100,
+  m: 16,
+  efConstruction: 64,
+  rescoreFactor: 4,
+  minRescore: 100,
+  maxRescore: 4_000,
+  filterCandidates: 1_000,
+  halfPrecisionSlack: 0.005,
+};
+
+let settings: VectorSearchSettings = { ...VECTOR_SEARCH_DEFAULTS };
+
+export function vectorSearchSettings(): Readonly<VectorSearchSettings> {
+  return settings;
+}
+
+// Overrides some settings; with no argument, restores the defaults.
+export function setVectorSearchSettings(
+  overrides?: Partial<VectorSearchSettings>,
+) {
+  settings = { ...VECTOR_SEARCH_DEFAULTS, ...(overrides ?? {}) };
+}
+
 export interface NearTarget {
   // the vector field's path, without list brackets (`segments.embedding`)
   fieldPath: string;
@@ -26,6 +107,22 @@ export interface NearTarget {
   targetSpace?: string;
   // the space the field is declared in
   declaredSpace?: string;
+  // When an approximate read chose them: the only cards (by URL) whose
+  // vectors are compared, each exactly.
+  candidates?: string[];
+}
+
+// The vectors an approximate read found nearest a target, in a realm, a
+// field and a space: by URL, with the approximate distance, nearest first.
+export interface NearCandidateRequest {
+  realmURL: string;
+  fieldPath: string;
+  space: string;
+  // the target as a '[…]' literal
+  literal: string;
+  k: number;
+  // keep only vectors within this cosine distance (a filter's threshold)
+  maxDistance?: number;
 }
 
 export interface VectorStore {
@@ -66,6 +163,24 @@ export interface VectorStore {
   oneCardVectors(realmURL: string, url: string): Promise<StoredVector[]>;
   // A `select` column holding a card's vectors at a field.
   vectorColumn(fieldPath: string, list: boolean, alias: string): string;
+  // Whether a space's vectors have an approximate (nearest-neighbour) index,
+  // with the settings it reads them by.
+  nearIndex(space: string): Promise<boolean>;
+  // About how many vectors a space holds in all, the planner's estimate
+  // (undefined when there is none yet).
+  spaceSize(space: string): Promise<number | undefined>;
+  // How many vectors a realm holds in one field and space, counting no
+  // further than `limit`.
+  countVectors(opts: {
+    realmURL: string;
+    fieldPath: string;
+    space: string;
+    limit: number;
+  }): Promise<number>;
+  // The vectors nearest a target by the approximate index.
+  nearCandidates(
+    request: NearCandidateRequest,
+  ): Promise<{ url: string; distance: number }[]>;
   // Gives each space a home before vectors are written in it (a partition,
   // in Postgres). Runs outside the writer's transaction.
   ensureSpaces(spaces: string[]): Promise<void>;
@@ -85,6 +200,8 @@ export interface LookalikeRequest {
   k: number;
   // the neighbours a card may have, when a filter or a grant narrows them
   allowed: Set<string> | undefined;
+  // read through the space's approximate index, then re-scored exactly
+  approximate: boolean;
 }
 
 export interface StoredVector {
@@ -169,6 +286,18 @@ export class SqliteVectorStore implements VectorStore {
     return [];
   }
   async ensureSpaces(): Promise<void> {}
+  async nearIndex(): Promise<boolean> {
+    return false;
+  }
+  async countVectors(): Promise<number> {
+    return 0;
+  }
+  async spaceSize(): Promise<number | undefined> {
+    return undefined;
+  }
+  async nearCandidates(): Promise<never> {
+    needsPostgres();
+  }
   async oneCardVectors(): Promise<StoredVector[]> {
     return [];
   }

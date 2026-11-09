@@ -68,9 +68,11 @@ import {
   SEARCH_TEXT_KEY,
 } from './search-intent.ts';
 import {
+  NearContext,
   VectorQuery,
   isNearSort,
   nearSimilarityAlias,
+  type NearReport,
   type VectorStatus,
 } from './vector-query.ts';
 export { NEAR_SIMILARITY_KEY, isNearSort } from './vector-query.ts';
@@ -479,6 +481,10 @@ export type QueryOptions = WIPOptions & {
   // Cancels the search's statements when it aborts (the request's client went
   // away, or its time budget ran out). See `ExecuteOptions.signal`.
   signal?: AbortSignal;
+  // Run every near search exactly, over all the realm's vectors (the
+  // engine's retry when an approximate read starved a page; see
+  // `NearContext#starved`).
+  nearExact?: boolean;
 };
 
 // Selects which columns `search()` projects. `dataOnly` projects
@@ -569,6 +575,11 @@ export interface QueryResultsMeta {
   // where the query's expression ran: `sql` over every match, or `top` over
   // the rerank window, with why it could not run in SQL
   expression?: { placement: 'sql' | 'top'; reason?: string };
+  // How the query's near search ran: `exact` over every vector of the
+  // field in its space, or `hnsw` through the space's approximate index
+  // with exact re-scoring (see vector-query.ts). `candidates` counts the
+  // realm's vectors, stopping one past `threshold`.
+  near?: NearReport;
 }
 
 // Per re-ranked row: its formula value.
@@ -612,6 +623,8 @@ interface FilterContext {
   // The realm the search runs over, where a signal needs it (the spaces a
   // near signal's field is declared in).
   realmURL?: URL;
+  // The search's near plans, which a near signal records its plan in.
+  near?: NearContext;
 }
 const DEFAULT_FILTER_CONTEXT: FilterContext = {
   inAny: false,
@@ -1730,8 +1743,11 @@ export class IndexQueryEngine {
       // page's rows under these alone (see `#pageRows`).
       let baseConditions = [...conditions];
 
+      // How this search's near sorts, signals and filters run: exactly, or
+      // through an approximate index (see vector-query.ts).
+      let nearCtx = new NearContext({ exact: opts.nearExact, page });
       if (filter) {
-        await this.#assertNearFilters(filter, baseCardRef, realmURL);
+        await this.#assertNearFilters(filter, baseCardRef, realmURL, nearCtx);
         conditions.push(
           this.filterCondition(filter, baseCardRef, 'positive', {
             inAny: false,
@@ -1789,6 +1805,7 @@ export class IndexQueryEngine {
       let { nearColumns, nearJoins } = await this.#vectors.nearSortExpressions(
         sort,
         realmURL,
+        nearCtx,
       );
       let { blendColumns, blendJoins } = await this.#blendSortExpressions(
         sort,
@@ -1799,6 +1816,7 @@ export class IndexQueryEngine {
           prerenderedTable: prerenderedTableFromOpts(opts),
           indexTable: tableFromOpts(opts),
           realmURL,
+          near: nearCtx,
         },
         Boolean(explain),
       );
@@ -2106,6 +2124,24 @@ export class IndexQueryEngine {
           .filter((url): url is string => typeof url === 'string'),
       );
 
+      // The leading near sort compared an approximate read's candidates,
+      // and the page shows the filter may have admitted cards it left out:
+      // answer exactly instead.
+      if (nearCtx.starved(results as Record<string, unknown>[])) {
+        let exact = await this._search(
+          realmURL,
+          asWritten,
+          { ...opts, nearExact: true },
+          askedSelect,
+          entryType,
+          conditionalLiveDoc,
+        );
+        if (exact.meta.near) {
+          exact.meta.near = { ...exact.meta.near, reason: 'filtered-out' };
+        }
+        return exact;
+      }
+      let nearWarnings = nearCtx.warnings;
       return {
         results,
         meta: {
@@ -2113,6 +2149,7 @@ export class IndexQueryEngine {
             total: Number(totalResults[0].total),
             ...(candidatesCapped ? { totalIsEstimate: true } : {}),
           },
+          ...(nearCtx.report ? { near: nearCtx.report } : {}),
           ...(passages ? { passages } : {}),
           ...(requestedFacets.length
             ? {
@@ -2128,7 +2165,9 @@ export class IndexQueryEngine {
             : {}),
           ...(Object.keys(facetStats).length ? { facetStats } : {}),
           ...(letMeta ? { lets: letMeta } : {}),
-          ...(letWarnings.length ? { warnings: letWarnings } : {}),
+          ...(letWarnings.length || nearWarnings.length
+            ? { warnings: [...letWarnings, ...nearWarnings] }
+            : {}),
           ...(formulaMeta ? { expression: formulaMeta } : {}),
         },
       };
@@ -3815,7 +3854,7 @@ export class IndexQueryEngine {
     } else if (isTypeAheadFilter(filter)) {
       return this.typeAheadCondition(filter, typeConditionRef, context);
     } else if (isNearFilter(filter)) {
-      return this.nearCondition(filter, typeConditionRef);
+      return this.nearCondition(filter, typeConditionRef, context.realmURL);
     } else if ('linkedFrom' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
@@ -4145,6 +4184,7 @@ export class IndexQueryEngine {
     filter: Filter | undefined,
     onRef: CodeRef,
     realmURL?: URL,
+    near?: NearContext,
   ) {
     if (!filter) {
       return;
@@ -4154,7 +4194,7 @@ export class IndexQueryEngine {
       (filter as { type?: CodeRef }).type ??
       onRef;
     if (isNearFilter(filter)) {
-      await this.#vectors.assertNearFilter(filter, on, realmURL);
+      await this.#vectors.assertNearFilter(filter, on, realmURL, near);
     } else if ('pattern' in filter || 'regex' in filter) {
       let operator = 'regex' in filter ? 'regex' : 'pattern';
       if (operator === 'regex' && this.#dbAdapter.kind !== 'pg') {
@@ -4178,14 +4218,14 @@ export class IndexQueryEngine {
       }
     } else if ('every' in filter) {
       for (let child of filter.every) {
-        await this.#assertNearFilters(child, on, realmURL);
+        await this.#assertNearFilters(child, on, realmURL, near);
       }
     } else if ('any' in filter) {
       for (let child of filter.any) {
-        await this.#assertNearFilters(child, on, realmURL);
+        await this.#assertNearFilters(child, on, realmURL, near);
       }
     } else if ('not' in filter) {
-      await this.#assertNearFilters(filter.not, on, realmURL);
+      await this.#assertNearFilters(filter.not, on, realmURL, near);
     }
   }
 
@@ -4675,10 +4715,11 @@ export class IndexQueryEngine {
   private nearCondition(
     filter: NearFilter,
     typeConditionRef?: CodeRef,
+    realmURL?: URL,
   ): CardExpression {
     return every([
       ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-      this.#vectors.nearCondition(filter),
+      this.#vectors.nearCondition(filter, realmURL),
     ]);
   }
 
@@ -4896,6 +4937,7 @@ export class IndexQueryEngine {
         component.when,
         baseCardRef,
         filterContext.realmURL,
+        filterContext.near,
       );
       let condition = this.filterCondition(
         component.when,
@@ -4920,6 +4962,7 @@ export class IndexQueryEngine {
         joinAlias,
         joins,
         filterContext.realmURL,
+        filterContext.near,
       );
     }
     return [
