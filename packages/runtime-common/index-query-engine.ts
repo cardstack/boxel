@@ -6320,16 +6320,14 @@ export class IndexQueryEngine {
     // negated polarity we keep plain extraction, whose NULL-on-absent-path
     // semantics `@>` cannot reproduce under `NOT`.
     if (polarity === 'positive') {
+      let pathMatch = this.#pluralPathMatch(key, [value], context);
       return [
         fieldArity({
           type: onRef,
           path: key,
           value: [jsonContainsQuery(key, onRef, [param(value)])],
-          pluralValue: this.#pluralPathMatch(key, [value], context) ?? [
-            query,
-            '=',
-            v,
-          ],
+          pluralValue: pathMatch ?? [query, '=', v],
+          pluralSelfContained: pathMatch !== undefined,
           errorHint: 'filter',
         }),
       ];
@@ -6440,18 +6438,14 @@ export class IndexQueryEngine {
               ')',
             ]
           : ['(', ...containments, ')'];
+      let inPathMatch = this.#pluralPathMatch(key, nonNullValues, context);
       conditions.push([
         fieldArity({
           type: onRef,
           path: key,
           value: matched,
-          pluralValue: this.#pluralPathMatch(key, nonNullValues, context) ?? [
-            query,
-            'IN',
-            '(',
-            ...inList,
-            ')',
-          ],
+          pluralValue: inPathMatch ?? [query, 'IN', '(', ...inList, ')'],
+          pluralSelfContained: inPathMatch !== undefined,
           errorHint: 'filter',
         }),
       ]);
@@ -6611,7 +6605,14 @@ export class IndexQueryEngine {
   //   ORDER BY url
 
   private async handleFieldArity(fieldArity: FieldArity): Promise<Expression> {
-    let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
+    let {
+      path,
+      value,
+      type,
+      pluralValue,
+      pluralSelfContained,
+      usePluralContainer,
+    } = fieldArity;
     let definition = await this.getDefinition(type);
     let exp: CardExpression = await this.walkFilterFieldPath(
       definition,
@@ -6620,6 +6621,11 @@ export class IndexQueryEngine {
       // Leaf field handler
       async (_definition, expression, pathTraveled) => {
         if (traveledThruPlural(pathTraveled)) {
+          // A JSON path match tests the card on its own; joining the list's
+          // jsonb_tree would only make Postgres expand every row's list.
+          if (pluralSelfContained && pluralValue) {
+            return pluralValue;
+          }
           return [
             ...every([
               pluralValue ?? expression,

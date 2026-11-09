@@ -124,6 +124,10 @@ export interface FieldArity {
   path: string;
   value: CardExpression;
   pluralValue?: CardExpression;
+  // The plural value is a complete test of the card on its own (a JSON path
+  // match the search_doc GIN index answers), so no jsonb_tree walk of the
+  // list is joined in.
+  pluralSelfContained?: boolean;
   usePluralContainer?: boolean;
   errorHint: string;
   kind: 'field-arity';
@@ -350,6 +354,7 @@ export function fieldArity({
   usePluralContainer,
   errorHint,
   pluralValue,
+  pluralSelfContained,
 }: {
   type: CodeRef;
   path: string;
@@ -357,6 +362,7 @@ export function fieldArity({
   usePluralContainer?: boolean;
   errorHint: string;
   pluralValue?: CardExpression;
+  pluralSelfContained?: boolean;
 }): FieldArity {
   return {
     type,
@@ -365,6 +371,7 @@ export function fieldArity({
     errorHint,
     usePluralContainer,
     pluralValue,
+    ...(pluralSelfContained ? { pluralSelfContained } : {}),
     kind: 'field-arity',
   };
 }
