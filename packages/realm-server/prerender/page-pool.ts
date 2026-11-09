@@ -246,6 +246,10 @@ const STANDBY_CREATION_RETRIES = 3;
 const STANDBY_BACKOFF_MS = 500;
 const STANDBY_BACKOFF_CAP_MS = 4000;
 const CONSOLE_ERROR_LIMIT = 50;
+// Console formatting bounds (see `#formatConsoleMessage`): how many messages
+// may wait on their tabs for argument values at once, and how long each waits.
+const CONSOLE_FORMAT_CONCURRENCY = 32;
+const CONSOLE_FORMAT_TIMEOUT_MS = 500;
 // How long an awaited `disposeAffinity` waits for its tabs to close before
 // returning. A tab closes only once the render holding it lets go (closing a
 // page under a live render surfaces as a raw protocol error, which the
@@ -4026,12 +4030,50 @@ export class PagePool {
     }
   }
 
+  // Console messages being formatted through their arguments right now,
+  // across every tab. Each one waits on CDP round-trips into its tab.
+  #consoleFormatsInFlight = 0;
+
+  // A console message's text, from its arguments' JSON values when that is
+  // cheap, and from `message.text()` otherwise. Reading an argument's value is
+  // a round-trip into the tab, so a tab that has stopped answering never
+  // settles it: a hung tab that keeps logging (a fetch failing in a loop logs
+  // an error per attempt) used to leave one suspended handler per message,
+  // and millions of them ran this process out of heap. So the formatting is
+  // bounded both ways: at most CONSOLE_FORMAT_CONCURRENCY messages wait on
+  // their tabs at once, and each waits at most CONSOLE_FORMAT_TIMEOUT_MS.
+  // Past either bound the message's own text is used, which needs nothing
+  // from the tab.
   async #formatConsoleMessage(message: ConsoleMessage): Promise<string> {
+    let args = message.args();
+    if (
+      !args.length ||
+      this.#consoleFormatsInFlight >= CONSOLE_FORMAT_CONCURRENCY
+    ) {
+      return message.text();
+    }
+    this.#consoleFormatsInFlight++;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      let args = message.args();
-      if (!args.length) {
-        return message.text();
-      }
+      let deadline = new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), CONSOLE_FORMAT_TIMEOUT_MS);
+      });
+      let formatted = await Promise.race([
+        this.#formatConsoleArgs(message, args),
+        deadline,
+      ]);
+      return formatted ?? message.text();
+    } finally {
+      clearTimeout(timer);
+      this.#consoleFormatsInFlight--;
+    }
+  }
+
+  async #formatConsoleArgs(
+    message: ConsoleMessage,
+    args: ReturnType<ConsoleMessage['args']>,
+  ): Promise<string> {
+    try {
       let parts = await Promise.all(
         args.map(async (arg) => {
           try {
