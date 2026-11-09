@@ -388,6 +388,43 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('merged reranks, on the real engine', function (hooks) {
+    let ctx = engineRealms(hooks, {
+      [A]: [
+        { id: 'a1', text: 'loop loop loop loop loop', score: 1 },
+        { id: 'a2', text: 'loop', score: 4 },
+      ],
+      [B]: [
+        { id: 'b1', text: 'loop loop loop loop', score: 2 },
+        { id: 'b2', text: 'loop loop', score: 3 },
+      ],
+    });
+    let short = (doc: { data: { id: string }[] }) =>
+      doc.data.map((e) => e.id.replace(/^http:\/\/(\w)\/(\w+)\.json$/, '$2'));
+
+    test('a merged rerank orders the realms together by its value', async function (assert) {
+      let doc = await searchEntryRealms(
+        [ctx.realm(A), ctx.realm(B)],
+        query({
+          federation: { results: 'merged' },
+          filter: { matches: 'loop' },
+          sort: [{ by: 'item.textRelevance' }],
+          rerank: { expression: 'score' },
+          page: { number: 0, size: 4 },
+        }),
+      );
+      assert.deepEqual(short(doc), ['a2', 'b2', 'b1', 'a1']);
+      assert.deepEqual(
+        doc.data.map((e) => e.meta?._rerank),
+        [4, 3, 2, 1],
+      );
+      assert.true(
+        doc.data.every((e) => typeof e.meta?._matchRelevance === 'number'),
+        'each row keeps its text relevance',
+      );
+    });
+  });
+
   module('each realm reports how it answered', function () {
     test('a refusal with a code, an outage and a timeout read differently', async function (assert) {
       let doc = await searchEntryRealms(

@@ -441,6 +441,7 @@ export class RealmIndexQueryEngine {
       labelFilter,
       grantFilter,
       grantsForType,
+      expressionOverTopWindow,
     } = searchEntryQuery;
     if (!columns) {
       throw new Error('searchColumns needs columns');
@@ -459,6 +460,7 @@ export class RealmIndexQueryEngine {
       ...(labelFilter ? { labelFilter } : {}),
       ...(grantFilter ? { grantFilter } : {}),
       ...(grantsForType ? { grantsForType } : {}),
+      ...(expressionOverTopWindow ? { expressionOverTopWindow } : {}),
     };
     let plans = await this.#indexQueryEngine.planColumns(type, columns);
     let run = () =>
@@ -498,6 +500,7 @@ export class RealmIndexQueryEngine {
       grantFilter,
       grantsForType,
       exposeSortValues,
+      expressionOverTopWindow,
     } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
@@ -507,6 +510,7 @@ export class RealmIndexQueryEngine {
       ...(grantFilter ? { grantFilter } : {}),
       ...(grantsForType ? { grantsForType } : {}),
       ...(exposeSortValues ? { exposeSortValues } : {}),
+      ...(expressionOverTopWindow ? { expressionOverTopWindow } : {}),
     };
 
     // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one

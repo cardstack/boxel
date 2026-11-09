@@ -1375,6 +1375,107 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a reranked page keeps what the query computed for each row', async function (assert) {
+    let page = async (query: Query, opts = {}) =>
+      (
+        await engine.search(new URL(testRealm), query, opts, {
+          kind: 'renderSet',
+        })
+      ).results as Record<string, any>[];
+    let rows = await page(
+      {
+        filter: { type: on },
+        explain: true,
+        sort: [{ by: '_blend', of: [{ on, by: 'hnScore' }] }],
+        collapse: { by: 'channel', on },
+        page: { number: 0, size: 3 },
+        rerank: { expression: '100 - hnScore', top: 4 },
+      },
+      { exposeSortValues: true },
+    );
+    assert.deepEqual(
+      rows.map((r) => r.url.replace(`${testRealm}Talk/`, '')),
+      ['g.json', 'f.json', 'b.json'],
+      'the first four groups, lowest score first',
+    );
+    for (let row of rows) {
+      assert.strictEqual(
+        typeof Number(row._blendScore),
+        'number',
+        `${row.url} keeps its blend score`,
+      );
+      assert.notStrictEqual(row._blendScore, undefined);
+      assert.ok(row._explain?.signals, `${row.url} keeps its explanation`);
+      assert.ok(Number(row._collapseSize) >= 1, `${row.url} keeps its size`);
+      assert.deepEqual(
+        row._sortValues.slice(0, 1),
+        [row._rerank],
+        `${row.url} sorts by its rerank value first, for a merge`,
+      );
+      assert.strictEqual(
+        row._sortValues.length,
+        3,
+        'then the blend score and the url',
+      );
+    }
+    assert.deepEqual(
+      rows.map((r) => Number(r._collapseSize)),
+      [1, 1, 3],
+      'two talks with no channel, then Strange Loop',
+    );
+
+    // A SQL expression sort keeps its own values and report beside a rerank.
+    let both = await engine.search(
+      new URL(testRealm),
+      {
+        filter: { type: on },
+        sort: [{ by: '_expr', on, expr: 'hnScore * 2' }],
+        rerank: { expression: '100 - hnScore', top: 3 },
+      },
+      {},
+      { kind: 'renderSet' },
+    );
+    assert.deepEqual(both.meta.expression, { placement: 'sql' });
+    let d = both.results.find((r: any) => r.url === url('d')) as any;
+    assert.strictEqual(Number(d._expression), 100, "the sort's value");
+    assert.strictEqual(Number(d._rerank), 50, "the rerank's value");
+
+    // A rerank alone is not an expression of the query's.
+    let alone = await engine.search(
+      new URL(testRealm),
+      {
+        filter: { type: on },
+        sort: byScore,
+        rerank: { expression: '100 - hnScore', top: 3 },
+      },
+      {},
+      { kind: 'renderSet' },
+    );
+    assert.strictEqual(alone.meta.expression, undefined);
+    assert.ok(alone.meta.rerank, 'the rerank reports itself');
+    assert.notOk(
+      alone.results.some((r: any) => '_expression' in r),
+      'no row carries an expression value',
+    );
+
+    // An expression placed over the top window still says so.
+    let top = await engine.search(
+      new URL(testRealm),
+      {
+        filter: { type: on },
+        sort: [{ expression: '100 - hnScore', placement: 'top' }],
+        type: on,
+      } as unknown as Query,
+      {},
+      { kind: 'renderSet' },
+    );
+    assert.strictEqual(top.meta.expression?.placement, 'top');
+    assert.ok(
+      top.results.every((r: any) => r._expression === r._rerank),
+      "each row's expression value is its rerank value",
+    );
+  });
+
   test('a rerank says when its window or its comparison set was cut short', async function (assert) {
     let whole = await reranked({
       filter: { type: on },

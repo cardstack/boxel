@@ -459,6 +459,10 @@ export type QueryOptions = WIPOptions & {
   // sorted it by (`_sortValues`), so rows from several realms can be ordered
   // by the query's own sort.
   exposeSortValues?: boolean;
+  // Set when the query's rerank is an expression placed over the top window,
+  // lowered before the engine saw it (the entry grammar lowers on parse): its
+  // values are then the query's expression (`FORMULA_KEY`).
+  expressionOverTopWindow?: boolean;
   // Set for a caller a realm policy scopes: realm-wide word statistics
   // (IDF, typo corrections) are used only under the small-count rules
   // (`STATS_MIN_ROWS`, `STATS_MIN_COUNT`).
@@ -561,7 +565,9 @@ export interface QueryResultsMeta {
 // Per re-ranked row: its formula value.
 export const RERANK_KEY = '_rerank';
 // The value of the query's expression for a row, wherever it ran: its `_expr`
-// sort in SQL, or its rerank over the top window. `meta.expression` says which.
+// sort in SQL, or, for an expression placed over the top window, the rerank
+// it lowered to. `meta.expression` says which. A rerank the query asked for
+// itself is not the query's expression: its value rides `_rerank` alone.
 export const FORMULA_KEY = '_expression';
 
 // Per result row, under `explain`: the row's `_explain` column.
@@ -1560,6 +1566,15 @@ export class IndexQueryEngine {
         { written: lowering?.notes.quotedLabels },
       )) as Query);
     }
+    // An expression placed over the top window lowered to this rerank: its
+    // values are the query's expression, and `meta.expression` reports it.
+    if (
+      rerank &&
+      (lowering?.notes.expression?.placement === 'top' ||
+        opts.expressionOverTopWindow)
+    ) {
+      this.#formulaReranks.add(rerank);
+    }
     // One-card bindings resolve first: their values stand in for each
     // reference, and the query runs on without them.
     if (lets && Object.values(lets).some((b) => b.one)) {
@@ -1568,6 +1583,9 @@ export class IndexQueryEngine {
         { filter, sort, rerank, let: lets },
         opts,
       );
+      if (rerank && resolved.rerank && this.#formulaReranks.has(rerank)) {
+        this.#formulaReranks.add(resolved.rerank);
+      }
       let out = await this._search(
         realmURL,
         {
@@ -1593,7 +1611,7 @@ export class IndexQueryEngine {
     if (rerank) {
       let reranked = await this.#reranked(
         realmURL,
-        { filter, sort, page, facets, collapse, let: lets, rerank },
+        { filter, sort, page, facets, collapse, let: lets, explain, rerank },
         opts,
         selectClauseExpression,
         entryType,
@@ -2104,6 +2122,12 @@ export class IndexQueryEngine {
           String((error as Error)?.message),
         )
       ) {
+        let fallback = {
+          expression: leading.expr,
+          top: MAX_RERANK_TOP,
+          ...(leading.direction ? { direction: leading.direction } : {}),
+        };
+        this.#formulaReranks.add(fallback);
         let out = await this._search(
           realmURL,
           {
@@ -2114,11 +2138,7 @@ export class IndexQueryEngine {
             collapse,
             let: lets,
             explain,
-            rerank: {
-              expression: leading.expr,
-              top: MAX_RERANK_TOP,
-              ...(leading.direction ? { direction: leading.direction } : {}),
-            },
+            rerank: fallback,
           },
           opts,
           askedSelect,
@@ -2315,6 +2335,7 @@ export class IndexQueryEngine {
         facets: query.facets,
         collapse: query.collapse,
         let: query.let,
+        explain: query.explain,
       },
       opts,
       [
@@ -2326,6 +2347,7 @@ export class IndexQueryEngine {
       url: string;
       type?: string;
       search_doc?: unknown;
+      [column: string]: unknown;
     }[];
     let docs = rows.map((row) => {
       let doc = row.search_doc;
@@ -2367,6 +2389,7 @@ export class IndexQueryEngine {
             };
           })
         : docs;
+    let formula = this.#formulaReranks.has(rerank);
     let bound = this.#rerankBindings.get(rerank);
     let scored = await this.#scoreRerank(
       rerank.expression,
@@ -2417,10 +2440,33 @@ export class IndexQueryEngine {
           byKey.get(`${w.row.type ?? ''} ${w.row.url}`) ??
           page.find((r) => (r as any).url === w.row.url);
         if (row) {
+          // The page is read by url alone, so what the query computed for
+          // each candidate (its scores, `_explain`, `_collapseSize`, a SQL
+          // expression's value) comes from the candidate row.
+          let {
+            url: _url,
+            type: _type,
+            search_doc: _doc,
+            [SORT_VALUES_KEY]: candidateSortValues,
+            ...computed
+          } = w.row;
           results.push({
             ...row,
+            ...computed,
             [RERANK_KEY]: w.value,
-            [FORMULA_KEY]: w.value,
+            ...(formula ? { [FORMULA_KEY]: w.value } : {}),
+            // A merge across realms orders by the rerank value first, then
+            // by the query's own sort.
+            ...(opts.exposeSortValues
+              ? {
+                  [SORT_VALUES_KEY]: [
+                    w.value,
+                    ...((candidateSortValues as unknown[] | undefined) ?? [
+                      w.row.url,
+                    ]),
+                  ],
+                }
+              : {}),
           } as Partial<IndexRowWithHtml>);
         }
       }
@@ -2441,10 +2487,16 @@ export class IndexQueryEngine {
           ...(set?.truncated ? { compareTruncated: set.truncated } : {}),
           ...(set?.peersTruncated ? { peersTruncated: true } : {}),
         },
-        expression: {
-          placement: 'top',
-          reason: topWindowReason(rerank.expression),
-        },
+        // Only an expression the query placed over the top window reports
+        // here; a SQL expression sort keeps the report its own pass made.
+        ...(formula
+          ? {
+              expression: {
+                placement: 'top' as const,
+                reason: topWindowReason(rerank.expression),
+              },
+            }
+          : {}),
         ...(scored.timedOut
           ? {
               warnings: [
@@ -2876,6 +2928,9 @@ export class IndexQueryEngine {
   // filter, the sort and a rerank's comparison filter; a rerank formula
   // reads the card itself under the binding's name.
   #rerankBindings = new WeakMap<object, Record<string, unknown>>();
+  // The reranks an expression over the top window lowered to (see
+  // `FORMULA_KEY`), as against a rerank the query asked for itself.
+  #formulaReranks = new WeakSet<object>();
   async #resolveCardLets(
     realmURL: URL,
     query: Pick<Query, 'filter' | 'sort' | 'rerank' | 'let'>,

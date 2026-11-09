@@ -230,6 +230,10 @@ export interface SearchEntryQuery {
   // the values the query sorted it by (`meta._sortValues`), so rows from
   // different realms can be ordered by the query's own sort. Internal.
   exposeSortValues?: boolean;
+  // The query's rerank is an expression it placed over the top window (see
+  // `lowerEntryPayload`), so the engine reports it as the query's
+  // expression. Internal.
+  expressionOverTopWindow?: boolean;
 }
 
 // One requested column: the name it goes out under, and the search-doc path
@@ -951,9 +955,10 @@ function refuseInternalSortKeys(sort: unknown) {
   }
 }
 
-function lowerEntryPayload(
-  record: Record<string, unknown>,
-): Record<string, unknown> {
+function lowerEntryPayload(record: Record<string, unknown>): {
+  record: Record<string, unknown>;
+  expressionOverTopWindow?: boolean;
+} {
   refuseInternalSortKeys(record.sort);
   let query: Record<string, any> = {};
   let rest: Record<string, unknown> = {};
@@ -962,7 +967,7 @@ function lowerEntryPayload(
     else rest[k] = v;
   }
   if (!usesNewSyntax(query)) {
-    return record;
+    return { record };
   }
   // The htmlQuery binding rides in the filter's top-level eq unprefixed; it
   // is the entry's, not the query's, so it stays out of the lowering.
@@ -1004,7 +1009,12 @@ function lowerEntryPayload(
       eq: { ...(wire.filter?.eq ?? {}), htmlQuery },
     };
   }
-  return { ...wire, ...rest };
+  return {
+    record: { ...wire, ...rest },
+    ...(lowered.notes.expression?.placement === 'top'
+      ? { expressionOverTopWindow: true }
+      : {}),
+  };
 }
 
 // `let` in the wire grammar: each binding's query is a wire query (field
@@ -1055,7 +1065,9 @@ export function parseSearchEntryQueryFromPayload(
   ) {
     throw invalidQuery(`request body must be a JSON object`);
   }
-  let record = lowerEntryPayload(payload as Record<string, unknown>);
+  let { record, expressionOverTopWindow } = lowerEntryPayload(
+    payload as Record<string, unknown>,
+  );
   for (let key of Object.keys(record)) {
     if (!SEARCH_ENTRY_QUERY_MEMBERS.includes(key)) {
       let near = nearestMember(key, [...SEARCH_ENTRY_QUERY_MEMBERS, 'type']);
@@ -1232,6 +1244,7 @@ export function parseSearchEntryQueryFromPayload(
 
   return {
     itemQuery: itemQuery as Query,
+    ...(expressionOverTopWindow ? { expressionOverTopWindow } : {}),
     htmlQuery,
     fieldset,
     realms,
@@ -2532,9 +2545,15 @@ export async function searchEntryRealms(
     );
     // Each entry in the direction the engine sorted it: scores (an `_expr`
     // formula, a blend, a near similarity, text relevance) default to `desc`.
-    let directions = (searchEntryQuery.itemQuery.sort ?? []).map((s: any) =>
-      (s.direction ?? defaultSortDirection(s)) === 'desc' ? -1 : 1,
-    );
+    // Under a rerank each row's values lead with its rerank value (highest
+    // first unless the rerank says `asc`), then the query's own sort.
+    let rerank = searchEntryQuery.itemQuery.rerank;
+    let directions = [
+      ...(rerank ? [rerank.direction === 'asc' ? 1 : -1] : []),
+      ...(searchEntryQuery.itemQuery.sort ?? []).map((s: any) =>
+        (s.direction ?? defaultSortDirection(s)) === 'desc' ? -1 : 1,
+      ),
+    ];
     combined.data.sort((a, b) =>
       compareSortValues(
         a.meta?._sortValues as unknown[] | undefined,
