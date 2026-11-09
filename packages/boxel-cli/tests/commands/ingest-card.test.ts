@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
 import {
   extractImportSpecifiers,
   extractExportedClassNames,
   extractRelationshipLinks,
+  realmRelativePath,
   resolveSameRealmFile,
 } from '../../src/commands/realm/ingest-card.js';
 
@@ -76,6 +78,33 @@ describe('ingest-card helpers', () => {
     });
   });
 
+  describe('realmRelativePath', () => {
+    let realmRoot = 'https://localhost:4201/catalog/';
+    let network = new PrefixRealmNetwork({ '@cardstack/catalog/': realmRoot });
+
+    it('gives the same path for either form of an identifier', () => {
+      expect(
+        realmRelativePath('@cardstack/catalog/Spec/foo', realmRoot, network),
+      ).toBe('Spec/foo');
+      expect(
+        realmRelativePath(`${realmRoot}Spec/foo`, realmRoot, network),
+      ).toBe('Spec/foo');
+    });
+
+    it('returns null outside the realm and for what does not resolve', () => {
+      expect(
+        realmRelativePath(
+          'https://localhost:4201/other/Spec/foo',
+          realmRoot,
+          network,
+        ),
+      ).toBeNull();
+      expect(
+        realmRelativePath('@glimmer/component', realmRoot, network),
+      ).toBeNull();
+    });
+  });
+
   describe('resolveSameRealmFile', () => {
     let realmRoot = 'https://localhost:4201/catalog/';
     let fromAbs =
@@ -84,6 +113,11 @@ describe('ingest-card helpers', () => {
       '04868f-mortgage-calculator/mortgage-calculator.gts',
       '04868f-mortgage-calculator/components/utils.gts',
     ]);
+    let network = new PrefixRealmNetwork({
+      '@cardstack/base/': 'https://localhost:4201/base/',
+      '@cardstack/catalog/': realmRoot,
+      '@cardstack/skills/': 'https://localhost:4201/skills/',
+    });
 
     it('resolves a relative import to an existing same-realm .gts file', () => {
       expect(
@@ -92,11 +126,12 @@ describe('ingest-card helpers', () => {
           fromAbs,
           realmRoot,
           fileSet,
+          network,
         ),
       ).toBe('04868f-mortgage-calculator/mortgage-calculator.gts');
-      expect(resolveSameRealmFile('./utils', fromAbs, realmRoot, fileSet)).toBe(
-        '04868f-mortgage-calculator/components/utils.gts',
-      );
+      expect(
+        resolveSameRealmFile('./utils', fromAbs, realmRoot, fileSet, network),
+      ).toBe('04868f-mortgage-calculator/components/utils.gts');
     });
 
     it('returns null for base-realm and bare (npm) imports', () => {
@@ -106,6 +141,7 @@ describe('ingest-card helpers', () => {
           fromAbs,
           realmRoot,
           fileSet,
+          network,
         ),
       ).toBeNull();
       expect(
@@ -114,16 +150,35 @@ describe('ingest-card helpers', () => {
           fromAbs,
           realmRoot,
           fileSet,
+          network,
         ),
       ).toBeNull();
       expect(
-        resolveSameRealmFile('@glimmer/component', fromAbs, realmRoot, fileSet),
+        resolveSameRealmFile(
+          '@glimmer/component',
+          fromAbs,
+          realmRoot,
+          fileSet,
+          network,
+        ),
       ).toBeNull();
+    });
+
+    it('matches a file whose name the import percent-encodes', () => {
+      expect(
+        resolveSameRealmFile(
+          './my%20utils',
+          fromAbs,
+          realmRoot,
+          new Set(['04868f-mortgage-calculator/components/my utils.gts']),
+          network,
+        ),
+      ).toBe('04868f-mortgage-calculator/components/my utils.gts');
     });
 
     it('returns null when the same-realm file is not present', () => {
       expect(
-        resolveSameRealmFile('./missing', fromAbs, realmRoot, fileSet),
+        resolveSameRealmFile('./missing', fromAbs, realmRoot, fileSet, network),
       ).toBeNull();
     });
 
@@ -134,18 +189,57 @@ describe('ingest-card helpers', () => {
           fromAbs,
           realmRoot,
           fileSet,
+          network,
         ),
       ).toBe('04868f-mortgage-calculator/mortgage-calculator.gts');
     });
 
+    it('resolves a prefix to wherever the server serves its realm', () => {
+      let servedElsewhere = 'https://realms.example.test/published/v2/';
+      expect(
+        resolveSameRealmFile(
+          '@cardstack/catalog/04868f-mortgage-calculator/mortgage-calculator',
+          `${servedElsewhere}04868f-mortgage-calculator/components/isolated-template.gts`,
+          servedElsewhere,
+          fileSet,
+          new PrefixRealmNetwork({ '@cardstack/catalog/': servedElsewhere }),
+        ),
+      ).toBe('04868f-mortgage-calculator/mortgage-calculator.gts');
+    });
+
+    it("does not match another realm's identifier that contains this realm's name", () => {
+      expect(
+        resolveSameRealmFile(
+          '@cardstack/base/catalog/04868f-mortgage-calculator/mortgage-calculator',
+          fromAbs,
+          realmRoot,
+          fileSet,
+          network,
+        ),
+      ).toBeNull();
+    });
+
+    it('returns null for an unregistered prefix', () => {
+      expect(
+        resolveSameRealmFile(
+          '@cardstack/unknown/04868f-mortgage-calculator/mortgage-calculator',
+          fromAbs,
+          realmRoot,
+          fileSet,
+          network,
+        ),
+      ).toBeNull();
+    });
+
     it('returns null for prefix imports that point at another realm', () => {
-      // npm-scoped packages and other realms don't contain this realm's tail.
+      // Another registered realm's prefix resolves outside this realm.
       expect(
         resolveSameRealmFile(
           '@cardstack/skills/foo',
           fromAbs,
           realmRoot,
           fileSet,
+          network,
         ),
       ).toBeNull();
     });

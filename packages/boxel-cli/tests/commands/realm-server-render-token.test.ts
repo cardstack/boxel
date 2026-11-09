@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   mkdtempSync,
   readFileSync,
@@ -11,8 +11,13 @@ import { join } from 'path';
 import jwt from 'jsonwebtoken';
 
 import {
+  PREFIX_REALMS_ENDPOINT,
+  clearPrefixRealmNetworkCache,
+} from '@cardstack/runtime-common/prefix-realm-network';
+import {
   buildRenderURL,
   mintRenderToken,
+  renderTokenTarget,
   writeRenderFile,
   type DiagnosticRenderSession,
 } from '../../src/commands/realm-server/render-token.js';
@@ -155,5 +160,50 @@ describe('boxel realm-server render-token', () => {
       writeRenderFile(path, { ...minted(), renderURL: 'https://h.test/r' }),
     ).toThrow(/ELOOP/);
     expect(readFileSync(target, 'utf8')).toBe('untouched');
+  });
+});
+
+describe('renderTokenTarget', () => {
+  // The catalog is served away from `<server>/catalog/`, so a resolution that
+  // guessed from the prefix's spelling would come out wrong.
+  const SERVER = 'https://realms.example.test/';
+  const CATALOG = 'https://catalog.example.test/';
+  const prefixMapFetch = (async (input: string | URL | Request) => {
+    let url = input instanceof Request ? input.url : String(input);
+    if (!url.endsWith(`/${PREFIX_REALMS_ENDPOINT}`)) {
+      return new Response('not found', { status: 404 });
+    }
+    return Response.json({
+      data: [
+        {
+          type: 'prefix-realm',
+          id: '@cardstack/catalog/',
+          attributes: { realmURL: CATALOG },
+        },
+      ],
+    });
+  }) as typeof globalThis.fetch;
+
+  beforeEach(() => clearPrefixRealmNetworkCache());
+
+  it("asks the card URL's origin when no realm server is given", async () => {
+    expect(await renderTokenTarget(CARD, undefined)).toEqual({
+      card: CARD,
+      realmServerUrl: 'https://realms.example.test',
+    });
+  });
+
+  it("resolves a prefix-form card on the given realm server's map", async () => {
+    expect(
+      await renderTokenTarget('@cardstack/catalog/Person/1', SERVER, {
+        fetch: prefixMapFetch,
+      }),
+    ).toEqual({ card: `${CATALOG}Person/1`, realmServerUrl: SERVER });
+  });
+
+  it('refuses a card that is neither a URL nor in prefix form', async () => {
+    await expect(renderTokenTarget('Person/1', SERVER)).rejects.toThrow(
+      /Not a card URL or realm identifier: Person\/1/,
+    );
   });
 });

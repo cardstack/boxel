@@ -21,6 +21,11 @@ import { spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import {
+  isAbsoluteIdentifier,
+  resolveRRIReference,
+} from '@cardstack/runtime-common/realm-identifiers';
+
 import { loginWithPassword } from './matrix-api.ts';
 import { RealmClient, type CardDocument } from './realm-api.ts';
 import { loadEvaluationBundle, type Evaluation } from './eval-card.ts';
@@ -126,7 +131,7 @@ function parseArgs(argv: string[]): Args {
 // eval-realm/Evaluation/ (with or without `.json`), which `pnpm eval:setup`
 // pushes to the writer's evaluations workspace.
 function evaluationUrl(nameOrUrl: string): string {
-  if (/^https?:\/\//.test(nameOrUrl)) {
+  if (isAbsoluteIdentifier(nameOrUrl)) {
     return nameOrUrl;
   }
   let name = nameOrUrl.replace(/\.json$/, '');
@@ -149,7 +154,7 @@ function newSessionId(evaluationName: string) {
 }
 
 function cardModule(evaluation: Evaluation) {
-  return new URL(evaluation.adoptsFrom.module, evaluation.url).href;
+  return resolveRRIReference(evaluation.adoptsFrom.module, evaluation.url);
 }
 
 function fileLink(url: string) {

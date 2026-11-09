@@ -30,6 +30,7 @@ import GlimmerComponent from '@glimmer/component';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
+import { pathSegmentsOfIdentifier } from '@cardstack/runtime-common';
 import { Todo } from './todo';
 
 export class TaskStatusEdit extends Component<typeof TaskStatusField> {
@@ -557,11 +558,10 @@ export class Task extends Todo {
   static fitted = FittedTask;
 }
 
-function extractId(href: string): string {
-  const urlObj = new URL(href);
-  const pathname = urlObj.pathname;
-  const parts = pathname.split('/');
-  const lastPart = parts[parts.length - 1];
+// The last path segment of a card id, in either RRI form.
+function extractId(id: string): string {
+  const segments = pathSegmentsOfIdentifier(id);
+  const lastPart = segments[segments.length - 1] ?? '';
   return lastPart.replace('.json', '');
 }
 

@@ -6,8 +6,6 @@ import { Tooltip } from './tooltip';
 import { Button } from './button';
 import { SIDE_OPTIONS } from '../demo-structure';
 
-// Note: Pretui Tooltip is CSS-only — it reveals on hover/focus-within, with
-// no floating-ui positioning or JS listeners (prerender-safe by design).
 // Dropped knobs: offset (fixed 0.375rem gap, no arg); variant (single always-dark
 // treatment — "the lining"); the six boxel-tooltip-* CSS-variable knobs
 // (CSS knob layer not yet ported).
@@ -24,7 +22,7 @@ class TooltipUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='Tooltip'
-      @description='Tooltips provide additional information when hovering over an element. Pretui Tooltip is CSS-only — it reveals on hover and focus-within, always dark in both modes, with no JS positioning.'
+      @description='Tooltips provide additional information when hovering over an element. Shown in the top layer; takes no space while hidden.'
     >
       <:example>
         <Tooltip
@@ -38,7 +36,7 @@ class TooltipUsage extends GlimmerComponent {
       <:api as |Args|>
         <Args.String
           @name='side'
-          @description='The positioning of the tooltip relative to the reference element.'
+          @description='The side the tooltip prefers; it flips when that side has no room.'
           @value={{this.side}}
           @options={{SIDE_OPTIONS}}
           @defaultValue='top'
@@ -59,7 +57,7 @@ class TooltipUsage extends GlimmerComponent {
           @onInput={{this.setDisabled}}
         />
         <Args.Yield
-          @description='The element the tooltip is attached to; the tooltip reveals on its hover and focus-within.'
+          @description='The element the tooltip is attached to; the tooltip opens on its hover and keyboard focus.'
           @hideControls={{true}}
         />
       </:api>
