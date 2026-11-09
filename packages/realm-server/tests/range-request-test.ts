@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import type { FileRef, RealmAdapter } from '@cardstack/runtime-common';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   setupPermissionedRealmCached,
   withRealmPath,
@@ -195,6 +196,60 @@ module(basename(import.meta.filename), function () {
         () => getSource('/gone-after-stat-source.png').timeout(5000),
       );
       assertRealmNotFound(assert, response);
+    });
+
+    test('the cached card+source read of a file deleted after its stat answers not-found', async function (assert) {
+      // A .json is read through the source cache rather than streamed. Written
+      // straight to the adapter, so no indexing reads it.
+      await adapter.write('gone-after-stat.json', jsonText);
+      let response = await withFileGoneAfterStat('gone-after-stat.json', () =>
+        getSource('/gone-after-stat.json').timeout(5000),
+      );
+      assertRealmNotFound(assert, response);
+    });
+
+    test('a file deleted while its body streams is not reported as a server error', async function (assert) {
+      // Written straight to the adapter, so no indexing reads it, and deleted
+      // from disk once the request's ref is opened. A ranged read streams its
+      // slice without opening the file first, so the read itself finds the
+      // file gone.
+      await adapter.write('gone-mid-stream.png', bytes);
+      let openFile = adapter.openFile.bind(adapter);
+      adapter.openFile = async (path) => {
+        let ref: FileRef | undefined = await openFile(path);
+        if (ref && path === 'gone-mid-stream.png') {
+          await adapter.remove(path as LocalPath);
+        }
+        return ref;
+      };
+      let reported: unknown[][] = [];
+      let consoleError = console.error;
+      console.error = (...args: unknown[]) => {
+        reported.push(args);
+        consoleError(...args);
+      };
+      let status: number | undefined;
+      try {
+        status = (
+          await getSample('/gone-mid-stream.png')
+            .set('Range', 'bytes=2-5')
+            .timeout(5000)
+        ).status;
+      } catch (error) {
+        status = (error as { status?: number }).status;
+      } finally {
+        adapter.openFile = openFile;
+        console.error = consoleError;
+      }
+
+      assert.strictEqual(status, 404, 'the read answers that nothing is there');
+      assert.deepEqual(
+        reported.filter(([message]) =>
+          String(message).includes('Unhandled server error'),
+        ),
+        [],
+        'nothing is reported as an unhandled server error',
+      );
     });
 
     test('the card+source read declares the length of the bytes it sends, not a stale stat', async function (assert) {

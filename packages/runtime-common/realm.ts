@@ -12799,6 +12799,15 @@ export class Realm {
           notThere,
         });
       } else {
+        // Opened before it is read, so a file the stat still lists but another
+        // host has deleted is answered as missing rather than as a read that
+        // fails. The read below consumes the content this opened.
+        if (served.openContent && !served.openContent()) {
+          return (
+            notThere ??
+            notFound(request, requestContext, `${localName} not found`)
+          );
+        }
         let cachedRef = await this.materializeFileRef(served);
         // Test-only gate: park here (bytes read, cache not yet written) so the
         // source-cache race test can fire invalidateCache before the set.

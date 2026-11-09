@@ -26,6 +26,7 @@ const { ensureDirSync } = fsExtra;
 import {
   httpLogging,
   instanceIdHeader,
+  isVanishedFileBody,
   searchAdmission,
   orderConnectionsByRealm,
   methodOverrideSupport,
@@ -1060,11 +1061,11 @@ export class RealmServer {
       .use(serveFromRealm);
 
     app.on('error', (err, ctx) => {
-      // A response body streamed from a file that was deleted after the
-      // response was built. Koa answers it as a 404 when nothing has been
-      // sent yet, and otherwise ends the response; either way the file is
-      // simply gone, which is not a server fault.
-      if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+      // A file response body whose file was deleted after the response was
+      // built: the file is simply gone, which is not a server fault. Only an
+      // error marked on that body is passed over; the same code raised
+      // anywhere else is reported like any other error.
+      if (isVanishedFileBody(err)) {
         this.log.warn(
           `${ctx.method} ${ctx.url}: file vanished while its response was being sent (${err.code})`,
         );
