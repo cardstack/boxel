@@ -1,4 +1,5 @@
 import { withholdsErrorStacks } from './create-response.ts';
+import { isOperationFailure } from './card-operations/types.ts';
 import { CardError, responseWithError } from './error.ts';
 import type { RequestContext } from './index.ts';
 import { RealmPaths, logger } from './index.ts';
@@ -514,6 +515,26 @@ export class Router {
             `(status ${err.status}): ${err.message}`,
         );
         return responseWithError(err, requestContext);
+      }
+      // A refusal from the operation core that reaches a route answering in
+      // statuses rather than an operations envelope. Only the server-side ones
+      // are answered with their own status here: such a refusal says nothing
+      // about what the caller may see, and its status — a 503 that names when
+      // to retry, say — is what the caller acts on. A client-side refusal is
+      // the route's own to shape, so it stays an unexpected exception.
+      if (isOperationFailure(err) && err.error.status >= 500) {
+        this.log.warn(
+          `handler for ${request.method} ${request.url} threw ${err.error.code} ` +
+            `(status ${err.error.status}): ${err.error.detail}`,
+        );
+        let cardError = new CardError(err.error.detail, {
+          status: err.error.status,
+          title: err.error.title,
+        });
+        if (err.error.meta) {
+          cardError.meta = err.error.meta;
+        }
+        return responseWithError(cardError, requestContext);
       }
 
       this.log.error(err);

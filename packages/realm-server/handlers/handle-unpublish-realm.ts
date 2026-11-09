@@ -221,7 +221,7 @@ export default function handleUnpublishRealm({
     } catch (error: any) {
       log.error(`Error unpublishing realm ${publishedRealmURL}:`, error);
       Sentry.captureException(error);
-      await sendResponseForSystemError(ctxt, error.message);
+      await sendResponseForSystemError(ctxt, error.message, error);
     }
   };
 }

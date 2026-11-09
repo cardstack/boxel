@@ -11,6 +11,7 @@ import {
   logger,
   param,
 } from '@cardstack/runtime-common';
+import { WriteLockTimeoutError } from '@cardstack/runtime-common/card-operations/types';
 import { createHash } from 'crypto';
 import nodePgMigrate, { type RunnerOption } from 'node-pg-migrate';
 import { join } from 'path';
@@ -112,6 +113,34 @@ const RETRYABLE_TRANSACTION_SQLSTATES = new Set(['40P01', '40001']);
 // The line leads with a fixed token because the log envelope does not carry
 // the channel name: filtering for this signal means matching the content.
 const lockLog = logger('realm:write-lock');
+
+// The longest a writer waits for its write locks before it gives up and its
+// request is answered 503. A waiter sits in postgres with a pool connection
+// checked out and a transaction open, so an unbounded wait lets one long
+// holder — or a realm-lifecycle caller queued behind one — gather a pooled
+// connection from every writer that arrives after it, until the replica has
+// none left for the work the holder itself needs to finish. A bounded wait
+// gives each of those connections back on its own.
+//
+// Sized from the lock's own telemetry: deployed writers wait a fraction of a
+// second at the 99th percentile, and the waits past a minute are the ones
+// queued behind a holder that is itself stuck. Override with
+// PG_WRITE_LOCK_WAIT_MS.
+const DEFAULT_WRITE_LOCK_WAIT_MS = 60_000;
+function configuredWriteLockWaitMs(): number {
+  let rawValue = process.env.PG_WRITE_LOCK_WAIT_MS;
+  if (!rawValue) {
+    return DEFAULT_WRITE_LOCK_WAIT_MS;
+  }
+  let value = Number(rawValue);
+  return Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_WRITE_LOCK_WAIT_MS;
+}
+
+// lock_not_available: a lock statement waited out the transaction's
+// `lock_timeout`.
+const LOCK_NOT_AVAILABLE_SQLSTATE = '55P03';
 
 type MigrationNameFixes = {
   migrationRenames: Array<[string, string]>;
@@ -307,8 +336,17 @@ export class PgAdapter implements DBAdapter {
   // pins a pool connection while it waits, and two writers aimed at different
   // cards never meet here at all. See withFileWriteLocks.
   #fileWriteQueue = new Map<string, Promise<void>>();
+  readonly #writeLockWaitMs: number;
 
-  constructor(opts?: { autoMigrate?: boolean; migrationLogging?: boolean }) {
+  constructor(opts?: {
+    autoMigrate?: boolean;
+    migrationLogging?: boolean;
+    // How long a writer may wait for its write locks; see
+    // DEFAULT_WRITE_LOCK_WAIT_MS.
+    writeLockWaitMs?: number;
+  }) {
+    this.#writeLockWaitMs =
+      opts?.writeLockWaitMs ?? configuredWriteLockWaitMs();
     if (opts?.autoMigrate) {
       this.started = this.migrateDb(opts.migrationLogging !== false);
     } else {
@@ -889,6 +927,16 @@ export class PgAdapter implements DBAdapter {
   // (low realistic write concurrency, pool size >= concurrent writers +
   // headroom) this is acceptable.
   //
+  // Bounded wait: a caller waits at most the adapter's write-lock budget for
+  // the lock (see DEFAULT_WRITE_LOCK_WAIT_MS) and then rejects with
+  // `WriteLockTimeoutError`, giving its pooled connection back. That matters
+  // here more than anywhere: while this exclusive caller waits on a realm
+  // whose files are being written, postgres queues every later file writer of
+  // the realm behind it, each holding a pooled connection, so an unbounded
+  // wait turns one slow writer into a replica with no connections left. The
+  // bound covers only the wait for the lock — once it is held, `fn`'s own
+  // statements on the pinned querier wait as long as they need.
+  //
   // Re-entrancy: callers MUST NOT re-enter the lock for the same URL while
   // already holding it — a second `pg_advisory_xact_lock` on the same key
   // would pin a different pool connection and block forever on its own
@@ -901,7 +949,12 @@ export class PgAdapter implements DBAdapter {
     fn: (txQuerier: Querier | undefined) => Promise<T>,
   ): Promise<T> {
     const lockKey = hashRealmUrlForAdvisoryLock(realmUrl);
-    return await this.#runWithAdvisoryXactLock(lockKey, realmUrl, fn);
+    return await this.#runWithAdvisoryXactLock(
+      lockKey,
+      realmUrl,
+      fn,
+      Date.now() + this.#writeLockWaitMs,
+    );
   }
 
   // Serialize the writers of a set of files, rather than the writers of a
@@ -1052,6 +1105,16 @@ export class PgAdapter implements DBAdapter {
         // A prior caller's failure must not cascade — the next writer of
         // these files still gets its turn at the lock.
       }
+      // The wait is bounded from the call, not from the turn: time spent
+      // chained here behind a same-file writer counts against it, so a writer
+      // whose budget ran out in memory gives up without checking out a
+      // connection at all.
+      if (Date.now() >= enqueuedAt + this.#writeLockWaitMs) {
+        lockLog.warn(
+          `writeLock realm=${realmUrl} waitMs=${Date.now() - enqueuedAt} holdMs=0 files=${fileKeys.length} scope=${bulk ? 'realm' : 'files'} timedOut=true`,
+        );
+        throw new WriteLockTimeoutError(realmUrl, this.#writeLockWaitMs);
+      }
       return await this.#runWithAdvisoryXactLocks(
         lockPlan,
         { realmUrl, fileCount: fileKeys.length, enqueuedAt },
@@ -1188,18 +1251,25 @@ export class PgAdapter implements DBAdapter {
     fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<{ work: Promise<T> }> {
     let work: Promise<T> | undefined;
+    const deadline = context.enqueuedAt + this.#writeLockWaitMs;
     await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
       let holdStart: number | undefined;
+      let timedOut = false;
       try {
-        for (const { key, mode } of lockPlan) {
-          await queryFn([
-            mode === 'shared'
-              ? `SELECT pg_advisory_xact_lock_shared(`
-              : `SELECT pg_advisory_xact_lock(`,
-            param(key),
-            `::bigint)`,
-          ]);
+        try {
+          for (const { key, mode } of lockPlan) {
+            await this.#takeAdvisoryXactLock(
+              queryFn,
+              key,
+              mode,
+              deadline,
+              context.realmUrl,
+            );
+          }
+        } catch (err: unknown) {
+          timedOut = err instanceof WriteLockTimeoutError;
+          throw err;
         }
         holdStart = Date.now();
         const releasedEarly = new Deferred<void>();
@@ -1259,9 +1329,13 @@ export class PgAdapter implements DBAdapter {
             : context.fileCount === 0
               ? 'guard'
               : 'files';
-        lockLog.info(
-          `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${scope}`,
-        );
+        // A writer that gave up is a refused request, so it logs at warn.
+        let line = `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${scope}`;
+        if (timedOut) {
+          lockLog.warn(`${line} timedOut=true`);
+        } else {
+          lockLog.info(line);
+        }
       }
     });
     // Only reachable once the transaction ended without the section having
@@ -1269,19 +1343,30 @@ export class PgAdapter implements DBAdapter {
     return { work: work! };
   }
 
+  // `deadline`, when given, bounds the wait for the lock (see
+  // `#takeAdvisoryXactLock`). The callback is handed this transaction's
+  // querier, so the bound is lifted again once the lock is held: it is a limit
+  // on queueing for the lock, not on the row locks the callback's own
+  // statements wait for.
   async #runWithAdvisoryXactLock<T>(
     lockKey: string,
     contextLabel: string,
     fn: (txQuerier: Querier) => Promise<T>,
+    deadline?: number,
   ): Promise<T> {
     return await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
       try {
-        await queryFn([
-          `SELECT pg_advisory_xact_lock(`,
-          param(lockKey),
-          `::bigint)`,
-        ]);
+        await this.#takeAdvisoryXactLock(
+          queryFn,
+          lockKey,
+          'exclusive',
+          deadline,
+          contextLabel,
+        );
+        if (deadline !== undefined) {
+          await queryFn(['SET LOCAL lock_timeout TO DEFAULT']);
+        }
         const result = await fn(queryFn);
         await queryFn(['COMMIT']);
         return result;
@@ -1300,6 +1385,47 @@ export class PgAdapter implements DBAdapter {
         throw err;
       }
     });
+  }
+
+  // Take one transaction-scoped advisory lock on `queryFn`'s open
+  // transaction. With a `deadline`, the statement waits no later than it:
+  // `lock_timeout` is set to what remains of the budget before each lock, so a
+  // plan of several keys shares one budget rather than getting a fresh one per
+  // key. A lock not granted in time rejects with `WriteLockTimeoutError`, and
+  // the caller's ROLLBACK releases whatever this transaction did take.
+  async #takeAdvisoryXactLock(
+    queryFn: (e: Expression) => Promise<Record<string, PgPrimitive>[]>,
+    key: string,
+    mode: 'shared' | 'exclusive',
+    deadline: number | undefined,
+    realmUrl: string,
+  ): Promise<void> {
+    if (deadline !== undefined) {
+      let remainingMs = Math.ceil(deadline - Date.now());
+      if (remainingMs <= 0) {
+        throw new WriteLockTimeoutError(realmUrl, this.#writeLockWaitMs);
+      }
+      // An integer this process computed, never caller input, so it is safe
+      // to interpolate; SET takes no bind parameters.
+      await queryFn([`SET LOCAL lock_timeout = ${remainingMs}`]);
+    }
+    try {
+      await queryFn([
+        mode === 'shared'
+          ? `SELECT pg_advisory_xact_lock_shared(`
+          : `SELECT pg_advisory_xact_lock(`,
+        param(key),
+        `::bigint)`,
+      ]);
+    } catch (err: unknown) {
+      if (
+        deadline !== undefined &&
+        (err as { code?: unknown })?.code === LOCK_NOT_AVAILABLE_SQLSTATE
+      ) {
+        throw new WriteLockTimeoutError(realmUrl, this.#writeLockWaitMs);
+      }
+      throw err;
+    }
   }
 
   // One transaction on one pinned pool connection: BEGIN, `fn`, COMMIT, with

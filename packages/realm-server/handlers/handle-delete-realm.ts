@@ -307,7 +307,7 @@ export default function handleDeleteRealm({
       }
     } catch (error: any) {
       Sentry.captureException(error);
-      await sendResponseForSystemError(ctxt, error.message);
+      await sendResponseForSystemError(ctxt, error.message, error);
     }
   };
 }

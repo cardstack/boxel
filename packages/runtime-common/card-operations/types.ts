@@ -1716,6 +1716,11 @@ export type OperationErrorCode =
   // caller away rather than let it through uncounted. Nothing was done.
   // Carries a 503 with `Retry-After`, and `meta.retryAfterSeconds`.
   | 'rate-limit-unavailable'
+  // A write that waited longer than the realm server allows for the locks over
+  // the files or realm it writes, because another writer held them. Nothing
+  // was done, and nothing the caller sent is wrong. Carries a 503 with
+  // `Retry-After`, and `meta.retryAfterSeconds`.
+  | 'write-lock-timeout'
   // A `callApi` whose request carries a credential slot that no binding fills:
   // none was approved for the operation in this realm (for the caller, for a
   // `{{userKey}}` slot), or the key or grant it named was removed. Nothing was
@@ -1853,6 +1858,33 @@ export function definitionNotReady(
       retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
     },
   });
+}
+
+// How long a writer turned away by `WriteLockTimeoutError` is told to wait
+// before it tries again. The writers that wait out the budget are queued
+// behind a holder that is itself slow to finish, so an immediate retry would
+// only join the same queue.
+export const WRITE_LOCK_RETRY_AFTER_SECONDS = 5;
+
+// A writer that could not take its write locks within the realm server's
+// budget, because another writer held them for longer. The database adapter
+// raises it before the write's own work begins, so nothing was written; every
+// HTTP write surface answers it as a 503 with `Retry-After`.
+export class WriteLockTimeoutError extends OperationFailure {
+  constructor(realmUrl: string, waitMs: number) {
+    super({
+      status: 503,
+      code: 'write-lock-timeout',
+      title: 'Write lock unavailable',
+      detail: `another write to ${realmUrl} held the files this write needs for longer than ${waitMs} ms; retry shortly`,
+      meta: { retryAfterSeconds: WRITE_LOCK_RETRY_AFTER_SECONDS },
+    });
+    this.name = 'WriteLockTimeoutError';
+  }
+}
+
+export function isWriteLockTimeout(err: unknown): err is OperationFailure {
+  return isOperationFailure(err) && err.error.code === 'write-lock-timeout';
 }
 
 // A refusal as a caller the realm ACL would not let read the realm is told it.
