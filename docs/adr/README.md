@@ -35,3 +35,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [018](018-build-realm-historian-as-erasable-typescript-node-runs-unbuilt.md)                    | Build realm-historian as erasable TypeScript that Node runs unbuilt                       | proposed   |
 | [019](019-build-the-secure-origins-pages-as-their-own-ember-app-on-pret-ui.md)                  | Build the secure origin's pages as their own Ember app, on Pret UI                        | proposed   |
 | [020](020-run-every-launched-browser-with-its-sandbox-on-and-a-current-chrome.md)               | Run every launched browser with its sandbox on, on a current Chrome                       | proposed   |
+| [023](023-read-the-current-time-for-rendering-through-a-clock-tests-pin.md)                     | Read the current time for rendering through a clock that tests pin                        | proposed   |
