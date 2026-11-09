@@ -70,6 +70,20 @@ module('Pretui | components/context-ring', function (hooks) {
     assert.true(document.querySelector('[role="tooltip"]')?.textContent?.startsWith('Context window full: 600k tokens'));
   });
 
+  test('a window of a million tokens or more is counted in millions', async function (assert) {
+    await render(<template><ContextRing @used={{232600}} @limit={{1000000}} /></template>);
+    assert.strictEqual(root().getAttribute('aria-label'), 'Context window 23% used: 232.6k of 1M tokens');
+
+    await render(<template><ContextRing @used={{1200000}} @limit={{1000000}} /></template>);
+    assert.strictEqual(
+      root().getAttribute('aria-label'),
+      'Context window full: 1.2M tokens, 200k more than the 1M this model holds. Earlier messages may be summarized when the next one is sent',
+    );
+
+    await render(<template><ContextRing @used={{999950}} @limit={{2000000}} /></template>);
+    assert.strictEqual(root().getAttribute('aria-label'), 'Context window 50% used: 1M of 2M tokens', 'a count that would round to 1000k reads as 1M');
+  });
+
   test('an unknown limit is never over', async function (assert) {
     await render(<template><ContextRing @used={{5000}} @limit={{0}} /></template>);
     assert.strictEqual(root().dataset['over'], undefined);

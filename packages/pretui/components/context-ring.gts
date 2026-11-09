@@ -18,7 +18,12 @@ export interface ContextRingSignature {
   Element: HTMLSpanElement;
 }
 
+// 232.6k, 1M, 1.2M: a count that would round to 1000k or more is read in
+// millions instead
 function compact(n: number): string {
+  if (Math.round(n / 100) >= 10000) {
+    return `${Math.round(n / 100000) / 10}M`;
+  }
   return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
 }
 
