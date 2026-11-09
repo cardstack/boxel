@@ -25,7 +25,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import { logger } from '@cardstack/runtime-common';
+import { logger, nowDate } from '@cardstack/runtime-common';
 
 import {
   isHostedRealm,
@@ -98,7 +98,9 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  @tracked private hour = new Date().getHours();
+  // Read through the clock seam: tests pin it, so a visual comparison of the
+  // dashboard doesn't depend on the hour the suite ran at.
+  @tracked private hour = nowDate().getHours();
 
   private get greeting() {
     return greetingFor(this.hour, this.matrixService.profile.displayName);
@@ -117,7 +119,7 @@ export default class Dashboard extends Component<Signature> {
     };
     let update = () => {
       clearTimeout(timer);
-      this.hour = new Date().getHours();
+      this.hour = nowDate().getHours();
       schedule();
     };
     let onVisibilityChange = () => {
