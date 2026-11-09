@@ -1,15 +1,6 @@
 {
   "main": [
     {
-      "run": 39963181413,
-      "at": "2026-10-23T13:40:35Z",
-      "minutes": 217.5,
-      "slowestShard": 17,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
       "run": 39965394111,
       "at": "2026-10-23T13:56:30Z",
       "minutes": 213.9,
@@ -356,6 +347,15 @@
       "at": "2026-11-09T05:28:57Z",
       "minutes": 212.2,
       "slowestShard": 15.5,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
+    },
+    {
+      "run": 42581094545,
+      "at": "2026-11-09T07:43:16Z",
+      "minutes": 214.3,
+      "slowestShard": 16.2,
       "shards": 16,
       "runsOn": true,
       "indexCache": false
