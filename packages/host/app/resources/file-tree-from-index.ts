@@ -125,6 +125,13 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     return this.search.isRunning;
   }
 
+  // The server caps every search at a page, so the tree walks the pages until
+  // it holds `meta.page.total` rows. The server may clamp the requested size
+  // to a smaller ceiling; it keeps `page.number` as given, so walking from page
+  // zero at one fixed size still visits every row exactly once. The tree swaps
+  // in only once the walk finishes, so it never renders a partial listing. The
+  // walk lives in the task body so each page request is a cancellation point:
+  // a restart or teardown mid-walk stops it from fetching the pages left.
   private search = restartableTask(async () => {
     let realmURL = this.#realmURL;
     if (!realmURL) {
@@ -132,44 +139,34 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     }
     let token = waiter.beginAsync();
     try {
-      let fileURLs = await this.fetchAllFileURLs(realmURL);
+      let fileURLs = new Set<string>();
+      let rowsSeen = 0;
+      for (let number = 0; ; number++) {
+        let { data, meta } = await this.store.searchEntries(
+          {
+            ...this.query,
+            page: { number, size: SERVER_ABSOLUTE_MAX_PAGE_SIZE },
+          },
+          [realmURL],
+        );
+        rowsSeen += data.length;
+        for (let entry of data) {
+          if (entry.id) {
+            fileURLs.add(entry.id);
+          }
+        }
+        let total = meta?.page?.total;
+        // A page with no rows ends the walk even when the total says more
+        // remain: files deleted between pages shrink the result set under it.
+        if (data.length === 0 || total == null || rowsSeen >= total) {
+          break;
+        }
+      }
       this._fileURLs.splice(0, this._fileURLs.length, ...fileURLs);
     } finally {
       waiter.endAsync(token);
     }
   });
-
-  // The server caps every search at a page, so the tree walks the pages until
-  // it holds `meta.page.total` rows. The server may clamp the requested size
-  // to a smaller ceiling; it keeps `page.number` as given, so walking from page
-  // zero at one fixed size still visits every row exactly once. The tree swaps
-  // in only once the walk finishes, so it never renders a partial listing.
-  private async fetchAllFileURLs(realmURL: string): Promise<string[]> {
-    let fileURLs = new Set<string>();
-    let rowsSeen = 0;
-    for (let number = 0; ; number++) {
-      let { data, meta } = await this.store.searchEntries(
-        {
-          ...this.query,
-          page: { number, size: SERVER_ABSOLUTE_MAX_PAGE_SIZE },
-        },
-        [realmURL],
-      );
-      rowsSeen += data.length;
-      for (let entry of data) {
-        if (entry.id) {
-          fileURLs.add(entry.id);
-        }
-      }
-      let total = meta?.page?.total;
-      // A page with no rows ends the walk even when the total says more
-      // remain: files deleted between pages shrink the result set under it.
-      if (data.length === 0 || total == null || rowsSeen >= total) {
-        break;
-      }
-    }
-    return [...fileURLs];
-  }
 
   // The file tree only needs each matched file's URL — the `entry`
   // ids. The fieldset pins the leanest projection the wire grammar offers (a

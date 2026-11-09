@@ -178,6 +178,68 @@ module('Integration | file-tree-from-index resource', function (hooks) {
     }
   });
 
+  test('a tree re-run cancels the page walk it replaces', async function (assert) {
+    setSearchBoundsForTests({
+      serverMaxPageSize: 1,
+      serverAbsoluteMaxPageSize: 1,
+    });
+    let store = getService('store');
+    let messageService = getService('message-service');
+    let requestedPages: (number | undefined)[] = [];
+    let originalSearchEntries = store.searchEntries.bind(store);
+    store.searchEntries = (async (
+      ...args: Parameters<typeof store.searchEntries>
+    ) => {
+      requestedPages.push(args[0].page?.number);
+      let result = await originalSearchEntries(...args);
+      if (requestedPages.length === 1) {
+        // Hold the first walk at its first page until an index event has
+        // restarted the tree and the replacement walk has begun.
+        messageService.relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}notes/plain.md`],
+          realmURL: testRealmURL,
+        });
+        for (let i = 0; i < 500 && requestedPages.length < 2; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      }
+      return result;
+    }) as typeof store.searchEntries;
+
+    try {
+      let tree = getTreeForTest(
+        getService('loader-service'),
+        () => markdownRef,
+        () => undefined,
+      );
+      // Reading `loaded` starts the first walk. The restart cancels it, so
+      // its promise settles as a cancellation; the replacement walk is what
+      // `settled()` waits on.
+      tree.loaded.catch(() => {});
+      await settled();
+
+      assert.deepEqual(
+        requestedPages,
+        [0, 0, 1, 2],
+        'the replaced walk requests no page after the restart',
+      );
+      assert.deepEqual(
+        filePaths(tree.entries),
+        [
+          'notes/plain.md',
+          'recipes/pasta/SKILL.md',
+          'skills/realm-sync/SKILL.md',
+        ],
+        'the replacement walk builds the whole tree',
+      );
+    } finally {
+      store.searchEntries = originalSearchEntries;
+      resetSearchBoundsForTests();
+    }
+  });
+
   test('a burst of realm events coalesces into a single tree re-run', async function (assert) {
     let store = getService('store');
     let searchCount = 0;
