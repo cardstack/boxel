@@ -34,6 +34,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   setupDB,
+  withoutRealmTimings,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 
@@ -957,8 +958,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         );
         assert.strictEqual(response.status, 200, `${name}: HTTP 200 status`);
         assert.strictEqual(
-          response.text,
-          nothing.text,
+          withoutRealmTimings(response.text),
+          withoutRealmTimings(nothing.text),
           `${name}: byte-identical to the declared query that admits nothing`,
         );
       }
@@ -982,8 +983,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         let response = await federatedSearch({ ...payload, realms: [SCHOOL] });
         assert.strictEqual(response.status, 200, `${name}: HTTP 200 status`);
         assert.strictEqual(
-          response.text,
-          nothing.text,
+          withoutRealmTimings(response.text),
+          withoutRealmTimings(nothing.text),
           `${name}: byte-identical to the declared query that admits nothing`,
         );
       }
@@ -1167,7 +1168,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       );
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.strictEqual(response.text, nothing.text);
+      assert.strictEqual(
+        withoutRealmTimings(response.text),
+        withoutRealmTimings(nothing.text),
+      );
     });
 
     module('on a realm’s own _search', function () {
@@ -1180,8 +1184,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
           let response = await realmSearch(school, payload, PROVIDER_B);
           assert.strictEqual(response.status, 200, `${name}: HTTP 200 status`);
           assert.strictEqual(
-            response.text,
-            nothing.text,
+            withoutRealmTimings(response.text),
+            withoutRealmTimings(nothing.text),
             `${name}: byte-identical to the declared query that admits nothing`,
           );
         }
@@ -1204,8 +1208,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         let mine = await signedOut({ operation: 'mySecrets', on: SECRET });
         assert.strictEqual(mine.status, 200, 'HTTP 200 status');
         assert.strictEqual(
-          mine.text,
-          nothing.text,
+          withoutRealmTimings(mine.text),
+          withoutRealmTimings(nothing.text),
           'byte-identical to the declared query that admits nothing',
         );
       });

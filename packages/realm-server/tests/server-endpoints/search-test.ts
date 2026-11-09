@@ -45,6 +45,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   setupTestDatabaseTemplate,
+  withoutRealmTimings,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
@@ -938,9 +939,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         'the reader independently computes rather than being served a cached body',
       );
       assert.strictEqual(
-        reader.text,
-        owner.text,
-        'two independent computes produce a byte-identical body',
+        withoutRealmTimings(reader.text),
+        withoutRealmTimings(owner.text),
+        'two independent computes produce a byte-identical body, but for the measured time',
       );
     });
 

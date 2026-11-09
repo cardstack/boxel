@@ -257,6 +257,29 @@ export { testRealmHref, testRealmURL };
 
 const REALM_EVENT_TS_SKEW_BUFFER_MS = 2000;
 
+// A search response's body with each realm's wall time (`meta.realms[url].ms`)
+// left out, for tests that compare two bodies byte for byte: the time is
+// measured, so it differs between two otherwise identical answers. Anything
+// that is not a JSON document comes back unchanged.
+export function withoutRealmTimings(text: string): string {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return text;
+  }
+  let realms = (doc as { meta?: { realms?: Record<string, unknown> } })?.meta
+    ?.realms;
+  if (realms && typeof realms === 'object') {
+    for (let entry of Object.values(realms)) {
+      if (entry && typeof entry === 'object') {
+        delete (entry as { ms?: unknown }).ms;
+      }
+    }
+  }
+  return JSON.stringify(doc);
+}
+
 export async function waitUntil<T>(
   condition: () => Promise<T>,
   options: {

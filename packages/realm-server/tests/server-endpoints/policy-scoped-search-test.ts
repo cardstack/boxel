@@ -45,6 +45,7 @@ import {
   runTestRealmServerWithRealms,
   setupDB,
   waitUntil,
+  withoutRealmTimings,
 } from '../helpers/index.ts';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
@@ -883,8 +884,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
         assert.strictEqual(undeclared.status, 200, 'HTTP 200 status');
         assert.strictEqual(
-          undeclared.text,
-          nothing.text,
+          withoutRealmTimings(undeclared.text),
+          withoutRealmTimings(nothing.text),
           'byte-identical to the declared query that admits nothing',
         );
       });
@@ -1865,10 +1866,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
         assert.strictEqual(matchesNothing.status, 200);
         assert.strictEqual(grantsNothing.status, 200);
+        // Each realm is named in its totals, its section and its entry in
+        // `realms`, whose `ms` is measured: those differ, and nothing else.
         let withRealmsElided = (body: {
           meta: {
             realmTotals?: Record<string, number>;
             policyScopedRealms?: string[];
+            sections?: { realm: string }[];
+            realms?: Record<string, { ms?: number }>;
           };
         }) => ({
           ...body,
@@ -1876,6 +1881,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             ...body.meta,
             realmTotals: Object.values(body.meta.realmTotals ?? {}),
             policyScopedRealms: body.meta.policyScopedRealms?.length,
+            sections: body.meta.sections?.map(
+              ({ realm: _realm, ...rest }) => rest,
+            ),
+            realms: Object.values(body.meta.realms ?? {}).map(
+              ({ ms: _ms, ...rest }) => rest,
+            ),
           },
         });
         assert.deepEqual(
