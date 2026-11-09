@@ -2309,8 +2309,9 @@ export class IndexQueryEngine {
   }
 
   // A `rerank`: the query's first `top` rows, ordered by a BXL formula over
-  // each row's search doc, then the page of that order. Undefined when the
-  // page lies past the window, so the query runs in its own order.
+  // each row's search doc, then the rows past the window in the query's own
+  // order, and the page of that. Undefined when the page lies past the
+  // window, so the query runs in its own order.
   async #reranked(
     realmURL: URL,
     query: Query,
@@ -2326,12 +2327,15 @@ export class IndexQueryEngine {
     if (query.page && start >= top) {
       return undefined;
     }
+    // A page that runs past the window is filled from the rows after it,
+    // read in the same pass.
+    let past = query.page ? Math.max(0, start + query.page.size - top) : 0;
     let candidates = await this._search(
       realmURL,
       {
         filter: query.filter,
         sort: query.sort,
-        page: { number: 0, size: top },
+        page: { number: 0, size: top + past },
         facets: query.facets,
         collapse: query.collapse,
         let: query.let,
@@ -2343,12 +2347,14 @@ export class IndexQueryEngine {
       ],
       entryType,
     );
-    let rows = candidates.results as {
+    let read = candidates.results as {
       url: string;
       type?: string;
       search_doc?: unknown;
       [column: string]: unknown;
     }[];
+    let rows = read.slice(0, top);
+    let after = read.slice(top);
     let docs = rows.map((row) => {
       let doc = row.search_doc;
       if (typeof doc === 'string') {
@@ -2420,9 +2426,23 @@ export class IndexQueryEngine {
         }
         return (a.value - b.value) * direction || a.index - b.index;
       });
+    let ordered: {
+      row: (typeof read)[number];
+      index: number;
+      value: number | null;
+      past?: true;
+    }[] = [
+      ...order,
+      ...after.map((row, i) => ({
+        row,
+        index: rows.length + i,
+        value: null,
+        past: true as const,
+      })),
+    ];
     let window = query.page
-      ? order.slice(start, start + query.page.size)
-      : order;
+      ? ordered.slice(start, start + query.page.size)
+      : ordered;
     let results: Partial<IndexRowWithHtml>[] = [];
     if (window.length > 0) {
       let { results: page } = await this._search(
@@ -2453,8 +2473,14 @@ export class IndexQueryEngine {
           results.push({
             ...row,
             ...computed,
-            [RERANK_KEY]: w.value,
-            ...(formula ? { [FORMULA_KEY]: w.value } : {}),
+            // A row past the window was not re-ranked, so it carries no
+            // value of the rerank's.
+            ...(w.past
+              ? {}
+              : {
+                  [RERANK_KEY]: w.value,
+                  ...(formula ? { [FORMULA_KEY]: w.value } : {}),
+                }),
             // A merge across realms orders by the rerank value first, then
             // by the query's own sort.
             ...(opts.exposeSortValues

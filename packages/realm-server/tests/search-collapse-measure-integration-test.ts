@@ -1375,6 +1375,37 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a page that runs past the rerank window is filled in the query order', async function (assert) {
+    let pageOf = (number: number) =>
+      reranked({
+        filter: { type: on },
+        sort: byScoreDesc,
+        page: { number, size: 3 },
+        rerank: { expression: '100 - hnScore', top: 4 },
+      });
+    let straddling = await pageOf(1);
+    assert.deepEqual(
+      straddling.rows,
+      [
+        ['d', 50],
+        ['a', null],
+        ['f', null],
+      ],
+      'the last re-ranked row, then the rows after the window, unscored',
+    );
+    let seen: string[] = [];
+    for (let number of [0, 1, 2]) {
+      seen.push(...(await pageOf(number)).rows.map((r) => r[0] as string));
+    }
+    assert.deepEqual(
+      seen,
+      ['c', 'b', 'e', 'd', 'a', 'f', 'g'],
+      'every match once, with no gap after the window',
+    );
+    assert.strictEqual(straddling.meta.rerank?.window, 4);
+    assert.true(straddling.meta.rerank?.truncated);
+  });
+
   test('a reranked page keeps what the query computed for each row', async function (assert) {
     let page = async (query: Query, opts = {}) =>
       (
