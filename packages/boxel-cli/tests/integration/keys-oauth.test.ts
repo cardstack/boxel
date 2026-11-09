@@ -428,7 +428,7 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
       }),
     ).rejects.toThrow(
       new RegExp(
-        `^team account can't fill the slot userKey of .+: it isn't a kind of key that slot takes, or its credential isn't good at ${host}\\S*, where the batch sends it\\. Name another key or share$`,
+        `^team account can't fill the slot userKey of .+: it isn't a kind of key that slot takes, or its credential isn't good at ${host}\\S*, where the operations approved send it\\. Name another key or share$`,
       ),
     );
     let bindings = await listOwnBindings(

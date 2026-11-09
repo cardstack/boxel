@@ -196,8 +196,8 @@ function chosenOperations(
   );
 }
 
-// The hosts the batch sends a slot token to, for `use`: every operation that
-// sends it, as the realm server weighs them in naming the token's fillers.
+// The hosts the batch sends a slot token to, for `use`: every operation the
+// realm server weighed in naming the token's fillers that sends it.
 function slotHosts(
   batch: ApprovalBatch,
   token: string,
@@ -207,6 +207,9 @@ function slotHosts(
   for (let group of batch.groups) {
     for (let op of group.operations) {
       if (use === 'pipelines' && op.status === 'pipelines-only') {
+        continue;
+      }
+      if (batch.fillersFor && !batch.fillersFor.includes(op.name)) {
         continue;
       }
       if (op.slots.some((s) => s.slot === token)) {
@@ -223,10 +226,11 @@ function slotHosts(
 // slot.
 //
 // A key or share fills a slot only where the batch's `fillers` offer it for
-// `use`, as the secure window's approve page offers only those. One that
-// would fill a slot of its type but isn't offered there is refused, naming
-// the slot and why, rather than approved to send where its credential can't
-// be used.
+// `use`, as the secure window's approve page offers only those. Asked for the
+// operations `--operation` names, `fillers` weigh only where those send. One
+// that would fill a slot of its type but isn't offered there is refused,
+// naming the slot and why, rather than approved to send where its credential
+// can't be used.
 export function plan(
   batch: ApprovalBatch,
   name: string,
@@ -289,12 +293,21 @@ export function plan(
     let filled = [
       ...new Set(planned.flatMap((p) => p.fills.map((f) => f.slot))),
     ];
+    let it = tokens.length === 1 ? 'it' : 'them';
+    // A slot the realm server weighed by every operation of the card, though
+    // the approval covers only one.
+    let batchWide =
+      operation !== undefined && !batch.fillersFor
+        ? ` This realm server offers a key for a slot by every operation of ${batch.card.name} that sends it, not only ${operation}.`
+        : '';
+    // `--slot` helps only where what it fills needs no new grant: the secure
+    // window approves every slot of an operation.
+    let next =
+      filled.length > 0 && newGrants(planned).length === 0
+        ? `Pass --slot ${filled.join(' or --slot ')} to approve only what it fills, or name another key or share`
+        : 'Name another key or share';
     throw new Error(
-      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.join(', ')}, where the batch sends ${tokens.length === 1 ? 'it' : 'them'}. ${
-        filled.length > 0
-          ? `Pass --slot ${filled.join(' or --slot ')} to approve only what it fills, or name another key or share`
-          : 'Name another key or share'
-      }`,
+      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.length === 1 ? hosts[0] : `every one of ${hosts.join(', ')}`}, where ${batch.fillersFor ? 'the operations approved send' : 'the batch sends'} ${it}.${batchWide} ${next}`,
     );
   }
   return planned;
@@ -572,6 +585,7 @@ export async function keysApprove(
   let batch = await approvalBatch(ctx.realmServerUrl, token, {
     target,
     interactive: Boolean(options.interactive),
+    ...(parsed.operation ? { operations: [parsed.operation] } : {}),
   });
   // A card is named by its own URL, so the type --operation names is checked
   // against the one the card adopts from. Both are asked of the realm server,
