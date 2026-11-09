@@ -709,6 +709,9 @@ export interface ColumnPlan {
   segments?: string[];
   plural?: boolean;
   link?: { segments: string[]; type: CodeRef };
+  // A vector field's values, read from the vector table rather than the
+  // search doc (a vector in a sidecar is not in the doc).
+  vector?: { fieldPath: string; list: boolean };
 }
 
 // `items[].name` as a SQL/JSON path, lax, so a list is read element by
@@ -3347,11 +3350,30 @@ export class IndexQueryEngine {
           break;
         }
       }
+      let plural = segments.some((x) => x.endsWith('[]'));
+      let leaf = !link
+        ? await getField(
+            definition,
+            segments.map((x) => x.replace(/\[\]$/, '')).join('.'),
+            this.#definitionLookup,
+          ).catch(() => undefined)
+        : undefined;
+      if (leaf?.serializerName === 'vector') {
+        plans.push({
+          name,
+          index,
+          vector: {
+            fieldPath: segments.map((x) => x.replace(/\[\]$/, '')).join('.'),
+            list: plural,
+          },
+        });
+        continue;
+      }
       plans.push({
         name,
         index,
         segments,
-        plural: segments.some((x) => x.endsWith('[]')),
+        plural,
         link,
       });
     }
@@ -3373,6 +3395,17 @@ export class IndexQueryEngine {
         ? `jsonb_path_query_array(i.search_doc, '${jsonPathOf(segments)}')`
         : `spill_unmark(i.search_doc #> '{${segments.join(',')}}')`;
     for (let plan of plans) {
+      if (plan.vector) {
+        // A vector column: the card's own vectors at the field, each with its
+        // space (and, inside a list, its item id), in item order.
+        let match = `v.realm_url = i.realm_url AND v.url = i.url AND v.type = i.type AND v.field_path = '${plan.vector.fieldPath.replace(/'/g, "''")}'`;
+        select.push(
+          plan.vector.list
+            ? `, ANY_VALUE((SELECT jsonb_agg(jsonb_build_object('item', v.item_id, 'space', v.space, 'values', v.embedding::text::jsonb) ORDER BY v.ordinal, v.item_id) FROM boxel_index_vectors AS v WHERE ${match})) AS "__col${plan.index}"`
+            : `, ANY_VALUE((SELECT jsonb_build_object('space', v.space, 'values', v.embedding::text::jsonb) FROM boxel_index_vectors AS v WHERE ${match} AND v.item_id = '' LIMIT 1)) AS "__col${plan.index}"`,
+        );
+        continue;
+      }
       if (!plan.segments) continue;
       select.push(
         `, ANY_VALUE(${read(plan.segments)}) AS "__col${plan.index}"`,
