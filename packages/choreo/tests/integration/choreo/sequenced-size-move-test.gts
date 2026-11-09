@@ -64,7 +64,9 @@ module('Integration | choreo | sequenced size move', function (hooks) {
     await animationsSettled();
 
     const b = document.querySelector('[data-box="b"]')!;
-    const xs: number[] = [];
+    // seeded with where it stands before the change, so the run's first
+    // frame is compared too
+    const xs: number[] = [b.getBoundingClientRect().x];
     let on = true;
     const tick = () => {
       if (!on) {

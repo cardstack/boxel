@@ -3,11 +3,9 @@
  * picture, not of the layout. A pass that lands while it is in flight must
  * measure the element at rest, and when the new score names the element
  * only for something else (a fade), the region must carry the transform on
- * to rest rather than leave it where the measurement found it.
- *
- * Before: the scale was neither rested for the measure nor carried on, so
- * the element was measured at its mid-entrance size and stayed scaled down
- * for good.
+ * to rest rather than leave it where the measurement found it. A transform
+ * the new score drives itself (a single-value tween, a hold) carries on from
+ * where it is painted, or stands where the hold puts it.
  */
 import { Choreo } from '@cardstack/choreo';
 import {
@@ -71,6 +69,67 @@ class Scene extends Component<{ Args: { seize: (self: Scene) => void } }> {
 
 const array = (...values: number[]) => values;
 
+const xOf = (el: Element) => el.getBoundingClientRect().x;
+const yOf = (el: Element) => el.getBoundingClientRect().y;
+
+class Slide extends Component<{ Args: { seize: (self: Slide) => void } }> {
+  @tracked go = false;
+  @tracked showB = false;
+  constructor(owner: unknown, args: { seize: (self: Slide) => void }) {
+    super(owner as never, args as never);
+    args.seize(this);
+  }
+  <template>
+    <Choreo style='position:relative;width:600px;height:400px' as |c|>
+      <div
+        data-box='a'
+        data-go={{this.go}}
+        style='position:absolute;left:0;top:20px;width:100px;height:100px;background:#0af'
+        {{motion id='a' role='box'}}
+      ></div>
+      {{#if this.showB}}
+        <div
+          data-box='b'
+          style='position:absolute;left:320px;top:200px;width:100px;height:100px;background:#fa0'
+          {{motion id='b' role='box'}}
+        ></div>
+      {{/if}}
+      {{#if this.go}}
+        <c.Tween @of={{c.id 'a'}} @x={{200}} @duration={{2}} @ease='linear' />
+      {{/if}}
+    </Choreo>
+  </template>
+}
+
+class HeldMove extends Component<{
+  Args: { seize: (self: HeldMove) => void };
+}> {
+  @tracked moved = false;
+  @tracked held = false;
+  constructor(owner: unknown, args: { seize: (self: HeldMove) => void }) {
+    super(owner as never, args as never);
+    args.seize(this);
+  }
+  <template>
+    <Choreo style='position:relative;width:600px;height:400px' as |c|>
+      <div
+        data-box='a'
+        style={{if
+          this.moved
+          'position:absolute;left:300px;top:200px;width:100px;height:100px;background:#0af'
+          'position:absolute;left:0;top:0;width:100px;height:100px;background:#0af'
+        }}
+        {{motion id='a' role='box'}}
+      ></div>
+      {{#if this.held}}
+        <c.Hold @of={{c.id 'a'}} @y={{-30}} @fill={{true}} />
+      {{else}}
+        <c.Move @of={{c.moved 'box'}} @duration={{2}} @ease='linear' />
+      {{/if}}
+    </Choreo>
+  </template>
+}
+
 module('Integration | choreo | rested transform', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks, { width: 600 });
@@ -109,5 +168,47 @@ module('Integration | choreo | rested transform', function (hooks) {
       'the box stands at its laid-out size',
     );
     assert.deepEqual(strandedTransforms(), [], 'no transform is stranded');
+  });
+
+  test('a single-value tween caught by another pass carries on from where it is painted', async function (assert) {
+    let scene: Slide | undefined;
+    const seize = (self: Slide) => (scene = self);
+    await render(<template><Slide @seize={{seize}} /></template>);
+    await animationsSettled();
+    const a = document.querySelector('[data-box="a"]')!;
+
+    scene!.go = true;
+    await frames(12);
+    const before = xOf(a);
+    assert.true(before > 0, `the tween is in flight (x ${before})`);
+
+    // another box arrives: a replacement pass whose score drives 'a' on x
+    scene!.showB = true;
+    await frames(1);
+    assert.true(
+      xOf(a) >= before - 1,
+      `x carries on rather than snapping back (${xOf(a)} after ${before})`,
+    );
+    await animationsSettled();
+    assert.strictEqual(Math.round(xOf(a)), 200, 'the tween reaches its end');
+  });
+
+  test('a box caught mid-move and then held stands where the hold puts it', async function (assert) {
+    let scene: HeldMove | undefined;
+    const seize = (self: HeldMove) => (scene = self);
+    await render(<template><HeldMove @seize={{seize}} /></template>);
+    await animationsSettled();
+    const a = document.querySelector('[data-box="a"]')!;
+
+    scene!.moved = true;
+    await frames(12);
+    scene!.held = true;
+    await animationsSettled();
+    await frames(2);
+    assert.strictEqual(
+      Math.round(yOf(a)),
+      200 - 30,
+      'the hold wins over the continuation of the move it caught',
+    );
   });
 });

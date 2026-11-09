@@ -1089,9 +1089,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // nor reasserts the world: the release itself was the snap. A sprite
     // that merely REFLOWED is untouched — it was never driven.
     if (this.run && !this.run.isDone()) {
-      // A sprite the new score already MOVES needs no continuation: its
-      // move starts from the painted box. One the score names only for
-      // something else (a fade, a hold) still needs carrying through space,
+      // A sprite the new score already MOVES or HOLDS in place needs no
+      // continuation: its move starts from the painted box, and its hold
+      // decides where it stands. One the score names only for something
+      // else (a fade, a hold on opacity) still needs carrying through space,
       // or a transform the prior run was tweening (an entrance's scale)
       // would be left where the release put it.
       const scored = new Set(
@@ -1099,7 +1100,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           .filter(
             (c) =>
               c.flight !== undefined ||
-              Object.keys(c.target ?? {}).some((key) => MOVED_KEYS.has(key)),
+              [
+                ...Object.keys(c.target ?? {}),
+                ...Object.keys(c.hold?.values ?? {}),
+              ].some((key) => MOVED_KEYS.has(key)),
           )
           .map((c) => c.sprite.node),
       );
@@ -1144,6 +1148,17 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // a Move that animates sizes translates from where layout puts each
     // box at the flight's start sizes, not from its final box
     correctMovesForLayout(cues, measureZoom);
+    // a value a new tween or spring takes over carries on from where it is
+    // painted: stand it back up where the measure rested it
+    this.run?.restoreRested((ve, key) =>
+      cues.some(
+        (c) =>
+          (c.kind === 'tween' || c.kind === 'spring') &&
+          c.sprite.node.visualElement === ve &&
+          c.target !== undefined &&
+          key in c.target,
+      ),
+    );
     if (!cues.length) {
       // nothing to play: let every leaver go now
       for (const node of claimed) {

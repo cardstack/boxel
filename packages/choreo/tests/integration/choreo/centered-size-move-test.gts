@@ -1,17 +1,15 @@
 /**
  * A size-animating Move on an element whose layout position depends on its
- * own size: the operator-mode stack card. Each card is `position: absolute`
- * with no `left`, in a `display: flex; justify-content: center` region, so
- * its static position is centered, and its x is a function of its width.
+ * own size. Each card is `position: absolute` with no `left`, in a
+ * `display: flex; justify-content: center` region, so its static position
+ * is centered and its x is a function of its width.
  *
- * A card opened over another is inserted at one size and, once it loads,
- * grows to another in a later pass; the card under it shrinks. Every box
- * either card ever has lies inside the stage, so no frame may show either
- * card outside it. Two things sent the cards off it: the move translated
- * from the final box while layout re-centered the card under its animated
- * width (each re-pass added the error again), and the entrance's scale,
- * cut short by the pass that moved the card, was measured into its boxes
- * and never finished.
+ * A card inserted over another at one size grows to another in a later
+ * pass, sometimes while its entrance scale is still in flight and with
+ * further renders landing mid-flight; the card under it shrinks. Every box
+ * either card ever has lies inside the stage, so no frame shows either card
+ * outside it, both land centered at their final widths, and no transform
+ * is left behind.
  */
 import { Choreo } from '@cardstack/choreo';
 import {
