@@ -225,7 +225,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         menuContext: 'code-mode-playground',
         toolContext: this.toolService.toolContext,
         format: this.format,
-        workspacePin: this.workspacePins.pinStateFor(cardId),
+        workspacePin: this.workspacePins.pinStateFor(rri(cardId)),
       }) || [],
     );
   }

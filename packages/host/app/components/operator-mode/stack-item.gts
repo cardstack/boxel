@@ -629,7 +629,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         format: this.cardFormat,
         useBaseTemplate: this.args.item.useBaseTemplate,
         workspacePin: this.url
-          ? this.workspacePins.pinStateFor(this.url as string)
+          ? this.workspacePins.pinStateFor(rri(this.url))
           : undefined,
       }) ?? [],
     );

@@ -30,6 +30,7 @@ import {
 import {
   cardTypeDisplayName,
   cardTypeIcon,
+  rri,
   type ToolContext,
 } from '@cardstack/runtime-common';
 
@@ -612,9 +613,11 @@ export default class OperatorModeOverlays extends Overlays {
         menuItems.push(editItem);
       }
       menuItems.push(copyUrlItem);
-      let workspacePin = isField
-        ? undefined
-        : this.workspacePins.pinStateFor(cardId);
+      // A workspace pins cards only, never files.
+      let workspacePin =
+        isField || isFile
+          ? undefined
+          : this.workspacePins.pinStateFor(rri(cardId));
       if (workspacePin) {
         menuItems.push({
           label: workspacePin.pinned
@@ -645,9 +648,10 @@ export default class OperatorModeOverlays extends Overlays {
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         toolContext: this.toolContext,
-        workspacePin: isField
-          ? undefined
-          : this.workspacePins.pinStateFor(cardId),
+        workspacePin:
+          isField || isFile
+            ? undefined
+            : this.workspacePins.pinStateFor(rri(cardId)),
       }) ?? [];
 
     // Delete and New Card of This Type don't make sense from an embedded field

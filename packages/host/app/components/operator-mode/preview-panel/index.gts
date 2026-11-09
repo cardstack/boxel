@@ -168,7 +168,7 @@ export default class PreviewPanel extends Component<Signature> {
         menuContext: 'code-mode-preview',
         toolContext: this.toolService.toolContext,
         workspacePin: this.cardId
-          ? this.workspacePins.pinStateFor(this.cardId)
+          ? this.workspacePins.pinStateFor(rri(this.cardId))
           : undefined,
       }),
     );

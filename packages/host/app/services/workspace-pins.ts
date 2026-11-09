@@ -2,8 +2,10 @@ import Service, { service } from '@ember/service';
 
 import {
   isRealmIndexCardId,
+  ri,
   rri,
   trimJsonExtension,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import { WorkspacePins } from '../components/operator-mode/dashboard/workspace-pins';
@@ -22,30 +24,31 @@ export default class WorkspacePinsService extends Service {
   // What a card's menu offers: undefined while the card's workspace pins
   // load, and whenever the user can't pin it — they can't write to its
   // realm, the realm's index card isn't a Workspace, or it is the index card.
-  pinStateFor(cardId: string): { pinned: boolean } | undefined {
-    let realmURL = this.realm.realmURLOf(cardId);
-    if (!realmURL || !this.realm.canWrite(realmURL)) {
+  pinStateFor(
+    cardId: RealmResourceIdentifier,
+  ): { pinned: boolean } | undefined {
+    let realmKey = this.realm.realmURLOf(cardId);
+    if (!realmKey || !this.realm.canWrite(realmKey)) {
       return undefined;
     }
     let id = rri(trimJsonExtension(cardId));
-    if (
-      isRealmIndexCardId(id, new URL(realmURL), this.network.virtualNetwork)
-    ) {
+    if (isRealmIndexCardId(id, ri(realmKey), this.network.virtualNetwork)) {
       return undefined;
     }
-    let pins = this.pinsFor(realmURL);
+    let pins = this.pinsFor(realmKey);
     if (!pins.isWorkspace) {
       return undefined;
     }
     return { pinned: pins.cardIds.includes(id) };
   }
 
-  private pinsFor(realmURL: string): WorkspacePins {
-    let pins = this.#pinsByRealm.get(realmURL);
+  private pinsFor(realmKey: string): WorkspacePins {
+    let pins = this.#pinsByRealm.get(realmKey);
     if (!pins) {
-      let realm = this.realm.realmOf(new URL(realmURL)) ?? realmURL;
+      let realm = ri(realmKey);
+      let realmURL = this.network.virtualNetwork.toURL(realm).href;
       pins = new WorkspacePins(this, () => ({ realm, realmURL }));
-      this.#pinsByRealm.set(realmURL, pins);
+      this.#pinsByRealm.set(realmKey, pins);
     }
     return pins;
   }

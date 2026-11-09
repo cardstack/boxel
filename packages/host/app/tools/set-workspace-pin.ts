@@ -1,12 +1,18 @@
 import { service } from '@ember/service';
 
-import { isCardInstance, rri } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  isRealmIndexCardId,
+  RealmPaths,
+  ri,
+  rri,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
-import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 // A workspace's pins are the `entryPoints` links of its Workspace card, the
@@ -15,10 +21,11 @@ export default class SetWorkspacePinTool extends HostBaseTool<
   typeof BaseToolModule.SetWorkspacePinInput,
   undefined
 > {
+  @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
 
-  static actionVerb = 'Pin';
+  static actionVerb = 'Set';
 
   description =
     "Pin a card to its workspace, or unpin it. Pinned cards show on the workspace's Home and on its desk in the dashboard. Only works in a workspace whose index card is a Workspace card.";
@@ -28,7 +35,7 @@ export default class SetWorkspacePinTool extends HostBaseTool<
     return commandModule.SetWorkspacePinInput;
   }
 
-  requireInputFields = ['cardId'];
+  requireInputFields = ['cardId', 'pinned'];
 
   protected async run(
     input: BaseToolModule.SetWorkspacePinInput,
@@ -37,11 +44,18 @@ export default class SetWorkspacePinTool extends HostBaseTool<
     if (!realmURL) {
       throw new Error(`No known workspace holds ${input.cardId}.`);
     }
-    let indexId = `${realmURL}index`;
-    let [workspaceModule, index, card] = await Promise.all([
-      this.loaderService.loader.import<
-        typeof import('@cardstack/base/workspace')
-      >('@cardstack/base/workspace'),
+    if (!this.realm.canWrite(realmURL)) {
+      throw new Error(`You can't change the pins of ${realmURL}.`);
+    }
+    let indexId = new RealmPaths(ri(realmURL)).fileRRI('index');
+    let loader = this.loaderService.loader;
+    let [workspaceModule, { rawArrayValues }, index, card] = await Promise.all([
+      loader.import<typeof import('@cardstack/base/workspace')>(
+        '@cardstack/base/workspace',
+      ),
+      loader.import<typeof import('@cardstack/base/watched-array')>(
+        '@cardstack/base/watched-array',
+      ),
       this.store.get(indexId),
       this.store.get(input.cardId),
     ]);
@@ -54,9 +68,16 @@ export default class SetWorkspacePinTool extends HostBaseTool<
       throw new Error(`Card not found: ${input.cardId}`);
     }
     let pinnedId = rri(card.id as string);
-    let pins = (index.entryPoints ?? []) as CardDef[];
-    let isPinned = (pin: CardDef | undefined) =>
-      typeof pin?.id === 'string' && rri(pin.id) === pinnedId;
+    if (
+      isRealmIndexCardId(pinnedId, ri(realmURL), this.network.virtualNetwork)
+    ) {
+      throw new Error(`A workspace's index card can't be one of its pins.`);
+    }
+    // The raw backing array keeps the links of pins whose cards are missing or
+    // not loaded yet, which reading the field directly would save as empty.
+    let pins = rawArrayValues(index.entryPoints ?? []);
+    let isPinned = (pin: unknown) =>
+      isCardInstance(pin) && rri(pin.id as string) === pinnedId;
     if (Boolean(input.pinned) === pins.some(isPinned)) {
       return undefined;
     }

@@ -11,7 +11,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { rri } from '@cardstack/runtime-common';
+import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -386,6 +386,42 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     assert
       .dom(WORKSPACE_A_PINS)
       .hasAttribute('data-test-pinned-card', `${realmURL}notes`);
+  });
+
+  test("pinning a card keeps the workspace's other pins, even one whose card is missing", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('roadmap.json', JSON.stringify(cardJSON('Roadmap')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './roadmap' } },
+          'entryPoints.1': { links: { self: './missing' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}notes`, format: 'isolated' }]],
+    });
+
+    await openCardMenu(`${realmURL}notes`);
+    await waitFor(PIN);
+    await click(PIN);
+    // The menu offers Unpin once the saved pin is indexed.
+    await openCardMenu(`${realmURL}notes`);
+    await waitFor(UNPIN);
+
+    let source = await (
+      await (getService('network') as NetworkService).authedFetch(
+        `${realmURL}index.json`,
+        { headers: { Accept: SupportedMimeType.CardSource } },
+      )
+    ).json();
+    let relationships = source.data.relationships;
+    assert.deepEqual(
+      [0, 1, 2].map((i) => relationships[`entryPoints.${i}`]?.links?.self),
+      ['./roadmap', './missing', './notes'],
+    );
   });
 
   test("a pinned card's menu unpins it, and its desk drops it without a reload", async function (assert) {
