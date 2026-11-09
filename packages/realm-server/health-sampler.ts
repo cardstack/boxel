@@ -43,7 +43,7 @@ export interface HealthSamplerOptions {
   // scheduler is keeping one realm's searches from crowding out another's.
   // Holds are the connections `withConnection` callers keep across other
   // work; connections in use above the limit are what the scheduler granted
-  // past it while every connection was such a hold waiting on nested work.
+  // past it once every connection was such a hold waiting on nested work.
   connectionStats?: () => {
     inUse: number;
     holds: number;

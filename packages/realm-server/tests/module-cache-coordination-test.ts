@@ -466,17 +466,27 @@ module(basename(import.meta.filename), function () {
   // so winners drain through a pool far smaller than their count.
   module('ModuleCacheCoordinator pool exhaustion', function (hooks) {
     let savedPoolMax: string | undefined;
+    let savedPoolOverflow: string | undefined;
     hooks.before(function () {
       savedPoolMax = process.env.PG_POOL_MAX;
+      savedPoolOverflow = process.env.PG_POOL_OVERFLOW;
       // Force a pool smaller than the concurrent-winner count below so the
-      // test would deadlock if a winner needed a second connection.
+      // test would deadlock if a winner needed a second connection. The
+      // scheduler's overflow is turned off, or it would grant that second
+      // connection past the limit and the deadlock this detects would clear.
       process.env.PG_POOL_MAX = '2';
+      process.env.PG_POOL_OVERFLOW = '0';
     });
     hooks.after(function () {
       if (savedPoolMax === undefined) {
         delete process.env.PG_POOL_MAX;
       } else {
         process.env.PG_POOL_MAX = savedPoolMax;
+      }
+      if (savedPoolOverflow === undefined) {
+        delete process.env.PG_POOL_OVERFLOW;
+      } else {
+        process.env.PG_POOL_OVERFLOW = savedPoolOverflow;
       }
     });
 

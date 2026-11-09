@@ -19,6 +19,7 @@ import { Pool, Client, type PoolClient, type Notification } from 'pg';
 import {
   ConnectionScheduler,
   markConnectionHeld,
+  type ConnectionHold,
   withSharedWork,
 } from './connection-scheduler.ts';
 import { postgresConfig } from './pg-config.ts';
@@ -189,6 +190,22 @@ function configuredPoolTenantShare(): number {
     : DEFAULT_POOL_TENANT_SHARE;
 }
 
+// How many connections past `PG_POOL_MAX` the scheduler may grant to unwedge
+// a pool whose every connection is held by work waiting on a nested checkout
+// (see `ConnectionScheduler`). Unset, it is the scheduler's default: a quarter
+// of the pool's max, and at least four. What a wedge needs is how deep holds
+// nest, not how many there are, so this rarely needs raising; set it when a
+// fixed connection budget has to cover `PG_POOL_MAX + PG_POOL_OVERFLOW` for
+// every process. `0` turns it off, leaving a wedged pool wedged.
+function configuredPoolOverflow(): number | undefined {
+  let rawValue = process.env.PG_POOL_OVERFLOW;
+  if (!rawValue) {
+    return undefined;
+  }
+  let value = Number(rawValue);
+  return Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
 export type NotificationHandler = (notification: Notification) => void;
 
 export interface NotificationSubscription {
@@ -320,6 +337,7 @@ export class PgAdapter implements DBAdapter {
     this.#scheduler = new ConnectionScheduler({
       limit: max,
       tenantShare: configuredPoolTenantShare(),
+      overflow: configuredPoolOverflow(),
     });
     log.debug(`connecting to DB ${this.url}`);
     this.pool = new Pool({
@@ -328,7 +346,7 @@ export class PgAdapter implements DBAdapter {
       database,
       password,
       port,
-      // Room for the overflow the scheduler grants past `max` while every
+      // Room for the overflow the scheduler grants past `max` once every
       // connection is held by a hold waiting on nested work. It never grants
       // more than this, so the pool's own queue still never forms.
       max: this.#scheduler.ceiling,
@@ -363,7 +381,7 @@ export class PgAdapter implements DBAdapter {
   // connections checked out against the pool's max, how many of those are
   // held by `withConnection` callers, acquisitions waiting, and how many of
   // those wait only because their tenant is at its share. `inUse` above
-  // `limit` is the overflow granted while every connection was held by a hold
+  // `limit` is the overflow granted once every connection was held by a hold
   // waiting on nested work.
   get connectionStats(): {
     inUse: number;
@@ -798,11 +816,11 @@ export class PgAdapter implements DBAdapter {
 
   // Wait for the scheduler's go-ahead, then check a client out of the pool.
   // The turn is handed back by the caller after the client is released, or
-  // here if the checkout itself fails.
-  // `holding` is for a checkout kept across the caller's other work rather
-  // than given back once one statement returns (see `ConnectionScheduler`).
+  // here if the checkout itself fails. `hold` is for a checkout kept across
+  // the caller's other work rather than given back once one statement
+  // returns (see `ConnectionScheduler`).
   async #checkout(opts?: {
-    holding?: boolean;
+    hold?: ConnectionHold;
   }): Promise<{ client: PoolClient; releaseTurn: () => void }> {
     let releaseTurn = await this.#scheduler.acquire(opts);
     try {
@@ -1364,7 +1382,11 @@ export class PgAdapter implements DBAdapter {
   ): Promise<T> {
     await this.started;
 
-    let { client, releaseTurn } = await this.#checkout({ holding: true });
+    // `fn` runs holding this client, so any connection it checks out through
+    // the adapter is one it needs before it can give this one back. The hold
+    // is made before the checkout so the scheduler knows it as a hold.
+    let holding = markConnectionHeld();
+    let { client, releaseTurn } = await this.#checkout({ hold: holding });
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
@@ -1372,9 +1394,6 @@ export class PgAdapter implements DBAdapter {
       let { rows } = await client.query(sql);
       return rows;
     };
-    // `fn` runs holding this client, so any connection it checks out through
-    // the adapter is one it needs before it can give this one back.
-    let holding = markConnectionHeld();
     let released = false;
     try {
       return await holding.run(() => fn(query));
