@@ -1,0 +1,53 @@
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import QUnit from 'qunit';
+const { module, test } = QUnit;
+
+import {
+  playwrightHeadlessShellDirName,
+  playwrightHeadlessShellPresent,
+} from '../src/preflight.ts';
+
+module('preflight > Playwright headless shell', function (hooks) {
+  let browsersPath: string;
+  let savedBrowsersPath: string | undefined;
+
+  hooks.beforeEach(function () {
+    savedBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    browsersPath = mkdtempSync(join(tmpdir(), 'sf-preflight-'));
+    process.env.PLAYWRIGHT_BROWSERS_PATH = browsersPath;
+  });
+
+  hooks.afterEach(function () {
+    if (savedBrowsersPath === undefined) {
+      delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+    } else {
+      process.env.PLAYWRIGHT_BROWSERS_PATH = savedBrowsersPath;
+    }
+    rmSync(browsersPath, { recursive: true, force: true });
+  });
+
+  test('names the revision the installed Playwright launches', function (assert) {
+    let name = playwrightHeadlessShellDirName();
+    assert.true(
+      /^chromium_headless_shell-\d+$/.test(name ?? ''),
+      `unexpected directory name: ${name}`,
+    );
+  });
+
+  test('a build of another revision does not satisfy it', function (assert) {
+    let expected = playwrightHeadlessShellDirName()!;
+    let revision = Number(expected.split('-').pop());
+    mkdirSync(join(browsersPath, `chromium_headless_shell-${revision - 1}`));
+
+    assert.false(playwrightHeadlessShellPresent());
+  });
+
+  test('the installed revision satisfies it', function (assert) {
+    mkdirSync(join(browsersPath, playwrightHeadlessShellDirName()!));
+
+    assert.true(playwrightHeadlessShellPresent());
+  });
+});

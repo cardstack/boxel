@@ -18,9 +18,10 @@
 // fresh checkout it exists to fix, and the failure won't look related to
 // whatever change caused it.
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 // A plain script on Node builtins, not the boxel-cli bundle: safe to import on
 // a checkout where nothing has been built.
@@ -123,18 +124,54 @@ export function playwrightBrowsersRoot(): string | undefined {
 }
 
 /**
+ * The browser-cache directory of the headless shell that the installed
+ * Playwright launches, such as `chromium_headless_shell-1254`. Each Playwright
+ * release names one revision in playwright-core's `browsers.json`, and the
+ * launch looks only for that revision, so a build left in the cache by another
+ * Playwright release doesn't count. Undefined when the file can't be read.
+ */
+export function playwrightHeadlessShellDirName(): string | undefined {
+  try {
+    // @playwright/test reaches playwright-core through playwright, and pnpm
+    // links each package only where its dependent can resolve it.
+    let testPackageJson = createRequire(import.meta.url).resolve(
+      '@playwright/test/package.json',
+    );
+    let playwrightPackageJson = createRequire(testPackageJson).resolve(
+      'playwright/package.json',
+    );
+    let corePackageJson = createRequire(playwrightPackageJson).resolve(
+      'playwright-core/package.json',
+    );
+    let { browsers } = JSON.parse(
+      readFileSync(join(dirname(corePackageJson), 'browsers.json'), 'utf8'),
+    ) as { browsers: { name: string; revision: string }[] };
+    let shell = browsers.find((b) => b.name === 'chromium-headless-shell');
+    return shell ? `chromium_headless_shell-${shell.revision}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * `boxel test` runs `chromium.launch({ headless: true })`, which uses
- * Playwright's `chromium-headless-shell` binary. This is a cheap heuristic —
- * the presence of a downloaded `chromium_headless_shell-*` build in the browser
+ * Playwright's `chromium-headless-shell` binary. This is a cheap check — the
+ * presence of the installed Playwright's headless-shell revision in the browser
  * cache — rather than an actual browser launch. `npx playwright install
  * chromium` also downloads the headless shell, so this covers both install
- * commands. When the browser path can't be determined (PLAYWRIGHT_BROWSERS_PATH
- * set to '0'), assume present so we don't block on a false negative.
+ * commands. When the revision can't be read, any downloaded
+ * `chromium_headless_shell-*` build counts. When the browser path can't be
+ * determined (PLAYWRIGHT_BROWSERS_PATH set to '0'), assume present so we don't
+ * block on a false negative.
  */
 export function playwrightHeadlessShellPresent(): boolean {
   let root = playwrightBrowsersRoot();
   if (!root) return true;
   if (!existsSync(root)) return false;
+  let expected = playwrightHeadlessShellDirName();
+  if (expected) {
+    return existsSync(join(root, expected));
+  }
   try {
     return readdirSync(root).some((name) =>
       name.startsWith('chromium_headless_shell-'),
@@ -173,7 +210,9 @@ export function checkPrerequisites(): Prerequisite[] {
     },
     {
       id: 'playwright-chromium',
-      label: 'Playwright Chromium headless-shell binary',
+      label: `Playwright Chromium headless-shell binary (${
+        playwrightHeadlessShellDirName() ?? 'chromium_headless_shell-*'
+      })`,
       satisfied: playwrightHeadlessShellPresent(),
       fix: 'npx playwright install chromium-headless-shell',
     },
