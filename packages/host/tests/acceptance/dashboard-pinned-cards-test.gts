@@ -2,6 +2,7 @@ import {
   click,
   findAll,
   settled,
+  triggerEvent,
   waitFor,
   waitUntil,
 } from '@ember/test-helpers';
@@ -417,12 +418,38 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
   test("the code mode preview's menu pins a card to its workspace", async function (assert) {
     await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
     await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
+    // A stack keeps the dashboard toggle enabled.
     await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}notes`, format: 'isolated' }]],
       submode: 'code',
       codePath: `${realmURL}notes.json`,
     });
 
     await click('[data-test-more-options-button]');
+    await waitFor(PIN);
+    await click(PIN);
+
+    await openDashboard([realmURL]);
+    await waitUntil(() => findAll(WORKSPACE_A_PINS).length === 1);
+    assert
+      .dom(WORKSPACE_A_PINS)
+      .hasAttribute('data-test-pinned-card', `${realmURL}notes`);
+  });
+
+  test("a card's menu in its workspace's card grid pins it", async function (assert) {
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+    });
+
+    let gridItem = `[data-test-cards-grid-item="${realmURL}notes"]`;
+    await click('[data-test-workspace-tab="library"]');
+    await waitFor(gridItem);
+    await triggerEvent(`${gridItem} [data-test-hydratable-card]`, 'mouseenter');
+    await click(
+      `[data-test-overlay-card="${realmURL}notes"] [data-test-overlay-more-options]`,
+    );
     await waitFor(PIN);
     await click(PIN);
 
