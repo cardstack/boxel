@@ -1,12 +1,15 @@
 ---
 status: proposed
-date: 2026-11-09
+date: 2026-10-02
+retroactive: true
+recorded: 2026-11-09
 scope:
   - packages/host/app/lib/realm-runner/**
   - packages/host/app/tools/**
   - packages/runtime-common/realm-runner-script.ts
   - packages/ai-bot/lib/script-syntax-check.ts
   - packages/ai-bot/lib/bot-tools/**
+  - packages/host/app/services/matrix-service.ts
 ---
 
 # 022. Do the assistant's workspace work in one sandboxed script
@@ -80,10 +83,17 @@ realm makes the permission decision. Each call method MUST have an entry in
 
 ### 1.5. Confirmation
 
-A call that cannot be undone, spends the user's credit or brings content from
-outside MUST be in `CLICK_REQUIRED_CALLS`. A run whose code names such a call
+A call that cannot be undone, spends the user's credit, changes the state of a
+whole workspace for a long time, or saves content from an outside URL into the
+workspace MUST be in `CLICK_REQUIRED_CALLS`. A run whose code names such a call
 MUST wait for the user's click before it starts. The runner MUST refuse such a
 call when the script does not name it.
+
+Two kinds of calls are not in this rule. A call that only reads outside content
+into the sandbox (`realm.web.search`, `realm.web.read`, `realm.resolve`) needs
+no click, and §1.6 limits it. An operation that a card type declares
+(`realm.operations.*`) needs no click. The realm allows it when its policy
+grants the operation (§1.4).
 
 ### 1.6. Limits
 
@@ -98,32 +108,28 @@ errors with `packages/runtime-common/realm-runner-script.ts`.
 
 ## 2. Rationale
 
-Models write code well, and they prefer a tool call with code to a text format
-they were not trained on. The Realm Runner came from such a format: the
-assistant once wrote code changes in an invented search/replace format in
-prose, and its output was often malformed. The model evals improved
-significantly with the runner (#6235).
+Models prefer to make a tool call and write code to a text format they were not
+trained on. The Realm Runner came from such a format: the assistant once wrote
+code changes in an invented search/replace format in prose, and its output was
+often malformed. The model evals improved significantly with the runner
+(#6235).
 
-One script also replaces a sequence of tool calls. Loops and other basic
-constructs let the model search, read, change and check in one call, instead of
-one LLM turn for each step (#6235). One tool
-definition costs fewer tokens than many tool schemas. It also keeps the
-provider's prompt cache valid: tool definitions come before all message
-history, so a changed definition bills the whole conversation again at full
-input price (`packages/host/app/services/matrix-service.ts`).
+A script can hold loops and other basic constructs, so the model can do a task
+in one call instead of a sequence of tool calls (#6235). A tool definition that
+changes bills the whole conversation again at full input price, because tool
+definitions come before all message history
+(`packages/host/app/services/matrix-service.ts`).
 
-The script is code from a model, so it is untrusted. The model reads web
-pages, cards and files that other people wrote, and that text can tell it to
-write a harmful script (prompt injection). In the host page, such a script
-could read the user's realm tokens and Matrix session, call any realm with
-them, send data out, or change the app. A loop or a large allocation could
-freeze the user's tab, or slow a server for other users. The sandbox removes
-all of this. The script can only ask the runner to do a call, and the runner
-decides (#6235). Today the sandbox is QuickJS, compiled to WebAssembly, in a Web
-Worker in the host. QuickJS is a choice of this implementation, not a rule.
+The runner trusts nothing that comes from the sandbox: the script sees only
+`realm` and `room`, and the host does each call and its checks
+(`packages/host/app/lib/realm-runner/worker.ts`). The sandbox has no access to
+the network, the DOM or the host app, and it has memory and time limits
+(#6235). Today it is QuickJS, compiled to WebAssembly, in a Web Worker in the
+host (#6235). QuickJS is a choice of this implementation, not a rule.
 
-A tool that ai-bot runs itself does not need the browser, so it does not cost a
-round trip to the host. That is why §1.1 lets such tools stay named.
+A call that only reads outside content needs no click, but each one is a paid
+request, so it has a limit per run
+(`packages/host/app/tools/run-realm-code.ts`).
 
 The runner may move to the realm server later. The rules in §1.2–§1.7 apply to
 a runner in either place, so a server runner follows this ADR.
@@ -131,13 +137,30 @@ a runner in either place, so a server runner follows this ADR.
 ## 3. Considered options
 
 - **One script in a sandbox.** Chosen, for the reasons in §2.
-- **A sequence of named tool calls.** Rejected: one LLM turn for each step, and
-  more tool schemas in the prompt (#6235).
+- **An invented search/replace format in prose.** Rejected: models were not
+  trained on it, and its output was often malformed (#6235).
+- **A sequence of named tool calls.** Rejected: a script with loops can do
+  the same task in one call (#6235).
 - **A per-card patch tool in each message.** Rejected: its definition changes
   when the open card changes, so each change bills the conversation again
   (`packages/host/app/services/matrix-service.ts`).
 
-## 4. Sources
+## 4. Open questions
+
+These reasons are likely, but no source states them. Ask Matic Jurglic.
+
+- Did prompt injection decide the sandbox? The model reads web pages, cards
+  and files that other people wrote. In the host page, a harmful script could
+  read the user's realm tokens and Matrix session, send data out, or freeze
+  the tab.
+- Is the token cost of many tool schemas, compared to one tool definition, a
+  reason to prefer one script?
+- Do tools that ai-bot runs itself stay named because they need no round trip
+  to the browser?
+- Why do card operations (`realm.operations.*`) need no click, when they
+  cannot be undone? Is the realm's policy decision the reason?
+
+## 5. Sources
 
 - #6235: the first runner and its reasons.
 - #6630: a run in a workspace the user can only read.
@@ -146,7 +169,11 @@ a runner in either place, so a server runner follows this ADR.
 - 886bc0648d: sandbox start time is not charged to the script.
 - `packages/host/app/services/matrix-service.ts`: why messages carry no
   per-card patch tool.
+- `packages/host/app/lib/realm-runner/worker.ts`: the sandbox trusts nothing
+  in the script.
+- `packages/host/app/tools/run-realm-code.ts`: which calls need a click, and
+  why outside reads have limits instead.
 
-## 5. Remediation
+## 6. Remediation
 
 Known gaps are listed in [remediation/022.md](remediation/022.md).
