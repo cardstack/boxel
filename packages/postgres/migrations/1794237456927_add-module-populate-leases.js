@@ -7,11 +7,12 @@
 //
 // `lease_key` is the populate's coalesce key hashed to an int64, the same value
 // the notification carries. `holder_id` is unique to one claim, so a holder
-// deletes only its own lease. `expires_at` frees the key when the holder dies
-// mid-populate: an expired lease is claimed over as though it were absent.
+// deletes only its own lease. The holder pushes `expires_at` out on a timer
+// for as long as its populate runs, so the lease lapses only when the holder
+// dies mid-populate: an expired lease is claimed over as though it were absent.
 //
-// UNLOGGED: a lease outlives no Postgres restart, and losing every lease on one
-// costs a duplicate prerender at most. Server-only, and excluded from the
+// UNLOGGED: Postgres empties the table after a crash, and losing every lease
+// then costs a duplicate prerender at most. Server-only, and excluded from the
 // SQLite schema dump.
 //
 // Additive: a new table nothing reads until the code that writes it ships.

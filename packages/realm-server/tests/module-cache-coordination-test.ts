@@ -339,12 +339,12 @@ module(basename(import.meta.filename), function () {
       await peerCoordinator.start();
       try {
         await new Promise((r) => setTimeout(r, 100));
-        let resolved = false;
+        // The waiter's own timeout is far longer than the NOTIFY should take,
+        // so a quick wake can only be the release's notification.
+        const waitStarted = Date.now();
         const waitPromise = peerCoordinator
-          .waitForKey('lease-test-key', 5000)
-          .then(() => {
-            resolved = true;
-          });
+          .waitForKey('lease-test-key', 20_000)
+          .then(() => Date.now() - waitStarted);
         await new Promise((r) => setTimeout(r, 50));
 
         let leaseRowsDuringFn: string[] = [];
@@ -367,8 +367,11 @@ module(basename(import.meta.filename), function () {
           [],
           'the lease row is deleted once fn finishes',
         );
-        await waitPromise;
-        assert.true(resolved, 'peer waiter resolved on the release NOTIFY');
+        const waited = await waitPromise;
+        assert.true(
+          waited < 5_000,
+          `peer waiter woke on the release NOTIFY (after ${waited}ms, not its 20s timeout)`,
+        );
       } finally {
         await peerCoordinator.shutDown();
         await coordinator.shutDown();
@@ -424,75 +427,197 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('tryLeaseAndRun: an expired lease is claimed over, and its old holder does not release the new claim', async function (assert) {
+    test('tryLeaseAndRun: a lease left by a dead holder is claimed once it expires', async function (assert) {
       const coordinator = new ModuleCacheCoordinator({ dbAdapter });
       await coordinator.start();
-      let releaseFirst!: () => void;
-      const firstGate = new Promise<void>((resolve) => {
-        releaseFirst = resolve;
-      });
-      let releaseSecond!: () => void;
-      const secondGate = new Promise<void>((resolve) => {
-        releaseSecond = resolve;
+      try {
+        const leaseKey = hashCoalesceKeyForAdvisoryLock(
+          'lease-dead-holder-key',
+        );
+        // A holder that died: its lease is still live, and nothing renews it.
+        await query(dbAdapter, [
+          'INSERT INTO module_populate_leases (lease_key, holder_id, expires_at) VALUES (',
+          param(leaseKey),
+          `, 'dead-holder', clock_timestamp() + interval '300 milliseconds')`,
+        ]);
+        const whileLive = await coordinator.tryLeaseAndRun(
+          'lease-dead-holder-key',
+          60_000,
+          async () => {
+            throw new Error('fn must not run while the lease is live');
+          },
+        );
+        assert.deepEqual(
+          whileLive,
+          { acquired: false },
+          'a live lease keeps the key even with nobody renewing it yet',
+        );
+
+        await new Promise((r) => setTimeout(r, 400));
+        const afterExpiry = await coordinator.tryLeaseAndRun(
+          'lease-dead-holder-key',
+          60_000,
+          async () => leaseHolders(dbAdapter, 'lease-dead-holder-key'),
+        );
+        assert.true(afterExpiry.acquired, 'the expired lease is claimed over');
+        assert.notDeepEqual(
+          afterExpiry.acquired ? afterExpiry.result : [],
+          ['dead-holder'],
+          'the new claim replaced the dead holder in the row',
+        );
+      } finally {
+        await coordinator.shutDown();
+      }
+    });
+
+    test('tryLeaseAndRun: a holder that lost its lease neither deletes the new claim nor wakes its waiters', async function (assert) {
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      const peerCoordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await peerCoordinator.start();
+      let releaseFn!: () => void;
+      const fnGate = new Promise<void>((resolve) => {
+        releaseFn = resolve;
       });
       try {
-        // A holder that outlives its lease, as one that hung would.
-        const first = coordinator.tryLeaseAndRun(
-          'lease-expiry-key',
-          50,
-          async () => {
-            await firstGate;
-            return 'first';
-          },
-        );
-        await new Promise((r) => setTimeout(r, 150));
-
-        let secondEntered!: () => void;
-        const secondRunning = new Promise<void>((resolve) => {
-          secondEntered = resolve;
-        });
-        const second = coordinator.tryLeaseAndRun(
-          'lease-expiry-key',
+        await new Promise((r) => setTimeout(r, 100));
+        const holder = coordinator.tryLeaseAndRun(
+          'lease-lost-key',
           60_000,
           async () => {
-            secondEntered();
-            await secondGate;
-            return 'second';
+            await fnGate;
+            return 'stale';
           },
         );
-        await secondRunning;
-        const [secondHolder] = await leaseHolders(
-          dbAdapter,
-          'lease-expiry-key',
-        );
-        assert.ok(secondHolder, 'the second claim took over the expired lease');
+        await new Promise((r) => setTimeout(r, 50));
+        // Another process claimed the key over this holder's lapsed lease.
+        await query(dbAdapter, [
+          `UPDATE module_populate_leases SET holder_id = 'other-holder' WHERE lease_key =`,
+          param(hashCoalesceKeyForAdvisoryLock('lease-lost-key')),
+        ]);
+        let woken = false;
+        const waiter = peerCoordinator
+          .waitForKey('lease-lost-key', 1_000)
+          .then(() => {
+            woken = true;
+          });
+        await new Promise((r) => setTimeout(r, 50));
 
-        releaseFirst();
-        assert.deepEqual(await first, { acquired: true, result: 'first' });
+        releaseFn();
+        assert.deepEqual(await holder, { acquired: true, result: 'stale' });
+        await new Promise((r) => setTimeout(r, 300));
+        assert.false(
+          woken,
+          "the old holder's release does not wake the new holder's waiters",
+        );
         assert.deepEqual(
-          await leaseHolders(dbAdapter, 'lease-expiry-key'),
-          [secondHolder],
-          "the first holder's release leaves the second claim's lease in place",
+          await leaseHolders(dbAdapter, 'lease-lost-key'),
+          ['other-holder'],
+          "the new holder's lease is left in place",
         );
-        const contender = await coordinator.tryLeaseAndRun(
-          'lease-expiry-key',
-          60_000,
+        await waiter;
+      } finally {
+        releaseFn();
+        await peerCoordinator.shutDown();
+        await coordinator.shutDown();
+      }
+    });
+
+    test('tryLeaseAndRun: a holder renews its lease for as long as fn runs', async function (assert) {
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      let releaseFn!: () => void;
+      const fnGate = new Promise<void>((resolve) => {
+        releaseFn = resolve;
+      });
+      try {
+        const holder = coordinator.tryLeaseAndRun(
+          'lease-renewal-key',
+          300,
           async () => {
-            throw new Error('contender fn must not run');
+            await fnGate;
+            return 'long-running';
+          },
+        );
+        // Several lease lengths: without renewal the lease would have lapsed.
+        await new Promise((r) => setTimeout(r, 1_000));
+        const contender = await coordinator.tryLeaseAndRun(
+          'lease-renewal-key',
+          300,
+          async () => {
+            throw new Error(
+              'contender fn must not run while the holder renews',
+            );
           },
         );
         assert.deepEqual(
           contender,
           { acquired: false },
-          'the key stays held by the second claim',
+          'the renewed lease still keeps the key',
         );
 
-        releaseSecond();
-        assert.deepEqual(await second, { acquired: true, result: 'second' });
-        assert.deepEqual(await leaseHolders(dbAdapter, 'lease-expiry-key'), []);
+        releaseFn();
+        assert.deepEqual(await holder, {
+          acquired: true,
+          result: 'long-running',
+        });
+        assert.deepEqual(
+          await leaseHolders(dbAdapter, 'lease-renewal-key'),
+          [],
+        );
       } finally {
-        releaseFirst();
-        releaseSecond();
+        releaseFn();
+        await coordinator.shutDown();
+      }
+    });
+
+    test('shutDown releases the leases this process holds and wakes their waiters', async function (assert) {
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      const peerCoordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await peerCoordinator.start();
+      let releaseFn!: () => void;
+      const fnGate = new Promise<void>((resolve) => {
+        releaseFn = resolve;
+      });
+      try {
+        await new Promise((r) => setTimeout(r, 100));
+        const holder = coordinator.tryLeaseAndRun(
+          'lease-shutdown-key',
+          60_000,
+          async () => {
+            await fnGate;
+            return 'unfinished';
+          },
+        );
+        await new Promise((r) => setTimeout(r, 50));
+        const waitStarted = Date.now();
+        const waiter = peerCoordinator
+          .waitForKey('lease-shutdown-key', 20_000)
+          .then(() => Date.now() - waitStarted);
+        await new Promise((r) => setTimeout(r, 50));
+
+        await coordinator.shutDown();
+        assert.deepEqual(
+          await leaseHolders(dbAdapter, 'lease-shutdown-key'),
+          [],
+          'the lease is gone while its populate is still running',
+        );
+        const waited = await waiter;
+        assert.true(
+          waited < 5_000,
+          `the peer waiter woke on the shutdown release (after ${waited}ms)`,
+        );
+
+        releaseFn();
+        assert.deepEqual(
+          await holder,
+          { acquired: true, result: 'unfinished' },
+          'the populate still finishes and returns its own result',
+        );
+      } finally {
+        releaseFn();
+        await peerCoordinator.shutDown();
         await coordinator.shutDown();
       }
     });
@@ -504,11 +629,12 @@ module(basename(import.meta.filename), function () {
       await peerCoordinator.start();
       try {
         await new Promise((r) => setTimeout(r, 100));
-        // A timeout far beyond the test's own, so only the NOTIFY can wake it.
-        const waitPromise = peerCoordinator.waitForKey(
-          'lease-throw-key',
-          60_000,
-        );
+        // The waiter's own timeout is far longer than the NOTIFY should take,
+        // so a quick wake can only be the release's notification.
+        const waitStarted = Date.now();
+        const waitPromise = peerCoordinator
+          .waitForKey('lease-throw-key', 20_000)
+          .then(() => Date.now() - waitStarted);
         await new Promise((r) => setTimeout(r, 50));
 
         await assert.rejects(
@@ -522,8 +648,11 @@ module(basename(import.meta.filename), function () {
           [],
           'the lease row is deleted after fn throws',
         );
-        await waitPromise;
-        assert.ok(true, 'peer waiter woke on the release NOTIFY');
+        const waited = await waitPromise;
+        assert.true(
+          waited < 5_000,
+          `peer waiter woke on the release NOTIFY (after ${waited}ms, not its 20s timeout)`,
+        );
       } finally {
         await peerCoordinator.shutDown();
         await coordinator.shutDown();

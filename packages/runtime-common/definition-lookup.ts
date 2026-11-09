@@ -77,27 +77,18 @@ export const MODULE_CACHE_POPULATED_CHANNEL = 'module_cache_populated';
 // is encountered, the prerenderer is called again to get a fresh result.
 // This prevents transient prerender failures from being permanently cached.
 const ERROR_CACHE_TTL_MS = 30_000; // 30 seconds
-// CS-10953 cross-process populate-coalesce loser-path wait timeout. The
-// loser blocks on a peer's NOTIFY; on timeout (peer crashed mid-prerender,
-// missed wakeup, etc.), the loop re-reads the cache and may take another
-// shot at the lease. Set well above realistic prerender wall time
-// (single-module prerenders are sub-second to a few seconds; the absolute
-// upper bound is the prerender request timeout, currently 150s in
-// production) so a healthy peer's prerender always wakes the loser
-// before this fires.
-const COALESCE_NOTIFY_WAIT_MS = 180_000; // 180 seconds
-// How long a populate's lease keeps peers from prerendering the same module.
-// Below COALESCE_NOTIFY_WAIT_MS so a peer that waits out a holder that died
-// mid-prerender finds the lease expired and claims it on its next iteration,
-// and above the prerender request timeout so a healthy holder is never
-// claimed over.
-const COALESCE_LEASE_MS = COALESCE_NOTIFY_WAIT_MS - 15_000;
-// Bounded retry loop in the coordinated path. Each iteration re-reads
-// the cache, contends for the lease, and (if losing) waits on NOTIFY. A
-// pathological peer crash-loop or NOTIFY drop sequence could in
-// principle cycle the loser indefinitely; capping at a small number and
-// throwing surfaces it instead of silently hanging.
-const COALESCE_MAX_ITERATIONS = 4;
+// How long a populate's lease lasts without renewal. The holder renews it
+// on a timer for as long as its populate runs, so this is not a cap on the
+// populate: it bounds how long a holder that died mid-populate keeps its
+// peers from the module. It is also how long a waiting peer sleeps between
+// re-reads when no NOTIFY wakes it, so a dead holder's key is claimed again
+// within about one lease of its last renewal.
+const COALESCE_LEASE_MS = 30_000;
+// How long a peer keeps waiting on a live lease before giving up with an
+// error. Long enough for a healthy holder to work through every population
+// candidate, prerender retries included; a holder still renewing past it is
+// stuck, and the error surfaces that instead of hanging the caller.
+const COALESCE_MAX_WAIT_MS = 720_000;
 // How many times `lookupDefinition` re-runs a populate whose result an
 // invalidation discarded out from under it. A populate that loses this race
 // returns the post-invalidate cache state — `undefined` once the invalidation
@@ -336,11 +327,11 @@ export interface PopulateCoordinator {
     coalesceKey: string,
     fn: (querier: Querier) => Promise<T>,
   ): Promise<{ acquired: true; result: T } | { acquired: false }>;
-  // Try to claim the cross-process lease for `coalesceKey`, good for
-  // `leaseMs`. If claimed, run `fn` holding no database connection, then
-  // delete the lease and emit the same NOTIFY `tryAcquireAndRun` does, whether
-  // `fn` resolved or threw. If another claim is live, return
-  // `{ acquired: false }` immediately.
+  // Try to claim the cross-process lease for `coalesceKey`. If claimed, run
+  // `fn` holding no database connection, renewing the lease every third of
+  // `leaseMs` while it runs, then delete the lease and emit the same NOTIFY
+  // `tryAcquireAndRun` does, whether `fn` resolved or threw. If another claim
+  // is live, return `{ acquired: false }` immediately.
   //
   // For work that waits on something outside the database, such as a
   // prerender. A lock transaction would pin a pooled connection for that
@@ -349,10 +340,11 @@ export interface PopulateCoordinator {
   // through the shared dbAdapter one statement at a time, so it never holds
   // one while asking for another.
   //
-  // `leaseMs` bounds how long a holder that died mid-`fn` keeps the key from
-  // its peers. Size it above the longest `fn` that still counts as healthy and
-  // below the peers' `waitForKey` timeout, so a peer that waited out a dead
-  // holder finds its lease expired and claims it.
+  // Because a live holder keeps renewing, `leaseMs` does not limit how long
+  // `fn` may run. It bounds how long a holder that died mid-`fn` keeps the
+  // key from its peers, so peers waiting on the key should re-check at about
+  // that interval rather than wait for a NOTIFY that a dead holder never
+  // sends.
   tryLeaseAndRun<T>(
     coalesceKey: string,
     leaseMs: number,
@@ -770,9 +762,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // returns it, so no step of a populate waits for a connection while
   // holding another.
   //
-  // The outer `for` is bounded by COALESCE_MAX_ITERATIONS so a
-  // pathological peer crash-loop or NOTIFY-drop sequence surfaces as
-  // an error instead of silently hanging.
+  // The outer loop is bounded by COALESCE_MAX_WAIT_MS so a holder that
+  // keeps renewing but never finishes surfaces as an error instead of
+  // silently hanging its peers.
   //
   // Error semantics:
   //   - If the uncoordinated body throws, the coordinator deletes the
@@ -798,7 +790,8 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     coordinator: PopulateCoordinator,
   ): Promise<DefinitionCacheEntry | undefined> {
     let coalesceKey = inFlightKey(args);
-    for (let iteration = 0; iteration < COALESCE_MAX_ITERATIONS; iteration++) {
+    let deadline = Date.now() + COALESCE_MAX_WAIT_MS;
+    for (;;) {
       // Optimistic pre-claim cache read. On a hit we skip the lease
       // contention entirely; on a miss we proceed to the claim.
       // Mirrors the uncoordinated body's first read — when we win the
@@ -827,14 +820,21 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         return outcome.result;
       }
 
-      // Loser. Block on peer's NOTIFY (or bounded timeout). On wake,
-      // the next iteration's optimistic cache read picks up the peer's
-      // populated row.
-      await coordinator.waitForKey(coalesceKey, COALESCE_NOTIFY_WAIT_MS);
+      // Loser. Block on the holder's NOTIFY, or for one lease length if none
+      // comes. On wake, the next iteration's optimistic cache read picks up
+      // the holder's populated row; if the holder died instead, its lease
+      // has lapsed by then and the claim succeeds.
+      let remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error(
+          `loadDefinitionCacheEntryCoordinated waited ${COALESCE_MAX_WAIT_MS}ms for ${coalesceKey}; the populate holding its lease appears stuck`,
+        );
+      }
+      await coordinator.waitForKey(
+        coalesceKey,
+        Math.min(COALESCE_LEASE_MS, remaining),
+      );
     }
-    throw new Error(
-      `loadDefinitionCacheEntryCoordinated exceeded ${COALESCE_MAX_ITERATIONS} iterations for ${coalesceKey}; peer prerender appears stuck or NOTIFY broadcast is broken`,
-    );
   }
 
   private async loadDefinitionCacheEntryUncached({

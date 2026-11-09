@@ -87,11 +87,22 @@ interface KeyWaiter {
   resolve: () => void;
 }
 
+interface HeldLease {
+  leaseKey: string;
+  holderId: string;
+  leaseMs: number;
+  renewal?: ReturnType<typeof setInterval>;
+  renewing?: boolean;
+}
+
 export class ModuleCacheCoordinator implements PopulateCoordinator {
   #deps: ModuleCacheCoordinatorDeps;
   #subscription?: NotificationSubscription;
   #starting?: Promise<void>;
   #waiters = new Map<string, Set<KeyWaiter>>();
+  // Leases this process holds, keyed by holder id, so shutDown can release
+  // them rather than leave peers waiting for them to lapse.
+  #heldLeases = new Map<string, HeldLease>();
 
   constructor(deps: ModuleCacheCoordinatorDeps) {
     this.#deps = deps;
@@ -133,6 +144,12 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
     } catch {
       // ignore
     }
+    // Release every lease this process still holds. Its populates may never
+    // finish once the process exits, and a released key is claimable by a
+    // peer at once rather than after the lease lapses.
+    await Promise.all(
+      [...this.#heldLeases.values()].map((lease) => this.#releaseLease(lease)),
+    );
     const sub = this.#subscription;
     this.#subscription = undefined;
     await sub?.unsubscribe();
@@ -221,9 +238,12 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
   // PopulateCoordinator — winner path for work that waits outside the
   // database. The claim is one autocommitted statement: it inserts the lease,
   // or takes over one whose holder let it expire, and returns a row only when
-  // this claim won. Nothing is held between the claim and the release, so a
-  // burst of distinct-key winners all prerendering at once occupies no pool
-  // connections while they wait.
+  // this claim won. Between the claim and the release the holder keeps no
+  // connection: a renewal every third of `leaseMs` checks one out for a single
+  // UPDATE and returns it. So a burst of distinct-key winners all
+  // prerendering at once occupies no pool connections while they wait, and a
+  // lease lapses only once its holder stops renewing it — because the holder
+  // died, not because its work ran long.
   async tryLeaseAndRun<T>(
     coalesceKey: string,
     leaseMs: number,
@@ -243,37 +263,96 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
     if (claimed.length === 0) {
       return { acquired: false };
     }
+    const lease: HeldLease = { leaseKey, holderId, leaseMs };
+    this.#heldLeases.set(holderId, lease);
+    lease.renewal = setInterval(
+      () => void this.#renewLease(lease),
+      Math.max(1, Math.floor(leaseMs / 3)),
+    );
+    // Unref so a renewal timer never holds the Node event loop open on its
+    // own; the populate it belongs to is what keeps the process busy.
+    (lease.renewal as { unref?: () => void }).unref?.();
     let result: T;
     try {
       result = await fn();
     } finally {
-      await this.#releaseLease(leaseKey, holderId);
+      await this.#releaseLease(lease);
     }
     return { acquired: true, result };
   }
 
-  // Delete this claim's lease and notify its waiters in one statement, so the
-  // notification goes out exactly when the lease is gone. Waiters are notified
-  // whether `fn` resolved or threw: either way they re-read the cache, and
-  // after a throw they find the persisted error row or claim the lease
-  // themselves rather than sitting out their timeout. The holder id keeps a
-  // holder whose lease expired and was claimed over from deleting the new
-  // holder's lease.
+  // Push the lease's expiry out by another `leaseMs`. A renewal that matches
+  // no row means the lease lapsed and another process claimed the key; the
+  // populate runs on, but holds nothing, so renewing stops. A renewal that
+  // fails outright is logged and the next one tries again: one missed
+  // renewal still leaves two thirds of the lease.
+  async #renewLease(lease: HeldLease): Promise<void> {
+    if (lease.renewing || lease.renewal === undefined) {
+      return;
+    }
+    lease.renewing = true;
+    try {
+      const renewed = await this.#deps.dbAdapter.execute(
+        `UPDATE ${LEASES_TABLE}
+            SET expires_at = clock_timestamp() + $3::double precision * interval '1 millisecond'
+          WHERE lease_key = $1 AND holder_id = $2
+          RETURNING 1`,
+        { bind: [lease.leaseKey, lease.holderId, lease.leaseMs] },
+      );
+      if (renewed.length === 0 && lease.renewal !== undefined) {
+        clearInterval(lease.renewal);
+        lease.renewal = undefined;
+        log.warn(
+          `populate lease ${lease.leaseKey} lapsed and was claimed by another holder before it could be renewed`,
+        );
+      }
+    } catch (err: unknown) {
+      log.warn(
+        `renewing populate lease ${lease.leaseKey} failed; retrying at the next renewal: ${String(err)}`,
+      );
+    } finally {
+      lease.renewing = false;
+    }
+  }
+
+  // Delete this claim's lease and, only when it was still this claim's,
+  // notify its waiters, in one statement, so the notification goes out
+  // exactly when the lease is gone. Waiters are notified whether `fn`
+  // resolved or threw: either way they re-read the cache, and after a throw
+  // they find the persisted error row or claim the lease themselves rather
+  // than sitting out their wait. A holder whose lease lapsed and was claimed
+  // by another process deletes nothing and notifies no one, so the new
+  // holder's waiters keep waiting for the new holder.
   //
   // A failed release is logged, not thrown: `fn`'s own outcome is the
-  // caller's answer, and the lease frees itself when it expires.
-  async #releaseLease(leaseKey: string, holderId: string): Promise<void> {
+  // caller's answer, and the lease lapses on its own once renewals stop.
+  async #releaseLease(lease: HeldLease): Promise<void> {
+    if (lease.renewal !== undefined) {
+      clearInterval(lease.renewal);
+      lease.renewal = undefined;
+    }
+    if (!this.#heldLeases.delete(lease.holderId)) {
+      return;
+    }
     try {
       await this.#deps.dbAdapter.execute(
         `WITH released AS (
-           DELETE FROM ${LEASES_TABLE} WHERE lease_key = $1 AND holder_id = $2
+           DELETE FROM ${LEASES_TABLE}
+            WHERE lease_key = $1 AND holder_id = $2
+            RETURNING lease_key
          )
-         SELECT pg_notify($3, $1)`,
-        { bind: [leaseKey, holderId, MODULE_CACHE_POPULATED_CHANNEL] },
+         SELECT pg_notify($3, lease_key) FROM released`,
+        {
+          bind: [
+            lease.leaseKey,
+            lease.holderId,
+            MODULE_CACHE_POPULATED_CHANNEL,
+          ],
+        },
       );
     } catch (err: unknown) {
       log.warn(
-        `releasing populate lease ${leaseKey} failed; it frees itself when it expires: ${String(err)}`,
+        `releasing populate lease ${lease.leaseKey} failed; it lapses once renewals stop: ${String(err)}`,
       );
     }
   }
