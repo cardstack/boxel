@@ -143,7 +143,7 @@ module(basename(import.meta.filename), function () {
   module('SessionProbe', function (hooks) {
     // A database of the test's own, so the only sessions the probe sees are
     // the ones each test opens.
-    setupDB(hooks);
+    setupDB(hooks, { beforeEach: async () => {} });
 
     let clients: Client[] = [];
     let probe: SessionProbe;
