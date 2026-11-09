@@ -115,21 +115,28 @@ often malformed. The model evals improved significantly with the runner
 (#6235).
 
 A script can hold loops and other basic constructs, so the model can do a task
-in one call instead of a sequence of tool calls (#6235). A tool definition that
-changes bills the whole conversation again at full input price, because tool
-definitions come before all message history
-(`packages/host/app/services/matrix-service.ts`).
+in one call instead of a sequence of tool calls (#6235). One tool definition
+also costs fewer tokens than the schemas of many tools (Matic Jurglic,
+2026-11-09). A tool definition that changes bills the whole conversation
+again at full input price, because tool definitions come before all message
+history (`packages/host/app/services/matrix-service.ts`).
 
-The runner trusts nothing that comes from the sandbox: the script sees only
-`realm` and `room`, and the host does each call and its checks
-(`packages/host/app/lib/realm-runner/worker.ts`). The sandbox has no access to
-the network, the DOM or the host app, and it has memory and time limits
-(#6235). Today it is QuickJS, compiled to WebAssembly, in a Web Worker in the
+The script is code that comes from the LLM, so it is untrusted, and it can
+carry an injection of any sort. That is why it runs in a sandbox (Matic
+Jurglic, 2026-11-09). The runner trusts nothing that comes from the sandbox:
+the script sees only `realm` and `room`, and the host does each call and its
+checks (`packages/host/app/lib/realm-runner/worker.ts`). The sandbox has no
+access to the network, the DOM or the host app, and it has memory and time
+limits (#6235). Today it is QuickJS, compiled to WebAssembly, in a Web Worker in the
 host (#6235). QuickJS is a choice of this implementation, not a rule.
 
 A call that only reads outside content needs no click, but each one is a paid
 request, so it has a limit per run
 (`packages/host/app/tools/run-realm-code.ts`).
+
+A tool that ai-bot runs itself stays a named tool for two reasons. It needs
+no round trip to the browser, and ai-bot is a special app with no access to
+the browser (Matic Jurglic, 2026-11-09).
 
 The runner may move to the realm server later. The rules in §1.2–§1.7 apply to
 a runner in either place, so a server runner follows this ADR.
@@ -147,16 +154,8 @@ a runner in either place, so a server runner follows this ADR.
 
 ## 4. Open questions
 
-These reasons are likely, but no source states them. Ask Matic Jurglic.
+No source states this reason. Ask Matic Jurglic.
 
-- Did prompt injection decide the sandbox? The model reads web pages, cards
-  and files that other people wrote. In the host page, a harmful script could
-  read the user's realm tokens and Matrix session, send data out, or freeze
-  the tab.
-- Is the token cost of many tool schemas, compared to one tool definition, a
-  reason to prefer one script?
-- Do tools that ai-bot runs itself stay named because they need no round trip
-  to the browser?
 - Why do card operations (`realm.operations.*`) need no click, when they
   cannot be undone? Is the realm's policy decision the reason?
 
@@ -173,6 +172,9 @@ These reasons are likely, but no source states them. Ask Matic Jurglic.
   in the script.
 - `packages/host/app/tools/run-realm-code.ts`: which calls need a click, and
   why outside reads have limits instead.
+- Matic Jurglic, 2026-11-09: untrusted code from the LLM as the reason for the
+  sandbox, the token cost of many tool schemas, and why ai-bot tools stay
+  named.
 
 ## 6. Remediation
 
