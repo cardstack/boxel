@@ -134,7 +134,7 @@
       "bytes": 1154
     },
     "probe/probe.js": {
-      "bytes": 253230,
+      "bytes": 253289,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -181,7 +181,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/probe/main.ts",
-          "size": 103
+          "size": 167,
+          "stylesAtRunTime": [
+            "creates a <style> element"
+          ]
         },
         {
           "package": "@cardstack/secure-origin",
