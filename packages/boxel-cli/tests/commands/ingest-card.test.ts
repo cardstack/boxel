@@ -232,7 +232,7 @@ describe('ingest-card helpers', () => {
     });
 
     it('returns null for prefix imports that point at another realm', () => {
-      // npm-scoped packages and other realms don't contain this realm's tail.
+      // Another registered realm's prefix resolves outside this realm.
       expect(
         resolveSameRealmFile(
           '@cardstack/skills/foo',

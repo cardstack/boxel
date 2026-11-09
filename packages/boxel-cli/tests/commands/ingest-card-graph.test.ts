@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
+import {
+  PREFIX_REALMS_ENDPOINT,
+  PrefixRealmNetwork,
+  clearPrefixRealmNetworkCache,
+} from '@cardstack/runtime-common/prefix-realm-network';
 import { ingestCard } from '../../src/commands/realm/ingest-card.js';
 import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.js';
 import type { ProfileManager } from '../../src/lib/profile-manager.js';
@@ -299,5 +303,71 @@ describe('ingest-card graph (fake realm end-to-end)', () => {
         `unexpected fetch outside realm: ${url}`,
       ).toBe(true);
     }
+  });
+});
+
+// With seed auth and no injected network, the prefix map comes from the server
+// at the source realm's origin, the one seed auth mints tokens for. A profile
+// and REALM_SERVER_URL that name another server, whose map lacks the source
+// realm's prefix, must not be read: the prefix-form Spec id would not resolve
+// there, and the card Spec would be left out.
+describe('ingest-card graph with seed auth (prefix map from the realm origin)', () => {
+  const OTHER_SERVER = 'https://realm-server.example.test/';
+  let localDir: string;
+  let fetchedUrls: string[] = [];
+  let prefixMapReads: string[] = [];
+  let result: { files: string[]; error?: string };
+
+  beforeAll(async () => {
+    clearPrefixRealmNetworkCache();
+    vi.stubEnv('REALM_SERVER_URL', OTHER_SERVER);
+    let realm = makeFakeAuthenticator(fetchedUrls);
+    vi.stubGlobal('fetch', (async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      let url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith(`/${PREFIX_REALMS_ENDPOINT}`)) {
+        prefixMapReads.push(url);
+        let served: Record<string, string> = url.startsWith(OTHER_SERVER)
+          ? { '@cardstack/base/': `${OTHER_SERVER}base/` }
+          : {
+              '@cardstack/base/': 'https://realms.example.test/base/',
+              '@cardstack/workshop/': ROOT,
+            };
+        return Response.json({
+          data: Object.entries(served).map(([id, realmURL]) => ({
+            type: 'prefix-realm',
+            id,
+            attributes: { realmURL },
+          })),
+        });
+      }
+      return realm.authedRealmFetch(url, init);
+    }) as typeof globalThis.fetch);
+    localDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ingest-graph-seed-'));
+    result = await ingestCard(GADGET_MODULE_ABS, localDir, {
+      realm: ROOT,
+      realmSecretSeed: 'test-seed',
+      profileManager: makeFakeProfileManager(),
+    });
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    clearPrefixRealmNetworkCache();
+    fs.rmSync(localDir, { recursive: true, force: true });
+  });
+
+  it('reads the prefix map from the source realm origin', () => {
+    expect(prefixMapReads).toEqual([
+      `https://realms.example.test/${PREFIX_REALMS_ENDPOINT}`,
+    ]);
+  });
+
+  it('ingests the whole card graph, including the prefix-form card Spec', () => {
+    expect(result.error).toBeUndefined();
+    expect(result.files).toEqual(EXPECTED_INGESTED);
   });
 });

@@ -636,15 +636,20 @@ export async function ingestCard(
     }
   }
 
-  // References in the source realm resolve on the network of the configured
-  // realm server, or, with no server configured, of the server at the source
-  // realm's origin, the server seed auth already assumes.
+  // References in the source realm resolve on the network of the server that
+  // holds it. Seed auth already assumes that server is at the source realm's
+  // origin, so it reads the map there, not from a profile or REALM_SERVER_URL
+  // that can name another server. Otherwise the configured realm server holds
+  // it, or, with none configured, the server at the source realm's origin.
   let network = options.network;
   if (!network) {
     let server = resolveRealmServerUrl({ profileManager: pm });
     let resolvedNetwork = await resolveRealmNetwork({
       profileManager: pm,
-      realmServerUrl: server.ok ? server.url : deriveRealmServerUrl(realmRoot),
+      realmServerUrl:
+        resolution.mode === 'seed' || !server.ok
+          ? deriveRealmServerUrl(realmRoot)
+          : server.url,
     });
     if (!resolvedNetwork.ok) {
       return { files: [], error: resolvedNetwork.error };
