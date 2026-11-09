@@ -15,6 +15,16 @@
 // changed files from determine-changed-migrations.sh), so it only checks newly
 // added migrations, not the drops already present in `migrations/`.
 //
+// A migration that swaps a rebuilt table in under the same name (Postgres
+// cannot, for example, partition a table in place) drops and renames in its
+// `up()` without breaking the previous revision, which goes on reading and
+// writing the table by its name. It says so, with its reason, on a line of its
+// own:
+//
+//   // check-removal-phase: allow <why the previous revision is unaffected>
+//
+// and the guard lets it through, printing the reason.
+//
 // AST-based (via the TypeScript parser) rather than grep so it can look ONLY at
 // the `up` function: an additive migration's `down()` legitimately calls
 // dropColumn/dropTable to reverse itself, and a text search can't tell the two
@@ -136,6 +146,11 @@ for (const file of files) {
     // throw on parse errors). Matches the .js|.ts file filter above.
     /\.ts$/.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS,
   );
+  const allowed = src.match(/^\/\/ check-removal-phase: allow (\S.*)$/m);
+  if (allowed) {
+    console.log(`check-removal-phase: ${file} allowed: ${allowed[1]}`);
+    continue;
+  }
   const upFn = findUpFunction(sourceFile);
   if (!upFn) {
     continue;
