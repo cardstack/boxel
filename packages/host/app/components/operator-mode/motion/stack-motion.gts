@@ -106,31 +106,37 @@ const slideUpOnTop: PropSource = (sprite, changeset) =>
 const fadeInOnTopWhenReduced: PropSource = (sprite, changeset) =>
   reducesMotion() ? fadeInOnTop(sprite, changeset) : [1, 1];
 
-// A leaving card drops a little from where it is painted as it fades; under
-// reduced motion it fades where it stood.
+// A leaving card drops a little below where it is painted as it fades
+// (a card closed mid-glide drops from where it is, not to a fixed place);
+// under reduced motion it fades where it stood.
 const DROP = 18;
 const dropOut: PropSource = (sprite) => {
   const { x, y } = paintedTranslation(sprite);
   const from = `translate(${x}px, ${y}px)`;
   return reducesMotion()
     ? [from, from]
-    : [from, `translate(${x}px, ${DROP}px)`];
+    : [from, `translate(${x}px, ${y + DROP}px)`];
 };
 
 /**
  * A card whose place changed (covered, uncovered, expanded) glides from the
- * centre it was painted at to its new one, by transform alone. Its size
+ * center it was painted at to its new one, by transform alone. Its size
  * lands at once: the card is laid out once at its new width, and only
- * travels, so its content never re-lays out frame by frame. Centre to
- * centre, because the stack centres its cards: a card that narrows stays
+ * travels, so its content never re-lays out frame by frame. Center to
+ * center, because the stack centers its cards: a card that narrows stays
  * under its own middle. Measured against the painted translation, so a
  * card caught mid-flight (or measured with its transform still on) carries
  * on from where it is seen.
+ *
+ * Under reduced motion it lands at once. The region's reduced motion lands
+ * only the separate positional values (x, y, scale, width, height); a whole
+ * transform string is not one of them, so this value has to stand still
+ * itself, as the entrance and the exit do.
  */
 const reflow: PropSource = (sprite, changeset) => {
   const from = sprite.initial?.page;
   const to = sprite.final?.page;
-  if (!from || !to) {
+  if (!from || !to || reducesMotion()) {
     return STILL;
   }
   const painted = paintedTranslation(sprite);
@@ -142,12 +148,6 @@ const reflow: PropSource = (sprite, changeset) => {
     ? STILL
     : [`translate(${x}px, ${y}px)`, 'none'];
 };
-
-/** a fade cut short by the pass that moved the card is carried on to 1 */
-const restingOpacity: PropSource = (sprite) => [
-  Number(getComputedStyle(sprite.element).opacity),
-  1,
-];
 
 // How long a phone card stays in view under a card opening over it, read by
 // the stylesheet as a transition delay (see stack-item.gts). The slide runs
@@ -178,12 +178,15 @@ interface Signature {
  *   phone it slides up from below the viewport instead;
  * - a departing card fades and drops a little, over the exit duration;
  * - a card whose box changed (uncovered, covered, or expanded) takes its
- *   new size at once and glides by transform from the centre it was painted
+ *   new size at once and glides by transform from the center it was painted
  *   at to its new one, so its content is laid out once and only travels.
+ *   A fade the card was still playing (an entrance cut short) is carried on
+ *   by the region itself, so this step names only the transform.
  *
- * Under reduced motion the region's MotionConfig ('user') lands every move
- * at once, and a card fades in or out where it stands, on a phone as on a
- * wide screen (§1.5).
+ * Under reduced motion every move lands at once, and a card fades in or out
+ * where it stands, on a phone as on a wide screen (§1.5). Each transform
+ * value here checks for it itself: the region's MotionConfig ('user') lands
+ * separate positional values, never a whole transform string.
  */
 export default class StackMotion extends Component<Signature> {
   private enabled = motionEnabled('boxel-stack-motion');
@@ -225,7 +228,6 @@ export default class StackMotion extends Component<Signature> {
           <c.Tween
             @of={{c.kept STACK_ITEM_ROLE}}
             @transform={{reflow}}
-            @opacity={{restingOpacity}}
             @duration={{DURATION.space}}
             @ease={{EASE}}
           />
