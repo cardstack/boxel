@@ -14,8 +14,9 @@ const { spawn } = require('child_process');
 
 // Traefik's API, published on the host by docker-compose.traefik.yml.
 const DEFAULT_API_URL = 'http://127.0.0.1:4230';
-// Docker Desktop on macOS has delivered a route file to Traefik within about
-// 2s; one still missing after this long isn't coming.
+// Traefik loads a route file within about 2s of its write: it reloads at most
+// once every 2s, and Docker Desktop on macOS delivers the change in well under
+// that. One still missing after this long isn't coming.
 const DEFAULT_TIMEOUT_MS = 5000;
 // Long enough for a restart already under way to finish: `docker restart`
 // gives Traefik up to 10s to shut down gracefully.
