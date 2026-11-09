@@ -10,6 +10,7 @@
 
 import {
   RealmResponseError,
+  realmPaths,
   type CardDocument,
   type RealmClient,
 } from './realm-api.ts';
@@ -26,7 +27,7 @@ export interface WorkspaceSnapshot {
   paths: string[];
   // path -> source, for the text files small enough to keep.
   files: Record<string, string>;
-  // card URL -> the indexed document. Computed fields only exist here: the
+  // card id -> the indexed document. Computed fields only exist here: the
   // instance on disk holds what was written, the indexed document holds what
   // the card actually evaluates to.
   cards: Record<string, CardDocument>;
@@ -61,12 +62,13 @@ export async function captureWorkspace(
     return snapshot;
   }
 
+  let realm = realmPaths(realmUrl);
   for (let path of snapshot.paths) {
     if (!TEXT_FILE.test(path)) {
       continue;
     }
     try {
-      let { body } = await client.getSource(realmUrl, `${realmUrl}${path}`);
+      let { body } = await client.getSource(realmUrl, realm.fileURL(path).href);
       if (body.byteLength > MAX_FILE_BYTES) {
         snapshot.errors.push(`${path} is ${body.byteLength} bytes, not read`);
         continue;
@@ -78,9 +80,9 @@ export async function captureWorkspace(
   }
 
   for (let path of snapshot.paths.filter((p) => p.endsWith('.json'))) {
-    let cardUrl = `${realmUrl}${path.replace(/\.json$/, '')}`;
+    let cardId = realm.fileRRI(path.replace(/\.json$/, ''));
     try {
-      snapshot.cards[cardUrl] = await client.getCard(realmUrl, cardUrl);
+      snapshot.cards[cardId] = await client.getCard(realmUrl, cardId);
     } catch (error) {
       if (error instanceof RealmResponseError && error.status === 404) {
         // Not a gap in the evidence: the realm has no card at this URL, and
