@@ -226,6 +226,13 @@ async function readDocument(
   if (result.renderError) {
     doc.meta = { ...doc.meta, renderError: result.renderError };
   }
+  // Each vector field's state, never its numbers: the vectors live in the
+  // card's sidecar and are read with getVector.
+  let vectors =
+    (await core.indexQueryEngine.vectorStatus?.(url).catch(() => ({}))) ?? {};
+  if (Object.keys(vectors).length > 0) {
+    doc.data.meta = { ...doc.data.meta, vectors } as typeof doc.data.meta;
+  }
   return {
     document: doc,
     // The assembled document, unprojected. `runOperation` runs the `output`

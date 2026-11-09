@@ -1,4 +1,5 @@
 import { cloneDeep, isEqual, merge, mergeWith } from 'lodash-es';
+import { isVectorSidecar } from '../vector-sidecar.ts';
 import { v4 as uuidV4 } from 'uuid';
 
 import { visitModuleDeps, type CodeRef } from '../code-ref.ts';
@@ -1174,6 +1175,14 @@ export async function stageAppendLine(
     refuse(
       `${url.href} names a card, whose stored source is a JSON document; a ` +
         `line appended to one leaves bytes that are no longer a card`,
+    );
+  }
+  // A vector sidecar belongs to its card, and only vector operations write
+  // it: a line appended to one would be a vector no space check has seen.
+  if (isVectorSidecar(url)) {
+    refuse(
+      `${url.href} is a vector sidecar; its vectors are written with ` +
+        `setVector or appendContainsMany on its card, not appended as lines`,
     );
   }
   // Classified by name, which is what the realm serves the file's content type

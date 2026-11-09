@@ -423,6 +423,11 @@ export class RealmIndexQueryEngine {
   // once as `meta.htmlQuery` whenever the html branch is in play.
   // A `select` search: the query's rows as a table of values read off the
   // search doc, `id` first. See `IndexQueryEngine.planColumns`.
+  // Each vector field's state for a card read (see IndexQueryEngine).
+  vectorStatus(url: URL) {
+    return this.#indexQueryEngine.vectorStatus(url);
+  }
+
   async searchColumns(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,

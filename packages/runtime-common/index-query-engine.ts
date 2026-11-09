@@ -4046,6 +4046,87 @@ export class IndexQueryEngine {
   // Resolves the VectorField a near sort or filter addresses and refuses
   // anything else: a path that is not a VectorField, or a Postgres without
   // the pgvector table.
+  // Each vector field's state for a card read: `ok` when every vector it
+  // holds is in the field's declared space, `stale` when some are in another
+  // (the type's space changed since they were written), `missing` when it
+  // holds none. Never the numbers. A sidecar line the indexer left out is
+  // reported with its field. Empty for a card with no vector fields.
+  async vectorStatus(url: URL): Promise<
+    Record<
+      string,
+      {
+        status: 'ok' | 'stale' | 'missing';
+        space: string;
+        count: number;
+        errors?: { code: string; message: string; item?: string }[];
+      }
+    >
+  > {
+    let out: Awaited<ReturnType<IndexQueryEngine['vectorStatus']>> = {};
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !(await hasVectorIndex(this.#dbAdapter))
+    ) {
+      return out;
+    }
+    let href = url.href.endsWith('.json') ? url.href : `${url.href}.json`;
+    let [row] = await this.#dbAdapter.execute(
+      `SELECT search_doc -> '_vectorFields' AS fields FROM boxel_index WHERE url = $1 AND type = 'instance' AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1`,
+      { bind: [href] },
+    );
+    let fields: unknown = row?.fields;
+    if (typeof fields === 'string') {
+      try {
+        fields = JSON.parse(fields);
+      } catch {
+        fields = undefined;
+      }
+    }
+    if (!fields || typeof fields !== 'object') {
+      return out;
+    }
+    let counts = await this.#dbAdapter.execute(
+      `SELECT field_path, space, count(*) AS n FROM boxel_index_vectors WHERE url = $1 AND type = 'instance' GROUP BY field_path, space`,
+      { bind: [href] },
+    );
+    let [sidecar] = await this.#dbAdapter
+      .execute(
+        `SELECT errors FROM boxel_index_vector_sidecars WHERE url = $1 AND type = 'instance' LIMIT 1`,
+        { bind: [href] },
+      )
+      .catch(() => []);
+    let errors = (
+      typeof sidecar?.errors === 'string'
+        ? JSON.parse(sidecar.errors)
+        : (sidecar?.errors ?? [])
+    ) as { field?: string; item?: string; code: string; message: string }[];
+    for (let [path, info] of Object.entries(
+      fields as Record<string, { space: string }>,
+    )) {
+      let rows = counts.filter((c) => c.field_path === path);
+      let inSpace = rows
+        .filter((c) => c.space === info.space)
+        .reduce((n, c) => n + Number(c.n), 0);
+      let other = rows
+        .filter((c) => c.space !== info.space)
+        .reduce((n, c) => n + Number(c.n), 0);
+      let fieldErrors = errors
+        .filter((e) => e.field === path)
+        .map(({ code, message, item }) => ({
+          code,
+          message,
+          ...(item ? { item } : {}),
+        }));
+      out[path] = {
+        status: other > 0 ? 'stale' : inSpace > 0 ? 'ok' : 'missing',
+        space: info.space,
+        count: inSpace,
+        ...(fieldErrors.length ? { errors: fieldErrors } : {}),
+      };
+    }
+    return out;
+  }
+
   // A card's single (non-list) vectors, by field path, with their spaces.
   async #oneCardVectors(
     realmURL: URL,

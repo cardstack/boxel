@@ -1,4 +1,5 @@
 import { Deferred } from './deferred.ts';
+import { vectorSidecarFor } from './vector-sidecar.ts';
 import {
   DEFAULT_ANONYMOUS_RATE_LIMIT,
   type AnonymousRateLimit,
@@ -8229,9 +8230,22 @@ export class Realm {
       broadcastRealmEvents?: boolean;
     },
   ): Promise<void> {
-    await this.#dbAdapter.withFileWriteLocks(this.url, [path], () =>
-      this._deleteUnlocked(path, options),
+    // A card's vector sidecar goes with it, under the same lock.
+    let sidecar = await this.#vectorSidecarOf(path);
+    await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      sidecar ? [path, sidecar] : [path],
+      () => this._deleteUnlocked(path, { ...options, sidecar }),
     );
+  }
+
+  // The vector sidecar stored beside a card's `.json`, if there is one.
+  async #vectorSidecarOf(path: LocalPath): Promise<LocalPath | undefined> {
+    if (!path.endsWith('.json')) {
+      return undefined;
+    }
+    let sidecar = vectorSidecarFor(path) as LocalPath;
+    return (await this.#adapter.exists(sidecar)) ? sidecar : undefined;
   }
 
   private async _deleteUnlocked(
@@ -8240,27 +8254,33 @@ export class Realm {
       waitForIndex?: boolean;
       initiatingUser?: string | null;
       broadcastRealmEvents?: boolean;
+      sidecar?: LocalPath;
     },
   ): Promise<void> {
     let url = this.paths.fileURL(path);
+    let removed = options?.sidecar ? [path, options.sidecar] : [path];
     let broadcastRealmEvents = options?.broadcastRealmEvents !== false;
     if (broadcastRealmEvents) {
       this.sendIndexInitiationEvent(url.href);
     }
-    await this.trackOwnWrite(path, { isDelete: true });
-    await this.#adapter.remove(path);
+    for (let p of removed) {
+      await this.trackOwnWrite(p, { isDelete: true });
+      await this.#adapter.remove(p);
+    }
     if (broadcastRealmEvents) {
       this.broadcastRealmEvent({
         eventName: 'update',
-        removed: [path],
+        removed,
         realmURL: this.url,
       });
     }
-    this.invalidateCache(path);
-    await this.#notifyFileChange(path);
+    for (let p of removed) {
+      this.invalidateCache(p);
+      await this.#notifyFileChange(p);
+    }
     await this.#persistWriteOutcome({
       fileMetaRows: [],
-      removedFiles: [path],
+      removedFiles: removed,
       addedFiles: [],
       updatedFiles: [],
       appendedPaths: new Set(),
@@ -8328,8 +8348,17 @@ export class Realm {
       initiatingUser?: string | null;
     },
   ): Promise<void> {
-    await this.#dbAdapter.withFileWriteLocks(this.url, paths, () =>
-      this._deleteAllUnlocked(paths, options),
+    // Each card's vector sidecar goes with it.
+    let sidecars: LocalPath[] = [];
+    for (let path of paths) {
+      let sidecar = await this.#vectorSidecarOf(path);
+      if (sidecar && !paths.includes(sidecar)) {
+        sidecars.push(sidecar);
+      }
+    }
+    let all = [...paths, ...sidecars];
+    await this.#dbAdapter.withFileWriteLocks(this.url, all, () =>
+      this._deleteAllUnlocked(all, options),
     );
   }
 

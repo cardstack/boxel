@@ -286,6 +286,8 @@ export interface OperationIndexQueryEngine {
     opts?: { includeErrors?: true },
   ): Promise<InstanceOrError | undefined>;
   file(url: URL): Promise<IndexedFile | undefined>;
+  // Each vector field's state (ok, stale, missing), for a card read's meta.
+  vectorStatus?(url: URL): Promise<Record<string, unknown>>;
   // The entries matching a parsed query, which is how an entry that describes
   // its target rather than naming one finds the cards it runs against. Scoped
   // to this realm by the engine itself — a `RealmIndexQueryEngine` is one
