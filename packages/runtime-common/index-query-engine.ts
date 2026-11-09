@@ -4426,21 +4426,25 @@ export class IndexQueryEngine {
     return found;
   }
 
-  // The spaces a field's vectors of one size are stored in, across realms.
-  // Cached briefly: a query may name the same field several times, and the
-  // answer changes only when a realm is indexed.
+  // The spaces a field's vectors of one size are stored in, in the realm
+  // searched (a near search compares only that realm's vectors). Read through
+  // the (realm_url, field_path, …) indexes: without the realm the lookup read
+  // every vector of the field (1.5 s over 237k vectors). Cached briefly: a
+  // query may name the same field several times, and the answer changes only
+  // when the realm is indexed.
   #fieldSpaces = new Map<string, { at: number; spaces: Promise<string[]> }>();
-  async #spacesOf(fieldPath: string, dims: number): Promise<string[]> {
-    let key = `${fieldPath} ${dims}`;
+  async #spacesOf(
+    realmURL: URL,
+    fieldPath: string,
+    dims: number,
+  ): Promise<string[]> {
+    let key = `${realmURL.href} ${fieldPath} ${dims}`;
     let cached = this.#fieldSpaces.get(key);
     if (!cached || Date.now() - cached.at > 30_000) {
       cached = {
         at: Date.now(),
         spaces: this.#dbAdapter
-          .execute(
-            `SELECT DISTINCT space FROM boxel_index_vectors WHERE field_path = $1 AND dims = $2 LIMIT 8`,
-            { bind: [fieldPath, dims] },
-          )
+          .execute(spacesOfSql, { bind: [realmURL.href, fieldPath, dims] })
           .then((rows) => rows.map((row) => String(row.space ?? '')))
           .catch(() => []),
       };
@@ -4530,16 +4534,23 @@ export class IndexQueryEngine {
   // A near target read from a card carries its space: comparing it with a
   // field whose vectors are all in other spaces is refused, never answered
   // with distances that mean nothing.
-  async #assertNearSpace(fieldPath: string, near: unknown, what: string) {
+  async #assertNearSpace(
+    realmURL: URL | undefined,
+    fieldPath: string,
+    near: unknown,
+    what: string,
+  ) {
     let space =
       near && typeof near === 'object'
         ? vectorTargetSpaces.get(near)
         : undefined;
-    if (space == null || this.#dbAdapter.kind !== 'pg') {
+    // Without the realm there are no vectors to compare against; the join's
+    // own space condition still keeps other spaces out.
+    if (space == null || !realmURL || this.#dbAdapter.kind !== 'pg') {
       return;
     }
     let dims = vectorDimensions(near as number[]);
-    let spaces = await this.#spacesOf(fieldPath, dims);
+    let spaces = await this.#spacesOf(realmURL, fieldPath, dims);
     if (spaces.length > 0 && !spaces.includes(space)) {
       throw new InvalidQueryError(
         `${what}: the target vector is in the space "${space}", but "${fieldPath}" holds vectors in ${spaces.map((s) => `"${s}"`).join(', ')}; vectors from different spaces can't be compared`,
@@ -5411,6 +5422,7 @@ export class IndexQueryEngine {
         `blend signal "${component.by}" near a vector`,
       );
       await this.#assertNearSpace(
+        filterContext.realmURL,
         removeBrackets(component.by),
         component.near,
         `blend signal "${component.by}" near a vector`,
@@ -5493,6 +5505,7 @@ export class IndexQueryEngine {
         `sort by "${s.by}" near a vector`,
       );
       await this.#assertNearSpace(
+        realmURL,
         removeBrackets(s.by),
         s.near,
         `sort by "${s.by}" near a vector`,
@@ -7790,6 +7803,10 @@ function shortTitleContainsSelect(
     ...(limit ? [`LIMIT ${Number(limit)}`] : []),
   ];
 }
+
+// The spaces a field's vectors of one size are stored in, in one realm
+// (`#spacesOf`). Exported for the test that pins its plan.
+export const spacesOfSql = `SELECT DISTINCT space FROM boxel_index_vectors WHERE realm_url = $1 AND field_path = $2 AND dims = $3 LIMIT 8`;
 
 // Bounds a matches subquery's side to the realm searched, where the context
 // knows it.
