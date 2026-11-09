@@ -463,8 +463,11 @@ export async function commitBatch(
   // (see `withLocksAfterDrain`): what it waits on is other writers' indexing,
   // which needs no exclusivity over this batch's files, and a long pass — a
   // module's fan-out across every card built from it — would otherwise park
-  // every other writer of those files behind this one for as long as it runs. Inside the locks only a synchronous re-check
-  // remains, so the state staging reads is still the state the drain left.
+  // every other writer of those files behind this one for as long as it runs.
+  // Inside the locks only a synchronous re-check remains, except on the last
+  // turn `withLocksAfterDrain` allows, where what is still pending is waited
+  // for under them, so the state staging reads is still the state the drain
+  // left.
   //
   // A batch that does not wait for its own indexing does not wait for
   // anyone else's either — the same trade the realm's own commit makes at
@@ -498,7 +501,9 @@ export async function commitBatch(
   // All of that is about the opt-out. The drain is skipped on its own terms
   // as well, for a batch that stages nothing: a removal names a file and
   // reads the bytes already there, resolving no definition, so a batch of
-  // removals would wait for indexing it has no use for.
+  // removals would wait for indexing it has no use for. The realm's commit
+  // gate applies the same rule to a commit that only removes files, so such
+  // a batch waits for no indexing at all, inside its locks or out.
   let drains = opts.waitForIndex !== false && entries.some(stagesContent);
   let drain = () => (drains ? core.drainIndexing() : undefined);
   return await withLocksAfterDrain({

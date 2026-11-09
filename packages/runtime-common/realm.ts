@@ -5061,7 +5061,7 @@ export class Realm {
   ): Promise<FileWriteResult> {
     let results = await this.#withFileWriteLocksAfterDrain(
       [path],
-      options?.waitForIndex !== false,
+      () => options?.waitForIndex !== false,
       (releaseLocks) =>
         this._batchWriteUnlocked(new Map([[path, contents]]), {
           ...options,
@@ -5077,7 +5077,7 @@ export class Realm {
   ): Promise<FileWriteResult[]> {
     return this.#withFileWriteLocksAfterDrain(
       [...files.keys()],
-      options?.waitForIndex !== false,
+      () => options?.waitForIndex !== false,
       (releaseLocks) =>
         this._batchWriteUnlocked(files, {
           ...options,
@@ -5087,7 +5087,9 @@ export class Realm {
   }
 
   // The file write locks, taken once the indexing the commit's gate would wait
-  // for has settled, when `drains` says the commit will wait for it. That gate
+  // for has settled, when `drains` says the commit will wait for it. `screen`
+  // is `withLocksAfterDrain`'s: a refusal decided under the locks before
+  // anything waits. That gate
   // runs inside the locks, so on its own it waits there, and a long pass
   // then parks every other writer of these files behind this one for as long
   // as it runs. Draining first leaves the gate nothing to wait for in
@@ -5095,15 +5097,17 @@ export class Realm {
   // so.
   #withFileWriteLocksAfterDrain<T>(
     paths: LocalPath[],
-    drains: boolean,
+    drains: () => boolean,
     fn: (releaseLocks: () => void) => Promise<T>,
+    screen?: () => Promise<T | undefined>,
   ): Promise<T> {
     return withLocksAfterDrain({
       drain: () =>
-        drains ? this.incrementalIndexingAffectingStaging() : undefined,
+        drains() ? this.incrementalIndexingAffectingStaging() : undefined,
       lock: (locked) =>
         this.#dbAdapter.withFileWriteLocks(this.url, paths, locked),
       run: fn,
+      screen,
     });
   }
 
@@ -5475,8 +5479,15 @@ export class Realm {
     // write below resolves, so an instance-only fan-out — however many cards
     // it invalidates — is not waited for here. That is what keeps one card's
     // fan-out from gating every other card's write in the realm.
+    //
+    // A commit that only removes files writes no bytes to resolve against, so
+    // it skips the gate whatever the caller asked of its own indexing — the
+    // same rule the batch coordinator applies to a batch that stages nothing.
     let stageCursor = options?.stageCursor;
-    if (options?.waitForIndex !== false) {
+    if (
+      options?.waitForIndex !== false &&
+      (files.size > 0 || appends.size > 0)
+    ) {
       await this.incrementalIndexingAffectingStaging();
       // A batch coordinator drains before it stages, and this gate drains
       // again. Both wait on the same set of passes, so they are one stage
@@ -5485,9 +5496,9 @@ export class Realm {
       // time here however many gates it passed through.
       //
       // This gate runs with the write's file locks held. The writers that
-      // take those locks drain before taking them (`withLocksAfterDrain`),
-      // so what is left to wait for here is a pass that registered after
-      // their re-check, not the bulk of a long pass.
+      // reach it drain before taking them (`withLocksAfterDrain`), so what is
+      // left to wait for here is a pass that registered after their last
+      // re-check, not the bulk of a long pass.
       stageCursor?.mark('drain');
     }
     // Audited once the drain has settled what the realm resolves against and
@@ -6730,105 +6741,113 @@ export class Realm {
     // reports it, and locking nothing for a file this request cannot name
     // excludes nobody.
     //
-    // Read before the locks, so a caller asking to wait for indexing has the
-    // in-flight passes its commit would wait for settled before it holds them.
+    // Everything that can refuse the request is decided off disk, under the
+    // locks, before anything waits: a request that will be refused is answered
+    // without waiting for indexing it would never have used. One that will
+    // write, and asked to wait for indexing, waits before it holds the locks
+    // rather than while it does (see `withLocksAfterDrain`), and is screened
+    // again on the turn that writes, since the files can change between turns.
     let waitForIndex =
       new URL(request.url).searchParams.get('waitForIndex') === 'true';
-    return await this.#withFileWriteLocksAfterDrain(
-      atomicWritePaths,
-      waitForIndex,
-      async () => {
-        let atomicCheckErrors =
-          await this.checkBeforeAtomicWrite(atomicOperations);
-        if (atomicCheckErrors.length > 0) {
+    let operations = filterAtomicOperations(atomicOperations);
+    let files = new Map<LocalPath, string>();
+    let screen = async (): Promise<Response | undefined> => {
+      let atomicCheckErrors =
+        await this.checkBeforeAtomicWrite(atomicOperations);
+      if (atomicCheckErrors.length > 0) {
+        return createResponse({
+          body: JSON.stringify({ errors: atomicCheckErrors }),
+          init: {
+            status: this.lowestStatusCode(atomicCheckErrors),
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
+
+      files = new Map<LocalPath, string>();
+
+      for (let operation of operations) {
+        let resource = operation.data;
+        let href = operation.href;
+        let localPath = this.paths.local(
+          new URL(this.#resolveAtomicHref(href), this.paths.url),
+        );
+        let exists = await this.#adapter.exists(localPath);
+        if (operation.op === 'add' && exists) {
           return createResponse({
-            body: JSON.stringify({ errors: atomicCheckErrors }),
+            body: JSON.stringify({
+              errors: [
+                {
+                  title: 'Resource already exists',
+                  detail: `Resource ${href} already exists`,
+                  status: 409,
+                },
+              ],
+            }),
             init: {
-              status: this.lowestStatusCode(atomicCheckErrors),
+              status: 409,
               headers: { 'content-type': SupportedMimeType.JSONAPI },
             },
             requestContext,
           });
         }
-
-        let operations = filterAtomicOperations(atomicOperations);
-        let files = new Map<LocalPath, string>();
-        let writeResults: FileWriteResult[] = [];
-
-        for (let operation of operations) {
-          let resource = operation.data;
-          let href = operation.href;
-          let localPath = this.paths.local(
-            new URL(this.#resolveAtomicHref(href), this.paths.url),
-          );
-          let exists = await this.#adapter.exists(localPath);
-          if (operation.op === 'add' && exists) {
-            return createResponse({
-              body: JSON.stringify({
-                errors: [
-                  {
-                    title: 'Resource already exists',
-                    detail: `Resource ${href} already exists`,
-                    status: 409,
-                  },
-                ],
-              }),
-              init: {
-                status: 409,
-                headers: { 'content-type': SupportedMimeType.JSONAPI },
-              },
-              requestContext,
-            });
-          }
-          if (operation.op === 'update' && !exists) {
-            return createResponse({
-              body: JSON.stringify({
-                errors: [
-                  {
-                    title: 'Resource does not exist',
-                    detail: `Resource ${href} does not exist`,
-                    status: 404,
-                  },
-                ],
-              }),
-              init: {
-                status: 404,
-                headers: { 'content-type': SupportedMimeType.JSONAPI },
-              },
-              requestContext,
-            });
-          }
-          if (isModuleResource(resource)) {
-            let content = resource.attributes?.content ?? '';
-            this.assertWriteSize(content, 'file', localPath);
-            files.set(localPath, content);
-          } else if (isCardResource(resource)) {
-            let doc = {
-              data: resource,
-            };
-            let jsonString = JSON.stringify(doc, null, 2);
-            this.assertWriteSize(jsonString, 'card', localPath);
-            files.set(localPath, jsonString);
-          } else {
-            return createResponse({
-              body: JSON.stringify({
-                errors: [
-                  {
-                    status: 400,
-                    title: 'Invalid resource',
-                    detail: `Operation data is not a valid card resource or module resource`,
-                  },
-                ],
-              }),
-              init: {
-                status: 400,
-                headers: { 'content-type': SupportedMimeType.JSONAPI },
-              },
-              requestContext,
-            });
-          }
+        if (operation.op === 'update' && !exists) {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  title: 'Resource does not exist',
+                  detail: `Resource ${href} does not exist`,
+                  status: 404,
+                },
+              ],
+            }),
+            init: {
+              status: 404,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
         }
+        if (isModuleResource(resource)) {
+          let content = resource.attributes?.content ?? '';
+          this.assertWriteSize(content, 'file', localPath);
+          files.set(localPath, content);
+        } else if (isCardResource(resource)) {
+          let doc = {
+            data: resource,
+          };
+          let jsonString = JSON.stringify(doc, null, 2);
+          this.assertWriteSize(jsonString, 'card', localPath);
+          files.set(localPath, jsonString);
+        } else {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  status: 400,
+                  title: 'Invalid resource',
+                  detail: `Operation data is not a valid card resource or module resource`,
+                },
+              ],
+            }),
+            init: {
+              status: 400,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+      }
 
+      return undefined;
+    };
+    return await this.#withFileWriteLocksAfterDrain(
+      atomicWritePaths,
+      () => waitForIndex && files.size > 0,
+      async () => {
+        let writeResults: FileWriteResult[] = [];
         if (files.size > 0) {
           try {
             // /_atomic returns once writes are durable, not once they are
@@ -6917,6 +6936,7 @@ export class Realm {
           requestContext,
         });
       },
+      screen,
     );
   }
 

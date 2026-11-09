@@ -29,16 +29,26 @@ const handedBack = Symbol('handed-back');
 // `drain` follows the realm's gate contract: `undefined` when nothing it
 // covers is in flight, so the re-check reads synchronously, otherwise a
 // promise that settles (and never rejects) once those passes have.
+//
+// `screen`, when given, is a check that can answer the request without
+// staging anything — a refusal decided by what is on disk. It runs under the
+// locks ahead of the re-check on every turn, and the first turn takes the
+// locks without draining, so a request it refuses is answered without waiting
+// for indexing it would never have used. A defined result is returned as the
+// answer; `undefined` lets the write go ahead, at the cost of one more turn
+// when indexing is in flight, since that first turn did not drain.
 export async function withLocksAfterDrain<T>({
   drain,
   lock,
   run,
+  screen,
   onDrain,
   onLocked,
 }: {
   drain: () => Promise<void> | undefined;
   lock: <R>(fn: (releaseLocks: () => void) => Promise<R>) => Promise<R>;
   run: (releaseLocks: () => void) => Promise<T>;
+  screen?: () => Promise<T | undefined>;
   // Wraps each wait outside the locks, for a caller timing the drain as a
   // stage of its write.
   onDrain?: (pending: Promise<void>) => Promise<void>;
@@ -46,7 +56,7 @@ export async function withLocksAfterDrain<T>({
   onLocked?: (waitedMs: number) => void;
 }): Promise<T> {
   for (let attempt = 1; ; attempt++) {
-    let pending = drain();
+    let pending = attempt === 1 && screen ? undefined : drain();
     if (pending) {
       await (onDrain ? onDrain(pending) : pending);
     }
@@ -54,6 +64,12 @@ export async function withLocksAfterDrain<T>({
     let outcome = await lock(
       async (releaseLocks): Promise<T | typeof handedBack> => {
         onLocked?.(Date.now() - lockRequestedAt);
+        if (screen) {
+          let answer = await screen();
+          if (answer !== undefined) {
+            return answer;
+          }
+        }
         if (attempt < MAX_DRAIN_BEFORE_LOCK_ATTEMPTS && drain() !== undefined) {
           return handedBack;
         }
