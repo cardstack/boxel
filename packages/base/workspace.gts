@@ -398,14 +398,35 @@ const SYSTEM_TYPE_NAMES = new Set([
 
 // The Workspace index card and the legacy Cards Grid index card are
 // self-referential: every Library / search / feed / pin query hides them so a
-// workspace never lists itself. Kept in one place — hiding a third
-// self-referential type means editing only this list, not each query site.
-const SELF_REFERENTIAL_CARD_TYPES = ['Cards Grid', 'Workspace'];
-function excludeSelfReferentialCards(on?: CodeRef): Filter[] {
-  return SELF_REFERENTIAL_CARD_TYPES.map((_cardType) =>
-    on ? { not: { on, eq: { _cardType } } } : { not: { eq: { _cardType } } },
-  );
+// workspace never lists itself, and never renders another workspace's Home
+// inside its own. They are hidden by type, which `type:` matches through the
+// adoption chain: a Workspace subclass is hidden whatever its display name.
+// (Matching `_cardType`, the display name, let a renamed subclass through, and
+// a base Workspace then rendered a whole second Home inside itself, in the
+// prerender too.) Kept in one place — hiding a third self-referential type
+// means editing only this list, not each query site.
+const SELF_REFERENTIAL_CARD_REFS: CodeRef[] = [
+  codeRef(here, './workspace', 'Workspace'),
+  codeRef(here, './cards-grid', 'CardsGrid'),
+];
+function excludeSelfReferentialCards(_on?: CodeRef): Filter[] {
+  return SELF_REFERENTIAL_CARD_REFS.map((ref) => ({ not: { type: ref } }));
 }
+
+// A render for the index (the prerender) draws the Workspace's frame and runs
+// none of its searches, subscriptions or panel tasks: their results would be
+// other cards' content baked into this card's HTML, stale on the next change,
+// and they cost the indexer a whole Home per render. The panels fill in when
+// a person opens the Workspace.
+function isIndexRender(): boolean {
+  return Boolean((globalThis as any).__boxelRenderContext);
+}
+
+// Index events refresh the Home's panels at most this often, so a re-index's
+// stream of events can't keep its searches running back to back.
+const INDEX_REFRESH_MIN_INTERVAL_MS = 5_000;
+// The dock shows running jobs; it needs only the newest few.
+const JOBS_PAGE_SIZE = 20;
 
 // Source modules (.gts, .ts, …) index as `file` rows just like uploaded
 // assets, but the Activity feed is a content stream — cards and uploaded
@@ -442,6 +463,9 @@ const INDEX_REFRESH_DEBOUNCE_MS = 200;
 // Activity feed: both the server query and the reveal-on-scroll pager are
 // bounded to this many of the most recently modified cards.
 const ACTIVITY_FEED_CAP = 100;
+type FeedMeta = {
+  page?: { total?: number; totalIsEstimate?: boolean; hasMore?: boolean };
+};
 // The feed reveals this many rows at a time as the sentinel scrolls into view.
 const FEED_REVEAL_CHUNK = 20;
 
@@ -1306,8 +1330,8 @@ class Isolated extends Component<typeof Workspace> {
                   first.</p>
               </div>
               <div class='feed'>
-                {{#if @context.searchResultsComponent}}
-                  <@context.searchResultsComponent
+                {{#if this.feedSearchComponent}}
+                  <this.feedSearchComponent
                     @query={{this.feedQuery}}
                     @mode='hover'
                     @overlays={{false}}
@@ -1416,15 +1440,17 @@ class Isolated extends Component<typeof Workspace> {
                       >
                         <span class='feed-more-note data'>Showing
                           {{results.entries.length}}
-                          of
-                          {{this.feedTotal results.meta}}</span>
+                          {{#if (this.feedTotalKnown results.meta)}}
+                            of
+                            {{this.feedTotal results.meta}}
+                          {{/if}}</span>
                       </div>
                     {{else if (this.feedAtCap results.meta)}}
                       <p class='feed-end-note data'>Showing the last
                         {{this.activityFeedCap}}
                         changes.</p>
                     {{/if}}
-                  </@context.searchResultsComponent>
+                  </this.feedSearchComponent>
                 {{/if}}
               </div>
             </section>
@@ -3270,7 +3296,7 @@ class Isolated extends Component<typeof Workspace> {
         every: [...excludeSelfReferentialCards()],
       },
       sort: [{ by: 'lastModified', direction: 'desc' }],
-      page: { size: 1 }, // Home preview reads only the single newest card.
+      page: { size: 1, total: 'none' }, // Home preview reads only the single newest card.
     } as Query);
     let first = (instances ?? []).find((i) => isCardInstance(i) && i.id) as
       | CardDef
@@ -3325,7 +3351,10 @@ class Isolated extends Component<typeof Workspace> {
 
   private loadConfig = restartableTask(async () => {
     let instances = await this.searchRealm({
-      filter: { eq: { _cardType: 'Realm Config' } },
+      // By type, one row: matching the display name tested every card's
+      // search document in the realm.
+      filter: { type: codeRef(here, './realm-config', 'RealmConfig') },
+      page: { size: 1, total: 'none' },
     } as Query);
     this.configInstance = (instances ?? []).find(
       (i) => isCardInstance(i) && i.id,
@@ -3673,7 +3702,7 @@ class Isolated extends Component<typeof Workspace> {
   setupRealmSubscription = modifier(
     (_element: HTMLElement, [realm]: [string | undefined]) => {
       // Explicit modifier element type for standalone Glint
-      if (!realm) {
+      if (!realm || isIndexRender()) {
         this.teardownRealmSubscription();
         return;
       }
@@ -3869,6 +3898,9 @@ class Isolated extends Component<typeof Workspace> {
           direction: 'desc',
         },
       ],
+      // The dock shows the newest few; hydrating a hundred job cards to
+      // draw them cost a module load and a card read each.
+      page: { size: JOBS_PAGE_SIZE, total: 'none' },
     } as Query);
 
     this.jobComponents.splice(0, this.jobComponents.length);
@@ -3898,6 +3930,15 @@ class Isolated extends Component<typeof Workspace> {
     this.#hadRunningJobs = running;
   });
 
+  private onVisible = () => {
+    if (document.hidden) {
+      return;
+    }
+    document.removeEventListener('visibilitychange', this.onVisible);
+    this.#refreshWhenVisible = false;
+    this.refreshAfterIndex.perform();
+  };
+
   private refreshOnIndex = (ev: RealmEventContent) => {
     // React to a completed index pass — incremental or full — not the
     // 'incremental-index-initiation' pre-index signal, whose new state is not
@@ -3915,8 +3956,27 @@ class Isolated extends Component<typeof Workspace> {
   // Coalesce a burst of index events into a single refresh: each event restarts
   // the task, cancelling the pending timeout, so the panel searches fan out once
   // the burst settles rather than 3–4× per event.
+  #lastIndexRefresh = 0;
+  #refreshWhenVisible = false;
+
+  // After an index event, refresh at most every INDEX_REFRESH_MIN_INTERVAL_MS,
+  // once the burst has gone quiet, and only while the page is visible. A
+  // hidden page remembers it owes a refresh and runs it when shown again.
   private refreshAfterIndex = restartableTask(async () => {
     await timeout(INDEX_REFRESH_DEBOUNCE_MS);
+    let wait =
+      this.#lastIndexRefresh + INDEX_REFRESH_MIN_INTERVAL_MS - clockNow();
+    if (wait > 0) {
+      await timeout(wait);
+    }
+    if (typeof document !== 'undefined' && document.hidden) {
+      if (!this.#refreshWhenVisible) {
+        this.#refreshWhenVisible = true;
+        document.addEventListener('visibilitychange', this.onVisible);
+      }
+      return;
+    }
+    this.#lastIndexRefresh = clockNow();
     this.loadFilterList.perform();
     this.loadJobs.perform();
     this.loadLatest.perform();
@@ -3966,7 +4026,10 @@ class Isolated extends Component<typeof Workspace> {
           ],
         },
         sort: [{ by: 'lastModified', direction: 'desc' }],
-        page: { size: Math.min(this.feedShown, ACTIVITY_FEED_CAP) },
+        page: {
+          size: Math.min(this.feedShown, ACTIVITY_FEED_CAP),
+          total: 'none',
+        },
       } as Query,
       // The prerendered face plus the fields the log line reads; the mixed
       // instance + file scope, since an untyped query would otherwise be
@@ -4068,14 +4131,33 @@ class Isolated extends Component<typeof Workspace> {
     return rows;
   };
 
-  private feedTotal = (meta: { page?: { total?: number } } | undefined) =>
-    Math.min(meta?.page?.total ?? 0, ACTIVITY_FEED_CAP);
+  // The feed asks for no total (`page.total: 'none'`): `hasMore` says whether
+  // another page follows, and the total is a lower bound until the last page
+  // has arrived, when it is exact. A Home never counts the whole realm to
+  // draw "Showing 20 of N".
+  private feedTotal = (meta: FeedMeta | undefined) =>
+    Math.min(
+      meta?.page?.hasMore
+        ? Math.max(meta?.page?.total ?? 0, this.feedShown + FEED_REVEAL_CHUNK)
+        : (meta?.page?.total ?? 0),
+      ACTIVITY_FEED_CAP,
+    );
 
-  private moreFeed = (meta: { page?: { total?: number } } | undefined) =>
-    this.feedTotal(meta) > this.feedShown;
+  private feedTotalKnown = (meta: FeedMeta | undefined) =>
+    !meta?.page?.totalIsEstimate;
 
-  private feedAtCap = (meta: { page?: { total?: number } } | undefined) =>
-    (meta?.page?.total ?? 0) >= ACTIVITY_FEED_CAP;
+  private moreFeed = (meta: FeedMeta | undefined) =>
+    this.feedShown < ACTIVITY_FEED_CAP &&
+    (meta?.page?.hasMore ?? this.feedTotal(meta) > this.feedShown);
+
+  private feedAtCap = (meta: FeedMeta | undefined) =>
+    this.feedShown >= ACTIVITY_FEED_CAP && Boolean(meta?.page?.hasMore);
+
+  private get feedSearchComponent() {
+    return isIndexRender()
+      ? undefined
+      : this.args.context?.searchResultsComponent;
+  }
 
   // The source a remix was cloned from. A remix row is rare, so its source's
   // title is the one thing the feed loads a card for: once per source, kept
