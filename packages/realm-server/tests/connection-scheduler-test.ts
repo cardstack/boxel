@@ -6,6 +6,7 @@ import {
   currentConnectionTenant,
   markConnectionHeld,
   isSharedWork,
+  waitingOnLock,
   withConnectionOrdering,
   withConnectionTenant,
   withSharedWork,
@@ -947,6 +948,122 @@ module(basename(import.meta.filename), function () {
     finishBusy();
     let finished = await settledWithin(Promise.all([busy, waiting]), 100);
     assert.true(finished.settled, 'both holds finished');
+    scheduler.dispose();
+  });
+
+  test('holds waiting on a lock a blocked hold owns count as blocked, so the owner finishes', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 4 });
+    let unlock!: () => void;
+    let lock = new Promise<void>((resolve) => (unlock = resolve));
+    let peak = 0;
+    // The owner takes the lock, then needs one more connection before it can
+    // release it, the way a lifecycle call reads through the adapter.
+    let owner = hold(scheduler, async () => {
+      await wait(10); // every hold is out before the owner asks for more
+      peak = Math.max(peak, scheduler.inUse);
+      await statement(scheduler);
+      unlock();
+    });
+    let waiters = Array.from({ length: 3 }, () =>
+      hold(scheduler, async () => {
+        await waitingOnLock(() => lock);
+        await statement(scheduler);
+      }),
+    );
+    let finished = await settledWithin(Promise.all([owner, ...waiters]), 1000);
+    assert.true(
+      finished.settled,
+      'the owner got its connection, and so did every waiter after it',
+    );
+    assert.strictEqual(
+      peak,
+      4,
+      'the owner and the lock waiters filled the pool',
+    );
+    assert.strictEqual(scheduler.inUse, 0, 'every connection came back');
+    assert.strictEqual(scheduler.holds, 0);
+    scheduler.dispose();
+  });
+
+  test('a lock waiter does not count as blocked once its wait is over', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
+    let unlock!: () => void;
+    let lock = new Promise<void>((resolve) => (unlock = resolve));
+    let finishWork!: () => void;
+    let work = new Promise<void>((resolve) => (finishWork = resolve));
+    // Waits on the lock, then works without asking for anything here.
+    let waiter = hold(scheduler, async () => {
+      await waitingOnLock(() => lock);
+      await work;
+    });
+    let granted = false;
+    let asking = hold(scheduler, async () => {
+      await wait(5);
+      let release = await scheduler.acquire();
+      granted = true;
+      release();
+    });
+    await wait(20);
+    assert.true(
+      granted,
+      'while the other hold waited on the lock, the pool was wedged',
+    );
+    unlock();
+    await wait(5);
+    let second = hold(scheduler, async () => {
+      await statement(scheduler);
+    });
+    let asked = hold(scheduler, async () => undefined);
+    assert.false(
+      (await settledWithin(Promise.all([second, asked]), 30)).settled,
+      'with the lock taken, the waiter is working and nothing goes past the limit',
+    );
+    finishWork();
+    let finished = await settledWithin(
+      Promise.all([waiter, asking, second, asked]),
+      100,
+    );
+    assert.true(finished.settled, 'everything finished once the work did');
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('a lock waiter beside a busy hold does not make the pool wedged', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 3, tenantShare: 3 });
+    let finishBusy!: () => void;
+    let busyWork = new Promise<void>((resolve) => (finishBusy = resolve));
+    let unlock!: () => void;
+    let lock = new Promise<void>((resolve) => (unlock = resolve));
+    let busy = hold(scheduler, () => busyWork);
+    let lockWaiter = hold(scheduler, () => waitingOnLock(() => lock));
+    let granted = false;
+    let asking = hold(scheduler, async () => {
+      await wait(5);
+      let release = await scheduler.acquire();
+      granted = true;
+      release();
+    });
+    await wait(30);
+    assert.false(
+      granted,
+      'the busy hold will give its connection back, so nothing goes past the limit',
+    );
+    assert.strictEqual(scheduler.inUse, 3);
+    finishBusy();
+    unlock();
+    let finished = await settledWithin(
+      Promise.all([busy, lockWaiter, asking]),
+      100,
+    );
+    assert.true(finished.settled, 'every hold finished');
+    assert.true(granted);
+    scheduler.dispose();
+  });
+
+  test('waiting on a lock outside any hold just runs', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 1, tenantShare: 1 });
+    assert.strictEqual(await waitingOnLock(async () => 7), 7);
+    assert.strictEqual(scheduler.inUse, 0);
     scheduler.dispose();
   });
 

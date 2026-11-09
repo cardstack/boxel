@@ -82,6 +82,17 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //   working: running a statement, awaiting something outside the pool),
 //   a connection is coming back without help, and nested work waits for it.
 //
+//   A hold whose own connection is waiting in Postgres for a lock, inside
+//   `waitingOnLock`, counts as blocked too. The lock's owner may be another
+//   hold here, waiting on nested work, and the waiter cannot give its
+//   connection back until that owner finishes. Counted as working, a single
+//   lock waiter would keep the pool from ever counting as wedged. The
+//   overflow still goes only to nested waiters, never to the lock waiter
+//   itself. When the owner is on another replica, the pool may go past its
+//   limit before a connection would have come back anyway; the ceiling still
+//   bounds it, and `inUse` above the limit then means every hold was waiting,
+//   not strictly that the pool could not have recovered alone.
+//
 //   Past the limit, the most deeply nested waiter goes first, one at a time.
 //   A hold granted past the limit is not blocked until its own nested work
 //   queues, and that work is nested deeper than anything else waiting, so it
@@ -93,9 +104,11 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 //
 //   What this cannot see is a hold waiting on work that is not nested in it:
 //   a request it made to this same server, a job it waits on, or shared work
-//   (see `withSharedWork`) another caller started outside any hold. Such a
-//   hold has nothing queued here, so it does not count as blocked, and a pool
-//   full of them is not unstuck by this.
+//   (see `withSharedWork`) another caller started outside any hold. Nor a
+//   hold waiting on a lock outside `waitingOnLock`, such as a row lock taken
+//   with `FOR UPDATE` through its own querier. Such a hold has nothing queued
+//   here, so it does not count as blocked, and a pool full of them is not
+//   unstuck by this.
 //
 // Oversubscription is judged on demand — connections granted plus
 // acquisitions waiting — rather than on connections in use, because holding a
@@ -119,8 +132,9 @@ export class ConnectionScheduler {
   #inUse = 0;
   // The connections granted to holds, by hold: each stays out until the work
   // holding it finishes, which may itself be waiting here. `queued` counts
-  // the waiters nested in the hold, at any depth; a hold with any is blocked.
-  #holds = new Map<HoldMarker, { queued: number }>();
+  // the waiters nested in the hold, at any depth, and `onLock` is whether its
+  // own connection is waiting for a lock; a hold with either is blocked.
+  #holds = new Map<HoldMarker, HoldState>();
   #blockedHolds = 0;
   // Connections each key holds, for lowest-held-first ordering.
   #held = new Map<TenantKey, number>();
@@ -132,6 +146,7 @@ export class ConnectionScheduler {
   #waiting = 0;
   #arrivals = 0;
   #unsubscribe: () => void;
+  #unsubscribeLockWaits: () => void;
 
   // `overflow` is how far past `limit` nested work may go while the pool is
   // wedged (see the policy above). What a wedge needs past the limit is how
@@ -149,6 +164,11 @@ export class ConnectionScheduler {
     // A tenant whose last scope closes may leave another tenant's waiters
     // eligible; nothing else would wake them.
     this.#unsubscribe = onScopeClosed(() => this.#drain());
+    // A hold starting to wait on a lock may be the last one the pool needed
+    // blocked to count as wedged.
+    this.#unsubscribeLockWaits = onLockWaitChanged((marker) =>
+      this.#lockWaitChanged(marker),
+    );
   }
 
   get limit(): number {
@@ -248,6 +268,7 @@ export class ConnectionScheduler {
   // owner is expected to have stopped issuing work.
   dispose(): void {
     this.#unsubscribe();
+    this.#unsubscribeLockWaits();
   }
 
   // Whether a free connection may go to `key`. `arriving` is demand not yet
@@ -267,7 +288,8 @@ export class ConnectionScheduler {
 
   // Whether the pool is wedged and may grant nested work past the limit:
   // every connection out is a hold, every hold has nested work queued, and
-  // there is overflow left (see the policy).
+  // there is overflow left (see the policy). A hold waiting on a lock counts
+  // as having nested work queued.
   #wedged(): boolean {
     return (
       this.#inUse >= this.#limit &&
@@ -282,16 +304,30 @@ export class ConnectionScheduler {
   #noteQueued(marker: HoldMarker | undefined, delta: 1 | -1): void {
     for (let m = marker; m; m = m.parent) {
       let state = this.#holds.get(m);
-      if (!state) {
-        continue;
+      if (state) {
+        this.#updateHold(state, () => (state.queued += delta));
       }
-      let before = state.queued;
-      state.queued += delta;
-      if (before === 0 && state.queued > 0) {
-        this.#blockedHolds++;
-      } else if (before > 0 && state.queued === 0) {
-        this.#blockedHolds--;
-      }
+    }
+  }
+
+  #lockWaitChanged(marker: HoldMarker): void {
+    let state = this.#holds.get(marker);
+    if (!state) {
+      return;
+    }
+    this.#updateHold(state, () => (state.onLock = marker.lockWaits > 0));
+    this.#drain();
+  }
+
+  // Apply `change` to a hold's state, keeping `#blockedHolds` in step.
+  #updateHold(state: HoldState, change: () => void): void {
+    let before = isBlocked(state);
+    change();
+    let after = isBlocked(state);
+    if (!before && after) {
+      this.#blockedHolds++;
+    } else if (before && !after) {
+      this.#blockedHolds--;
     }
   }
 
@@ -314,7 +350,11 @@ export class ConnectionScheduler {
   ): () => void {
     this.#inUse++;
     if (hold) {
-      this.#holds.set(hold, { queued: 0 });
+      let state: HoldState = { queued: 0, onLock: hold.lockWaits > 0 };
+      this.#holds.set(hold, state);
+      if (isBlocked(state)) {
+        this.#blockedHolds++;
+      }
     }
     increment(this.#held, key);
     if (!ordered) {
@@ -328,7 +368,8 @@ export class ConnectionScheduler {
       released = true;
       this.#inUse--;
       if (hold) {
-        if ((this.#holds.get(hold)?.queued ?? 0) > 0) {
+        let state = this.#holds.get(hold);
+        if (state && isBlocked(state)) {
           this.#blockedHolds--;
         }
         this.#holds.delete(hold);
@@ -469,6 +510,7 @@ export function markConnectionHeld(): ConnectionHold {
   let parent = scopeStorage.getStore();
   let holding: HoldMarker = {
     held: true,
+    lockWaits: 0,
     ...(parent?.holding ? { parent: parent.holding } : {}),
   };
   let scope: ConnectionScope = { ...parent, holding };
@@ -480,6 +522,26 @@ export function markConnectionHeld(): ConnectionHold {
   };
   holdMarkers.set(hold, holding);
   return hold;
+}
+
+// Run `fn`, a statement on the calling hold's own connection that waits in
+// Postgres for a lock (`pg_advisory_xact_lock` and the like), with the hold
+// counted as blocked until it settles (see the policy). Outside any hold it
+// just runs `fn`: a plain statement waiting on a lock holds no connection a
+// hold here could be waiting for.
+export async function waitingOnLock<T>(fn: () => Promise<T>): Promise<T> {
+  let marker = scopeStorage.getStore()?.holding;
+  if (!marker?.held) {
+    return await fn();
+  }
+  marker.lockWaits++;
+  notifyLockWaitChanged(marker);
+  try {
+    return await fn();
+  } finally {
+    marker.lockWaits--;
+    notifyLockWaitChanged(marker);
+  }
 }
 
 // Run `fn` with the database work it does ordered as `tenant`, but held to no
@@ -518,7 +580,18 @@ interface ConnectionScope {
 // inner mark leaves the outer one's work still nested.
 interface HoldMarker {
   held: boolean;
+  // Statements on this hold's own connection waiting for a lock.
+  lockWaits: number;
   parent?: HoldMarker;
+}
+
+interface HoldState {
+  queued: number;
+  onLock: boolean;
+}
+
+function isBlocked(state: HoldState): boolean {
+  return state.queued > 0 || state.onLock;
 }
 
 // How many holds a nested waiter's work runs inside.
@@ -572,6 +645,18 @@ const scopeStorage = new AsyncLocalStorage<ConnectionScope>();
 const holdMarkers = new WeakMap<ConnectionHold, HoldMarker>();
 const openScopes = new Map<string, number>();
 const scopeClosedListeners = new Set<() => void>();
+const lockWaitListeners = new Set<(marker: HoldMarker) => void>();
+
+function onLockWaitChanged(listener: (marker: HoldMarker) => void): () => void {
+  lockWaitListeners.add(listener);
+  return () => lockWaitListeners.delete(listener);
+}
+
+function notifyLockWaitChanged(marker: HoldMarker): void {
+  for (let listener of [...lockWaitListeners]) {
+    listener(marker);
+  }
+}
 
 function onScopeClosed(listener: () => void): () => void {
   scopeClosedListeners.add(listener);
@@ -600,8 +685,7 @@ function decrement(counts: Map<TenantKey, number>, key: TenantKey): void {
   }
 }
 
-// A count is a positive integer; anything else would either grant nothing or
-// compare against NaN and stall every acquisition.
+// The overflow when the caller names none (see the constructor).
 function defaultOverflow(limit: number): number {
   return Math.max(4, Math.ceil(limit / 4));
 }
@@ -611,6 +695,8 @@ function normalizeOverflow(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
+// A count is a positive integer; anything else would either grant nothing or
+// compare against NaN and stall every acquisition.
 function normalizeCount(value: number): number {
   if (!Number.isFinite(value)) {
     return 1;

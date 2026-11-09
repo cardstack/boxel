@@ -20,6 +20,7 @@ import {
   ConnectionScheduler,
   markConnectionHeld,
   type ConnectionHold,
+  waitingOnLock,
   withSharedWork,
 } from './connection-scheduler.ts';
 import { postgresConfig } from './pg-config.ts';
@@ -382,7 +383,7 @@ export class PgAdapter implements DBAdapter {
   // held by `withConnection` callers, acquisitions waiting, and how many of
   // those wait only because their tenant is at its share. `inUse` above
   // `limit` is the overflow granted once every connection was held by a hold
-  // waiting on nested work.
+  // waiting on nested work or on a lock.
   get connectionStats(): {
     inUse: number;
     holds: number;
@@ -914,9 +915,14 @@ export class PgAdapter implements DBAdapter {
   // writers, N-1 block on the advisory lock before doing anything — so
   // this method does not itself amplify pool pressure. Under N concurrent
   // different-URL writers, each pins one client, and a callback that needs
-  // another waits for it behind the rest of the pool's demand. It cannot wait
-  // forever: when every connection is held this way, the connection
-  // scheduler grants the nested checkout past the pool's limit.
+  // another waits for it behind the rest of the pool's demand. When every
+  // connection is held either way — a holder waiting on its nested checkout,
+  // or a writer waiting on the advisory lock — the connection scheduler
+  // grants the nested checkout past the pool's limit. That is bounded by the
+  // scheduler's overflow, though, and it cannot see a holder waiting on
+  // anything but a checkout or this lock. A callback that keeps its DB work on
+  // the pinned querier needs none of it, and that is still the way to write
+  // one.
   //
   // Re-entrancy: callers MUST NOT re-enter the lock for the same URL while
   // already holding it — a second `pg_advisory_xact_lock` on the same key
@@ -1222,13 +1228,15 @@ export class PgAdapter implements DBAdapter {
       let holdStart: number | undefined;
       try {
         for (const { key, mode } of lockPlan) {
-          await queryFn([
-            mode === 'shared'
-              ? `SELECT pg_advisory_xact_lock_shared(`
-              : `SELECT pg_advisory_xact_lock(`,
-            param(key),
-            `::bigint)`,
-          ]);
+          await waitingOnLock(() =>
+            queryFn([
+              mode === 'shared'
+                ? `SELECT pg_advisory_xact_lock_shared(`
+                : `SELECT pg_advisory_xact_lock(`,
+              param(key),
+              `::bigint)`,
+            ]),
+          );
         }
         holdStart = Date.now();
         const releasedEarly = new Deferred<void>();
@@ -1306,11 +1314,13 @@ export class PgAdapter implements DBAdapter {
     return await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
       try {
-        await queryFn([
-          `SELECT pg_advisory_xact_lock(`,
-          param(lockKey),
-          `::bigint)`,
-        ]);
+        await waitingOnLock(() =>
+          queryFn([
+            `SELECT pg_advisory_xact_lock(`,
+            param(lockKey),
+            `::bigint)`,
+          ]),
+        );
         const result = await fn(queryFn);
         await queryFn(['COMMIT']);
         return result;
