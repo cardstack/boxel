@@ -1140,6 +1140,28 @@ export function assertQuery(
       );
     }
   }
+  // A list binding stands in for a whole list, so it goes only where the
+  // engine reads one: as the one value of an `in` (in the filter or a
+  // boost's filter, or a rerank's comparison filter). Anywhere else it would
+  // match nothing.
+  let placed = new Set<unknown>();
+  for (let part of [
+    { filter: query.filter, sort: query.sort },
+    { filter: query.rerank?.compare?.filter },
+  ]) {
+    mapLetReferences(part as any, (_field, _name, node) => {
+      placed.add(Object.values(node.in)[0]);
+      return node;
+    });
+  }
+  for (let ref of letReferencesIn(query)) {
+    if (ref.path === undefined && !placed.has(ref)) {
+      throw new InvalidQueryError(
+        `${pointer.join('/') || '/'}: "${ref.$let}" is a list, and a list binding goes only as the one value of an \`in\`: { "in": { "field": { "$let": "${ref.$let}" } } }`,
+        'binding-kind',
+      );
+    }
+  }
   if ('let' in query) {
     assertLetBindings(query.let, pointer.concat('let'));
     let cards = new Set(
@@ -1188,6 +1210,20 @@ export function assertQuery(
       ...query,
       ...(query.filter ? { filter: probe.filter } : {}),
       ...(query.sort ? { sort: probe.sort } : {}),
+    };
+  }
+  // A rerank's comparison set runs with the query's bindings too.
+  if (query.rerank?.compare?.filter) {
+    let probe = mapLetReferences(
+      { filter: query.rerank.compare.filter } as any,
+      (field, _name, node) => ({ ...node, in: { [field]: [] } }),
+    );
+    query = {
+      ...query,
+      rerank: {
+        ...query.rerank,
+        compare: { ...query.rerank.compare, filter: probe.filter },
+      },
     };
   }
 

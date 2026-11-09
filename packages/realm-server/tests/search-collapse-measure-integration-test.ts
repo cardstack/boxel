@@ -901,6 +901,70 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((wire.let as any).hot.select, 'item.channel');
   });
 
+  test('a list binding goes only as the one value of an in', async function (assert) {
+    let hot = {
+      from: { filter: { on, range: { hnScore: { gte: 40 } } } },
+      select: 'channel',
+    };
+    let refused = (filter: unknown, why: string) =>
+      assert.throws(
+        () => assertQuery({ let: { hot }, filter }),
+        (err: unknown) =>
+          err instanceof InvalidQueryError &&
+          err.code === 'binding-kind' &&
+          /only as the one value of an `in`/.test(err.message),
+        why,
+      );
+    refused({ on, eq: { channel: { $let: 'hot' } } }, 'an eq value');
+    refused(
+      { on, in: { channel: { $let: 'hot' }, title: ['A'] } },
+      'an in with another entry',
+    );
+    refused({ on, in: { channel: [{ $let: 'hot' }] } }, 'inside an in list');
+    refused(
+      { on, range: { hnScore: { gte: { $let: 'hot' } } } },
+      'a range bound',
+    );
+    assert.throws(
+      () =>
+        assertQuery({
+          let: { hot },
+          filter: { type: on },
+          sort: [{ on, by: 'hnScore' }],
+          rerank: {
+            expression: 'hnScore',
+            compare: { filter: { on, eq: { channel: { $let: 'hot' } } } },
+          },
+        }),
+      (err: unknown) =>
+        err instanceof InvalidQueryError && err.code === 'binding-kind',
+      "a rerank's comparison filter is checked too",
+    );
+    // The one place it goes still runs, in the filter and in a comparison set.
+    let { titles } = await search({
+      let: { hot },
+      filter: { on, in: { channel: { $let: 'hot' } } },
+      sort: byScore,
+    });
+    assert.deepEqual(titles, ['d', 'e']);
+    let compared: Query = {
+      let: { hot },
+      filter: { type: on },
+      sort: byScore,
+      rerank: {
+        expression: 'stats.hnScore.max',
+        compare: { filter: { on, in: { channel: { $let: 'hot' } } } },
+      },
+    };
+    assertQuery(compared);
+    let { rows } = await reranked(compared);
+    assert.deepEqual(
+      [...new Set(rows.map((r) => r[1]))],
+      [50],
+      'the comparison set is the GOTO talks',
+    );
+  });
+
   test('under a policy, bindings and linkedFrom read only what the grants admit', function (assert) {
     let grant = { on, eq: { channel: 'GOTO' } };
     let scoped = policyScopedQuery(

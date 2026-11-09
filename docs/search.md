@@ -462,7 +462,7 @@ On the wire, `by` goes through `item.` (`collapse: 'item.variantGroup'`) and the
 
 A query can name values it computes before it runs, in the manner of a FLWOR `let`, and read them in its filter. Each binding is a query over the same realm (`from`: a `type` or filter, optionally a sort and a `page.size` of at most 1,000, in the same grammar as the query itself) and a search-doc path (`select`) whose values, across the rows that query finds, become the list. A list field contributes each of its values and a link its id; a path through a link (`items.brand.name`) reads only what the link's `searchable` option puts in the search doc.
 
-A reference to a binding is an object, `{ "$let": "name" }`, never a string. An `in` reads a list whole with it, in the filter or inside a `boost`. Any string is a literal, `"$"` or not, so a shopper typing `"$25 gift"` is never read as a binding.
+A reference to a binding is an object, `{ "$let": "name" }`, never a string. An `in` reads a list whole with it, in the filter, inside a `boost`, or in a `rerank`'s comparison filter. That is the only place a list goes: as the one value of an `in` (`{ "in": { "brand.name": { "$let": "topBrands" } } }`). Anywhere else (an `eq` value, a `range` bound, inside a list, an `in` with another field beside it) it is refused (`binding-kind`). Any string is a literal, `"$"` or not, so a shopper typing `"$25 gift"` is never read as a binding.
 
 ```js
 let { data, meta } = await indexer.search({
@@ -519,7 +519,7 @@ let { data } = await indexer.search({
 });
 ```
 
-A reference names a binding of the right kind, or the query is refused: `unknown-binding` for a name `let` doesn't declare (with the nearest declared name), and `binding-kind` for `{ "$let" }` on a one-card binding or `{ "$let", "path" }` on a list. A binding's query cannot use another binding, and a query takes at most 4. Bindings resolve within each realm a search reaches. Under a realm policy, the grants that scope the caller's query also scope every binding's query, and a `linkedFrom` runs as a binding, so a list never holds anything the caller couldn't search for. Live queries leave a query with bindings to the server. On the wire, `select` and the binding's field paths go through `item.`; a reference's `path` reads the card's own path, with or without `item.`.
+A reference names a binding of the right kind, or the query is refused: `unknown-binding` for a name `let` doesn't declare (with the nearest declared name), and `binding-kind` for `{ "$let" }` on a one-card binding, `{ "$let", "path" }` on a list, or a list anywhere but as the one value of an `in`. A binding's query cannot use another binding, and a query takes at most 4. Bindings resolve within each realm a search reaches. Under a realm policy, the grants that scope the caller's query also scope every binding's query, and a `linkedFrom` runs as a binding, so a list never holds anything the caller couldn't search for. Live queries leave a query with bindings to the server. On the wire, `select` and the binding's field paths go through `item.`; a reference's `path` reads the card's own path, with or without `item.`.
 
 ### A table of values (`select`)
 
@@ -738,7 +738,7 @@ A query the grammar refuses gets a 400 whose body carries a code a caller can ac
 | `matches-required`                                               | A text-relevance sort with no `matches` filter to score.                                                       |
 | `engine-only`                                                    | A member only the engine sets.                                                                                 |
 | `invalid-expression`, `expression-placement`, `unknown-function` | An expression that is not a string, cannot run where the query puts it, or calls a function BXL does not know. |
-| `unknown-binding`, `binding-kind`                                | A `{ "$let" }` reference to a binding that does not exist, or of the wrong kind.                               |
+| `unknown-binding`, `binding-kind`                                | A `{ "$let" }` reference to a binding that does not exist, of the wrong kind, or a list anywhere but an `in`.  |
 | `policy-linked-from`                                             | A `linkedFrom` where a realm policy cannot scope it.                                                           |
 | `invalid-page`, `invalid-json`, `invalid-filter`                 | A malformed page, body or filter node.                                                                         |
 | `not-selectable`, `select-excludes-fields`                       | A `select` path the index does not carry, or `select` beside `fields`.                                         |
