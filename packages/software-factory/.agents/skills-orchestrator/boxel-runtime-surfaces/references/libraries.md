@@ -110,9 +110,16 @@ import {
 } from '@cardstack/pretui/helpers';
 ```
 
-Every component has a write-up at `packages/pretui/components/<name>.md`
-and a usage page at `<name>.usage.gts`; read them for the component's
-arguments, named blocks and `--pretui-*` knobs.
+A component's write-up is its contract: arguments, named blocks and
+`--pretui-*` knobs. It lives in the Pret UI realm, outside your workspace, so
+read it from `Bash`:
+
+```sh
+boxel file read @cardstack/pretui/components/<name>.md
+```
+
+Most components also have worked examples at `<name>.usage.gts`, which
+`boxel file read` reads the same way.
 
 ### `@cardstack/boxel-icons` — icons
 

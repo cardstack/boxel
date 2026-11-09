@@ -175,8 +175,9 @@ Overlays: `Dialog` (`AlertDialog` for a destructive confirmation), `Drawer`,
 `Toast`. Structure: `Card`, `Field`, `Accordion`, `Grid`, `Masonry`, `Feed`,
 `AppShell`, `DashboardGrid`, `SplitPanes`, `CopyFit` (a record tile for a
 `Grid` or a result list; it sets its own size container, so it is not a
-fitted template's root), `Board` (kanban). Colour: `ColorPalette`,
-`ColorPicker`. Each has a write-up at `packages/pretui/components/<name>.md`.
+fitted template's root), `Board` (kanban). Color: `ColorPalette`,
+`ColorPicker`. Read a component's write-up with
+`boxel file read @cardstack/pretui/components/<name>.md` from `Bash`.
 
 Format values for display with the formatting components. Their args are
 `Intl` options, not boxel-ui's format strings, so read each contract. For a

@@ -53,8 +53,9 @@ reindexing controls, catalog/listing operations, and more.
 - `/components/<name>` — one module per component, imported per file
   (`import { Button } from '@cardstack/pretui/components/button'`):
   `Button`, `Chip`, `Avatar`, `Input`, `Select`, `Field`, `Dialog`, `Drawer`,
-  `Toast`, `Tabs`, `Grid`, `Board` (drag/drop kanban), and more. Each has a
-  write-up at `packages/pretui/components/<name>.md`.
+  `Toast`, `Tabs`, `Grid`, `Board` (drag/drop kanban), and more. Read a
+  component's write-up with
+  `boxel file read @cardstack/pretui/components/<name>.md` from `Bash`.
 - Templates format values with components: `FormatDate`, `FormatNumber`
   (currency and percent too), `RelativeTime`, `FormatBytes`. `formatBytes()`
   from `/components/format-bytes` returns a file size as a string for JS.
