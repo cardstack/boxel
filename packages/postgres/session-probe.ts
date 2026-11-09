@@ -1,6 +1,6 @@
 import { Client, type ClientConfig } from 'pg';
 import { logger } from '@cardstack/runtime-common';
-import { postgresConfig } from './pg-config.ts';
+import { boxelDatabaseConfig } from './pg-config.ts';
 
 const log = logger('pg-session-probe');
 
@@ -30,8 +30,14 @@ export interface SessionStats {
 // reading covers the sessions of the role the probe connects as — the
 // realm-server's own role, and every process that shares it — across the
 // whole database, not only this process's connections.
+//
+// A server with `track_activities` off records no state or timestamps for any
+// session, and every count would read zero. The probe's own session carries
+// the server's setting, so the reading includes it, and a sample on such a
+// server fails rather than report an all-clear it cannot see.
 const SESSION_STATS_SQL = `
 SELECT
+  current_setting('track_activities') AS track_activities,
   count(*) FILTER (WHERE state IN ('idle in transaction', 'idle in transaction (aborted)'))
     AS idle_in_transaction,
   coalesce(max(extract(epoch FROM now() - state_change) * 1000)
@@ -45,6 +51,14 @@ SELECT
 FROM pg_stat_activity
 WHERE datname = current_database() AND pid <> pg_backend_pid()
 `;
+
+export class TrackActivitiesOffError extends Error {
+  constructor() {
+    super(
+      'track_activities is off, so pg_stat_activity records no session states to read',
+    );
+  }
+}
 
 // Samples `pg_stat_activity` on a connection of its own, outside the pool.
 // The states it looks for are the ones that starve a pool, so a probe that
@@ -63,8 +77,7 @@ export class SessionProbe {
   #closed = false;
 
   constructor(opts: { config?: ClientConfig; timeoutMs?: number } = {}) {
-    // The same connection settings the adapter's pool uses.
-    this.#config = opts.config ?? postgresConfig({ database: 'boxel' });
+    this.#config = opts.config ?? boxelDatabaseConfig();
     this.#timeoutMs = opts.timeoutMs ?? 5000;
   }
 
@@ -73,6 +86,9 @@ export class SessionProbe {
     try {
       let { rows } = await client.query(SESSION_STATS_SQL);
       let row = rows[0] ?? {};
+      if (row.track_activities !== 'on') {
+        throw new TrackActivitiesOffError();
+      }
       return {
         idleInTransaction: Number(row.idle_in_transaction ?? 0),
         idleInTransactionMaxMs: Math.round(
@@ -82,7 +98,10 @@ export class SessionProbe {
         advisoryWaitMaxMs: Math.round(Number(row.advisory_wait_max_ms ?? 0)),
       };
     } catch (e) {
-      await this.#discard(client);
+      // The connection is sound when the server simply isn't tracking.
+      if (!(e instanceof TrackActivitiesOffError)) {
+        await this.#discard(client);
+      }
       throw e;
     }
   }

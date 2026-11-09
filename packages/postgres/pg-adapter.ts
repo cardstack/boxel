@@ -21,7 +21,7 @@ import {
   markConnectionHeld,
   withSharedWork,
 } from './connection-scheduler.ts';
-import { postgresConfig } from './pg-config.ts';
+import { boxelDatabaseConfig, postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
 
 // node-pg-migrate is CJS and exposes the runner as its default export. Under
@@ -122,9 +122,7 @@ const { migrationRenames, buildUpdateMigrationSql } =
   migrationNameFixes as MigrationNameFixes;
 
 function config() {
-  return postgresConfig({
-    database: 'boxel',
-  });
+  return boxelDatabaseConfig();
 }
 
 type Config = ReturnType<typeof config>;
