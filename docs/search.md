@@ -309,7 +309,7 @@ sort: [
 ];
 ```
 
-Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `textRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, each realm ranks its own matches, so a merged federated blend orders only approximately (see [Federated search](#federated-search)).
+Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `textRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Its members are `blend`, `method` (`rrf`), `k` and `direction`; any other (`fusion`, say) is refused (`unknown-key`) with the nearest real one, and so is a member a `near` sort entry does not have. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, each realm ranks its own matches, so a merged federated blend orders only approximately (see [Federated search](#federated-search)).
 
 ### Ranking by an expression (`expression`)
 

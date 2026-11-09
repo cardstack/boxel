@@ -1650,6 +1650,11 @@ function assertSortExpression(
         'needs-type',
       );
     }
+    assertKnownMembers(
+      sort,
+      ['by', 'on', 'near', 'direction', 'weight'],
+      pointer,
+    );
     assertCardType(sort.on, pointer.concat('on'));
     assertNearTarget(sort.near, pointer.concat('near'));
     return;
@@ -1731,8 +1736,28 @@ function assertRelevanceSort(sort: any, pointer: string[]) {
   }
 }
 
+// What a blend takes, as the request grammar spells it (`blend` is the
+// engine's `of`), and the near misses that name another member.
+const BLEND_MEMBERS = ['blend', 'method', 'k', 'direction'] as const;
+const BLEND_MEMBER_ALIASES: Record<string, string> = {
+  fusion: 'method',
+  fuse: 'method',
+  signals: 'blend',
+};
+
 function assertBlendSort(sort: any, pointer: string[]) {
   let where = pointer.join('/') || '/';
+  for (let key of Object.keys(sort)) {
+    if (!['by', 'of', 'method', 'k', 'direction'].includes(key)) {
+      let near =
+        BLEND_MEMBER_ALIASES[key.toLowerCase()] ??
+        nearestMember(key, BLEND_MEMBERS);
+      throw new InvalidQueryError(
+        `${where}: unknown blend member "${key}"${near ? `; did you mean "${near}"?` : ''} (a blend takes ${BLEND_MEMBERS.join(', ')})`,
+        'unknown-key',
+      );
+    }
+  }
   if (!Array.isArray(sort.of) || sort.of.length === 0) {
     throw new InvalidQueryError(
       `${where}/of: a blend needs an array of the sort entries to fuse`,

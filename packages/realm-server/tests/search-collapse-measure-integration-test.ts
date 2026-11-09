@@ -2304,6 +2304,53 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a blend or a near sort refuses a member it does not have', function (assert) {
+    let refused = (payload: Record<string, unknown>, pattern: RegExp) =>
+      assert.throws(
+        () => parseSearchEntryQueryFromPayload(payload),
+        (e: any) => e.queryCode === 'unknown-key' && pattern.test(e.message),
+        pattern.source,
+      );
+    let signals = [{ by: 'item.hnScore', 'item.on': on }];
+    refused(
+      {
+        filter: { 'item.on': on },
+        sort: [{ blend: signals, fusion: 'linear' }],
+      },
+      /unknown blend member "fusion"; did you mean "method"\?/,
+    );
+    refused(
+      { filter: { 'item.on': on }, sort: [{ blend: signals, zzz: 1 }] },
+      /unknown blend member "zzz" \(a blend takes blend, method, k, direction\)/,
+    );
+    refused(
+      { filter: { 'item.on': on }, sort: [{ blend: signals, metod: 'rrf' }] },
+      /did you mean "method"/,
+    );
+    let near = { by: 'embedding', on, near: [1, 0] };
+    assert.throws(
+      () => assertQuery({ sort: [{ ...near, directon: 'asc' }] }),
+      (e: any) =>
+        e instanceof InvalidQueryError &&
+        e.code === 'unknown-key' &&
+        /did you mean "direction"/.test(e.message),
+      'a near sort entry',
+    );
+    assert.throws(
+      () =>
+        assertQuery({
+          sort: [{ by: '_blend', of: [{ ...near, zzz: 1 }] }],
+        }),
+      (e: any) => e instanceof InvalidQueryError && e.code === 'unknown-key',
+      'a near signal in a blend',
+    );
+    assertQuery({ sort: [{ ...near, direction: 'asc' }] });
+    assertQuery({
+      sort: [{ by: '_blend', of: [{ ...near, weight: 2 }], k: 60 }],
+    });
+    assert.ok(true, 'the members they have still pass');
+  });
+
   test('exists keeps its own node, a type ANDs with another anchor, and policy marks the statistics rule', function (assert) {
     assert.throws(
       () =>
