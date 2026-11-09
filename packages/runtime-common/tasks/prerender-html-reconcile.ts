@@ -17,6 +17,7 @@ import {
   skipsPrerenderHtml,
 } from '../jobs/prerender-html.ts';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './indexer.ts';
+import { isUserOfMatrixServer } from '../matrix-server-name.ts';
 import {
   fetchRealmGenerations,
   findActivePrerenderHtmlJobCoverage,
@@ -156,6 +157,16 @@ const prerenderHtmlReconcile: Task<
         );
         continue;
       }
+      // A prerender job names the user it runs as by localpart, which the
+      // worker qualifies with its own server name. For an owner on another
+      // homeserver that would name a different account, so the realm is
+      // skipped.
+      if (!isUserOfMatrixServer(owner, matrixServerName)) {
+        log.warn(
+          `${jobIdentity(jobInfo)} prerender-html reconcile: skipping realm whose owner is on another homeserver: ${realmURL} (${urls.length} stale url(s))`,
+        );
+        continue;
+      }
       let realmGeneration = generations.get(realmURL);
       if (!realmGeneration) {
         log.debug(
@@ -185,8 +196,8 @@ const prerenderHtmlReconcile: Task<
       try {
         await enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
-          // A prerender job names the user it runs as by localpart, which the
-          // worker qualifies with its own server name.
+          // The owner is on the worker's server, so the worker qualifies this
+          // localpart back to the owner's id.
           realmUsername: getMatrixUsername(owner),
           changes: urls.map((url) => ({ url, operation: 'update' as const })),
           // Spawned from committed state: no index pass to wait on.

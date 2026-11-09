@@ -8,6 +8,7 @@ import {
   isPublishedRealmAccount,
 } from '../index.ts';
 import { systemInitiatedIndexPriority } from '../jobs/indexing.ts';
+import { isUserOfMatrixServer } from '../matrix-server-name.ts';
 import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
@@ -142,10 +143,20 @@ const fullReindex: Task<FullReindexArgs, void> = ({
         if (isPublishedRealmAccount(ownerUserId, matrixServerName)) {
           return null;
         }
+        // An indexing job names the user it runs as by localpart, which the
+        // worker qualifies with its own server name. For an owner on another
+        // homeserver that would name a different account, so the realm is
+        // skipped.
+        if (!isUserOfMatrixServer(ownerUserId, matrixServerName)) {
+          log.warn(
+            `${jobIdentity(jobInfo)} skipping realm whose owner is on another homeserver: ${realmUrl}`,
+          );
+          return null;
+        }
         return {
           realmUrl,
-          // An indexing job names the user it runs as by localpart, which the
-          // worker qualifies with its own server name.
+          // The owner is on the worker's server, so the worker qualifies this
+          // localpart back to the owner's id.
           realmUsername: getMatrixUsername(ownerUserId),
         };
       })
