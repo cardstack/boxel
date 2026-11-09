@@ -624,7 +624,7 @@ module(
         // The file changes between the stat the ref was opened with and the
         // read, as when another host rewrites it.
         fsExtra.writeFileSync(join(dir, 'page.html'), '<p>hello</p>');
-        let opened = ref!.openContent!();
+        let opened = ref!.openContent!()!;
 
         assert.strictEqual(
           opened.size,
@@ -652,7 +652,7 @@ module(
         let adapter = new NodeAdapter(dir);
         let original = 'a'.repeat(64 * 1024);
         await adapter.write('page.html', original);
-        let opened = (await adapter.openFile('page.html'))!.openContent!();
+        let opened = (await adapter.openFile('page.html'))!.openContent!()!;
 
         await adapter.write('page.html', 'b');
 
@@ -682,7 +682,7 @@ module(
       try {
         let adapter = new NodeAdapter(dir);
         await adapter.write('log.txt', 'a'.repeat(100));
-        let opened = (await adapter.openFile('log.txt'))!.openContent!();
+        let opened = (await adapter.openFile('log.txt'))!.openContent!()!;
 
         await adapter.append('log.txt' as LocalPath, 'b'.repeat(50));
 
@@ -697,12 +697,46 @@ module(
       }
     });
 
+    test('openContent reports a file deleted since the stat as gone', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        fsExtra.writeFileSync(join(dir, 'sample.png'), 'bytes');
+        let adapter = new NodeAdapter(dir);
+        let ref = await adapter.openFile('sample.png');
+
+        // Another host deletes the file after the stat the ref was opened
+        // with, which still described it.
+        fsExtra.removeSync(join(dir, 'sample.png'));
+
+        assert.strictEqual(
+          ref!.openContent!(),
+          undefined,
+          'the open finds nothing to read',
+        );
+        let error = await new Promise<NodeJS.ErrnoException | undefined>(
+          (resolve) => {
+            let content = ref!.content as NodeJS.ReadableStream;
+            content.on('error', resolve);
+            content.on('end', () => resolve(undefined));
+            content.resume();
+          },
+        );
+        assert.strictEqual(
+          error?.code,
+          'ENOENT',
+          'content fails its read as a vanished file does',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
     test('openContent of an empty file reports no bytes and streams none', async function (assert) {
       let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
       try {
         fsExtra.writeFileSync(join(dir, 'empty.txt'), '');
         let adapter = new NodeAdapter(dir);
-        let opened = (await adapter.openFile('empty.txt'))!.openContent!();
+        let opened = (await adapter.openFile('empty.txt'))!.openContent!()!;
 
         assert.strictEqual(opened.size, 0);
         assert.strictEqual(

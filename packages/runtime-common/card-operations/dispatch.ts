@@ -241,13 +241,16 @@ export interface OperationStoredFile {
   // where the adapter can measure what it opened; `size` above is the stat
   // the handle opened with, which a write elsewhere can leave describing a
   // version of the file the stream does not read. The content returned is
-  // the stream `content` yields.
-  openContent?: () => {
-    content: OperationSourceBody;
-    size?: number;
-    // The opened content's modification time, in milliseconds.
-    lastModifiedMs?: number;
-  };
+  // the stream `content` yields. Undefined when the open finds the file gone,
+  // which the handle's stat can miss when another host deleted it.
+  openContent?: () =>
+    | {
+        content: OperationSourceBody;
+        size?: number;
+        // The opened content's modification time, in milliseconds.
+        lastModifiedMs?: number;
+      }
+    | undefined;
 }
 
 export interface OperationStoredFileMeta {
