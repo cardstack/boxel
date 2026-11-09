@@ -1,3 +1,4 @@
+import { matchCandidateCap } from './search-bounds.ts';
 import type * as JSONTypes from 'json-typescript';
 import { logger } from './log.ts';
 
@@ -526,6 +527,11 @@ export interface QueryResultsMeta {
   // keep track of page size and index number
   page: {
     total: number;
+    // The total is a lower bound rather than an exact count: a broad
+    // `matches` term matched more cards than the candidate cap, so only the
+    // capped candidates were ranked and counted (see `#capBroadMatches`).
+    // Absent when the total is exact. `page.exactTotal` asks for an exact one.
+    totalIsEstimate?: boolean;
   };
   // A query's `facets`, counted over every match: per facet's `by`, its
   // values with how many matched cards hold each, most common first.
@@ -1670,6 +1676,15 @@ export class IndexQueryEngine {
       let anonymize = Boolean(opts.anonymizeStatistics);
       filter = await this.#resolveTypos(filter, realmURL, anonymize);
       filter = await this.#prepareWordStatistics(filter, realmURL, anonymize);
+      // A broad `matches` term ranks a capped candidate set, unless the
+      // caller asked for an exact total.
+      let candidatesCapped = false;
+      ({ filter, capped: candidatesCapped } = await this.#capBroadMatches(
+        filter,
+        realmURL,
+        page,
+        opts,
+      ));
       sort = await this.#expandRelevanceSorts(sort, filter);
       // A formula that leads the sort ran in SQL; each row carries its value.
       let leadingExpr = sort?.[0];
@@ -1748,6 +1763,7 @@ export class IndexQueryEngine {
             inAny: false,
             prerenderedTable: prerenderedTableFromOpts(opts),
             indexTable: tableFromOpts(opts),
+            realmURL,
           }),
         );
       }
@@ -1763,6 +1779,7 @@ export class IndexQueryEngine {
             inAny: false,
             prerenderedTable: prerenderedTableFromOpts(opts),
             indexTable: tableFromOpts(opts),
+            realmURL,
           }),
         );
       }
@@ -2070,6 +2087,7 @@ export class IndexQueryEngine {
         inAny: false,
         prerenderedTable: prerenderedTableFromOpts(opts),
         indexTable: tableFromOpts(opts),
+        realmURL,
       };
       let extendedPlans = facetPlans.filter((plan) => !plan.plain);
       let extendedResults = await Promise.all(
@@ -2133,7 +2151,10 @@ export class IndexQueryEngine {
       return {
         results,
         meta: {
-          page: { total: Number(totalResults[0].total) },
+          page: {
+            total: Number(totalResults[0].total),
+            ...(candidatesCapped ? { totalIsEstimate: true } : {}),
+          },
           ...(passages ? { passages } : {}),
           ...(requestedFacets.length
             ? {
@@ -4818,6 +4839,82 @@ export class IndexQueryEngine {
     }
   }
 
+  // Bounds each broad `matches` term (docs/search.md, "Bounds every query
+  // runs under"). Every positive full-text term of a paged search is probed:
+  // how many of the realm's cards it matches on each side of its match (the
+  // rendered page, the fields), counting no further than the cap. A term
+  // within the cap on both sides runs as written, so its rows and total are
+  // exact. One past it on either side is marked `candidateCap` and then
+  // takes at most that many candidates from each side (see
+  // `matchesCondition`); the search reports its total as a lower bound
+  // (`capped`). A term under a `not` is never capped, since bounding what it
+  // excludes would admit what it should not. `page.exactTotal` turns the cap
+  // off; the time budget still bounds the search.
+  async #capBroadMatches(
+    filter: Filter | undefined,
+    realmURL: URL,
+    page: Query['page'],
+    opts: QueryOptions,
+  ): Promise<{ filter: Filter | undefined; capped: boolean }> {
+    if (
+      !filter ||
+      !page ||
+      page.exactTotal ||
+      this.#dbAdapter.kind !== 'pg' ||
+      opts.pendingStagingId !== undefined
+    ) {
+      return { filter, capped: false };
+    }
+    let cap = matchCandidateCap();
+    let capped = false;
+    let context: FilterContext = {
+      inAny: false,
+      prerenderedTable: prerenderedTableFromOpts(opts),
+      indexTable: tableFromOpts(opts),
+      realmURL,
+    };
+    let broad = async (node: MatchesFilter): Promise<boolean> => {
+      let [row] = (await this.#query(
+        [
+          `SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', false)} @@`,
+          ...renderedTsQuery(node),
+          ...realmBound('phm', context),
+          `LIMIT ${cap + 1}) AS a) AS page_count, (SELECT COUNT(*) FROM (SELECT 1 FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', false)} @@`,
+          ...matchTsQuery(node),
+          ...realmBound('tsi', context),
+          `LIMIT ${cap + 1}) AS b) AS field_count`,
+        ] as Expression,
+        opts.signal,
+      )) as { page_count: number | string; field_count: number | string }[];
+      return Number(row.page_count) > cap || Number(row.field_count) > cap;
+    };
+    let walk = async (node: any): Promise<any> => {
+      if (!node || typeof node !== 'object') {
+        return node;
+      }
+      if (Array.isArray(node.every)) {
+        return { ...node, every: await Promise.all(node.every.map(walk)) };
+      }
+      if (Array.isArray(node.any)) {
+        return { ...node, any: await Promise.all(node.any.map(walk)) };
+      }
+      if (
+        typeof node.matches === 'string' &&
+        node.matches.trim() !== '' &&
+        !node.within &&
+        !node.fields?.length &&
+        node.scope !== 'title' &&
+        (await broad(node))
+      ) {
+        capped = true;
+        return { ...node, candidateCap: cap };
+      }
+      return node;
+    };
+    let out = await walk(filter);
+    return { filter: capped ? out : filter, capped };
+  }
+
   async #resolveTypos(
     filter: Filter | undefined,
     realmURL: URL,
@@ -5640,13 +5737,29 @@ export class IndexQueryEngine {
           ]);
           continue;
         }
+        // As `matchesCondition`: each side reads only the realm searched, and
+        // a term broader than the candidate cap takes at most that many
+        // candidates from each side.
+        let cap = branch.candidateCap;
         selects.push([
+          ...(cap ? ['('] : []),
           `SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
           ...renderedTsQuery(branch),
+          ...realmBound('phm', context),
+          ...(cap ? [`LIMIT ${Number(cap)})`] : []),
         ]);
         selects.push([
+          ...(cap ? ['('] : []),
           `SELECT tsi.url, tsi.realm_url, tsi.type FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)} @@`,
           ...matchTsQuery(branch),
+          ...realmBound('tsi', context),
+          ...(cap
+            ? [
+                `ORDER BY ts_rank_cd(COALESCE(${rankVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)}, ''::tsvector),`,
+                ...matchTsQuery(branch),
+                `, 32) DESC, tsi.url LIMIT ${Number(cap)})`,
+              ]
+            : []),
         ]);
         continue;
       }
@@ -6456,13 +6569,39 @@ export class IndexQueryEngine {
               // fields the card doesn't render, such as a transcript's
               // segments. Each side is its own GIN-indexed lookup, so the
               // union stays an index answer.
-              pg: [
-                `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
-                ...renderedTsQuery(filter),
-                `UNION SELECT tsi.url, tsi.realm_url, tsi.type FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)} @@`,
-                ...matchTsQuery(filter),
-                filter.matches.includes('"') ? `)` : `OFFSET 0)`,
-              ],
+              //
+              // Each side reads only the realm searched: the IN compares the
+              // realm too, so rows of other realms could never match, but
+              // without the bound a common word read every realm's vectors
+              // (28 s for "card" over 265k renderings, once per realm).
+              //
+              // A term broader than the candidate cap (`candidateCap`, see
+              // `#capBroadMatches`) takes at most that many cards from each
+              // side: the rendered side's first ones (a card matched only
+              // there ranks at the page-only floor, tied with the rest), and
+              // the fields' best by rank vector, which is what a relevance
+              // sort ranks them by.
+              pg: filter.candidateCap
+                ? [
+                    `(i.url, i.realm_url, i.type) IN ((SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
+                    ...renderedTsQuery(filter),
+                    ...realmBound('phm', context),
+                    `LIMIT ${Number(filter.candidateCap)}) UNION (SELECT tsi.url, tsi.realm_url, tsi.type FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)} @@`,
+                    ...matchTsQuery(filter),
+                    ...realmBound('tsi', context),
+                    `ORDER BY ts_rank_cd(COALESCE(${rankVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)}, ''::tsvector),`,
+                    ...matchTsQuery(filter),
+                    `, 32) DESC, tsi.url LIMIT ${Number(filter.candidateCap)}))`,
+                  ]
+                : [
+                    `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE ${markdownVector('phm', context.prerenderedTable !== 'prerendered_html')} @@`,
+                    ...renderedTsQuery(filter),
+                    ...realmBound('phm', context),
+                    `UNION SELECT tsi.url, tsi.realm_url, tsi.type FROM ${context.indexTable} AS tsi WHERE ${searchTextVector('tsi', context.indexTable !== DEFAULT_FILTER_CONTEXT.indexTable)} @@`,
+                    ...matchTsQuery(filter),
+                    ...realmBound('tsi', context),
+                    filter.matches.includes('"') ? `)` : `OFFSET 0)`,
+                  ],
               sqlite: [
                 `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
                 param(`%${escapeSqliteLikePattern(filter.matches)}%`),
@@ -7533,6 +7672,14 @@ function facetCountsFromColumn(
 // promotes a pass (see `promotePrerenderedHtmlPending`); a pass's staged rows
 // don't carry it, so a search over them computes it inline, which is
 // affordable because staging only ever holds one pass.
+// Bounds a matches subquery's side to the realm searched, where the context
+// knows it.
+function realmBound(alias: string, context: FilterContext): Expression {
+  return context.realmURL
+    ? [`AND ${alias}.realm_url =`, param(context.realmURL.href)]
+    : [];
+}
+
 function markdownVector(alias: string, staged: boolean): string {
   return staged
     ? `to_tsvector('boxel_english', markdown_search_text(${alias}.markdown))`

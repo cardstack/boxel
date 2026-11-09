@@ -447,6 +447,10 @@ interface QueryCommon {
     number?: number; // page.number is 0-based
     size: number;
     generation?: number;
+    // Count every match, however many: a broad `matches` term otherwise
+    // ranks a capped candidate set and reports an estimated total
+    // (`meta.page.totalIsEstimate`). Still held to the time budget.
+    exactTotal?: boolean;
   };
 }
 
@@ -470,6 +474,7 @@ interface QueryWithInterpolationsBase {
     number?: number; // page.number is 0-based
     size: number | string;
     generation?: number;
+    exactTotal?: boolean;
   };
 }
 
@@ -842,6 +847,10 @@ export interface MatchesFilter extends TypedFilter {
   // of a long enough word still being typed.
   typoQuery?: string;
   typoPartial?: string;
+  // Set by the engine, never on the wire: the term matched more of the
+  // realm's cards than the candidate cap, so its match set is bounded to
+  // this many candidates on each side (see `#capBroadMatches`).
+  candidateCap?: number;
 }
 
 // Membership in another card's links: keeps the cards that `card` links to
@@ -1884,7 +1893,17 @@ function assertPage(
     );
   }
 
-  assertKnownMembers(page, ['size', 'number', 'generation'], pointer);
+  assertKnownMembers(
+    page,
+    ['size', 'number', 'generation', 'exactTotal'],
+    pointer,
+  );
+  if ('exactTotal' in page && typeof page.exactTotal !== 'boolean') {
+    throw new InvalidQueryError(
+      `${pointer.concat('exactTotal').join('/') || '/'}: exactTotal is true or false`,
+      'invalid-page',
+    );
+  }
   // size 0 asks for counts and facets only
   if ('size' in page) {
     let size = Number(page.size);

@@ -614,7 +614,7 @@ The `page` object has the following properties:
 
 The search response includes a `meta` object with pagination information:
 
-- `meta.page.total`: The total number of results across all pages
+- `meta.page.total`: The total number of results across all pages. With `meta.page.totalIsEstimate: true` it is a lower bound (see "Bounds every query runs under"); `page.exactTotal: true` asks for an exact count.
 
 #### Examples
 
@@ -710,6 +710,7 @@ A `_federated-search` request names its realms in `realms`, all on the realm ser
 These hold for every search, whoever runs it (a card's `getCards`, a query-backed field, the host's search pane, a `_search` or `_federated-search` request), with nothing to turn on:
 
 - **A search whose client leaves stops.** When the connection of a `_search` or `_federated-search` request closes before its response is written, the search is cancelled in every realm it was running in: its SQL is cancelled in Postgres (`pg_cancel_backend`), and nothing else is computed for it. A result shared by identical requests in flight together (the live-search cache) is stopped only once every request waiting for it has gone.
+- **A broad `matches` term ranks a capped candidate set.** A full-text term reads only the realm searched. Before a paged search runs, each positive `matches` term is probed: how many of the realm's cards it matches on its rendered page and in its fields, counting no further than the cap (`SEARCH_MATCH_CANDIDATE_CAP`, default 1,000). A term within the cap runs as written, so its rows and its total are exact. A term past it (a word nearly every card holds, like "card") takes at most the cap's worth of candidates from each side: its best field matches by rank vector (what a text-relevance sort ranks them by) and the first of the cards that hold it only on their page (which all rank at the same page-only floor). The rest of the query (other filters, the sort, facets, the page) runs over those candidates. Its `meta.page.total` is then the number of candidates that matched, a lower bound, and `meta.page.totalIsEstimate` is `true`; a federated total is flagged when any realm's is. The first page of a text-relevance sort is unchanged; a query sorted another way (say, newest first) orders the candidates rather than every match. A term under `not` is never capped. To count and order every match, ask for it: `page: { size: 20, exactTotal: true }`. Such a search is still held to the time budget.
 
 ### Refusals
 

@@ -191,6 +191,19 @@ export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
   MIN_TIME_BUDGET_MS,
 );
 
+// The most cards a broad `matches` term ranks in one realm. A term that
+// matches more (a word nearly every card holds, like "card") ranks a capped
+// candidate set instead: its best field matches by rank, and that many of the
+// cards that hold it only on their rendered page. The search reports a lower
+// bound for its total with `meta.page.totalIsEstimate`; `page.exactTotal`
+// counts every match instead. See docs/search.md, "Bounds every query runs
+// under".
+export const SEARCH_MATCH_CANDIDATE_CAP = parsePositiveInt(
+  env.SEARCH_MATCH_CANDIDATE_CAP,
+  1_000,
+  1,
+);
+
 // Max card `@context` item-leg searches one store service may have in flight at
 // once. Enforced client-side (see host StoreService); exported here so the
 // client and the shared contract agree on one number. Excess searches queue
@@ -519,6 +532,7 @@ let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
 let maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
+let matchCandidateCapValue = SEARCH_MATCH_CANDIDATE_CAP;
 
 // The (size, max) pairs already reported by `warnOncePerClamp`. In practice a
 // clamp is driven by an authored page size — a constant in a card definition —
@@ -539,7 +553,11 @@ export function setSearchBoundsForTests(overrides: {
   maxRealmsPerRequest?: number;
   timeBudgetMs?: number;
   maxAssembledLinkResources?: number;
+  matchCandidateCap?: number;
 }): void {
+  if (overrides.matchCandidateCap !== undefined) {
+    matchCandidateCapValue = overrides.matchCandidateCap;
+  }
   if (overrides.maxPageSize !== undefined) {
     maxPageSize = overrides.maxPageSize;
   }
@@ -576,6 +594,14 @@ export function resetSearchBoundsForTests(): void {
   maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
   timeBudgetMs = SEARCH_TIME_BUDGET_MS;
   maxAssembledLinkResources = SERVER_MAX_ASSEMBLED_LINK_RESOURCES;
+  matchCandidateCapValue = SEARCH_MATCH_CANDIDATE_CAP;
+}
+
+// The effective candidate cap for a broad `matches` term (see
+// SEARCH_MATCH_CANDIDATE_CAP), read through a function so the test seam
+// above reaches it.
+export function matchCandidateCap(): number {
+  return matchCandidateCapValue;
 }
 
 // The effective assembled-resource budget. Read through a function rather than

@@ -8,6 +8,8 @@ import {
   param,
   query,
   rri,
+  resetSearchBoundsForTests,
+  setSearchBoundsForTests,
   VirtualNetwork,
   type DefinitionLookup,
   type Filter,
@@ -1150,6 +1152,136 @@ module(basename(import.meta.filename), function () {
         [`${testRealmURL}both.json`, `${testRealmURL}one.json`],
         'the row matching both union terms ranks ahead of the one-term row',
       );
+    });
+
+    // A broad term (more matches than the candidate cap on a side) ranks a
+    // capped candidate set: its best field matches and the first page-only
+    // ones, with the total reported as a lower bound.
+    module('a term broader than the candidate cap', function (hooks) {
+      hooks.beforeEach(async function () {
+        setSearchBoundsForTests({ matchCandidateCap: 3 });
+        for (let name of ['alpha', 'beta']) {
+          await seedRow(dbAdapter, {
+            url: `${testRealmURL}lantern-${name}.json`,
+            markdown: `Lantern ${name}: a brass lantern.`,
+            searchDoc: { _title: `Lantern ${name}` },
+            fieldText: `lantern ${name} brass lantern`,
+          });
+        }
+        for (let i = 0; i < 8; i++) {
+          await seedRow(dbAdapter, {
+            url: `${testRealmURL}shed-${i}.json`,
+            markdown: `Shed ${i}, where an old lantern hangs by the door.`,
+            searchDoc: { _title: `Shed ${i}` },
+            fieldText: `shed ${i}`,
+          });
+        }
+      });
+      hooks.afterEach(function () {
+        resetSearchBoundsForTests();
+      });
+
+      async function lanternSearch(page: {
+        size: number;
+        exactTotal?: boolean;
+      }) {
+        let { results, meta } = await engine.search(
+          new URL(testRealmURL),
+          {
+            filter: { matches: 'lantern' },
+            sort: [{ by: '_matchRelevance', direction: 'desc' }],
+            page,
+          },
+          {},
+          { kind: 'dataOnly' },
+        );
+        return { urls: results.map((r) => r.url), meta };
+      }
+
+      test('the top rows are the same, and the total is a flagged lower bound', async function (assert) {
+        let exact = await lanternSearch({ size: 2, exactTotal: true });
+        assert.strictEqual(exact.meta.page.total, 10, 'every match counted');
+        assert.strictEqual(
+          exact.meta.page.totalIsEstimate,
+          undefined,
+          'an exact total carries no flag',
+        );
+
+        let capped = await lanternSearch({ size: 2 });
+        assert.deepEqual(
+          capped.urls,
+          exact.urls,
+          'the first page is the one the exact search answers',
+        );
+        assert.deepEqual(capped.urls.sort(), [
+          `${testRealmURL}lantern-alpha.json`,
+          `${testRealmURL}lantern-beta.json`,
+        ]);
+        assert.true(capped.meta.page.totalIsEstimate, 'flagged an estimate');
+        assert.true(
+          capped.meta.page.total >= 3,
+          `at least the cap's candidates; got ${capped.meta.page.total}`,
+        );
+        assert.true(
+          capped.meta.page.total < 10,
+          `not every match was counted; got ${capped.meta.page.total}`,
+        );
+      });
+
+      test("the search sheet's any of matches and title contains is capped the same way", async function (assert) {
+        let sheet = (page: { size: number; exactTotal?: boolean }) =>
+          engine.search(
+            new URL(testRealmURL),
+            {
+              filter: {
+                any: [
+                  { matches: 'lantern' },
+                  { contains: { _title: 'lantern' } },
+                ],
+              },
+              sort: [{ by: '_matchRelevance', direction: 'desc' }],
+              page,
+            },
+            {},
+            { kind: 'dataOnly' },
+          );
+        let exact = await sheet({ size: 2, exactTotal: true });
+        let capped = await sheet({ size: 2 });
+        assert.strictEqual(exact.meta.page.total, 10);
+        assert.deepEqual(
+          capped.results.map((r) => r.url),
+          exact.results.map((r) => r.url),
+          'the same first page',
+        );
+        assert.true(capped.meta.page.totalIsEstimate);
+        assert.true(capped.meta.page.total < 10);
+      });
+
+      test('a term within the cap is exact and unflagged', async function (assert) {
+        let { meta } = await engine.search(
+          new URL(testRealmURL),
+          { filter: { matches: 'brass' }, page: { size: 5 } },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(meta.page.total, 2);
+        assert.strictEqual(meta.page.totalIsEstimate, undefined);
+      });
+
+      test('a broad term under not is never capped', async function (assert) {
+        let { meta } = await engine.search(
+          new URL(testRealmURL),
+          {
+            filter: {
+              every: [{ matches: 'shed' }, { not: { matches: 'lantern' } }],
+            },
+            page: { size: 5 },
+          },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(meta.page.total, 0, 'every shed holds a lantern');
+      });
     });
 
     test('rejects a relevance sort with no positive matches term', async function (assert) {

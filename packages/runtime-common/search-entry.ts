@@ -2245,6 +2245,9 @@ export function combineSearchEntryResults(
   for (let doc of docs) {
     combined.data.push(...doc.data);
     combined.meta.page.total += doc.meta?.page?.total ?? 0;
+    if (doc.meta?.page?.totalIsEstimate) {
+      combined.meta.page.totalIsEstimate = true;
+    }
     // Facet counts add up across realms. Each realm returns only its own top
     // values, so a value common overall but outside one realm's top `size`
     // is undercounted there.

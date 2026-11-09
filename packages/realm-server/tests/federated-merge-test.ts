@@ -489,6 +489,29 @@ module(basename(import.meta.filename), function () {
       assert.true(aborted, "the slow realm's search is told to stop");
     });
 
+    test("a realm's estimated total makes the merged total an estimate", async function (assert) {
+      let estimating = {
+        url: B,
+        searchEntries: async () => ({
+          data: [],
+          meta: { page: { total: 1000, totalIsEstimate: true } },
+        }),
+      };
+      for (let results of ['byRealm', 'merged'] as const) {
+        let doc = await searchEntryRealms(
+          [realm(A, [{ id: 'a1', price: 1, score: 1 }]), estimating],
+          query({ federation: { results } }),
+        );
+        assert.strictEqual(doc.meta.page.total, 1001, `${results}: summed`);
+        assert.true(doc.meta.page.totalIsEstimate, `${results}: flagged`);
+      }
+      let exact = await searchEntryRealms(
+        [realm(A, [{ id: 'a1', price: 1, score: 1 }])],
+        query({}),
+      );
+      assert.strictEqual(exact.meta.page.totalIsEstimate, undefined);
+    });
+
     test('a realm that never resolved is unavailable', async function (assert) {
       let doc = await searchEntryRealms(
         [realm(A, [{ id: 'a1', price: 1, score: 1 }]), null],
