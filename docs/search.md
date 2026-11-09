@@ -703,7 +703,7 @@ A `_federated-search` request names its realms in `realms`, all on the realm ser
 }
 ```
 
-`meta.realms` reports every realm asked, `{ status, code?, total?, ms? }`, where `status` is `ok`, `refused` (with the refusal `code`), `timeout` or `unavailable`. A realm that fails never fails the search; `meta.incomplete` is true when any realm did not answer `ok`.
+`meta.realms` reports every realm asked, `{ status, code?, total?, ms? }`, where `status` is `ok`, `refused` (with the refusal `code`), `timeout` or `unavailable`. A realm that fails never fails the search; `meta.incomplete` is true when any realm did not answer `ok`. That includes a slow realm: each realm has its own deadline inside the request's time budget (the budget less a tenth of it, at most 2 s, kept for the merge), and a realm that has not answered by then is cut off and reported as `timeout` while the others' rows come back.
 
 ### Refusals
 

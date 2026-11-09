@@ -19,7 +19,11 @@ import {
   type EntryResource,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { SearchBoundError } from '@cardstack/runtime-common/search-bounds';
+import {
+  SearchBoundError,
+  realmDeadlineWithin,
+  runWithSearchTimeBudget,
+} from '@cardstack/runtime-common/search-bounds';
 import type { PgAdapter } from '@cardstack/postgres';
 
 import {
@@ -450,6 +454,39 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(realms[C].status, 'unavailable');
       assert.strictEqual(realms['http://d/'].status, 'timeout');
       assert.true(doc.meta.incomplete, 'kept for the clients that read it');
+    });
+
+    test('a slow realm times out on its own, and the others still answer', async function (assert) {
+      let aborted = false;
+      let slow = {
+        url: B,
+        searchEntries: (
+          _q: SearchEntryQuery,
+          opts?: { signal?: AbortSignal },
+        ) =>
+          new Promise<never>(() => {
+            opts?.signal?.addEventListener('abort', () => (aborted = true));
+          }),
+      };
+      // The request's budget, as the search handler runs it: each realm's
+      // deadline falls inside it, so the search answers rather than a 408.
+      let budget = 1_000;
+      let started = Date.now();
+      let doc = await runWithSearchTimeBudget(
+        (signal) =>
+          searchEntryRealms(
+            [realm(A, [{ id: 'a1', price: 1, score: 1 }]), slow],
+            query({ federation: { results: 'merged' } }),
+            { signal, realmDeadline: realmDeadlineWithin(budget) },
+          ),
+        budget,
+      );
+      assert.ok(Date.now() - started < budget, 'answered inside the budget');
+      assert.deepEqual(ids(doc), ['a:a1'], "the fast realm's rows");
+      assert.strictEqual(doc.meta.realms![A].status, 'ok');
+      assert.strictEqual(doc.meta.realms![B].status, 'timeout');
+      assert.true(doc.meta.incomplete);
+      assert.true(aborted, "the slow realm's search is told to stop");
     });
 
     test('a realm that never resolved is unavailable', async function (assert) {

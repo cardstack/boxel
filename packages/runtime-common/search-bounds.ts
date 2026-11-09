@@ -809,6 +809,17 @@ export function applyServerSearchPageBound(query: Query): Query {
 // the federated fan-out swallows the abort (it treats an aborted realm as a
 // failed realm). The abandoned runner promise gets a no-op catch so its late
 // abort rejection isn't an unhandled rejection.
+// When each realm of a federated search must have answered, so one slow
+// realm is reported as a timeout (`meta.realms[url].status`) while the rest
+// answer, inside the request's own budget: the budget less a reserve for
+// merging and serializing the answer (a tenth of it, at most 2 s).
+export function realmDeadlineWithin(
+  budgetMs: number = timeBudgetMs,
+  now: number = Date.now(),
+): number {
+  return now + budgetMs - Math.min(2_000, Math.floor(budgetMs / 10));
+}
+
 export async function runWithSearchTimeBudget<T>(
   run: (signal: AbortSignal) => Promise<T>,
   budgetMs: number = timeBudgetMs,

@@ -202,6 +202,10 @@ export type SearchOpts = {
   // engine's `loadLinks` fan-out stops promptly instead of running to
   // completion. Threaded the same way as `timings`.
   signal?: AbortSignal;
+  // A federated search's deadline for each realm (epoch ms; see
+  // `realmDeadlineWithin`): a realm that has not answered by then is cut off
+  // and reported as a timeout, and the search answers with the others.
+  realmDeadline?: number;
 };
 
 // Indirection so a host integration test can deterministically capture

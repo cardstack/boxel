@@ -16,6 +16,7 @@ import {
   policyScopedQuery,
   policyScopedRealms,
   runWithSearchTimeBudget,
+  realmDeadlineWithin,
   sanitizeConsumingRealmHeader,
   SearchBoundError,
   SearchRequestError,
@@ -862,6 +863,9 @@ export default function handleSearch(opts: {
     // lazy-mount work entirely.
     let runSearch = async () => {
       let doRun = async (signal?: AbortSignal) => {
+        // Each realm gets its own deadline inside the request's budget, so
+        // one slow realm is reported as a timeout and the rest still answer.
+        let realmDeadline = itemLegBounded ? realmDeadlineWithin() : undefined;
         // Only the realms rows are read from are mounted: the caller reads
         // them, or their policy scopes the caller into them. A realm an
         // earlier step of the request already tried to mount is answered as
@@ -883,6 +887,7 @@ export default function handleSearch(opts: {
           {
             ...runSearchOpts,
             ...(signal ? { signal } : {}),
+            ...(realmDeadline !== undefined ? { realmDeadline } : {}),
           },
           scopedQueries.size === 0
             ? undefined

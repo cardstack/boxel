@@ -22,6 +22,7 @@ import {
   type SearchOpts,
 } from './search-utils.ts';
 import { RequestTimings } from './request-timings.ts';
+import { SearchBoundError } from './search-bounds.ts';
 import { internalSortKeyIn } from './internal-sort-keys.ts';
 import { lowerQuery, usesNewSyntax } from './query-syntax.ts';
 import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
@@ -2470,11 +2471,16 @@ export async function searchEntryRealms(
       }
       let t0 = Date.now();
       try {
-        let doc = await realm.searchEntries(
-          perRealmQuery(
-            queryForRealm ? queryForRealm(realm) : searchEntryQuery,
-          ),
+        let doc = await withRealmDeadline(
+          opts?.realmDeadline,
           perRealmOpts,
+          (o) =>
+            realm.searchEntries(
+              perRealmQuery(
+                queryForRealm ? queryForRealm(realm) : searchEntryQuery,
+              ),
+              o,
+            ),
         );
         return {
           url,
@@ -2633,6 +2639,52 @@ export async function searchEntryRealms(
     );
   }
   return combined;
+}
+
+// One realm's search, cut off at the federated search's per-realm deadline:
+// the realm's own signal aborts (so its link fan-out stops) and the search
+// fails as a timeout, which the merge reports for that realm alone. The
+// caller's own signal still aborts it.
+async function withRealmDeadline<T>(
+  deadline: number | undefined,
+  opts: SearchOpts | undefined,
+  run: (opts: SearchOpts | undefined) => Promise<T>,
+): Promise<T> {
+  if (deadline == null) {
+    return run(opts);
+  }
+  let controller = new AbortController();
+  let outer = opts?.signal;
+  let onAbort = () => controller.abort(outer?.reason);
+  if (outer?.aborted) {
+    controller.abort(outer.reason);
+  } else {
+    outer?.addEventListener('abort', onAbort, { once: true });
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => {
+        let error = new SearchBoundError(
+          408,
+          'this realm did not answer within the request time limit',
+        );
+        controller.abort(error);
+        reject(error);
+      },
+      Math.max(0, deadline - Date.now()),
+    );
+  });
+  let running = run({ ...opts, signal: controller.signal });
+  running.catch(() => {});
+  try {
+    return await Promise.race([running, timedOut]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    outer?.removeEventListener('abort', onAbort);
+  }
 }
 
 // How a realm's failed search reads in `meta.realms`: a refusal the query
