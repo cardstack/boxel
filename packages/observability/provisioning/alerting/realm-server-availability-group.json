@@ -711,6 +711,363 @@
           "for": "0s",
           "isPaused": false,
           "notification_settings": null
+        },
+        {
+          "uid": "rs-db-pool-stuck",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "realm-server-availability-group",
+          "title": "Realm Server DB Pool Stuck",
+          "condition": "B",
+          "annotations": {
+            "summary": "{{ if $values }}A realm-server process had a database acquisition waiting more than 60s for a pool connection in every 1-minute bin of the last 5 minutes (the rule reduces the window with min, so one bin under the threshold keeps it quiet). Sourced from dbOldestWaitMs on the periodic health line: the wait of the oldest acquisition still queued. A pool that is only busy keeps its queue moving, so this stays short however many acquisitions wait (dbWaiting); it climbs when the pool's connections are held by work that is not finishing, and every database-touching request on that process hangs behind it. The load balancer's check and /_liveness do not touch the pool and stay green. Read dbIdleInTxMaxMs and dbAdvisoryWaitMaxMs on the same line: a long idle transaction is a holder that stopped driving its work, a long advisory wait is a writer queued behind a lock holder. pg_stat_activity names the sessions. Replacing the task drops its connections and clears a wedge it cannot leave on its own.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about the database pool. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /dbOldestWaitMs=/\n| parse @message /dbOldestWaitMs=(?<v>\\d+)/\n| stats max(v) as maxOldestWaitMs by bin(1m)",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}:log-group:${REALM_SERVER_LOG_GROUP_NAME}",
+                    "name": "${REALM_SERVER_LOG_GROUP_NAME}"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "min",
+                "refId": "C",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [60000, 0],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "rs-db-idle-in-transaction",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "realm-server-availability-group",
+          "title": "Realm Server DB Transaction Left Idle",
+          "condition": "B",
+          "annotations": {
+            "summary": "{{ if $values }}A database session of the realm-server's role sat idle inside an open transaction for more than 5 minutes at some point in the last 5 minutes. Sourced from dbIdleInTxMaxMs on the periodic health line, which a realm-server process reads from pg_stat_activity on a connection of its own every 30s; the reading covers the whole database, so every replica reports the same session. A request's transaction is idle between its statements for milliseconds. One idle for minutes is a client that stopped driving its transaction, and its locks, advisory locks included, stay taken until it ends. Find it in pg_stat_activity (state 'idle in transaction', oldest state_change) and read client_addr and query, its last statement, to see which task holds it and what it was doing.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about idle transactions. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /dbIdleInTxMaxMs=/\n| parse @message /dbIdleInTxMaxMs=(?<v>\\d+)/\n| stats max(v) as maxIdleInTxMs by bin(1m)",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}:log-group:${REALM_SERVER_LOG_GROUP_NAME}",
+                    "name": "${REALM_SERVER_LOG_GROUP_NAME}"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [300000, 0],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "rs-db-advisory-lock-wait",
+          "orgID": 1,
+          "folderUID": "defd2d156sav4d",
+          "ruleGroup": "realm-server-availability-group",
+          "title": "Realm Server DB Advisory Lock Wait",
+          "condition": "B",
+          "annotations": {
+            "summary": "{{ if $values }}A database session of the realm-server's role was blocked acquiring an advisory lock for more than 5 minutes at some point in the last 5 minutes. Sourced from dbAdvisoryWaitMaxMs on the periodic health line, read from pg_stat_activity (wait_event 'advisory') on a connection of the probe's own every 30s; dbAdvisoryWaiters on the same line counts the blocked sessions. Each one holds a pooled connection while it waits, so enough of them starve the pool. The holder is the session the waiters queue behind: in pg_locks it holds the granted advisory lock with the waiters' classid/objid, and it is usually idle in transaction.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about advisory lock waits. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "dimensions": {},
+                "expression": "filter @message like /dbAdvisoryWaitMaxMs=/\n| parse @message /dbAdvisoryWaitMaxMs=(?<v>\\d+)/\n| stats max(v) as maxAdvisoryWaitMs by bin(1m)",
+                "id": "",
+                "intervalMs": 1000,
+                "label": "",
+                "logGroups": [
+                  {
+                    "accountId": "${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${REALM_SERVER_LOG_GROUP_ACCOUNT_ID}:log-group:${REALM_SERVER_LOG_GROUP_NAME}",
+                    "name": "${REALM_SERVER_LOG_GROUP_NAME}"
+                  }
+                ],
+                "matchExact": true,
+                "maxDataPoints": 43200,
+                "metricEditorMode": 0,
+                "metricName": "",
+                "metricQueryType": 0,
+                "namespace": "",
+                "period": "",
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default",
+                "sqlExpression": "",
+                "statistic": "Average"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "max",
+                "refId": "C",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [300000, 0],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": []
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "avg"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "name": "Expression",
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "C",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "B",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "notification_settings": null
         }
       ]
     }

@@ -358,18 +358,21 @@ export class PgAdapter implements DBAdapter {
 
   // The connection scheduler's state when read, for the health sampler:
   // connections checked out against the pool's max, acquisitions waiting,
-  // and how many of those wait only because their tenant is at its share.
+  // how many of those wait only because their tenant is at its share, and how
+  // long the longest-waiting of them has waited.
   get connectionStats(): {
     inUse: number;
     limit: number;
     waiting: number;
     waitingAtShare: number;
+    oldestWaitMs: number;
   } {
     return {
       inUse: this.#scheduler.inUse,
       limit: this.#scheduler.limit,
       waiting: this.#scheduler.waiting,
       waitingAtShare: this.#scheduler.waitingAtShare,
+      oldestWaitMs: this.#scheduler.oldestWaitMs,
     };
   }
 
