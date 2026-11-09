@@ -1064,10 +1064,13 @@ module(basename(import.meta.filename), function () {
         dbAdapter = adapter;
       },
       afterEach: async () => {
-        for (let adapter of extraAdapters) {
+        // Detached before closing, so a test that hangs and is torn down
+        // twice does not close the same adapters again.
+        let adapters = extraAdapters;
+        extraAdapters = [];
+        for (let adapter of adapters) {
           await adapter.close();
         }
-        extraAdapters = [];
       },
     });
 
