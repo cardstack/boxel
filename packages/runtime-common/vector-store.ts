@@ -66,6 +66,9 @@ export interface VectorStore {
   oneCardVectors(realmURL: string, url: string): Promise<StoredVector[]>;
   // A `select` column holding a card's vectors at a field.
   vectorColumn(fieldPath: string, list: boolean, alias: string): string;
+  // Gives each space a home before vectors are written in it (a partition,
+  // in Postgres). Runs outside the writer's transaction.
+  ensureSpaces(spaces: string[]): Promise<void>;
   // Index writes: remove the rows `condition` selects; add `rows`.
   deleteVectors(condition: Expression): Expression;
   insertVectors(rows: VectorRow[]): Expression;
@@ -165,6 +168,7 @@ export class SqliteVectorStore implements VectorStore {
   async vectorCounts() {
     return [];
   }
+  async ensureSpaces(): Promise<void> {}
   async oneCardVectors(): Promise<StoredVector[]> {
     return [];
   }

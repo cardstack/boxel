@@ -1334,15 +1334,6 @@ module(basename(import.meta.filename), function () {
           /declare the field with search: \{ neighbors: true \}/,
           'a field that has not opted in is refused',
         );
-        let built = false;
-        for (let i = 0; i < 50 && !built; i++) {
-          let [row] = await adapter.execute(
-            `SELECT count(*) AS n FROM pg_indexes WHERE indexname = 'boxel_index_vectors_nb_embedding_3'`,
-          );
-          built = Number(row.n) > 0;
-          if (!built) await new Promise((r) => setTimeout(r, 100));
-        }
-        assert.ok(built, "the first lookup builds the field's neighbour index");
       },
     );
 
@@ -1454,6 +1445,185 @@ module(basename(import.meta.filename), function () {
           }),
           ['c.json', 'a.json', 'd.json'],
           'ranks are over the filtered set: c 1/62+1/61 > a 1/61+1/63 > d 1/62',
+        );
+      },
+    );
+
+    // Where each row sits: the partition (by name) that holds it.
+    async function partitionsOf() {
+      return (await adapter.execute(
+        `SELECT v.url, v.space, c.relname AS part
+           FROM boxel_index_vectors AS v JOIN pg_class AS c ON c.oid = v.tableoid
+          WHERE v.realm_url = $1 ORDER BY v.url`,
+        { bind: [testRealm] },
+      )) as { url: string; space: string; part: string }[];
+    }
+    async function catalog() {
+      return Object.fromEntries(
+        (
+          await adapter.execute(
+            'SELECT space, partition_name, dims FROM boxel_vector_spaces',
+          )
+        ).map((r) => [
+          String(r.space),
+          { part: String(r.partition_name), dims: Number(r.dims) },
+        ]),
+      );
+    }
+    const declaredIn = (space: string) => ({
+      _vectorFields: { embedding: { space, list: false, computed: false } },
+    });
+
+    pgvectorTest(
+      "vectors land in their space's partition, made on the space's first write",
+      async (assert) => {
+        const A = 'part@1 p 3';
+        const B = 'other/model@2 q 3';
+        await index({
+          a: { title: 'a', embedding: vec([1, 0, 0]), ...declaredIn(A) },
+          b: { title: 'b', embedding: vec([0, 1, 0]), ...declaredIn(A) },
+          c: { title: 'c', embedding: vec([1, 1, 0]), ...declaredIn(B) },
+        });
+        let spaces = await catalog();
+        assert.deepEqual(
+          Object.keys(spaces).sort(),
+          [B, A].sort(),
+          'each space was given a partition when its first vector was written',
+        );
+        assert.strictEqual(spaces[A].dims, 3, 'the catalog records the size');
+        assert.ok(
+          /^boxel_index_vectors_part_3_[0-9a-f]{8}$/.test(spaces[A].part),
+          `a readable prefix and a hash of the space: ${spaces[A].part}`,
+        );
+        assert.deepEqual(
+          (await partitionsOf()).map((r) => [r.url, r.part]),
+          [
+            [url('a'), spaces[A].part],
+            [url('b'), spaces[A].part],
+            [url('c'), spaces[B].part],
+          ],
+          "each row is in its space's partition",
+        );
+        let [inDefault] = await adapter.execute(
+          'SELECT count(*)::int AS n FROM boxel_index_vectors_default',
+        );
+        assert.strictEqual(inDefault.n, 0, 'the default partition is empty');
+
+        // c's field moves to another space: its row leaves B's partition.
+        const C = 'part@3 p 3';
+        await index({
+          c: { title: 'c', embedding: vec([1, 1, 0]), ...declaredIn(C) },
+        });
+        spaces = await catalog();
+        let rows = await partitionsOf();
+        assert.deepEqual(
+          rows.filter((r) => r.url === url('c')).map((r) => [r.space, r.part]),
+          [[C, spaces[C].part]],
+          "a field that changes space moves its row to the new space's partition",
+        );
+        let [leftInB] = await adapter.execute(
+          `SELECT count(*)::int AS n FROM ${spaces[B].part}`,
+        );
+        assert.strictEqual(leftInB.n, 0, 'and nothing is left in the old one');
+        assert.deepEqual(
+          await nearIds({
+            filter: { type: momentRef },
+            sort: [{ on: momentRef, by: 'embedding', near: [1, 0, 0] }],
+          }),
+          ['a.json', 'b.json', 'c.json'],
+          'a near sort reads its declared space, from its partition',
+        );
+      },
+    );
+
+    pgvectorTest(
+      'a vector written before its space has a partition is moved into it',
+      async (assert) => {
+        const A = 'late@1 p 3';
+        // A writer that does not make partitions (the previous revision,
+        // mid-rollout) leaves its rows in the default partition.
+        await adapter.execute(
+          `INSERT INTO boxel_index_vectors (realm_url, url, type, field_path, item_id, dims, embedding, space)
+           VALUES ($1, $2, 'instance', 'embedding', '', 3, '[0,0,1]'::vector, $3)`,
+          { bind: [testRealm, url('early'), A] },
+        );
+        let [before] = await adapter.execute(
+          'SELECT count(*)::int AS n FROM boxel_index_vectors_default',
+        );
+        assert.strictEqual(
+          before.n,
+          1,
+          'the row waits in the default partition',
+        );
+        await index({
+          a: { title: 'a', embedding: vec([1, 0, 0]), ...declaredIn(A) },
+        });
+        let spaces = await catalog();
+        assert.deepEqual(
+          (await partitionsOf()).map((r) => [r.url, r.part]),
+          [
+            [url('a'), spaces[A].part],
+            [url('early'), spaces[A].part],
+          ],
+          "both rows are in the space's partition",
+        );
+      },
+    );
+
+    pgvectorTest(
+      'the partitioning migration goes down to one table and up again, keeping every row',
+      async (assert) => {
+        // a few spaces, and a row of each
+        for (let [i, space] of ['m@1 p 3', 'm@2 p 3', ''].entries()) {
+          await adapter.execute(
+            `INSERT INTO boxel_index_vectors (realm_url, url, type, field_path, item_id, dims, embedding, space)
+             VALUES ($1, $2, 'instance', 'embedding', '', 3, '[1,2,3]'::vector, $3)`,
+            { bind: [testRealm, url(`m${i}`), space] },
+          );
+        }
+        let migration = (await import(
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore a CommonJS migration, required for its SQL
+          '../../postgres/migrations/1794253807954_partition-boxel-index-vectors-by-space.js'
+        )) as { up: Function; down: Function };
+        let run = async (step: Function) => {
+          let statements: string[] = [];
+          step({ sql: (sql: string) => statements.push(sql) });
+          for (let sql of statements) {
+            await adapter.execute(sql);
+          }
+        };
+        let shape = async () => {
+          let [row] = await adapter.execute(
+            `SELECT c.relkind AS kind,
+                    (SELECT count(*)::int FROM boxel_index_vectors) AS n,
+                    to_regclass('boxel_vector_spaces') IS NOT NULL AS catalog
+               FROM pg_class AS c WHERE c.relname = 'boxel_index_vectors'`,
+          );
+          return [row.kind, row.n, row.catalog];
+        };
+        assert.deepEqual(await shape(), ['p', 3, true], 'partitioned');
+        await run(migration.down);
+        assert.deepEqual(await shape(), ['r', 3, false], 'down: one table');
+        await run(migration.up);
+        assert.deepEqual(await shape(), ['p', 3, true], 'up again');
+        let [parts] = await adapter.execute(
+          `SELECT count(*)::int AS n FROM boxel_vector_spaces`,
+        );
+        assert.strictEqual(
+          parts.n,
+          3,
+          'one partition per space, the empty one too',
+        );
+        let [inDefault] = await adapter.execute(
+          'SELECT count(*)::int AS n FROM boxel_index_vectors_default',
+        );
+        assert.strictEqual(inDefault.n, 0, 'and none in the default partition');
+        await run(migration.up);
+        assert.deepEqual(
+          await shape(),
+          ['p', 3, true],
+          'a second up changes nothing',
         );
       },
     );

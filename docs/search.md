@@ -230,6 +230,8 @@ A card can carry an embedding in a `VectorField` (`@cardstack/base/vector`; Qwen
 
 `near` targets are a number array or a vector in its stored form (`{ dims, encoding, scale?, data }`). A plural path (`segments.embedding`) scores a card by its nearest vector. A comparison reads only the vectors stored in the space the field's type declares, wherever the target came from (numbers, a card's vector, a rerank's look-alikes), so a vector left in another space, or stored before spaces were recorded, never compares just because its size matches. A target read from a card in another space is refused (`vector-space-mismatch`). Search is exact. On Postgres it needs the pgvector extension; without it a `near` query is refused with an error that says so. The SQLite index (host tests) scores singular paths only.
 
+On Postgres the vectors sit apart from the card rows, in one table partitioned by space, as vector databases keep one index per embedding model and size: a space's partition is made the first time a vector in it is written (the vectors of a space that has none yet wait in a default partition, and move into the space's partition when it is made). A search reads only the partition of the space it compares in, so another field's or another model's vectors cost it nothing. When a type moves a field to another space, each card's vectors move to the new space's partition as the card is indexed again.
+
 ```js
 let { data: nearest } = await indexer.search({
   filter: {
@@ -377,7 +379,7 @@ rerank: {
 }
 ```
 
-Look-alikes are read through a nearest-neighbor index, which a vector field opts into: `@field imageEmbedding = contains(ImageEmbedding, { search: { neighbors: true } })`. The first lookup by a declared field builds one HNSW index for that field and dimension, concurrently; until it is ready, lookups scan exactly. A field that has not opted in is refused with the declaration to add, and keeps exact `near` search and no index. The index is approximate (about 98% of the exact neighbors on a real catalog), which suits a comparison set; `near` filters and sorts stay exact. Each lookup stays within the realm. Under a realm policy, a neighbor the grants do not admit is left out. Postgres with pgvector only.
+Look-alikes are read by a vector field that opts into them: `@field imageEmbedding = contains(ImageEmbedding, { search: { neighbors: true } })`. Lookups scan the field's vectors in its space's partition exactly. A field that has not opted in is refused with the declaration to add. Each lookup stays within the realm. Under a realm policy, a neighbor the grants do not admit is left out. Postgres with pgvector only.
 
 Aggregates a card stores, such as a category's median price, are fields like any other (`category.medianPrice`, when the link is searchable). Under a realm policy, the grants that scope the caller's query also scope `compare.filter`. A comparison set runs on Postgres only.
 

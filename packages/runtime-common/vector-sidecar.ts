@@ -22,6 +22,14 @@ import { spaceDimensions } from './vector-space.ts';
 //
 // `.vectors.jsonl` is a reserved suffix. A sidecar belongs to its card: it is
 // never a file row of its own, and it moves, copies and deletes with its card.
+//
+// Practice: quantized vector storage, int8 with a scale (Qdrant's scalar
+// quantization; pgvector's `halfvec` and `bit` are the same idea inside the
+// database), and embeddings kept beside their source with the model that
+// made them and a hash of what they were made from (see
+// vector-index-writer.ts). Boxel's mapping: the sidecar keeps float32 or
+// int8 per line; the store keeps full precision, and its search index reads
+// a half-precision copy.
 
 export const VECTOR_SIDECAR_SUFFIX = '.vectors.jsonl';
 // A sidecar may be much larger than an ordinary realm file: a float32 line at

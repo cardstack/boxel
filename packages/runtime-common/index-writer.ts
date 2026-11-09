@@ -3933,6 +3933,7 @@ export class Batch {
       {
         dbAdapter: this.#dbAdapter,
         realmURL: this.realmURL.href,
+        stagingId: this.#stagingId,
         query: (expression) => this.#query(expression),
         stagedSearchDocs: (chunk, filter) =>
           this.#stagedSearchDocs(chunk, filter),

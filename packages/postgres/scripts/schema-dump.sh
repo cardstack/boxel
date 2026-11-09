@@ -3,7 +3,8 @@ set -euo pipefail
 
 tmpFile='./schema_tmp.sql'
 # boxel_index_passages is excluded too: SQLite matches passages from the
-# search doc. boxel_index_vectors is excluded: it exists only where Postgres has
+# search doc. boxel_index_vectors (with its per-space partitions) and its
+# catalog boxel_vector_spaces are excluded: they exist only where Postgres has
 # pgvector, and the SQLite index scores `near` sorts from the search doc.
 # boxel_index_spill is excluded: the SQLite index never spills (ADR 021 §1.8).
 # boxel_term_stats and boxel_realm_text_stats are excluded: BM25 is
@@ -70,6 +71,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=retired_realm_event_rooms \
   --exclude-table-and-children=host_shell_generation \
   --exclude-table-and-children=boxel_index_vectors \
+  --exclude-table-and-children=boxel_vector_spaces \
   --exclude-table-and-children=boxel_index_passages \
   --exclude-table-and-children=boxel_index_spill \
   --exclude-table-and-children=boxel_index_words \

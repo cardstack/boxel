@@ -7,6 +7,7 @@ import {
 } from './expression.ts';
 import type { DBAdapter } from './db.ts';
 import { hasVectorIndex } from './vector-index.ts';
+import { spaceDimensions } from './vector-space.ts';
 import type {
   LookalikeRequest,
   NearTarget,
@@ -16,6 +17,25 @@ import type {
 } from './vector-store.ts';
 
 const log = logger('vector-store-pg');
+
+// The partition a space's vectors live in: a readable prefix (the
+// vectorizer's name and the size) and a hash of the whole space, since a
+// space is free text. The migration that partitioned the table names the
+// existing spaces' partitions the same way; `boxel_vector_spaces` records
+// each name, and is what every read goes by.
+const partitionNameSql = `'boxel_index_vectors_'
+  || left(coalesce(nullif(trim(both '_' FROM regexp_replace(
+       lower(split_part(split_part($1::text, '@', 1), ' ', 1)),
+       '[^a-z0-9]+', '_', 'g')), ''), 'space'), 18)
+  || '_' || $2::int || '_' || left(md5($1::text), 8)`;
+
+const DEFAULT_PARTITION = 'boxel_index_vectors_default';
+
+// A string as a SQL literal, for DDL (which takes no bind parameters).
+// Standard-conforming strings are on, so doubling quotes is the whole escape.
+function sqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
 
 // Vectors in Postgres, with pgvector.
 //
@@ -54,6 +74,131 @@ export class PgVectorStore implements VectorStore {
 
   available(): Promise<boolean> {
     return hasVectorIndex(this.#dbAdapter);
+  }
+
+  // Whether the table is partitioned by space, with its catalog. A table
+  // from before the partitioning migration is not, and every space then
+  // shares it. Probed every half minute: the migration runs at startup, but
+  // a database migrated under a running process is seen soon after.
+  #partitionedAt = 0;
+  #partitioned: Promise<boolean> | undefined;
+  #isPartitioned(): Promise<boolean> {
+    if (!this.#partitioned || Date.now() - this.#partitionedAt > 30_000) {
+      this.#partitionedAt = Date.now();
+      this.#partitioned = this.#dbAdapter
+        .execute(
+          `SELECT to_regclass('boxel_vector_spaces') IS NOT NULL
+              AND EXISTS (SELECT 1 FROM pg_partitioned_table
+                           WHERE partrelid = to_regclass('boxel_index_vectors')) AS partitioned`,
+        )
+        .then((rows) => Boolean(rows[0]?.partitioned))
+        .catch(() => false);
+    }
+    return this.#partitioned;
+  }
+
+  // The spaces that have a partition, by space.
+  #spaces = new Map<string, { partition: string; dims: number | null }>();
+  async #loadSpaces() {
+    let rows = await this.#dbAdapter.execute(
+      'SELECT space, partition_name, dims FROM boxel_vector_spaces',
+    );
+    this.#spaces = new Map(
+      rows.map((row) => [
+        String(row.space),
+        {
+          partition: String(row.partition_name),
+          dims: row.dims == null ? null : Number(row.dims),
+        },
+      ]),
+    );
+  }
+
+  // Gives each space its own partition before vectors are written in it.
+  // Runs in a transaction of its own, before the index writer's swap writes
+  // any vector: attaching a partition locks the DEFAULT partition, which a
+  // swap that had already written vectors would hold. Creation is
+  // serialized by an advisory lock and is a no-op for a space that already
+  // has one, so writers in several processes may race to create the same
+  // space. A space whose partition can't be made in time (`lock_timeout`)
+  // is written into the DEFAULT partition, where every read still finds it,
+  // and moved out the next time its partition is created.
+  async ensureSpaces(spaces: string[]): Promise<void> {
+    let wanted = [...new Set(spaces)].filter(
+      (space) => !this.#spaces.has(space),
+    );
+    if (wanted.length === 0 || !(await this.#isPartitioned())) {
+      return;
+    }
+    await this.#loadSpaces();
+    for (let space of wanted) {
+      if (this.#spaces.has(space)) {
+        continue;
+      }
+      try {
+        await this.#createPartition(space);
+      } catch (e) {
+        log.warn(
+          `could not create the vector partition for "${space}"; its vectors stay in the default partition: ${(e as Error).message}`,
+        );
+      }
+    }
+    await this.#loadSpaces();
+  }
+
+  async #createPartition(space: string) {
+    let dims = spaceDimensions(space) ?? 0;
+    await this.#dbAdapter.withTransaction(
+      async (q) => {
+        await q([`SET LOCAL lock_timeout = '2s'`]);
+        await q([
+          `SELECT pg_advisory_xact_lock(hashtext('boxel_index_vectors partitions'))`,
+        ]);
+        let [known] = await q([
+          'SELECT partition_name FROM boxel_vector_spaces WHERE space =',
+          param(space),
+        ]);
+        if (known) {
+          return;
+        }
+        let [named] = await this.#dbAdapter.execute(
+          `SELECT ${partitionNameSql} AS name`,
+          { bind: [space, dims] },
+        );
+        let name = String(named.name);
+        if (!/^[a-z0-9_]+$/.test(name)) {
+          throw new Error(`unexpected partition name ${name}`);
+        }
+        // A table of the parent's shape, filled with any rows of the space
+        // that landed in the DEFAULT partition, then attached: attaching
+        // locks the parent only against other DDL, where creating the table
+        // as a partition would lock out every read and write of the parent.
+        await q([`CREATE TABLE ${name} (LIKE boxel_index_vectors)`]);
+        let [hasDefault] = await q([
+          `SELECT to_regclass('${DEFAULT_PARTITION}') IS NOT NULL AS present`,
+        ]);
+        if (hasDefault?.present) {
+          await q([
+            `WITH moved AS (DELETE FROM ${DEFAULT_PARTITION} WHERE space =`,
+            param(space),
+            `RETURNING *) INSERT INTO ${name} SELECT * FROM moved`,
+          ]);
+        }
+        await q([
+          `ALTER TABLE boxel_index_vectors ATTACH PARTITION ${name} FOR VALUES IN (${sqlLiteral(space)})`,
+        ]);
+        await q([
+          'INSERT INTO boxel_vector_spaces (space, partition_name, dims) VALUES (',
+          param(space),
+          ',',
+          param(name),
+          ',',
+          param(dims || null),
+          ')',
+        ]);
+      },
+      { label: `vector partition for ${space}` },
+    );
   }
 
   // An uncorrelated IN rather than a correlated EXISTS: under AND the
@@ -131,14 +276,13 @@ export class PgVectorStore implements VectorStore {
   }
 
   // Each source card's nearest cards by one field, in its realm and space.
-  // The field path and dimension are inlined, checked, so the planner
-  // matches the partial index; the iterative scan keeps reading the index
-  // until enough rows of this realm turn up.
+  // The field path and dimension are inlined, checked. The settings are for
+  // an HNSW index: the iterative scan keeps reading it until enough rows of
+  // this realm turn up.
   async lookalikes(
     request: LookalikeRequest,
   ): Promise<{ src: string; nb: string; sim: number }[]> {
     let { realmURL, fieldPath: field, dims, k: fetchK, allowed } = request;
-    void this.#ensureNeighborIndex(field, dims);
     let vec = `::vector(${dims})`;
     let pairs = await this.#dbAdapter.withTransaction(async (q) => {
       // A failed SET aborts the whole transaction in Postgres, so the
@@ -188,46 +332,6 @@ export class PgVectorStore implements VectorStore {
       nb: String(p.nb),
       sim: Number(p.sim),
     }));
-  }
-
-  // The nearest-neighbour index for one declared vector field and
-  // dimension: an HNSW index over that slice of boxel_index_vectors, built
-  // once, concurrently, the first time a search asks for look-alikes by it.
-  // Until it is valid, lookups scan exactly.
-  #neighborIndexes = new Map<string, Promise<void>>();
-  #ensureNeighborIndex(field: string, dims: number): Promise<void> {
-    let key = `${field}:${dims}`;
-    let pending = this.#neighborIndexes.get(key);
-    if (pending) return pending;
-    let slug = field
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .slice(0, 30);
-    let name = `boxel_index_vectors_nb_${slug}_${dims}`;
-    pending = (async () => {
-      try {
-        let [existing] = await this.#dbAdapter.execute(
-          `SELECT i.indisvalid AS valid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname = $1`,
-          { bind: [name] },
-        );
-        if (existing && existing.valid) return;
-        if (existing) {
-          await this.#dbAdapter.execute(
-            `DROP INDEX CONCURRENTLY IF EXISTS ${name}`,
-          );
-        }
-        await this.#dbAdapter.execute(
-          `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${name} ON boxel_index_vectors USING hnsw ((embedding::vector(${dims})) vector_cosine_ops) WHERE field_path = '${field}' AND dims = ${dims}`,
-        );
-      } catch (e) {
-        this.#neighborIndexes.delete(key);
-        log.warn(
-          `could not build the neighbour index ${name}: ${(e as Error).message}`,
-        );
-      }
-    })();
-    this.#neighborIndexes.set(key, pending);
-    return pending;
   }
 
   // How many vectors a card holds per field and space.

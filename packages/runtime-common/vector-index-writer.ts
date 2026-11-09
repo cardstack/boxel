@@ -56,6 +56,9 @@ export type VectorSidecarReader = (
 export interface VectorIndexWriterHost {
   dbAdapter: DBAdapter;
   realmURL: string;
+  // the pass's staging id, whose rows in `boxel_index_pending` are the
+  // cards being indexed
+  stagingId: string;
   query(expression: Expression): Promise<Record<string, PgPrimitive>[]>;
   stagedSearchDocs(
     chunk: string[],
@@ -96,6 +99,35 @@ export async function vectorSidecarMtimes(
   return found;
 }
 
+// The spaces the staged cards of `chunk` declare their vector fields in.
+async function stagedVectorSpaces(
+  host: VectorIndexWriterHost,
+  chunk: string[],
+): Promise<string[]> {
+  let rows = await host.query([
+    `SELECT DISTINCT f.value ->> 'space' AS space
+       FROM boxel_index_pending AS p
+       CROSS JOIN LATERAL jsonb_each(
+         CASE WHEN jsonb_typeof(p.search_doc -> '_vectorFields') = 'object'
+              THEN p.search_doc -> '_vectorFields' ELSE '{}'::jsonb END
+       ) AS f
+      WHERE`,
+    ...every([
+      ['p.realm_url =', param(host.realmURL)],
+      ['p.staging_id =', param(host.stagingId)],
+      [
+        'p.url IN',
+        ...addExplicitParens(
+          separatedByCommas(chunk.map((url) => [param(url)])),
+        ),
+      ],
+    ]),
+  ] as Expression);
+  return rows
+    .map((row) => row.space)
+    .filter((space): space is string => typeof space === 'string');
+}
+
 // Re-derives the stored vectors for every URL a pass staged. A card
 // with a sidecar (`<card>.vectors.jsonl`) takes its vectors from the
 // sidecar alone; a card without one takes the inline values its search doc
@@ -118,6 +150,18 @@ export async function syncVectorIndex(
   }
   let realm = host.realmURL;
   const CHUNK = 500;
+  // Every space the pass's cards declare a vector field in has its home in
+  // the store before any vector is written (see `ensureSpaces`).
+  let spaces = new Set<string>();
+  for (let start = 0; start < urls.length; start += CHUNK) {
+    for (let space of await stagedVectorSpaces(
+      host,
+      urls.slice(start, start + CHUNK),
+    )) {
+      spaces.add(space);
+    }
+  }
+  await store.ensureSpaces([...spaces]);
   for (let start = 0; start < urls.length; start += CHUNK) {
     let chunk = urls.slice(start, start + CHUNK);
     let rows = await host.stagedSearchDocs(

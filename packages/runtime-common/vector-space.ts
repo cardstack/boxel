@@ -9,6 +9,15 @@
 // ('vector 1024'), comparable only with other plain vectors of that size. A
 // type from before spaces were declared in full, which names only an
 // `embeddingModel`, reads as 'legacy:<model> <size>' until it is ported.
+//
+// Practice: model versioning for embeddings. Vectors from different models,
+// revisions or sizes are not comparable, so vector databases keep one
+// collection or index per model (Elasticsearch and OpenSearch: one index per
+// model and dimension; Pinecone and Qdrant: one collection per model), and
+// RAG pipelines tag each stored embedding with the model that made it.
+// Boxel's mapping: the space string is that tag, on every stored vector; the
+// store partitions by it (vector-store-pg.ts), and a search never compares
+// two spaces.
 
 export interface VectorSpaceSource {
   vectorizer?: string;
