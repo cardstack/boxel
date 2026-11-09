@@ -252,17 +252,32 @@ function stub(opts: StubOptions = {}): Stub {
       }
     },
     // The realm gate's contract: undefined when nothing it covers is in
-    // flight, otherwise a promise that settles once it has.
+    // flight, otherwise a promise that settles once it has. A wait is
+    // counted when the promise is awaited, not when the gate is asked: a
+    // synchronous re-check reads the answer without waiting on it.
     drainIndexing() {
       if (!inFlight) {
         return undefined;
       }
-      drains++;
-      calls.push('drain');
-      drainLockDepths.push(held);
-      return Promise.resolve().then(() => {
+      let settled = Promise.resolve().then(() => {
         inFlight = false;
       });
+      let lockDepthWhenAsked = held;
+      let awaited = false;
+      return {
+        then(
+          onFulfilled?: ((value: void) => unknown) | null,
+          onRejected?: ((reason: unknown) => unknown) | null,
+        ) {
+          if (!awaited) {
+            awaited = true;
+            drains++;
+            calls.push('drain');
+            drainLockDepths.push(lockDepthWhenAsked);
+          }
+          return settled.then(onFulfilled, onRejected);
+        },
+      } as unknown as Promise<void>;
     },
     async isIgnored(url) {
       return (opts.ignored ?? []).some((p) => url.href === `${REALM}${p}`);
