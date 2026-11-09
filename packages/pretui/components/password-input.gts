@@ -2,14 +2,14 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { PasswordStrength, estimateWhenIdle, loadPasswordEstimator } from './password-strength';
 import type { StrengthReading } from './password-strength';
-import { TYPED_BLOCK_RULES, TYPED_FONT } from '../internal/extras';
+import { TYPED_PROPERTIES, typedProperties } from '../internal/extras';
 import { FieldDress } from '../internal/field-dress';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
 
 // BoxelInput @type='password' plus the reveal toggle boxel-ui doesn't
 // ship: an overlay eye button flips the native type to text while pressed
@@ -35,9 +35,12 @@ import { FieldDress } from '../internal/field-dress';
 // logged, put in the DOM as text, or sent anywhere; zxcvbn runs entirely
 // locally and there is no network call on this path.
 
-const PASSWORD_METRICS = htmlSafe(
-  `${TYPED_BLOCK_RULES} padding-inline-end: 1.875rem;`,
-);
+// The field's metrics, written through the CSSOM by `keepStyle` so the input
+// renders no `style` attribute; a revealable field also keeps its end clear of
+// the reveal button.
+const PASSWORD_METRICS = typedProperties({
+  'padding-inline-end': '1.875rem',
+});
 
 /** Idle time after the last keystroke before an estimate runs. Long enough
  * that a live region is not narrating mid-word, short enough to feel live. */
@@ -94,8 +97,8 @@ export class PasswordInput extends Component<PasswordInputSignature> {
   get autocomplete() {
     return this.args.autocomplete ?? 'current-password';
   }
-  get inputStyle() {
-    return this.revealable ? PASSWORD_METRICS : TYPED_FONT;
+  get inputProperties(): KeptProperty[] {
+    return this.revealable ? PASSWORD_METRICS : TYPED_PROPERTIES;
   }
   get strength() {
     return this.args.strength ?? false;
@@ -190,7 +193,7 @@ export class PasswordInput extends Component<PasswordInputSignature> {
         @autocomplete={{this.autocomplete}}
         @onInput={{this.handleInput}}
         id={{@controlId}}
-        style={{this.inputStyle}}
+        {{keepStyle this.inputProperties}}
       />
       {{#if this.revealable}}
         <button

@@ -1,8 +1,8 @@
 // Pretui — Spinner: an indeterminate busy indicator, sized in pixels.
 import Component from '@glimmer/component';
-import { htmlSafe } from '@ember/template';
 import type { PretuiSize, PretuiSizeArg } from '../pretui-primitives';
 import { resolvePixelSize } from '../internal/feedback';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
 
 const SPINNER_PX: Record<PretuiSize, number> = {
   xs: 9,
@@ -25,12 +25,19 @@ export interface SpinnerSignature {
 // `aria-label='…'` and splattributes wins. Promoting it to an arg is the
 // native-attribute-swallowing bug this whole alias pass exists to avoid.
 export class Spinner extends Component<SpinnerSignature> {
-  get style() {
-    let size = resolvePixelSize(this.args.size, SPINNER_PX);
-    return htmlSafe(`width: ${size}px; height: ${size}px`);
+  // The size is written through the CSSOM rather than a `style` attribute,
+  // which a strict Content Security Policy refuses. Without `@size` it is the
+  // component's default, and a caller's own `width`/`height` win over it.
+  get keptStyle(): KeptProperty[] {
+    let size = `${resolvePixelSize(this.args.size, SPINNER_PX)}px`;
+    const strength = this.args.size === undefined ? 'default' : 'arg';
+    return [
+      { property: 'width', value: size, strength },
+      { property: 'height', value: size, strength },
+    ];
   }
   <template>
-    <span class='pretui-spinner' role='status' aria-label='Loading' style={{this.style}} data-test-pretui-spinner ...attributes></span>
+    <span class='pretui-spinner' role='status' aria-label='Loading' {{keepStyle this.keptStyle}} data-test-pretui-spinner ...attributes></span>
     <style scoped>
       @layer PretComponent {
         @keyframes pretui-spin {

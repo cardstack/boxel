@@ -474,16 +474,20 @@ test.describe('the secure window’s key pages', () => {
       'Team weather',
     );
     await expect(keys.locator('[data-test-key-value]')).toHaveCount(0);
-    await keys.locator('[data-test-workspace-dropdown-trigger]').click();
     await keys
-      .locator('[data-test-workspace-dropdown-search]')
+      .locator(
+        '[data-test-workspace-dropdown] [data-test-pretui-select-trigger]',
+      )
+      .click();
+    await keys
+      .locator('[data-test-pretui-select-search-input]')
       .fill(realmName.slice(0, 8));
     await snapshot(
       testInfo,
       keys,
       'share a key from your keys: choosing the workspace',
     );
-    await keys.locator(`[data-test-workspace-option="${realmName}"]`).click();
+    await keys.getByRole('option', { name: realmName, exact: true }).click();
     await keys.locator('[data-test-share-label]').fill('Weather for everyone');
     await snapshot(testInfo, keys, 'share a key from your keys');
     await keys.locator('[data-test-share-key-save]').click();
