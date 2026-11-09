@@ -30,11 +30,11 @@ export class BrowserManager {
 
     let launchArgs: string[] = [];
     // The renderer runs card code from any realm, so the sandbox stays on
-    // wherever Chrome is known to start it. That is macOS, where the sandbox
-    // needs no privileges: local development.
+    // wherever Chrome starts it without privileges: macOS and Windows, which
+    // only ever run the prerenderer for local development.
     //
     // It is off in two cases:
-    // - Off the Mac. The deployed prerenderer is a Linux ECS task, where
+    // - On Linux. The deployed prerenderer is a Linux ECS task, where
     //   Chrome's sandbox has not been shown to start, and a prerenderer that
     //   cannot launch Chrome renders nothing. There the boundary is the task
     //   itself: a separate ECS task, isolated from the realm-server. Linux CI
@@ -45,7 +45,7 @@ export class BrowserManager {
     //
     // The gate is the platform, not an env var, so a missing variable can't
     // break the deployed launch.
-    if (process.platform !== 'darwin' || v8ProfEnabled()) {
+    if (process.platform === 'linux' || v8ProfEnabled()) {
       launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
     }
 

@@ -50,13 +50,13 @@ export default defineConfig({
         viewport: { width: 1600, height: 1000 },
         launchOptions: {
           // The browser runs model-written card code. Playwright starts
-          // Chromium with its sandbox off unless asked. On macOS the sandbox
-          // needs no privileges, so it is on. On Linux the bundled Chromium has
-          // no setuid sandbox helper, so it needs unprivileged user
-          // namespaces, which Ubuntu 23.10+ blocks for it by default. There
-          // the suite keeps the sandbox off rather than depend on the host's
-          // settings.
-          chromiumSandbox: process.platform === 'darwin',
+          // Chromium with its sandbox off unless asked. On macOS and Windows
+          // the sandbox needs no privileges, so it is on. On Linux the bundled
+          // Chromium has no setuid sandbox helper, so it needs unprivileged
+          // user namespaces, which Ubuntu 23.10+ blocks for it by default.
+          // There the suite keeps the sandbox off rather than depend on the
+          // host's settings.
+          chromiumSandbox: process.platform !== 'linux',
           args: ['--ignore-certificate-errors', '--allow-insecure-localhost'],
         },
       },

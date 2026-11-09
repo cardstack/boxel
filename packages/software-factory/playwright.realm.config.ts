@@ -12,11 +12,11 @@ export default defineConfig({
   },
   use: {
     // The specs this config runs come from a realm. Playwright starts Chromium
-    // with its sandbox off unless asked. On macOS the sandbox needs no
-    // privileges, so it is on. On Linux the bundled Chromium has no setuid
+    // with its sandbox off unless asked. On macOS and Windows the sandbox needs
+    // no privileges, so it is on. On Linux the bundled Chromium has no setuid
     // sandbox helper, so it needs unprivileged user namespaces, which Ubuntu
     // 23.10+ blocks for it by default. There the run keeps the sandbox off
     // rather than depend on the host's settings.
-    launchOptions: { chromiumSandbox: process.platform === 'darwin' },
+    launchOptions: { chromiumSandbox: process.platform !== 'linux' },
   },
 });
