@@ -40,12 +40,12 @@ import {
   type SerializedError,
 } from './error.ts';
 import type { DBAdapter } from './db.ts';
-import { hasVectorIndex, collectSearchDocVectors } from './vector-index.ts';
 import {
-  parseVectorSidecar,
-  sidecarHash,
-  type SidecarLineError,
-} from './vector-sidecar.ts';
+  syncVectorIndex,
+  vectorSidecarMtimes,
+  type VectorSidecarReader,
+} from './vector-index-writer.ts';
+export type { VectorSidecarReader } from './vector-index-writer.ts';
 import { collectSearchDocPassages } from './passage-index.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
@@ -146,24 +146,6 @@ export class IndexWriter {
     return !row;
   }
 }
-
-// The vector fields a search doc declares (`_vectorFields`, written when the
-// card is rendered): each one's space, and whether it sits inside a list.
-function vectorFieldsOfDoc(
-  searchDoc: unknown,
-): Record<string, { space: string; list: boolean; computed: boolean }> {
-  let fields = (searchDoc as { _vectorFields?: unknown } | null)?._vectorFields;
-  return fields && typeof fields === 'object'
-    ? (fields as Record<
-        string,
-        { space: string; list: boolean; computed: boolean }
-      >)
-    : {};
-}
-
-export type VectorSidecarReader = (
-  cardURL: string,
-) => Promise<{ content: string; lastModified: number } | undefined>;
 
 export type IndexEntry = InstanceEntry | IndexErrorEntry | FileEntry;
 export type LastModifiedTimes = Map<
@@ -901,27 +883,11 @@ export class Batch {
   // The modified time of the sidecar each card's vectors were loaded from,
   // by card URL. Empty where there is no vector table.
   async vectorSidecarMtimes(): Promise<Map<string, number>> {
-    let found = new Map<string, number>();
-    if (!(await hasVectorIndex(this.#dbAdapter))) {
-      return found;
-    }
-    try {
-      let rows = (await this.#query([
-        'SELECT url, sidecar_mtime FROM boxel_index_vector_sidecars WHERE realm_url =',
-        param(this.realmURL.href),
-      ] as Expression)) as {
-        url: string;
-        sidecar_mtime: number | string | null;
-      }[];
-      for (let row of rows) {
-        if (row.sidecar_mtime != null) {
-          found.set(row.url, Number(row.sidecar_mtime));
-        }
-      }
-    } catch {
-      // the sidecar table arrives with a later migration
-    }
-    return found;
+    return await vectorSidecarMtimes(
+      this.#dbAdapter,
+      (expression) => this.#query(expression),
+      this.realmURL.href,
+    );
   }
 
   // The generation this batch stages its rows under (see
@@ -3960,243 +3926,21 @@ export class Batch {
     ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[];
   }
 
-  // Re-derives `boxel_index_vectors` for every URL this pass staged. A card
-  // with a sidecar (`<card>.vectors.jsonl`) takes its vectors from the
-  // sidecar alone; a card without one takes the inline values its search doc
-  // carries (see `collectSearchDocVectors`). Every row records the space of
-  // its vector, from the field's declared space (`_vectorFields` in the
-  // search doc). A sidecar line whose field, space or item doesn't fit the
-  // card is left out and recorded as an error on that vector. A card whose
-  // sidecar hash is the one its rows were loaded from keeps its rows
-  // untouched. A tombstoned URL keeps none. Runs inside the swap
-  // transaction, so a `near` sort never sees a card's new row with its old
-  // vectors. A no-op where the database has no vector table (SQLite, or a
-  // Postgres without pgvector).
+  // Re-derives the stored vectors for every URL this pass staged (see
+  // vector-index-writer.ts). Runs inside the swap transaction.
   async #syncVectorIndex() {
-    if (!(await hasVectorIndex(this.#dbAdapter))) {
-      return;
-    }
-    let realm = this.realmURL.href;
-    let urls = [...this.#invalidations];
-    const CHUNK = 500;
-    for (let start = 0; start < urls.length; start += CHUNK) {
-      let chunk = urls.slice(start, start + CHUNK);
-      let rows = await this.#stagedSearchDocs(
-        chunk,
-        `(search_doc::text LIKE '%"vec:[%' OR jsonb_exists(search_doc, '_vectorFields'))`,
-      );
-      let loaded = new Map<string, string>();
-      if (this.#readVectorSidecar) {
-        let known = (await this.#query([
-          'SELECT url, type, sidecar_hash FROM boxel_index_vector_sidecars WHERE',
-          ...every([
-            ['realm_url =', param(realm)],
-            [
-              'url IN',
-              ...addExplicitParens(
-                separatedByCommas(chunk.map((url) => [param(url)])),
-              ),
-            ],
-          ]),
-        ] as Expression)) as {
-          url: string;
-          type: string;
-          sidecar_hash: string;
-        }[];
-        for (let row of known) {
-          loaded.set(`${row.url}\u0000${row.type}`, row.sidecar_hash);
-        }
-      }
-
-      // Which cards keep their rows, and which sidecars to load.
-      let keep = new Set<string>();
-      let sidecars = new Map<
-        string,
-        { content: string; lastModified: number; hash: string }
-      >();
-      let plain: typeof rows = [];
-      for (let row of rows) {
-        let sidecar =
-          this.#readVectorSidecar && row.type === 'instance'
-            ? await this.#readVectorSidecar(row.url)
-            : undefined;
-        if (!sidecar) {
-          plain.push(row);
-          continue;
-        }
-        let hash = await sidecarHash(sidecar.content);
-        if (loaded.get(`${row.url}\u0000${row.type}`) === hash) {
-          keep.add(row.url);
-        } else {
-          sidecars.set(row.url, { ...sidecar, hash });
-        }
-      }
-
-      let clear = chunk.filter((url) => !keep.has(url));
-      if (clear.length > 0) {
-        await this.#query([
-          'DELETE FROM boxel_index_vectors WHERE',
-          ...every([['realm_url =', param(realm)], this.#stagedInChunk(clear)]),
-        ] as Expression);
-        if (this.#readVectorSidecar) {
-          await this.#query([
-            'DELETE FROM boxel_index_vector_sidecars WHERE',
-            ...every([
-              ['realm_url =', param(realm)],
-              this.#stagedInChunk(clear),
-            ]),
-          ] as Expression);
-        }
-      }
-
-      let values: Expression[] = [];
-      let push = (
-        row: { url: string; type: string },
-        v: {
-          fieldPath: string;
-          itemId: string;
-          ordinal: number;
-          space: string;
-          sourceHash: string | undefined;
-          components: ArrayLike<number>;
-        },
-      ) =>
-        values.push([
-          '(',
-          param(realm),
-          ',',
-          param(row.url),
-          ',',
-          param(row.type),
-          ',',
-          param(v.fieldPath),
-          ',',
-          param(v.itemId),
-          ',',
-          param(v.ordinal),
-          ',',
-          param(v.space),
-          ',',
-          param(v.sourceHash ?? null),
-          ',',
-          param(v.components.length),
-          ', CAST(',
-          param(`[${Array.from(v.components).join(',')}]`),
-          'AS vector))',
-        ]);
-
-      for (let row of plain) {
-        let fields = vectorFieldsOfDoc(row.search_doc);
-        for (let vector of collectSearchDocVectors(row.search_doc)) {
-          let info = fields[vector.fieldPath];
-          push(row, {
-            fieldPath: vector.fieldPath,
-            itemId:
-              info?.list || vector.ordinal > 0 ? `#${vector.ordinal}` : '',
-            ordinal: vector.ordinal,
-            space: info?.space ?? `vector ${vector.components.length}`,
-            sourceHash: undefined,
-            components: vector.components,
-          });
-        }
-      }
-
-      let records: Expression[] = [];
-      for (let row of rows) {
-        let sidecar = sidecars.get(row.url);
-        if (!sidecar) {
-          continue;
-        }
-        let fields = vectorFieldsOfDoc(row.search_doc);
-        let { vectors, errors } = parseVectorSidecar(sidecar.content);
-        let ordinals = new Map<string, number>();
-        for (let v of vectors) {
-          let info = fields[v.field];
-          let refuse = (code: string, message: string) =>
-            errors.push({
-              line: 0,
-              field: v.field,
-              item: v.item,
-              code,
-              message,
-            });
-          if (!info) {
-            refuse(
-              'unknown-vector-field',
-              `${v.field} is not a vector field of this card`,
-            );
-            continue;
-          }
-          if (info.computed) {
-            refuse(
-              'vector-is-computed',
-              `${v.field} is computed; the indexer writes it`,
-            );
-            continue;
-          }
-          if (v.space !== info.space) {
-            refuse(
-              'vector-space-mismatch',
-              `${v.field} is in the space "${info.space}", not "${v.space}"`,
-            );
-            continue;
-          }
-          if (info.list && !v.item) {
-            refuse(
-              'needs-item-id',
-              `${v.field} is inside a list; its line names the item`,
-            );
-            continue;
-          }
-          if (!info.list && v.item) {
-            refuse(
-              'unexpected-item-id',
-              `${v.field} is a single field; its line names no item`,
-            );
-            continue;
-          }
-          let ordinal = ordinals.get(v.field) ?? 0;
-          ordinals.set(v.field, ordinal + 1);
-          push(row, {
-            fieldPath: v.field,
-            itemId: v.item,
-            ordinal,
-            space: v.space,
-            sourceHash: v.sourceHash,
-            components: v.components,
-          });
-        }
-        records.push([
-          '(',
-          param(realm),
-          ',',
-          param(row.url),
-          ',',
-          param(row.type),
-          ',',
-          param(sidecar.hash),
-          ',',
-          param(sidecar.lastModified),
-          ', CAST(',
-          param(JSON.stringify(errors satisfies SidecarLineError[])),
-          'AS jsonb))',
-        ]);
-      }
-
-      for (let i = 0; i < values.length; i += CHUNK) {
-        await this.#query([
-          'INSERT INTO boxel_index_vectors (realm_url, url, type, field_path, item_id, ordinal, space, source_hash, dims, embedding) VALUES',
-          ...separatedByCommas(values.slice(i, i + CHUNK)),
-        ] as Expression);
-      }
-      for (let i = 0; i < records.length; i += CHUNK) {
-        await this.#query([
-          'INSERT INTO boxel_index_vector_sidecars (realm_url, url, type, sidecar_hash, sidecar_mtime, errors) VALUES',
-          ...separatedByCommas(records.slice(i, i + CHUNK)),
-          'ON CONFLICT (realm_url, url, type) DO UPDATE SET sidecar_hash = EXCLUDED.sidecar_hash, sidecar_mtime = EXCLUDED.sidecar_mtime, errors = EXCLUDED.errors',
-        ] as Expression);
-      }
-    }
+    await syncVectorIndex(
+      {
+        dbAdapter: this.#dbAdapter,
+        realmURL: this.realmURL.href,
+        query: (expression) => this.#query(expression),
+        stagedSearchDocs: (chunk, filter) =>
+          this.#stagedSearchDocs(chunk, filter),
+        stagedInChunk: (chunk) => this.#stagedInChunk(chunk),
+        readVectorSidecar: this.#readVectorSidecar,
+      },
+      [...this.#invalidations],
+    );
   }
 
   // Re-derives `boxel_index_passages` for every URL this pass staged, the

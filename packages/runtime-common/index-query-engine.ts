@@ -67,11 +67,14 @@ import {
   SEARCH_RANK_SIGNALS,
   SEARCH_TEXT_KEY,
 } from './search-intent.ts';
-import { vectorDimensions, vectorToSqlLiteral } from './serializers/vector.ts';
 import {
-  hasVectorIndex,
-  VECTOR_INDEX_UNAVAILABLE_MESSAGE,
-} from './vector-index.ts';
+  VectorQuery,
+  isNearSort,
+  nearSimilarityAlias,
+  type VectorStatus,
+} from './vector-query.ts';
+export { NEAR_SIMILARITY_KEY, isNearSort } from './vector-query.ts';
+export { spacesOfSql } from './vector-store-pg.ts';
 import {
   type Query,
   type Filter,
@@ -194,36 +197,6 @@ import {
 // never made searchable (fixable by annotating it) from a query-backed
 // relationship, which is never in the doc at all and cannot be filtered
 // through.
-// The space of a near target read from a stored card (a one-card binding),
-// keyed by the target's array. A target written as numbers has none, and
-// compares with whatever the field holds at its size.
-const vectorTargetSpaces = new WeakMap<object, string>();
-
-// Restricts a vector-table alias to the target's space, when it has one.
-function spaceCondition(alias: string, target: unknown): Expression {
-  let space =
-    target && typeof target === 'object'
-      ? vectorTargetSpaces.get(target)
-      : undefined;
-  return space == null ? [] : [`AND ${alias}.space =`, param(space)];
-}
-
-// The space a near filter's field is declared in, keyed by the filter's
-// `{ to, minSimilarity }` entry (the filter compiler is synchronous, so
-// `#assertNearFilters` reads it first).
-const nearFilterDeclaredSpaces = new WeakMap<object, string>();
-
-// Restricts a vector-table alias to the space its field is declared in, so a
-// vector stored in another space (a stale one, or one from before spaces
-// were recorded, `space = ''`) never compares with the target, even when it
-// has the same size.
-function declaredSpaceCondition(
-  alias: string,
-  space: string | undefined,
-): Expression {
-  return space == null ? [] : [`AND ${alias}.space =`, param(space)];
-}
-
 export class FilterRefersToNonsearchableFieldError extends Error {
   type: CodeRef;
   // The full filter path as written (e.g. `bestFriend.friends.name`).
@@ -705,15 +678,6 @@ export function defaultSortDirection(sort: object): 'asc' | 'desc' {
     : 'asc';
 }
 
-// A `near` sort ranks by cosine similarity between a VectorField and a target
-// vector (see `NearSortTarget` in query.ts). Like `_matchRelevance`, the score
-// belongs to the query and reads "higher is better": `_search` projects it as
-// an aggregated, aliased column (`nearSimilarityAlias`) and the order builders
-// reference the alias, defaulting to `desc` (most similar first). The first
-// near sort's similarity (1 = same direction, -1 = opposite) rides each
-// result's `meta._nearSimilarity`.
-export const NEAR_SIMILARITY_KEY = '_nearSimilarity';
-
 // A `_blend` sort fuses several ranking signals with reciprocal rank fusion
 // (see `BlendSortExpression` in query.ts). Like the other synthetic keys it is
 // projected as a column (`blendScoreAlias`) and ordered by alias, defaulting
@@ -794,25 +758,6 @@ function blendScoreAlias(sort: Sort, index: number): string {
   return index === firstBlend ? BLEND_SCORE_KEY : `${BLEND_SCORE_KEY}_${index}`;
 }
 
-export function isNearSort(sort: object): sort is {
-  by: string;
-  on: CodeRef;
-  near: NearSortTarget;
-  direction?: 'asc' | 'desc';
-} {
-  return 'near' in sort && (sort as { near?: unknown }).near != null;
-}
-
-// The alias of the sort at `index`'s similarity column: the first near sort
-// gets `_nearSimilarity` (which `meta._nearSimilarity` reads), any later one a
-// suffixed alias.
-function nearSimilarityAlias(sort: Sort, index: number): string {
-  let firstNear = sort.findIndex((s) => isNearSort(s));
-  return index === firstNear
-    ? NEAR_SIMILARITY_KEY
-    : `${NEAR_SIMILARITY_KEY}_${index}`;
-}
-
 export { isValidPrerenderedHtmlFormat };
 
 // Whether a predicate sits under an even (`positive`) or odd (`negated`) number
@@ -874,6 +819,8 @@ export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
   #definitionLookup: DefinitionLookup;
   #virtualNetwork: VirtualNetwork;
+  // near sorts, filters and signals, look-alikes, and the space guard
+  #vectors: VectorQuery;
 
   constructor(
     dbAdapter: DBAdapter,
@@ -883,6 +830,16 @@ export class IndexQueryEngine {
     this.#dbAdapter = dbAdapter;
     this.#definitionLookup = definitionLookup;
     this.#virtualNetwork = virtualNetwork;
+    this.#vectors = new VectorQuery({
+      dbAdapter,
+      virtualNetwork,
+      fieldOf: async (on, path) =>
+        await getField(
+          await this.getDefinition(on),
+          path,
+          this.#definitionLookup,
+        ),
+    });
   }
 
   async #query(expression: Expression, signal?: AbortSignal) {
@@ -1829,7 +1786,7 @@ export class IndexQueryEngine {
           ];
         }
       }
-      let { nearColumns, nearJoins } = await this.#nearSortExpressions(
+      let { nearColumns, nearJoins } = await this.#vectors.nearSortExpressions(
         sort,
         realmURL,
       );
@@ -2691,35 +2648,6 @@ export class IndexQueryEngine {
     >
   > {
     let compare = query.rerank!.compare!;
-    let field = compare.near!;
-    if (this.#dbAdapter.kind !== 'pg') {
-      throw new InvalidQueryError(
-        'rerank: look-alikes (compare.near) run on Postgres only',
-        'needs-postgres',
-      );
-    }
-    let anchor = filterAnchor(query.filter);
-    let declared = false;
-    if (anchor) {
-      try {
-        let definition = await this.getDefinition(anchor);
-        let def = await getField(definition, field, this.#definitionLookup);
-        declared =
-          typeof def.search === 'object' && def.search?.neighbors === true;
-      } catch {
-        declared = false;
-      }
-    }
-    if (!declared) {
-      throw new InvalidQueryError(
-        `rerank: compare.near reads each card's look-alikes by "${field}", which needs a neighbour index: declare the field with search: { neighbors: true }, and anchor the query on its type`,
-        'needs-declaration',
-      );
-    }
-    let [dimsRow] = await this.#dbAdapter.execute(
-      'SELECT dims FROM boxel_index_vectors WHERE realm_url = $1 AND field_path = $2 LIMIT 1',
-      { bind: [realmURL.href, field] },
-    );
     let out = new Map<
       string,
       {
@@ -2727,95 +2655,30 @@ export class IndexQueryEngine {
         stats: Record<string, Record<string, number | null>>;
       }
     >();
-    if (!dimsRow || rowUrls.length === 0) {
-      return out;
-    }
-    let dims = Number(dimsRow.dims);
-    if (!Number.isInteger(dims) || dims < 1 || dims > 2000) {
-      return out;
-    }
-    void this.#ensureNeighborIndex(field, dims);
-
-    let declaredSpace = await this.#declaredSpaceOf(
-      realmURL,
-      anchor!,
-      field,
-      undefined,
-      'rerank: compare.near',
-    );
     let k = Math.min(compare.k ?? DEFAULT_NEAR_PEERS, MAX_NEAR_PEERS);
-    // The neighbours a row may have: those its comparison filter and, for a
-    // caller a policy scopes, its grants admit. They are applied inside the
-    // nearest-neighbour read, before its ORDER BY and LIMIT, so rows the
-    // caller cannot see never take an admitted neighbour's place.
-    let allowed: Set<string> | undefined;
-    if (compare.filter || opts.grantFilter) {
-      let { results } = await this._search(
-        realmURL,
-        { filter: compare.filter, let: query.let },
-        { ...opts, cardUrls: undefined },
-        ['SELECT i.url AS url'],
-        entryType,
-      );
-      allowed = new Set(results.map((r) => String((r as any).url)));
-    }
-    // The field path and dimension are inlined, checked, so the planner
-    // matches the partial index; the iterative scan keeps reading the index
-    // until enough rows of this realm turn up.
-    let fetchK = k;
-    let vec = `::vector(${dims})`;
-    let pairs = await this.#dbAdapter.withTransaction(async (q) => {
-      // A failed SET aborts the whole transaction in Postgres, so the
-      // settings go in a savepoint: on an older pgvector, which has neither,
-      // the savepoint is rolled back and the read runs as a plain index scan,
-      // which may return fewer.
-      await q(['SAVEPOINT hnsw_settings']);
-      try {
-        await q(['SET LOCAL hnsw.iterative_scan = relaxed_order']);
-        await q([`SET LOCAL hnsw.ef_search = ${Math.max(40, fetchK * 2)}`]);
-        await q(['RELEASE SAVEPOINT hnsw_settings']);
-      } catch {
-        await q(['ROLLBACK TO SAVEPOINT hnsw_settings']);
-      }
-      return await q([
-        `SELECT s.url AS src, n.url AS nb, n.sim AS sim
-           FROM boxel_index_vectors AS s
-           CROSS JOIN LATERAL (
-             SELECT v.url, 1 - (v.embedding${vec} <=> s.embedding${vec}) AS sim
-               FROM boxel_index_vectors AS v
-              WHERE v.field_path = '${field}' AND v.dims = ${dims}
-                AND v.realm_url = s.realm_url AND v.url <> s.url
-                AND v.type = 'instance' AND v.space = s.space`,
-        ...(allowed
-          ? [
-              'AND v.url IN (SELECT jsonb_array_elements_text(',
-              param(JSON.stringify([...allowed])),
-              '::jsonb))',
-            ]
-          : []),
-        `ORDER BY v.embedding${vec} <=> s.embedding${vec}
-              LIMIT ${fetchK}
-           ) AS n
-          WHERE s.field_path = '${field}' AND s.dims = ${dims} AND s.ordinal = 0`,
-        ...declaredSpaceCondition('s', declaredSpace),
-        'AND s.realm_url =',
-        param(realmURL.href),
-        'AND s.url IN (',
-        ...rowUrls.flatMap((url, i) => (i ? [',', param(url)] : [param(url)])),
-        ')',
-      ]);
+    let bySrc = await this.#vectors.lookalikes({
+      realmURL,
+      anchor: filterAnchor(query.filter),
+      field: compare.near!,
+      sourceUrls: rowUrls,
+      k,
+      minSimilarity: compare.minSimilarity,
+      // The neighbours a row may have: those its comparison filter and, for
+      // a caller a policy scopes, its grants admit.
+      allowed: async () => {
+        if (!compare.filter && !opts.grantFilter) {
+          return undefined;
+        }
+        let { results } = await this._search(
+          realmURL,
+          { filter: compare.filter, let: query.let },
+          { ...opts, cardUrls: undefined },
+          ['SELECT i.url AS url'],
+          entryType,
+        );
+        return new Set(results.map((r) => String((r as any).url)));
+      },
     });
-    let bySrc = new Map<string, { url: string; sim: number }[]>();
-    for (let p of pairs as Record<string, unknown>[]) {
-      let sim = Number(p.sim);
-      let nb = String(p.nb);
-      if (compare.minSimilarity !== undefined && sim < compare.minSimilarity)
-        continue;
-      if (allowed && !allowed.has(nb)) continue;
-      let list = bySrc.get(String(p.src)) ?? [];
-      if (list.length < k) list.push({ url: nb, sim });
-      bySrc.set(String(p.src), list);
-    }
     let fields = [
       ...new Set(
         [
@@ -2869,46 +2732,6 @@ export class IndexQueryEngine {
       });
     }
     return out;
-  }
-
-  // The nearest-neighbour index for one declared vector field and
-  // dimension: an HNSW index over that slice of boxel_index_vectors, built
-  // once, concurrently, the first time a search asks for look-alikes by it.
-  // Until it is valid, lookups scan exactly.
-  #neighborIndexes = new Map<string, Promise<void>>();
-  #ensureNeighborIndex(field: string, dims: number): Promise<void> {
-    let key = `${field}:${dims}`;
-    let pending = this.#neighborIndexes.get(key);
-    if (pending) return pending;
-    let slug = field
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .slice(0, 30);
-    let name = `boxel_index_vectors_nb_${slug}_${dims}`;
-    pending = (async () => {
-      try {
-        let [existing] = await this.#dbAdapter.execute(
-          `SELECT i.indisvalid AS valid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname = $1`,
-          { bind: [name] },
-        );
-        if (existing && existing.valid) return;
-        if (existing) {
-          await this.#dbAdapter.execute(
-            `DROP INDEX CONCURRENTLY IF EXISTS ${name}`,
-          );
-        }
-        await this.#dbAdapter.execute(
-          `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${name} ON boxel_index_vectors USING hnsw ((embedding::vector(${dims})) vector_cosine_ops) WHERE field_path = '${field}' AND dims = ${dims}`,
-        );
-      } catch (e) {
-        this.#neighborIndexes.delete(key);
-        log.warn(
-          `could not build the neighbour index ${name}: ${(e as Error).message}`,
-        );
-      }
-    })();
-    this.#neighborIndexes.set(key, pending);
-    return pending;
   }
 
   // A rerank's comparison set, when its formula reads `peers.` or `stats.`:
@@ -3081,7 +2904,10 @@ export class IndexQueryEngine {
         | undefined;
       let doc = first?.search_doc;
       if (first?.url) {
-        vectorsOf[name] = await this.#oneCardVectors(realmURL, first.url);
+        vectorsOf[name] = await this.#vectors.oneCardVectors(
+          realmURL,
+          first.url,
+        );
       }
       if (typeof doc === 'string') {
         try {
@@ -3103,9 +2929,7 @@ export class IndexQueryEngine {
       // its space, so a near compares it only with vectors of that space.
       let stored = role === 'vector' ? vectorsOf[name]?.get(path) : undefined;
       if (stored) {
-        let target = [...stored.components];
-        vectorTargetSpaces.set(target, stored.space);
-        return target;
+        return this.#vectors.targetFromStored(stored);
       }
       let v: unknown = cards[name];
       for (let key of path.split('.')) {
@@ -3616,11 +3440,8 @@ export class IndexQueryEngine {
       if (plan.vector) {
         // A vector column: the card's own vectors at the field, each with its
         // space (and, inside a list, its item id), in item order.
-        let match = `v.realm_url = i.realm_url AND v.url = i.url AND v.type = i.type AND v.field_path = '${plan.vector.fieldPath.replace(/'/g, "''")}'`;
         select.push(
-          plan.vector.list
-            ? `, ANY_VALUE((SELECT jsonb_agg(jsonb_build_object('item', v.item_id, 'space', v.space, 'values', v.embedding::text::jsonb) ORDER BY v.ordinal, v.item_id) FROM boxel_index_vectors AS v WHERE ${match})) AS "__col${plan.index}"`
-            : `, ANY_VALUE((SELECT jsonb_build_object('space', v.space, 'values', v.embedding::text::jsonb) FROM boxel_index_vectors AS v WHERE ${match} AND v.item_id = '' LIMIT 1)) AS "__col${plan.index}"`,
+          this.#vectors.vectorColumn(plan.vector, `__col${plan.index}`),
         );
         continue;
       }
@@ -4310,273 +4131,11 @@ export class IndexQueryEngine {
     ]);
   }
 
-  // Resolves the VectorField a near sort or filter addresses and refuses
-  // anything else: a path that is not a VectorField, or a Postgres without
-  // the pgvector table.
   // Each vector field's state for a card read: `ok` when every vector it
   // holds is in the field's declared space, `stale` when some are in another
-  // (the type's space changed since they were written), `missing` when it
-  // holds none. Never the numbers. A sidecar line the indexer left out is
-  // reported with its field. Empty for a card with no vector fields.
-  async vectorStatus(url: URL): Promise<
-    Record<
-      string,
-      {
-        status: 'ok' | 'stale' | 'missing';
-        space: string;
-        count: number;
-        errors?: { code: string; message: string; item?: string }[];
-      }
-    >
-  > {
-    let out: Awaited<ReturnType<IndexQueryEngine['vectorStatus']>> = {};
-    if (
-      this.#dbAdapter.kind !== 'pg' ||
-      !(await hasVectorIndex(this.#dbAdapter))
-    ) {
-      return out;
-    }
-    let href = url.href.endsWith('.json') ? url.href : `${url.href}.json`;
-    let [row] = await this.#dbAdapter.execute(
-      `SELECT search_doc -> '_vectorFields' AS fields FROM boxel_index WHERE url = $1 AND type = 'instance' AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1`,
-      { bind: [href] },
-    );
-    let fields: unknown = row?.fields;
-    if (typeof fields === 'string') {
-      try {
-        fields = JSON.parse(fields);
-      } catch {
-        fields = undefined;
-      }
-    }
-    if (!fields || typeof fields !== 'object') {
-      return out;
-    }
-    let counts = await this.#dbAdapter.execute(
-      `SELECT field_path, space, count(*) AS n FROM boxel_index_vectors WHERE url = $1 AND type = 'instance' GROUP BY field_path, space`,
-      { bind: [href] },
-    );
-    let [sidecar] = await this.#dbAdapter
-      .execute(
-        `SELECT errors FROM boxel_index_vector_sidecars WHERE url = $1 AND type = 'instance' LIMIT 1`,
-        { bind: [href] },
-      )
-      .catch(() => []);
-    let errors = (
-      typeof sidecar?.errors === 'string'
-        ? JSON.parse(sidecar.errors)
-        : (sidecar?.errors ?? [])
-    ) as { field?: string; item?: string; code: string; message: string }[];
-    for (let [path, info] of Object.entries(
-      fields as Record<string, { space: string }>,
-    )) {
-      let rows = counts.filter((c) => c.field_path === path);
-      let inSpace = rows
-        .filter((c) => c.space === info.space)
-        .reduce((n, c) => n + Number(c.n), 0);
-      let other = rows
-        .filter((c) => c.space !== info.space)
-        .reduce((n, c) => n + Number(c.n), 0);
-      let fieldErrors = errors
-        .filter((e) => e.field === path)
-        .map(({ code, message, item }) => ({
-          code,
-          message,
-          ...(item ? { item } : {}),
-        }));
-      out[path] = {
-        status: other > 0 ? 'stale' : inSpace > 0 ? 'ok' : 'missing',
-        space: info.space,
-        count: inSpace,
-        ...(fieldErrors.length ? { errors: fieldErrors } : {}),
-      };
-    }
-    return out;
-  }
-
-  // A card's single (non-list) vectors, by field path, with their spaces.
-  async #oneCardVectors(
-    realmURL: URL,
-    url: string,
-  ): Promise<Map<string, { space: string; components: number[] }>> {
-    let found = new Map<string, { space: string; components: number[] }>();
-    if (
-      this.#dbAdapter.kind !== 'pg' ||
-      !(await hasVectorIndex(this.#dbAdapter))
-    ) {
-      return found;
-    }
-    let rows = await this.#dbAdapter.execute(
-      `SELECT field_path, space, embedding::text AS components FROM boxel_index_vectors WHERE realm_url = $1 AND url = $2 AND type = 'instance' AND item_id = ''`,
-      { bind: [realmURL.href, url] },
-    );
-    for (let row of rows) {
-      try {
-        let components = JSON.parse(String(row.components));
-        if (Array.isArray(components) && components.length > 0) {
-          found.set(String(row.field_path), {
-            space: String(row.space ?? ''),
-            components,
-          });
-        }
-      } catch {
-        // not a vector we can read; the binding falls back to the doc
-      }
-    }
-    return found;
-  }
-
-  // The spaces a field's vectors of one size are stored in, in the realm
-  // searched (a near search compares only that realm's vectors). Read through
-  // the (realm_url, field_path, …) indexes: without the realm the lookup read
-  // every vector of the field (1.5 s over 237k vectors). Cached briefly: a
-  // query may name the same field several times, and the answer changes only
-  // when the realm is indexed.
-  #fieldSpaces = new Map<string, { at: number; spaces: Promise<string[]> }>();
-  async #spacesOf(
-    realmURL: URL,
-    fieldPath: string,
-    dims: number,
-  ): Promise<string[]> {
-    let key = `${realmURL.href} ${fieldPath} ${dims}`;
-    let cached = this.#fieldSpaces.get(key);
-    if (!cached || Date.now() - cached.at > 30_000) {
-      cached = {
-        at: Date.now(),
-        spaces: this.#dbAdapter
-          .execute(spacesOfSql, { bind: [realmURL.href, fieldPath, dims] })
-          .then((rows) => rows.map((row) => String(row.space ?? '')))
-          .catch(() => []),
-      };
-      this.#fieldSpaces.set(key, cached);
-    }
-    return cached.spaces;
-  }
-
-  // The space a type declares one of its vector fields in, read from the
-  // `_vectorFields` its cards' search docs carry (a card from before that was
-  // recorded stored its vectors as a plain `vector <size>`). A near
-  // comparison reads only the vectors stored in it, so one in another space
-  // (stale, or `''` from before spaces were recorded) never compares with
-  // the target just because its size matches. A target read from a card
-  // carries its own space, and one in another space is refused. Undefined
-  // off Postgres. Cached for a few seconds, so a query naming the field
-  // several times asks once, and a reindex that moves a field to a new space
-  // is seen soon after.
-  #declaredSpaces = new Map<
-    string,
-    { at: number; space: Promise<string | undefined> }
-  >();
-  async #declaredSpaceOf(
-    realmURL: URL,
-    on: CodeRef,
-    fieldPath: string,
-    target: unknown,
-    what: string,
-  ): Promise<string | undefined> {
-    if (this.#dbAdapter.kind !== 'pg') {
-      return undefined;
-    }
-    let typeKey = internalKeyFor(on, undefined, this.#virtualNetwork);
-    let key = `${realmURL.href} ${typeKey} ${fieldPath}`;
-    let cached = this.#declaredSpaces.get(key);
-    if (!cached || Date.now() - cached.at > 5_000) {
-      cached = {
-        at: Date.now(),
-        space: this.#dbAdapter
-          .execute(
-            `SELECT d.space FROM (
-               SELECT bi.search_doc -> '_vectorFields' -> $3 ->> 'space' AS space,
-                      jsonb_exists(bi.search_doc, '_vectorFields') AS recorded
-                 FROM boxel_index AS bi
-                WHERE bi.realm_url = $1 AND bi.type = 'instance'
-                  AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
-                  AND COALESCE(bi.types, '[]'::jsonb) @> $2::jsonb
-                LIMIT 20
-             ) AS d
-             ORDER BY d.space IS NULL, d.recorded DESC
-             LIMIT 1`,
-            { bind: [realmURL.href, JSON.stringify([typeKey]), fieldPath] },
-          )
-          .then(([row]) =>
-            row?.space != null
-              ? String(row.space)
-              : // no card records its fields: they stored plain vectors
-                row && !row.recorded
-                ? ''
-                : undefined,
-          )
-          .catch(() => undefined),
-      };
-      this.#declaredSpaces.set(key, cached);
-    }
-    let declared = await cached.space;
-    let dims = Array.isArray(target)
-      ? vectorDimensions(target as number[])
-      : undefined;
-    // A card from before `_vectorFields` stored a plain vector of its size.
-    if (declared === '') {
-      return dims ? `vector ${dims}` : undefined;
-    }
-    let targetSpace =
-      target && typeof target === 'object'
-        ? vectorTargetSpaces.get(target)
-        : undefined;
-    if (declared != null && targetSpace != null && targetSpace !== declared) {
-      throw new InvalidQueryError(
-        `${what}: the target vector is in the space "${targetSpace}", but "${fieldPath}" is declared in "${declared}"; vectors from different spaces can't be compared`,
-        'vector-space-mismatch',
-      );
-    }
-    return declared;
-  }
-
-  // A near target read from a card carries its space: comparing it with a
-  // field whose vectors are all in other spaces is refused, never answered
-  // with distances that mean nothing.
-  async #assertNearSpace(
-    realmURL: URL | undefined,
-    fieldPath: string,
-    near: unknown,
-    what: string,
-  ) {
-    let space =
-      near && typeof near === 'object'
-        ? vectorTargetSpaces.get(near)
-        : undefined;
-    // Without the realm there are no vectors to compare against; the join's
-    // own space condition still keeps other spaces out.
-    if (space == null || !realmURL || this.#dbAdapter.kind !== 'pg') {
-      return;
-    }
-    let dims = vectorDimensions(near as number[]);
-    let spaces = await this.#spacesOf(realmURL, fieldPath, dims);
-    if (spaces.length > 0 && !spaces.includes(space)) {
-      throw new InvalidQueryError(
-        `${what}: the target vector is in the space "${space}", but "${fieldPath}" holds vectors in ${spaces.map((s) => `"${s}"`).join(', ')}; vectors from different spaces can't be compared`,
-        'vector-space-mismatch',
-      );
-    }
-  }
-
-  async #assertNearField(on: CodeRef, path: string, what: string) {
-    let definition = await this.getDefinition(on);
-    let field = await getField(definition, path, this.#definitionLookup);
-    if (field.serializerName !== 'vector') {
-      throw new InvalidQueryError(
-        `${what} requires "${path}" to be a VectorField`,
-        'needs-declaration',
-      );
-    }
-    if (
-      this.#dbAdapter.kind === 'pg' &&
-      !(await hasVectorIndex(this.#dbAdapter))
-    ) {
-      throw new InvalidQueryError(
-        VECTOR_INDEX_UNAVAILABLE_MESSAGE,
-        'needs-postgres',
-      );
-    }
+  // (see `VectorQuery#vectorStatus`).
+  async vectorStatus(url: URL): Promise<VectorStatus> {
+    return await this.#vectors.vectorStatus(url);
   }
 
   // Validates every near filter in the tree up front (field lookups are
@@ -4595,19 +4154,7 @@ export class IndexQueryEngine {
       (filter as { type?: CodeRef }).type ??
       onRef;
     if (isNearFilter(filter)) {
-      for (let [path, entry] of Object.entries(filter.near)) {
-        await this.#assertNearField(on, path, `near filter on "${path}"`);
-        if (realmURL && entry && typeof entry === 'object') {
-          let space = await this.#declaredSpaceOf(
-            realmURL,
-            on,
-            removeBrackets(path),
-            (entry as { to: number[] }).to,
-            `near filter on "${path}"`,
-          );
-          if (space != null) nearFilterDeclaredSpaces.set(entry, space);
-        }
-      }
+      await this.#vectors.assertNearFilter(filter, on, realmURL);
     } else if ('pattern' in filter || 'regex' in filter) {
       let operator = 'regex' in filter ? 'regex' : 'pattern';
       if (operator === 'regex' && this.#dbAdapter.kind !== 'pg') {
@@ -5124,62 +4671,14 @@ export class IndexQueryEngine {
     );
   }
 
-  // A near filter: the card has a vector at the path of the target's
-  // dimension and, given `minSimilarity`, at least that cosine similarity to
-  // the target. Postgres asks `boxel_index_vectors` with EXISTS (so it negates
-  // and nests like any predicate); SQLite scores the search doc's own vector,
-  // singular paths only.
+  // A near filter (see `VectorQuery#nearCondition`).
   private nearCondition(
     filter: NearFilter,
     typeConditionRef?: CodeRef,
   ): CardExpression {
-    let [path, entry] = Object.entries(filter.near)[0];
-    let { to, minSimilarity } = entry;
-    let fieldPath = removeBrackets(path);
-    let target = vectorToSqlLiteral(to);
-    let dims = vectorDimensions(to);
-    let condition: CardExpression;
-    if (this.#dbAdapter.kind === 'pg') {
-      // An uncorrelated IN rather than a correlated EXISTS: under AND the
-      // planner makes it a semi-join, and under OR (`any`) a hashed SubPlan
-      // that scans the vectors once instead of once per candidate row.
-      condition = [
-        '(i.realm_url, i.url, i.type) IN (SELECT nvf.realm_url, nvf.url, nvf.type FROM boxel_index_vectors AS nvf WHERE nvf.field_path =',
-        param(fieldPath),
-        'AND nvf.dims =',
-        param(dims),
-        ...spaceCondition('nvf', to),
-        ...declaredSpaceCondition('nvf', nearFilterDeclaredSpaces.get(entry)),
-        ...(minSimilarity == null
-          ? []
-          : [
-              'AND (nvf.embedding <=> CAST(',
-              param(target),
-              'AS vector)) <=',
-              param(1 - minSimilarity),
-            ]),
-        ')',
-      ];
-    } else {
-      let jsonPath = `$.${fieldPath}`;
-      condition = [
-        'json_array_length(substr(json_extract(i.search_doc,',
-        param(jsonPath),
-        '), 5)) =',
-        param(dims),
-        ...(minSimilarity == null
-          ? []
-          : [
-              'AND',
-              ...sqliteCosineSimilarity(jsonPath, target),
-              '>=',
-              param(minSimilarity),
-            ]),
-      ];
-    }
     return every([
       ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-      condition,
+      this.#vectors.nearCondition(filter),
     ]);
   }
 
@@ -5416,49 +4915,12 @@ export class IndexQueryEngine {
       return ['NULLIF(', ...this.matchRelevanceScore(matches, staged), ', 0)'];
     }
     if (isNearSort(component)) {
-      await this.#assertNearField(
-        component.on,
-        component.by,
-        `blend signal "${component.by}" near a vector`,
-      );
-      await this.#assertNearSpace(
+      return await this.#vectors.nearSignalScore(
+        component,
+        joinAlias,
+        joins,
         filterContext.realmURL,
-        removeBrackets(component.by),
-        component.near,
-        `blend signal "${component.by}" near a vector`,
       );
-      let target = vectorToSqlLiteral(component.near);
-      if (this.#dbAdapter.kind === 'pg') {
-        joins.push(
-          `LEFT JOIN boxel_index_vectors AS ${joinAlias} ON ${joinAlias}.realm_url = i.realm_url AND ${joinAlias}.url = i.url AND ${joinAlias}.type = i.type AND ${joinAlias}.field_path =`,
-          param(removeBrackets(component.by)),
-          `AND ${joinAlias}.dims =`,
-          param(vectorDimensions(component.near)),
-          ...spaceCondition(joinAlias, component.near),
-          ...declaredSpaceCondition(
-            joinAlias,
-            filterContext.realmURL
-              ? await this.#declaredSpaceOf(
-                  filterContext.realmURL,
-                  component.on,
-                  removeBrackets(component.by),
-                  component.near,
-                  `blend signal "${component.by}" near a vector`,
-                )
-              : undefined,
-          ),
-        );
-        return [
-          `MAX(1 - (${joinAlias}.embedding <=> CAST(`,
-          param(target),
-          'AS vector)))',
-        ];
-      }
-      return [
-        'MAX(',
-        ...sqliteCosineSimilarity(`$.${removeBrackets(component.by)}`, target),
-        ')',
-      ];
     }
     return [
       'ANY_VALUE(',
@@ -5467,85 +4929,6 @@ export class IndexQueryEngine {
         : this.generalFieldSortColumn(component.by),
       ')',
     ];
-  }
-
-  // The projection columns and joins for the query's near sorts.
-  //
-  // Postgres reads the vectors the index writer copied into
-  // `boxel_index_vectors` (one LEFT JOIN per near sort, on the card's row and
-  // the field path) and scores cosine similarity, `1 - <=>`. MAX folds a
-  // plural field's vectors into the card's nearest one, and leaves NULL
-  // (sorted last) for a card with no vector at the path. The search is exact:
-  // every row the filter admits is scored, so a near sort combines with any
-  // filter and never drops a match. While an index pass is staged (WIP
-  // reads), the table still holds the last committed vectors.
-  //
-  // SQLite (the browser index the host tests run on) has no vector type, so
-  // it scores the search doc's own "vec:[…]" string with json_each. That is a
-  // fallback for small test indexes, not for real data.
-  async #nearSortExpressions(
-    sort: Sort | undefined,
-    realmURL: URL,
-  ): Promise<{
-    nearColumns: CardExpression;
-    nearJoins: CardExpression;
-  }> {
-    let nearColumns: CardExpression = [];
-    let nearJoins: CardExpression = [];
-    if (!sort) {
-      return { nearColumns, nearJoins };
-    }
-    for (let [index, s] of sort.entries()) {
-      if (!isNearSort(s)) {
-        continue;
-      }
-      await this.#assertNearField(
-        s.on,
-        s.by,
-        `sort by "${s.by}" near a vector`,
-      );
-      await this.#assertNearSpace(
-        realmURL,
-        removeBrackets(s.by),
-        s.near,
-        `sort by "${s.by}" near a vector`,
-      );
-      let alias = nearSimilarityAlias(sort, index);
-      let target = vectorToSqlLiteral(s.near);
-      let dims = vectorDimensions(s.near);
-      if (this.#dbAdapter.kind === 'pg') {
-        let v = `nv${index}`;
-        nearJoins.push(
-          `LEFT JOIN boxel_index_vectors AS ${v} ON ${v}.realm_url = i.realm_url AND ${v}.url = i.url AND ${v}.type = i.type AND ${v}.field_path =`,
-          param(removeBrackets(s.by)),
-          `AND ${v}.dims =`,
-          param(dims),
-          ...spaceCondition(v, s.near),
-          ...declaredSpaceCondition(
-            v,
-            await this.#declaredSpaceOf(
-              realmURL,
-              s.on,
-              removeBrackets(s.by),
-              s.near,
-              `sort by "${s.by}" near a vector`,
-            ),
-          ),
-        );
-        nearColumns.push(
-          `, MAX(1 - (${v}.embedding <=> CAST(`,
-          param(target),
-          `AS vector))) AS "${alias}"`,
-        );
-      } else {
-        nearColumns.push(
-          ', MAX(',
-          ...sqliteCosineSimilarity(`$.${removeBrackets(s.by)}`, target),
-          `) AS "${alias}"`,
-        );
-      }
-    }
-    return { nearColumns, nearJoins };
   }
 
   // The relevance value for a `matches` query, aggregated per (url, type) group.
@@ -7575,22 +6958,6 @@ function convertBracketsToWildCards(pathTraveled: string) {
   return pathTraveled.replace(/\[\]/g, '[%]');
 }
 
-// SQLite's stand-in for pgvector: the cosine similarity between the
-// search doc's "vec:[…]" string at `jsonPath` and `target` (a '[…]' literal),
-// as a scalar subquery. NULL when the doc has no vector there.
-function sqliteCosineSimilarity(
-  jsonPath: string,
-  target: string,
-): CardExpression {
-  return [
-    '(SELECT SUM(a.value * b.value) / (sqrt(SUM(a.value * a.value)) * sqrt(SUM(b.value * b.value))) FROM json_each(substr(json_extract(i.search_doc,',
-    param(jsonPath),
-    '), 5)) AS a JOIN json_each(',
-    param(target),
-    ') AS b ON a.key = b.key)',
-  ];
-}
-
 function removeBrackets(pathTraveled: string) {
   return pathTraveled.replace(/\[\]/g, '');
 }
@@ -7803,10 +7170,6 @@ function shortTitleContainsSelect(
     ...(limit ? [`LIMIT ${Number(limit)}`] : []),
   ];
 }
-
-// The spaces a field's vectors of one size are stored in, in one realm
-// (`#spacesOf`). Exported for the test that pins its plan.
-export const spacesOfSql = `SELECT DISTINCT space FROM boxel_index_vectors WHERE realm_url = $1 AND field_path = $2 AND dims = $3 LIMIT 8`;
 
 // Bounds a matches subquery's side to the realm searched, where the context
 // knows it.
