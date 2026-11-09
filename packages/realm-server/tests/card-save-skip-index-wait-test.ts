@@ -249,7 +249,7 @@ module(basename(import.meta.filename), function () {
         () => (drained ? undefined : gate.promise),
       );
       try {
-        let waiting = false;
+        let firstAnswered = false;
         let waitingPatch = request
           .patch('/person-1')
           .send({
@@ -263,12 +263,12 @@ module(basename(import.meta.filename), function () {
           })
           .set('Accept', 'application/vnd.card+json')
           .then((response) => {
-            waiting = true;
+            firstAnswered = true;
             return response;
           });
         await resolveAfter(WAIT_OBSERVATION_MS);
 
-        let other = await request
+        let otherPatch = request
           .patch('/person-1')
           .send({
             data: {
@@ -280,18 +280,30 @@ module(basename(import.meta.filename), function () {
             },
           })
           .set('Accept', 'application/vnd.card+json')
-          .set(SKIP_INDEX_WAIT_HEADER, 'true');
+          .set(SKIP_INDEX_WAIT_HEADER, 'true')
+          .then((response) => response);
+        // Raced against a deadline rather than awaited, so a writer queued
+        // behind the first one's locks fails here instead of hanging the test.
+        let other = await Promise.race([
+          otherPatch,
+          resolveAfter(WAIT_OBSERVATION_MS * 5).then(() => undefined),
+        ]);
+        assert.ok(
+          other,
+          'the other writer of the file is answered without waiting for the indexing',
+        );
         assert.strictEqual(
-          other.status,
+          other?.status,
           200,
-          `the other writer of the file is answered — ${JSON.stringify(other.body)}`,
+          `with a 200 — ${JSON.stringify(other?.body)}`,
         );
         assert.false(
-          waiting,
+          firstAnswered,
           'while the first writer is still waiting for the indexing',
         );
 
         gate.fulfill();
+        await otherPatch;
         let response = await waitingPatch;
         assert.strictEqual(
           response.status,
