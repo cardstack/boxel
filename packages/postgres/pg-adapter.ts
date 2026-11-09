@@ -1098,18 +1098,32 @@ export class PgAdapter implements DBAdapter {
     // that holds to the end and different for one that releases early, and the
     // queue below has to chain on the first of them while the caller waits on
     // the second.
+    // Outcome-erased: a prior caller's failure must not cascade — the next
+    // writer of these files still gets its turn at the lock.
+    const previousDone = previous.then(
+      () => undefined,
+      () => undefined,
+    );
     const myTurn = (async (): Promise<{ work: Promise<T> }> => {
-      try {
-        await previous;
-      } catch {
-        // A prior caller's failure must not cascade — the next writer of
-        // these files still gets its turn at the lock.
-      }
       // The wait is bounded from the call, not from the turn: time spent
-      // chained here behind a same-file writer counts against it, so a writer
-      // whose budget ran out in memory gives up without checking out a
-      // connection at all.
-      if (Date.now() >= enqueuedAt + this.#writeLockWaitMs) {
+      // chained here behind a same-file writer counts against it. So the turn
+      // is raced against what is left of the budget, and a writer whose budget
+      // runs out here gives up then — without waiting for the holder ahead of
+      // it, and without checking out a connection at all.
+      const deadline = enqueuedAt + this.#writeLockWaitMs;
+      let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+      const budgetSpent = new Promise<'spent'>((resolve) => {
+        budgetTimer = setTimeout(
+          () => resolve('spent'),
+          Math.max(0, deadline - Date.now()),
+        );
+      });
+      const outcome = await Promise.race([
+        previousDone.then(() => 'turn' as const),
+        budgetSpent,
+      ]);
+      clearTimeout(budgetTimer);
+      if (outcome === 'spent' || Date.now() >= deadline) {
         lockLog.warn(
           `writeLock realm=${realmUrl} waitMs=${Date.now() - enqueuedAt} holdMs=0 files=${fileKeys.length} scope=${bulk ? 'realm' : 'files'} timedOut=true`,
         );
@@ -1128,10 +1142,19 @@ export class PgAdapter implements DBAdapter {
     // early release removes in postgres — the next writer would sit here for
     // the duration of this one's index wait, on this replica, having been let
     // through by every other replica.
-    const myCompletion: Promise<void> = myTurn.then(
-      () => undefined,
-      () => undefined,
-    );
+    //
+    // It also waits for the writer ahead of this one. A caller whose budget ran
+    // out in the queue gives up before its predecessor is done, and a
+    // successor that chained on that alone would go straight to postgres and
+    // wait there behind the same holder, with a connection checked out —
+    // exactly what the queue keeps to one per file set.
+    const myCompletion: Promise<void> = Promise.all([
+      previousDone,
+      myTurn.then(
+        () => undefined,
+        () => undefined,
+      ),
+    ]).then(() => undefined);
     this.#fileWriteQueue.set(queueKey, myCompletion);
     // Compact the map once the chain is idle. Only delete if no later caller
     // has overwritten the tail — otherwise the chain is unlinked and a
@@ -1357,14 +1380,14 @@ export class PgAdapter implements DBAdapter {
     return await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
       try {
-        await this.#takeAdvisoryXactLock(
+        let timeoutSet = await this.#takeAdvisoryXactLock(
           queryFn,
           lockKey,
           'exclusive',
           deadline,
           contextLabel,
         );
-        if (deadline !== undefined) {
+        if (timeoutSet) {
           await queryFn(['SET LOCAL lock_timeout TO DEFAULT']);
         }
         const result = await fn(queryFn);
@@ -1393,14 +1416,29 @@ export class PgAdapter implements DBAdapter {
   // plan of several keys shares one budget rather than getting a fresh one per
   // key. A lock not granted in time rejects with `WriteLockTimeoutError`, and
   // the caller's ROLLBACK releases whatever this transaction did take.
+  //
+  // A bounded lock is tried without waiting first. Most are uncontended, and
+  // one that is granted straight away costs the single statement it always
+  // did; only one that has to wait pays for setting the timeout. Resolves to
+  // whether it set `lock_timeout` on the transaction.
   async #takeAdvisoryXactLock(
     queryFn: (e: Expression) => Promise<Record<string, PgPrimitive>[]>,
     key: string,
     mode: 'shared' | 'exclusive',
     deadline: number | undefined,
     realmUrl: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (deadline !== undefined) {
+      let [tried] = await queryFn([
+        mode === 'shared'
+          ? `SELECT pg_try_advisory_xact_lock_shared(`
+          : `SELECT pg_try_advisory_xact_lock(`,
+        param(key),
+        `::bigint) AS granted`,
+      ]);
+      if (tried?.granted === true) {
+        return false;
+      }
       let remainingMs = Math.ceil(deadline - Date.now());
       if (remainingMs <= 0) {
         throw new WriteLockTimeoutError(realmUrl, this.#writeLockWaitMs);
@@ -1426,6 +1464,7 @@ export class PgAdapter implements DBAdapter {
       }
       throw err;
     }
+    return deadline !== undefined;
   }
 
   // One transaction on one pinned pool connection: BEGIN, `fn`, COMMIT, with

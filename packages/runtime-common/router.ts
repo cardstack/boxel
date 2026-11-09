@@ -517,12 +517,13 @@ export class Router {
         return responseWithError(err, requestContext);
       }
       // A refusal from the operation core that reaches a route answering in
-      // statuses rather than an operations envelope. Only the server-side ones
-      // are answered with their own status here: such a refusal says nothing
-      // about what the caller may see, and its status — a 503 that names when
-      // to retry, say — is what the caller acts on. A client-side refusal is
-      // the route's own to shape, so it stays an unexpected exception.
-      if (isOperationFailure(err) && err.error.status >= 500) {
+      // statuses rather than an operations envelope, saying the realm can't do
+      // this now but can shortly — a write that gave up waiting for its locks.
+      // It is answered as its 503, with the `Retry-After` its `meta` names,
+      // since retrying is what the caller should do. Any other refusal is the
+      // route's own to shape, and one that reaches here stays an unexpected
+      // exception, logged with its stack below.
+      if (isOperationFailure(err) && err.error.status === 503) {
         this.log.warn(
           `handler for ${request.method} ${request.url} threw ${err.error.code} ` +
             `(status ${err.error.status}): ${err.error.detail}`,
