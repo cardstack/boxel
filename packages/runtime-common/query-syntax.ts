@@ -191,6 +191,9 @@ function lowerFilter(node: any, type: CodeRef | undefined): any {
       return node.on ? { on: node.on, ...lowered } : lowered;
     } else if (k === 'fields' && Array.isArray(v)) {
       out[k] = v.map((p) => (typeof p === 'string' ? barePath(p) : p));
+    } else if (k === 'within' && typeof v === 'string') {
+      // a passage list, named like any field path
+      out[k] = barePath(v);
     } else {
       out[k] = v;
     }
@@ -636,6 +639,8 @@ export function mapQueryPaths<Q>(
         out[k] = v.map((path) =>
           typeof path === 'string' ? map(path, t) : path,
         );
+      } else if (k === 'within' && typeof v === 'string') {
+        out[k] = map(v, t);
       } else {
         out[k] = v;
       }
@@ -781,6 +786,8 @@ export async function resolveQueryLabels(
         out[k] = Object.fromEntries(entries);
       } else if (k === 'fields' && Array.isArray(v)) {
         out[k] = await Promise.all(v.map((p) => resolve(t, p)));
+      } else if (k === 'within' && typeof v === 'string') {
+        out[k] = await resolve(t, v);
       } else {
         out[k] = v;
       }

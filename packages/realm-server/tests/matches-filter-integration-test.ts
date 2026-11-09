@@ -1030,6 +1030,28 @@ module(basename(import.meta.filename), function () {
         (passages?.[0].score ?? 0) > 0,
         'each carries a relevance score',
       );
+      assert.true(
+        passages?.every((p) => /clock|time/i.test(p.snippet ?? '')),
+        'each carries the stretch of text around what matched',
+      );
+    });
+
+    test('a passage search under the request grammar names its list like any field', async function (assert) {
+      await seedTalks();
+      let { meta } = await engine.search(
+        new URL(testRealmURL),
+        {
+          filter: { matches: 'logical clocks', within: 'item.segments' },
+          sort: [{ blend: [{ by: 'textRelevance' }] }],
+        } as any,
+        {},
+        { kind: 'dataOnly' },
+      );
+      assert.deepEqual(
+        Object.keys(meta.passages ?? {}),
+        [`${testRealmURL}clocks-talk`],
+        'a blend beside `within` reads the list through item., as the wire spells it',
+      );
     });
 
     test('a relevance sort carrying a type anchor ranks the same as one without', async function (assert) {

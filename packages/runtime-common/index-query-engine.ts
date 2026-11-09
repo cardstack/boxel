@@ -5972,7 +5972,9 @@ export class IndexQueryEngine {
         tsQuery.push(...matchTsQuery(term));
       });
       let rows = (await this.#query([
-        `SELECT url, ordinal, start_at, end_at, score FROM (SELECT pp.url, pp.ordinal, pp.start_at, pp.end_at, ts_rank_cd(pp.tsv, (`,
+        `SELECT url, ordinal, start_at, end_at, score, ts_headline('boxel_english', body, (`,
+        ...tsQuery,
+        `), 'StartSel="",StopSel="",MaxWords=24,MinWords=10,ShortWord=2,MaxFragments=1') AS snippet FROM (SELECT pp.url, pp.ordinal, pp.start_at, pp.end_at, pp.body, ts_rank_cd(pp.tsv, (`,
         ...tsQuery,
         `), 32) AS score, ROW_NUMBER() OVER (PARTITION BY pp.url ORDER BY ts_rank_cd(pp.tsv, (`,
         ...tsQuery,
@@ -5995,6 +5997,7 @@ export class IndexQueryEngine {
         start_at: number | null;
         end_at: number | null;
         score: number;
+        snippet: string | null;
       }[];
       for (let row of rows) {
         let key = row.url.replace(/\.json$/, '');
@@ -6004,6 +6007,7 @@ export class IndexQueryEngine {
           start: row.start_at == null ? null : Number(row.start_at),
           end: row.end_at == null ? null : Number(row.end_at),
           score: Number(row.score),
+          ...(row.snippet ? { snippet: row.snippet } : {}),
         });
       }
     }
@@ -6389,11 +6393,12 @@ export class IndexQueryEngine {
       param(test),
       `AS jsonpath) UNION ALL SELECT ps.url, ps.realm_url, ps.type FROM ${context.indexTable} AS ps WHERE ps.search_doc @? CAST(`,
       param(`$."${root}"."$spilled"`),
-      'AS jsonpath) AND jsonb_path_exists(jsonb_build_object(',
+      // jsonb_build_object takes `any`, so a bare parameter has no type.
+      'AS jsonpath) AND jsonb_path_exists(jsonb_build_object(CAST(',
       param(root),
-      ', spill_unmark(ps.search_doc -> ',
+      'AS text), spill_unmark(ps.search_doc -> CAST(',
       param(root),
-      ')), CAST(',
+      'AS text))), CAST(',
       param(test),
       'AS jsonpath)))',
     ];

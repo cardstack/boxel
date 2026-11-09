@@ -874,6 +874,9 @@ export interface PassageMatch {
   start: number | null;
   end: number | null;
   score: number;
+  // The stretch of the passage around what matched (Postgres `ts_headline`),
+  // so a result can show the line without loading the field.
+  snippet?: string;
 }
 
 // Type-ahead over a card's short names: its title and its
