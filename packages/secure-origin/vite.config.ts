@@ -2,15 +2,29 @@ import { ember, extensions } from '@embroider/vite';
 import { buildMacros } from '@embroider/macros/babel';
 import { babel } from '@rollup/plugin-babel';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
-import { defineConfig } from 'vite';
+import { fileURLToPath } from 'node:url';
+
+import { defineConfig, type ViteBuilder } from 'vite';
 
 import { buildInputs } from './build/build-inputs.ts';
 import { buildRecord } from './build/build-record.ts';
 import { importAllowlist } from './build/import-allowlist.ts';
 import { layerOrderFirst } from './build/layer-order.ts';
+import { modulePackage } from './build/module-package.ts';
+import { probeOutDir } from './build/probe.ts';
 import { relativeModuleNames } from './build/relative-module-names.ts';
 
 const macros = buildMacros();
+
+// The entry documents the origin serves. `session.js` is an entry of its own,
+// so it is served whole, with its exports under their own names: the secure
+// window's end-to-end tests import it from the origin and call it as the
+// window does.
+const PAGES = {
+  shell: 'index.html',
+  credentials: 'credentials.html',
+  session: 'src/security/session.js',
+};
 
 // The secure origin's pages are only ever served from this build, read by the
 // realm server at startup — never from a dev server, which injects styles
@@ -57,6 +71,10 @@ export default defineConfig(({ mode }) => ({
             allowDeclareFields: true,
           },
         ],
+        // boxel-ui's tasks are written as `task(async () => …)`, which this
+        // turns into what ember-concurrency runs, as boxel-ui's own build
+        // and the host's do.
+        'ember-concurrency/async-arrow-task-transform',
         [
           'babel-plugin-ember-template-compilation',
           {
@@ -69,8 +87,13 @@ export default defineConfig(({ mode }) => ({
         [
           'module:decorator-transforms',
           {
+            // A path, not a `file:` URL: Embroider's resolver reads a URL
+            // imported from a dependency's module, such as boxel-ui's, as a
+            // package named `file:`.
             runtime: {
-              import: import.meta.resolve('decorator-transforms/runtime-esm'),
+              import: fileURLToPath(
+                import.meta.resolve('decorator-transforms/runtime-esm'),
+              ),
             },
           },
         ],
@@ -101,20 +124,16 @@ export default defineConfig(({ mode }) => ({
                 : 'write',
           }),
           buildInputs(),
+          probeOutDir(),
         ]),
   ],
   build: {
     modulePreload: { polyfill: false },
     rollupOptions: {
-      // `session.js` is an entry of its own, so it is served whole, with its
-      // exports under their own names: the secure window's end-to-end tests
-      // import it from the origin and call it as the window does.
-      input: {
-        shell: 'index.html',
-        credentials: 'credentials.html',
-        session: 'src/security/session.js',
-        ...(mode === 'development' ? { tests: 'tests/index.html' } : {}),
-      },
+      input:
+        mode === 'development'
+          ? { ...PAGES, tests: 'tests/index.html' }
+          : PAGES,
       preserveEntrySignatures: 'exports-only',
       output: {
         entryFileNames: '[name].js',
@@ -123,42 +142,72 @@ export default defineConfig(({ mode }) => ({
         // Chunks the pages share get fixed names, so the build record and the
         // files the realm server serves don't change name with whichever
         // module sorts first. `shared` holds Ember and the components the
-        // pages are built from, where more than one entry reaches them, so the
-        // credential frame loads none of the shell's own components; `layers`
+        // pages are built from, where more than one entry keeps them, so the
+        // credential frame loads none of the shell's own components, nor the
+        // part of a dependency only the shell uses; `layers`
         // holds only the order of the pages' cascade layers
         // (`src/styles/layers.css`), which every entry imports and
         // `layerOrderFirst` links ahead of the page's other stylesheets.
-        manualChunks(id, { getModuleInfo }) {
-          if (id.split('?')[0].endsWith('/src/styles/layers.css')) {
-            return 'layers';
-          }
-          if (
-            !id.includes('/node_modules/') &&
-            !/\/src\/(components|helpers|modifiers)\//.test(id)
-          ) {
-            return undefined;
-          }
-          let entries = new Set<string>();
-          let seen = new Set<string>();
-          let pending = [id];
-          while (pending.length > 0) {
-            let moduleId = pending.pop()!;
-            if (seen.has(moduleId)) {
-              continue;
-            }
-            seen.add(moduleId);
-            let info = getModuleInfo(moduleId);
-            if (info?.isEntry) {
-              entries.add(moduleId);
-            }
-            pending.push(
-              ...(info?.importers ?? []),
-              ...(info?.dynamicImporters ?? []),
-            );
-          }
-          return entries.size > 1 ? 'shared' : undefined;
+        codeSplitting: {
+          groups: [
+            {
+              name: 'layers',
+              test: (id: string) =>
+                id.split('?')[0].endsWith('/src/styles/layers.css'),
+              priority: 2,
+            },
+            {
+              name: 'shared',
+              // Dependencies, Pret UI, boxel-ui and boxel-icons (this
+              // repository's other packages) included, and this package's
+              // components, helpers and modifiers.
+              test: (id: string) => {
+                let found = modulePackage(id);
+                return (
+                  id.includes('/node_modules/') ||
+                  (found.virtual === undefined && found.workspace) ||
+                  /\/src\/(components|helpers|modifiers)\//.test(id)
+                );
+              },
+              // Counted on the modules each entry keeps once unused exports
+              // are dropped, so a module the shell reaches through a barrel
+              // the credential fields also import (boxel-ui's `components`)
+              // stays in the shell's chunk.
+              minShareCount: 2,
+              priority: 1,
+            },
+          ],
         },
       },
     },
   },
+  // The production build is two builds. `client` is the pages the origin
+  // serves. `probe` is the build probe (`probe.html`), a page no user is sent
+  // to and the realm server never serves, which draws on Pret UI, boxel-ui
+  // and boxel-icons so that the allowlist, the build record and the policy
+  // test cover what those packages ship. It is a build of its own, written to
+  // `probe/` in the output, so the modules it shares with a page never move
+  // that page's modules into another chunk: what it adds leaves every page's
+  // files as they are. The build record covers both.
+  ...(mode === 'development'
+    ? {}
+    : {
+        environments: {
+          client: {},
+          probe: {
+            consumer: 'client' as const,
+            build: {
+              // A single entry, named for its file. Given as a string, it
+              // replaces the pages' entries rather than joining them.
+              rollupOptions: { input: 'probe.html' },
+            },
+          },
+        },
+        builder: {
+          async buildApp(builder: ViteBuilder) {
+            await builder.build(builder.environments.client);
+            await builder.build(builder.environments.probe);
+          },
+        },
+      }),
 }));

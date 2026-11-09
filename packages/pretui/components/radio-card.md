@@ -27,7 +27,7 @@ One-of-N where every option is a card. The card is the label and the whole hit t
 
 **Selection is a hairline, not a border.** The chosen card wears a 1px ring in `--primary` and a soft 4px halo of the same hue at 12%; the rest of the card does not change. The corner mark is the same 15px disc **RadioGroup** draws, so a card group and a plain group read as one family.
 
-**State attributes are strings both ways.** `data-selected='true' | 'false'` and `data-disabled='true' | 'false'` on every card; `data-orientation` and `data-columns` on the root.
+**State attributes are strings both ways.** `data-selected='true' | 'false'` and `data-disabled='true' | 'false'` on every card, and `data-test-pretui-choice-card` with the option's value; `data-orientation` and `data-columns` on the root.
 
 ## Prior art
 
@@ -45,6 +45,7 @@ What that buys, without any script: **the platform keyboard model.** Tab lands o
 
 - **Focus stays visible.** The input is positioned off the card at 1px with zero opacity — it is in the tab order and in the accessibility tree — and the card paints the focus ring itself through `:has(.pretui-optioncard-input:focus-visible)`.
 - **The accessible name of each radio is the card's text**: title, description and meta, in that order, because all of it is inside the label. A long description makes a long announcement; that is the caller's to keep short.
+- **Forced colors keep the choice visible.** They drop the ring and halo, so a chosen card also carries a transparent outline inset 2px, which forced colors repaint in the system's color.
 - **The mark is `aria-hidden`.** It repeats the checked state visually and contributes nothing to the tree.
 - **`data-selected` is a stamp, not a role.** Assistive tech reads the radio's own checked state.
 - **A media block's content is inside the label**, so an icon with a text alternative becomes part of the radio's name. Pass `aria-hidden` on decorative icons.
@@ -54,6 +55,8 @@ The tests assert the radiogroup role, the shared name, one radio per label, the 
 ## Theming
 
 From the host theme: `--card` and `--card-foreground` (the card surface and its ink), `--border` (the resting hairline), `--hover` (the hover fill), `--primary` (the selected ring, halo and mark fill), `--primary-foreground` (unused on a radio mark; the checkbox check), `--field` and `--input` (the resting mark), `--ring` (the focus outline), `--muted-foreground` (description and meta).
+
+`--pretui-choice-card-tone` replaces `--primary` for the selected ring, halo and mark, for a theme whose `--primary` is too faint for a 3:1 ring; `--pretui-control-rest` and `--pretui-control-border` draw the resting mark, as on **RadioGroup**.
 
 Kit tokens, each named once on the card: `--space-4` (padding), `--space-3` (gap), `--text-ui-md` and `--text-ui-sm` (title and description), `--weight-strong` (title weight), `--radius-surface` (card radius), `--pretui-dur-snap` and `--pretui-ease-snap` (the ring and fill transitions), `--pretui-shadow-control` (the resting shadow), `--pretui-edge-highlight` (the inset highlight on a selected mark). The grid reads `--space-3` for its gap.
 

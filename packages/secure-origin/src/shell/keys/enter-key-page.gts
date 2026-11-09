@@ -37,7 +37,9 @@
 // page, at `keys/add`, it goes back there once the key is added, rather than
 // closing the window. Reached from the approve page's "Add a new key"
 // (`then=approve` or `then=review-changes` beside what that page was opened
-// for), it goes back to that page with the new key chosen.
+// for), it goes back to that page with the new key chosen. A connected
+// account it sends on to `connect` comes back to that page the same way,
+// once the user has signed in at the service (`approval-return.ts`).
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -51,16 +53,18 @@ import {
   type OAuthClientSettings,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
-import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { Button } from '@cardstack/pretui/components/button';
+import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
+import Tag from '@cardstack/boxel-icons/tag';
+import { Input } from '@cardstack/pretui/components/input';
+import { eq } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
-import { pageURL, shellPath } from '../urls.js';
+import { pageURL } from '../urls.js';
 
 import AnonymousUseFields, { anonymousCapOf } from './anonymous-use-fields.gts';
+import { approvalPageAfter, approvalPageThen } from './approval-return.ts';
 import {
   failureMessage,
   isSignedOut,
@@ -80,7 +84,7 @@ import OAuthClientFields, {
   type OAuthClientForm,
 } from './oauth-client-fields.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { addressAbove, keyPageURL, pageTitle } from './trail.ts';
+import { keyPageURL, pageTitle } from './trail.ts';
 import {
   cliOpenedFor,
   contextRequest,
@@ -194,8 +198,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               />
             {{/if}}
             {{#if this.onlyKind}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Kind'
                 @icon={{Tag}}
                 data-test-only-kind={{this.onlyKind.value}}
@@ -207,7 +213,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                     <strong>{{this.onlyKind.label}}</strong>.</p>
                   <p class='only-kind-hint'>{{this.onlyKind.hint}}</p>
                 </div>
-              </FieldContainer>
+              </Field>
             {{else}}
               <RadioChoices
                 @label='Kind'
@@ -255,15 +261,18 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 >
                   <:beforeValue>
                     {{#if this.isOAuthClient}}
-                      <FieldContainer
-                        @tag='label'
+                      <Field
+                        @reserveMessage={{false}}
+                        @orientation='horizontal'
                         @label='Client ID'
                         @icon={{RectangleEllipsis}}
                         data-test-key-field='client-id'
+                        as |controlId|
                       >
-                        <BoxelInput
+                        <Input
+                          @controlId={{controlId}}
                           @type='text'
-                          @autocomplete='off'
+                          autocomplete='off'
                           @placeholder='The app’s Client ID, shown on the site'
                           @value={{this.form.clientId}}
                           @onInput={{this.setClientId}}
@@ -271,7 +280,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                           spellcheck='false'
                           data-test-oauth-client-id-input
                         />
-                      </FieldContainer>
+                      </Field>
                     {{/if}}
                   </:beforeValue>
                 </KeyFields>
@@ -283,8 +292,8 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                     {{#if this.takesServiceAccount}}
                       <Button
                         type='button'
-                        @kind='secondary'
-                        @size='small'
+                        @variant='secondary'
+                        @size='s'
                         data-test-use-service-account
                         {{on 'click' this.usePastedKeyFile}}
                       >Use it as a Google service account</Button>
@@ -316,16 +325,16 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               {{/unless}}
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
             {{#if this.returnsToKeyPage}}
               <Button
                 type='button'
-                @kind='secondary'
+                @variant='secondary'
                 data-test-enter-key-back
                 {{on 'click' this.back}}
               >Cancel</Button>
@@ -333,14 +342,14 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
             {{#if this.connecting}}
               <Button
                 type='button'
-                @kind='primary'
+                @variant='primary'
                 data-test-go-to-connect
                 {{on 'click' this.goToConnect}}
               >Connect an account</Button>
             {{else}}
               <Button
                 type='submit'
-                @kind='primary'
+                @variant='primary'
                 @disabled={{this.submitDisabled}}
                 @loading={{this.form.saving}}
                 data-test-enter-key-save
@@ -394,12 +403,6 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
         overflow-wrap: break-word;
-      }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
       }
     </style>
   </template>
@@ -494,12 +497,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   private back = () => navigation.back(keyPageURL());
 
   // The `connect` page, opened for the same card and operation: a connected
-  // account is made by signing in there, not entered here.
+  // account is made by signing in there, not entered here. Reached from an
+  // approve page, it goes back there once the account is connected.
   private get connectURL() {
-    let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    fragment.delete('then');
-    fragment.delete('after');
-    return `${pageURL('connect')}#${fragment}`;
+    return `${pageURL('connect')}${window.location.hash}`;
   }
 
   private goToConnect = () => navigation.assign(this.connectURL);
@@ -771,41 +772,6 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       this.form.saving = false;
     }
   };
-}
-
-// The approve page this one was reached from (`then=approve` or
-// `then=review-changes`), if any.
-function approvalPageThen(): 'approve' | 'review-changes' | undefined {
-  let then = new URLSearchParams(window.location.hash.replace(/^#/, '')).get(
-    'then',
-  );
-  return then === 'approve' || then === 'review-changes' ? then : undefined;
-}
-
-// The approve page this one was opened from, to go back to once `keyId` is
-// added, with what it was opened for and the new key chosen: the page above
-// this one in its trail, as it was, or else rebuilt from this page's own
-// fragment.
-function approvalPageAfter(keyId: string): string | undefined {
-  let then = approvalPageThen();
-  if (!then) {
-    return undefined;
-  }
-  let above = addressAbove();
-  if (above !== undefined && above.split('#')[0] === then) {
-    let aboveFragment = new URLSearchParams(above.split('#')[1] ?? '');
-    aboveFragment.set('key', keyId);
-    return `${shellPath()}${then}#${aboveFragment}`;
-  }
-  let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  fragment.delete('then');
-  // The approve page goes back to the key page it was reached from.
-  if (fragment.get('after') === 'keys') {
-    fragment.set('then', 'keys');
-  }
-  fragment.delete('after');
-  fragment.set('key', keyId);
-  return `${pageURL(then)}#${fragment}`;
 }
 
 export default class EnterKeyPage extends Component<{

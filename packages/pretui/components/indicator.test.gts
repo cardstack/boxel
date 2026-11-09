@@ -4,6 +4,7 @@ import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Indicator } from './indicator';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 module('Pretui | components/indicator', function (hooks) {
   setupCardTest(hooks);
@@ -40,5 +41,18 @@ module('Pretui | components/indicator', function (hooks) {
     let btn = document.querySelector('[data-test-pretui-indicator] button') as HTMLElement;
     let label = document.querySelector('[data-test-pretui-indicator-label]') as HTMLElement;
     assert.strictEqual(btn.getAttribute('aria-describedby'), label.id);
+  });
+
+  test('the tone is set through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <Indicator @label='Online'><span>Ana</span></Indicator>
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    let indicator = document.querySelector<HTMLElement>('[data-test-pretui-indicator]')!;
+    assert.strictEqual(indicator.style.getPropertyValue('--pretui-mark-hue'), 'var(--success)');
   });
 });

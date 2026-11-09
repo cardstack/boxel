@@ -298,10 +298,15 @@ module('Integration | register', function (hooks) {
         described,
         `${value || 'empty'}: the input names a description`,
       );
+      let errorRow = document.getElementById(described!);
+      assert.dom(errorRow).hasText(message);
       assert
-        .dom(document.getElementById(described!))
-        .hasAttribute('aria-live', 'polite')
-        .hasText(message);
+        .dom(errorRow?.closest('[aria-live]') ?? null)
+        .hasAttribute(
+          'aria-live',
+          'polite',
+          'it is shown inside a live region that stays on the page',
+        );
     }
     assert.deepEqual(
       servers.requests('matrix', 'GET register/available').map(() => 'checked'),

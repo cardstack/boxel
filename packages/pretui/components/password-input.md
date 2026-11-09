@@ -13,7 +13,7 @@ A password field with a reveal toggle. Use it for any credential entry. The reve
 
 **`@autocomplete` defaults to `'current-password'`, and this is the arg you must think about.** A sign-in field is `current-password`; a registration or change-password field is `new-password` — and getting that wrong means password managers offer the saved password where they should generate a new one, or vice versa. It is also the only member of the typed-input family that exposes `autocomplete` as a first-class arg, which is a good decision that the rest of the family should copy.
 
-**`@revealable={{false}}` removes the toggle**, and the component swaps its inline metrics accordingly (`PASSWORD_METRICS` reserves room for the button; `TYPED_FONT` does not) so a non-revealable field has no dead space on its right.
+**`@revealable={{false}}` removes the toggle**, and the component swaps the metrics it writes on the input accordingly (`PASSWORD_METRICS` reserves room for the button; `TYPED_PROPERTIES` does not) so a non-revealable field has no dead space on its right.
 
 The reveal is implemented by swapping `type` between `'password'` and `'text'` — the standard approach, and worth knowing because it means the value is briefly a plain text input, visible to anything reading the DOM.
 

@@ -233,6 +233,57 @@ async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   });
 }
 
+// The workspace picker is Pret UI's Select: its trigger, and the options of
+// its list, which renders in the dropdown's wormhole.
+const WORKSPACE_TRIGGER =
+  '[data-test-workspace-dropdown] [data-test-pretui-select-trigger]';
+const OPTION_META = '[data-test-pretui-select-option-meta]';
+
+// The options of the open workspace list, which renders outside the test's
+// root element: those of the listbox the open list's search field controls,
+// since a list just closed can still be leaving the page.
+function workspaceOptions(): HTMLElement[] {
+  let listbox = workspaceSearch()?.getAttribute('aria-controls');
+  return listbox
+    ? [
+        ...document.querySelectorAll<HTMLElement>(
+          `#${CSS.escape(listbox)} [role="option"]`,
+        ),
+      ]
+    : [];
+}
+
+// The option of the open workspace list named `name`.
+function workspaceOption(name: string): HTMLElement {
+  let option = workspaceOptions().find(
+    (o) =>
+      o
+        .querySelector('[data-test-pretui-select-option]')
+        ?.textContent?.trim() === name,
+  );
+  if (!option) {
+    throw new Error(`no workspace option named ${name}`);
+  }
+  return option;
+}
+
+// The open workspace list's search field: the last one, since a list just
+// closed can still be leaving the page.
+function workspaceSearch(): HTMLElement {
+  return [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-test-pretui-select-search-input]',
+    ),
+  ].at(-1)!;
+}
+
+// The option the search field names as highlighted.
+function activeOption(): HTMLElement | null {
+  return document.getElementById(
+    workspaceSearch().getAttribute('aria-activedescendant') ?? '',
+  );
+}
+
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
   setupWaitedBrowserWork(hooks);
@@ -595,7 +646,9 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-error-message]')
         .hasText('Boxel couldn’t load this page.');
       assert.dom('[data-test-error-details]').doesNotExist();
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert.dom('[data-test-error-detail="Status"]').hasText('503');
       assert
         .dom('[data-test-error-detail="Message"]')
@@ -621,7 +674,9 @@ module('Integration | key pages', function (hooks) {
         .hasText(
           'Boxel couldn’t be reached. Check your connection and try again.',
         );
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert
         .dom('[data-test-error-detail="Error"]')
         .hasText('Boxel could not be reached.');
@@ -702,7 +757,7 @@ module('Integration | key pages', function (hooks) {
         .exists('allowing it opens the key’s own setting');
       assert
         .dom(
-          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input] input',
         )
         .isChecked('already set to allow it, so one Save finishes it');
     });
@@ -888,7 +943,7 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-anonymous-use-form]').exists({ count: 1 });
       assert
         .dom(
-          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input] input',
         )
         .isChecked();
     });
@@ -1057,7 +1112,7 @@ module('Integration | key pages', function (hooks) {
 
       await click(`${weather} [data-test-key-anonymous-use-change]`);
       assert.dom('[data-test-key-anonymous-use-form]').exists();
-      assert.dom('[data-test-anonymous-use-input]').isNotChecked();
+      assert.dom('[data-test-anonymous-use-input] input').isNotChecked();
       assert
         .dom('[data-test-anonymous-use-agreement]')
         .hasText('Allow people who aren’t signed in to use this key');
@@ -1136,7 +1191,7 @@ module('Integration | key pages', function (hooks) {
 
       await click(`${maps} [data-test-key-anonymous-use-change]`);
       assert
-        .dom('[data-test-anonymous-use-input]')
+        .dom('[data-test-anonymous-use-input] input')
         .isChecked('the panel starts from the key’s setting');
       assert.dom('[data-test-anonymous-cap-input]').hasValue('50');
       assert.dom('[data-test-anonymous-monthly-cap-input]').hasValue('1000');
@@ -1195,8 +1250,14 @@ module('Integration | key pages', function (hooks) {
         .includesText(
           'Unshare from Team? Cards there stop using this key. It stays shared everywhere else.',
         );
+      assert
+        .dom(`${team} [data-test-key-unshare-cancel]`)
+        .isFocused('the question takes focus from the Unshare it replaces');
       await click(`${team} [data-test-key-unshare-cancel]`);
       assert.dom(`${team} [data-test-key-unshare-confirm]`).doesNotExist();
+      assert
+        .dom(`${team} [data-test-key-unshare]`)
+        .isFocused('Cancel gives focus back to Unshare');
       assert.false(
         requests.some((r) => r.method === 'DELETE'),
         'nothing is unshared until confirmed',
@@ -1221,6 +1282,56 @@ module('Integration | key pages', function (hooks) {
           '[data-test-key-row="Weather service"] [data-test-key-shared-into-summary]',
         )
         .hasText('Shared with 2 workspaces', 'and the key stays in the rest');
+    });
+
+    test('a cancelled Unshare takes focus back once, not again when the key list is read again', async function (assert) {
+      const DASHBOARD = 'https://realm-server.test/someone/dashboard/';
+      let mapsShared = true;
+      let maps = () => ({
+        ...KEYS[1],
+        sharedInto: mapsShared
+          ? [
+              {
+                url: DASHBOARD,
+                name: 'Dashboard',
+                shares: [
+                  {
+                    id: 'share-maps-dash',
+                    label: 'Maps',
+                    state: 'active' as const,
+                    approvedCalls: 1,
+                  },
+                ],
+              },
+            ]
+          : [],
+      });
+      serve({
+        'GET _user-keys': () => json(200, keyResources([KEYS[0], maps()])),
+        'DELETE _key-shares/share-maps-dash': () => {
+          mapsShared = false;
+          return { status: 204 };
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      let team = `[data-test-key-row="Weather service"] [data-test-key-shared-into-workspace="${REALM}"]`;
+      let mapsDashboard = `[data-test-key-row="Maps"] [data-test-key-shared-into-workspace="${DASHBOARD}"]`;
+
+      await click(`${team} [data-test-key-unshare]`);
+      await click(`${team} [data-test-key-unshare-cancel]`);
+      assert.dom(`${team} [data-test-key-unshare]`).isFocused();
+
+      // Another key's change reads the key list again, which draws every
+      // workspace row anew.
+      await click(`${mapsDashboard} [data-test-key-unshare]`);
+      await click(`${mapsDashboard} [data-test-key-unshare-confirm-button]`);
+      await settled();
+      assert.dom(mapsDashboard).doesNotExist('the list was read again');
+      assert
+        .dom(`${team} [data-test-key-unshare]`)
+        .isNotFocused('an earlier Cancel doesn’t pull focus back on a redraw');
     });
 
     test('an unshare refused part-way through shows what is left, and unsharing again removes only that', async function (assert) {
@@ -1382,9 +1493,21 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Weather service"]');
-      await click(
-        '[data-test-key-row="Weather service"] [data-test-key-delete]',
-      );
+      let deleteButton =
+        '[data-test-key-row="Weather service"] [data-test-key-delete]';
+      assert
+        .dom(deleteButton)
+        .hasTagName('button', 'the delete control is a button')
+        .hasAria('label', 'Delete Weather service', 'named by its key')
+        .hasNoText('showing only its icon');
+      assert
+        .dom(`${deleteButton} svg`)
+        .hasAria(
+          'hidden',
+          'true',
+          'and the icon is hidden from screen readers',
+        );
+      await click(deleteButton);
       await waitFor('[data-test-key-delete-shares]');
       assert.dom('[data-test-key-delete-shares]').includesText('Weather');
       assert.dom('[data-test-key-delete-shares]').includesText(REALM);
@@ -1479,9 +1602,9 @@ module('Integration | key pages', function (hooks) {
       let weather = '[data-test-key-row="Weather service"]';
       let team = `${weather} [data-test-key-shared-into-workspace="${REALM}"]`;
       assert
-        .dom(`${team} [data-test-key-share-unapproved="share-team-1"]`)
+        .dom(`${team} [data-test-key-share-unapproved="share-team-1"] p`)
         .hasText(
-          '“Weather” isn’t approved for any calls yet Approve for a card…',
+          '“Weather” isn’t approved for any calls yet',
           'one of a workspace’s several shares is named by its label',
         );
       assert
@@ -1495,10 +1618,10 @@ module('Integration | key pages', function (hooks) {
         .hasAria('label', 'Approve for a card: “Weather” in Team');
       assert
         .dom(
-          '[data-test-key-row="Maps"] [data-test-key-share-unapproved="share-maps"]',
+          '[data-test-key-row="Maps"] [data-test-key-share-unapproved="share-maps"] p',
         )
         .hasText(
-          'Not approved for any calls yet Approve for a card…',
+          'Not approved for any calls yet',
           'a workspace’s only share needs no label',
         );
 
@@ -1612,7 +1735,7 @@ module('Integration | key pages', function (hooks) {
         .hasText(
           'Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.',
         );
-      assert.dom('[data-test-anonymous-use-input]').isNotChecked();
+      assert.dom('[data-test-anonymous-use-input] input').isNotChecked();
       assert
         .dom('[data-test-anonymous-cap]')
         .doesNotExist('the cap is asked for only once they are allowed');
@@ -1676,9 +1799,9 @@ module('Integration | key pages', function (hooks) {
       visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
-      await click('[data-test-radio-choice="oauth-client"] input');
+      await click('[data-test-pretui-radio-option="oauth-client"] input');
       assert.dom('[data-test-anonymous-use]').doesNotExist();
-      await click('[data-test-radio-choice="static"] input');
+      await click('[data-test-pretui-radio-option="static"] input');
       await fillIn('[data-test-key-name]', 'Forecasts');
       await fillIn('[data-test-key-value]', 'sk-forecast');
       await click('[data-test-anonymous-use-input]');
@@ -1805,7 +1928,9 @@ module('Integration | key pages', function (hooks) {
           'This workspace, card or request doesn’t exist, or you don’t have access to it.',
         );
       assert.dom('[data-test-keys-retry]').doesNotExist();
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert.dom('[data-test-error-detail="Status"]').hasText('404');
       assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
     });
@@ -1866,7 +1991,9 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-error-message]')
         .hasText('You don’t have access to this.');
       assert.dom('[data-test-keys-retry]').doesNotExist();
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert.dom('[data-test-error-detail="Status"]').hasText('403');
     });
 
@@ -1882,7 +2009,9 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-keys-load-failed]');
       assert.dom('[data-test-keys-heading]').hasText('Add key');
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert.dom('[data-test-error-detail="Status"]').hasText('503');
       await click('[data-test-keys-retry]');
       await waitFor('[data-test-enter-key-form]');
@@ -1948,10 +2077,12 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       assert
-        .dom('[data-test-radio-choice="static"] input')
+        .dom('[data-test-pretui-radio-option="static"] input')
         .isChecked('a key pasted in as it is is the default');
       await fillIn('[data-test-key-value]', 'typed before switching');
-      await click('[data-test-radio-choice="google-service-account"] input');
+      await click(
+        '[data-test-pretui-radio-option="google-service-account"] input',
+      );
       assert
         .dom('[data-test-key-value]')
         .doesNotExist('a service account has no value to paste');
@@ -2019,7 +2150,9 @@ module('Integration | key pages', function (hooks) {
       visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
-      await click('[data-test-radio-choice="google-service-account"] input');
+      await click(
+        '[data-test-pretui-radio-option="google-service-account"] input',
+      );
       await fillIn('[data-test-key-name]', 'Sheets');
       await chooseKeyFile(SERVICE_ACCOUNT_FILE);
       await fillIn('[data-test-service-account-scopes]', 'openid');
@@ -2037,7 +2170,9 @@ module('Integration | key pages', function (hooks) {
       visitShell('enter-key');
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
-      await click('[data-test-radio-choice="google-service-account"] input');
+      await click(
+        '[data-test-pretui-radio-option="google-service-account"] input',
+      );
       await fillIn('[data-test-key-name]', 'Sheets');
       await fillIn('[data-test-service-account-scopes]', 'openid');
       await chooseKeyFile('{"type": "authorized_user"}', 'credentials.json');
@@ -2086,7 +2221,7 @@ module('Integration | key pages', function (hooks) {
         .isDisabled('a key file is never saved as a key sent as it is');
       await click('[data-test-use-service-account]');
       assert
-        .dom('[data-test-radio-choice="google-service-account"] input')
+        .dom('[data-test-pretui-radio-option="google-service-account"] input')
         .isChecked();
       assert
         .dom('[data-test-service-account-email]')
@@ -2139,9 +2274,11 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-google-destination-hint]')
         .includesText('This request goes to a Google API.');
       assert
-        .dom('[data-test-radio-choice="static"] input')
+        .dom('[data-test-pretui-radio-option="static"] input')
         .isChecked('the page doesn’t choose for the user');
-      await click('[data-test-radio-choice="google-service-account"] input');
+      await click(
+        '[data-test-pretui-radio-option="google-service-account"] input',
+      );
       assert.dom('[data-test-google-destination-hint]').doesNotExist();
     });
 
@@ -2479,7 +2616,11 @@ module('Integration | key pages', function (hooks) {
       let fragment = new URLSearchParams(url.hash.slice(1));
       assert.strictEqual(fragment.get('card'), CARD);
       assert.strictEqual(fragment.get('operation'), 'values');
-      assert.strictEqual(fragment.get('then'), null);
+      assert.strictEqual(
+        fragment.get('then'),
+        'approve',
+        'the connect page goes back to the approval too',
+      );
     });
 
     test('opened for an operation that takes several kinds, offers only those', async function (assert) {
@@ -2493,15 +2634,15 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-opened-for]');
       assert.dom('[data-test-only-kind]').doesNotExist();
-      assert.dom('[data-test-radio-choice="static"] input').isChecked();
+      assert.dom('[data-test-pretui-radio-option="static"] input').isChecked();
       assert
-        .dom('[data-test-radio-choice="oauth-client"]')
+        .dom('[data-test-pretui-radio-option="oauth-client"]')
         .includesText('Connected account (OAuth)');
       assert
-        .dom('[data-test-radio-choice="google-service-account"]')
+        .dom('[data-test-pretui-radio-option="google-service-account"]')
         .doesNotExist();
 
-      await click('[data-test-radio-choice="oauth-client"] input');
+      await click('[data-test-pretui-radio-option="oauth-client"] input');
       assert
         .dom('[data-test-connect-instead]')
         .exists('a connected account is signed in to, not entered');
@@ -2530,10 +2671,10 @@ module('Integration | key pages', function (hooks) {
       visitShell(`enter-key#card=${encodeURIComponent(CARD)}&operation=values`);
       await render(EnterKeyPage);
       await waitFor('[data-test-opened-for]');
-      assert.dom('[data-test-radio-choice="static"]').exists();
-      assert.dom('[data-test-radio-choice="oauth-client"]').exists();
+      assert.dom('[data-test-pretui-radio-option="static"]').exists();
+      assert.dom('[data-test-pretui-radio-option="oauth-client"]').exists();
       assert
-        .dom('[data-test-radio-choice="google-service-account"]')
+        .dom('[data-test-pretui-radio-option="google-service-account"]')
         .doesNotExist('a workspace key’s slot is not the user’s to fill here');
     });
 
@@ -2548,9 +2689,9 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-opened-for]');
       assert
-        .dom('[data-test-radio-choice="google-service-account"] input')
+        .dom('[data-test-pretui-radio-option="google-service-account"] input')
         .isChecked();
-      assert.dom('[data-test-radio-choice="static"]').doesNotExist();
+      assert.dom('[data-test-pretui-radio-option="static"]').doesNotExist();
       assert.dom('[data-test-google-destination-hint]').doesNotExist();
     });
   });
@@ -2606,46 +2747,46 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-share-key-form]');
       assert.dom('[data-test-share-key-key]').includesText('Maps');
       assert.dom('[data-test-key-picker]').doesNotExist('the key is chosen');
+      assert
+        .dom('[data-test-share-key-audience]')
+        .hasAttribute(
+          'data-test-key-audience-tone',
+          'info',
+          'the key being shared sits in the shared-key section',
+        );
+      assert
+        .dom('[data-test-share-key-audience] [data-test-key-audience-label]')
+        .hasText('Sharing your key');
+      assert
+        .dom('[data-test-share-key-audience] [data-test-key-audience-who]')
+        .includesText('Everyone in');
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
       assert
         .dom('[data-test-share-label]')
         .hasValue('Maps', 'labelled with its key’s name until one is typed');
       assert.dom('[data-test-share-key-save]').isDisabled();
 
-      await click('[data-test-workspace-dropdown-trigger]');
-      assert.dom('[data-test-workspace-option]').exists({ count: 2 });
-      let search = '[data-test-workspace-dropdown-search]';
-      assert.dom(search).hasAttribute('role', 'combobox');
+      await click(WORKSPACE_TRIGGER);
+      assert.strictEqual(workspaceOptions().length, 2);
+      assert.dom(workspaceSearch()).hasAttribute('role', 'combobox');
       assert
-        .dom(search)
-        .hasAttribute(
-          'aria-activedescendant',
-          'workspace-option-0',
+        .dom(activeOption())
+        .hasText(
+          'Dashboard',
           'the highlighted option is named for a screen reader',
         );
-      await triggerKeyEvent(search, 'keydown', 'ArrowDown');
+      await triggerKeyEvent(workspaceSearch(), 'keydown', 'ArrowDown');
+      assert.dom(activeOption()).hasText('Team Workspace');
+      await triggerKeyEvent(workspaceSearch(), 'keydown', 'Escape');
       assert
-        .dom(search)
-        .hasAttribute('aria-activedescendant', 'workspace-option-1');
-      assert
-        .dom('#workspace-option-1')
-        .hasAttribute('data-test-workspace-option', 'Team Workspace');
-      await triggerKeyEvent(search, 'keydown', 'Escape');
-      assert.dom('[data-test-workspace-dropdown-content]').doesNotExist();
-      assert
-        .dom('[data-test-workspace-dropdown-trigger]')
-        .isFocused('closing from the keyboard puts focus back on the trigger');
+        .dom(WORKSPACE_TRIGGER)
+        .hasAttribute('aria-expanded', 'false', 'Escape closes the list');
 
-      await click('[data-test-workspace-dropdown-trigger]');
-      await fillIn(search, 'team');
-      assert.dom('[data-test-workspace-option]').exists({ count: 1 });
-      await triggerKeyEvent(search, 'keydown', 'Enter');
-      assert
-        .dom('[data-test-workspace-dropdown-selected]')
-        .hasText('Team Workspace');
-      assert
-        .dom('[data-test-workspace-dropdown-trigger]')
-        .isFocused('as does choosing from it');
+      await click(WORKSPACE_TRIGGER);
+      await fillIn(workspaceSearch(), 'team');
+      assert.strictEqual(workspaceOptions().length, 1);
+      await triggerKeyEvent(workspaceSearch(), 'keydown', 'Enter');
+      assert.dom(WORKSPACE_TRIGGER).hasText('Team Workspace');
       await fillIn('[data-test-share-label]', 'Team maps');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -2695,8 +2836,8 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-share-key-intro="signed-in"]')
         .exists('until a workspace is picked, nothing is said of anyone else');
-      await click('[data-test-workspace-dropdown-trigger]');
-      await click('[data-test-workspace-option="Team Workspace"]');
+      await click(WORKSPACE_TRIGGER);
+      await click(workspaceOption('Team Workspace'));
       assert
         .dom('[data-test-share-key-intro="anyone"] strong')
         .hasText('and so will people who aren’t signed in');
@@ -2705,7 +2846,7 @@ module('Integration | key pages', function (hooks) {
         .hasText(
           'This workspace lets people who aren’t signed in use the keys shared into it, and this key doesn’t allow them. Allow it on your key page first.',
         );
-      assert.dom('[data-test-anonymous-use-input]').doesNotExist();
+      assert.dom('[data-test-anonymous-use-input] input').doesNotExist();
       assert.dom('[data-test-share-key-save]').isDisabled();
       await click('[data-test-share-key-go-to-key]');
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
@@ -2713,6 +2854,19 @@ module('Integration | key pages', function (hooks) {
         requests.some((r) => r.path === '_key-shares'),
         'nothing is shared',
       );
+    });
+
+    test('with no workspace the user writes, the share page says so in place of the picker', async function (assert) {
+      serve({
+        'GET _secure-window/realms': () => json(200, { data: [] }),
+      });
+      visitShell('keys/key-2/share');
+      await render(SharePage);
+      await waitFor('[data-test-workspace-dropdown-no-results]');
+      assert
+        .dom('[data-test-workspace-dropdown-no-results]')
+        .hasText('You don’t edit any workspace you could share a key with.');
+      assert.dom('[data-test-workspace-dropdown]').doesNotExist();
     });
 
     test('two workspaces with the same name are told apart by their addresses', async function (assert) {
@@ -2737,27 +2891,25 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys/key-2/share');
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
-      await click('[data-test-workspace-dropdown-trigger]');
+      await click(WORKSPACE_TRIGGER);
       assert
-        .dom(
-          '[data-test-workspace-option="Dashboard"] [data-test-workspace-address]',
-        )
+        .dom(OPTION_META, workspaceOption('Dashboard'))
         .doesNotExist('a name of its own needs no address');
       assert.deepEqual(
         [
-          ...document.querySelectorAll(
-            '[data-test-workspace-option="Team Workspace"] [data-test-workspace-address]',
-          ),
+          ...workspaceOptions().flatMap((option) => [
+            ...option.querySelectorAll(OPTION_META),
+          ]),
         ].map((e) => e.textContent?.trim()),
         [OTHER, REALM].map((url) => url.replace('https://', '')),
       );
       await click(
-        [...document.querySelectorAll('[data-test-workspace-option]')].find(
-          (e) => e.textContent?.includes(OTHER.replace('https://', '')),
+        workspaceOptions().find((e) =>
+          e.textContent?.includes(OTHER.replace('https://', '')),
         )!,
       );
       assert
-        .dom('[data-test-workspace-address]')
+        .dom(`${WORKSPACE_TRIGGER} ${OPTION_META}`)
         .hasText(OTHER.replace('https://', ''));
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
@@ -2788,9 +2940,11 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-key-picker-prompt]')
         .doesNotHaveClass('visually-hidden');
-      assert.dom('[data-test-workspace-dropdown-trigger]').doesNotExist();
+      assert.dom(WORKSPACE_TRIGGER).doesNotExist();
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
-      await click('[data-test-key-choice="Maps"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Maps"]) input',
+      );
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
       assert.deepEqual(
@@ -2831,7 +2985,9 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-share-key-intro="signed-in"] strong')
         .hasText('Only signed-in people');
-      await click('[data-test-key-choice="Maps"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Maps"]) input',
+      );
       assert
         .dom('[data-test-share-key-intro="signed-in"]')
         .exists('the key allowing them changes nothing here');
@@ -2878,7 +3034,9 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-share-key-intro="anyone"] strong')
         .hasText('and so will people who aren’t signed in');
 
-      await click('[data-test-key-choice="Weather service"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Weather service"]) input',
+      );
       assert
         .dom('[data-test-share-key-key-refuses-text]')
         .includesText('this key doesn’t allow them');
@@ -2886,22 +3044,28 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-share-key-key-allows]').doesNotExist();
       assert.dom('[data-test-share-key-save]').isDisabled();
 
-      await click('[data-test-key-choice="Maps"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Maps"]) input',
+      );
       assert.dom('[data-test-share-key-key-refuses]').doesNotExist();
       assert
         .dom('[data-test-share-key-key-allows-text]')
         .hasText(
           'This key allows it, up to 50 calls a day and 1500 a month all together. Sharing it here means they will use it.',
         );
-      assert.dom('[data-test-anonymous-use-input]').doesNotExist();
+      assert.dom('[data-test-anonymous-use-input] input').doesNotExist();
       assert.dom('[data-test-share-key-save]').isEnabled();
 
-      await click('[data-test-key-choice="Weather service"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Weather service"]) input',
+      );
       assert
         .dom('[data-test-share-key-save]')
         .isDisabled('switching keys reads the page again');
       assert.dom('[data-test-share-key-key-refuses]').exists();
-      await click('[data-test-key-choice="Maps"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Maps"]) input',
+      );
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
       assert.deepEqual(
@@ -2939,6 +3103,12 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys/key-2/share');
       await render(SharePage);
       await waitFor('[data-test-share-key-key-allows]');
+      assert
+        .dom('[data-test-share-key-audience]')
+        .hasAttribute('data-test-key-audience-tone', 'warning');
+      assert
+        .dom('[data-test-share-key-audience] [data-test-key-audience-who]')
+        .hasText('Anyone, signed in or not');
       assert
         .dom('[data-test-share-key-key-allows-text]')
         .hasText(
@@ -2994,7 +3164,9 @@ module('Integration | key pages', function (hooks) {
           'This link doesn’t name a key or a workspace to share it with.',
         );
       assert.dom('[data-test-keys-retry]').doesNotExist();
-      await click('[data-test-toggle-details]');
+      await click(
+        '[data-test-toggle-details] [data-test-pretui-collapsible-trigger]',
+      );
       assert
         .dom('[data-test-error-detail="Message"]')
         .hasText('This page names neither a key nor a workspace.');
@@ -3072,10 +3244,27 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-swap-key-form]');
       assert.dom('[data-test-swap-share-label]').hasText('Team weather');
       assert
+        .dom('[data-test-swap-key-audience]')
+        .hasAttribute(
+          'data-test-key-audience-tone',
+          'info',
+          'the suspended share and the key that takes its place sit in the shared-key section',
+        );
+      assert
+        .dom('[data-test-swap-key-audience] [data-test-swap-share]')
+        .exists();
+      assert
+        .dom('[data-test-swap-key-audience] [data-test-key-audience-what]')
+        .hasText(
+          'The key you choose goes into this share, which keeps its label and the calls approved with it.',
+        );
+      assert
         .dom('[data-test-swap-share]')
         .includesText('no longer has direct write access to this workspace');
       assert.dom('[data-test-key-value]').doesNotExist('no key is entered');
-      await click('[data-test-key-choice="Weather service"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Weather service"]) input',
+      );
       await click('[data-test-swap-key-save]');
       await waitFor('[data-test-keys-done]');
       assert.dom('[data-test-keys-heading]').hasText('Key shared');
@@ -3104,7 +3293,9 @@ module('Integration | key pages', function (hooks) {
       visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
       await render(SwapKeyPage);
       await waitFor('[data-test-swap-key-form]');
-      await click('[data-test-key-choice="Weather service"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Weather service"]) input',
+      );
       assert.dom('[data-test-swap-key-key-refuses]').exists();
       assert
         .dom('[data-test-swap-key-save]')
@@ -3114,7 +3305,9 @@ module('Integration | key pages', function (hooks) {
       visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
       await render(SwapKeyPage);
       await waitFor('[data-test-swap-key-form]');
-      await click('[data-test-key-choice="Weather service"] input');
+      await click(
+        '[data-test-pretui-choice-card]:has([data-test-key-choice="Weather service"]) input',
+      );
       assert
         .dom('[data-test-swap-key-key-allows] strong')
         .hasText('they will use this key');
@@ -3149,7 +3342,9 @@ module('Integration | key pages', function (hooks) {
         );
         await render(SwapKeyPage);
         await waitFor('[data-test-swap-key-form]');
-        await click('[data-test-key-choice="Weather service"] input');
+        await click(
+          '[data-test-pretui-choice-card]:has([data-test-key-choice="Weather service"]) input',
+        );
         await click('[data-test-swap-key-save]');
         await waitFor('[data-test-keys-done]');
         await click('[data-test-keys-close]');
@@ -3195,7 +3390,9 @@ module('Integration | key pages', function (hooks) {
           );
           await render(SwapKeyPage);
           await waitFor('[data-test-swap-key-form]');
-          await click('[data-test-key-choice="Weather service"] input');
+          await click(
+            '[data-test-pretui-choice-card]:has([data-test-key-choice="Weather service"]) input',
+          );
           await click(button!);
           assert.deepEqual(submitted, [
             {
@@ -4057,9 +4254,11 @@ module('Integration | key pages', function (hooks) {
     }
 
     function crumbs() {
-      return [...document.querySelectorAll('[data-test-breadcrumbs] li')].map(
-        (li) => li.textContent!.replace('›', '').trim(),
-      );
+      return [
+        ...document.querySelectorAll(
+          '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-label]',
+        ),
+      ].map((crumb) => crumb.textContent!.trim());
     }
 
     test('the page the window was opened on shows no trail, and is titled by its name', async function (assert) {
@@ -4080,13 +4279,15 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-key-list]');
       assert.deepEqual(crumbs(), ['Share key', 'Your keys']);
       assert
-        .dom('[data-test-breadcrumb-current]')
+        .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-current]')
         .hasAttribute('aria-current', 'page');
       assert.dom('[data-test-keys-heading]').hasText('Your keys');
       assert
-        .dom('[data-test-breadcrumb="0"]')
+        .dom('[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a')
         .hasAttribute('href', `/secure/${share}`);
-      await click('[data-test-breadcrumb="0"]');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/${share}` },
       ]);
@@ -4103,7 +4304,9 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-enter-key-form]');
       assert.deepEqual(crumbs(), ['Approve', 'Add key']);
       assert.dom('[data-test-keys-heading]').hasText('Add key');
-      await click('[data-test-breadcrumb="0"]');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
       assert.deepEqual(navigations, [
         { how: 'replace', url: `/secure/${approve}` },
       ]);
@@ -4155,12 +4358,41 @@ module('Integration | key pages', function (hooks) {
         'Approve',
         'Add key',
       ]);
-      await click('[data-test-breadcrumb="0"]');
-      await click('[data-test-breadcrumb="1"]');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="1"] a',
+      );
       assert.deepEqual(navigations, [
         { how: 'replace', url: '/secure/keys' },
         { how: 'replace', url: `/secure/${use}` },
       ]);
+    });
+
+    test('a trail too long for a narrow window wraps onto more lines rather than running off the edge', async function (assert) {
+      serveForecast();
+      let use = 'keys/key-1/use';
+      let approve = `approve#${OPENED_FOR_CARD}&${new URLSearchParams({ back: use })}`;
+      visitShell(
+        `enter-key#${OPENED_FOR_CARD}&then=approve&${new URLSearchParams({ back: approve })}`,
+      );
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      document
+        .querySelector<HTMLElement>('[data-test-secure-page]')!
+        .style.setProperty('width', '10rem');
+      let nav = document.querySelector<HTMLElement>('[data-test-breadcrumbs]')!;
+      let lines = new Set(
+        [...nav.querySelectorAll('[data-test-pretui-breadcrumb-label]')].map(
+          (crumb) => Math.round(crumb.getBoundingClientRect().top),
+        ),
+      );
+      assert.true(lines.size > 1, 'the crumbs sit on more than one line');
+      assert.true(
+        nav.scrollWidth <= nav.clientWidth,
+        'nothing overflows the trail sideways',
+      );
     });
 
     test('a page beneath the key page has the key page above it', async function (assert) {
@@ -4168,7 +4400,9 @@ module('Integration | key pages', function (hooks) {
       await render(EnterKeyPage);
       await waitFor('[data-test-enter-key-form]');
       assert.deepEqual(crumbs(), ['Your keys', 'Add key']);
-      await click('[data-test-breadcrumb="0"]');
+      await click(
+        '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+      );
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
     });
 
@@ -4182,8 +4416,12 @@ module('Integration | key pages', function (hooks) {
         await render(EnterKeyPage);
         await waitFor('[data-test-enter-key-form]');
         assert.deepEqual(crumbs(), ['Share key', 'Your keys', 'Add key']);
-        await click('[data-test-breadcrumb="1"]');
-        await click('[data-test-breadcrumb="0"]');
+        await click(
+          '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="1"] a',
+        );
+        await click(
+          '[data-test-breadcrumbs] [data-test-pretui-breadcrumb-item="0"] a',
+        );
         assert.deepEqual(navigations, [
           { how: 'back', url: `/secure/${keys}` },
           { how: 'replace', url: `/secure/${share}` },

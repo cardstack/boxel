@@ -132,6 +132,12 @@ function columnCount(selector: string) {
   return getComputedStyle(grid).gridTemplateColumns.split(' ').length;
 }
 
+// An IconButton whose tip matches its label is named by the tip.
+function nameFromTip(selector: string) {
+  let id = find(selector)?.getAttribute('aria-labelledby') ?? '';
+  return document.getElementById(id)?.textContent?.trim();
+}
+
 function selectedName() {
   return find('[data-test-workspace-selected]')?.getAttribute(
     'data-test-workspace-selected',
@@ -202,10 +208,12 @@ module('Acceptance | dashboard', function (hooks) {
     },
   });
 
+  let mainRealm: Awaited<ReturnType<typeof setupAcceptanceTestRealm>>['realm'];
+
   hooks.beforeEach(async function () {
     setupUserSubscription();
     setupAuthEndpoints();
-    await setupAcceptanceTestRealm({
+    ({ realm: mainRealm } = await setupAcceptanceTestRealm({
       realmURL,
       mockMatrixUtils,
       permissions: {
@@ -214,7 +222,7 @@ module('Acceptance | dashboard', function (hooks) {
       contents: {
         'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
       },
-    });
+    }));
   });
 
   module('state', function () {
@@ -472,9 +480,11 @@ module('Acceptance | dashboard', function (hooks) {
         .dom(`${gear} [role="tooltip"]`)
         .hasAttribute('data-open', 'true')
         .hasText('Choose Catalogs');
-      assert
-        .dom('[data-test-manage-catalogs]')
-        .hasAttribute('aria-label', 'Choose Catalogs');
+      assert.strictEqual(
+        nameFromTip('[data-test-manage-catalogs]'),
+        'Choose Catalogs',
+        'its tip names it',
+      );
     });
 
     test('with a favorite, Favorites comes first among the sections', async function (assert) {
@@ -1474,6 +1484,84 @@ module('Acceptance | dashboard', function (hooks) {
         assert
           .dom('[data-test-pinned-cards]')
           .exists({ count: 1 }, 'only the desk shows pins');
+      });
+
+      test('a pin saved to the Workspace card shows on its desk without a reload', async function (assert) {
+        const deskPins =
+          '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-pinned-card]';
+        await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+        await mainRealm.write(
+          'index.json',
+          JSON.stringify(workspaceIndexJSON({})),
+        );
+        await visitWithFavorites([realmURL]);
+        assert.dom(deskPins).doesNotExist();
+
+        await mainRealm.write(
+          'index.json',
+          JSON.stringify(
+            workspaceIndexJSON({
+              'entryPoints.0': { links: { self: './notes' } },
+            }),
+          ),
+        );
+        await waitUntil(() => findAll(deskPins).length === 1);
+
+        assert
+          .dom(deskPins)
+          .hasAttribute('aria-label', 'Open Notes')
+          .hasAttribute('data-test-pinned-card', `${realmURL}notes`);
+      });
+
+      test("a write to another card doesn't search for the desk's pins again", async function (assert) {
+        await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+        await mainRealm.write(
+          'index.json',
+          JSON.stringify(
+            workspaceIndexJSON({
+              'entryPoints.0': { links: { self: './notes' } },
+            }),
+          ),
+        );
+        let pinSearches = 0;
+        let { virtualNetwork } = getService('network');
+        let countPinSearches = async (request: Request) => {
+          if (
+            request.url.endsWith('/_federated-search') &&
+            JSON.stringify(await request.clone().json()).includes(
+              'item.entryPoints',
+            )
+          ) {
+            pinSearches++;
+          }
+          return null;
+        };
+        virtualNetwork.mount(countPinSearches, { prepend: true });
+        try {
+          await visitWithFavorites([realmURL]);
+          await waitUntil(
+            () =>
+              findAll(
+                '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-pinned-card]',
+              ).length === 1,
+          );
+          let searchesBefore = pinSearches;
+
+          await mainRealm.write(
+            'other.json',
+            JSON.stringify(cardJSON('Other')),
+          );
+          await settled();
+
+          assert.true(searchesBefore > 0, 'the desk searched for its pins');
+          assert.strictEqual(
+            pinSearches,
+            searchesBefore,
+            'the pins are not searched again',
+          );
+        } finally {
+          virtualNetwork.unmount(countPinSearches);
+        }
       });
 
       // The ids in the stack a pin opens, from the bottom.
@@ -2739,9 +2827,11 @@ module('Acceptance | dashboard', function (hooks) {
       test('copying a step puts its text on the clipboard and counts it', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
-        assert
-          .dom('[data-test-agent-copy="3"]')
-          .hasAttribute('aria-label', 'Copy');
+        assert.strictEqual(
+          nameFromTip('[data-test-agent-copy="3"]'),
+          'Copy',
+          'its tip names it',
+        );
         assert.true(
           (
             find('[data-test-agent-copy="3"]')?.getAttribute(
@@ -3128,7 +3218,7 @@ module('Acceptance | dashboard', function (hooks) {
         (getService('recent-cards-service') as any).add(`${realmURL}index`);
         await settled();
 
-        assert.dom(TOGGLE).hasAria('label', 'Minimize steps');
+        assert.strictEqual(nameFromTip(TOGGLE), 'Minimize steps');
         await click(TOGGLE);
 
         assert.dom(GET_STARTED).exists('the list stays open, folded');
@@ -3137,13 +3227,13 @@ module('Acceptance | dashboard', function (hooks) {
           countText(),
           '1 of 3 done · Next: Ask Boxel AI Assistant to build something',
         );
-        assert.dom(TOGGLE).hasAria('label', 'Expand steps');
+        assert.strictEqual(nameFromTip(TOGGLE), 'Expand steps');
         assert.dom(TOGGLE).hasAttribute('aria-expanded', 'false');
         assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
 
         await click(TOGGLE);
         assert.dom('[data-test-get-started-step]').exists({ count: 3 });
-        assert.dom(TOGGLE).hasAria('label', 'Minimize steps');
+        assert.strictEqual(nameFromTip(TOGGLE), 'Minimize steps');
         assert.dom(TOGGLE).hasAttribute('aria-expanded', 'true');
       });
 

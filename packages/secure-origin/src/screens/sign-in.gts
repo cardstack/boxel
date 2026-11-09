@@ -13,7 +13,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
 import AuthButton from '../components/auth-button.gts';
-import Button from '../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import GoogleColor from '../components/icons/google-color.gts';
 
 interface Signature {
@@ -78,8 +78,7 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     <Button
       type='button'
       class='forgot-password'
-      @kind='link-muted'
-      @size='extra-small'
+      @variant='link'
       {{on 'click' @onForgotPassword}}
       data-test-forgot-password
       data-test-secure-forgot-password
@@ -108,7 +107,7 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       <Button
         type='button'
         class='register-link'
-        @kind='link-primary'
+        @variant='link'
         {{on 'click' @onRegister}}
         data-test-register-user
         data-test-secure-register
@@ -142,15 +141,49 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       font: var(--boxel-font-sm);
       line-height: 1.4;
     }
+    /* The two links sit in the text as boxel-ui's link buttons do: no
+       height of their own, in the surrounding type. */
+    .forgot-password,
+    .register-link {
+      min-height: 0;
+      padding-block: 0;
+      border: 0;
+      font: inherit;
+      letter-spacing: inherit;
+    }
+    /* On hover and press they change color, with no underline, as
+       boxel-ui's link buttons do. */
+    .forgot-password:is(:hover, :active),
+    .register-link:is(:hover, :active) {
+      text-decoration-line: none;
+    }
+    .forgot-password:is(:hover, :active) {
+      color: var(
+        --boxel-button-link-muted-active-foreground,
+        var(--foreground)
+      );
+    }
+    .register-link:is(:hover, :active) {
+      color: var(
+        --boxel-button-link-primary-active-foreground,
+        color-mix(in oklab, var(--primary) 80%, black)
+      );
+    }
     .forgot-password {
       --host-outline-offset: 2px;
+      --pretui-button-fg: var(
+        --boxel-button-link-muted-foreground,
+        var(--muted-foreground)
+      );
+      font: var(--boxel-font-xs);
+      line-height: inherit;
       margin-top: var(--boxel-sp-4xs);
       margin-bottom: var(--boxel-sp-lg);
       margin-inline-start: auto;
     }
     .google-button {
+      --pretui-button-gap: var(--boxel-sp-xs);
       margin-top: var(--boxel-sp-sm);
-      gap: var(--boxel-sp-xs);
     }
     .google-g {
       flex-shrink: 0;
@@ -193,6 +226,10 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     }
     .register-link {
       --host-outline-offset: 2px;
+      --pretui-button-fg: var(
+        --boxel-button-link-primary-foreground,
+        var(--primary)
+      );
     }
   </style>
 </template>;

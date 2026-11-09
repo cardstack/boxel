@@ -11,9 +11,9 @@ import { on } from '@ember/modifier';
 
 import AuthButton from '../components/auth-button.gts';
 import AuthFormField from '../components/auth-form-field.gts';
-import BoxelInput from '../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import optional from '../helpers/optional.ts';
-import { autofocus } from '../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface ForgotPasswordFormSignature {
   Args: {
@@ -42,19 +42,20 @@ export const ForgotPasswordForm: TemplateOnlyComponent<ForgotPasswordFormSignatu
       <AuthFormField
         @label='Email Address'
         data-test-secure-field='email'
-        as |labelId|
+        as |labelId controlId|
       >
-        <BoxelInput
+        <Input
+          @controlId={{controlId}}
           aria-labelledby={{labelId}}
           data-test-email-field
           name='email'
           autocomplete='email'
           @type='text'
           @errorMessage={{@emailError}}
-          @state={{if @emailError 'invalid' 'initial'}}
+          @invalid={{if @emailError true false}}
           @value={{@email}}
           @onInput={{@onEmailInput}}
-          {{autofocus (if @autofocus true false)}}
+          {{focusWhen (if @autofocus true false)}}
         />
       </AuthFormField>
       <div class='button-wrapper'>

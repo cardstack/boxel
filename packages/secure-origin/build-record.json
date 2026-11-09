@@ -6,6 +6,7 @@
       "credentials.html",
       "credentials.js",
       "layers.css",
+      "rolldown-runtime.js",
       "session.js",
       "shared.css",
       "shared.js"
@@ -14,11 +15,19 @@
       "app-origins.js",
       "index.html",
       "layers.css",
+      "rolldown-runtime.js",
       "session.js",
       "shared.css",
       "shared.js",
       "shell.css",
       "shell.js"
+    ],
+    "probe/probe.html": [
+      "probe/layers.css",
+      "probe/probe.css",
+      "probe/probe.html",
+      "probe/probe.js",
+      "probe/rolldown-runtime.js"
     ]
   },
   "files": {
@@ -33,19 +42,19 @@
       ]
     },
     "credentials.css": {
-      "bytes": 1046,
+      "bytes": 1770,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/credentials/b38b0caa88.css"
+          "module": "src/credentials/4db4450b23.css"
         }
       ]
     },
     "credentials.html": {
-      "bytes": 1052
+      "bytes": 1146
     },
     "credentials.js": {
-      "bytes": 12487,
+      "bytes": 13159,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -55,22 +64,22 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/credential-fields.gts",
-          "size": 4828
+          "size": 5282
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/main.ts",
-          "size": 1121
+          "size": 1454
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/style.ts",
-          "size": 2763
+          "size": 2857
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/credentials.js",
-          "size": 8524
+          "size": 8488
         },
         {
           "package": "@cardstack/secure-origin",
@@ -80,10 +89,10 @@
       ]
     },
     "index.html": {
-      "bytes": 1591
+      "bytes": 1841
     },
     "layers.css": {
-      "bytes": 48,
+      "bytes": 127,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -91,90 +100,98 @@
         }
       ]
     },
-    "session.js": {
-      "bytes": 6814,
-      "modules": [
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/security/session.js",
-          "size": 10729
-        }
-      ]
-    },
-    "shared.css": {
-      "bytes": 4386,
+    "probe/layers.css": {
+      "bytes": 127,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/51537f9ada.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/e2561eec49.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/f21b304789.css"
+          "module": "src/styles/layers.css"
         }
       ]
     },
-    "shared.js": {
-      "bytes": 285952,
+    "probe/probe.css": {
+      "bytes": 3753,
+      "sources": [
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/accordion/749b3ba4ba.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/accordion/item/79d7ef0833.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/ebd676688b.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/probe/358eea86a2.css"
+        }
+      ]
+    },
+    "probe/probe.html": {
+      "bytes": 1154
+    },
+    "probe/probe.js": {
+      "bytes": 253230,
       "modules": [
         {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/field-container.gts",
-          "size": 2930
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/chevron-right.js",
+          "sha256": "f922a36ee50c4c15fe41934bf9196877bfb5df4369ca07efddf20047ca4c076a",
+          "size": 808
         },
         {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/failure-bordered.gts",
-          "size": 1015
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/key-round.js",
+          "sha256": "eb742fec42e69fc7fd0e18ddbce1904149dd5014115bb4389176f0ad5603b78a",
+          "size": 1069
         },
         {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/success-bordered.gts",
-          "size": 1007
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/accordion/index.gts",
+          "sha256": "9db20a329feaaf6a1b31060f5b7bfe3710014fdef16c3e765a9a2a8faafbdfb8",
+          "size": 642
         },
         {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/input.gts",
-          "size": 4347
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/accordion/item/index.gts",
+          "sha256": "7a9aa88ce7d33eb8f5ad9b4e87690069219abf4d47b9d990c94c46ec5c6d0575",
+          "size": 1939
         },
         {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/label.gts",
-          "size": 407
-        },
-        {
-          "package": "@cardstack/secure-origin",
+          "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/helpers/cn.ts",
-          "size": 231
+          "sha256": "ba62889c8f67906e327d7e799be6d686342d871ead5bb95b730948f41c210776",
+          "size": 327
         },
         {
-          "package": "@cardstack/secure-origin",
+          "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/helpers/optional.ts",
-          "size": 115
+          "sha256": "a2cad5e8c50c377a02a0be99ce0d2a8c405dffbbd9ed4c5939d640b5ddc99974",
+          "size": 127
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/accordion.gts",
+          "sha256": "13454533b9fe8cb6159acb5bc7d93e39d6b84c5e4ea7e024f1a47d77e85bd8af",
+          "size": 701
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/helpers/truth-helpers.ts",
-          "size": 317
+          "module": "src/probe/main.ts",
+          "size": 103
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/modifiers/fit-content.ts",
-          "size": 864
+          "module": "src/probe/probe-page.gts",
+          "size": 1165
         },
         {
-          "package": "@cardstack/secure-origin",
-          "module": "src/modifiers/modifier.ts",
-          "size": 771
-        },
-        {
-          "package": "@glimmer/component@2.1.1",
-          "module": "dist/index.js",
-          "size": 2375
+          "package": "classnames@2.5.1",
+          "module": "index.js",
+          "size": 1417
         },
         {
           "package": "ember-source@6.10.1",
@@ -189,7 +206,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/meta/lib/meta.js",
-          "size": 7968
+          "size": 7956
         },
         {
           "package": "ember-source@6.10.1",
@@ -204,7 +221,679 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/runtime/lib/mixins/-proxy.js",
-          "size": 1455
+          "size": 1447
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/action_handler.js",
+          "size": 569
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/comparable.js",
+          "size": 310
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/container_proxy.js",
+          "size": 753
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/registry_proxy.js",
+          "size": 900
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/target_action_support.js",
+          "size": 1648
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/string/index.js",
+          "size": 1344
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/compat/attrs.js",
+          "size": 296
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/mixins/action_support.js",
+          "size": 532
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/system/utils.js",
+          "size": 1859
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/views/core_view.js",
+          "size": 1284
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/views/states.js",
+          "size": 1327
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/array/-internals.js",
+          "size": 404
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/array/index.js",
+          "size": 8472
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/array/lib/make-array.js",
+          "size": 390
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/component/template-only.js",
+          "size": 285
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/controller/index.js",
+          "size": 1062
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/index.js",
+          "size": 280
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/lib/assert.js",
+          "size": 259
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/lib/inspect.js",
+          "size": 2309
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/lib/testing.js",
+          "size": 300
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/engine/instance.js",
+          "size": 2409
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/engine/lib/engine-parent.js",
+          "size": 435
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/enumerable/index.js",
+          "size": 269
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/enumerable/mutable.js",
+          "size": 288
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/helper/index.js",
+          "size": 251
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/instrumentation/index.js",
+          "size": 1740
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/modifier/on.js",
+          "size": 246
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/-internals.js",
+          "size": 305
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/compat.js",
+          "size": 989
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/core.js",
+          "size": 5721
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/evented.js",
+          "size": 660
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/index.js",
+          "size": 1630
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/lib/computed/computed_macros.js",
+          "size": 1225
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/mixin.js",
+          "size": 8986
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/observable.js",
+          "size": 1481
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/owner/index.js",
+          "size": 258
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/dsl.js",
+          "size": 4734
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/generate_controller.js",
+          "size": 790
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/router_state.js",
+          "size": 925
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/routing-service.js",
+          "size": 2383
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/utils.js",
+          "size": 3973
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/route.js",
+          "size": 16516
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/router-service.js",
+          "size": 3342
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/router.js",
+          "size": 23451
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/runloop/index.js",
+          "size": 1371
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/service/index.js",
+          "size": 381
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/utils/lib/compare.js",
+          "size": 1550
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/utils/lib/type-of.js",
+          "size": 1032
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/destroyable/index.js",
+          "size": 2866
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/encoder/index.js",
+          "size": 817
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/global-context/index.js",
+          "size": 923
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/manager/index.js",
+          "size": 9093
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/opcode-compiler/index.js",
+          "size": 35262
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/owner/index.js",
+          "size": 386
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/program/index.js",
+          "size": 8169
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/reference/index.js",
+          "size": 6308
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/runtime/index.js",
+          "size": 100135
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/util/index.js",
+          "size": 1618
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/validator/index.js",
+          "size": 15766
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/vm/index.js",
+          "size": 904
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/wire-format/index.js",
+          "size": 1578
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/backburner.js/index.js",
+          "size": 21688
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/ember/version.js",
+          "size": 250
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/route-recognizer/index.js",
+          "size": 15564
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/alias-CPqbuwcg.js",
+          "size": 1966
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/array-CVk-fNjW.js",
+          "size": 2539
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/cache-DtDz7X5V.js",
+          "size": 24158
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/cache-qDyqAcpg.js",
+          "size": 804
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/chunk-3SQBS3Y5-Cj4eryg1.js",
+          "size": 3258
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/dictionary-gc5gpyOG.js",
+          "size": 377
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/env-DxZ20QzS.js",
+          "size": 2506
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/index-BGP1rw3B.js",
+          "size": 993
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/index-DaCZcoCY.js",
+          "size": 61650
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/is_proxy-DxRbm8wn.js",
+          "size": 455
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/mandatory-setter-CXNsxygN.js",
+          "size": 3101
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/namespace_search-Dh_YNV5f.js",
+          "size": 346
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/property_set-n9lAuzYY.js",
+          "size": 1319
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/registry-BJpQx6hv.js",
+          "size": 10870
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/router-BViwI_oJ.js",
+          "size": 35890
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/rsvp-ziM3qQyS.js",
+          "size": 22966
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/set_properties-D2_u0phU.js",
+          "size": 892
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/to-string-DaIn5NlY.js",
+          "size": 406
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/unrecognized-url-error-Csk7hcJF.js",
+          "size": 8923
+        }
+      ]
+    },
+    "probe/rolldown-runtime.js": {
+      "bytes": 568,
+      "modules": [
+        {
+          "package": "(bundler)",
+          "module": "rolldown/runtime.js",
+          "size": 1124
+        }
+      ]
+    },
+    "rolldown-runtime.js": {
+      "bytes": 695,
+      "modules": [
+        {
+          "package": "(bundler)",
+          "module": "rolldown/runtime.js",
+          "size": 1388
+        }
+      ]
+    },
+    "session.js": {
+      "bytes": 6814,
+      "modules": [
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/security/session.js",
+          "size": 10729
+        }
+      ]
+    },
+    "shared.css": {
+      "bytes": 18040,
+      "sources": [
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input/95f9b29188.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/705956fbe5.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/b93fc7b584.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/bd5579bb2b.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/2d68bd1d08.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/86ee7a4370.css"
+        }
+      ]
+    },
+    "shared.js": {
+      "bytes": 325004,
+      "modules": [
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/check.js",
+          "sha256": "aec2a56eef69c23d11f1a1577d2f40edb5522e01ad0dd0d9e07e4177dd1d3a4c",
+          "size": 782
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/search.js",
+          "sha256": "4e1ad75efdc332a3a819ab920acab65bb7d1502c712b6bfa72be7eae651df67e",
+          "size": 864
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/x.js",
+          "sha256": "28a68fc26b1d95e7631859116873c5537ba10a33ff39be3f2ab36d34e57e197a",
+          "size": 771
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input/index.gts",
+          "sha256": "fc555d4ff8ddaa5311b96e511a702cf67d475bfcc146ebc5b8fc5db131492607",
+          "size": 6264
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/helpers/cn.ts",
+          "sha256": "ba62889c8f67906e327d7e799be6d686342d871ead5bb95b730948f41c210776",
+          "size": 329
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/helpers/element.ts",
+          "sha256": "c87b38f1a1ca946c3f4d39f227791c2f23fa4c4018b2b299f2700429fa6a6ecf",
+          "size": 328
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/helpers/optional.ts",
+          "sha256": "a2cad5e8c50c377a02a0be99ce0d2a8c405dffbbd9ed4c5939d640b5ddc99974",
+          "size": 127
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/helpers/pick.ts",
+          "sha256": "d8edf8803cb27f29ff10bb6287d989b0c9011b816e28c918fb74f82c7fabbc91",
+          "size": 145
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/helpers/truth-helpers.ts",
+          "sha256": "8107c76549c6f34a62a5a941bf4b468a6cf675edc0d123556f28fc460eff498e",
+          "size": 479
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/icons/check-mark.gts",
+          "sha256": "29c68b8b8ce057095cca3974be15001134cf931fedf14cfee175696660891bfa",
+          "size": 682
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/icons/failure-bordered.gts",
+          "sha256": "0664bbe5015d960bdd41145df4adedf6c8bd97767dc952a62182c91e3ce62c36",
+          "size": 1065
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/icons/icon-search.gts",
+          "sha256": "8fb177d3eb9651a7b5d601c32cd17c51d1b288b08c9664a57aa1f51c1e70bf2b",
+          "size": 920
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/icons/loading-indicator.gts",
+          "sha256": "aff77dd5c7fc7b0b360647ba1a41b3dd9a0189e56b1d0b154764c2ce139ed6b8",
+          "size": 918
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/icons/success-bordered.gts",
+          "sha256": "1810eb678084004f7de89591e045f5eb1e44889aa0165ff85a7c66e1c2af2b7e",
+          "size": 1057
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/cue.gts",
+          "sha256": "4874501c1f13e6cc847e6673752e150432c7fde9721a63fd207975332361c74f",
+          "size": 3057
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/field.gts",
+          "sha256": "f81b700dd97887d5e27a03de13871b1481bde9cfa368668c5b5e5a504e39fc97",
+          "size": 5193
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/input.gts",
+          "sha256": "dabb9c9d8e69f2cb62f7e1eaeffd0c6c667413b9340b394b3a71b20f7a78cc89",
+          "size": 2914
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/described-by.ts",
+          "sha256": "ef6e3b86ec85ba3e528052e2abc44449588427374f520cf6c9e41d743f9755a4",
+          "size": 671
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/extras.gts",
+          "sha256": "5ed9d9ce64f97b889f2277f77e5b7f145429d4d01e89acb9ce4fa4310d83989f",
+          "size": 722
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/field-dress.gts",
+          "sha256": "19a8a9cf6fab91720d34b682b3613a282675bb16c965daeb9171a66a205297dd",
+          "size": 741
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/keep-style.gts",
+          "sha256": "f1c93b8ac1a47d55fdb6750ff6a353c257c50882ae9afb47c2f27089af4e4640",
+          "size": 2122
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/search-glyph.gts",
+          "sha256": "5b47186d96593017fb43e76643eba8087dc28b338680a63536dea1470a206760",
+          "size": 750
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "pretui-primitives.gts",
+          "sha256": "515ada8c7b13fbd4d8391b668fbb8207c750f58daae9114b05dc0cb7fc459767",
+          "size": 1148
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/helpers/cn.ts",
+          "size": 231
+        },
+        {
+          "package": "@glimmer/component@2.1.1",
+          "module": "dist/index.js",
+          "size": 2377
+        },
+        {
+          "package": "classnames@2.5.1",
+          "module": "index.js",
+          "size": 1417
+        },
+        {
+          "package": "decorator-transforms@2.4.0",
+          "module": "dist/runtime--fcdnjmJ.js",
+          "size": 1815
+        },
+        {
+          "package": "ember-modifier@4.3.0",
+          "module": "dist/index.js",
+          "size": 2298
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/deprecations/index.js",
+          "size": 1767
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/error-handling/index.js",
+          "size": 457
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/meta/lib/meta.js",
+          "size": 7968
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/owner/index.js",
+          "size": 454
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/ext/rsvp.js",
+          "size": 1203
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/-proxy.js",
+          "size": 1457
         },
         {
           "package": "ember-source@6.10.1",
@@ -243,6 +932,11 @@
         },
         {
           "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/component_lookup.js",
+          "size": 561
+        },
+        {
+          "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/views/lib/mixins/action_support.js",
           "size": 534
         },
@@ -259,12 +953,32 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/views/lib/views/core_view.js",
-          "size": 1284
+          "size": 1288
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/-internals/views/lib/views/states.js",
           "size": 1331
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/application/index.js",
+          "size": 4917
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/application/instance.js",
+          "size": 4335
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/application/lib/lazy_load.js",
+          "size": 598
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/application/namespace.js",
+          "size": 940
         },
         {
           "package": "ember-source@6.10.1",
@@ -293,8 +1007,13 @@
         },
         {
           "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/container-debug-adapter.js",
+          "size": 1035
+        },
+        {
+          "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/debug/index.js",
-          "size": 280
+          "size": 305
         },
         {
           "package": "ember-source@6.10.1",
@@ -304,7 +1023,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/debug/lib/inspect.js",
-          "size": 2311
+          "size": 2315
         },
         {
           "package": "ember-source@6.10.1",
@@ -315,6 +1034,11 @@
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/destroyable/index.js",
           "size": 349
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/engine/index.js",
+          "size": 3325
         },
         {
           "package": "ember-source@6.10.1",
@@ -339,7 +1063,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/helper/index.js",
-          "size": 318
+          "size": 310
         },
         {
           "package": "ember-source@6.10.1",
@@ -399,7 +1123,17 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/owner/index.js",
-          "size": 258
+          "size": 367
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/hash-location.js",
+          "size": 1394
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/history-location.js",
+          "size": 2952
         },
         {
           "package": "ember-source@6.10.1",
@@ -418,6 +1152,11 @@
         },
         {
           "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/location-utils.js",
+          "size": 355
+        },
+        {
+          "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/routing/lib/router_state.js",
           "size": 925
         },
@@ -433,13 +1172,18 @@
         },
         {
           "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/none-location.js",
+          "size": 901
+        },
+        {
+          "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/routing/route.js",
-          "size": 16560
+          "size": 16564
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/routing/router-service.js",
-          "size": 3342
+          "size": 3362
         },
         {
           "package": "ember-source@6.10.1",
@@ -449,7 +1193,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/runloop/index.js",
-          "size": 1511
+          "size": 1641
         },
         {
           "package": "ember-source@6.10.1",
@@ -463,8 +1207,13 @@
         },
         {
           "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/utils/lib/is_empty.js",
+          "size": 699
+        },
+        {
+          "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/utils/lib/type-of.js",
-          "size": 1032
+          "size": 1046
         },
         {
           "package": "ember-source@6.10.1",
@@ -485,6 +1234,11 @@
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/manager/index.js",
           "size": 13917
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/node/index.js",
+          "size": 2757
         },
         {
           "package": "ember-source@6.10.1",
@@ -509,7 +1263,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/runtime/index.js",
-          "size": 110121
+          "size": 110125
         },
         {
           "package": "ember-source@6.10.1",
@@ -519,7 +1273,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/validator/index.js",
-          "size": 17358
+          "size": 17360
         },
         {
           "package": "ember-source@6.10.1",
@@ -535,6 +1289,11 @@
           "package": "ember-source@6.10.1",
           "module": "dist/packages/backburner.js/index.js",
           "size": 21688
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/dag-map/index.js",
+          "size": 3939
         },
         {
           "package": "ember-source@6.10.1",
@@ -559,7 +1318,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/cache-DtDz7X5V.js",
-          "size": 24226
+          "size": 24232
         },
         {
           "package": "ember-source@6.10.1",
@@ -569,7 +1328,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/chunk-3SQBS3Y5-Cj4eryg1.js",
-          "size": 3258
+          "size": 3292
         },
         {
           "package": "ember-source@6.10.1",
@@ -589,12 +1348,12 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/index-DaCZcoCY.js",
-          "size": 69696
+          "size": 70110
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/is_proxy-DxRbm8wn.js",
-          "size": 455
+          "size": 459
         },
         {
           "package": "ember-source@6.10.1",
@@ -604,12 +1363,12 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/mandatory-setter-CXNsxygN.js",
-          "size": 3101
+          "size": 3109
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/name-BVdprEDX.js",
-          "size": 407
+          "size": 409
         },
         {
           "package": "ember-source@6.10.1",
@@ -624,7 +1383,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/registry-BJpQx6hv.js",
-          "size": 10870
+          "size": 10874
         },
         {
           "package": "ember-source@6.10.1",
@@ -643,74 +1402,419 @@
         },
         {
           "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/setup-registry-DktVPnKH.js",
+          "size": 1128
+        },
+        {
+          "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/to-string-DaIn5NlY.js",
           "size": 406
         },
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/unrecognized-url-error-Csk7hcJF.js",
-          "size": 8923
+          "size": 8939
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_arrayMap.js",
+          "size": 320
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_assocIndexOf.js",
+          "size": 249
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_baseGet.js",
+          "size": 338
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_baseGetTag.js",
+          "size": 437
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_baseIsNative.js",
+          "size": 702
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_baseToString.js",
+          "size": 566
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_castPath.js",
+          "size": 245
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_coreJsData.js",
+          "size": 148
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_freeGlobal.js",
+          "size": 195
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_getMapData.js",
+          "size": 249
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_getNative.js",
+          "size": 220
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_getRawTag.js",
+          "size": 676
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_getValue.js",
+          "size": 183
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_Hash.js",
+          "size": 459
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_hashClear.js",
+          "size": 200
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_hashDelete.js",
+          "size": 236
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_hashGet.js",
+          "size": 430
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_hashHas.js",
+          "size": 285
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_hashSet.js",
+          "size": 333
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_isKey.js",
+          "size": 511
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_isKeyable.js",
+          "size": 286
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_isMasked.js",
+          "size": 342
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_ListCache.js",
+          "size": 519
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_listCacheClear.js",
+          "size": 174
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_listCacheDelete.js",
+          "size": 375
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_listCacheGet.js",
+          "size": 241
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_listCacheHas.js",
+          "size": 183
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_listCacheSet.js",
+          "size": 309
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_Map.js",
+          "size": 132
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_MapCache.js",
+          "size": 507
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_mapCacheClear.js",
+          "size": 256
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_mapCacheDelete.js",
+          "size": 238
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_mapCacheGet.js",
+          "size": 174
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_mapCacheHas.js",
+          "size": 174
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_mapCacheSet.js",
+          "size": 272
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_memoizeCapped.js",
+          "size": 327
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_nativeCreate.js",
+          "size": 153
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_objectToString.js",
+          "size": 238
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_root.js",
+          "size": 243
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_stringToPath.js",
+          "size": 551
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_Symbol.js",
+          "size": 127
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_toKey.js",
+          "size": 304
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "_toSource.js",
+          "size": 323
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "eq.js",
+          "size": 189
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "get.js",
+          "size": 254
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "isArray.js",
+          "size": 128
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "isFunction.js",
+          "size": 419
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "isObject.js",
+          "size": 222
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "isObjectLike.js",
+          "size": 188
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "isSymbol.js",
+          "size": 255
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "memoize.js",
+          "size": 690
+        },
+        {
+          "package": "lodash-es@4.18.1",
+          "module": "toString.js",
+          "size": 179
         }
       ]
     },
     "shell.css": {
-      "bytes": 81748,
+      "bytes": 133743,
       "sources": [
         {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/2a4b56d7da.css"
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/button/6c7dbd1683.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/icon-button/cd9c7937ab.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/7a9abfc800.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/accessories/68bba714fe.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/accessories/6ca717a623.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/loading-indicator/803b34d81d.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/07eefebab2.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/26399f7c1f.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/743ac815ce.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/919ea60df0.css"
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/b595555c27.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/1acf6ef770.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/1f591b670b.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/24df79f237.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/43ec649b08.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/64fe82e6e1.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/69120dd1a0.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/78049cf645.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/7c21381fd5.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/7d74a5ae13.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/919ac9890d.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/a4714df51a.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/b2e0c6c378.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/c19257535b.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/cd535640b0.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/e67bd21f1d.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/e8e8225775.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/ee74d86ad3.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/9af661bf35.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/a06279a4f5.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/2b5d9db39c.css"
+          "module": "src/components/2a8ba28b2a.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/30af999b0b.css"
+          "module": "src/components/38a8c7f015.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/365822eb1d.css"
+          "module": "src/components/b9489e92c7.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/43ad77275b.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/6134f21d67.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/8bdbff4e39.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/b61fa3248b.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/b832a3ca2d.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/ca076b9590.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/d1529afc86.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/d27b7c8d1f.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/ea8785a40f.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/f500bff2f2.css"
+          "module": "src/components/f7ee36bddb.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -718,15 +1822,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/screens/0511df30aa.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/screens/0c6916d8d2.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/screens/1c3237ba01.css"
+          "module": "src/screens/349b4c7408.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -738,7 +1838,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/screens/5d7eae1ae3.css"
+          "module": "src/screens/5a87087861.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/screens/665ce1b551.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -754,6 +1858,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/f563e3b71b.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/global.css"
         },
         {
@@ -762,7 +1870,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/01170928fe.css"
+          "module": "src/shell/keys/05992df8b2.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -770,7 +1878,31 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/0e3dcff1a9.css"
+          "module": "src/shell/keys/1139af9600.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/15fc03d644.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/18c4bdcfee.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/1c861dc12b.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/1ce372042c.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/1e94133232.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/208a267baf.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -778,15 +1910,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/2642f509cc.css"
+          "module": "src/shell/keys/2830ece10f.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/280551eb4d.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/2e1c24f5f6.css"
+          "module": "src/shell/keys/2c38a1b574.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -794,7 +1922,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/319c6453ca.css"
+          "module": "src/shell/keys/36a414a9db.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -802,11 +1930,23 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/40de416709.css"
+          "module": "src/shell/keys/403fa6b39b.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/4d26177b8f.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/4e750c121b.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/525c77723c.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/5b0204448e.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -818,39 +1958,39 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/5f1e53cd3f.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/69c34ca52c.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/6a2778f66d.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/7444a22aa5.css"
+          "module": "src/shell/keys/7c65de0aa9.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/7bec823ea5.css"
+          "module": "src/shell/keys/7ed65a585b.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/80e5dcd242.css"
+          "module": "src/shell/keys/9042e19054.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/968c816a26.css"
+          "module": "src/shell/keys/a45c1c02bd.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/a0b3760b6c.css"
+          "module": "src/shell/keys/a4da6cd303.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/a9020baded.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/abdaf1e89c.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/ac74591982.css"
+          "module": "src/shell/keys/ae0fa46a5d.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -858,35 +1998,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/bd13cff975.css"
+          "module": "src/shell/keys/cf06d7356e.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/cc4aca9eca.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/cd87ff06a7.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/ce9b09fe81.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/d04c36b5ba.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/d05259cb91.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/d88c53b8d4.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/de85b19ebc.css"
+          "module": "src/shell/keys/cff92bc523.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -894,19 +2010,19 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/e76a708c45.css"
+          "module": "src/shell/keys/e8a207d923.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/edffc4fb81.css"
+          "module": "src/shell/keys/eae2b3f8ec.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/ef42dcf82f.css"
+          "module": "src/shell/keys/ece4d13c40.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/f646894f58.css"
+          "module": "src/shell/keys/f8cd2f5ae4.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -947,12 +2063,330 @@
       ]
     },
     "shell.js": {
-      "bytes": 373668,
+      "bytes": 571142,
       "modules": [
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/alert-triangle.js",
+          "sha256": "841a407c161c735a3ae4082ff8ae1c8daba023fc1ae233168eba2bcc0809ff4a",
+          "size": 894
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/globe.js",
+          "sha256": "2797e0fe7ea44319ad0423b258757b64aba937e74789fe50d3cc43ea48ebbda9",
+          "size": 906
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/hat-glasses.js",
+          "sha256": "0de9a857f1b7b86f92ea34b75e5cf3f143b96d0ca7c2a2fd832505c9a0c18cec",
+          "size": 1076
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/info-small.js",
+          "sha256": "379a5a5d7e50d54af94e098bf5ad2c1fe43139d53c7aceed4b36e820a585fddb",
+          "size": 924
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/key-round.js",
+          "sha256": "eb742fec42e69fc7fd0e18ddbce1904149dd5014115bb4389176f0ad5603b78a",
+          "size": 1069
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/layout-grid.js",
+          "sha256": "36afdb967d976b518c1e9221292bc2723f3f8d66b9f66a3ffab248fd67ec9ee0",
+          "size": 1231
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/loader.js",
+          "sha256": "fed7b09fd36871df6aab79af3143254b2ab0ee5c0da769eb1143294006c131a9",
+          "size": 871
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/message-square.js",
+          "sha256": "f5fafb14f706b5bf2d1e32a968b2abf9d2f584ddfc25d722ee1f2e2b6b5c1bb8",
+          "size": 918
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js",
+          "sha256": "ca79b244588e2b5467969dc6d5bab2a188547fe3ce100241306d01f192b7e34f",
+          "size": 969
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/refresh-cw.js",
+          "sha256": "af3132a464c29cf3637616e2a2852e8c2685f2e44bb736e52b5eb07fe2a833c9",
+          "size": 987
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/share-2.js",
+          "sha256": "a4e737063cf7ecd3a4658eb044ee940719ae53ddea6ba40a5acf713626ffe3d4",
+          "size": 1055
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/tag.js",
+          "sha256": "f694fb481f781245c185ce6aa74afaf3d438e389bca05dfb9ec9c82794276f2b",
+          "size": 1022
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/trash-2.js",
+          "sha256": "a2b0f594ea96315cc291b8b861c0e12d8224124951b038bd6e726441f16b3e28",
+          "size": 878
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/user.js",
+          "sha256": "1ef3a905a2bd53623ec2e3cc8978341daf2ccccb575b33fee83e1cb0604805bc",
+          "size": 884
+        },
+        {
+          "package": "@cardstack/boxel-icons@0.0.0",
+          "module": "dist/@cardstack/boxel-icons/v1/icons/users.js",
+          "sha256": "87fc3e2102f257dd9e87f74aa517008cff8668845f8fe0e5556119d4216fee1d",
+          "size": 940
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/button/index.gts",
+          "sha256": "59fb31250cb570a50add5f2d400f9dc276fe2f00d9d9b58198d4be5f0a951abf",
+          "size": 2409
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/icon-button/index.gts",
+          "sha256": "ac6918137e14d08516bdd40f3c51d41e2fd2fda1d490616b70e4fde1184c74bd",
+          "size": 1549
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/accessories/index.gts",
+          "sha256": "da7548c11d08ced5b6066ac60db866e7d6356932e2574a2893a017d6ef943172",
+          "size": 3255
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/controls/index.gts",
+          "sha256": "f1ddd53d3984b7c3a2a447a0b54c97324711f269e703066fbed00a5e8de03596",
+          "size": 1128
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/input-group/index.gts",
+          "sha256": "7a0f098017be4c558a12071df46a6f9c770f170f07a310aa261cba0b8a6cc4c0",
+          "size": 4534
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/loading-indicator/index.gts",
+          "sha256": "39e0fadc34cb44397106231a36443ee3000d67ded27aceca61234cac7c004ced",
+          "size": 822
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/index.gts",
+          "sha256": "4824d7ca0ef7c5d6b7fa383925ad8f9a3d8085fd10b41a66cf6783b0228304a8",
+          "size": 8422
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/select/trigger.gts",
+          "sha256": "c4f0c380157b1cbb9c46c3b9d414642ef9bec04f6db304cb2be0e972d7b3f47c",
+          "size": 2563
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/helpers/sanitize-html.ts",
+          "sha256": "c9c85faf46138ec34d51612f05a0516f6264a2c93ebf0d756fc7e2aa5dd9f208",
+          "size": 735
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/icons/caret-down.gts",
+          "sha256": "8b516db8829e35aa46c3fccb0cf0e551d34f5ed329d578f4d4f3064f2738e94d",
+          "size": 693
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/modifiers/set-css-var.ts",
+          "sha256": "a526e4e2aa474e8c98a919405fe21fcf8d03fedd5144fa7e31f96c30f335a7bc",
+          "size": 570
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/alert.gts",
+          "sha256": "57d59371aab2dc67af51ea7ce5e5f5ab3a7ad99fd766b16d8778ca52f1b23ebb",
+          "size": 2964
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/breadcrumb.gts",
+          "sha256": "ecb88d6094f7283860b53485aba30780c5bd7b3220724e4ad1656b11b87da6b7",
+          "size": 2212
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/button.gts",
+          "sha256": "b583cbc2124b7588486a267f67233c2f71a2f9b7feedf4be47c01d9cb09c462c",
+          "size": 7011
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/card.gts",
+          "sha256": "6d6c5b48e18f7ca358a3c72ba4220891185418d0a8edfcd358e98409c578179a",
+          "size": 6390
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/checkbox.gts",
+          "sha256": "52f53f58a1ace8ef4c416f1d5b4dd68e3b9035688e2c637529fa1e4a331e986e",
+          "size": 1620
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/chip.gts",
+          "sha256": "9a4ab497429c8d1315f4dadd5fdf5dca34da82453a1f6f6edcb2f65294e9df35",
+          "size": 1365
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/collapsible.gts",
+          "sha256": "edccca6db34ba8fffcd14fb44dcc2cf754ad26bdc33fa0fcf047cae4b4739522",
+          "size": 2800
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/empty-state.gts",
+          "sha256": "9016728a4f4e7af5db1bb6b55db26013adbd7c0ac4b955476a958cb3f157668d",
+          "size": 2250
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/input-group.gts",
+          "sha256": "26229ef3f19c46adc36b01694dd02c5e63197c23a73475105193a8bef3d5e133",
+          "size": 3866
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/item.gts",
+          "sha256": "3e07417c5ed47b34f82d2141babbfae851406bed99d31a79c50f1bfb711ebe56",
+          "size": 2550
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/key-value.gts",
+          "sha256": "aea66f0e7f5df67007338ea7096bee1ea3f9313977846f07e3f91f34cb7ea001",
+          "size": 2198
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/progress-bar.gts",
+          "sha256": "01a9306afc1aeb340c99be470087b81477fee38c43330c86bc2fe1da9fea509f",
+          "size": 3417
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/radio-card.gts",
+          "sha256": "8ea03d7a18c8fe7e03c99b4ad37b60946d6d34d1f37b6a597065c876b14d9665",
+          "size": 2329
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/radio-group.gts",
+          "sha256": "6e0d114ccb86dbb9cc7e6ae00213be398038a2ebbead98809d3600bdd90403a8",
+          "size": 2764
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/select.gts",
+          "sha256": "fe952350aee66f20b7293d09656a7fae5b104d1fc4f60d779780dfbd7819ebf0",
+          "size": 9202
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/spinner.gts",
+          "sha256": "188406b73308eec06706aba331dcb5b069adc9eb6d1b9dad239c0d5be2a225e5",
+          "size": 928
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/status-chip.gts",
+          "sha256": "dca3af01f9e34e35da901e5c4ab34bc02a96a89b4c994557581e77c1f47845be",
+          "size": 758
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/textarea.gts",
+          "sha256": "8aa70b293ab1c31b652ba9681ec085c3436c45307a7529474900cac35c535283",
+          "size": 2297
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/visually-hidden.gts",
+          "sha256": "dc1932369c671d8d88fb1fa8d224f73ec338bf1ea3cc6a542bc09eee27a01096",
+          "size": 563
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "focus.gts",
+          "sha256": "97518bad5031a6cd6919f401308b5e0b7d91bd2db0aa34b0f2a408b89ec86385",
+          "size": 1981
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "helpers.gts",
+          "sha256": "6e2afaea3fdf2f27b1e218a2be5b4a663766d168c286d603cea34b2aacaba008",
+          "size": 210
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/choice-cards.gts",
+          "sha256": "9d95ff8b8b95fd4c4a31c2ff96b28ad62d17d599f40df3779ccb38310a358f79",
+          "size": 2473
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/feedback.gts",
+          "sha256": "ffcc6c9168da263f1ec154578b8cccd87ac2a8353256e4fc4676aa9dafebbaec",
+          "size": 202
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/ink.gts",
+          "sha256": "59af15cd77b5ce784dfb3c1c06bf0d771e4d5ae174af25b2433fdad9cdb4bc98",
+          "size": 225
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/overlay.gts",
+          "sha256": "61c5c24a130fb19da5d0c0e4b12926d2cc6112eb1088d0dee34d7cb99adbef6e",
+          "size": 2493
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "internal/structure-layout.gts",
+          "sha256": "9b042e2ae5b950c146ff41e504094edbb6af1d111f3ee38eb038b2259957fdee",
+          "size": 507
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "pretui-css.gts",
+          "sha256": "87aa6d293256e4f2eb896437817bffc4e73e807308ca97a14dc7d1b0c809d958",
+          "size": 1912
+        },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/auth-button.gts",
-          "size": 619
+          "size": 757
         },
         {
           "package": "@cardstack/secure-origin",
@@ -962,7 +2396,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/auth-form-field.gts",
-          "size": 587
+          "size": 641
         },
         {
           "package": "@cardstack/secure-origin",
@@ -972,52 +2406,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/busy-message.gts",
-          "size": 682
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/button.gts",
-          "size": 1775
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/checkbox.gts",
-          "size": 873
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/disclosure-toggle.gts",
-          "size": 566
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/error-display.gts",
-          "size": 3405
+          "size": 717
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/icons/boxel-icon.gts",
           "size": 2020
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/check-mark.gts",
-          "size": 632
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/dropdown-arrow-down.gts",
-          "size": 696
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/dropdown-arrow-up.gts",
-          "size": 691
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/globe.gts",
-          "size": 720
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1036,98 +2430,33 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/key-round.gts",
-          "size": 880
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/layout-grid.gts",
-          "size": 1040
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/message-square.gts",
-          "size": 724
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/rectangle-ellipsis.gts",
-          "size": 771
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/refresh-cw.gts",
-          "size": 797
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/share-2.gts",
-          "size": 871
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/tag.gts",
-          "size": 840
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/trash-2.gts",
-          "size": 688
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/users.gts",
-          "size": 756
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/icons/warning.gts",
           "size": 1013
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/input-group.gts",
-          "size": 3916
+          "module": "src/helpers/optional.ts",
+          "size": 115
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/loading-indicator.gts",
-          "size": 1171
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/radio-tile.gts",
-          "size": 696
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/radio.gts",
-          "size": 566
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/validation-hint.gts",
-          "size": 549
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/modifiers/autofocus.ts",
-          "size": 137
+          "module": "src/modifiers/fit-content.ts",
+          "size": 884
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/password-reset.gts",
-          "size": 6871
+          "size": 6896
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/register.gts",
-          "size": 9106
+          "size": 9776
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/screens/sign-in.gts",
-          "size": 3954
+          "size": 3922
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1142,7 +2471,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 9029
+          "size": 9080
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1172,37 +2501,37 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/anonymous-use-fields.gts",
-          "size": 4688
+          "size": 4823
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approval-batch.ts",
-          "size": 8855
+          "size": 8609
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/approval-return.ts",
+          "size": 1707
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 34866
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/breadcrumbs.gts",
-          "size": 1848
+          "size": 40413
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/client-picker.gts",
-          "size": 3405
+          "size": 3906
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/connect-page.gts",
-          "size": 10100
+          "size": 10487
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/connected-page.gts",
-          "size": 8018
+          "size": 9220
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1212,12 +2541,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/destination.gts",
-          "size": 2041
+          "size": 2082
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/done-page.gts",
-          "size": 904
+          "size": 1092
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1227,67 +2556,77 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/enter-key-page.gts",
-          "size": 20942
+          "size": 20285
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/key-audience.gts",
+          "size": 4636
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-fields.gts",
-          "size": 1451
+          "size": 1620
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-grants.gts",
-          "size": 6739
+          "size": 7362
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-limit-notices.gts",
-          "size": 5577
+          "size": 5971
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/key-mark.gts",
+          "size": 1119
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 26550
+          "size": 26574
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-picker.gts",
-          "size": 2113
+          "size": 2499
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-policy-notices.gts",
-          "size": 6905
+          "size": 7600
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-tile.gts",
-          "size": 2125
+          "size": 2217
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-usage-panel.gts",
-          "size": 4438
+          "size": 4786
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-use.gts",
-          "size": 9475
+          "size": 10688
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/keys-window.gts",
-          "size": 5390
+          "size": 5796
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/limits-form.gts",
-          "size": 8492
+          "size": 8496
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/load-failed.gts",
-          "size": 1166
+          "size": 2733
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1297,17 +2636,17 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/oauth-client-fields.gts",
-          "size": 10455
+          "size": 10882
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/oauth-key-status.gts",
-          "size": 4216
+          "size": 4122
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/opened-for-summary.gts",
-          "size": 3244
+          "size": 3438
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1317,17 +2656,17 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/radio-choices.gts",
-          "size": 1875
+          "size": 1076
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/replace-key-page.gts",
-          "size": 19325
+          "size": 19820
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/service-account-details.gts",
-          "size": 2465
+          "size": 2138
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1337,7 +2676,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/service-account-fields.gts",
-          "size": 6784
+          "size": 7068
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1347,37 +2686,42 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 15139
+          "size": 16723
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-limits-page.gts",
-          "size": 8953
+          "size": 8958
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 12024
+          "size": 12954
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/trail.ts",
-          "size": 3076
+          "size": 3079
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/usage-summary.gts",
-          "size": 11898
+          "size": 11042
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/use-key-page.gts",
-          "size": 10347
+          "size": 11217
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/workspace-dropdown.gts",
-          "size": 9178
+          "module": "src/shell/keys/workspace-picker.gts",
+          "size": 944
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/workspaces.ts",
+          "size": 334
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1387,7 +2731,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/new-password-fields.gts",
-          "size": 2093
+          "size": 2562
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1467,7 +2811,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/google-callback.gts",
-          "size": 3369
+          "size": 3350
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1482,7 +2826,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-in-form.gts",
-          "size": 5262
+          "size": 5372
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1497,7 +2841,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/signed-in.gts",
-          "size": 5025
+          "size": 5006
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1530,74 +2874,349 @@
           "size": 204
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/-internals/views/lib/component_lookup.js",
-          "size": 561
+          "package": "@embroider/macros@1.21.1",
+          "module": "src/addon/es-compat2.js",
+          "size": 292
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/application/index.js",
-          "size": 4890
+          "package": "dompurify@3.4.10",
+          "module": "dist/purify.es.mjs",
+          "size": 55878
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/application/instance.js",
-          "size": 4329
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/components/basic-dropdown-content.js",
+          "size": 16674
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/application/lib/lazy_load.js",
-          "size": 598
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/components/basic-dropdown-trigger.js",
+          "size": 3361
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/application/namespace.js",
-          "size": 936
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/components/basic-dropdown.js",
+          "size": 10663
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/debug/container-debug-adapter.js",
-          "size": 1033
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/config.js",
+          "size": 278
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/engine/index.js",
-          "size": 3323
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/modifiers/basic-dropdown-trigger.js",
+          "size": 6022
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/hash-location.js",
-          "size": 1394
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/utils/calculate-position.js",
+          "size": 7943
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/history-location.js",
-          "size": 2952
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/utils/has-moved.js",
+          "size": 692
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/lib/location-utils.js",
+          "package": "ember-basic-dropdown@9.0.0",
+          "module": "dist/utils/scroll-helpers.js",
+          "size": 3924
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/async-arrow-runtime.js",
+          "size": 636
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/cancelable-promise-helpers.js",
+          "size": 1973
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/ember-environment.js",
+          "size": 666
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/environment.js",
+          "size": 733
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/generator-state.js",
+          "size": 1073
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/bounded-policy.js",
+          "size": 357
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/drop-policy.js",
+          "size": 672
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/enqueued-policy.js",
+          "size": 595
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/execution-states.js",
+          "size": 487
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/keep-latest-policy.js",
+          "size": 970
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/restartable-policy.js",
+          "size": 740
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/policies/unbounded-policy.js",
+          "size": 443
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/refresh.js",
+          "size": 2630
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/scheduler.js",
+          "size": 1156
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/state-tracker/null-state-tracker.js",
+          "size": 387
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/state-tracker/null-state.js",
+          "size": 357
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/state-tracker/state-tracker.js",
+          "size": 930
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/scheduler/state-tracker/state.js",
+          "size": 1335
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-factory.js",
+          "size": 3620
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-instance/base.js",
+          "size": 1566
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-instance/cancelation.js",
+          "size": 721
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-instance/executor.js",
+          "size": 7924
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task-instance/initial-state.js",
+          "size": 413
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task/default-state.js",
+          "size": 467
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task/task.js",
+          "size": 2266
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/task/taskable.js",
+          "size": 1537
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/external/yieldables.js",
+          "size": 2291
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/scheduler/ember-scheduler.js",
+          "size": 332
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/task-factory.js",
+          "size": 992
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/task-instance.js",
+          "size": 2041
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/task.js",
+          "size": 1229
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/taskable-mixin.js",
+          "size": 761
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/tracked-state.js",
+          "size": 1212
+        },
+        {
+          "package": "ember-concurrency@5.2.0",
+          "module": "dist/-private/utils.js",
+          "size": 585
+        },
+        {
+          "package": "ember-element-helper@0.8.8",
+          "module": "dist/helpers/element.js",
+          "size": 1976
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select.js",
+          "size": 30300
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/before-options.js",
+          "size": 2935
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/input.js",
+          "size": 5398
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/label.js",
+          "size": 1395
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/no-matches-message.js",
+          "size": 1107
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/options.js",
+          "size": 7300
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/placeholder.js",
+          "size": 1068
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/power-select-group.js",
+          "size": 1115
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/search-message.js",
+          "size": 1028
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/components/power-select/trigger.js",
+          "size": 8591
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/helpers/ember-power-select-is-equal.js",
+          "size": 542
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/helpers/ember-power-select-is-group.js",
+          "size": 323
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/helpers/ember-power-select-is-selected-present.js",
+          "size": 370
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/utils/equal.js",
+          "size": 453
+        },
+        {
+          "package": "ember-power-select@9.0.2",
+          "module": "dist/utils/group-utils.js",
+          "size": 12915
+        },
+        {
+          "package": "ember-provide-consume-context@0.8.0",
+          "module": "dist/index.js",
+          "size": 399
+        },
+        {
+          "package": "ember-provide-consume-context@0.8.0",
+          "module": "dist/utils-8e9180ab.js",
+          "size": 1068
+        },
+        {
+          "package": "ember-style-modifier@4.6.0",
+          "module": "dist/modifiers/style.js",
+          "size": 1583
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/and.js",
+          "size": 358
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/eq.js",
+          "size": 202
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/not-eq.js",
+          "size": 207
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/not.js",
+          "size": 233
+        },
+        {
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/helpers/or.js",
           "size": 355
         },
         {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@ember/routing/none-location.js",
-          "size": 901
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/@glimmer/node/index.js",
-          "size": 2757
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/dag-map/index.js",
-          "size": 3939
-        },
-        {
-          "package": "ember-source@6.10.1",
-          "module": "dist/packages/shared-chunks/setup-registry-DktVPnKH.js",
-          "size": 1124
+          "package": "ember-truth-helpers@5.0.0",
+          "module": "dist/utils/truth-convert.js",
+          "size": 394
         }
       ]
     }

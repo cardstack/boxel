@@ -9,17 +9,18 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
+import { Cue } from '@cardstack/pretui/components/cue';
+import { Spinner } from '@cardstack/pretui/components/spinner';
+
 import AuthButton from '../components/auth-button.gts';
 import AuthFormField from '../components/auth-form-field.gts';
 import AuthHeading from '../components/auth-heading.gts';
-import CheckMark from '../components/icons/check-mark.gts';
-import BoxelInput from '../components/input.gts';
-import InputGroup, {
-  type InputGroupValidationState,
-} from '../components/input-group.gts';
-import LoadingIndicator from '../components/loading-indicator.gts';
-import ValidationHint from '../components/validation-hint.gts';
-import { autofocus } from '../modifiers/autofocus.ts';
+import { Input } from '@cardstack/pretui/components/input';
+import {
+  InputGroup,
+  type InputGroupState,
+} from '@cardstack/pretui/components/input-group';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface RegisterFormSignature {
   Args: {
@@ -34,7 +35,7 @@ interface RegisterFormSignature {
     nameError?: string;
     emailError?: string;
     usernameError?: string;
-    usernameState: InputGroupValidationState;
+    usernameState: InputGroupState;
     // Shows "name available" under the username.
     usernameAvailable?: boolean;
     formError?: string;
@@ -57,8 +58,12 @@ interface RegisterFormSignature {
   Blocks: { default: [] };
 }
 
-function fieldState(error: string | undefined) {
-  return error ? 'invalid' : 'initial';
+function isInvalid(error: string | undefined): boolean {
+  return Boolean(error);
+}
+
+function ariaInvalid(state: InputGroupState): 'true' | undefined {
+  return state === 'invalid' ? 'true' : undefined;
 }
 
 export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
@@ -73,61 +78,71 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
         <AuthFormField
           @label='Your Name'
           data-test-secure-field='name'
-          as |labelId|
+          as |labelId controlId|
         >
-          <BoxelInput
+          <Input
+            @controlId={{controlId}}
             aria-labelledby={{labelId}}
             data-test-name-field
             name='name'
             autocomplete='name'
-            @state={{fieldState @nameError}}
+            @invalid={{isInvalid @nameError}}
             @value={{@name}}
             placeholder='Enter your name'
             @errorMessage={{@nameError}}
             @onInput={{@onNameInput}}
-            @onBlur={{@onNameBlur}}
-            {{autofocus (if @autofocus true false)}}
+            {{on 'blur' @onNameBlur}}
+            {{focusWhen (if @autofocus true false)}}
           />
         </AuthFormField>
         <AuthFormField
           @label='Email'
           data-test-secure-field='email'
-          as |labelId|
+          as |labelId controlId|
         >
-          <BoxelInput
+          <Input
+            @controlId={{controlId}}
             aria-labelledby={{labelId}}
             data-test-email-field
             name='email'
             autocomplete='email'
-            @state={{fieldState @emailError}}
+            @invalid={{isInvalid @emailError}}
             @value={{@email}}
             placeholder='Enter your email'
             @errorMessage={{@emailError}}
             @onInput={{@onEmailInput}}
-            @onBlur={{@onEmailBlur}}
+            {{on 'blur' @onEmailBlur}}
           />
         </AuthFormField>
         <AuthFormField
+          @labelTag='span'
           @label='Username'
           data-test-secure-field='username'
           as |labelId|
         >
           <InputGroup
             data-test-username-field
-            @labelledBy={{labelId}}
-            @name='username'
-            @autocomplete='username'
             @state={{@usernameState}}
-            @value={{@username}}
-            @placeholder='Your username'
             @errorMessage={{@usernameError}}
-            @onInput={{@onUsernameInput}}
-            @onBlur={{@onUsernameBlur}}
-            @validIcon={{CheckMark}}
           >
             <:before as |Accessories|>
               <Accessories.Text class='username-prefix'>@</Accessories.Text>
             </:before>
+            <:default as |Controls _accessories group|>
+              <Controls.Input
+                id={{group.elementId}}
+                name='username'
+                autocomplete='username'
+                aria-labelledby={{labelId}}
+                aria-invalid={{ariaInvalid @usernameState}}
+                aria-describedby={{group.errorMessageId}}
+                aria-errormessage={{group.errorMessageId}}
+                @placeholder='Your username'
+                @value={{@username}}
+                @onInput={{@onUsernameInput}}
+                @onBlur={{@onUsernameBlur}}
+              />
+            </:default>
             <:after as |Accessories|>
               <Accessories.Text
                 data-input-group-suffix
@@ -136,7 +151,12 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
             </:after>
           </InputGroup>
           {{#if @usernameAvailable}}
-            <ValidationHint data-test-username-available>name available</ValidationHint>
+            <Cue
+              @tone='success'
+              @text='name available'
+              class='validation-hint'
+              data-test-username-available
+            />
           {{/if}}
         </AuthFormField>
         {{yield}}
@@ -169,6 +189,10 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
     <style scoped>
       .registration-page {
         display: contents;
+      }
+      .validation-hint {
+        display: flex;
+        margin-top: var(--boxel-sp-2xs);
       }
       .registration-page[hidden] {
         display: none;
@@ -230,19 +254,20 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
       <AuthFormField
         @label='Your invite code'
         data-test-secure-field='token'
-        as |labelId|
+        as |labelId controlId|
       >
-        <BoxelInput
+        <Input
+          @controlId={{controlId}}
           aria-labelledby={{labelId}}
           data-test-token-field
           name='invite-code'
           autocomplete='off'
-          @state={{fieldState @tokenError}}
+          @invalid={{isInvalid @tokenError}}
           @value={{@token}}
           placeholder='Enter invite code'
           @errorMessage={{@tokenError}}
           @onInput={{@onTokenInput}}
-          {{autofocus (if @autofocus true false)}}
+          {{focusWhen (if @autofocus true false)}}
         />
       </AuthFormField>
       <div class='button-wrapper'>
@@ -339,7 +364,7 @@ export const CreatingAccount: TemplateOnlyComponent = <template>
     <span class='loading-title' data-test-email-validation-complete>Email
       validation complete</span>
     <p class='loading-message'>Please wait as we set up your account.</p>
-    <LoadingIndicator class='loading-spinner' />
+    <Spinner @size={{20}} class='loading-spinner' aria-hidden='true' />
   </div>
   <style scoped>
     .centered-loading {
@@ -360,8 +385,7 @@ export const CreatingAccount: TemplateOnlyComponent = <template>
       font: 500 var(--boxel-font-sm);
     }
     .loading-spinner {
-      --boxel-loading-indicator-size: var(--boxel-icon-md);
-      --loading-indicator-color: var(--boxel-highlight);
+      color: var(--boxel-highlight);
       margin-top: var(--boxel-sp-xs);
     }
   </style>

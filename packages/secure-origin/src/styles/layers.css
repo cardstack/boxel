@@ -1,8 +1,11 @@
 /*
-  The order of the pages' cascade layers, as the app orders them (boxel-ui's
-  `global.css`): the reset beneath boxel-ui's components, and each tier of
-  component above the one it wraps. Every entry imports this first, and the
-  build links it ahead of every other stylesheet (`build/layer-order.ts`), so
-  it is the first to name any layer.
+  The order of the pages' cascade layers, as the app orders them: boxel-ui's
+  (`global.css`), the reset beneath its components and each tier of component
+  above the one it wraps, then Pret UI's, which sit above all of boxel-ui's,
+  a composite above the component it restyles. Every entry imports this
+  first, and the build links it ahead of every other stylesheet
+  (`build/layer-order.ts`), so it is the first to name any layer. The build
+  fails on a stylesheet that names a layer this doesn't.
 */
-@layer reset, boxelComponentL1, boxelComponentL2;
+@layer vendor, reset, utilities, boxelComponentL1, boxelComponentL2,
+  boxelComponentL3, boxelComponentL4, PretComponent, PretComposite;

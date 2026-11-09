@@ -188,6 +188,27 @@ function usageResource(id: string, attributes: Record<string, unknown>) {
   return json(200, { data: { type: 'key-usage', id, attributes } });
 }
 
+// The button of a key's usage disclosure.
+const USAGE_TOGGLE =
+  '[data-test-key-usage-toggle] [data-test-pretui-collapsible-trigger]';
+
+// A row of one of the usage details' lists, as it reads: what it counts, then
+// the count. The selector names the count.
+function rowText(selector: string): string {
+  let count = document.querySelector(selector);
+  let label = count?.closest('dd')?.previousElementSibling;
+  return `${label?.textContent?.trim()} ${count?.textContent?.trim()}`;
+}
+
+function rowsOf(group: string): string[] {
+  return [
+    ...document.querySelectorAll(`[data-test-key-usage-${group}] dt`),
+  ].map(
+    (dt) =>
+      `${dt.textContent!.trim()} ${dt.nextElementSibling!.textContent!.trim()}`,
+  );
+}
+
 module('Integration | key usage and limits', function (hooks) {
   setupRenderingTest(hooks);
   setupWaitedBrowserWork(hooks);
@@ -299,21 +320,26 @@ module('Integration | key usage and limits', function (hooks) {
         'nothing is asked for until it is opened',
       );
 
-      assert
-        .dom('[data-test-key-usage-toggle]')
-        .hasAttribute('aria-expanded', 'false');
-      await click('[data-test-key-usage-toggle]');
+      assert.dom(USAGE_TOGGLE).hasAttribute('aria-expanded', 'false');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-usage]');
       assert
-        .dom('[data-test-key-usage-toggle]')
+        .dom(USAGE_TOGGLE)
         .hasAttribute('aria-expanded', 'true')
-        .hasText('Usage and limits', 'the disclosure keeps its name open');
+        .includesText('Usage and limits', 'the disclosure keeps its name open');
       assert
-        .dom('[data-test-key-usage-details]')
-        .doesNotHaveAttribute('open', 'the detailed counts start closed');
+        .dom(
+          '[data-test-key-usage-details] [data-test-pretui-collapsible-trigger]',
+        )
+        .hasAttribute(
+          'aria-expanded',
+          'false',
+          'the detailed counts start closed',
+        );
       assert
-        .dom('[data-test-key-usage-budget="day"] progress')
-        .hasAttribute('value', '12', 'the meter shows the day’s use');
+        .dom('[data-test-key-usage-budget="day"] [role="progressbar"]')
+        .hasAttribute('aria-valuenow', '12', 'the meter shows the day’s use')
+        .hasAttribute('aria-valuetext', '12 of 2,400 calls');
       assert
         .dom('[data-test-key-usage-budget="day"]')
         .includesText('12 of 2,400 calls');
@@ -326,15 +352,19 @@ module('Integration | key usage and limits', function (hooks) {
       assert
         .dom(`[data-test-key-usage-caller="${CALLER}"]`)
         .includesText('300');
-      assert
-        .dom('[data-test-key-usage-callers] li:last-child')
-        .hasText('Others 52', 'callers withheld from the viewer together');
-      assert
-        .dom('[data-test-key-usage-refusal="over-budget"]')
-        .hasText('Over budget 4');
-      assert
-        .dom('[data-test-key-usage-outcome="403"]')
-        .hasText('403 Forbidden 8');
+      assert.strictEqual(
+        rowsOf('callers').at(-1),
+        'Others 52',
+        'callers withheld from the viewer together',
+      );
+      assert.strictEqual(
+        rowText('[data-test-key-usage-refusal="over-budget"]'),
+        'Over budget 4',
+      );
+      assert.strictEqual(
+        rowText('[data-test-key-usage-outcome="403"]'),
+        '403 Forbidden 8',
+      );
       assert
         .dom(
           '[data-test-key-usage-grant="api.openweathermap.org/data/"][data-test-key-usage-grant-state="rejected"]',
@@ -354,6 +384,40 @@ module('Integration | key usage and limits', function (hooks) {
         ['How fast', 'How many'],
         'a personal key’s limits don’t speak of other people',
       );
+    });
+
+    test('draws a small budget as a bar, not as steps', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource(
+            'key-1',
+            usage({
+              budgets: {
+                day: { used: 3, budget: 10, resetsAt: '2026-11-03T00:00:00Z' },
+                month: {
+                  used: 3,
+                  budget: 300,
+                  resetsAt: '2026-12-01T00:00:00Z',
+                },
+              },
+            }),
+          ),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      await click(USAGE_TOGGLE);
+      await waitFor('[data-test-key-usage]');
+      assert
+        .dom(
+          '[data-test-key-usage-budget="day"] [data-test-pretui-progress-step]',
+        )
+        .doesNotExist('a budget of ten calls is one bar');
+      assert
+        .dom(
+          '[data-test-key-usage-budget="day"] [data-test-pretui-progress-fill]',
+        )
+        .exists();
     });
 
     test('names each destination a key may be sent to by host and path, each with its own flag', async function (assert) {
@@ -384,11 +448,11 @@ module('Integration | key usage and limits', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Weather service"]');
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-usage]');
 
       assert.deepEqual(
-        [...document.querySelectorAll('[data-test-key-usage-grant] .name')].map(
+        [...document.querySelectorAll('[data-test-key-usage-grants] dt')].map(
           (el) => el.textContent!.trim(),
         ),
         ['api.openweathermap.org/data/2.5/', 'api.openweathermap.org/geo/1.0/'],
@@ -426,7 +490,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
 
       assert
@@ -490,7 +554,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       await fillIn('[data-test-key-limit-input="dailyBudget"]', '900');
       await click('[data-test-key-limits-save]');
@@ -505,7 +569,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       await fillIn('[data-test-key-limit-input="monthlyBudget"]', '2.5');
       await click('[data-test-key-limits-save]');
@@ -535,7 +599,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       assert
         .dom('[data-test-key-limit-input="monthlyBudget"]')
@@ -586,7 +650,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
 
       let input = document.querySelector(
@@ -627,7 +691,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       assert
         .dom('[data-test-key-limit-input="rateRefillPerMinute"]')
@@ -645,7 +709,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       for (let typed of ['1,2,3', ',,5', '15,00']) {
         await fillIn('[data-test-key-limit-input="monthlyBudget"]', typed);
@@ -682,7 +746,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
       assert.dom('[data-test-key-limit-input="dailyBudget"]').hasValue('500');
       assert
@@ -708,7 +772,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await click('[data-test-key-usage-toggle]');
+      await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-usage-error]');
       fail = false;
       await click('[data-test-key-usage-retry]');
@@ -763,9 +827,7 @@ module('Integration | key usage and limits', function (hooks) {
 
       await click('[data-test-key-limit-notice-usage]');
       await waitFor('[data-test-key-usage]');
-      assert
-        .dom('[data-test-key-usage-toggle]')
-        .hasAttribute('aria-expanded', 'true');
+      assert.dom(USAGE_TOGGLE).hasAttribute('aria-expanded', 'true');
       assert
         .dom('[data-test-key-limit-input="dailyBudget"]')
         .hasAttribute(
@@ -773,9 +835,7 @@ module('Integration | key usage and limits', function (hooks) {
           '2,400',
           'the key’s limits are there to change',
         );
-      assert
-        .dom('[data-test-key-usage-toggle]')
-        .isFocused('focus moves to the panel it opened');
+      assert.dom(USAGE_TOGGLE).isFocused('focus moves to the panel it opened');
       assert
         .dom('[data-test-key-limit-notice-usage]')
         .hasText('See usage…', 'the same action as on any other notice');
@@ -1172,9 +1232,7 @@ module('Integration | key usage and limits', function (hooks) {
       await render(ShareLimitsPage);
       await waitFor('[data-test-key-usage-realms]');
       assert.deepEqual(
-        [...document.querySelectorAll('[data-test-key-usage-realm]')].map(
-          (el) => el.textContent!.replace(/\s+/g, ' ').trim(),
-        ),
+        rowsOf('realms'),
         ['Published site published.test/workspace-site 40', 'The workspace 12'],
         'each site with its calls this month, the workspace named as such',
       );
