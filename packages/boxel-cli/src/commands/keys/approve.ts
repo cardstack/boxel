@@ -10,6 +10,7 @@ import {
   type ApprovedBinding,
   type BatchOperation,
   type BatchTarget,
+  type BatchUse,
   type BindingPreview,
   type BindingSnapshot,
   type KeyBinding,
@@ -168,7 +169,7 @@ function placement(snapshot: BindingSnapshot): string {
 }
 
 // One slot of the approval: which slot, and the key or share that fills it.
-interface Fill {
+export interface Fill {
   slot: string;
   kind: 'userKey' | 'apiKey';
   id: string;
@@ -176,7 +177,7 @@ interface Fill {
   covers: string[];
 }
 
-interface Planned {
+export interface Planned {
   operation: BatchOperation;
   destination: string;
   host: string;
@@ -195,22 +196,61 @@ function chosenOperations(
   );
 }
 
+// The hosts the batch sends a slot token to, for `use`: every operation that
+// sends it, as the realm server weighs them in naming the token's fillers.
+function slotHosts(
+  batch: ApprovalBatch,
+  token: string,
+  use: BatchUse,
+): string[] {
+  let hosts = new Set<string>();
+  for (let group of batch.groups) {
+    for (let op of group.operations) {
+      if (use === 'pipelines' && op.status === 'pipelines-only') {
+        continue;
+      }
+      if (op.slots.some((s) => s.slot === token)) {
+        hosts.add(group.destination.host);
+      }
+    }
+  }
+  return [...hosts];
+}
+
 // Fills each slot of the chosen operations that `name` can fill: a
 // `{{userKey}}` slot with the user's key of that name, an `{{apiKey}}` slot
 // with their share in the realm under that label. `--slot` narrows it to one
 // slot.
-function plan(
+//
+// A key or share fills a slot only where the batch's `fillers` offer it for
+// `use`, as the secure window's approve page offers only those. One that
+// would fill a slot of its type but isn't offered there is refused, naming
+// the slot and why, rather than approved to send where its credential can't
+// be used.
+export function plan(
   batch: ApprovalBatch,
   name: string,
-  { operation, slot }: { operation?: string; slot?: string },
+  {
+    operation,
+    slot,
+    use,
+  }: { operation?: string; slot?: string; use: BatchUse },
 ): Planned[] {
   let key = batch.keys.find((k) => k.name === name);
   let share = batch.shares.find((s) => s.label === name);
+  let offered = (token: string, id: string) =>
+    !batch.fillers || (batch.fillers[use]?.[token] ?? []).includes(id);
+  let refused = new Set<string>();
   let planned: Planned[] = [];
   for (let { operation: op, group } of chosenOperations(batch, operation)) {
     let fills: Fill[] = [];
     for (let s of op.slots) {
       if (slot !== undefined && s.slot !== slot) {
+        continue;
+      }
+      let filler = s.key === 'userKey' ? key : share;
+      if (filler && !offered(s.slot, filler.id)) {
+        refused.add(s.slot);
         continue;
       }
       if (s.key === 'userKey' && key) {
@@ -240,6 +280,22 @@ function plan(
         fills,
       });
     }
+  }
+  if (refused.size > 0) {
+    let tokens = [...refused];
+    let hosts = [
+      ...new Set(tokens.flatMap((token) => slotHosts(batch, token, use))),
+    ];
+    let filled = [
+      ...new Set(planned.flatMap((p) => p.fills.map((f) => f.slot))),
+    ];
+    throw new Error(
+      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.join(', ')}, where the batch sends ${tokens.length === 1 ? 'it' : 'them'}. ${
+        filled.length > 0
+          ? `Pass --slot ${filled.join(' or --slot ')} to approve only what it fills, or name another key or share`
+          : 'Name another key or share'
+      }`,
+    );
   }
   return planned;
 }
@@ -541,6 +597,7 @@ export async function keysApprove(
   let planned = plan(batch, name, {
     operation: parsed.operation,
     slot: options.slot,
+    use: options.interactive ? 'interactive' : 'pipelines',
   });
   if (planned.length === 0) {
     let pending = chosenOperations(batch, parsed.operation);

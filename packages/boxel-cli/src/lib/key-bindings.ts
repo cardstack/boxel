@@ -115,7 +115,21 @@ export interface ApprovalBatch {
   remainingPipelinesOnly?: number;
   keys: BatchKey[];
   shares: BatchShare[];
+  // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
+  // one) the realm server offers for each slot token, by use: of a kind the
+  // slot takes in every operation of the batch that sends it, with a
+  // credential good where each of those sends. One choice fills a slot token
+  // for the whole batch, so these are the only ones the secure window's
+  // approve page offers for it. A realm server that doesn't name them leaves
+  // the choice to approval, which holds a key to the slot's declared kind.
+  fillers?: Record<BatchUse, Record<string, string[]>>;
 }
+
+// Where the requests a batch approves run: from any card a reader opens, or
+// only from pipelines. For `pipelines`, an operation approved for pipelines
+// only is left out of the batch's `fillers`, as the window leaves it out of
+// what it approves for pipelines.
+export type BatchUse = 'interactive' | 'pipelines';
 
 // What the batch is asked for: a card type in a realm, or one card.
 export type BatchTarget =
