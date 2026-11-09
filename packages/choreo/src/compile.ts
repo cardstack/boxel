@@ -425,6 +425,9 @@ function resolveMove(
     if (crop) {
       if (fx !== 1) {
         target['scale'] = holdsStart ? [1, fx] : [fx, 1];
+        // a spring's length is read from every value it carries: a match
+        // that only scales (its centers already agree) still has a flight to time
+        pairs.push(holdsStart ? [1, fx] : [fx, 1]);
       }
       // the crop window at the FAR pose: the other end's SUBJECT sets
       // the floor — anything of this element that runs past that
@@ -445,9 +448,11 @@ function resolveMove(
     } else {
       if (fx !== 1) {
         target['scaleX'] = holdsStart ? [1, fx] : [fx, 1];
+        pairs.push(holdsStart ? [1, fx] : [fx, 1]);
       }
       if (fy !== 1) {
         target['scaleY'] = holdsStart ? [1, fy] : [fy, 1];
+        pairs.push(holdsStart ? [1, fy] : [fy, 1]);
       }
     }
   } else {

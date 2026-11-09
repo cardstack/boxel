@@ -44,6 +44,7 @@ import {
   setPassScheduler,
 } from './far.ts';
 import { GESTURE, type GestureRef, trackGestures } from './gesture.ts';
+import { correctMovesForLayout } from './layout-probe.ts';
 import {
   boundsOf as bounds,
   isRendered,
@@ -95,6 +96,18 @@ import type {
 
 /** `{{c.kept 'card'}}` narrows by role; bare `{{c.kept}}` is handed over uncalled, so the function is a Query too */
 type Selector = ((role?: string) => Query) & Query;
+/** the values that carry a sprite through space: what a move writes */
+const MOVED_KEYS = new Set([
+  'height',
+  'scale',
+  'scaleX',
+  'scaleY',
+  'transform',
+  'width',
+  'x',
+  'y',
+]);
+
 const selector = (type?: Query['type']): Selector =>
   Object.assign(
     (role?: string): Query => (role === undefined ? { type } : { role, type }),
@@ -1050,7 +1063,24 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // nor reasserts the world: the release itself was the snap. A sprite
     // that merely REFLOWED is untouched — it was never driven.
     if (this.run && !this.run.isDone()) {
-      const scored = new Set(cues.map((c) => c.sprite.node));
+      // A sprite the new score already MOVES or HOLDS in place needs no
+      // continuation: its move starts from the painted box, and its hold
+      // decides where it stands. One the score names only for something
+      // else (a fade, a hold on opacity) still needs carrying through space,
+      // or a transform the prior run was tweening (an entrance's scale)
+      // would be left where the release put it.
+      const scored = new Set(
+        cues
+          .filter(
+            (c) =>
+              c.flight !== undefined ||
+              [
+                ...Object.keys(c.target ?? {}),
+                ...Object.keys(c.hold?.values ?? {}),
+              ].some((key) => MOVED_KEYS.has(key)),
+          )
+          .map((c) => c.sprite.node),
+      );
       for (const [node, transition] of this.run.midflight()) {
         if (scored.has(node)) {
           continue;
@@ -1089,6 +1119,20 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         }
       }
     }
+    // a Move that animates sizes translates from where layout puts each
+    // box at the flight's start sizes, not from its final box
+    correctMovesForLayout(cues, measureZoom);
+    // a value a new tween or spring takes over carries on from where it is
+    // painted: stand it back up where the measure rested it
+    this.run?.restoreRested((ve, key) =>
+      cues.some(
+        (c) =>
+          (c.kind === 'tween' || c.kind === 'spring') &&
+          c.sprite.node.visualElement === ve &&
+          c.target !== undefined &&
+          key in c.target,
+      ),
+    );
     if (!cues.length) {
       // nothing to play: let every leaver go now
       for (const node of claimed) {

@@ -1033,7 +1033,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         justify-self: center;
         position: absolute;
         width: 89%;
-        height: inherit;
+        height: 100%;
         z-index: 0;
         pointer-events: none;
       }
@@ -1114,7 +1114,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       /* When the top card is expanded, fade out the underlying
          buried cards so the user isn't visually distracted by the
          stack history behind the expanded surface. Sibling selector
-         within .operator-mode-stack > .inner; uses :has() to match
+         within the stack's cards wrapper (.stack-cards); uses :has() to match
          buried items that have an expanded sibling AFTER them in the
          DOM (top card = last in DOM order). */
       .item:not(.expanded, .phone-layout):has(~ .item.expanded) {
