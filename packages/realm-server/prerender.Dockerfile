@@ -12,7 +12,10 @@ WORKDIR /realm-server
 # install layer below from the registry build cache until something it depends
 # on changes; this value is one of those inputs. When a Chrome security release
 # lands, raise it to the fixed version: the layer then reinstalls from the
-# current stable package instead of keeping the cached browser.
+# current stable package instead of keeping the cached browser. Raise the
+# Chrome for Testing pin in the repo-root `.puppeteerrc.cjs` along with it:
+# that pin is the browser Puppeteer launches on machines with no installed
+# Chrome, and it must not fall below this value.
 ARG CHROME_MIN_VERSION=156.0.8078.79
 
 # Install Chrome dependencies required by Puppeteer; the google-chrome package
