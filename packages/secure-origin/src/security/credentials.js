@@ -47,14 +47,10 @@ const MIN_REDACTED_LENGTH = 4;
 
 // The forms the frame shows, by the name the app gives in `form`. Each names
 // its fields and the one request it may make. A field's `validate` is `new`
-// for a new password and `confirm` for its confirmation; a form that is
-// `stateful` shows each field's validation state, as a BoxelInput given
-// `@state` does.
+// for a new password and `confirm` for its confirmation.
 export const FORMS = {
   'change-password': {
     layout: 'settings',
-    // Its fields show a validation state, as a BoxelInput given `@state` does.
-    stateful: true,
     operations: ['set-password'],
     hiddenUsername: true,
     fields: [
@@ -85,8 +81,6 @@ export const FORMS = {
   },
   'confirm-password': {
     layout: 'modal',
-    // Its fields show a validation state, as a BoxelInput given `@state` does.
-    stateful: true,
     operations: ['add-threepid'],
     fields: [
       {

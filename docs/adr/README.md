@@ -30,7 +30,9 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [013](013-settle-a-transcripts-scroll-anchor-in-the-render-pass-before-motion-measures.md)      | Settle a transcript's scroll anchor in the render pass, before motion measures            | proposed   |
 | [014](014-beacon-the-secure-origins-telemetry-to-the-realm-server-and-let-no-secret-into-it.md) | Beacon the secure origin's telemetry to the realm server, and let no secret into it       | proposed   |
 | [015](015-express-realm-url-routing-as-rules-the-server-interprets-never-as-realm-code.md)      | Express realm URL routing as rules the server interprets, never as realm code             | proposed   |
+| [016](016-carry-a-matrix-events-oversized-structured-fields-as-media.md)                        | Carry a Matrix event's oversized structured fields as media                               | proposed   |
 | [017](017-fit-toolbar-rows-with-layoutcontrol-not-per-app-css.md)                               | Fit toolbar rows with LayoutControl, not per-app CSS                                      | proposed   |
 | [018](018-build-realm-historian-as-erasable-typescript-node-runs-unbuilt.md)                    | Build realm-historian as erasable TypeScript that Node runs unbuilt                       | proposed   |
 | [019](019-build-the-secure-origins-pages-as-their-own-ember-app-on-pret-ui.md)                  | Build the secure origin's pages as their own Ember app, on Pret UI                        | proposed   |
-| [020](020-search-by-vector-and-rank-fusion-in-the-realms-own-index.md)                          | Search by vector and rank fusion in the realm's own index                                 | proposed   |
+| [020](020-run-every-launched-browser-with-its-sandbox-on-and-a-current-chrome.md)               | Run every launched browser with its sandbox on, on a current Chrome                       | proposed   |
+| [021](021-search-by-vector-and-rank-fusion-in-the-realms-own-index.md)                          | Search by vector and rank fusion in the realm's own index                                 | proposed   |

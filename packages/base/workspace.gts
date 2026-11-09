@@ -2792,13 +2792,24 @@ class Isolated extends Component<typeof Workspace> {
         return; // already pinned
       }
       this.args.model.entryPoints = [...existing, card];
+      this.savePins();
     }
   });
 
   unpinDoor = (index: number) => () => {
     let pts = (this.args.model.entryPoints ?? []) as CardDef[];
     this.args.model.entryPoints = pts.filter((_, i) => i !== index);
+    this.savePins();
   };
+
+  // A pin is one deliberate click, not typing, so it skips the autosave's
+  // quiet period: the dashboard's desks read pins from the index.
+  private savePins() {
+    let { id } = this.args.model;
+    if (id) {
+      this.args.context?.store.save(id);
+    }
+  }
 
   // ── Typeahead search ──────────────────────────────────────
   @tracked private searchTerm = '';

@@ -148,13 +148,17 @@ export default class InputGroup extends Component<Signature> {
             </div>
           {{/if}}
         </div>
-        {{#if shouldShowErrorMessage}}
-          <div
-            id={{concat 'error-message-' this.elementId}}
-            class='error-message'
-            data-test-boxel-input-group-error-message
-          >{{@errorMessage}}</div>
-        {{/if}}
+        {{! The live region stays on the page, and the error is added inside it,
+          so a screen reader announces the error when it appears. }}
+        <div class='error-live' aria-live='polite'>
+          {{#if shouldShowErrorMessage}}
+            <div
+              id={{concat 'error-message-' this.elementId}}
+              class='error-message'
+              data-test-boxel-input-group-error-message
+            >{{@errorMessage}}</div>
+          {{/if}}
+        </div>
         {{#if @helperText}}
           <div
             id={{concat 'helper-text-' this.elementId}}
@@ -321,7 +325,7 @@ export default class InputGroup extends Component<Signature> {
         border-color: var(--destructive, var(--boxel-error-100));
       }
 
-      .boxel-input-group--disabled ~ .error-message,
+      .boxel-input-group--disabled ~ .error-live > .error-message,
       .boxel-input-group--disabled ~ .helper-text {
         display: none;
       }

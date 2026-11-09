@@ -265,8 +265,8 @@ module('Integration | telemetry', function (hooks) {
     pageOpened('enter-key');
     await render(EnterKeyPage);
     await waitFor('[data-test-enter-key-form]');
-    await click('[data-test-radio-choice="oauth-client"] input');
-    await click('[data-test-radio-choice="other"] input');
+    await click('[data-test-pretui-radio-option="oauth-client"] input');
+    await click('[data-test-pretui-radio-option="other"] input');
     await fillIn('[data-test-key-name]', SECRETS.clientLabel);
     await fillIn('[data-test-oauth-client-id-input]', SECRETS.clientId);
     await fillIn('[data-test-key-value]', SECRETS.clientSecret);

@@ -280,12 +280,16 @@ export {
   refusalSeenBy,
   unshareableFormatsOf,
   AUTHENTICATION_REQUIRED,
+  definitionNotReady,
+  DEFINITION_RETRY_AFTER_SECONDS,
 } from './types.ts';
 export {
   buildCallApiRequest,
   destinationCovers,
   notApproved,
+  slotKeyKinds,
   slotsIn,
+  type CallApiKeyKind,
   type AnonymousCallApiCaller,
   type CallApiCredential,
   type CallApiFilledSlot,
@@ -343,3 +347,7 @@ export type {
   ValidatedPolicyIssue,
   ValidatedRule,
 } from './types.ts';
+export {
+  requestDefinitionLookup,
+  REQUEST_DEFINITION_DEADLINE_MS,
+} from './request-definition-lookup.ts';

@@ -808,13 +808,11 @@ module('Acceptance | operator mode tests', function (hooks) {
     );
   });
 
-  test('open workspace chooser when boxel icon is clicked', async function (assert) {
+  test('open the dashboard when boxel icon is clicked', async function (assert) {
     getService('network').mount(
       async (req: Request) => {
-        let isOnWorkspaceChooser = document.querySelector(
-          '[data-test-workspace-chooser]',
-        );
-        if (isOnWorkspaceChooser && req.url.includes('_info')) {
+        let isOnDashboard = document.querySelector('[data-test-dashboard]');
+        if (isOnDashboard && req.url.includes('_info')) {
           assert
             .dom(
               `[data-test-workspace-list] [data-test-workspace-loading-indicator]`,
@@ -841,19 +839,19 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
       .exists();
     assert.dom('[data-test-submode-layout-title]').doesNotExist();
-    assert.dom('[data-test-workspace-chooser]').doesNotExist();
+    assert.dom('[data-test-dashboard]').doesNotExist();
     let url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
     let urlParameters = new URLSearchParams(url);
     assert.false(Boolean(urlParameters.get('workspaceChooserOpened')));
 
     await click('[data-test-workspace-chooser-toggle]');
 
-    assert.dom('[data-test-workspace-chooser]').exists();
+    assert.dom('[data-test-dashboard]').exists();
     // Wait for a workspace to actually render. Each tile renders either its
     // own loading indicator or its content, never both, so a list that has
     // finished loading and a list holding no tiles at all are alike in having
     // no indicator in them — and the second is what let a Percy snapshot of an
-    // entirely empty chooser through with the test still green. Only the
+    // entirely empty dashboard through with the test still green. Only the
     // presence of a tile separates them.
     await waitFor(`[data-test-workspace="Test Workspace B"]`);
     // Still worth asserting after that wait: the wait settles one tile, this

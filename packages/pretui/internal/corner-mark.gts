@@ -4,11 +4,10 @@
 // icon, a presence dot on an avatar. Both components wrap their child in an
 // inline box and position the mark against one of its four logical corners,
 // so RTL moves the mark with the reading direction.
-import { htmlSafe } from '@ember/template';
 // type-only gap: 'ember-modifier' resolves at realm runtime; glint cannot see
 // it here (accepted parse baseline, same as toaster.gts / focus.gts)
 import { modifier } from 'ember-modifier';
-import type { SafeString } from '@ember/template';
+import type { KeptProperty } from './keep-style';
 import { PRETUI_TONES, resolveTone } from '../pretui-primitives';
 import type { PretuiTone, PretuiToneArg } from '../pretui-primitives';
 
@@ -44,9 +43,21 @@ export function resolveCornerTone(tone: PretuiToneArg | string | undefined, fall
   return resolveTone(tone, PRETUI_TONES, fallback);
 }
 
-/** The mark's hue as one custom property; the stylesheet derives the rest. */
-export function cornerHueStyle(tone: PretuiTone): SafeString {
-  return htmlSafe(`--pretui-mark-hue: ${TONE_HUES[tone]}`);
+/**
+ * The mark's hue as one custom property, for `keepStyle`; the stylesheet
+ * derives the rest. It is written through the CSSOM, never a `style`
+ * attribute, which a strict Content Security Policy refuses. A tone the
+ * caller passed wins over the same property in the caller's `style`; the
+ * component's default tone fills in only when that `style` sets none.
+ */
+export function cornerHue(tone: PretuiTone, passed: boolean): KeptProperty[] {
+  return [
+    {
+      property: '--pretui-mark-hue',
+      value: TONE_HUES[tone],
+      strength: passed ? 'arg' : 'default',
+    },
+  ];
 }
 
 const FOCUSABLE = 'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';

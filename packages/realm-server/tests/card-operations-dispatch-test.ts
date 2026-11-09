@@ -3,6 +3,9 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import {
+  DEFINITION_RETRY_AFTER_SECONDS,
+  definitionNotReady,
+  refusalForNonReader,
   dischargePendingDecision,
   erroredTargetRow,
   isDocumentResult,
@@ -1212,6 +1215,83 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error.code, 'target-not-found');
     });
+    test('a type whose definition is not ready yet is refused as not ready, not as unknown', async function (assert) {
+      let { core } = stub();
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let notReady = (error: OperationError, target: string) => {
+        assert.strictEqual(error.status, 503, `${target} answers 503`);
+        assert.strictEqual(error.code, 'target-not-indexed');
+        assert.deepEqual(error.meta, {
+          awaitingIndex: true,
+          retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+        });
+      };
+      notReady(
+        await refusalFrom(() =>
+          resolveOperation(
+            core,
+            { kind: 'type', codeRef: PERSON, realm: REALM },
+            'create',
+          ),
+        ),
+        'a type target',
+      );
+      notReady(
+        await refusalFrom(() => runOperation(core, invoke(CARD, 'read'))),
+        'a card target',
+      );
+    });
+    test('a caller declined reads is told a definition that is not ready without the type it names', function (assert) {
+      let seen = refusalForNonReader(
+        definitionNotReady(`${REALM}person-1`, PERSON).error,
+      );
+      assert.strictEqual(seen.status, 503);
+      assert.strictEqual(seen.code, 'target-not-indexed');
+      assert.strictEqual(seen.id, undefined, 'the card is not named');
+      assert.false(
+        JSON.stringify(seen).includes(JSON.stringify(PERSON)),
+        'the type is not named',
+      );
+      assert.deepEqual(seen.meta, {
+        awaitingIndex: true,
+        retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+      });
+    });
+    // The card+json routes read through this dispatch. A read that resolves
+    // no definition is the built-in one and serves the document whole, so a
+    // type whose `read` declares an `output` has its card refused, not served
+    // unprojected, while its definition is not ready.
+    test('a card whose type projects its read is refused while the definition is not ready, not served whole', async function (assert) {
+      let { core } = stub({
+        operations: {
+          read: {
+            base: 'read',
+            deterministic: true,
+            output: { source: '{id:.id}', syntax: 'solidified' },
+          },
+        },
+      });
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'read')),
+      );
+      assert.strictEqual(error.status, 503);
+      assert.strictEqual(error.code, 'target-not-indexed');
+    });
     test('a card whose type entry is unreadable still reads', async function (assert) {
       // The built-in `read` consults no definition, so refusing here would make
       // every card of a broken module unreadable.
@@ -2120,6 +2200,63 @@ module(basename(import.meta.filename), function () {
         resolveGatedOperation(core, target, 'create', declined(core)),
       );
       assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    // Resolution's refusal is answered as the gate's for a caller the ACL
+    // declined: as not permitted, so the 503 reaches only a caller the realm
+    // admitted.
+    test('a type whose definition is not ready yet is refused as not permitted to a declined caller', async function (assert) {
+      let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
+      let { core } = stub({ ...reExported, policy: access });
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'create', declined(core)),
+      );
+      assert.strictEqual(failure.status, 403);
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    // A refusal the gate's own reads raise is told the same way. Here the
+    // target's entry reads, and the chain of the type a named create mints,
+    // read to settle whether it mints a policy card, refuses.
+    test('a refusal the gate itself raises is told as not permitted to a declined caller, and as not ready to an admitted one', async function (assert) {
+      const PET: CodeRef = { module: `${REALM}pet`, name: 'Pet' } as CodeRef;
+      let { access } = policyStub([{ targetType: PERSON, grants: ['draft'] }]);
+      let { core } = stub({
+        ...reExported,
+        policy: access,
+        operations: { draft: { base: 'create', of: PET, deterministic: true } },
+      });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (codeRef) => {
+        if (typeKey(codeRef) === typeKey(PET)) {
+          throw definitionNotReady(undefined, codeRef);
+        }
+        return await entry(codeRef);
+      };
+      let toDeclined = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'draft', declined(core)),
+      );
+      assert.strictEqual(toDeclined.status, 403, 'a caller declined reads');
+      assert.strictEqual(toDeclined.code, 'operation-not-permitted');
+      let reader = newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+      let toReader = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'draft', reader),
+      );
+      assert.strictEqual(toReader.status, 503, 'a reader declined only writes');
+      assert.strictEqual(toReader.code, 'target-not-indexed');
     });
 
     test('a rule on an ancestor in the recorded chain applies', async function (assert) {

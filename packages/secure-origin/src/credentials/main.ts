@@ -3,6 +3,7 @@
 // lists, and wires the fields' protocol (`src/security/credentials.js`) to the
 // page: the messages, the styles the app sends, and the fields' size.
 import '../styles/layers.css';
+import Application from '@ember/application';
 import { renderComponent, renderSettled } from '@ember/renderer';
 
 import {
@@ -15,6 +16,24 @@ import { Changes } from './changes.ts';
 import CredentialFields from './credential-fields.gts';
 import { applyStyle, customProperties, whenStyled } from './style.ts';
 
+// An application with nothing registered, whose instance is the owner the
+// fields render under. Ember's classic components, which boxel-ui's input
+// draws its element with, look up the renderer through their owner.
+class FrameApplication extends Application {
+  Resolver = {
+    create: () => ({ resolve: () => undefined }),
+  } as unknown as Application['Resolver'];
+}
+
+async function frameOwner() {
+  let instance = FrameApplication.create({
+    autoboot: false,
+    rootElement: document.body,
+  }).buildInstance();
+  await instance.boot();
+  return instance;
+}
+
 let config = readConfig(document);
 let { form, appOrigin } = readParams(window.location.href);
 
@@ -26,10 +45,10 @@ if (
     framed: window.parent !== window,
   })
 ) {
-  start(appOrigin!);
+  void start(appOrigin!);
 }
 
-function start(appOrigin: string) {
+async function start(appOrigin: string) {
   let fieldsForm = () =>
     document.getElementById('credential-fields') as HTMLFormElement | null;
   let requested: string[] = [];
@@ -49,6 +68,7 @@ function start(appOrigin: string) {
   });
   window.addEventListener('message', (event) => frame.receive(event));
   renderComponent(CredentialFields, {
+    owner: await frameOwner(),
     into: document.body,
     args: { frame, changes },
   });

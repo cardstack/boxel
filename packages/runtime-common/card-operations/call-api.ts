@@ -22,6 +22,13 @@ import type { KeyReadiness } from './capability-wire.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
+import {
+  CALL_API_KEY_KINDS,
+  isCallApiKeyKind,
+  type CallApiKeyKind,
+} from '../call-api-key-kind.ts';
+
+export type { CallApiKeyKind };
 
 // ============================================================================
 // callApi: a request to a service outside the realm, declared as data on a
@@ -128,6 +135,7 @@ export interface CallApiClauses {
   json?: unknown;
   graphql?: unknown;
   perInstance?: unknown;
+  keyKind?: unknown;
 }
 
 const METHODS: readonly CallApiMethod[] = [
@@ -400,6 +408,9 @@ export function lowerCallApi(
     );
   }
 
+  // The kind of key each slot takes, where the declaration says.
+  let declaredKind = lowerKeyKind(clauses.keyKind, byName, fail);
+
   if (!ok || !lowered?.url || !lowered.destination) {
     return undefined;
   }
@@ -411,9 +422,113 @@ export function lowerCallApi(
     ...(headers ? { headers } : {}),
     ...(query ? { query } : {}),
     ...(body ? { body } : {}),
-    slots: slots.map(({ text: _text, ...slot }) => slot),
+    slots: slots.map(({ text: _text, ...slot }) => {
+      let keyKind = declaredKind(slot.name);
+      return keyKind ? { ...slot, keyKind } : slot;
+    }),
     ...(clauses.perInstance === true ? { perInstance: true as const } : {}),
   };
+}
+
+const KEY_KIND_LIST = CALL_API_KEY_KINDS.map((k) => `"${k}"`).join(', ');
+
+// `keyKind` as declared: one kind for every slot, or a kind for each slot
+// named. Answers the kind declared for a slot, by its name. A `|basic` slot
+// sends the base64 of a user and password, which a minted token isn't, so it
+// is declared only `static`.
+function lowerKeyKind(
+  keyKind: unknown,
+  slots: Map<string, Pick<CallApiSlot, 'transform'>>,
+  fail: (
+    code: OperationLoweringIssueCode,
+    path: string,
+    message: string,
+  ) => void,
+): (slot: string) => CallApiKeyKind | undefined {
+  if (keyKind === undefined) {
+    return () => undefined;
+  }
+  let basicOnly = (kind: CallApiKeyKind, name: string, path: string) => {
+    if (kind !== 'static' && slots.get(name)?.transform === 'basic') {
+      fail(
+        'invalid-request',
+        path,
+        `the "${name}" slot is sent as HTTP Basic credentials, which only a key sent as it is can be, so \`${path}\` is "static"`,
+      );
+      return false;
+    }
+    return true;
+  };
+  if (isCallApiKeyKind(keyKind)) {
+    for (let name of slots.keys()) {
+      basicOnly(keyKind, name, 'keyKind');
+    }
+    return () => keyKind;
+  }
+  if (!isPlainObject(keyKind)) {
+    fail(
+      'invalid-request',
+      'keyKind',
+      `\`keyKind\` is one of ${KEY_KIND_LIST} for every slot, or an object giving one for each slot by its name`,
+    );
+    return () => undefined;
+  }
+  let bySlot = new Map<string, CallApiKeyKind>();
+  for (let [name, kind] of Object.entries(keyKind)) {
+    if (!slots.has(name)) {
+      fail(
+        'invalid-request',
+        `keyKind.${name}`,
+        `the request has no "${name}" slot for \`keyKind.${name}\` to describe`,
+      );
+    } else if (!isCallApiKeyKind(kind)) {
+      fail(
+        'invalid-request',
+        `keyKind.${name}`,
+        `\`keyKind.${name}\` must be one of ${KEY_KIND_LIST}`,
+      );
+    } else if (basicOnly(kind, name, `keyKind.${name}`)) {
+      bySlot.set(name, kind);
+    }
+  }
+  return (slot) => bySlot.get(slot);
+}
+
+// The kinds of key that can fill a slot, in `CALL_API_KEY_KINDS` order: the
+// one its declaration names, or else every kind that can work there. The
+// realm server fills a slot with a minted access token wherever it stands, so
+// only two things rule a kind out. A `|basic` slot sends the base64 of a user
+// and password, which a minted token isn't. And a Google service account's
+// tokens are only for Google's own services.
+export function slotKeyKinds(
+  slot: CallApiSlot,
+  request: Pick<OperationCallApi, 'destination'>,
+): CallApiKeyKind[] {
+  if (slot.keyKind) {
+    return [slot.keyKind];
+  }
+  if (slot.transform === 'basic') {
+    return ['static'];
+  }
+  return isGoogleDestination(request.destination)
+    ? [...CALL_API_KEY_KINDS]
+    : ['static', 'oauth'];
+}
+
+// The domains of Google's services that take a service account's access
+// tokens: its APIs, and the Firebase Realtime Database.
+const GOOGLE_TOKEN_DOMAINS = ['googleapis.com', 'firebaseio.com'];
+
+function isGoogleDestination(destination: string): boolean {
+  let host: string;
+  try {
+    host = new URL(destination).hostname;
+  } catch {
+    return false;
+  }
+  return GOOGLE_TOKEN_DOMAINS.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
 }
 
 interface LoweredUrl {

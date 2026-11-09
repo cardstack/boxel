@@ -89,7 +89,7 @@ jobs:
   check-percy:
     name: Check if Percy is needed
     # Follows host-test onto RunsOn, which waits on it; see host-test.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-check-percy/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-check-percy/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       percy_needed: ${{ steps.check.outputs.percy_needed }}
@@ -165,7 +165,7 @@ jobs:
     # timings with PR runs wants it on.
     name: Check if cached index is usable
     # Follows host-test onto RunsOn, which waits on it; see host-test.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-check-index-cache/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-check-index-cache/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       use_cache: ${{ steps.check.outputs.use_cache }}
@@ -303,12 +303,11 @@ jobs:
       # chrome against the env-mode service stack at
       # `https://*.ci.localhost`, so environment.js needs to bake those
       # URLs into the host bundle. The standard-mode build still exists
-      # in ci.yaml for its other jobs; `matrix-client-test` has its own
-      # there, with DASHBOARD_V2 on.
+      # in ci.yaml for its other jobs, `matrix-client-test` among them.
       boxel_environment: ci
       # host-test waits on this build, so it follows host-test onto RunsOn,
       # under the same variables and the same fork guard; see host-test.
-      runs_on_spec: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && vars.HOST_TEST_RUNS_ON || '' }}
+      runs_on_spec: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && vars.RUNS_ON_SPEC || '' }}
     concurrency:
       group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -318,7 +317,7 @@ jobs:
     if: github.event.action != 'ready_for_review'
     # Same service stack as a host-test shard, so it moves with host-test onto
     # RunsOn under the same variables and guard; see host-test.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-live-test/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-live-test/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     # See the note on host-test's timeout. This job has never taken more than
     # ~10 minutes when healthy.
     timeout-minutes: 25
@@ -544,7 +543,7 @@ jobs:
     # Shards can run on RunsOn: ephemeral EC2 instances in our own AWS
     # account, which take the sixteen shards out of GitHub's runner pool so the
     # rest of CI stops queueing behind them. The repo variable
-    # HOST_TEST_RUNS_ON holds the RunsOn spec, such as
+    # RUNS_ON_SPEC holds the RunsOn spec, such as
     # `cpu=4/ram=16/family=m8i+m7i+m7a+m6i+m6a/image=ubuntu24-full-x64` (the
     # shape of a public repo's ubuntu-latest). RunsOn refuses a spec without
     # `family` and runs the job on a fallback that fails it; the more families
@@ -555,11 +554,13 @@ jobs:
     # only pushes to main always take RunsOn: the memory baseline and the
     # shard timings are measured on main, and one machine type keeps them
     # comparable from run to run. Every other run takes RunsOn only while the
-    # repo variable HOST_TEST_SPILL is `true`. The actions-queue collector
+    # repo variable RUNS_ON_SPILL is `true`. The actions-queue collector
     # (packages/observability/collectors/actions-queue.ts) sets it while
     # GitHub's pool is near full and clears it when the pool drains. GitHub
     # reads `vars` when each job is queued, so a change reaches every job
     # queued after it, including later jobs of a run already in progress.
+    # The same two variables move the Realm Server and Matrix jobs in ci.yaml,
+    # where main follows the spill too; see realm-server-test there.
     #
     # Fork PRs always stay on GitHub's runners: the repo is public, and a
     # fork's code must never run inside our AWS account.
@@ -581,7 +582,7 @@ jobs:
     # build, but on main a build completed by a re-run is rejected (see the
     # finalize job), so a reclaim on main costs that commit its baseline
     # build. Pull requests stay on spot.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-host-test-{1}/{2}{3}', github.run_id, matrix.shardIndex, vars.HOST_TEST_RUNS_ON, (github.event_name == 'push' && github.ref == 'refs/heads/main') && '/spot=false' || '') || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-host-test-{1}/{2}{3}', github.run_id, matrix.shardIndex, vars.RUNS_ON_SPEC, (github.event_name == 'push' && github.ref == 'refs/heads/main') && '/spot=false' || '') || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
     # every other PR in the repo. A healthy shard has never exceeded ~19
@@ -1151,7 +1152,7 @@ jobs:
     needs: [host-test, check-percy]
     # Follows host-test onto RunsOn, so a run's tail doesn't queue behind
     # GitHub's cap either; see host-test.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-percy-finalize/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-percy-finalize/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 15
     # Job-level so the reject step can test for their presence in its `if:` —
     # a step's own `env:` block is not in scope for that step's condition.
@@ -1491,7 +1492,7 @@ jobs:
       cancel-in-progress: true
     needs: host-test
     # Follows host-test onto RunsOn; see host-test.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-merge-reports/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-merge-reports/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       # checks/pull-requests: needed by publish-unit-test-result-action to post
@@ -1596,7 +1597,7 @@ jobs:
     needs: host-test
     # Follows host-test onto RunsOn; see host-test. It only reads the shards'
     # memory reports, so where it runs doesn't change what it measures.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-memory-baseline/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-memory-baseline/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -1630,7 +1631,7 @@ jobs:
     needs: host-test
     # Follows host-test onto RunsOn; see host-test. It only reads the jobs API,
     # so where it runs doesn't change what it measures.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-test-time/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-test-time/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -1692,7 +1693,7 @@ jobs:
     needs: host-test
     # Follows host-test onto RunsOn; see host-test. It only reads the shards'
     # memory reports, so where it runs doesn't change what it measures.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-peak-heap/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-peak-heap/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: read

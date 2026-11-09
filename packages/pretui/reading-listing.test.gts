@@ -1194,6 +1194,17 @@ module('Pretui | reading-listing', function (hooks) {
     assert.dom(link).hasText('Gyokuro');
   });
 
+  test('Item with @wrap marks its text to wrap, and cuts it short by default', async function (assert) {
+    await render(
+      <template>
+        <Item @title='Gyokuro' data-test-default />
+        <Item @title='Gyokuro' @wrap={{true}} data-test-wrapped />
+      </template>,
+    );
+    assert.dom('[data-test-default]').doesNotHaveAttribute('data-wrap');
+    assert.dom('[data-test-wrapped]').hasAttribute('data-wrap', 'true');
+  });
+
   // ── Descriptions ──────────────────────────────────────────────────────
 
   test('Descriptions is a description list, not a table', async function (assert) {

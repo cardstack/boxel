@@ -24,6 +24,16 @@ import {
   PACKAGE_ROOT,
 } from './module-package.ts';
 
+// A package joins this list only by a change to it, reviewed as a change to
+// the origin's trusted code (ADR 019 §1.3). It never joins because a package
+// already on it, Pret UI or boxel-ui included, starts depending on it: the
+// build then fails, naming it. Beyond Ember, Glimmer and the build's runtime
+// helpers, the list names only the packages the build reaches. Of the
+// modules a page can reach, boxel-ui declares only its stylesheets as side
+// effects, so a Pret UI wrapper of a boxel-ui component brings in that
+// component's own imports, not everything boxel-ui's `components` index
+// re-exports. A page that starts using a component whose imports reach a
+// package ADR 019 §1.3 reviews adds that package here in the same change.
 export const ALLOWED_PACKAGES = new Set([
   'ember-source',
   '@glimmer/component',
@@ -31,6 +41,39 @@ export const ALLOWED_PACKAGES = new Set([
   // The build's runtime helpers, which compiled code calls into.
   '@babel/runtime',
   'decorator-transforms',
+
+  // Pret UI, and the packages of ADR 019 §1.3 the build reaches through it.
+  // boxel-ui reaches the pages only through Pret UI: the package never
+  // imports it.
+  '@cardstack/pretui',
+  '@cardstack/boxel-ui',
+  '@cardstack/boxel-icons',
+  'ember-modifier',
+  'ember-provide-consume-context',
+
+  // boxel-ui's run-time dependencies, as ADR 019 §1.3 names them.
+  'classnames',
+  'dompurify',
+  'ember-basic-dropdown',
+  'ember-concurrency',
+  'ember-power-select',
+  'lodash-es',
+
+  // Packages the build reaches through the ones above, as ADR 019 §1.3
+  // names them.
+  //
+  // Embroider's run-time macros: `ember-provide-consume-context` calls
+  // `importSync` from them, and Pret UI's Select reaches it by consuming
+  // context.
+  '@embroider/macros',
+  // `ember-basic-dropdown`'s and `ember-power-select`'s helpers and
+  // modifier, which arrive with boxel-ui's select: the `eq`/`and`/`or`
+  // helpers, a dynamic `{{element}}`, and a modifier that sets style
+  // properties through the CSSOM (`element.style.setProperty`), which the
+  // policy allows.
+  'ember-truth-helpers',
+  'ember-element-helper',
+  'ember-style-modifier',
 ]);
 
 // Modules the bundler itself generates, which have no file on disk.
