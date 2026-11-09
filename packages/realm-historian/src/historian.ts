@@ -11,7 +11,11 @@
 // error.
 
 import { mkdir } from 'node:fs/promises';
-import { logger, REALM_CHANGE_EVENTS_CHANNEL } from '@cardstack/runtime-common';
+import {
+  logger,
+  REALM_CHANGE_EVENTS_CHANNEL,
+  type ChangeEvent,
+} from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 import { LeaseManager, shardOf, type LeaseOptions } from './lease.ts';
 import {
@@ -47,11 +51,16 @@ export class Historian {
   #recorders = new Map<string, RealmRecorder>();
   // The shards whose realms the consumer's position accounts for.
   #loadedShards = new Set<number>();
+  // The horizon taken before the realms were last loaded: every event below
+  // it had committed when they were read.
+  #loadedBelow = 0n;
   #realmsStale = true;
   #consumer: Consumer | undefined;
   #stopped = false;
   #failure: Error | undefined;
   #wake: (() => void) | undefined;
+  // A wakeup that came while the loop was busy, so the next sleep is skipped.
+  #wakePending = false;
   #done: Promise<void> | undefined;
 
   constructor(options: HistorianOptions) {
@@ -117,6 +126,7 @@ export class Historian {
       );
       while (this.#running()) {
         this.#options.heartbeat.beat();
+        this.#wakePending = false;
         if (this.#lease.held.length > 0) {
           if (this.#realmsStale || this.#shardsChanged()) {
             await this.#loadRealms();
@@ -159,13 +169,15 @@ export class Historian {
   // the events after the position; its earlier history is the backfill's.
   async #loadRealms(): Promise<void> {
     let { db, realmsRoot, lease } = this.#options;
-    let held = this.#lease.held;
+    let held = new Set(this.#lease.held);
+    let horizon = await currentHorizon(db);
     this.#realms = await loadRecordedRealms({
       db,
       realmsRoot,
       shardCount: lease.shardCount,
-      holds: (shard) => this.#lease.holds(shard),
+      holds: (shard) => held.has(shard),
     });
+    this.#loadedBelow = BigInt(horizon);
     for (let id of this.#recorders.keys()) {
       if (!this.#realms.has(id)) {
         this.#recorders.delete(id);
@@ -177,9 +189,9 @@ export class Historian {
       let position =
         cursors.length > 0
           ? positionOfCursors(cursors)
-          : { xid: await currentHorizon(db), seq: 0 };
+          : { xid: horizon, seq: 0 };
       this.#consumer = new Consumer(
-        { db, recorderFor: (realmId) => this.#recorderFor(realmId) },
+        { db, recorderFor: (event) => this.#recorderFor(event) },
         position,
       );
       log.info(
@@ -194,18 +206,20 @@ export class Historian {
       }
       log.info(`recording ${this.#realms.size} realm(s)`);
     }
-    this.#loadedShards = new Set(held);
+    this.#loadedShards = held;
   }
 
-  // A realm the task has not loaded, in a shard it holds, is a realm enabled
-  // since the last load: the realms are loaded again before its event is
-  // given up on.
-  async #recorderFor(realmId: string): Promise<RealmRecorder | undefined> {
+  // An event for a realm the task has not loaded, in a shard it holds, may
+  // belong to a realm enabled since the last load, or to a shard gained since
+  // then, whose load moves the consumer's position back. The realms are
+  // loaded again before the event is given up on, unless the last load
+  // covered its shard and came after the event committed: that load already
+  // found the realm not recorded, as it does a realm disabled with events
+  // still unread, so its backlog costs one load rather than one per event.
+  async #recorderFor(event: ChangeEvent): Promise<RealmRecorder | undefined> {
+    let { realmId } = event;
     let realm = this.#realms.get(realmId);
-    if (
-      !realm &&
-      this.#lease.holds(shardOf(realmId, this.#options.lease.shardCount))
-    ) {
+    if (!realm && this.#mayBeUnloaded(event)) {
       await this.#loadRealms();
       realm = this.#realms.get(realmId);
     }
@@ -220,6 +234,16 @@ export class Historian {
       this.#recorders.set(realmId, recorder);
     }
     return recorder;
+  }
+
+  #mayBeUnloaded(event: ChangeEvent): boolean {
+    let shard = shardOf(event.realmId, this.#options.lease.shardCount);
+    if (!this.#lease.holds(shard)) {
+      return false;
+    }
+    return (
+      !this.#loadedShards.has(shard) || BigInt(event.xid) >= this.#loadedBelow
+    );
   }
 
   // An empty payload wakes the task. A payload naming a realm wakes it only
@@ -240,10 +264,18 @@ export class Historian {
   }
 
   #wakeUp(): void {
-    this.#wake?.();
+    if (this.#wake) {
+      this.#wake();
+    } else {
+      this.#wakePending = true;
+    }
   }
 
   #sleep(ms: number): Promise<void> {
+    if (this.#wakePending) {
+      this.#wakePending = false;
+      return Promise.resolve();
+    }
     return new Promise((resolve) => {
       let finish = () => {
         clearTimeout(timer);

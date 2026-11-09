@@ -8,6 +8,7 @@ import {
   REALM_CHANGE_EVENTS_CHANNEL,
   type ChangeEvent,
 } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 import { Historian } from '../src/historian.ts';
 import { Heartbeat } from '../src/health.ts';
 import { LeaseManager, shardOf } from '../src/lease.ts';
@@ -21,7 +22,8 @@ import {
 } from './helpers.ts';
 
 const RENEW_MS = 50;
-const EXPIRY_MS = 300;
+// Long enough that a busy machine doesn't push a renewal past its deadline.
+const EXPIRY_MS = 1000;
 // Long enough that only a wakeup, not the timer, explains a prompt read.
 const POLL_MS = 5000;
 
@@ -49,10 +51,20 @@ module('historian', (hooks) => {
 
   function historian(
     holder: string,
-    { shardCount = 1, taskCount = 1 } = {},
+    {
+      shardCount = 1,
+      taskCount = 1,
+      db = database.another(),
+      record = async (event: ChangeEvent) => void recorded.push(event),
+    }: {
+      shardCount?: number;
+      taskCount?: number;
+      db?: PgAdapter;
+      record?: (event: ChangeEvent) => Promise<void>;
+    } = {},
   ): Historian {
     let created = new Historian({
-      db: database.another(),
+      db,
       historyRoot: join(root, holder, 'history'),
       realmsRoot: join(root, 'realms'),
       heartbeat: new Heartbeat(),
@@ -64,13 +76,58 @@ module('historian', (hooks) => {
         expiryMs: EXPIRY_MS,
         holder,
       },
-      recorderFor: () => ({
-        record: async (event) => void recorded.push(event),
-      }),
+      recorderFor: () => ({ record }),
     });
     historians.push(created);
     created.run().catch(() => {});
     return created;
+  }
+
+  // One realm in each shard, indexed by shard.
+  async function realmPerShard(shardCount: number): Promise<TestRealm[]> {
+    let realms: TestRealm[] = [];
+    for (let i = 0; realms.filter(Boolean).length < shardCount && i < 50; i++) {
+      let realm = await insertRealm(database.db, {
+        url: `http://localhost:4201/test-user/realm-${i}/`,
+        diskId: `test-user/realm-${i}`,
+      });
+      realms[shardOf(realm.id, shardCount)] ??= realm;
+    }
+    return realms;
+  }
+
+  // Another task's lease manager, which takes the first free shard of two.
+  async function otherHolder(shardCount: number): Promise<LeaseManager> {
+    let other = new LeaseManager(database.another(), {
+      shardCount,
+      taskCount: 2,
+      renewMs: RENEW_MS,
+      expiryMs: EXPIRY_MS,
+      holder: 'other',
+    });
+    managers.push(other);
+    await other.start(() => {});
+    return other;
+  }
+
+  // A recorder that holds the poll at `seq` until the returned `release`.
+  function holdAt(seq: () => number) {
+    let release!: () => void;
+    let released = new Promise<void>((resolve) => (release = resolve));
+    let holding = false;
+    return {
+      get holding() {
+        return holding;
+      },
+      release,
+      record: async (event: ChangeEvent) => {
+        recorded.push(event);
+        if (event.seq === seq() && !holding) {
+          holding = true;
+          await released;
+        }
+      },
+    };
   }
 
   // The journal's own wakeup: the realm's id on the channel.
@@ -115,35 +172,19 @@ module('historian', (hooks) => {
 
   test("a wakeup for another task's shard is ignored", async (assert) => {
     let shardCount = 2;
-    let realms: TestRealm[] = [];
-    for (let i = 0; realms.length < 2 && i < 50; i++) {
-      let realm = await insertRealm(database.db, {
-        url: `http://localhost:4201/test-user/realm-${i}/`,
-        diskId: `test-user/realm-${i}`,
-      });
-      let shard = shardOf(realm.id, shardCount);
-      if (!realms.some((known) => shardOf(known.id, shardCount) === shard)) {
-        realms.push(realm);
-      }
-    }
+    let [second, first] = await realmPerShard(shardCount);
     // Another holder takes the first free shard before the task starts; the
     // task, whose share is both shards, holds the other and keeps trying for
     // the first.
-    let other = new LeaseManager(database.another(), {
-      shardCount,
-      taskCount: 2,
-      renewMs: RENEW_MS,
-      expiryMs: EXPIRY_MS,
-      holder: 'other',
-    });
-    managers.push(other);
-    await other.start(() => {});
+    let other = await otherHolder(shardCount);
     let task = historian('task', { shardCount, taskCount: 1 });
-    await waitUntil(() => task.held.length === 1, { what: 'the lease' });
+    // Its realm's load comes after the lease and right before the first
+    // poll, so the events below arrive after that poll.
+    await waitUntil(() => task.realms.has(first.id), {
+      what: "the task's realm to load",
+    });
     assert.deepEqual(other.held, [0]);
     assert.deepEqual(task.held, [1]);
-    let first = realms.find((realm) => shardOf(realm.id, shardCount) === 1)!;
-    let second = realms.find((realm) => shardOf(realm.id, shardCount) === 0)!;
 
     let querier = dbAdapterQuerier(database.db);
     let mine = await insertEvent(querier, first, 'mine.json');
@@ -178,6 +219,108 @@ module('historian', (hooks) => {
     assert.deepEqual(
       recorded.map((event) => event.seq),
       [mine, mine, theirs],
+    );
+  });
+
+  test("a shard gained during a poll brings its realm's earlier events first", async (assert) => {
+    let shardCount = 2;
+    let [theirs, mine] = await realmPerShard(shardCount);
+    let querier = dbAdapterQuerier(database.db);
+    let before = await insertEvent(querier, theirs, 'before.json');
+    let own = await insertEvent(querier, mine, 'own.json');
+    let after = await insertEvent(querier, theirs, 'after.json');
+    let other = await otherHolder(shardCount);
+    // The poll is held at the task's own event until the task has gained the
+    // other shard, so the gain falls between the other realm's two events.
+    let recorder = holdAt(() => own);
+    let task = historian('task', { shardCount, record: recorder.record });
+    await waitUntil(() => recorder.holding, { what: 'the poll to be held' });
+    assert.deepEqual(task.held, [1]);
+    await other.abandon();
+    await waitUntil(() => task.held.length === 2, {
+      what: 'the task to gain the other shard',
+    });
+    recorder.release();
+    await waitUntil(() => recorded.some((event) => event.seq === after), {
+      timeoutMs: 2000,
+      what: "the gained realm's later event",
+    });
+    assert.deepEqual(
+      recorded
+        .filter((event) => event.realmId === theirs.id)
+        .map((event) => event.seq),
+      [before, after],
+      "the gained realm's event from before the gain is handed over, ahead of its later one",
+    );
+  });
+
+  test('a wakeup that comes during a poll is kept', async (assert) => {
+    let realm = await insertRealm(database.db, {
+      url: 'http://localhost:4201/test-user/test-realm/',
+    });
+    let querier = dbAdapterQuerier(database.db);
+    let first = await insertEvent(querier, realm, 'first.json');
+    let recorder = holdAt(() => first);
+    historian('task', { record: recorder.record });
+    await waitUntil(() => recorder.holding, { what: 'the poll to be held' });
+    let second = await insertEvent(querier, realm, 'second.json');
+    await notify(realm);
+    // Time for the wakeup to arrive while the poll is still held.
+    await sleep(100);
+    recorder.release();
+    await waitUntil(() => recorded.some((event) => event.seq === second), {
+      timeoutMs: 1000,
+      what: 'the second event to be read on the wakeup',
+    });
+    assert.deepEqual(
+      recorded.map((event) => event.seq),
+      [first, second],
+    );
+  });
+
+  test("a backlog for a realm that isn't recorded costs one load of the realms", async (assert) => {
+    let realm = await insertRealm(database.db, {
+      url: 'http://localhost:4201/test-user/test-realm/',
+    });
+    let db = database.another();
+    let loads = 0;
+    let execute = db.execute.bind(db);
+    db.execute = (sql, options) => {
+      if (sql.includes('FROM realm_history_state state')) {
+        loads++;
+      }
+      return execute(sql, options);
+    };
+    let task = historian('task', { db });
+    await waitUntil(() => task.realms.has(realm.id), {
+      what: 'the realm to load',
+    });
+    let loadsAtStart = loads;
+    // Events for a realm whose recording is off, as a realm disabled before
+    // its events were read leaves them.
+    let off = await insertRealm(database.db, {
+      url: 'http://localhost:4201/test-user/off-realm/',
+      diskId: 'test-user/off-realm',
+      enabled: false,
+    });
+    let querier = dbAdapterQuerier(database.db);
+    for (let i = 0; i < 5; i++) {
+      await insertEvent(querier, off, `${i}.json`);
+    }
+    let last = await insertEvent(querier, realm, 'last.json');
+    await notify(realm);
+    await waitUntil(() => recorded.some((event) => event.seq === last), {
+      timeoutMs: 1000,
+      what: "the recorded realm's event after the backlog",
+    });
+    assert.strictEqual(
+      loads - loadsAtStart,
+      1,
+      'the first of the five events loads the realms, and that load covers the rest',
+    );
+    assert.deepEqual(
+      recorded.map((event) => event.seq),
+      [last],
     );
   });
 

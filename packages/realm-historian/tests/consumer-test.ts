@@ -38,7 +38,7 @@ module('consumer', (hooks) => {
     consumer = new Consumer(
       {
         db: database.db,
-        recorderFor: (realmId) =>
+        recorderFor: ({ realmId }) =>
           realmId === realm.id
             ? { record: async (event) => void recorded.push(event) }
             : undefined,
@@ -262,6 +262,37 @@ module('consumer', (hooks) => {
     assert.strictEqual(recorded.length, 2);
     assert.strictEqual(consumer.position.seq, recorded[1].seq);
     assert.strictEqual(await consumer.poll(), 3, 'the rest follows');
+  });
+
+  test('a rewind while a recorder is looked up comes before the event', async (assert) => {
+    let first = await insertEvent(querier(), realm, 'first.json');
+    let second = await insertEvent(querier(), realm, 'second.json');
+    let third = await insertEvent(querier(), realm, 'third.json');
+    let rewound = false;
+    consumer = new Consumer(
+      {
+        db: database.db,
+        recorderFor: (event) => {
+          // The second event's lookup loads a realm whose cursor lies at the
+          // start, as a gained shard's would.
+          if (event.seq === second && !rewound) {
+            rewound = true;
+            consumer.rewindTo(JOURNAL_START);
+          }
+          return {
+            record: async (recordedEvent) => void recorded.push(recordedEvent),
+          };
+        },
+      },
+      JOURNAL_START,
+    );
+    assert.strictEqual(await consumer.poll(), 4);
+    assert.deepEqual(
+      recorded.map((event) => event.seq),
+      [first, first, second, third],
+      'the poll reads again from the rewind, and the event whose lookup moved the position comes after the events before it',
+    );
+    assert.strictEqual(consumer.position.seq, third);
   });
 
   test('the position starts at the lowest cursor, or the beginning', async (assert) => {
