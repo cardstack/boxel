@@ -14,6 +14,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
 
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { Field } from '@cardstack/pretui/components/field';
 import Globe from '@cardstack/boxel-icons/globe';
 import KeyRound from '@cardstack/boxel-icons/key-round';
@@ -209,8 +210,7 @@ export default class OAuthClientFields extends Component<Signature> {
           app for signing in.</span>
       </div>
     </Field>
-    <details class='advanced' data-test-oauth-advanced>
-      <summary>Advanced</summary>
+    <Disclosure class='advanced' @label='Advanced' data-test-oauth-advanced>
       <RadioChoices
         @label='How Boxel sends the app’s secret'
         @icon={{KeyRound}}
@@ -219,7 +219,7 @@ export default class OAuthClientFields extends Component<Signature> {
         @selected={{@form.tokenAuth}}
         @onSelect={{this.setTokenAuth}}
       />
-    </details>
+    </Disclosure>
 
     <style scoped>
       .with-hint {
@@ -227,10 +227,9 @@ export default class OAuthClientFields extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-5xs);
       }
-      .advanced summary {
-        cursor: pointer;
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
+      /* The section opens under its trigger with the rows' own gap. */
+      .advanced {
+        row-gap: var(--boxel-sp-xs);
       }
       .callback {
         display: flex;

@@ -83,6 +83,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import { Button } from '@cardstack/pretui/components/button';
 import { Checkbox } from '@cardstack/pretui/components/checkbox';
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import Warning from '../../components/icons/warning.gts';
 import { Field } from '@cardstack/pretui/components/field';
@@ -486,44 +487,50 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                           >Approved for open cards</span>
                         {{/if}}
                       </Checkbox>
-                      <details class='request'>
-                        <summary class='summary' data-test-approve-summary>
-                          <span class='method'>{{operation.method}}</span>
-                          <span class='path'>{{operation.path}}</span>
+                      <Disclosure
+                        class='request'
+                        data-test-approve-request-toggle
+                      >
+                        <:trigger><span
+                            class='summary'
+                            data-test-approve-summary
+                          ><span class='method'>{{operation.method}}</span>
+                            <span class='path'>{{operation.path}}</span>
+                            {{#each operation.slots as |slot|}}
+                              <span class='placement'>· key
+                                {{placementPhrase slot.snapshot}}</span>
+                            {{/each}}</span></:trigger>
+                        <:default>
                           {{#each operation.slots as |slot|}}
-                            <span class='placement'>· key
-                              {{placementPhrase slot.snapshot}}</span>
-                          {{/each}}
-                        </summary>
-                        {{#each operation.slots as |slot|}}
-                          {{#if (this.showsDiff slot)}}
-                            <table class='diff' data-test-approve-diff>
-                              <thead>
-                                <tr><th>Changed</th><th>Approved</th><th
-                                  >Now</th></tr>
-                              </thead>
-                              <tbody>
-                                {{#each (requestChanges slot) as |change|}}
-                                  <tr
-                                    data-test-approve-diff-field={{change.field}}
-                                  >
-                                    <th scope='row'>{{change.field}}</th>
-                                    <td><pre>{{change.before}}</pre></td>
-                                    <td><pre>{{change.after}}</pre></td>
-                                  </tr>
+                            {{#if (this.showsDiff slot)}}
+                              <table class='diff' data-test-approve-diff>
+                                <thead>
+                                  <tr><th>Changed</th><th>Approved</th><th
+                                    >Now</th></tr>
+                                </thead>
+                                <tbody>
+                                  {{#each (requestChanges slot) as |change|}}
+                                    <tr
+                                      data-test-approve-diff-field={{change.field}}
+                                    >
+                                      <th scope='row'>{{change.field}}</th>
+                                      <td><pre>{{change.before}}</pre></td>
+                                      <td><pre>{{change.after}}</pre></td>
+                                    </tr>
+                                  {{/each}}
+                                </tbody>
+                              </table>
+                            {{else}}
+                              <dl class='full' data-test-approve-request>
+                                {{#each (requestFields slot.snapshot) as |row|}}
+                                  <dt>{{row.field}}</dt>
+                                  <dd><pre>{{row.value}}</pre></dd>
                                 {{/each}}
-                              </tbody>
-                            </table>
-                          {{else}}
-                            <dl class='full' data-test-approve-request>
-                              {{#each (requestFields slot.snapshot) as |row|}}
-                                <dt>{{row.field}}</dt>
-                                <dd><pre>{{row.value}}</pre></dd>
-                              {{/each}}
-                            </dl>
-                          {{/if}}
-                        {{/each}}
-                      </details>
+                              </dl>
+                            {{/if}}
+                          {{/each}}
+                        </:default>
+                      </Disclosure>
                     </li>
                   {{/each}}
                 </ul>
@@ -760,10 +767,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       .request {
         margin-inline-start: var(--boxel-sp-lg);
       }
+      /* The line wraps rather than being cut short, in the page's own
+         weight rather than the bolder one the disclosure sets for its
+         trigger. */
       .summary {
-        cursor: pointer;
-        font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
+        font-weight: 400;
+        white-space: normal;
         color: var(--muted-foreground);
       }
       .method,
