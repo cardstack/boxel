@@ -173,9 +173,9 @@ This is the closed list of ways the Loader departs from native ESM.
 
 ### 1.5. ESM features the Loader must gain
 
-Top-level `await`, import attributes (including JSON and CSS modules), and
-`import.meta.resolve` are part of §1.1 and are not supported yet. Until they
-are, new code MUST NOT add a non-standard substitute for any of them.
+Top-level `await` and import attributes (including JSON and CSS modules) are
+part of §1.1 and are not supported yet. Until they are, new code MUST NOT add a
+non-standard substitute for either of them.
 
 ### 1.6. Out of scope by design
 

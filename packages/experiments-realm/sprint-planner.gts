@@ -149,7 +149,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
 
             await this.args.createCard?.(
               this.config.taskSource,
-              new URL(this.config.taskSource.module),
+              this.config.taskSource.module,
               {
                 realmURL: this.currentRealm,
                 doc,

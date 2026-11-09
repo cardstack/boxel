@@ -340,7 +340,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             attributes: { title: `Card ${i}` },
             meta: {
               adoptsFrom: {
-                module: rri('https://cardstack.com/base/card-api'),
+                module: rri('@cardstack/base/card-api'),
                 name: 'CardDef',
               },
             },
@@ -360,7 +360,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         prerenderModule: async (args) => {
           // The prerender-html job that follows a completed pass may render
           // modules too; only the canary's module counts here.
-          if (args.url === 'https://cardstack.com/base/card-api') {
+          if (args.url === '@cardstack/base/card-api') {
             canaryRenders++;
           }
           return moduleResponse(args.url, canary);
