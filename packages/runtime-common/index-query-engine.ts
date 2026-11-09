@@ -105,6 +105,7 @@ import {
   facetRangeLabel,
   type PassageMatch,
   typeAheadWords,
+  matchesHoldsNoWord,
   type TypeAheadFilter,
   type LinkedFromFilter,
   isNearFilter,
@@ -3983,7 +3984,7 @@ export class IndexQueryEngine {
     } else if ('in' in filter) {
       return this.inCondition(filter, on, typeConditionRef, polarity, context);
     } else if ('contains' in filter) {
-      return this.containsCondition(filter, on, typeConditionRef);
+      return this.containsCondition(filter, on, typeConditionRef, context);
     } else if ('not' in filter) {
       return this.notCondition(filter, on, typeConditionRef, polarity, context);
     } else if ('range' in filter) {
@@ -4252,8 +4253,22 @@ export class IndexQueryEngine {
     filter: ContainsFilter,
     on: CodeRef,
     typeConditionRef?: CodeRef,
+    context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     let typeRef = typeConditionRef;
+    // A short title substring broader than the candidate cap (see
+    // `#capBroadMatches`) matches at most that many of the realm's cards.
+    let short = shortTitleContains(filter);
+    if (filter.candidateCap && short && this.#dbAdapter.kind === 'pg') {
+      return every([
+        ...(typeRef ? [this.typeCondition(typeRef)] : []),
+        [
+          '(i.url, i.realm_url, i.type) IN (',
+          ...shortTitleContainsSelect(short, context, filter.candidateCap),
+          ')',
+        ],
+      ]);
+    }
     return every([
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.contains).map(([key, value]) => {
@@ -4898,9 +4913,25 @@ export class IndexQueryEngine {
       if (Array.isArray(node.any)) {
         return { ...node, any: await Promise.all(node.any.map(walk)) };
       }
+      let short = shortTitleContains(node);
+      if (short) {
+        let [row] = (await this.#query(
+          [
+            'SELECT COUNT(*) AS n FROM (',
+            ...shortTitleContainsSelect(short, context, cap + 1),
+            ') AS c',
+          ] as Expression,
+          opts.signal,
+        )) as { n: number | string }[];
+        if (Number(row.n) > cap) {
+          capped = true;
+          return { ...node, candidateCap: cap };
+        }
+        return node;
+      }
       if (
         typeof node.matches === 'string' &&
-        node.matches.trim() !== '' &&
+        !matchesHoldsNoWord(node.matches) &&
         !node.within &&
         !node.fields?.length &&
         node.scope !== 'title' &&
@@ -5722,7 +5753,7 @@ export class IndexQueryEngine {
         return undefined;
       }
       if (isMatchesFilter(branch)) {
-        if (branch.matches.trim() === '') {
+        if (matchesHoldsNoWord(branch.matches)) {
           continue;
         }
         if (branch.scope) {
@@ -5771,12 +5802,30 @@ export class IndexQueryEngine {
           selects.push([
             `SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ${TYPE_AHEAD_TSVECTOR('ti')} @@`,
             ...query,
+            ...realmBound('ti', context),
           ]);
         }
         continue;
       }
-      if (!('contains' in branch) || Object.keys(branch).length !== 1) {
+      if (
+        !('contains' in branch) ||
+        Object.keys(branch).some(
+          (k) => k !== 'contains' && k !== 'candidateCap',
+        )
+      ) {
         return undefined;
+      }
+      // A one- or two-character title substring: no trigram narrows it, so
+      // it reads the realm's titles, and at most the candidate cap of them
+      // when it is broader than that (see `#capBroadMatches`).
+      let short = shortTitleContains(branch);
+      if (short) {
+        selects.push([
+          '(',
+          ...shortTitleContainsSelect(short, context, branch.candidateCap),
+          ')',
+        ]);
+        continue;
       }
       let entries = Object.entries(branch.contains);
       if (entries.length !== 1) {
@@ -5799,6 +5848,7 @@ export class IndexQueryEngine {
       selects.push([
         `SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ti.search_doc ->> '${key}' ILIKE`,
         param(`%${value}%`),
+        ...realmBound('ti', context),
       ]);
     }
     if (selects.length === 0) {
@@ -6478,6 +6528,7 @@ export class IndexQueryEngine {
             pg: [
               `(i.url, i.realm_url, i.type) IN (SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ${TYPE_AHEAD_TSVECTOR('ti')} @@`,
               ...query,
+              ...realmBound('ti', context),
               `)`,
             ],
             sqlite: words.flatMap((word, index) => [
@@ -6517,6 +6568,14 @@ export class IndexQueryEngine {
     context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     let typeRef = typeConditionRef;
+    // A term of nothing but stop words and single letters matches nothing,
+    // without a scan (`matchesHoldsNoWord`).
+    if (matchesHoldsNoWord(filter.matches)) {
+      return every([
+        ...(typeRef ? [this.typeCondition(typeRef)] : []),
+        ['FALSE'],
+      ]);
+    }
     if (filter.within && filter.matches.trim() !== '') {
       return every([
         ...(typeRef ? [this.typeCondition(typeRef)] : []),
@@ -7672,6 +7731,47 @@ function facetCountsFromColumn(
 // promotes a pass (see `promotePrerenderedHtmlPending`); a pass's staged rows
 // don't carry it, so a search over them computes it inline, which is
 // affordable because staging only ever holds one pass.
+// A `contains` on a title key (and nothing else) whose text is one or two
+// characters: too short for the title trigram index to narrow.
+function shortTitleContains(
+  filter: any,
+): { key: string; value: string } | undefined {
+  if (!filter || typeof filter.contains !== 'object' || 'on' in filter) {
+    return undefined;
+  }
+  let entries = Object.entries(filter.contains ?? {});
+  if (entries.length !== 1) {
+    return undefined;
+  }
+  let [key, value] = entries[0];
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    [...value].length >= 3 ||
+    !(TRIGRAM_INDEXED_TITLE_KEYS as readonly string[]).includes(key)
+  ) {
+    return undefined;
+  }
+  return { key, value };
+}
+
+// The realm's rows whose title holds a short substring, at most `limit` of
+// them when given. The key is one of the fixed title keys, so it is spliced
+// in as a literal.
+function shortTitleContainsSelect(
+  { key, value }: { key: string; value: string },
+  context: FilterContext,
+  limit?: number,
+): Expression {
+  return [
+    `SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE ti.search_doc ->> '${key}' ILIKE`,
+    param(`%${value}%`),
+    ...realmBound('ti', context),
+    `AND (ti.is_deleted = FALSE OR ti.is_deleted IS NULL)`,
+    ...(limit ? [`LIMIT ${Number(limit)}`] : []),
+  ];
+}
+
 // Bounds a matches subquery's side to the realm searched, where the context
 // knows it.
 function realmBound(alias: string, context: FilterContext): Expression {

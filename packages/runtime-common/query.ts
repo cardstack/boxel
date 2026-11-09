@@ -807,6 +807,10 @@ export interface InFilter extends TypedFilter {
 
 export interface ContainsFilter extends TypedFilter {
   contains: { [fieldName: string]: JSONValue };
+  // Set by the engine, never on the wire: a one- or two-character substring of
+  // a title that more of the realm's cards hold than the candidate cap, so it
+  // matches at most this many of them (see `#capBroadMatches`).
+  candidateCap?: number;
 }
 
 /**
@@ -907,6 +911,32 @@ export interface TypeAheadFilter extends TypedFilter {
 // The words of a type-ahead query: runs of letters and digits, lowercased.
 export function typeAheadWords(text: string): string[] {
   return [...text.matchAll(/[\p{L}\p{N}]+/gu)].map((m) => m[0].toLowerCase());
+}
+
+// Postgres's English stop words (its `english.stop`), which the full-text
+// configuration drops from a query.
+const ENGLISH_STOP_WORDS = new Set(
+  (
+    'i me my myself we our ours ourselves you your yours yourself yourselves ' +
+    'he him his himself she her hers herself it its itself they them their ' +
+    'theirs themselves what which who whom this that these those am is are ' +
+    'was were be been being have has had having do does did doing a an the ' +
+    'and but if or because as until while of at by for with about against ' +
+    'between into through during before after above below to from up down ' +
+    'in out on off over under again further then once here there when where ' +
+    'why how all any both each few more most other some such no nor not ' +
+    'only own same so than too very s t can will just don should now'
+  ).split(' '),
+);
+
+// A `matches` text that holds nothing to search for: every word in it is a
+// stop word or a single letter or digit ("a", "the of", "x y"). Such a term
+// matches no card, and never reaches a full-text scan: an empty text query
+// still reads every rendered page to find that out.
+export function matchesHoldsNoWord(text: string): boolean {
+  return typeAheadWords(text).every(
+    (word) => [...word].length < 2 || ENGLISH_STOP_WORDS.has(word),
+  );
 }
 
 export function isTypeAheadFilter(filter: Filter): filter is TypeAheadFilter {

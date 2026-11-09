@@ -1257,6 +1257,124 @@ module(basename(import.meta.filename), function () {
         assert.true(capped.meta.page.total < 10);
       });
 
+      test('a term of only stop words and single letters matches nothing, without a full-text scan', async function (assert) {
+        let executed: string[] = [];
+        let originalExecute = dbAdapter.execute.bind(dbAdapter);
+        dbAdapter.execute = ((
+          sql: string,
+          opts?: Parameters<typeof originalExecute>[1],
+        ) => {
+          executed.push(sql);
+          return originalExecute(sql, opts);
+        }) as typeof dbAdapter.execute;
+        try {
+          for (let text of ['a', 'the of', 'x', 'a b c']) {
+            let { meta } = await engine.search(
+              new URL(testRealmURL),
+              {
+                filter: { matches: text },
+                sort: [{ by: '_matchRelevance', direction: 'desc' }],
+                page: { size: 5 },
+              },
+              {},
+              { kind: 'dataOnly' },
+            );
+            assert.strictEqual(meta.page.total, 0, `"${text}" matches nothing`);
+          }
+        } finally {
+          dbAdapter.execute = originalExecute;
+        }
+        assert.false(
+          executed.some((sql) => sql.includes('@@')),
+          'no statement ran a full-text match',
+        );
+        let { meta } = await engine.search(
+          new URL(testRealmURL),
+          { filter: { matches: 'the brass' }, page: { size: 5 } },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(
+          meta.page.total,
+          2,
+          'a stop word beside a word is dropped as before',
+        );
+      });
+
+      test('a one- or two-letter title substring broader than the cap is capped and flagged', async function (assert) {
+        let shed = (page: { size: number; exactTotal?: boolean }) =>
+          engine.search(
+            new URL(testRealmURL),
+            {
+              filter: {
+                any: [
+                  { contains: { _title: 'sh' } },
+                  { contains: { cardTitle: 'sh' } },
+                ],
+              },
+              page,
+            },
+            {},
+            { kind: 'dataOnly' },
+          );
+        let exact = await shed({ size: 2, exactTotal: true });
+        assert.strictEqual(exact.meta.page.total, 8, 'every shed counted');
+        assert.strictEqual(exact.meta.page.totalIsEstimate, undefined);
+        let capped = await shed({ size: 2 });
+        assert.strictEqual(capped.meta.page.total, 3, 'at most the cap');
+        assert.true(capped.meta.page.totalIsEstimate);
+        assert.strictEqual(capped.results.length, 2);
+        let alone = await engine.search(
+          new URL(testRealmURL),
+          { filter: { contains: { _title: 'sh' } }, page: { size: 2 } },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(alone.meta.page.total, 3, 'on its own too');
+        assert.true(alone.meta.page.totalIsEstimate);
+
+        let sheet = await engine.search(
+          new URL(testRealmURL),
+          {
+            filter: {
+              any: [
+                { matches: 'a' },
+                { contains: { _title: 'e' } },
+                { contains: { cardTitle: 'e' } },
+              ],
+            },
+            page: { size: 2 },
+          },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.true(
+          sheet.meta.page.totalIsEstimate,
+          "the search sheet's one-letter query is capped",
+        );
+        assert.ok(
+          sheet.meta.page.total <= 6,
+          `bounded; got ${sheet.meta.page.total}`,
+        );
+
+        let narrow = await engine.search(
+          new URL(testRealmURL),
+          {
+            filter: {
+              any: [
+                { contains: { _title: 'al' } },
+                { contains: { cardTitle: 'al' } },
+              ],
+            },
+            page: { size: 5 },
+          },
+          {},
+          { kind: 'dataOnly' },
+        );
+        assert.strictEqual(narrow.meta.page.total, 1, 'within the cap: exact');
+        assert.strictEqual(narrow.meta.page.totalIsEstimate, undefined);
+      });
+
       test('a term within the cap is exact and unflagged', async function (assert) {
         let { meta } = await engine.search(
           new URL(testRealmURL),
