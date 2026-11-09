@@ -296,18 +296,24 @@ export class RealmClient {
   async getSource(
     realmUrl: string,
     fileUrl: string,
-  ): Promise<{ url: string; body: Uint8Array }> {
+  ): Promise<{ url: string; body: Uint8Array; lastModified?: number }> {
     let response = await this.#fetch(realmUrl, fileUrl, {
       headers: { accept: MIME.cardSource },
     });
     if (!response.ok) {
-      throw new Error(
+      throw new RealmResponseError(
+        response.status,
         `GET ${fileUrl} (source) failed: ${response.status} ${await response.text()}`,
       );
     }
+    let lastModified = Date.parse(response.headers.get('last-modified') ?? '');
     return {
       url: response.url || fileUrl,
       body: new Uint8Array(await response.arrayBuffer()),
+      // In whole seconds, as the realm's `meta.lastModified` counts them.
+      lastModified: Number.isNaN(lastModified)
+        ? undefined
+        : Math.floor(lastModified / 1000),
     };
   }
 

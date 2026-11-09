@@ -71,8 +71,10 @@ export function createSecureSessionJWT(
 }
 
 // `expiredWithinSeconds` accepts a token that expired no longer ago than
-// that, for a route whose only effect is to end something, which an app whose
-// token refresh fired late must still be able to ask for.
+// that: for a route whose only effect is to end something, which an app whose
+// token refresh fired late must still be able to ask for, and for the secure
+// window's renewal, where the `secure_sessions` row the token names, not the
+// token's own expiry, says whether the session stands.
 export function retrieveTokenClaim(
   authorizationString: string,
   secretSeed: string,

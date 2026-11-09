@@ -359,20 +359,7 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
-  isUsernameAvailable(_username: string): Promise<boolean> {
-    throw new Error('Method not implemented.');
-  }
-
   leave(_roomId: string): Promise<{}> {
-    throw new Error('Method not implemented.');
-  }
-
-  requestPasswordEmailToken(
-    _email: string,
-    _clientSecret: string,
-    _sendAttempt: number,
-    _nextLink?: string | undefined,
-  ): Promise<MatrixSDK.IRequestTokenResponse> {
     throw new Error('Method not implemented.');
   }
 
@@ -471,25 +458,23 @@ export class MockClient implements ExtendedClient {
     } as unknown as MatrixSDK.Room);
   }
 
-  loginFlows(): Promise<{ flows: MatrixSDK.LoginFlow[] }> {
-    return Promise.resolve(
-      this.sdkOpts.loginFlowsResponse ?? {
-        flows: [{ type: 'm.login.password' }],
-      },
-    );
-  }
-
-  getSsoLoginUrl(
-    _redirectUrl: string,
-    _loginType?: string,
-    _idpId?: string,
-  ): string {
-    return this.sdkOpts.ssoLoginUrl ?? 'http://example.invalid/sso';
-  }
-
   loginWithToken(token: string): Promise<MatrixSDK.LoginResponse> {
     if (this.sdkOpts.loginWithTokenInterceptor) {
       return this.sdkOpts.loginWithTokenInterceptor(token);
+    }
+    throw new Error('Method not implemented.');
+  }
+
+  login(
+    loginType: string,
+    data: { token?: string; device_id?: string },
+  ): Promise<MatrixSDK.LoginResponse> {
+    if (
+      loginType === 'm.login.token' &&
+      data.token &&
+      this.sdkOpts.loginWithTokenInterceptor
+    ) {
+      return this.sdkOpts.loginWithTokenInterceptor(data.token, data.device_id);
     }
     throw new Error('Method not implemented.');
   }
@@ -512,7 +497,6 @@ export class MockClient implements ExtendedClient {
   }
 
   requestEmailToken(
-    _type: 'registration' | 'threepid',
     _email: string,
     _clientSecret: string,
     _sendAttempt: number,
@@ -566,7 +550,7 @@ export class MockClient implements ExtendedClient {
     localEvent.setStatus('sending' as MatrixSDK.EventStatus.SENDING);
     this.emitEvent(localEvent);
     if (this.sdkOpts.sendEventInterceptor) {
-      await this.sdkOpts.sendEventInterceptor();
+      await this.sdkOpts.sendEventInterceptor({ type: eventType, content });
     }
     if (content.body?.match(/SENDING_DELAY_THEN_/)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -715,6 +699,7 @@ export class MockClient implements ExtendedClient {
       case BOT_TRIGGER_EVENT_TYPE:
       case 'm.room.create':
       case 'm.room.message':
+      case 'm.reaction':
       case 'm.room.name':
       case 'm.room.member':
       case APP_BOXEL_LLM_MODE:

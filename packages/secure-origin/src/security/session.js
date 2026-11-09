@@ -20,6 +20,82 @@ const EXPIRY_MARGIN_MS = 60 * 1000;
 // How long the window waits to learn whether its session is still signed in
 // before it carries on with the session it has.
 const SESSION_CHECK_TIMEOUT_MS = 10 * 1000;
+// How close to its end the window renews its session, which the realm server
+// does while the app session it handed a sign-in to lasts. The realm server
+// asks about the app's session only this close to the end, too.
+const RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// How long each request a page makes takes, and how it ends, for the secure
+// origin's telemetry. This module and `matrix.js` make every request through
+// `timedFetch`. Until the shell starts its telemetry (`observeRequests`),
+// nothing watches and a request goes out exactly as given; the credential
+// fields load `session.js` too and never start it.
+//
+// The observer is told the request's URL, method, status, duration and
+// response size, and the correlation id it was sent with. Never a body, and no
+// header but the response's `Content-Length`, which gives the size: the
+// telemetry reduces the URL to a fixed label before it records anything.
+
+// The realm server writes this id on its `realm:requests` log line, so a
+// request's telemetry joins to the server's record of it. Only the realm
+// server is sent one: the Matrix server's CORS doesn't allow the header, so a
+// browser would refuse to send the request at all.
+export const CORRELATION_ID_HEADER = 'X-Boxel-Logging-Correlation-Id';
+
+let observer;
+
+// Calls `observe` with each request's outcome. Answers a function that stops.
+export function observeRequests(observe) {
+  observer = observe;
+  return () => {
+    if (observer === observe) {
+      observer = undefined;
+    }
+  };
+}
+
+// `fetch`, timed. `server` is 'realm-server' or 'matrix'. A request that
+// never reaches the server is reported with status 0, and rethrown.
+export async function timedFetch(url, init, server) {
+  let observe = observer;
+  if (!observe) {
+    return await fetch(url, init);
+  }
+  let correlationId = null;
+  if (server === 'realm-server') {
+    correlationId = crypto.randomUUID();
+    init = {
+      ...init,
+      headers: { ...init.headers, [CORRELATION_ID_HEADER]: correlationId },
+    };
+  }
+  let method = init.method ?? 'GET';
+  let start = performance.now();
+  let report = (status, respBytes) => {
+    try {
+      observe({
+        url: String(url),
+        method,
+        status,
+        durationMs: performance.now() - start,
+        respBytes,
+        correlationId,
+      });
+    } catch {
+      // Telemetry never fails the request it watches.
+    }
+  };
+  let response;
+  try {
+    response = await fetch(url, init);
+  } catch (e) {
+    report(0, 0);
+    throw e;
+  }
+  let length = Number(response.headers.get('content-length'));
+  report(response.status, Number.isFinite(length) ? length : 0);
+  return response;
+}
 
 export class SecureSessionError extends Error {
   // `retryAfterMs`: for a 429, how long until the next attempt may be made,
@@ -49,14 +125,18 @@ async function request(url, { method = 'POST', body, token, signal } = {}) {
   }
   let response;
   try {
-    response = await fetch(url, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: 'omit',
-      referrerPolicy: 'no-referrer',
-      signal,
-    });
+    response = await timedFetch(
+      url,
+      {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        signal,
+      },
+      'realm-server',
+    );
   } catch {
     throw new SecureSessionError(0, 'network', 'Boxel could not be reached.');
   }
@@ -122,7 +202,7 @@ export async function signInWithPassword(
 export async function changePassword(config, change) {
   let response;
   try {
-    response = await fetch(
+    response = await timedFetch(
       new URL('_secure-sessions/password-change', config.realmServerURL),
       {
         method: 'POST',
@@ -133,6 +213,7 @@ export async function changePassword(config, change) {
         credentials: 'omit',
         referrerPolicy: 'no-referrer',
       },
+      'realm-server',
     );
   } catch (e) {
     return { ok: false, status: 0, body: { error: String(e?.message) } };
@@ -275,19 +356,29 @@ export async function finishGoogleSignIn(config) {
   }
 }
 
-// The window's session, while it lasts.
-export function storedSession() {
+// The session stored here, whether or not it has expired: one bound to the
+// app's session can still be renewed.
+function storedRecord() {
   let session;
   try {
     session = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
   } catch {
     return undefined;
   }
-  if (
-    !session ||
-    typeof session.token !== 'string' ||
-    Date.parse(session.expiresAt) - EXPIRY_MARGIN_MS <= Date.now()
-  ) {
+  if (!session || typeof session.token !== 'string') {
+    return undefined;
+  }
+  return session;
+}
+
+function hasExpired(session) {
+  return Date.parse(session.expiresAt) - EXPIRY_MARGIN_MS <= Date.now();
+}
+
+// The window's session, while it lasts.
+export function storedSession() {
+  let session = storedRecord();
+  if (!session || hasExpired(session)) {
     return undefined;
   }
   return session;
@@ -302,9 +393,10 @@ export function forgetSession() {
 }
 
 // Signs the window's own session out: forgotten here even when the server
-// can't be reached, and ended on the server.
+// can't be reached, and ended on the server. One past its stored end is
+// ended too, since a session bound to the app's outlives its token.
 export async function signOut(config) {
-  let session = storedSession();
+  let session = storedRecord();
   forgetSession();
   if (!session) {
     return;
@@ -333,11 +425,19 @@ export async function endSession(config, session) {
 // an ended session is forgotten, so the window shows its sign-in. When the
 // server can't be reached or doesn't answer in time, the stored session is
 // kept, since nothing says it has ended.
+//
+// A session within a day of its end, or past it, is renewed instead
+// (`renew`): the realm server renews the window's session for as long as the
+// app session it handed its sign-in to lasts.
 export async function liveSession(config) {
-  let session = storedSession();
-  if (!session) {
+  let record = storedRecord();
+  if (!record) {
     return undefined;
   }
+  if (Date.parse(record.expiresAt) - RENEWAL_WINDOW_MS <= Date.now()) {
+    return await renew(config, record);
+  }
+  let session = record;
   try {
     await request(new URL('_secure-session', config.realmServerURL), {
       method: 'GET',
@@ -346,25 +446,74 @@ export async function liveSession(config) {
     });
   } catch (e) {
     if (e.status === 401) {
-      forgetSession();
+      // The server's end for the session can come before the one stored
+      // here, when the two clocks disagree; a session bound to an app session
+      // that lasts is renewed then too. Anything short of a renewal means it
+      // has ended.
+      let renewed = await renew(config, session);
+      if (renewed && renewed.token !== session.token) {
+        return renewed;
+      }
+      if (storedRecord()?.token === session.token) {
+        forgetSession();
+      }
       return undefined;
     }
   }
   return session;
 }
 
+// Asks the realm server for the window's session again, under the token
+// stored here, which may have expired. It answers the session renewed while
+// the app session it handed a sign-in to lasts, and as it was otherwise, with
+// a fresh token either way. An ended session is forgotten. When the server
+// can't be reached, a session that hasn't expired is kept, as `liveSession`
+// keeps one, and one that has is kept for a later try but not answered.
+async function renew(config, record) {
+  try {
+    let json = await request(
+      new URL('_secure-session/renewal', config.realmServerURL),
+      {
+        token: record.token,
+        signal: AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS),
+      },
+    );
+    let renewed = json.data.attributes;
+    // Signed out, or signed in as someone else, in another tab meanwhile.
+    if (storedRecord()?.token !== record.token) {
+      return storedSession();
+    }
+    storeSession(renewed);
+    return storedSession();
+  } catch (e) {
+    if (e.status === 401) {
+      // Another tab of this origin may have renewed the session first, which
+      // leaves this token behind; its renewal stands.
+      if (storedRecord()?.token !== record.token) {
+        return storedSession();
+      }
+      forgetSession();
+      return undefined;
+    }
+    return hasExpired(record) ? undefined : record;
+  }
+}
+
 function signedOut() {
   return new SecureSessionError(401, 'signed-out', 'Sign in to continue.');
 }
 
-// A request to the realm server under the window's own session. A mode that
+// A request to the realm server under the window's own session. A page that
 // changes a key uses this, so the change is authorized by this session and
 // never by the app's. A refusal because the session has ended forgets it and
 // answers `signed-out`: a key write ticket refuses an ended session with a
 // 403, as it does any session that isn't a secure one, so a 403 is checked
 // against the server.
+/** @returns {Promise<any>} */
 export async function authorizedRequest(config, path, options = {}) {
-  let session = storedSession();
+  // A session that has run out since the window last checked it may still be
+  // renewed.
+  let session = storedSession() ?? (await liveSession(config));
   if (!session) {
     throw signedOut();
   }
@@ -375,7 +524,27 @@ export async function authorizedRequest(config, path, options = {}) {
     });
   } catch (e) {
     if (e.status === 401) {
-      forgetSession();
+      // The server's clock can put the token past its end before this
+      // window's does; a session bound to the app's is renewed then, and the
+      // request made once more under the renewed token.
+      let renewed = await renew(config, session);
+      let last = session;
+      if (renewed && renewed.token !== session.token) {
+        last = renewed;
+        try {
+          return await request(new URL(path, config.realmServerURL), {
+            ...options,
+            token: renewed.token,
+          });
+        } catch (again) {
+          if (again.status !== 401) {
+            throw again;
+          }
+        }
+      }
+      if (storedRecord()?.token === last.token) {
+        forgetSession();
+      }
       throw signedOut();
     }
     if (e.status === 403 && !(await liveSession(config))) {
@@ -386,13 +555,25 @@ export async function authorizedRequest(config, path, options = {}) {
 }
 
 // A key write ticket for one change, minted with the window's own session.
-// `action` is 'add', or 'replace' or 'delete' with the id of the key.
-export async function mintKeyWriteTicket(config, { action, keyId }) {
+// `action` is 'add'; 'replace' or 'delete' with the id of the key; 'share'
+// with the key and the realm it goes into; or 'swap' with the key and the
+// share it goes into.
+/**
+ * @param {{ action: string, keyId?: string, realm?: string, shareId?: string }} change
+ * @returns {Promise<{ ticket: string, expiresAt: string }>}
+ */
+export async function mintKeyWriteTicket(config, change) {
+  let { action, keyId, realm, shareId } = change;
   let json = await authorizedRequest(config, '_key-write-tickets', {
     body: {
       data: {
         type: 'key-write-ticket',
-        attributes: { action, ...(keyId ? { keyId } : {}) },
+        attributes: {
+          action,
+          ...(keyId ? { keyId } : {}),
+          ...(realm ? { realm } : {}),
+          ...(shareId ? { shareId } : {}),
+        },
       },
     },
   });
@@ -439,4 +620,18 @@ export async function loginToken(config, session) {
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
+}
+
+// Calls `changed` whenever another window on this origin changes the stored
+// session: signing out (as the app's sign-out does, through this origin's
+// `sign-out` page), or signing in as someone else. Answers a function that
+// stops listening.
+export function onStoredSessionChange(changed) {
+  let listener = (event) => {
+    if (event.key === STORAGE_KEY || event.key === null) {
+      changed(storedSession());
+    }
+  };
+  window.addEventListener('storage', listener);
+  return () => window.removeEventListener('storage', listener);
 }

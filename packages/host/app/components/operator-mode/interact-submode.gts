@@ -155,6 +155,9 @@ export default class InteractSubmode extends Component {
   @action private handleEscape(event: KeyboardEvent) {
     // A modal owns Escape regardless of where focus is.
     if (document.body.classList.contains('has-modal')) return;
+    // The workspace chooser covers the stacks, so Escape never reaches a
+    // card hidden behind it.
+    if (this.operatorModeStateService.workspaceChooserOpened) return;
 
     if (usesEscape(event.target)) {
       // Field inside a stack card: move focus out to the card, so a
@@ -673,7 +676,14 @@ export default class InteractSubmode extends Component {
         let ref = identifyCard(card.constructor);
         let name = cardTypeDisplayName(card);
         if (isResolvedCodeRef(ref)) {
-          if (items.find((item) => item.ref === ref && item.name === name)) {
+          if (
+            items.find(
+              (item) =>
+                item.ref.module === ref.module &&
+                item.ref.name === ref.name &&
+                item.name === name,
+            )
+          ) {
             // do not add duplicate of the same card type
             return;
           }

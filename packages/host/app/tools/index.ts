@@ -3,6 +3,7 @@ import type { VirtualNetwork } from '@cardstack/runtime-common';
 import * as AddFieldToCardDefinitionToolModule from './add-field-to-card-definition';
 import * as UseAiAssistantToolModule from './ai-assistant';
 import * as ApplyMarkdownEditToolModule from './apply-markdown-edit';
+import * as AskUserToolModule from './ask-user';
 import * as AuthedFetchToolModule from './authed-fetch';
 import * as CreateListingPRRequestToolModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
@@ -40,6 +41,7 @@ import * as GetCardTypeSchemaToolModule from './get-card-type-schema';
 import * as GetCatalogRealmIdentifiersToolModule from './get-catalog-realm-identifiers';
 import * as GetDefaultWritableRealmToolModule from './get-default-writable-realm';
 import * as GetEventsFromRoomToolModule from './get-events-from-room';
+import * as GetKeyShareUsageToolModule from './get-key-share-usage';
 import * as GetPublishedRealmsToolModule from './get-published-realms';
 import * as GetRealmOfResourceIdentifierToolModule from './get-realm-of-resource-identifier';
 import * as GetUserSystemCardToolModule from './get-user-system-card';
@@ -48,12 +50,14 @@ import * as InvalidateRealmIdentifiersToolModule from './invalidate-realm-identi
 import * as InviteUserToRoomToolModule from './invite-user-to-room';
 import * as InvokeCardOperationToolModule from './invoke-card-operation';
 import * as LintAndFixToolModule from './lint-and-fix';
+import * as ListRealmKeySharesToolModule from './list-realm-key-shares';
 import * as ListingBuildToolModule from './listing-action-build';
 import * as MigrateSkillToolModule from './migrate-skill';
 import * as OneShotLlmRequestToolModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomToolModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalToolModule from './open-create-listing-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
+import * as OpenSecureWindowToolModule from './open-secure-window';
 import * as OpenWorkspaceToolModule from './open-workspace';
 import * as PatchCardInstanceToolModule from './patch-card-instance';
 import * as PatchFieldsToolModule from './patch-fields';
@@ -86,11 +90,13 @@ import * as ShowCardToolModule from './show-card';
 import * as ShowFileToolModule from './show-file';
 import * as StoreAddToolModule from './store-add';
 import * as SummarizeSessionToolModule from './summarize-session';
+import * as SuspendKeyShareToolModule from './suspend-key-share';
 import * as SwitchSubmodeToolModule from './switch-submode';
 import * as SyncOpenRouterModelsToolModule from './sync-openrouter-models';
 import * as TransformCardsToolModule from './transform-cards';
 import * as UnpublishRealmToolModule from './unpublish-realm';
 import * as UnregisterBotToolModule from './unregister-bot';
+import * as UnshareKeyToolModule from './unshare-key';
 import * as UpdateCodePathWithSelectionToolModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionToolModule from './update-playground-selection';
 import * as UpdateRoomSkillsToolModule from './update-room-skills';
@@ -323,7 +329,28 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'delete-workspace',
     DeleteWorkspaceToolModule,
   );
+  shimHostToolModule(
+    virtualNetwork,
+    'open-secure-window',
+    OpenSecureWindowToolModule,
+  );
   shimHostToolModule(virtualNetwork, 'open-workspace', OpenWorkspaceToolModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'list-realm-key-shares',
+    ListRealmKeySharesToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'get-key-share-usage',
+    GetKeyShareUsageToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
+    'suspend-key-share',
+    SuspendKeyShareToolModule,
+  );
+  shimHostToolModule(virtualNetwork, 'unshare-key', UnshareKeyToolModule);
   shimHostToolModule(
     virtualNetwork,
     'send-ai-assistant-message',
@@ -337,6 +364,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'set-active-llm', SetActiveLlmModule);
   shimHostToolModule(virtualNetwork, 'show-card', ShowCardToolModule);
   shimHostToolModule(virtualNetwork, 'show-file', ShowFileToolModule);
+  shimHostToolModule(virtualNetwork, 'ask-user', AskUserToolModule);
   shimHostToolModule(virtualNetwork, 'switch-submode', SwitchSubmodeToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -513,6 +541,8 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   InvalidateRealmIdentifiersToolModule.default,
   InvokeCardOperationToolModule.default,
   LintAndFixToolModule.default,
+  ListRealmKeySharesToolModule.default,
+  GetKeyShareUsageToolModule.default,
   ListingBuildToolModule.default,
   CreateListingPRRequestToolModule.default,
   OneShotLlmRequestToolModule.default,
@@ -524,6 +554,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CreateWorkspaceToolModule.default,
   DeleteWorkspaceToolModule.default,
   OpenInInteractModeModule.default,
+  OpenSecureWindowToolModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
   RunRealmCodeToolModule.default,
@@ -557,11 +588,14 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   ShowCardToolModule.default,
   ShowFileToolModule.default,
   SummarizeSessionToolModule.default,
+  SuspendKeyShareToolModule.default,
+  AskUserToolModule.default,
   SwitchSubmodeToolModule.default,
   SyncOpenRouterModelsToolModule.default,
   TransformCardsToolModule.default,
   UnpublishRealmToolModule.default,
   UnregisterBotToolModule.default,
+  UnshareKeyToolModule.default,
   CancelIndexingJobToolModule.default,
   CheckCorrectnessToolModule.default,
   CheckDomainAvailabilityToolModule.default,

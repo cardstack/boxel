@@ -2,19 +2,41 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { param, query, type DBAdapter } from '@cardstack/runtime-common';
 import type { Expression, Querier } from '@cardstack/runtime-common/expression';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
-import type {
-  SealedSecret,
-  SecretBinding,
-  SecretsKeyring,
-} from './secrets-at-rest/index.ts';
+import {
+  SecretDecryptionError,
+  type SealedSecret,
+  type SecretBinding,
+  type SecretsKeyring,
+} from './secrets-at-rest/envelope.ts';
+import {
+  sealedColumnsSelect,
+  sealedFromColumns,
+} from './secrets-at-rest/sealed-columns.ts';
+import { revokeBindingsIn } from './key-binding-revocation.ts';
+import {
+  GoogleServiceAccountKeyError,
+  isGoogleServiceAccountKeyFile,
+  parseGoogleServiceAccountKey,
+  serializeGoogleServiceAccount,
+} from './outbound/google-service-account.ts';
+import { clearKeyRejected, clearKeyRejections } from './key-grant-rejection.ts';
+import {
+  KEY_LIMIT_COLUMNS,
+  limitsViewOf,
+  MAX_KEY_LIMIT,
+  type KeyLimitsView,
+} from './key-limit-settings.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
 // it, and only that owner lists, shows, replaces or deletes it. A key's value
 // is sealed by the secrets-at-rest helper before it reaches the database and
 // is never returned by anything here: what callers get back is metadata.
 //
-// A key is only its secret. It records no destination: nothing here says
-// where a key may be sent, and the value is sealed to the key alone.
+// A key is only its secret. It records no destination, and its value, the
+// master copy, is sealed to the key alone. Where a key may be sent is a grant
+// (`lib/user-key-grants.ts`): each holds its own copy of the value, sealed to
+// the grant, the key and the grant's destination. Replacing a key re-seals the
+// master copy and every grant's copy together.
 //
 // A key is added, replaced, deleted, shared into a realm or swapped into a
 // share, and a share suspended by a writer is resumed, only with a key write
@@ -26,11 +48,39 @@ import type {
 // card code in the app page can't change a key from inside the browser.
 
 export const USER_KEY_VALUE_FIELD = 'user_keys.value';
+export const USER_KEY_GRANT_VALUE_FIELD = 'user_key_grants.value';
 
-export const USER_KEY_KINDS = ['static'] as const;
+// `static` is a secret sent as it is. `google-service-account` is a Google
+// service account's key file, subject and scopes, whose value mints the access
+// tokens sent (see `lib/outbound/google-service-account.ts`). `oauth-client`
+// is an app registered with a vendor, whose value is the client secret;
+// `oauth-connection` is a person's sign-in through one, whose value is the
+// token that mints its access tokens (see `lib/oauth.ts`). Only a static key,
+// a service account or a client is added with a value; a connection is made
+// by signing in through a client.
+export const USER_KEY_KINDS = [
+  'static',
+  'google-service-account',
+  'oauth-client',
+  'oauth-connection',
+] as const;
 export type UserKeyKind = (typeof USER_KEY_KINDS)[number];
 
-export type UserKeyState = 'active';
+// The kinds whose value is never what reaches a vendor: it only mints the
+// access token that does, at a token endpoint the platform alone calls. A
+// grant of such a key holds no copy of the value, only a marker that proves
+// the grant was made by the realm server (see `createOrReuseGrantIn`).
+export const MINTING_KINDS: ReadonlySet<UserKeyKind> = new Set([
+  'google-service-account',
+  'oauth-client',
+  'oauth-connection',
+]);
+
+// `rejected` is an OAuth connection its vendor refused to refresh
+// (`invalid_grant`), which signing in through its client again makes `active`,
+// or a service-account key Google's token endpoint refused, which a probe that
+// mints or replacing the key makes `active`.
+export type UserKeyState = 'active' | 'rejected';
 
 export const KEY_WRITE_ACTIONS = [
   'add',
@@ -54,6 +104,36 @@ export interface UserKeyMetadata {
   state: UserKeyState;
   createdAt: string;
   updatedAt: string;
+  // Only a google-service-account key has one.
+  serviceAccount?: ServiceAccountDetails;
+  // How much of the key its owner's own interactive calls may spend, their
+  // settings with the platform's defaults filled in, and which of them they
+  // set (see `KeyLimitsView`).
+  limits: KeyLimitsView;
+  // Whether its owner lets people who aren't signed in use it, through a
+  // share, wherever a realm's policy lets them make the call; and the
+  // optional caps on their calls a UTC day and a UTC month, all together, in
+  // every realm it is shared into. Null where none is set.
+  anonymous: boolean;
+  anonymousDailyCap: number | null;
+  anonymousMonthlyCap: number | null;
+}
+
+// What a google-service-account key acts as, none of it secret: the service
+// account's email, the user it acts as for domain-wide delegation (null when
+// it acts as itself) and the scopes its tokens ask for. Kept beside the
+// sealed value so its owner can see what a replace would change; never the
+// key file or its private key.
+export interface ServiceAccountDetails {
+  email: string;
+  subject: string | null;
+  scopes: string[];
+}
+
+// A value to seal as a key's master copy, with a service account's details.
+export interface EnteredUserKeyValue {
+  value: string;
+  serviceAccount: ServiceAccountDetails | null;
 }
 
 // A refusal the caller can act on. `status` is the HTTP status the routes
@@ -274,10 +354,16 @@ export function validateUserKeyKind(kind: unknown): UserKeyKind {
       `a key's kind is one of: ${USER_KEY_KINDS.join(', ')}`,
     );
   }
+  if (kind === 'oauth-connection') {
+    throw new UserKeyError(
+      400,
+      'an OAuth connection is made by signing in through a client, not added with a value',
+    );
+  }
   return kind as UserKeyKind;
 }
 
-function validateUserKeyValue(value: unknown): string {
+export function validateUserKeyValue(value: unknown): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new UserKeyError(400, 'a key needs a value');
   }
@@ -290,13 +376,94 @@ function validateUserKeyValue(value: unknown): string {
   return value;
 }
 
-// A value is bound to its field, its owner and its row, so a value moved to
-// another row or owner doesn't open.
-function binding(owner: string, id: string): SecretBinding {
+// What the owner entered, as the value a key of `kind` seals. A static key,
+// or an OAuth client's secret, seals its value as it is. A service account's value is its JSON key file,
+// sealed with the subject and scopes as one canonical value, so a key file that
+// can't mint a token is refused here rather than at its first call. Only a
+// service account takes a subject or scopes, and only it has details to keep
+// beside the sealed value.
+export function sealedValueFor(
+  kind: UserKeyKind,
+  {
+    value,
+    subject,
+    scopes,
+  }: { value: unknown; subject?: unknown; scopes?: unknown },
+): EnteredUserKeyValue {
+  let validValue = validateUserKeyValue(value);
+  if (kind !== 'google-service-account') {
+    if (subject !== undefined || scopes !== undefined) {
+      throw new UserKeyError(
+        400,
+        'only a google-service-account key takes a subject or scopes',
+      );
+    }
+    if (isGoogleServiceAccountKeyFile(validValue)) {
+      throw new UserKeyError(
+        400,
+        `this is a Google service account's JSON key file, which is never sent as it is: add it as a google-service-account key, with the scopes its tokens may use`,
+      );
+    }
+    return { value: validValue, serviceAccount: null };
+  }
+  try {
+    let credential = parseGoogleServiceAccountKey({
+      keyFile: validValue,
+      subject,
+      scopes,
+    });
+    return {
+      value: serializeGoogleServiceAccount(credential),
+      serviceAccount: {
+        email: credential.clientEmail,
+        subject: credential.subject,
+        scopes: credential.scopes,
+      },
+    };
+  } catch (e) {
+    if (e instanceof GoogleServiceAccountKeyError) {
+      throw new UserKeyError(400, e.message);
+    }
+    throw e;
+  }
+}
+
+// A key's master copy is bound to its field, its owner and its row, so a value
+// moved to another row or owner doesn't open.
+export function userKeyBinding(owner: string, id: string): SecretBinding {
   return { field: USER_KEY_VALUE_FIELD, owner, id };
 }
 
-const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at`;
+// A grant's copy of a key's value is bound to its field, the owner, the
+// grant's row, the key it copies (as the binding's parent) and the grant's
+// destination. So a copy moved to another grant or key, a grant pointed at
+// another key or destination, or a grant row written outside the realm
+// server, has no copy that opens.
+export function grantCopyBinding({
+  owner,
+  keyId,
+  grantId,
+  destination,
+}: {
+  owner: string;
+  keyId: string;
+  grantId: string;
+  destination: string;
+}): SecretBinding {
+  return {
+    field: USER_KEY_GRANT_VALUE_FIELD,
+    owner,
+    id: grantId,
+    parentId: keyId,
+    destination,
+  };
+}
+
+// A service account's details are returned only while they describe the
+// sealed value: they carry the `updated_at` of the statement that wrote them,
+// and anything that seals a new value without writing them moves `updated_at`
+// past that stamp.
+const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at, service_account_email, service_account_subject, service_account_scopes, (service_account_details_at IS NOT DISTINCT FROM updated_at) AS service_account_current, anonymous, anonymous_daily_cap, anonymous_monthly_cap, ${KEY_LIMIT_COLUMNS}`;
 
 function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
   return {
@@ -306,7 +473,170 @@ function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
     state: row.state as UserKeyState,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
+    limits: limitsViewOf(row),
+    anonymous: Boolean(row.anonymous),
+    anonymousDailyCap:
+      row.anonymous_daily_cap == null ? null : Number(row.anonymous_daily_cap),
+    anonymousMonthlyCap:
+      row.anonymous_monthly_cap == null
+        ? null
+        : Number(row.anonymous_monthly_cap),
+    ...(typeof row.service_account_email === 'string' &&
+    row.service_account_current
+      ? {
+          serviceAccount: {
+            email: row.service_account_email,
+            subject: (row.service_account_subject as string | null) ?? null,
+            scopes: (row.service_account_scopes as string[] | null) ?? [],
+          },
+        }
+      : {}),
   };
+}
+
+// Whether people who aren't signed in may use a key, as its owner sets it:
+// `anonymous` true or false, and two optional caps, `anonymousDailyCap` and
+// `anonymousMonthlyCap`, each a whole number of calls a UTC day or month,
+// given only with anonymous use. A cap is undefined where none was named,
+// and null where one was cleared.
+export interface AnonymousUse {
+  anonymous: boolean;
+  dailyCap: number | null | undefined;
+  monthlyCap: number | null | undefined;
+}
+
+function validateAnonymousCap(
+  anonymous: unknown,
+  cap: unknown,
+  which: 'daily' | 'monthly',
+): number | null | undefined {
+  if (cap === undefined || cap === null) {
+    return cap;
+  }
+  if (anonymous !== true) {
+    throw new UserKeyError(
+      400,
+      `a ${which} anonymous cap is set with anonymous use: people who aren't signed in may use the key`,
+    );
+  }
+  if (
+    typeof cap !== 'number' ||
+    !Number.isInteger(cap) ||
+    cap < 1 ||
+    cap > MAX_KEY_LIMIT
+  ) {
+    throw new UserKeyError(
+      400,
+      `the ${which} anonymous cap is a whole number of calls, from 1 to ${MAX_KEY_LIMIT}`,
+    );
+  }
+  return cap;
+}
+
+export function validateAnonymousUse({
+  anonymous,
+  anonymousDailyCap,
+  anonymousMonthlyCap,
+}: {
+  anonymous?: unknown;
+  anonymousDailyCap?: unknown;
+  anonymousMonthlyCap?: unknown;
+}): AnonymousUse {
+  if (anonymous !== undefined && typeof anonymous !== 'boolean') {
+    throw new UserKeyError(400, 'anonymous is true or false');
+  }
+  return {
+    anonymous: anonymous === true,
+    dailyCap: validateAnonymousCap(anonymous, anonymousDailyCap, 'daily'),
+    monthlyCap: validateAnonymousCap(anonymous, anonymousMonthlyCap, 'monthly'),
+  };
+}
+
+// Whether a key can serve people who aren't signed in at all: one sent as it
+// is, a Google service account, or an OAuth client that gets its own tokens
+// (`client_credentials`). A sign-in app's calls are each person's own
+// sign-in, and a connection is one person's, so neither ever serves someone
+// who isn't signed in, and neither takes the setting.
+export function servesVisitorsSQL(key: string, client: string): string {
+  return `(${key}.kind NOT IN ('oauth-client', 'oauth-connection') OR (${key}.kind = 'oauth-client' AND ${client}.grant_type = 'client_credentials'))`;
+}
+
+// Writes whether people who aren't signed in may use one of the owner's keys,
+// in the caller's transaction. Turning it off clears both caps; turning it on
+// without naming a cap keeps the one the key has.
+export async function writeAnonymousUseIn(
+  txQuery: Querier,
+  owner: string,
+  keyId: string,
+  { anonymous, dailyCap, monthlyCap }: AnonymousUse,
+): Promise<UserKeyMetadata> {
+  let [key] = await txQuery([
+    `SELECT ${servesVisitorsSQL('k', 'c')} AS serves_visitors FROM user_keys k LEFT JOIN oauth_clients c ON c.key_id = k.id WHERE k.id = `,
+    param(keyId),
+    ` AND k.owner = `,
+    param(owner),
+    ` FOR UPDATE OF k`,
+  ]);
+  if (!key) {
+    throw notFound();
+  }
+  if (anonymous && !key.serves_visitors) {
+    throw new UserKeyError(
+      400,
+      "a sign-in app or connection is each person's own sign-in, so it never serves people who aren't signed in",
+    );
+  }
+  let capValue = (column: string, cap: number | null | undefined) =>
+    !anonymous ? [`NULL`] : cap === undefined ? [column] : [param(cap)];
+  let [row] = await txQuery([
+    `UPDATE user_keys SET anonymous = `,
+    param(anonymous),
+    `, anonymous_daily_cap = `,
+    ...capValue(`anonymous_daily_cap`, dailyCap),
+    `, anonymous_monthly_cap = `,
+    ...capValue(`anonymous_monthly_cap`, monthlyCap),
+    ` WHERE id = `,
+    param(keyId),
+    ` AND owner = `,
+    param(owner),
+    ` RETURNING ${METADATA_COLUMNS}`,
+  ]);
+  if (!row) {
+    throw notFound();
+  }
+  return toMetadata(row);
+}
+
+// Sets whether people who aren't signed in may use one of the user's keys.
+// Another user's key answers as one that doesn't exist.
+export async function setUserKeyAnonymousUse(
+  dbAdapter: DBAdapter,
+  {
+    owner,
+    keyId,
+    anonymous,
+    anonymousDailyCap,
+    anonymousMonthlyCap,
+  }: {
+    owner: string;
+    keyId: string;
+    anonymous: unknown;
+    anonymousDailyCap?: unknown;
+    anonymousMonthlyCap?: unknown;
+  },
+): Promise<UserKeyMetadata> {
+  assertKeyId(keyId);
+  if (typeof anonymous !== 'boolean') {
+    throw new UserKeyError(400, 'anonymous is true or false');
+  }
+  let use = validateAnonymousUse({
+    anonymous,
+    anonymousDailyCap,
+    anonymousMonthlyCap,
+  });
+  return await dbAdapter.withTransaction(
+    async (txQuery) => await writeAnonymousUseIn(txQuery, owner, keyId, use),
+  );
 }
 
 export async function listUserKeys(
@@ -353,7 +683,7 @@ function assertKeyId(id: string): void {
   }
 }
 
-const SEALED_COLUMN_VALUES = (sealed: SealedSecret): Expression => [
+export const SEALED_COLUMN_VALUES = (sealed: SealedSecret): Expression => [
   `decode(`,
   param(sealed.ciphertext.toString('base64')),
   `, 'base64'), decode(`,
@@ -364,6 +694,23 @@ const SEALED_COLUMN_VALUES = (sealed: SealedSecret): Expression => [
   param(sealed.keyId),
 ];
 
+// A service account's details as the values of the `service_account_*`
+// columns (email, subject, scopes, and the stamp that ties them to this
+// statement's `updated_at`), in that order; nulls for any other kind.
+const SERVICE_ACCOUNT_VALUES = (
+  serviceAccount: ServiceAccountDetails | null,
+): Expression =>
+  serviceAccount
+    ? [
+        param(serviceAccount.email),
+        `, `,
+        param(serviceAccount.subject),
+        `, ARRAY(SELECT jsonb_array_elements_text(`,
+        param(JSON.stringify(serviceAccount.scopes)),
+        `::jsonb)), NOW()`,
+      ]
+    : [`NULL, NULL, NULL, NULL`];
+
 export async function addUserKey(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -372,19 +719,41 @@ export async function addUserKey(
     name,
     kind,
     value,
+    subject,
+    scopes,
+    anonymous,
+    anonymousDailyCap,
+    anonymousMonthlyCap,
     ticket,
   }: {
     owner: string;
     name: unknown;
     kind?: unknown;
     value: unknown;
+    subject?: unknown;
+    scopes?: unknown;
+    // Whether people who aren't signed in may use the key, and the optional
+    // caps on their calls a day and a month (`validateAnonymousUse`).
+    anonymous?: unknown;
+    anonymousDailyCap?: unknown;
+    anonymousMonthlyCap?: unknown;
     ticket: unknown;
   },
 ): Promise<UserKeyMetadata> {
   let validName = validateUserKeyName(name);
   let validKind = validateUserKeyKind(kind);
-  let validValue = validateUserKeyValue(value);
-  let id = randomUUID();
+  if (validKind === 'oauth-client' || validKind === 'oauth-connection') {
+    throw new UserKeyError(
+      400,
+      'an OAuth client is added with its client id and endpoints (`oauth`)',
+    );
+  }
+  let entered = sealedValueFor(validKind, { value, subject, scopes });
+  let use = validateAnonymousUse({
+    anonymous,
+    anonymousDailyCap,
+    anonymousMonthlyCap,
+  });
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'add',
@@ -392,28 +761,95 @@ export async function addUserKey(
       realmURL: null,
       shareId: null,
     });
-    let sealed = keyring.seal(validValue, binding(owner, id));
-    let rows = await txQuery([
-      `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
-      param(id),
-      `, `,
-      param(owner),
-      `, `,
-      param(validName),
-      `, `,
-      param(validKind),
-      `, 'active', `,
-      ...SEALED_COLUMN_VALUES(sealed),
-      `) ON CONFLICT (owner, name) DO NOTHING RETURNING ${METADATA_COLUMNS}`,
-    ]);
-    if (rows.length === 0) {
-      throw new UserKeyError(409, `you already have a key named ${validName}`);
-    }
-    return toMetadata(rows[0]);
+    let added = await insertUserKeyIn(txQuery, keyring, {
+      id: randomUUID(),
+      owner,
+      name: validName,
+      kind: validKind,
+      ...entered,
+    });
+    return use.anonymous
+      ? await writeAnonymousUseIn(txQuery, owner, added.id, use)
+      : added;
   });
 }
 
-// Replaces a key's value, keeping its name and kind.
+// Inserts a key, its value sealed as its master copy, in the caller's
+// transaction, with a service account's details beside it. The caller has
+// validated the name and value and spent the ticket for the change; a name
+// the owner already uses is refused 409.
+export async function insertUserKeyIn(
+  txQuery: Querier,
+  keyring: SecretsKeyring,
+  {
+    id,
+    owner,
+    name,
+    kind,
+    value,
+    serviceAccount = null,
+  }: {
+    id: string;
+    owner: string;
+    name: string;
+    kind: UserKeyKind;
+    value: string;
+    serviceAccount?: ServiceAccountDetails | null;
+  },
+): Promise<UserKeyMetadata> {
+  let sealed = keyring.seal(value, userKeyBinding(owner, id));
+  let rows = await txQuery([
+    `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id, service_account_email, service_account_subject, service_account_scopes, service_account_details_at) VALUES (`,
+    param(id),
+    `, `,
+    param(owner),
+    `, `,
+    param(name),
+    `, `,
+    param(kind),
+    `, 'active', `,
+    ...SEALED_COLUMN_VALUES(sealed),
+    `, `,
+    ...SERVICE_ACCOUNT_VALUES(serviceAccount),
+    `) ON CONFLICT (owner, name) DO NOTHING RETURNING ${METADATA_COLUMNS}`,
+  ]);
+  if (rows.length === 0) {
+    throw new UserKeyError(409, `you already have a key named ${name}`);
+  }
+  return toMetadata(rows[0]);
+}
+
+// Whether `sealed` opens under `binding`. Only a copy that doesn't open
+// answers false; any other failure is thrown.
+export function opensUnder(
+  keyring: SecretsKeyring,
+  sealed: SealedSecret | undefined,
+  binding: SecretBinding,
+): boolean {
+  if (!sealed) {
+    return false;
+  }
+  try {
+    keyring.open(sealed, binding);
+    return true;
+  } catch (e) {
+    if (e instanceof SecretDecryptionError) {
+      return false;
+    }
+    throw e;
+  }
+}
+
+// Replaces a key's value, keeping its name and kind. A service account's
+// replacement is a whole new key file, subject and scopes. The master copy and every
+// grant's copy are sealed again in the same transaction, so the old value
+// opens nowhere afterwards and no grant asks for approval again. Every grant
+// the vendor rejected the old value at is active again: the new value hasn't
+// been refused anywhere. A grant is sealed again only when its current copy
+// opens under its own binding: the binding is read from the row, so sealing
+// one whose copy doesn't open would make a row written or edited outside the
+// realm server a real grant. Such a row is left as it is, and still sends
+// nothing.
 export async function replaceUserKeyValue(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -421,11 +857,19 @@ export async function replaceUserKeyValue(
     owner,
     id,
     value,
+    subject,
+    scopes,
     ticket,
-  }: { owner: string; id: string; value: unknown; ticket: unknown },
+  }: {
+    owner: string;
+    id: string;
+    value: unknown;
+    subject?: unknown;
+    scopes?: unknown;
+    ticket: unknown;
+  },
 ): Promise<UserKeyMetadata> {
   assertKeyId(id);
-  let validValue = validateUserKeyValue(value);
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'replace',
@@ -433,24 +877,126 @@ export async function replaceUserKeyValue(
       realmURL: null,
       shareId: null,
     });
-    let sealed = keyring.seal(validValue, binding(owner, id));
+    let [current] = await txQuery([
+      `SELECT kind FROM user_keys WHERE id = `,
+      param(id),
+      ` AND owner = `,
+      param(owner),
+      ` FOR UPDATE`,
+    ]);
+    if (!current) {
+      throw notFound();
+    }
+    if (current.kind === 'oauth-connection') {
+      throw new UserKeyError(
+        400,
+        'an OAuth connection is replaced by signing in through its client again',
+      );
+    }
+    let { value: validValue, serviceAccount } = sealedValueFor(
+      current.kind as UserKeyKind,
+      { value, subject, scopes },
+    );
+    let sealed = keyring.seal(validValue, userKeyBinding(owner, id));
     let [updated] = await txQuery([
-      `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, updated_at) = (`,
+      `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, service_account_email, service_account_subject, service_account_scopes, service_account_details_at, updated_at) = (`,
       ...SEALED_COLUMN_VALUES(sealed),
+      `, `,
+      ...SERVICE_ACCOUNT_VALUES(serviceAccount),
       `, NOW()) WHERE id = `,
       param(id),
       ` AND owner = `,
       param(owner),
       ` RETURNING ${METADATA_COLUMNS}`,
     ]);
-    if (!updated) {
-      throw notFound();
+    if (MINTING_KINDS.has(updated.kind as UserKeyKind)) {
+      // A minting key's grants hold markers, not its value; each gets a new
+      // one, so a vendor's answer to the old value is told apart from one to
+      // the new. A new value is the fix for a token endpoint or a vendor that
+      // refused the old one, so the key and every one of its grants is
+      // accepted again, and a client, with every connection through it, mints
+      // again.
+      await txQuery([
+        `UPDATE oauth_clients SET state = 'active', broken_at = NULL WHERE key_id = `,
+        param(id),
+      ]);
+      await resealGrantMarkersIn(txQuery, keyring, owner, id);
+      await clearKeyRejections(txQuery, id);
+      let cleared = await clearKeyRejected(txQuery, id, 'key-replaced');
+      return toMetadata(cleared ? { ...updated, state: 'active' } : updated);
     }
+    let grants = await txQuery([
+      `SELECT id, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
+      param(id),
+      ` AND owner = `,
+      param(owner),
+      ` FOR UPDATE`,
+    ]);
+    for (let grant of grants) {
+      let binding = grantCopyBinding({
+        owner,
+        keyId: id,
+        grantId: grant.id as string,
+        destination: grant.destination as string,
+      });
+      if (!opensUnder(keyring, sealedFromColumns(grant, 'value'), binding)) {
+        continue;
+      }
+      let copy = keyring.seal(validValue, binding);
+      await txQuery([
+        `UPDATE user_key_grants SET (value_ciphertext, value_nonce, value_tag, value_key_id) = (`,
+        ...SEALED_COLUMN_VALUES(copy),
+        `) WHERE id = `,
+        param(grant.id as string),
+      ]);
+    }
+    await clearKeyRejections(txQuery, id);
     return toMetadata(updated);
   });
 }
 
-// Deletes a key. Every share holding it is suspended in the same statement,
+// Seals a fresh marker into each grant of a key that mints its tokens, for a
+// change to what the key mints with (a client's new secret, a connection's
+// new sign-in). The markers prove nothing new, but each gets a new nonce, so
+// anything that compares a grant's copy from before the change (a refusal
+// that was in flight for the old secret) sees it was made for another one.
+// As for a static key's replace, a row whose marker doesn't open under its
+// own binding is left as it is.
+export async function resealGrantMarkersIn(
+  txQuery: Querier,
+  keyring: SecretsKeyring,
+  owner: string,
+  keyId: string,
+): Promise<void> {
+  let grants = await txQuery([
+    `SELECT id, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,
+    param(keyId),
+    ` AND owner = `,
+    param(owner),
+    ` FOR UPDATE`,
+  ]);
+  for (let grant of grants) {
+    let binding = grantCopyBinding({
+      owner,
+      keyId,
+      grantId: grant.id as string,
+      destination: grant.destination as string,
+    });
+    if (!opensUnder(keyring, sealedFromColumns(grant, 'value'), binding)) {
+      continue;
+    }
+    let marker = keyring.seal(randomBytes(32).toString('base64url'), binding);
+    await txQuery([
+      `UPDATE user_key_grants SET (value_ciphertext, value_nonce, value_tag, value_key_id) = (`,
+      ...SEALED_COLUMN_VALUES(marker),
+      `) WHERE id = `,
+      param(grant.id as string),
+    ]);
+  }
+}
+
+// Deletes a key, and its grants with it (`user_key_grants` cascades). Every
+// share holding it is suspended in the same statement,
 // by a trigger on `user_keys`, and keeps its place in its realm for a direct
 // writer to swap another key into; `listOwnShares` with the key's id lists
 // the shares a delete would suspend.
@@ -466,15 +1012,24 @@ export async function deleteUserKey(
       realmURL: null,
       shareId: null,
     });
-    let rows = await txQuery([
-      `DELETE FROM user_keys WHERE id = `,
+    let [key] = await txQuery([
+      `SELECT id FROM user_keys WHERE id = `,
       param(id),
       ` AND owner = `,
       param(owner),
-      ` RETURNING id`,
+      ` FOR UPDATE`,
     ]);
-    if (rows.length === 0) {
+    if (!key) {
       throw notFound();
     }
+    // The key's own bindings are revoked with it, each recorded in its
+    // history. A share's bindings stay: the share is suspended, and a key
+    // swapped into it takes them over.
+    await revokeBindingsIn(txQuery, {
+      where: [`key_id = `, param(id)],
+      actor: owner,
+      via: null,
+    });
+    await txQuery([`DELETE FROM user_keys WHERE id = `, param(id)]);
   });
 }

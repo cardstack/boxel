@@ -7,7 +7,6 @@ import {
   settled,
   triggerEvent,
   waitFor,
-  waitUntil,
 } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
@@ -19,6 +18,11 @@ import CliSignInPage from '../../src/shell/sign-in/cli-sign-in-page.gts';
 import GoogleCallback from '../../src/shell/sign-in/google-callback.gts';
 import SignInPage from '../../src/shell/sign-in/sign-in-page.gts';
 import SignOutPage from '../../src/shell/sign-in/sign-out-page.gts';
+import {
+  setupTelemetrySecretsCheck,
+  stringsIn,
+} from '../helpers/telemetry-secrets.ts';
+import { setupWaitedBrowserWork, waitedFetch } from '../helpers/waiters.ts';
 
 // The realm server the pages talk to, named by the page's meta tag as the
 // shell's document names it.
@@ -56,24 +60,26 @@ function refusal(status: number, code: string, detail: string, meta?: object) {
 function realmServer(routes: Record<string, Route>) {
   let requests: { method: string; path: string; body: any }[] = [];
   let original = window.fetch;
-  window.fetch = async (
-    input: Parameters<typeof fetch>[0],
-    init: Parameters<typeof fetch>[1] = {},
-  ) => {
-    let url = new URL(String(input));
-    let method = init.method ?? 'GET';
-    let body = init.body ? JSON.parse(String(init.body)) : undefined;
-    let path = url.pathname.replace(/^\//, '');
-    requests.push({ method, path, body });
-    let route = routes[`${method} ${path}`];
-    let answer = route
-      ? await route({ url, method, body })
-      : refusal(404, 'not-found', 'Not found');
-    return new Response(JSON.stringify(answer.body ?? {}), {
-      status: answer.status,
-      headers: { 'Content-Type': 'application/vnd.api+json' },
-    });
-  };
+  window.fetch = waitedFetch(
+    async (
+      input: Parameters<typeof fetch>[0],
+      init: Parameters<typeof fetch>[1] = {},
+    ) => {
+      let url = new URL(String(input));
+      let method = init.method ?? 'GET';
+      let body = init.body ? JSON.parse(String(init.body)) : undefined;
+      let path = url.pathname.replace(/^\//, '');
+      requests.push({ method, path, body });
+      let route = routes[`${method} ${path}`];
+      let answer = route
+        ? await route({ url, method, body })
+        : refusal(404, 'not-found', 'Not found');
+      return new Response(JSON.stringify(answer.body ?? {}), {
+        status: answer.status,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      });
+    },
+  );
   return {
     requests,
     restore() {
@@ -96,8 +102,12 @@ const SIGNED_IN = json(201, { data: { attributes: SESSION } });
 
 module('Integration | sign-in', function (hooks) {
   setupRenderingTest(hooks);
+  setupWaitedBrowserWork(hooks);
 
   let server: ReturnType<typeof realmServer> | undefined;
+  // What the pages sent, still readable once the module's afterEach has let
+  // the server go.
+  let sent: ReturnType<typeof realmServer>['requests'] = [];
   let navigations: { how: 'assign' | 'replace'; url: string }[];
   let handoffs: HTMLFormElement[];
   let originalNavigation = { ...navigation };
@@ -107,6 +117,7 @@ module('Integration | sign-in', function (hooks) {
 
   function serve(...routes: Record<string, Route>[]) {
     server = realmServer(Object.assign({}, ...routes));
+    sent = server.requests;
     return server;
   }
 
@@ -117,6 +128,7 @@ module('Integration | sign-in', function (hooks) {
 
   hooks.beforeEach(function () {
     originalURL = window.location.href;
+    sent = [];
     navigations = [];
     handoffs = [];
     navigation.assign = (url: string) => {
@@ -152,10 +164,24 @@ module('Integration | sign-in', function (hooks) {
     history.replaceState(null, '', originalURL);
   });
 
+  setupTelemetrySecretsCheck(hooks, () => [
+    // What the page sent: bodies, not the method and path a label is made
+    // from. A Google callback's code, verifier and state are among them.
+    ...stringsIn(sent.map((r) => r.body)),
+    'a-password',
+    'not-the-password',
+    'another-password',
+    'someone@example.test',
+    '"someone"',
+    SESSION.token,
+    STATE,
+    'single-use-login-token',
+  ]);
+
   module('the sign-in form', function () {
     test('offers no Google sign-in when the realm server has no Google client', async function (assert) {
       serve(NO_GOOGLE);
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       await settled();
@@ -171,7 +197,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('offers Google sign-in when the realm server has a Google client', async function (assert) {
       serve(WITH_GOOGLE);
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-google]');
       assert.dom('[data-test-secure-google]').hasText('Continue with Google');
@@ -187,11 +213,10 @@ module('Integration | sign-in', function (hooks) {
 
     test('a Google sign-in sends the window to Google, remembering where it began', async function (assert) {
       serve(WITH_GOOGLE);
-      visitShell(`?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`);
+      visitShell(`cli-sign-in?port=51234&state=${STATE}&user=someone`);
       await render(CliSignInPage);
       await waitFor('[data-test-secure-google]');
       await click('[data-test-secure-google]');
-      await waitUntil(() => navigations.length > 0);
       assert.strictEqual(navigations.length, 1);
       let { how, url } = navigations[0];
       assert.strictEqual(how, 'assign');
@@ -222,7 +247,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('Sign In waits for both fields', async function (assert) {
       serve(NO_GOOGLE);
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       assert.dom('[data-test-secure-password-submit]').isDisabled();
@@ -238,7 +263,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('focus starts on the username, and moves through the page in order', async function (assert) {
       serve(WITH_GOOGLE);
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-google]');
       assert.dom('[data-test-secure-username]').isFocused();
@@ -272,7 +297,7 @@ module('Integration | sign-in', function (hooks) {
       // form has a submit button; a synthetic key press doesn't, so this pins
       // what implicit submission needs, and that submitting signs in.
       serve(NO_GOOGLE, signsIn(SIGNED_IN));
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       let form = find('[data-test-secure-sign-in-form]') as HTMLFormElement;
@@ -303,7 +328,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('signs the window in with the password, and keeps its session', async function (assert) {
       let server = serve(NO_GOOGLE, signsIn(SIGNED_IN));
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       await fillIn('[data-test-secure-username]', 'someone');
@@ -315,7 +340,7 @@ module('Integration | sign-in', function (hooks) {
         .hasText('You’re signed in to Boxel');
       assert
         .dom('[data-test-secure-signed-in]')
-        .hasText('Key management is coming.');
+        .hasText('You can close this window.');
       let signIn = server.requests.find(
         (r) => r.method === 'POST' && r.path === '_secure-session',
       );
@@ -332,7 +357,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('signs in with an email address as the username', async function (assert) {
       let server = serve(NO_GOOGLE, signsIn(SIGNED_IN));
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       assert
@@ -356,7 +381,7 @@ module('Integration | sign-in', function (hooks) {
         NO_GOOGLE,
         signsIn(refusal(401, 'invalid-credentials', 'Invalid credentials')),
       );
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       await fillIn('[data-test-secure-username]', 'someone');
@@ -384,7 +409,7 @@ module('Integration | sign-in', function (hooks) {
           }),
         ),
       );
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       await fillIn('[data-test-secure-username]', 'someone');
@@ -401,11 +426,11 @@ module('Integration | sign-in', function (hooks) {
     test('a server it cannot reach is said so', async function (assert) {
       serve(NO_GOOGLE);
       let original = window.fetch;
-      window.fetch = async () => {
+      window.fetch = waitedFetch(async () => {
         throw new TypeError('Failed to fetch');
-      };
+      });
       try {
-        visitShell('?mode=sign-in');
+        visitShell('sign-in');
         await render(SignInPage);
         await waitFor('[data-test-secure-sign-in-form]');
         await fillIn('[data-test-secure-username]', 'someone');
@@ -425,7 +450,7 @@ module('Integration | sign-in', function (hooks) {
       serve(NO_GOOGLE, {
         'GET _secure-session': () => json(200, { data: {} }),
       });
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-signed-in]');
       assert.dom('[data-test-secure-sign-in-form]').doesNotExist();
@@ -437,7 +462,7 @@ module('Integration | sign-in', function (hooks) {
         'GET _secure-session': () =>
           refusal(401, 'signed-out', 'Session ended'),
       });
-      visitShell('?mode=sign-in');
+      visitShell('sign-in');
       await render(SignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       assert.dom('[data-test-secure-error]').doesNotExist();
@@ -449,11 +474,11 @@ module('Integration | sign-in', function (hooks) {
     test('without a usable port and state it signs nothing in', async function (assert) {
       serve(NO_GOOGLE);
       for (let query of [
-        '?mode=cli-sign-in',
-        `?mode=cli-sign-in&state=${STATE}`,
-        '?mode=cli-sign-in&port=51234',
-        `?mode=cli-sign-in&port=99999&state=${STATE}`,
-        '?mode=cli-sign-in&port=51234&state=short',
+        'cli-sign-in',
+        `cli-sign-in?state=${STATE}`,
+        'cli-sign-in?port=51234',
+        `cli-sign-in?port=99999&state=${STATE}`,
+        'cli-sign-in?port=51234&state=short',
       ]) {
         visitShell(query);
         await render(CliSignInPage);
@@ -466,7 +491,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('names the CLI and what signing in lets it do, in place of the Google subtitle', async function (assert) {
       serve(WITH_GOOGLE);
-      visitShell(`?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`);
+      visitShell(`cli-sign-in?port=51234&state=${STATE}&user=someone`);
       await render(CliSignInPage);
       await waitFor('[data-test-secure-google]');
       assert.dom('[data-test-secure-title]').hasText('Authorize Boxel CLI');
@@ -480,7 +505,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('fills in the username the CLI named, and starts on the password', async function (assert) {
       serve(NO_GOOGLE);
-      visitShell(`?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`);
+      visitShell(`cli-sign-in?port=51234&state=${STATE}&user=someone`);
       await render(CliSignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       assert.dom('[data-test-secure-username]').hasValue('someone');
@@ -489,13 +514,12 @@ module('Integration | sign-in', function (hooks) {
 
     test('hands the session to the CLI’s listener, and keeps none of it', async function (assert) {
       let server = serve(NO_GOOGLE, signsIn(SIGNED_IN));
-      visitShell(`?mode=cli-sign-in&port=51234&state=${STATE}`);
+      visitShell(`cli-sign-in?port=51234&state=${STATE}`);
       await render(CliSignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       await fillIn('[data-test-secure-username]', 'someone');
       await fillIn('[data-test-secure-password]', 'a-password');
       await click('[data-test-secure-password-submit]');
-      await waitUntil(() => handoffs.length > 0);
       assert.strictEqual(handoffs.length, 1, 'posted once');
       let [form] = handoffs;
       assert.strictEqual(form.method, 'post');
@@ -525,7 +549,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('its links carry the CLI’s port, state and username along', async function (assert) {
       serve(NO_GOOGLE);
-      visitShell(`?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`);
+      visitShell(`cli-sign-in?port=51234&state=${STATE}&user=someone`);
       await render(CliSignInPage);
       await waitFor('[data-test-secure-sign-in-form]');
       await click('[data-test-secure-forgot-password]');
@@ -533,11 +557,11 @@ module('Integration | sign-in', function (hooks) {
       assert.deepEqual(navigations, [
         {
           how: 'assign',
-          url: `/secure/?mode=forgot-password&port=51234&state=${STATE}&user=someone`,
+          url: `/secure/forgot-password?port=51234&state=${STATE}&user=someone`,
         },
         {
           how: 'assign',
-          url: `/secure/?mode=register&port=51234&state=${STATE}&user=someone`,
+          url: `/secure/register?port=51234&state=${STATE}&user=someone`,
         },
       ]);
     });
@@ -568,10 +592,10 @@ module('Integration | sign-in', function (hooks) {
     test('without a usable port and state it says it can’t authorize, as the app does', async function (assert) {
       serve(NO_GOOGLE);
       for (let query of [
-        '?mode=cli-auth',
-        `?mode=cli-auth&state=${STATE}`,
-        '?mode=cli-auth&port=0&state=' + STATE,
-        '?mode=cli-auth&port=51234&state=short',
+        'cli-auth',
+        `cli-auth?state=${STATE}`,
+        'cli-auth?port=0&state=' + STATE,
+        'cli-auth?port=51234&state=short',
       ]) {
         visitShell(query);
         await render(CliAuthPage);
@@ -589,7 +613,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('asks the user to authorize the CLI, with every way to sign in', async function (assert) {
       serve(WITH_GOOGLE);
-      visitShell(`?mode=cli-auth&port=51234&state=${STATE}&session=secure`);
+      visitShell(`cli-auth?port=51234&state=${STATE}&session=secure`);
       await render(CliAuthPage);
       await waitFor('[data-test-secure-google]');
       assert.dom('[data-test-secure-title]').hasText('Authorize Boxel CLI');
@@ -605,11 +629,11 @@ module('Integration | sign-in', function (hooks) {
       assert.deepEqual(navigations, [
         {
           how: 'assign',
-          url: `/secure/?mode=forgot-password&port=51234&state=${STATE}&cli=profile&session=secure`,
+          url: `/secure/forgot-password?port=51234&state=${STATE}&cli=profile&session=secure`,
         },
         {
           how: 'assign',
-          url: `/secure/?mode=register&port=51234&state=${STATE}&cli=profile&session=secure`,
+          url: `/secure/register?port=51234&state=${STATE}&cli=profile&session=secure`,
         },
       ]);
     });
@@ -617,7 +641,7 @@ module('Integration | sign-in', function (hooks) {
     test('a window already signed in asks that account to confirm its password', async function (assert) {
       storeSession(SESSION);
       serve(NO_GOOGLE, { 'GET _secure-session': () => ({ status: 204 }) });
-      visitShell(`?mode=cli-auth&port=51234&state=${STATE}&session=secure`);
+      visitShell(`cli-auth?port=51234&state=${STATE}&session=secure`);
       await render(CliAuthPage);
       await waitFor('[data-test-secure-cli-auth-signed-in-as]');
       assert
@@ -634,10 +658,9 @@ module('Integration | sign-in', function (hooks) {
 
     test('hands the CLI a login token and the secure session together, and keeps none of it', async function (assert) {
       let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), MINTS);
-      visitShell(`?mode=cli-auth&port=51234&state=${STATE}&session=secure`);
+      visitShell(`cli-auth?port=51234&state=${STATE}&session=secure`);
       await render(CliAuthPage);
       await signInAs('someone');
-      await waitUntil(() => handoffs.length > 0);
       let [form] = handoffs;
       assert.strictEqual(form.method, 'post');
       assert.strictEqual(form.action, 'http://127.0.0.1:51234/callback');
@@ -672,7 +695,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('a CLI that takes no secure session is told it gets access to the workspaces alone', async function (assert) {
       serve(NO_GOOGLE);
-      visitShell(`?mode=cli-auth&port=51234&state=${STATE}`);
+      visitShell(`cli-auth?port=51234&state=${STATE}`);
       await render(CliAuthPage);
       await waitFor('[data-test-secure-sign-in-form]');
       assert.dom('[data-test-secure-title]').hasText('Authorize Boxel CLI');
@@ -686,7 +709,7 @@ module('Integration | sign-in', function (hooks) {
     test('a window already signed in, for a CLI that takes no secure session, asks only for access to the workspaces', async function (assert) {
       storeSession(SESSION);
       serve(NO_GOOGLE, { 'GET _secure-session': () => ({ status: 204 }) });
-      visitShell(`?mode=cli-auth&port=51234&state=${STATE}`);
+      visitShell(`cli-auth?port=51234&state=${STATE}`);
       await render(CliAuthPage);
       await waitFor('[data-test-secure-cli-auth-confirm]');
       assert
@@ -698,10 +721,9 @@ module('Integration | sign-in', function (hooks) {
 
     test('a CLI that takes no secure session gets the login token in the query of a navigation, and the session is ended', async function (assert) {
       let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), MINTS, ENDS);
-      visitShell(`?mode=cli-auth&port=51234&state=${STATE}`);
+      visitShell(`cli-auth?port=51234&state=${STATE}`);
       await render(CliAuthPage);
       await signInAs('someone');
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -718,7 +740,7 @@ module('Integration | sign-in', function (hooks) {
         'POST _secure-session/login-token': () =>
           refusal(503, 'unavailable', 'signing in is unavailable right now'),
       });
-      visitShell(`?mode=cli-auth&port=51234&state=${STATE}&session=secure`);
+      visitShell(`cli-auth?port=51234&state=${STATE}&session=secure`);
       await render(CliAuthPage);
       await signInAs('someone');
       await waitFor('[data-test-secure-cli-handoff-failed]');
@@ -760,7 +782,6 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       await render(GoogleCallback);
-      await waitUntil(() => handoffs.length > 0);
       assert.deepEqual(
         [...new FormData(handoffs[0])].map(([name]) => name),
         ['state', 'login_token', 'secure_session', 'user_id', 'expires_at'],
@@ -790,11 +811,10 @@ module('Integration | sign-in', function (hooks) {
         '/secure/google-callback',
       );
       await render(GoogleCallback);
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
         {
           how: 'replace',
-          url: `/secure/?mode=cli-auth&port=51234&state=${STATE}&cli=profile`,
+          url: `/secure/cli-auth?port=51234&state=${STATE}&cli=profile`,
         },
       ]);
     });
@@ -832,7 +852,7 @@ module('Integration | sign-in', function (hooks) {
       await waitFor('[data-test-secure-signed-in]');
       assert.strictEqual(
         `${window.location.pathname}${window.location.search}`,
-        '/secure/?mode=sign-in',
+        '/secure/sign-in',
       );
       assert.deepEqual(
         JSON.parse(localStorage.getItem('boxel-secure-session') ?? 'null'),
@@ -845,7 +865,6 @@ module('Integration | sign-in', function (hooks) {
       serve(exchanges(SIGNED_IN));
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       await render(GoogleCallback);
-      await waitUntil(() => handoffs.length > 0);
       assert.strictEqual(handoffs[0].action, 'http://127.0.0.1:51234/callback');
       assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
     });
@@ -895,7 +914,7 @@ module('Integration | sign-in', function (hooks) {
         .dom('[data-test-secure-start-again]')
         .hasAttribute(
           'href',
-          `/secure/?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`,
+          `/secure/cli-sign-in?port=51234&state=${STATE}&user=someone`,
         );
     });
 
@@ -919,7 +938,7 @@ module('Integration | sign-in', function (hooks) {
       assert.dom('[data-test-secure-error]').doesNotIncludeText('credentials');
       assert
         .dom('[data-test-secure-start-again]')
-        .hasAttribute('href', '/secure/?mode=sign-in');
+        .hasAttribute('href', '/secure/sign-in');
     });
 
     test('a callback this window never started is refused', async function (assert) {
@@ -941,11 +960,10 @@ module('Integration | sign-in', function (hooks) {
         '/secure/google-callback',
       );
       await render(GoogleCallback);
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
         {
           how: 'replace',
-          url: `/secure/?mode=cli-sign-in&port=51234&state=${STATE}&user=someone`,
+          url: `/secure/cli-sign-in?port=51234&state=${STATE}&user=someone`,
         },
       ]);
     });
@@ -953,18 +971,28 @@ module('Integration | sign-in', function (hooks) {
     test('says it is signing in while the exchange is under way', async function (assert) {
       pendingGoogleSignIn({ client: 'window' });
       let answer!: (value: Answer) => void;
-      serve({
-        'POST _secure-session/google': () =>
-          new Promise<Answer>((resolve) => (answer = resolve)),
+      let requested = new Promise<void>((asked) => {
+        serve({
+          'POST _secure-session/google': () => {
+            asked();
+            return new Promise<Answer>((resolve) => (answer = resolve));
+          },
+        });
       });
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       let rendered = render(GoogleCallback);
-      await waitFor('[data-test-secure-signing-in]');
-      assert
-        .dom('[data-test-secure-signing-in]')
-        .includesText('Signing you in…');
-      await waitUntil(() => answer);
-      answer(SIGNED_IN);
+      // The held request is answered on every path: a stubbed request still
+      // open keeps its waiter pending, and every later test's `settled()`
+      // with it.
+      try {
+        await waitFor('[data-test-secure-signing-in]');
+        assert
+          .dom('[data-test-secure-signing-in]')
+          .includesText('Signing you in…');
+        await requested;
+      } finally {
+        answer?.(SIGNED_IN);
+      }
       await rendered;
       await waitFor('[data-test-secure-signed-in]');
       assert.dom('[data-test-secure-signing-in]').doesNotExist();
@@ -1010,7 +1038,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('a sign-in the app started goes back to its page with a login token', async function (assert) {
       let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), MINTS);
-      visitShell(`?mode=sign-in${returnFragment(RETURN)}`);
+      visitShell(`sign-in${returnFragment(RETURN)}`);
       await render(SignInPage);
       assert.strictEqual(
         window.location.hash,
@@ -1018,7 +1046,6 @@ module('Integration | sign-in', function (hooks) {
         'the page to go back to is taken out of the address',
       );
       await signInWithPassword();
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -1041,14 +1068,38 @@ module('Integration | sign-in', function (hooks) {
       );
     });
 
+    test('a window session hands over the device the app signs in as, beside the token', async function (assert) {
+      serve(NO_GOOGLE, signsIn(SIGNED_IN), {
+        'POST _secure-session/login-token': () =>
+          json(201, {
+            data: {
+              type: 'login-token',
+              attributes: {
+                loginToken: 'a-login-token',
+                expiresInMs: 120000,
+                deviceId: 'WINDOWBOUND',
+              },
+            },
+          }),
+      });
+      visitShell(`sign-in${returnFragment(`${APP}/`)}`);
+      await render(SignInPage);
+      await signInWithPassword();
+      assert.deepEqual(navigations, [
+        {
+          how: 'replace',
+          url: `${APP}/#loginToken=a-login-token&deviceId=WINDOWBOUND`,
+        },
+      ]);
+    });
+
     test('a window already signed in hands over at once, with no form', async function (assert) {
       storeSession(SESSION);
       serve(NO_GOOGLE, MINTS, {
         'GET _secure-session': () => json(200, { data: {} }),
       });
-      visitShell(`?mode=sign-in${returnFragment(`${APP}/`)}`);
+      visitShell(`sign-in${returnFragment(`${APP}/`)}`);
       await render(SignInPage);
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
         { how: 'replace', url: `${APP}/#loginToken=a-login-token` },
       ]);
@@ -1060,11 +1111,8 @@ module('Integration | sign-in', function (hooks) {
       serve(NO_GOOGLE, MINTS, {
         'GET _secure-session': () => json(200, { data: {} }),
       });
-      visitShell(
-        `?mode=sign-in${returnFragment('https://branch.preview.test/')}`,
-      );
+      visitShell(`sign-in${returnFragment('https://branch.preview.test/')}`);
       await render(SignInPage);
-      await waitUntil(() => navigations.length > 0);
       assert.strictEqual(
         navigations[0].url,
         'https://branch.preview.test/#loginToken=a-login-token',
@@ -1073,9 +1121,7 @@ module('Integration | sign-in', function (hooks) {
 
     test('a page on an origin the realm server does not list is not handed a sign-in', async function (assert) {
       let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), MINTS);
-      visitShell(
-        `?mode=sign-in${returnFragment('https://elsewhere.test/collect')}`,
-      );
+      visitShell(`sign-in${returnFragment('https://elsewhere.test/collect')}`);
       await render(SignInPage);
       await signInWithPassword();
       await waitFor('[data-test-secure-signed-in]');
@@ -1092,7 +1138,7 @@ module('Integration | sign-in', function (hooks) {
       let server = serve(NO_GOOGLE, MINTS, {
         'GET _secure-session': () => json(200, { data: {} }),
       });
-      visitShell(`?mode=sign-in${returnFragment('http://localhost:4200/')}`);
+      visitShell(`sign-in${returnFragment('http://localhost:4200/')}`);
       await render(SignInPage);
       await waitFor('[data-test-secure-loopback-confirm]');
       assert
@@ -1108,7 +1154,6 @@ module('Integration | sign-in', function (hooks) {
         'nothing is minted until the user confirms',
       );
       await click('[data-test-secure-loopback-continue]');
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -1122,7 +1167,7 @@ module('Integration | sign-in', function (hooks) {
       let server = serve(NO_GOOGLE, MINTS, {
         'GET _secure-session': () => json(200, { data: {} }),
       });
-      visitShell(`?mode=sign-in${returnFragment('https://localhost:4200/')}`);
+      visitShell(`sign-in${returnFragment('https://localhost:4200/')}`);
       await render(SignInPage);
       await waitFor('[data-test-secure-loopback-confirm]');
       assert
@@ -1140,11 +1185,10 @@ module('Integration | sign-in', function (hooks) {
         'POST _secure-session/login-token': () =>
           refusal(401, 'signed-out', 'this session is signed out'),
       });
-      visitShell(`?mode=sign-in${returnFragment(`${APP}/`)}`);
+      visitShell(`sign-in${returnFragment(`${APP}/`)}`);
       await render(SignInPage);
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
-        { how: 'replace', url: '/secure/?mode=sign-in' },
+        { how: 'replace', url: '/secure/sign-in' },
       ]);
       assert.strictEqual(
         localStorage.getItem('boxel-secure-session'),
@@ -1163,7 +1207,7 @@ module('Integration | sign-in', function (hooks) {
       let server = serve(NO_GOOGLE, MINTS, {
         'GET _secure-session': () => json(200, { data: {} }),
       });
-      visitShell(`?mode=sign-in${returnFragment('http://localhost:4200/')}`);
+      visitShell(`sign-in${returnFragment('http://localhost:4200/')}`);
       await render(SignInPage);
       await waitFor('[data-test-secure-loopback-cancel]');
       await click('[data-test-secure-loopback-cancel]');
@@ -1189,7 +1233,6 @@ module('Integration | sign-in', function (hooks) {
       serve(MINTS, { 'POST _secure-session/google': () => SIGNED_IN });
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       await render(GoogleCallback);
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
         {
           how: 'replace',
@@ -1201,18 +1244,26 @@ module('Integration | sign-in', function (hooks) {
     test('a hand-off moments after another waits for the Matrix server to mint the next token', async function (assert) {
       storeSession(SESSION);
       let attempts = 0;
+      let retried!: () => void;
+      let retry = new Promise<void>((resolve) => (retried = resolve));
       serve(NO_GOOGLE, {
         'GET _secure-session': () => json(200, { data: {} }),
-        'POST _secure-session/login-token': () =>
-          ++attempts === 1
-            ? refusal(429, 'rate-limited', 'try again shortly', {
-                retryAfterMs: 20,
-              })
-            : MINTS['POST _secure-session/login-token'](),
+        'POST _secure-session/login-token': () => {
+          if (++attempts === 1) {
+            return refusal(429, 'rate-limited', 'try again shortly', {
+              retryAfterMs: 20,
+            });
+          }
+          retried();
+          return MINTS['POST _secure-session/login-token']();
+        },
       });
-      visitShell(`?mode=sign-in${returnFragment(`${APP}/`)}`);
+      visitShell(`sign-in${returnFragment(`${APP}/`)}`);
       await render(SignInPage);
-      await waitUntil(() => navigations.length > 0);
+      // The page waits out the server's Retry-After with a timer `settled()`
+      // can't see, so the test waits for the retry itself.
+      await retry;
+      await settled();
       assert.strictEqual(attempts, 2);
       assert.strictEqual(
         navigations[0].url,
@@ -1230,30 +1281,38 @@ module('Integration | sign-in', function (hooks) {
             ? refusal(503, 'unavailable', 'signing in is unavailable')
             : MINTS['POST _secure-session/login-token'](),
       });
-      visitShell(`?mode=sign-in${returnFragment(`${APP}/`)}`);
+      visitShell(`sign-in${returnFragment(`${APP}/`)}`);
       await render(SignInPage);
       await waitFor('[data-test-secure-handoff-retry]');
       assert
         .dom('[data-test-secure-error]')
         .hasText('Signing in is unavailable.');
       await click('[data-test-secure-handoff-retry]');
-      await waitUntil(() => navigations.length > 0);
       assert.strictEqual(
         navigations[0].url,
         `${APP}/#loginToken=a-login-token`,
       );
     });
 
-    test('signing out ends the window session and goes back to the app', async function (assert) {
+    test('signing out ends the window session and goes on to sign in, handing back to the app', async function (assert) {
       storeSession(SESSION);
       sessionStorage.setItem('boxel-secure-return', RETURN);
       let server = serve({
         'DELETE _secure-session': () => ({ status: 200, body: {} }),
       });
-      visitShell(`?mode=sign-out${returnFragment(`${APP}/`)}`);
+      visitShell(`sign-out${returnFragment(`${APP}/`)}`);
       await render(SignOutPage);
-      await waitUntil(() => navigations.length > 0);
-      assert.deepEqual(navigations, [{ how: 'replace', url: `${APP}/` }]);
+      assert
+        .dom('[data-test-secure-signing-out]')
+        .hasText('Signing you out…', 'says so as the app’s own page does');
+      assert
+        .dom('[data-test-secure-signing-out] [data-test-pretui-spinner]')
+        .exists('with the same spinner');
+      assert.deepEqual(
+        navigations,
+        [{ how: 'replace', url: '/secure/sign-in' }],
+        'straight to the sign-in page, never back to the app first',
+      );
       assert.true(
         server.requests.some(
           (r) => r.method === 'DELETE' && r.path === '_secure-session',
@@ -1261,17 +1320,66 @@ module('Integration | sign-in', function (hooks) {
         'the session is ended on the server',
       );
       assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
-      assert.strictEqual(sessionStorage.getItem('boxel-secure-return'), null);
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return'),
+        `${APP}/`,
+        'the sign-in that follows hands back to the app page sign-out named',
+      );
+      assert.strictEqual(
+        window.location.hash,
+        '',
+        '`return` is taken out of the address',
+      );
+    });
+
+    test('the sign-in page after signing out shows the form, keeping the app page to hand back to', async function (assert) {
+      storeSession(SESSION);
+      serve(NO_GOOGLE, {
+        'DELETE _secure-session': () => ({ status: 200, body: {} }),
+      });
+      visitShell(`sign-out${returnFragment(`${APP}/`)}`);
+      await render(SignOutPage);
+      // The route transition the sign-out page makes lands on the sign-in
+      // page at its bare address.
+      visitShell('sign-in');
+      await render(SignInPage);
+      assert.dom('[data-test-secure-sign-in-form]').exists('signed out');
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return'),
+        `${APP}/`,
+        'a sign-in page opened with no `return` keeps the one sign-out kept',
+      );
+    });
+
+    test('signing out ends a window session past its stored end too', async function (assert) {
+      storeSession({ ...SESSION, expiresAt: '2000-01-01T00:00:00.000Z' });
+      let server = serve({
+        'DELETE _secure-session': () => ({ status: 200, body: {} }),
+      });
+      visitShell(`sign-out${returnFragment(`${APP}/`)}`);
+      await render(SignOutPage);
+      assert.true(
+        server.requests.some(
+          (r) => r.method === 'DELETE' && r.path === '_secure-session',
+        ),
+        'a session bound to the app’s can outlive its stored end, so it is ended on the server',
+      );
+      assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
     });
 
     test('signing out never goes to an origin the realm server does not list', async function (assert) {
       serve({});
-      visitShell(`?mode=sign-out${returnFragment('https://elsewhere.test/')}`);
+      sessionStorage.setItem('boxel-secure-return', RETURN);
+      visitShell(`sign-out${returnFragment('https://elsewhere.test/')}`);
       await render(SignOutPage);
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [
-        { how: 'replace', url: '/secure/?mode=sign-in' },
+        { how: 'replace', url: '/secure/sign-in' },
       ]);
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return'),
+        null,
+        'the sign-in that follows hands over to nothing',
+      );
     });
   });
 });

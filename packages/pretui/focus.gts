@@ -27,8 +27,10 @@ import { modifier } from 'ember-modifier';
 
 // ── Roving focus ─────────────────────────────────────────────────────────
 
-/** Focuses the element only on the render where it BECAME the keyboard
- * target — never steals focus on a plain re-render. */
+/** Focuses the element whenever the modifier runs with `should` true: when
+ * it's inserted, and whenever `should` is computed again, even when it stays
+ * true (a keyed list redrawn from new objects does this without inserting
+ * anything). Clear the flag once focus has moved on. */
 export const focusWhen = modifier((el: HTMLElement, [should]: [boolean]) => {
   if (should) {
     el.focus();
@@ -446,6 +448,11 @@ export const tracksPointer = modifier(
     };
   },
 );
+
+/** Anything that can hold focus: used to move focus into, or hand it back to,
+ *  a panel's first control. */
+export const FOCUSABLE =
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /** Elements that own the keys a container would otherwise take: text entry
  *  and composite widgets. A container's keydown handler skips events whose

@@ -19,7 +19,12 @@ scope:
   - packages/host/app/services/realm-server.ts
   - packages/host/app/services/matrix-service.ts
   - packages/host/app/lib/secure-sign-in.ts
+  - packages/host/app/utils/login-token.ts
+  - packages/postgres/migrations/1793069013762_add-secure-sessions-app-device.js
   - packages/host/app/components/matrix/secure-sign-in.gts
+  - packages/host/app/routes/cli-auth.ts
+  - packages/host/app/lib/reset-password-link.ts
+  - packages/matrix/support/synapse/**
 ---
 
 # 005. Authorize changes to a user's keys only with a session that card code can't reach
@@ -34,11 +39,6 @@ out of card code's reach. The `secure-session` and `user-keys` skills cover
 the mechanics.
 
 ## 1. Decision
-
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
 
 ### 1.1. When an operation needs a secure session
 
@@ -114,15 +114,25 @@ every Matrix OpenID token requested before the sweep has expired. The sweep
 and that revocation MUST still run when the realm server that scheduled them
 stops before they are due.
 
-A secure window whose session has ended MUST forget it and offer to sign in
-again.
+A secure window whose session has ended MUST forget it. A sign-in page then
+offers to sign in again. A key page MUST NOT: it offers no sign-in of its own,
+as it offers no sign-out, and says to sign in to Boxel from the page that
+opened it. The one sign-in is Boxel's own on the secure origin (§1.7), which
+leaves the window its session there, so a key page never gathers a credential
+for a session of its own.
 
 ### 1.7. Signing in to the app on the secure origin
 
-A deployment that signs users in on the secure origin MUST NOT have the app
-draw a field that a credential is typed into for signing in. A signed-out app
-MUST send the user to the secure origin's sign-in page instead, and it MUST
-NOT navigate a frame it is shown in to do so.
+Users MUST sign in to Boxel, create an account and reset a password only on
+the secure origin's pages. The app MUST NOT draw a field that a credential is
+typed into for any of these. A signed-out app MUST send the user to the secure
+origin's sign-in page instead, and it MUST NOT navigate a frame it is shown in
+to do so. A link already sent that names an app page for one of these, a
+password reset email's or an older CLI's `/cli-auth`, MUST be forwarded to
+the secure origin's page for it. The Matrix server MUST NOT offer a sign-in
+of its own that returns to the app, such as single sign-on; its password
+login stays, for the CLI's terminal sign-ins and the realm server's password
+check.
 
 The secure origin MUST hand the app only a single-use Matrix login token, and
 MUST NOT hand it the secure session (§1.4). The token MUST travel only by a
@@ -144,6 +154,18 @@ A login token is something card code can get (§1.3), so the session the app
 redeems it for MUST NOT be a secure session. Signing out of the app SHOULD
 also sign out on the secure origin, by a top-level navigation there once the
 app's own sign-out has finished.
+
+### 1.8. How long a window's session lasts
+
+A secure window's session MAY last as long as the app session it handed a
+sign-in to, by being renewed while the Matrix device that app session signed
+in as exists. Only the realm server MAY choose that device: it MUST name the
+device when it mints the hand-off's login token, under the window's own
+session, and MUST NOT bind a session to a device named by anything the app
+page sends. A renewal MUST be answered only for a request whose `Origin` is
+the secure origin's, and MUST check that the device still exists. Ending a
+window's session (§1.6) MUST also end its binding, so the device can't renew
+it. The CLI's sessions MUST NOT be bound.
 
 ## 2. Rationale
 
@@ -264,8 +286,12 @@ Signing in to the app on the secure origin (§1.7) closes what the
 credential fields leave open. Those fields are invisible frames inside the
 app's own form, so card code can draw a form that looks the same and the user
 can't tell them apart; a full page on the secure origin gives the user an
-address bar to check. One sign-in there also serves both the app and the
-secure window, which otherwise sign in separately.
+address bar to check. That only holds while no Boxel page but the secure
+origin's ever asks for a credential, so the app keeps no sign-in,
+registration or reset form at all, and the Matrix server's single sign-on,
+which took a Google sign-in on the Matrix server's pages and returned to the
+app, is not configured. One sign-in on the secure origin also serves both the
+app and the secure window, which otherwise sign in separately.
 
 What reaches the app is a Matrix login token, not a session of the secure
 origin's: card code can already mint the same kind of token from the app's
@@ -288,6 +314,27 @@ tokens. Of the listed origins, only a loopback one can be served by whatever
 program happens to listen there, so only a hand-off to one is confirmed. An
 already-signed-in window hands over to any other listed origin with no click,
 as an app already signed in would show the user straight into the app.
+
+A window's session lasts a week, but the app's can last much longer, and the
+app comes back from the secure origin only when it signs in. Without
+renewal, a user signed in to the app for over a week would find the key pages
+signed out, and the only fix would be to sign out of the app and back in.
+The app's Matrix device lives exactly as long as the app's session: signing
+out of the app, switching accounts and changing the password each sign it
+out. So the window's session follows that device (§1.8). The realm server
+picks the device id when it mints the hand-off's token, and the app signs in
+as that device when it redeems the token, before any card code loads. The
+app page never reads, holds or extends the window's session (§1.4). Card code
+could learn the device id, since it is the app's own device, but knowing it
+gets card code nothing. The binding is fixed when the token is minted, and
+signing out of the app ends the window's session and its binding together,
+so bringing back a device with that id renews nothing. A token the app never
+redeems names a device that doesn't exist, which renews nothing either.
+Renewal asks the Matrix server about the device only in the session's last
+day, so a window that is opened often asks about once a day. A window's
+token expires with its row, and a renewal accepts an expired token, since
+the row it names decides. The CLI's session stays a week: the CLI keeps it
+beside a device of its own, and `boxel keys sign-in` signs it in again.
 
 ## 3. Considered options
 
@@ -365,6 +412,15 @@ as an app already signed in would show the user straight into the app.
 - **The token in the app page's query string.** The realm server's request
   log and the load balancer's access log would both record a token that is
   live for two minutes.
+- **Renewing a window's session each time the window uses it.** A user who
+  doesn't open the key pages for a week would still find them signed out
+  while the app stays signed in.
+- **Renewing it when the app comes back from the secure origin with a login
+  token.** That happens only when the app signs in, so it does nothing for
+  an app that stays signed in.
+- **Letting the app tell the realm server which device it signed in as.**
+  Card code could then bind the window's session to a device it keeps
+  signed in, which would let the app page extend that session (§1.4).
 - **Confirming every hand-off, not only a loopback one.** Every sign-in
   would ask a question whose answer is always yes; the listed origins other
   than loopback are the deployment's own.
@@ -400,15 +456,4 @@ as an app already signed in would show the user straight into the app.
 
 ## 5. Remediation
 
-- `packages/realm-server/lib/key-shares.ts` (`unshareKey`, `suspendShare`)
-  breaks §1.1. Each changes what a key may be used for without a key write
-  ticket.
-- `packages/postgres/migrations/1792187770930_add-key-shares.js`
-  (`key_shares_follow_permissions`) breaks §1.1. Restoring a user's write
-  access to a realm resumes their suspended shares there, through a
-  permissions change the app's session can make.
-- `packages/realm-server/handlers/realm-destruction-utils.ts` breaks §1.1.
-  Deleting a realm deletes its key shares without a secure session.
-- `packages/realm-server/handlers/handle-secure-session.ts`
-  (`handleGoogleSignInStart`) breaks §1.3. The Google sign-in start route
-  answers a request from any `Origin`.
+Known gaps are listed in [remediation/005.md](remediation/005.md).

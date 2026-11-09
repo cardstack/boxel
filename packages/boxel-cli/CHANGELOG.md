@@ -6,6 +6,55 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-11-04 — npm v0.12.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.12.0
+
+## @cardstack/boxel-cli v0.12.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.12.0
+
+## Changes
+
+- fix: name users by full Matrix id where delete-realm, the host config and boxel profile migration used a localpart or hostname by @lukemelia in https://github.com/cardstack/boxel/pull/7019
+- docs: Give the Codex plugin install as the terminal commands Codex accepts by @burieberry in https://github.com/cardstack/boxel/pull/7134
+- feat: alert techops when a system key's responses near or pass its size cap, with a per-key cap set from the CLI by @habdelra in https://github.com/cardstack/boxel/pull/7160
+- feat: ask before a policy save lets people who aren't signed in use shared keys by @habdelra in https://github.com/cardstack/boxel/pull/7147
+- feat: a monthly anonymous cap on a key, beside its daily one by @habdelra in https://github.com/cardstack/boxel/pull/7146
+- feat: boxel keys limits and boxel keys usage by @habdelra in https://github.com/cardstack/boxel/pull/7121
+- feat: let people who aren't signed in use a shared key where the realm's policy opens the call and the key's owner allows it by @habdelra in https://github.com/cardstack/boxel/pull/7132
+- feat: build client networks from the realm server's prefix map by @lukemelia in https://github.com/cardstack/boxel/pull/7103
+- feat: let a card use an approved key when it is opened, with a confirmation and the key's limits by @habdelra in https://github.com/cardstack/boxel/pull/7122
+- feat: end boxel keys approve and swap at once when the secure window is cancelled or closed by @habdelra in https://github.com/cardstack/boxel/pull/7113
+- feat: boxel keys approve, revoke, pending and ungrant, boxel operations invoke, and callApi lint checks by @habdelra in https://github.com/cardstack/boxel/pull/7111
+- feat: an operator note and a history for every change to a platform OAuth client by @habdelra in https://github.com/cardstack/boxel/pull/7106
+- chore: Sign in only on the secure origin: retire the app's sign-in forms and Synapse's Google sign-in by @habdelra in https://github.com/cardstack/boxel/pull/7066
+- feat: offer Boxel (read-only), the GitHub App, as the platform client for GitHub, with a realm's shared client in its place by @habdelra in https://github.com/cardstack/boxel/pull/7060
+- fix: keep waiting for a publish while its progress advances by @richardhjtan in https://github.com/cardstack/boxel/pull/7079
+- feat: an operator note and a history for every change to a platform OAuth client by @habdelra in https://github.com/cardstack/boxel/pull/7065
+- feat: boxel keys clients / connect, and adding OAuth clients from the terminal by @habdelra in https://github.com/cardstack/boxel/pull/7061
+- feat: show a Google service account's email, scopes and subject, and keep them on replace by @habdelra in https://github.com/cardstack/boxel/pull/7036
+- feat: add Google service-account keys, which send access tokens minted from the key file and never the file by @habdelra in https://github.com/cardstack/boxel/pull/7033
+- fix: withhold a share's owner and suspender once no permission row in the realm names them by @habdelra in https://github.com/cardstack/boxel/pull/7028
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.11.0...boxel-cli-v0.12.0
+
+## 2026-10-29 — npm v0.11.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.11.0
+
+## @cardstack/boxel-cli v0.11.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.11.0
+
+## Changes
+
+- refactor: address the secure origin's pages by Ember routes instead of the mode query parameter by @habdelra in https://github.com/cardstack/boxel/pull/6984
+- feat: boxel keys manages your own keys and shares from the terminal by @habdelra in https://github.com/cardstack/boxel/pull/6966
+- fix: Serve Pret UI from boxel test's local mode by @lukemelia in https://github.com/cardstack/boxel/pull/6928
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.10.0...boxel-cli-v0.11.0
+
 ## 2026-10-24 — npm v0.10.0
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.10.0

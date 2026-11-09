@@ -849,7 +849,7 @@ module(
         assert.dom('[data-test-boxel-menu-item-text="Delete"]').doesNotExist();
       });
 
-      test('opens index card when non-index card is closed and workspace chooser opens when index card is closed', async function (assert) {
+      test('opens index card when non-index card is closed and dashboard opens when index card is closed', async function (assert) {
         // Start with a non-index card in the stack
         await visitOperatorMode({
           stacks: [
@@ -864,7 +864,7 @@ module(
 
         // Verify the non-index card is displayed
         assert.dom('[data-test-stack-card-index="0"]').includesText('Fadhlan');
-        assert.dom('[data-test-workspace-chooser]').doesNotExist();
+        assert.dom('[data-test-dashboard]').doesNotExist();
 
         // Close the non-index card
         await click(
@@ -878,16 +878,16 @@ module(
             '[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]',
           )
           .hasText('Workspace - Test Workspace B');
-        assert.dom('[data-test-workspace-chooser]').doesNotExist();
+        assert.dom('[data-test-dashboard]').doesNotExist();
 
         // Close the index card
         await click(
           '[data-test-stack-card-index="0"] [data-test-close-button]',
         );
 
-        // Verify that the workspace chooser opens
-        await waitFor('[data-test-workspace-chooser]');
-        assert.dom('[data-test-workspace-chooser]').exists();
+        // Verify that the dashboard opens
+        await waitFor('[data-test-dashboard]');
+        assert.dom('[data-test-dashboard]').exists();
         assert.dom('[data-test-operator-mode-stack]').doesNotExist();
       });
 
@@ -952,8 +952,10 @@ module(
           },
         ]);
         assert
-          .dom('[data-test-llm-mode-option="act"]')
-          .hasClass('selected', 'LLM mode starts in act mode');
+          .dom(
+            '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+          )
+          .isChecked('LLM mode starts in act mode');
 
         // Verify the GETTING STARTED section with Welcome to Boxel
         assert

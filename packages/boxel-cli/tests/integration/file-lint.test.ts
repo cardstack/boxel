@@ -268,4 +268,123 @@ export class MyCard extends CardDef {
       fs.rmSync(srcDir, { recursive: true, force: true });
     }
   });
+
+  it('reports what indexing would record for a callApi declaration, a non-https destination and a missing label', async () => {
+    let source = `import { CardDef } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import { operation, params } from '@cardstack/base/operations';
+import { TOKEN_KIND } from './kinds';
+
+export class Vendor extends CardDef {
+  @operation static listItems = {
+    base: 'callApi',
+    label: 'List items',
+    params: { id: StringField },
+    url: 'https://api.example.com/v1/{id}/items',
+    path: { id: params('id') },
+    headers: { authorization: 'Bearer {{userKey}}' },
+  };
+
+  @operation static partSegment = {
+    base: 'callApi',
+    label: 'Part of a segment',
+    url: 'https://api.example.com/v1/item-{id}',
+  };
+
+  @operation static undeclared = {
+    base: 'callApi',
+    label: 'Undeclared param',
+    url: 'https://api.example.com/v1/{id}',
+    path: { id: params('missing') },
+  };
+
+  @operation static slotInName = {
+    base: 'callApi',
+    label: 'Slot in a header name',
+    url: 'https://api.example.com/v1/x',
+    headers: { '{{userKey}}': 'x' },
+  };
+
+  @operation static placedTwice = {
+    base: 'callApi',
+    label: 'Placed twice',
+    url: 'https://api.example.com/v1/x',
+    headers: { a: '{{userKey}}', b: '{{userKey}}' },
+  } as const;
+
+  @operation static badSlot = {
+    base: 'callApi',
+    label: 'Bad slot',
+    url: 'https://api.example.com/v1/x',
+    headers: { authorization: '{{userKey|hex}}' },
+  };
+
+  @operation static plainHttp = {
+    base: 'callApi',
+    label: 'Plain http',
+    url: 'http://api.example.com/v1/x',
+  };
+
+  @operation static unlabelled = {
+    base: 'callApi',
+    url: 'https://api.example.com/v1/x',
+  };
+
+  @operation static unknownKeyKind = {
+    base: 'callApi',
+    label: 'Unknown key kind',
+    url: 'https://api.example.com/v1/x',
+    headers: { authorization: 'Bearer {{userKey}}' },
+    keyKind: 'password',
+  };
+
+  @operation static importedKeyKind = {
+    base: 'callApi',
+    label: 'Imported key kind',
+    url: 'https://api.example.com/v1/x',
+    headers: { authorization: 'Bearer {{userKey}}' },
+    keyKind: { userKey: TOKEN_KIND },
+  };
+}
+`;
+    let result = await lintSource(source, 'vendor.gts');
+    expect(result.ok).toBe(true);
+    let messages = result.messages!.filter((m) =>
+      m.ruleId?.startsWith('@cardstack/boxel-operations/'),
+    );
+    let errors = messages
+      .filter((m) => m.ruleId === '@cardstack/boxel-operations/call-api')
+      .map((m) => m.message.split(':')[0]);
+    expect(errors.sort()).toEqual(
+      [
+        'invalid-request',
+        'invalid-request',
+        'invalid-slot',
+        'slot-out-of-place',
+        'slot-placed-twice',
+        'undeclared-param',
+        'unencoded-path-parameter',
+      ].sort(),
+    );
+    for (let m of messages) {
+      expect(m.severity).toBe(
+        m.ruleId === '@cardstack/boxel-operations/call-api' ? 2 : 1,
+      );
+    }
+    let advice = messages
+      .filter((m) => m.ruleId === '@cardstack/boxel-operations/call-api-advice')
+      .map((m) => m.message);
+    expect(advice).toHaveLength(2);
+    expect(advice.some((m) => m.includes('http://api.example.com/v1/'))).toBe(
+      true,
+    );
+    expect(advice.some((m) => m.includes('`label`'))).toBe(true);
+    // The well-formed declaration is reported for nothing, and nor is one
+    // whose key kind is a constant the source alone can't settle.
+    for (let name of ['listItems', 'importedKeyKind']) {
+      let line =
+        source.split('\n').indexOf(`  @operation static ${name} = {`) + 1;
+      expect(messages.some((m) => m.line === line)).toBe(false);
+    }
+  });
 });

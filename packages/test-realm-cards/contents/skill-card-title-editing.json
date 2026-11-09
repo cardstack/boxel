@@ -9,7 +9,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/skill",
+        "module": "@cardstack/base/skill",
         "name": "Skill"
       }
     }

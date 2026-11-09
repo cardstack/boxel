@@ -103,9 +103,8 @@ describe('buildSecureCliAuthUrl', () => {
       }),
     );
     expect(url.origin).toBe('https://secure.example.com');
-    expect(url.pathname).toBe('/');
+    expect(url.pathname).toBe('/cli-auth');
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      mode: 'cli-auth',
       port: '1234',
       state: 'abc123def456',
       session: 'secure',
@@ -119,7 +118,7 @@ describe('buildSecureCliAuthUrl', () => {
         state: 'abc123def456',
       }),
     );
-    expect(url.pathname).toBe('/secure');
+    expect(url.pathname).toBe('/secure/cli-auth');
     expect(url.search).not.toMatch(/http|localhost|127\.0\.0\.1/i);
   });
 });
@@ -231,6 +230,40 @@ describe('startLoopbackCallback', () => {
         login_token: 'syt_token',
         secure_session: 'secure-session-token',
       }),
+    });
+
+    expect(response.status).toBe(400);
+    await settled;
+  });
+
+  for (const outcome of ['done', 'cancelled'] as const) {
+    it(`accepts a secure window ending ${outcome}`, async () => {
+      const callback = await startLoopbackCallback();
+      const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+      const pending = callback.waitForResult();
+
+      const response = await fetch(callback.redirectUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formBody({ state, window_outcome: outcome }),
+      });
+
+      expect(response.status).toBe(200);
+      await expect(pending).resolves.toEqual({ kind: 'window', outcome });
+    });
+  }
+
+  it('rejects a secure window ending it does not know', async () => {
+    const callback = await startLoopbackCallback();
+    const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+    const settled = expect(callback.waitForResult()).rejects.toThrow(
+      /window_outcome/,
+    );
+
+    const response = await fetch(callback.redirectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({ state, window_outcome: 'approved' }),
     });
 
     expect(response.status).toBe(400);
@@ -478,7 +511,7 @@ describe('browserLogin', () => {
     });
 
     expect(new URL(opened!).origin).toBe('https://secure.example.com');
-    expect(new URL(opened!).searchParams.get('mode')).toBe('cli-auth');
+    expect(new URL(opened!).pathname).toBe('/cli-auth');
     expect(auth).toEqual({
       accessToken: 'redeemed',
       deviceId: 'DEVICE',

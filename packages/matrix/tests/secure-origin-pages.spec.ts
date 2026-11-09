@@ -36,7 +36,7 @@ test.describe('The secure origin’s pages', () => {
     page,
   }) => {
     let user = await createSubscribedUser('secure-keyboard');
-    let secure = await openSecurePage(page, 'mode=sign-in');
+    let secure = await openSecurePage(page, 'sign-in');
     await expect(secure.locator('[data-test-secure-google]')).toBeVisible();
     await expect(secure.locator('[data-test-secure-sign-in-title]')).toHaveText(
       'Sign in to your Boxel Account',
@@ -107,8 +107,8 @@ test.describe('The secure origin’s pages', () => {
     expect(await signedInUser(secure)).toBe(user.credentials.userId);
   });
 
-  test('an unknown mode renders nothing', async ({ page }) => {
-    let secure = await openSecurePage(page, 'mode=not-a-mode');
+  test('a `mode` that names no page renders nothing', async ({ page }) => {
+    let secure = await openSecurePage(page, '?mode=not-a-mode');
     await expect(secure.locator('#secure-shell')).toBeEmpty();
   });
 
@@ -117,9 +117,9 @@ test.describe('The secure origin’s pages', () => {
   }, testInfo) => {
     let username = uniqueName('secure-reg');
     let email = `${username}@example.com`;
-    let secure = await openSecurePage(page, 'mode=sign-in');
+    let secure = await openSecurePage(page, 'sign-in');
     await secure.locator('[data-test-secure-register]').click();
-    await expect(secure).toHaveURL(/[?&]mode=register\b/);
+    await expect(secure).toHaveURL(/\/register(\?|#|$)/);
     await expect(secure.getByLabel('Your Name')).toBeFocused();
     await expect(secure.locator('[data-test-register-btn]')).toBeDisabled();
     await expect(
@@ -193,9 +193,7 @@ test.describe('The secure origin’s pages', () => {
     expect(new URL(validated.url()).origin).toBe(
       new URL(secureOriginURL).origin,
     );
-    expect(new URL(validated.url()).searchParams.get('mode')).toBe(
-      'verify-email',
-    );
+    expect(new URL(validated.url()).pathname).toBe('/secure/verify-email');
     await expect(
       validated.locator('[data-test-email-validated]'),
     ).toBeVisible();
@@ -220,22 +218,24 @@ test.describe('The secure origin’s pages', () => {
     expect(record?.matrix_registration_token).toBe(REGISTRATION_TOKEN);
     expect(record?.session_room_id).toBeTruthy();
 
-    // The new account signs in to the app with its password.
+    // The secure origin is signed in as the new account, so the app's sign-in
+    // goes there and comes straight back with the account's login token.
     await page.goto(appURL);
-    let fields = page.frameLocator('[data-test-credential-fields-frame]');
-    await fields.locator('[data-test-username-field]').fill(username);
-    await fields.locator('[data-test-password-field]').fill('mypassword1!');
-    await page.locator('[data-test-login-btn]').click();
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
-    ).toHaveCount(1);
+    ).toHaveCount(1, { timeout: 60_000 });
+    await expect(page.locator('[data-test-profile-icon-button]')).toBeVisible();
+    await page.locator('[data-test-profile-icon-button]').click();
+    await expect(page.locator('[data-test-profile-icon-handle]')).toHaveText(
+      user,
+    );
   });
 
   test('creating an account checks each field as the app’s form does', async ({
     page,
   }) => {
     let taken = await createSubscribedUser('secure-taken');
-    let secure = await openSecurePage(page, 'mode=register');
+    let secure = await openSecurePage(page, 'register');
     let usernameField = '[data-test-secure-field="username"]';
     // A field's error, under its input, or under the username's input group.
     let error = (field: string) =>
@@ -306,9 +306,9 @@ test.describe('The secure origin’s pages', () => {
     );
     expect(await keyWriteTicketStatus(page, oldSession)).toBe(201);
 
-    let secure = await openSecurePage(page, 'mode=sign-in');
+    let secure = await openSecurePage(page, 'sign-in');
     await secure.locator('[data-test-secure-forgot-password]').click();
-    await expect(secure).toHaveURL(/[?&]mode=forgot-password\b/);
+    await expect(secure).toHaveURL(/\/forgot-password(\?|#|$)/);
     await snapshot(testInfo, secure, 'secure-reset-1-forgot');
 
     // An address no account holds is refused.
@@ -332,7 +332,7 @@ test.describe('The secure origin’s pages', () => {
     ).toBeVisible();
     let landed = new URL(confirm.url());
     expect(landed.origin).toBe(new URL(secureOriginURL).origin);
-    expect(landed.searchParams.get('mode')).toBe('reset-password');
+    expect(landed.pathname).toBe('/secure/reset-password');
     expect(landed.searchParams.has('clientSecret')).toBe(false);
     expect(landed.hash).toBe('');
     await snapshot(testInfo, confirm, 'secure-reset-3-new-password');

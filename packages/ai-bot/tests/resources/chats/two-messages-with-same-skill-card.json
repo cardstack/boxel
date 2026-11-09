@@ -353,7 +353,7 @@
           "contentType": "text/plain"
         },
         {
-          "url": "skill-card-1",
+          "url": "https://example.com/_matrix/client/v1/media/download/mock-server/skill-card-1?allow_redirect=true",
           "sourceUrl": "skill-card-1",
           "contentType": "text/plain"
         }
@@ -399,7 +399,7 @@
     "content": {
       "enabledSkillCards": [
         {
-          "url": "skill-card-1",
+          "url": "https://example.com/_matrix/client/v1/media/download/mock-server/skill-card-1?allow_redirect=true",
           "sourceUrl": "skill-card-1",
           "contentType": "text/plain"
         }
@@ -418,7 +418,7 @@
             "contentType": "text/plain"
           },
           {
-            "url": "skill-card-1",
+            "url": "https://example.com/_matrix/client/v1/media/download/mock-server/skill-card-1?allow_redirect=true",
             "sourceUrl": "skill-card-1",
             "contentType": "text/plain"
           }
@@ -440,7 +440,7 @@
           "contentType": "text/plain"
         },
         {
-          "url": "skill-card-1",
+          "url": "https://example.com/_matrix/client/v1/media/download/mock-server/skill-card-1?allow_redirect=true",
           "sourceUrl": "skill-card-1",
           "contentType": "text/plain"
         }

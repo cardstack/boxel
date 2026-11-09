@@ -1,56 +1,26 @@
 import { expect, test } from './fixtures.ts';
-import type { BrowserContext, Page, TestInfo } from '@playwright/test';
+import type { Page, TestInfo } from '@playwright/test';
 import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
 import {
   createRealm,
   createSubscribedUser,
   getMatrixTestContext,
+  getSharedSQLExecutor,
   logout,
   postCardSource,
   setupPermissions,
 } from '../helpers/index.ts';
 import { browserLogin } from '../../boxel-cli/src/lib/sso-login.ts';
+import jwt from 'jsonwebtoken';
 
-// With sign-in on the secure origin, the app draws no sign-in form: a
-// signed-out app sends the user to the secure origin's page, which signs them
-// in and hands the app a single-use Matrix login token by navigating back.
-// The realm server writes the deployment's setting into the host's config
-// each time it serves the app; these tests turn it on in the config as the
-// page parses it. (Fulfilling the document from a route instead would make
-// Chrome treat the page as public, and refuse it its loopback assets.)
+// The app draws no sign-in form: a signed-out app sends the user to the
+// secure origin's page, which signs them in and hands the app a single-use
+// Matrix login token by navigating back.
 
 const APP_ORIGIN = new URL(appURL).origin;
 const SECURE_SESSION_KEY = 'boxel-secure-session';
-
-async function signInOnSecureOrigin(context: BrowserContext) {
-  await context.addInitScript(() => {
-    const NAME = '@cardstack/host/config/environment';
-    let rewrite = (meta: Element) => {
-      if (meta.getAttribute('data-test-flag-set')) {
-        return;
-      }
-      let config = JSON.parse(
-        decodeURIComponent(meta.getAttribute('content') ?? '%7B%7D'),
-      );
-      config.signInOnSecureOrigin = true;
-      meta.setAttribute('content', encodeURIComponent(JSON.stringify(config)));
-      meta.setAttribute('data-test-flag-set', 'true');
-    };
-    new MutationObserver((records) => {
-      for (let record of records) {
-        for (let node of record.addedNodes) {
-          if (
-            node instanceof Element &&
-            node.tagName === 'META' &&
-            node.getAttribute('name') === NAME
-          ) {
-            rewrite(node);
-          }
-        }
-      }
-    }).observe(document, { childList: true, subtree: true });
-  });
-}
+// The isolated realm server's secret seed, which signs its sessions.
+const REALM_SECRET_SEED = "shhh! it's a secret";
 
 async function snapshot(testInfo: TestInfo, page: Page, name: string) {
   await testInfo.attach(name, {
@@ -69,11 +39,11 @@ async function signInOnSecurePage(
   await page.locator('[data-test-secure-password-submit]').click();
 }
 
-function onSecureOrigin(page: Page, mode: string) {
+function onSecureOrigin(page: Page, secureOriginPage: string) {
   let url = new URL(page.url());
   return (
     url.origin === new URL(secureOriginURL).origin &&
-    url.searchParams.get('mode') === mode
+    url.pathname.endsWith(`/${secureOriginPage}`)
   );
 }
 
@@ -82,13 +52,12 @@ test.describe('Sign in on the secure origin', () => {
   let password: string;
   let userId: string;
 
-  test.beforeEach(async ({ context }) => {
+  test.beforeEach(async () => {
     let user = await createSubscribedUser('secure-sign-in');
     username = user.username;
     password = user.password;
     userId = user.credentials.userId;
     await setupPermissions(user.credentials.userId, `${appURL}/`);
-    await signInOnSecureOrigin(context);
   });
 
   test('a signed-out deep link signs in on the secure origin and comes back to the same page', async ({
@@ -101,7 +70,7 @@ test.describe('Sign in on the secure origin', () => {
     let deepLink = `${appURL}/?operatorModeState=${encodeURIComponent(state)}`;
     await page.goto(deepLink);
 
-    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     expect(onSecureOrigin(page, 'sign-in')).toBe(true);
     expect(
       new URL(page.url()).hash,
@@ -121,7 +90,6 @@ test.describe('Sign in on the secure origin', () => {
     expect(
       JSON.parse(back.searchParams.get('operatorModeState')!).stacks[0][0].id,
     ).toBe(`${appURL}/index`);
-    await expect(page.locator('[data-test-login-form]')).toHaveCount(0);
     await snapshot(testInfo, page, 'back in the app, signed in');
   });
 
@@ -129,7 +97,7 @@ test.describe('Sign in on the secure origin', () => {
     page,
   }, testInfo) => {
     await page.goto(appURL);
-    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     // Back to the app without signing in, as a hand-off that never
     // completed would.
     await page.goto(appURL);
@@ -139,40 +107,83 @@ test.describe('Sign in on the secure origin', () => {
     expect(new URL(page.url()).origin).toBe(APP_ORIGIN);
     await expect(
       page.locator('[data-test-secure-sign-in-button]'),
-    ).toHaveAttribute('href', /mode=sign-in#return=/);
+    ).toHaveAttribute('href', /\/sign-in#return=/);
     await expect(
-      page.locator('[data-test-login-form]'),
-      'the app draws no sign-in form of its own',
+      page.locator('iframe'),
+      'the app draws no credential frame of its own',
     ).toHaveCount(0);
-    await expect(page.locator('iframe'), 'nor a credential frame').toHaveCount(
-      0,
-    );
     await snapshot(testInfo, page, 'app: sign-in did not complete');
 
     await page.locator('[data-test-secure-sign-in-button]').click();
-    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     await signInOnSecurePage(page, username, password);
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
     ).toHaveCount(1, { timeout: 60_000 });
   });
 
+  test('a password reset link in an email sent to the app lands on the secure origin’s reset page', async ({
+    page,
+  }, testInfo) => {
+    // Reset emails link to the app, with the client secret in the query and
+    // the email address and validation session in the fragment.
+    let email = `${username}@example.com`;
+    await page.goto(
+      `${appURL}/?clientSecret=example-client-secret#email=${encodeURIComponent(email)}&sid=example-sid`,
+    );
+
+    await page.waitForURL((url) => url.pathname.endsWith('/reset-password'));
+    expect(onSecureOrigin(page, 'reset-password')).toBe(true);
+    await expect(page.locator('[data-test-reset-password-form]')).toBeVisible();
+    // The form shows an error when the link it was handed lacks the client
+    // secret or the validation session.
+    await expect(page.locator('[data-test-reset-password-error]')).toHaveCount(
+      0,
+    );
+    expect(
+      new URL(page.url()).hash,
+      'the reset link’s secrets are taken out of the address',
+    ).toBe('');
+    await snapshot(
+      testInfo,
+      page,
+      'secure origin reset page, from a reset link sent to the app',
+    );
+  });
+
   test('signing out goes through the secure origin and ends its session too', async ({
     page,
   }, testInfo) => {
     await page.goto(appURL);
-    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     await signInOnSecurePage(page, username, password);
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
     ).toHaveCount(1, { timeout: 60_000 });
 
-    await logout(page);
+    // Every document the tab loads from here on.
+    let loaded: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.isNavigationRequest() &&
+        request.frame() === page.mainFrame()
+      ) {
+        loaded.push(request.url());
+      }
+    });
 
-    // Through the secure origin's sign-out, back to the app signed out, and
-    // so on to sign in again.
-    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    // logout() returns once the page is on the secure origin's sign-in. It
+    // goes there through the secure origin's sign-out, never back through
+    // the app, which signed out would only send the user there.
+    await logout(page);
     await expect(page.locator('[data-test-secure-sign-in-form]')).toBeVisible();
+    expect(
+      loaded.map((url) => {
+        let { origin, pathname } = new URL(url);
+        return `${origin}${pathname}`;
+      }),
+      'the sign-out page is the only document loaded: the app is not loaded again, and sign-in follows it as a route transition',
+    ).toEqual([`${secureOriginURL}/sign-out`]);
     expect(
       await page.evaluate(
         (key) => localStorage.getItem(key),
@@ -181,6 +192,111 @@ test.describe('Sign in on the secure origin', () => {
       "the secure origin's session is gone",
     ).toBeNull();
     await snapshot(testInfo, page, 'signed out, at the secure sign-in');
+  });
+
+  test("the secure window stays signed in past its first week while the app's session lasts", async ({
+    page,
+  }, testInfo) => {
+    await page.goto(appURL);
+    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
+    await signInOnSecurePage(page, username, password);
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1, { timeout: 60_000 });
+
+    let sql = getSharedSQLExecutor();
+    let appDevice = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('auth') ?? '{}').device_id,
+    );
+    let rows = (await sql.executeSQL(
+      `SELECT app_device_id FROM secure_sessions
+        WHERE user_id = '${userId}' AND client = 'window'`,
+    )) as { app_device_id: string | null }[];
+    expect(
+      rows.map((r) => r.app_device_id),
+      "the window's session is bound to the device the app signed in as",
+    ).toEqual([appDevice]);
+
+    // A week on: the window's row has lapsed, and so has the token the
+    // window stored, which ends with it.
+    let [{ id }] = (await sql.executeSQL(
+      `SELECT id FROM secure_sessions
+        WHERE user_id = '${userId}' AND client = 'window'`,
+    )) as { id: string }[];
+    let lapsedAt = Math.floor(Date.now() / 1000) - 60 * 60;
+    await sql.executeSQL(
+      `UPDATE secure_sessions SET expires_at = to_timestamp(${lapsedAt})
+        WHERE id = '${id}'`,
+    );
+    let lapsed = {
+      token: jwt.sign(
+        {
+          user: userId,
+          sessionRoom: 'test-session',
+          secureSession: id,
+          exp: lapsedAt,
+        },
+        REALM_SECRET_SEED,
+      ),
+      user: userId,
+      expiresAt: new Date(lapsedAt * 1000).toISOString(),
+    };
+    await page.context().addInitScript(
+      ({ secureOrigin, key, lapsed }) => {
+        // Once, before the first secure-origin page this test opens next.
+        if (
+          location.origin !== secureOrigin ||
+          localStorage.getItem('test-session-aged')
+        ) {
+          return;
+        }
+        localStorage.setItem('test-session-aged', 'true');
+        localStorage.setItem(key, JSON.stringify(lapsed));
+      },
+      {
+        secureOrigin: new URL(secureOriginURL).origin,
+        key: SECURE_SESSION_KEY,
+        lapsed,
+      },
+    );
+
+    let opened = page.context().waitForEvent('page');
+    await page.evaluate((url) => {
+      window.open(url, '_blank', 'noopener,popup,width=520,height=720');
+    }, `${secureOriginURL}/keys`);
+    let keys = await opened;
+    await keys.setViewportSize({ width: 520, height: 720 });
+    await expect(keys.locator('[data-test-key-list-empty]')).toBeVisible({
+      timeout: 60_000,
+    });
+    await snapshot(testInfo, keys, 'key page, signed in past its first week');
+    let renewed = JSON.parse(
+      (await keys.evaluate(
+        (key) => localStorage.getItem(key),
+        SECURE_SESSION_KEY,
+      )) ?? 'null',
+    );
+    expect(
+      Date.parse(renewed.expiresAt) - Date.now(),
+      'renewed for another week',
+    ).toBeGreaterThan(6 * 24 * 60 * 60 * 1000);
+    expect(
+      await page.evaluate(
+        (key) => localStorage.getItem(key),
+        SECURE_SESSION_KEY,
+      ),
+      'and the app page holds none of it',
+    ).toBeNull();
+    await keys.close();
+
+    // Once the app signs out, its device is gone, and nothing renews the
+    // window's session.
+    await logout(page);
+    let ended = (await sql.executeSQL(
+      `SELECT app_device_id, expires_at <= NOW() AS ended FROM secure_sessions
+        WHERE user_id = '${userId}' AND client = 'window'`,
+    )) as { app_device_id: string | null; ended: boolean }[];
+    expect(ended).toEqual([{ app_device_id: null, ended: true }]);
   });
 
   test("a private realm's images load after the hand-off, and stop once signed out", async ({
@@ -203,7 +319,7 @@ test.describe('Sign in on the secure origin', () => {
       );
 
     await page.goto(APP_ORIGIN);
-    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
+    await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     await signInOnSecurePage(page, username, password);
     await page.waitForURL((url) => url.origin === APP_ORIGIN);
     await createRealm(page, realmName);
@@ -224,7 +340,6 @@ test.describe('Sign in on the secure origin', () => {
       .toBe(true);
 
     await logout(page);
-    await page.waitForURL((url) => url.searchParams.get('mode') === 'sign-in');
     // Back on the app, held there rather than sent on to sign in again.
     await page.route(
       (url) => url.origin === new URL(secureOriginURL).origin,
@@ -299,7 +414,7 @@ test.describe('Sign in on the secure origin', () => {
     page,
   }, testInfo) => {
     await page.goto(
-      `${secureOriginURL}?mode=sign-in#return=${encodeURIComponent(
+      `${secureOriginURL}/sign-in#return=${encodeURIComponent(
         'https://elsewhere.example/collect',
       )}`,
     );
@@ -318,7 +433,7 @@ test.describe('Sign in on the secure origin', () => {
   test('a hand-off to a program on this computer asks first', async ({
     page,
   }, testInfo) => {
-    await page.goto(`${secureOriginURL}?mode=sign-in`);
+    await page.goto(`${secureOriginURL}/sign-in`);
     await signInOnSecurePage(page, username, password);
     await expect(page.locator('[data-test-secure-signed-in]')).toBeVisible({
       timeout: 60_000,
@@ -327,7 +442,7 @@ test.describe('Sign in on the secure origin', () => {
     // fresh document, since only the fragment would differ from this one.
     await page.goto('about:blank');
     await page.goto(
-      `${secureOriginURL}?mode=sign-in#return=${encodeURIComponent(
+      `${secureOriginURL}/sign-in#return=${encodeURIComponent(
         'http://localhost:4299/',
       )}`,
     );

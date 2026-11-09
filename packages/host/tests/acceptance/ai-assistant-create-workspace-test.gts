@@ -154,7 +154,7 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
 
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
-      .dom('[data-test-message-idx="0"] .tool-description')
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
       .containsText('Create the Team Space workspace');
     assert.strictEqual(
       createRealmCalls.length,
@@ -164,9 +164,11 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
 
     // The click settles, and settling holds through the tool's run and the
     // round trip of its result event.
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists();
 
     assert.strictEqual(createRealmCalls.length, 1, 'one realm is created');
@@ -209,13 +211,13 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
       'the new workspace is opened',
     );
 
-    // The chooser lists the new workspace without a reload.
+    // The dashboard lists the new workspace without a reload.
     await click('[data-test-workspace-chooser-toggle]');
     await waitFor(
       '[data-test-workspace-list] [data-test-workspace="Team Space"]',
     );
     assert
       .dom('[data-test-workspace-list] [data-test-workspace="Team Space"]')
-      .exists('the new workspace appears in the workspace chooser');
+      .exists('the new workspace appears on the dashboard');
   });
 });

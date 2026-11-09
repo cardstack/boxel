@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Intro to Pottery — Saturday Workshop",
+      "startsAt": "2026-12-05T10:00:00.000Z",
+      "venue": "Clayworks Studio, 12 Mill Lane",
+      "capacity": 4
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "host": {
+        "links": {
+          "self": "../Attendee/rosa-delgado"
+        }
+      },
+      "confirmed.0": {
+        "links": {
+          "self": "../Attendee/priya-shah"
+        }
+      },
+      "confirmed.1": {
+        "links": {
+          "self": "../Attendee/marcus-lee"
+        }
+      },
+      "confirmed.2": {
+        "links": {
+          "self": "../Attendee/tom-becker"
+        }
+      },
+      "confirmed.3": {
+        "links": {
+          "self": "../Attendee/aiko-tanaka"
+        }
+      },
+      "waitlist.0": {
+        "links": {
+          "self": "../Attendee/elena-petrova"
+        }
+      },
+      "waitlist.1": {
+        "links": {
+          "self": "../Attendee/kwame-mensah"
+        }
+      },
+      "waitlist.2": {
+        "links": {
+          "self": "../Attendee/lucy-hart"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../event",
+        "name": "Event"
+      }
+    }
+  }
+}

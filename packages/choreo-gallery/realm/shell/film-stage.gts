@@ -14,8 +14,15 @@ import { FilmFrame, type FilmName } from './film-frame';
    rather than a browser window. The picture stays CENTRED as it shrinks,
    the way a monitor in a grading suite does; the well itself does not
    move. The floor is a frame that still reads; the ceiling is the well.
-   Double-click the grip, or the chip, to snap back. */
+   Double-click the grip, or the chip, to snap back. From the keyboard the
+   grip is a slider: Right and Up grow the frame a step, Left and Down shrink
+   it, Shift for a longer step, Home takes it to the floor and End to the
+   well, and Enter or Escape snaps back. */
 const SIZE_MIN = { h: 216, w: 384 } as const;
+
+/** how far one arrow press moves the frame's edge, and one with Shift */
+const STEP = 16;
+const STEP_SHIFT = 64;
 
 interface Size {
   h: number;
@@ -59,6 +66,11 @@ export class FilmStage extends Component<Signature> {
   @tracked private size: Size | null = this.saved();
   /** a drag in progress: the iframe stands aside and a readout shows */
   @tracked private sizing = false;
+  /** the grip has been stepped from the keyboard since it took focus, so
+   *  the readout shows */
+  @tracked private keyed = false;
+  /** the well's own size, as last measured, for the grip's spoken value */
+  @tracked private wellSize: Size | null = null;
   private grip?: { h0: number; w0: number; x0: number; y0: number };
   private embedEl?: HTMLElement;
 
@@ -89,7 +101,17 @@ export class FilmStage extends Component<Signature> {
 
   private well = modifier((element: HTMLElement) => {
     this.embedEl = element;
+    let observer = new ResizeObserver(() => {
+      let max = this.ceiling();
+      if (max.w !== this.wellSize?.w || max.h !== this.wellSize?.h) {
+        this.wellSize = max;
+      }
+    });
+    if (element.parentElement) {
+      observer.observe(element.parentElement);
+    }
     return () => {
+      observer.disconnect();
       if (this.embedEl === element) {
         this.embedEl = undefined;
       }
@@ -132,27 +154,68 @@ export class FilmStage extends Component<Signature> {
     return size ? `${size.w} × ${size.h}` : '';
   }
 
-  /** the ceiling: the well the face sits in */
+  get showReadout(): boolean {
+    return (this.sizing || this.keyed) && this.size !== null;
+  }
+
+  /** the grip's value as a slider: the frame's width, out of the well's */
+  get gripNow(): number {
+    return this.size?.w ?? this.wellSize?.w ?? SIZE_MIN.w;
+  }
+
+  get gripMax(): number {
+    return Math.max(this.gripNow, this.wellSize?.w ?? 0);
+  }
+
+  /** what a screen reader says for the grip's value: both sides, since the
+   *  grip moves a corner, not an edge */
+  get gripText(): string {
+    if (this.size) {
+      return `${this.size.w} × ${this.size.h}`;
+    }
+    let well = this.wellSize;
+    return well ? `${well.w} × ${well.h}, default size` : 'Default size';
+  }
+
+  /** the ceiling: the well the face sits in, in the CSS pixels the frame's
+   *  size is set in, whatever transform the host draws the card under */
   private ceiling(): Size {
-    let box = this.embedEl?.parentElement?.getBoundingClientRect();
+    let well = this.embedEl?.parentElement;
     return {
-      h: Math.max(SIZE_MIN.h, Math.floor(box?.height ?? 0)),
-      w: Math.max(SIZE_MIN.w, Math.floor(box?.width ?? 0)),
+      h: Math.max(SIZE_MIN.h, well?.clientHeight ?? 0),
+      w: Math.max(SIZE_MIN.w, well?.clientWidth ?? 0),
     };
+  }
+
+  /**
+   * The frame a drag or a key asks for, held to the floor and the ceiling.
+   *
+   * AND THE BOX NEVER GOES TALLER THAN IT IS WIDE. Every layout inside the
+   * film is written for a frame that is not portrait — the type sets beside
+   * the subject, the mark draws across to it — so a tall thin frame does not
+   * show the film small, it shows a different film. The grip is free above
+   * that line and stops at it. At the ceiling on both axes the frame is the
+   * well again: no override.
+   */
+  private fit(wanted: Size): Size | null {
+    let max = this.ceiling();
+    let w = Math.round(Math.max(SIZE_MIN.w, Math.min(max.w, wanted.w)));
+    let h = Math.round(Math.max(SIZE_MIN.h, Math.min(max.h, w, wanted.h)));
+    return w >= max.w - 1 && h >= max.h - 1 ? null : { h, w };
   }
 
   private gripDown = (event: Event) => {
     if (!(event instanceof PointerEvent)) {
       return;
     }
-    let rect = this.embedEl?.getBoundingClientRect();
-    if (!rect) {
+    let frame = this.embedEl;
+    if (!frame) {
       return;
     }
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     this.grip = {
-      h0: rect.height,
-      w0: rect.width,
+      h0: frame.offsetHeight,
+      w0: frame.offsetWidth,
       x0: event.clientX,
       y0: event.clientY,
     };
@@ -169,26 +232,10 @@ export class FilmStage extends Component<Signature> {
       return;
     }
     /* the frame is centred, so a corner dragged by d grows the box by 2d */
-    let max = this.ceiling();
-    let w = Math.round(
-      Math.max(
-        SIZE_MIN.w,
-        Math.min(max.w, grip.w0 + 2 * (event.clientX - grip.x0)),
-      ),
-    );
-    /* AND THE BOX NEVER GOES TALLER THAN IT IS WIDE. Every layout inside
-       the film is written for a frame that is not portrait — the type sets
-       beside the subject, the mark draws across to it — so a tall thin drag
-       does not show the film small, it shows a different film. The grip is
-       free above that line and stops at it. */
-    let h = Math.round(
-      Math.max(
-        SIZE_MIN.h,
-        Math.min(max.h, w, grip.h0 + 2 * (event.clientY - grip.y0)),
-      ),
-    );
-    /* at the ceiling on both axes the frame is the well again: no override */
-    this.size = w >= max.w - 1 && h >= max.h - 1 ? null : { h, w };
+    this.size = this.fit({
+      h: grip.h0 + 2 * (event.clientY - grip.y0),
+      w: grip.w0 + 2 * (event.clientX - grip.x0),
+    });
   };
 
   private gripUp = () => {
@@ -198,6 +245,57 @@ export class FilmStage extends Component<Signature> {
     this.grip = undefined;
     this.sizing = false;
     this.remember();
+  };
+
+  /**
+   * The grip's keyboard, as a slider's: Right and Up grow the frame, Left and
+   * Down shrink it, Home is the floor and End the well, held by `fit` as a
+   * drag is. Enter or Escape snaps back; with the frame already at its own
+   * size they have nothing to undo and are the host's.
+   */
+  private gripKey = (event: Event) => {
+    if (
+      !(event instanceof KeyboardEvent) ||
+      event.altKey ||
+      event.metaKey ||
+      event.ctrlKey
+    ) {
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'Escape') {
+      if (this.size) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.reset();
+      }
+      return;
+    }
+    let step = event.shiftKey ? STEP_SHIFT : STEP;
+    let from = this.size ?? this.ceiling();
+    let to: Size;
+    if (event.key === 'ArrowRight') {
+      to = { h: from.h, w: from.w + step };
+    } else if (event.key === 'ArrowLeft') {
+      to = { h: from.h, w: from.w - step };
+    } else if (event.key === 'ArrowUp') {
+      to = { h: from.h + step, w: from.w };
+    } else if (event.key === 'ArrowDown') {
+      to = { h: from.h - step, w: from.w };
+    } else if (event.key === 'Home') {
+      to = SIZE_MIN;
+    } else if (event.key === 'End') {
+      to = this.ceiling();
+    } else {
+      return;
+    }
+    event.preventDefault();
+    this.size = this.fit(to);
+    this.keyed = true;
+    this.remember();
+  };
+
+  private gripBlur = () => {
+    this.keyed = false;
   };
 
   /** snap back to the well's own size */
@@ -277,21 +375,30 @@ export class FilmStage extends Component<Signature> {
             {{/if}}
             {{#if this.resizable}}
               {{! the corner grip: drag to resize the frame, double-click to
-                snap back }}
-              <button
-                type='button'
+                snap back; a slider, so a screen reader passes it the arrows
+                and speaks its size }}
+              <div
+                role='slider'
+                tabindex='0'
                 class='film-grip'
                 aria-label='Resize the frame'
-                title='Drag to resize · double-click to reset'
+                aria-valuemin={{SIZE_MIN.w}}
+                aria-valuemax={{this.gripMax}}
+                aria-valuenow={{this.gripNow}}
+                aria-valuetext={{this.gripText}}
+                title='Drag or use the arrow keys to resize · double-click, Enter or Escape to reset'
+                data-test-film-grip
                 {{on 'pointerdown' this.gripDown}}
                 {{on 'pointermove' this.gripMove}}
                 {{on 'pointerup' this.gripUp}}
                 {{on 'pointercancel' this.gripUp}}
                 {{on 'dblclick' this.reset}}
-              ></button>
+                {{on 'keydown' this.gripKey}}
+                {{on 'blur' this.gripBlur}}
+              ></div>
             {{/if}}
-            {{#if this.sizing}}
-              <span class='film-size'>{{this.readout}}</span>
+            {{#if this.showReadout}}
+              <span class='film-size' aria-hidden='true'>{{this.readout}}</span>
             {{/if}}
           {{/unless}}
         </div>

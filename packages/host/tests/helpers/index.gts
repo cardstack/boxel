@@ -26,6 +26,7 @@ import {
   ensureTrailingSlash,
   fetchEffectiveRealmPermissions,
   getCreatedTime,
+  hasExecutableExtension,
   IndexWriter,
   insertPermissions,
   Loader,
@@ -74,6 +75,7 @@ import {
 } from '@cardstack/host/utils/render-error';
 
 import { TestRealmAdapter } from './adapter';
+import { tagTestModuleExports } from './identity-tags';
 import { testRealmServerMatrixUsername, setupMockMatrix } from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { setupAuthEndpoints } from './realm-server-mock';
@@ -105,6 +107,7 @@ export {
   setupAuthEndpoints,
   setupPublicReadableRealms,
   setCatalogRealmURL,
+  withholdRealmSession,
 } from './realm-server-mock';
 export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
@@ -152,6 +155,7 @@ type ModuleHooks = {
 // homeserver, so it has to match whichever stack is actually running.
 const baseTestMatrix = {
   url: new URL(ENV.matrixURL),
+  serverName: 'localhost',
   username: 'test_realm',
   password: 'password',
 };
@@ -399,9 +403,18 @@ export async function withSlowSave(
 // resolves — neither side times a realm write against a wall clock.
 //
 // A held save holds a test waiter open, so the callback cannot await anything
-// that settles — which is every DOM helper. A callback that clicks or fills
-// belongs on `withSlowSave` instead, and trades the guarantee for a window.
-export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
+// that settles — which is every DOM helper. It can still fire a click without
+// awaiting it and then wait on the DOM with `waitFor` / `waitUntil`, which poll
+// and never settle. A callback that must await a click or fill belongs on
+// `withSlowSave` instead, and trades the guarantee for a window.
+//
+// `onSaveIssued` fires as a save enters `persistAndUpdate` and is held, so a
+// caller can tell a save that is waiting on the hold from one never issued.
+export async function withHeldSave(
+  cb: () => Promise<void>,
+  opts: { onSaveIssued?: (instance: CardDef) => void } = {},
+): Promise<void> {
+  let { onSaveIssued } = opts;
   let store = getService('store');
   let originalPersist = (store as any).persistAndUpdate as (
     instance: CardDef,
@@ -411,6 +424,7 @@ export async function withHeldSave(cb: () => Promise<void>): Promise<void> {
   let released = new Promise<void>((resolve) => (release = resolve));
   let heldSaves: Promise<unknown>[] = [];
   (store as any).persistAndUpdate = (instance: CardDef, opts?: unknown) => {
+    onSaveIssued?.(instance);
     let heldSave = released.then(() =>
       originalPersist.call(store, instance, opts),
     );
@@ -1362,6 +1376,22 @@ export async function setupAcceptanceTestRealm({
   return result;
 }
 
+// The test realm serves a module given as its exports by shimming them, so
+// the classes among them are tagged as the realm would compile them, under
+// the module's URL.
+function tagRealmContentClasses(contents: RealmContents, realmURL: string) {
+  for (let [path, value] of Object.entries(contents)) {
+    if (
+      hasExecutableExtension(path) &&
+      value &&
+      typeof value === 'object' &&
+      !(value instanceof Uint8Array)
+    ) {
+      tagTestModuleExports(new URL(path, realmURL).href, value);
+    }
+  }
+}
+
 export async function setupIntegrationTestRealm({
   contents = {},
   realmURL,
@@ -1555,6 +1585,7 @@ async function setupTestRealm({
   let { queue } = getService('queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
+  tagRealmContentClasses(contents, realmURL);
 
   if (isAcceptanceTest) {
     await visit('/acceptance-test-setup');
@@ -1620,6 +1651,7 @@ async function setupTestRealm({
         new URL(realmURL),
         user,
         baseTestMatrix.url.href,
+        baseTestMatrix.serverName,
       );
     setupAuthEndpoints({ [realmURL]: await sessionFor(TEST_MATRIX_USER) });
     if (mockMatrixUtils.loggedInAs) {
@@ -1636,6 +1668,7 @@ async function setupTestRealm({
     queuePublisher: queue,
     virtualNetwork,
     matrixURL: baseTestMatrix.url,
+    matrixServerName: baseTestMatrix.serverName,
     secretSeed: testRealmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer: localIndexer.prerenderer,
@@ -1645,6 +1678,7 @@ async function setupTestRealm({
   realm = new Realm(
     {
       url: realmURL,
+      canonicalName: ri(virtualNetwork.unresolveURL(realmURL)),
       adapter,
       secretSeed: testRealmSecretSeed,
       virtualNetwork,
@@ -1652,6 +1686,7 @@ async function setupTestRealm({
       queue,
       matrixClient: new MatrixClient({
         matrixURL: baseTestMatrix.url,
+        serverName: baseTestMatrix.serverName,
         username: testRealmServerMatrixUsername,
         seed: testRealmSecretSeed,
       }),

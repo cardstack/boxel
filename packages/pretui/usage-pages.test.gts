@@ -143,12 +143,14 @@ import { DEMOS_KEY_VALUE } from './components/key-value.usage';
 import { DEMOS_KNOWN_DATE } from './components/known-date.usage';
 import { DEMOS_LABEL } from './components/label.usage';
 import { DEMOS_LAYER_MANAGER } from './components/layer-manager.usage';
+import { DEMOS_LAYOUT_CONTROL } from './components/layout-control.usage';
 import { DEMOS_LIGHTBOX } from './components/lightbox.usage';
 import { DEMOS_LINE_GRID } from './components/line-grid.usage';
 import { DEMOS_LIST } from './components/list.usage';
 import { DEMOS_LOADER } from './components/loader.usage';
 import { DEMOS_LOADING_OVERLAY } from './components/loading-overlay.usage';
 import { DEMOS_LOADING_STATE } from './components/loading-state.usage';
+import { DEMOS_LOGO } from './components/logo.usage';
 import { DEMOS_LOOKUP } from './components/lookup.usage';
 import { DEMOS_MAGNETIC } from './components/magnetic.usage';
 import { DEMOS_MARQUEE } from './components/marquee.usage';
@@ -209,6 +211,7 @@ import { DEMOS_RECORD_PILL } from './components/record-pill.usage';
 import { DEMOS_RELATIVE_TIME } from './components/relative-time.usage';
 import { DEMOS_CONTROLS_REORDER } from './components/reorder.usage';
 import { DEMOS_RESIZABLE } from './components/resizable.usage';
+import { DEMOS_RESIZE_HANDLE } from './components/resize-handle.usage';
 import { DEMOS_RESULT_CARD } from './components/result-card.usage';
 import { DEMOS_RESULT } from './components/result.usage';
 import { DEMOS_RULE_ROW } from './components/rule-row.usage';
@@ -437,12 +440,14 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_KNOWN_DATE,
   DEMOS_LABEL,
   DEMOS_LAYER_MANAGER,
+  DEMOS_LAYOUT_CONTROL,
   DEMOS_LIGHTBOX,
   DEMOS_LINE_GRID,
   DEMOS_LIST,
   DEMOS_LOADER,
   DEMOS_LOADING_OVERLAY,
   DEMOS_LOADING_STATE,
+  DEMOS_LOGO,
   DEMOS_LOOKUP,
   DEMOS_MAGNETIC,
   DEMOS_MARQUEE,
@@ -503,6 +508,7 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_RELATIVE_TIME,
   DEMOS_CONTROLS_REORDER,
   DEMOS_RESIZABLE,
+  DEMOS_RESIZE_HANDLE,
   DEMOS_RESULT_CARD,
   DEMOS_RESULT,
   DEMOS_RULE_ROW,

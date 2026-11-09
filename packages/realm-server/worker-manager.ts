@@ -46,7 +46,7 @@ import {
   systemInitiatedPrerenderHtmlPriority,
   query as _query,
   IndexWriter,
-  isUrlLike,
+  isPrefixForm,
   VirtualNetwork,
   type Expression,
   type StatusArgs,
@@ -703,7 +703,10 @@ let secretsKeyringMessage: string | undefined;
   let urlMappings = fromUrls.map((fromUrl, i) => {
     let from = String(fromUrl);
     let to = new URL(String(toUrls[i]));
-    return [isUrlLike(from) ? new URL(from) : from, to] as [URL | string, URL];
+    return [isPrefixForm(from) ? from : new URL(from), to] as [
+      URL | string,
+      URL,
+    ];
   });
   // Refuse to start a deployed worker task without its KMS-wrapped data key,
   // and unwrap it once here for every worker this manager starts or respawns.

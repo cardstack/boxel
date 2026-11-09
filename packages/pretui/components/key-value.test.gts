@@ -8,6 +8,7 @@ import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { KeyValue } from './key-value';
 import type { KeyValueItem } from './key-value';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;
@@ -45,6 +46,22 @@ module('Pretui | components/key-value', function (hooks) {
       </template>,
     );
     assert.strictEqual(q('dd [data-test-custom]')?.textContent?.trim(), 'curing!');
+  });
+
+  test("KeyValue gives the value block each item's own fields", async function (assert) {
+    const ITEMS = [
+      { key: 'Over budget', value: '4', code: 'over-budget' },
+      { key: 'Rate limited', value: '2', code: 'rate-limited' },
+    ];
+    await render(
+      <template>
+        <KeyValue @items={{ITEMS}}>
+          <:value as |item|><span data-test-code={{item.code}}>{{item.value}}</span></:value>
+        </KeyValue>
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-code="over-budget"]')?.textContent?.trim(), '4');
+    assert.strictEqual(q('[data-test-code="rate-limited"]')?.textContent?.trim(), '2');
   });
 
   test('KeyValue lays out horizontally by default and takes stacked and inline layouts', async function (assert) {
@@ -132,5 +149,51 @@ module('Pretui | components/key-value', function (hooks) {
     assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-label-style');
     assert.dom('[data-test-kv="default"]').doesNotHaveAttribute('data-label-style');
     assert.dom('[data-test-kv="eyebrow"]').hasAttribute('data-label-style', 'eyebrow');
+  });
+
+  test('KeyValue divides and end-aligns only on the horizontal layout', async function (assert) {
+    const ITEMS: KeyValueItem[] = [{ key: 'Origin', value: 'Wuyi' }];
+    await render(
+      <template>
+        <KeyValue @items={{ITEMS}} data-test-kv='none' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' data-test-kv='horizontal' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' @layout='stacked' data-test-kv='stacked' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' @layout='inline' data-test-kv='inline' />
+      </template>,
+    );
+    assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-divided');
+    assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-value-align');
+    assert.dom('[data-test-kv="horizontal"]').hasAttribute('data-divided', 'true');
+    assert.dom('[data-test-kv="horizontal"]').hasAttribute('data-value-align', 'end');
+    for (let layout of ['stacked', 'inline']) {
+      assert.dom(`[data-test-kv="${layout}"]`).doesNotHaveAttribute('data-divided');
+      assert.dom(`[data-test-kv="${layout}"]`).doesNotHaveAttribute('data-value-align');
+    }
+  });
+
+  // The row selectors key off the list's children being only dt/dd, in
+  // alternating order with a dt first.
+  test('KeyValue horizontal renders alternating dt/dd children', async function (assert) {
+    const ITEMS: KeyValueItem[] = [
+      { key: 'Origin', value: 'Wuyi' },
+      { key: 'Harvest', value: 'Spring 2026' },
+    ];
+    await render(<template><KeyValue @items={{ITEMS}} @divided={{true}} /></template>);
+    assert.deepEqual(
+      Array.from(q('[data-test-pretui-kv]').children).map((c) => c.tagName),
+      ['DT', 'DD', 'DT', 'DD'],
+    );
+  });
+
+  test('renders no style attribute', async function (assert) {
+    let items: KeyValueItem[] = [
+      { key: 'Kind', value: 'API key' },
+      { key: 'Used with', value: 'github.com' },
+    ];
+    let writes = await styleAttributeWrites(() =>
+      render(<template><KeyValue @items={{items}} @labelStyle='eyebrow' /></template>),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.dom('[data-test-pretui-kv] dt').exists({ count: 2 });
   });
 });

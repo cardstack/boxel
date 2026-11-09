@@ -9,7 +9,10 @@ import BusyMessage from '@cardstack/secure-origin/components/busy-message.gts';
 import { restartableTask } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
-import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
+import {
+  extractMatrixErrorMessage,
+  isMatrixError,
+} from '@cardstack/host/lib/matrix-utils';
 import { resetPasswordParamsFrom } from '@cardstack/host/lib/reset-password-link';
 import {
   clearRedirectGuard,
@@ -26,8 +29,6 @@ import {
   consumeLoginTokenFromUrl,
   peekLoginToken,
 } from '@cardstack/host/utils/login-token';
-
-import { extractMatrixErrorMessage } from './login';
 
 type State =
   // Sent, or about to be sent, to the secure origin to sign in.
@@ -126,11 +127,6 @@ export default class SecureSignIn extends Component {
       this.state = 'signing-out';
       return;
     }
-    if (this.matrixService.isLoggedIn) {
-      // Signed in, and setting up a new account before the app shows.
-      this.state = 'signing-in';
-      return;
-    }
     if (peekLoginToken()) {
       this.state = 'signing-in';
       this.redeem.perform();
@@ -202,8 +198,8 @@ export default class SecureSignIn extends Component {
   private redeem = restartableTask(async () => {
     // Single-use: taken out of the address before it is redeemed, so a reload
     // can't try it again.
-    let token = consumeLoginTokenFromUrl();
-    if (!token) {
+    let handoff = consumeLoginTokenFromUrl();
+    if (!handoff) {
       this.redirect();
       return;
     }
@@ -214,7 +210,7 @@ export default class SecureSignIn extends Component {
       this.operatorModeStateService.showWorkspaceChooserBeforeBoot();
     }
     try {
-      let auth = await this.matrixService.loginWithSsoToken(token);
+      let auth = await this.matrixService.loginWithSsoToken(handoff);
       await this.matrixService.start({ auth, refreshRoutes: true });
       // `start()` handles a failure after the Matrix login by signing out
       // again rather than throwing, so only a session that is up counts.

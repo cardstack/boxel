@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base/mark-definition';
 import {
   CardDef,
   FieldDef,
@@ -15,7 +16,7 @@ import MarkdownField from '@cardstack/base/markdown';
 import TextAreaField from '@cardstack/base/text-area';
 import enumField from '@cardstack/base/enum';
 
-export const IssueStatusField = enumField(StringField, {
+export const IssueStatusField = markDefinition(enumField(StringField, {
   options: [
     { value: 'backlog', label: 'Backlog' },
     { value: 'in_progress', label: 'In Progress' },
@@ -23,18 +24,18 @@ export const IssueStatusField = enumField(StringField, {
     { value: 'review', label: 'In Review' },
     { value: 'done', label: 'Done' },
   ],
-});
+}));
 
-export const IssuePriorityField = enumField(StringField, {
+export const IssuePriorityField = markDefinition(enumField(StringField, {
   options: [
     { value: 'critical', label: 'Critical' },
     { value: 'high', label: 'High' },
     { value: 'medium', label: 'Medium' },
     { value: 'low', label: 'Low' },
   ],
-});
+}));
 
-export const IssueTypeField = enumField(StringField, {
+export const IssueTypeField = markDefinition(enumField(StringField, {
   options: [
     { value: 'bootstrap', label: 'Bootstrap' },
     { value: 'feature', label: 'Feature' },
@@ -43,9 +44,9 @@ export const IssueTypeField = enumField(StringField, {
     { value: 'research', label: 'Research' },
     { value: 'infrastructure', label: 'Infrastructure' },
   ],
-});
+}));
 
-export const ProjectStatusField = enumField(StringField, {
+export const ProjectStatusField = markDefinition(enumField(StringField, {
   options: [
     { value: 'planning', label: 'Planning' },
     { value: 'active', label: 'Active' },
@@ -53,9 +54,9 @@ export const ProjectStatusField = enumField(StringField, {
     { value: 'completed', label: 'Completed' },
     { value: 'archived', label: 'Archived' },
   ],
-});
+}));
 
-export const KnowledgeTypeField = enumField(StringField, {
+export const KnowledgeTypeField = markDefinition(enumField(StringField, {
   options: [
     { value: 'architecture', label: 'Architecture' },
     { value: 'decision', label: 'Decision (ADR)' },
@@ -64,7 +65,7 @@ export const KnowledgeTypeField = enumField(StringField, {
     { value: 'api', label: 'API Reference' },
     { value: 'onboarding', label: 'Onboarding' },
   ],
-});
+}));
 
 export class AgentProfile extends CardDef {
   static displayName = 'Agent Profile';

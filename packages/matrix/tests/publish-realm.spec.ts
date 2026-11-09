@@ -5,6 +5,7 @@ import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
+  enterWorkspace,
   postCardSource,
   postNewCard,
   waitForPublishedMarker,
@@ -25,7 +26,7 @@ test.describe('Publish realm', () => {
     );
 
     await createRealm(page, 'new-workspace', '1New Workspace');
-    await page.locator('[data-test-workspace="1New Workspace"]').click();
+    await enterWorkspace(page, '1New Workspace');
 
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
@@ -273,7 +274,7 @@ test.describe('Publish realm', () => {
     );
     let dependentCardURL = `${defaultRealmURL}index.json`;
 
-    await page.locator('[data-test-workspace="1New Workspace"]').click();
+    await enterWorkspace(page, '1New Workspace');
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
     await page.locator('[data-test-publish-realm-button]').click();
@@ -458,7 +459,7 @@ test.describe('Publish realm', () => {
     );
 
     // Open the publish modal and do the first publish.
-    await page.locator('[data-test-workspace="1New Workspace"]').click();
+    await enterWorkspace(page, '1New Workspace');
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
     await page.locator('[data-test-publish-realm-button]').click();

@@ -12,6 +12,7 @@ import {
   openAiAssistant,
   openRoom,
   assertMessages,
+  describeMessages,
   writeMessage,
   sendMessage,
   reloadAndOpenAiAssistant,
@@ -175,9 +176,12 @@ test.describe('Room messages', () => {
     let innerHTML = await page
       .locator('[data-test-message-idx="1"] .content')
       .evaluate((el) => el.innerHTML);
-    expect(innerHTML).toContain(
-      '&lt;h1&gt;Hello&lt;/h1&gt; &lt;template&gt;Hello&lt;/template&gt;',
-    );
+    let escaped =
+      '&lt;h1&gt;Hello&lt;/h1&gt; &lt;template&gt;Hello&lt;/template&gt;';
+    expect(
+      innerHTML,
+      innerHTML.includes(escaped) ? undefined : await describeMessages(page),
+    ).toContain(escaped);
   });
 
   test(`it can create a room specific pending message`, async ({ page }) => {
@@ -994,7 +998,7 @@ test.describe('Room messages', () => {
     });
   });
 
-  test('ai panel stays open when last card is closed and workspace chooser is opened', async ({
+  test('ai panel stays open when last card is closed and the dashboard is opened', async ({
     page,
   }) => {
     const { username } = await createSubscribedUserAndLogin(
@@ -1005,7 +1009,7 @@ test.describe('Room messages', () => {
     await page
       .locator('[data-test-stack-card] [data-test-close-button]')
       .click();
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
 
     page
       .locator('[data-test-message-field]')

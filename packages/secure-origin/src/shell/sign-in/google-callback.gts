@@ -18,7 +18,7 @@ import AuthContainer from '../../components/auth-container.gts';
 import BusyMessage from '../../components/busy-message.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
-import { modeURL, startURL } from '../urls.js';
+import { pageURL, startURL } from '../urls.js';
 
 import CliHandoff from './cli-handoff.gts';
 import IncompleteCliLink from './incomplete-cli-link.gts';
@@ -50,7 +50,6 @@ export default class GoogleCallback extends Component {
         </div>
         <div class='button-wrapper'>
           <AuthButton
-            @as='anchor'
             @href={{this.failure.startAgain}}
             @variant='secondary'
             data-test-secure-start-again
@@ -150,7 +149,7 @@ export default class GoogleCallback extends Component {
     storeSession(session);
     // Back to the window's own address, so a reload shows the signed-in window
     // rather than this callback.
-    history.replaceState(null, '', modeURL('sign-in'));
+    history.replaceState(null, '', pageURL('sign-in'));
     this.page.state = { name: 'signed-in' };
   }
 }

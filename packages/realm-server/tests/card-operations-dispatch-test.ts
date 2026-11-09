@@ -3,6 +3,9 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import {
+  DEFINITION_RETRY_AFTER_SECONDS,
+  definitionNotReady,
+  refusalForNonReader,
   dischargePendingDecision,
   erroredTargetRow,
   isDocumentResult,
@@ -10,6 +13,8 @@ import {
   isOperationFailure,
   isSourceResult,
   newOperationScope,
+  notApproved,
+  OperationFailure,
   pendingWriteFor,
   policyGateStats,
   readPlan,
@@ -18,6 +23,7 @@ import {
   resolveOperation,
   runOperation,
   scopeCallerFor,
+  type CallApiSlotLookup,
   type OperationCore,
   type OperationDefinition,
   type OperationError,
@@ -678,7 +684,14 @@ module(basename(import.meta.filename), function () {
           },
         },
       });
+      let lookups: CallApiSlotLookup[] = [];
       core.callApi = {
+        async fill(lookup) {
+          lookups.push(lookup);
+          throw new OperationFailure(
+            notApproved('withKey', lookup.request, lookup.realmURL),
+          );
+        },
         async send() {
           sent++;
           return { status: 200, headers: {}, body: null };
@@ -687,6 +700,7 @@ module(basename(import.meta.filename), function () {
       let error = await refusalFrom(() =>
         runOperation(core, { ...invoke(CARD, 'withKey'), actor: '' }),
       );
+      assert.strictEqual(lookups.length, 0, 'no binding is looked for');
       assert.strictEqual(error.code, 'actor-required');
       assert.strictEqual(sent, 0, 'nothing was sent');
 
@@ -698,7 +712,96 @@ module(basename(import.meta.filename), function () {
         'binding-not-approved',
         'a signed-in caller reaches the binding check',
       );
+      assert.strictEqual(signedIn.status, 409);
       assert.strictEqual(sent, 0, 'nothing was sent');
+    });
+    test("a callApi's slots are filled from the bindings, and sent only under the destination each key was approved for", async function (assert) {
+      let sent: { url: string; credentials: unknown[] }[] = [];
+      let lookups: CallApiSlotLookup[] = [];
+      let approvedFor = 'https://api.example.com/';
+      let { core } = stub({
+        operations: {
+          withKey: {
+            base: 'callApi',
+            deterministic: true,
+            callApi: {
+              method: 'GET',
+              url: 'https://api.example.com/v1/items',
+              destination: 'https://api.example.com/v1/',
+              headers: { authorization: 'Basic {{apiKey|basic}}' },
+              slots: [
+                {
+                  name: 'apiKey',
+                  key: 'apiKey',
+                  transform: 'basic',
+                  placement: 'header',
+                  at: 'headers.authorization',
+                },
+              ],
+            },
+          },
+        },
+      });
+      core.callApi = {
+        async fill(lookup) {
+          lookups.push(lookup);
+          return [
+            {
+              name: 'apiKey',
+              value: 'dTpw',
+              raw: 'u:p',
+              destination: approvedFor,
+            },
+          ];
+        },
+        async send(request, credentials) {
+          sent.push({ url: request.url, credentials });
+          return { status: 200, headers: {}, body: null };
+        },
+      };
+      await runOperation(core, invoke(CARD, 'withKey'));
+      assert.strictEqual(lookups.length, 1);
+      assert.strictEqual(lookups[0].operation, 'withKey');
+      assert.strictEqual(lookups[0].instance, `${REALM}person-1`);
+      assert.deepEqual(
+        lookups[0].type,
+        PERSON as { module: string; name: string },
+        'the type the card adopts from',
+      );
+      assert.strictEqual(lookups[0].caller, invoke(CARD, 'withKey').actor);
+      assert.strictEqual(
+        lookups[0].mode,
+        'interactive',
+        'an invocation is interactive unless the realm runs it as a pipeline',
+      );
+      assert.strictEqual(sent.length, 1);
+      let [credential] = sent[0].credentials as {
+        token: string;
+        value: string;
+        raw?: string;
+      }[];
+      assert.strictEqual(
+        credential.value,
+        'dTpw',
+        'sent as the binding filled it',
+      );
+      assert.strictEqual(
+        credential.raw,
+        'u:p',
+        'with its stored value beside it',
+      );
+      assert.ok(
+        /^boxel_slot_0_/.test(credential.token),
+        'for the token that stands in the slot',
+      );
+
+      approvedFor = 'https://api.example.com/v2/';
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'withKey')),
+      );
+      assert.strictEqual(error.code, 'guard-refused');
+      assert.strictEqual(error.meta?.reason, 'destination');
+      assert.strictEqual(sent.length, 1, 'nothing more was sent');
     });
     test('a keyless callApi on the type is sent through the core, filled from the payload alone', async function (assert) {
       let sent: { url: string; credentials: number }[] = [];
@@ -719,6 +822,7 @@ module(basename(import.meta.filename), function () {
         },
       });
       core.callApi = {
+        fill: async () => [],
         async send(request, credentials) {
           sent.push({ url: request.url, credentials: credentials.length });
           return { status: 404, headers: {}, body: { error: 'Not found' } };
@@ -752,6 +856,7 @@ module(basename(import.meta.filename), function () {
         },
       });
       core.callApi = {
+        fill: async () => [],
         async send() {
           sent++;
           return { status: 200, headers: {}, body: null };
@@ -783,13 +888,19 @@ module(basename(import.meta.filename), function () {
           },
         });
       let mapped = declare('{id:.body.id}');
-      mapped.core.callApi = { send: async () => response };
+      mapped.core.callApi = {
+        fill: async () => [],
+        send: async () => response,
+      };
       assert.deepEqual(await runOperation(mapped.core, invoke(CARD, 'fetch')), {
         callApi: { id: 7 },
       });
 
       let listed = declare('[.status]');
-      listed.core.callApi = { send: async () => response };
+      listed.core.callApi = {
+        fill: async () => [],
+        send: async () => response,
+      };
       let error = await refusalFrom(() =>
         runOperation(listed.core, invoke(CARD, 'fetch')),
       );
@@ -1103,6 +1214,83 @@ module(basename(import.meta.filename), function () {
         ),
       );
       assert.strictEqual(error.code, 'target-not-found');
+    });
+    test('a type whose definition is not ready yet is refused as not ready, not as unknown', async function (assert) {
+      let { core } = stub();
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let notReady = (error: OperationError, target: string) => {
+        assert.strictEqual(error.status, 503, `${target} answers 503`);
+        assert.strictEqual(error.code, 'target-not-indexed');
+        assert.deepEqual(error.meta, {
+          awaitingIndex: true,
+          retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+        });
+      };
+      notReady(
+        await refusalFrom(() =>
+          resolveOperation(
+            core,
+            { kind: 'type', codeRef: PERSON, realm: REALM },
+            'create',
+          ),
+        ),
+        'a type target',
+      );
+      notReady(
+        await refusalFrom(() => runOperation(core, invoke(CARD, 'read'))),
+        'a card target',
+      );
+    });
+    test('a caller declined reads is told a definition that is not ready without the type it names', function (assert) {
+      let seen = refusalForNonReader(
+        definitionNotReady(`${REALM}person-1`, PERSON).error,
+      );
+      assert.strictEqual(seen.status, 503);
+      assert.strictEqual(seen.code, 'target-not-indexed');
+      assert.strictEqual(seen.id, undefined, 'the card is not named');
+      assert.false(
+        JSON.stringify(seen).includes(JSON.stringify(PERSON)),
+        'the type is not named',
+      );
+      assert.deepEqual(seen.meta, {
+        awaitingIndex: true,
+        retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+      });
+    });
+    // The card+json routes read through this dispatch. A read that resolves
+    // no definition is the built-in one and serves the document whole, so a
+    // type whose `read` declares an `output` has its card refused, not served
+    // unprojected, while its definition is not ready.
+    test('a card whose type projects its read is refused while the definition is not ready, not served whole', async function (assert) {
+      let { core } = stub({
+        operations: {
+          read: {
+            base: 'read',
+            deterministic: true,
+            output: { source: '{id:.id}', syntax: 'solidified' },
+          },
+        },
+      });
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'read')),
+      );
+      assert.strictEqual(error.status, 503);
+      assert.strictEqual(error.code, 'target-not-indexed');
     });
     test('a card whose type entry is unreadable still reads', async function (assert) {
       // The built-in `read` consults no definition, so refusing here would make
@@ -2012,6 +2200,63 @@ module(basename(import.meta.filename), function () {
         resolveGatedOperation(core, target, 'create', declined(core)),
       );
       assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    // Resolution's refusal is answered as the gate's for a caller the ACL
+    // declined: as not permitted, so the 503 reaches only a caller the realm
+    // admitted.
+    test('a type whose definition is not ready yet is refused as not permitted to a declined caller', async function (assert) {
+      let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
+      let { core } = stub({ ...reExported, policy: access });
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'create', declined(core)),
+      );
+      assert.strictEqual(failure.status, 403);
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    // A refusal the gate's own reads raise is told the same way. Here the
+    // target's entry reads, and the chain of the type a named create mints,
+    // read to settle whether it mints a policy card, refuses.
+    test('a refusal the gate itself raises is told as not permitted to a declined caller, and as not ready to an admitted one', async function (assert) {
+      const PET: CodeRef = { module: `${REALM}pet`, name: 'Pet' } as CodeRef;
+      let { access } = policyStub([{ targetType: PERSON, grants: ['draft'] }]);
+      let { core } = stub({
+        ...reExported,
+        policy: access,
+        operations: { draft: { base: 'create', of: PET, deterministic: true } },
+      });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (codeRef) => {
+        if (typeKey(codeRef) === typeKey(PET)) {
+          throw definitionNotReady(undefined, codeRef);
+        }
+        return await entry(codeRef);
+      };
+      let toDeclined = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'draft', declined(core)),
+      );
+      assert.strictEqual(toDeclined.status, 403, 'a caller declined reads');
+      assert.strictEqual(toDeclined.code, 'operation-not-permitted');
+      let reader = newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+      let toReader = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'draft', reader),
+      );
+      assert.strictEqual(toReader.status, 503, 'a reader declined only writes');
+      assert.strictEqual(toReader.code, 'target-not-indexed');
     });
 
     test('a rule on an ancestor in the recorded chain applies', async function (assert) {

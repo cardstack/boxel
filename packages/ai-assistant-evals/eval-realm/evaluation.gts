@@ -4,6 +4,7 @@ import {
   contains,
   containsMany,
   field,
+  FieldDef,
   linksTo,
   linksToMany,
 } from '@cardstack/base/card-api';
@@ -16,7 +17,7 @@ import MarkdownField from '@cardstack/base/markdown';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
 import TextAreaField from '@cardstack/base/text-area';
-import { gt } from '@cardstack/boxel-ui/helpers';
+import { eq, gt } from '@cardstack/boxel-ui/helpers';
 import ClipboardCheck from '@cardstack/boxel-icons/clipboard-check';
 import ChartBar from '@cardstack/boxel-icons/chart-bar';
 import FlaskConical from '@cardstack/boxel-icons/flask-conical';
@@ -94,6 +95,43 @@ function tierForScore(score: number | undefined | null): EffectivenessTier {
   return 'great';
 }
 
+// Whose key fills an approved slot: the eval user's own key (`{{userKey}}`),
+// or a key another user shares into the test workspace (`{{apiKey}}`).
+const KEY_FROM = ['own-key', 'share'] as const;
+
+// An approval a key's owner gave before the conversation starts: one
+// operation of a seeded card's type, approved to send the key from the
+// realm's scheduled pipelines only, with use from an opened card, the AI
+// assistant and the CLI left off. An operation the assistant invokes is then
+// refused "Interactive use not approved".
+export class PipelineApprovalField extends FieldDef {
+  static displayName = 'Pipeline approval';
+
+  // One of the evaluation's `initialCards`; its card type is what is
+  // approved.
+  @field card = linksTo(CardDef);
+  @field operation = contains(StringField);
+  // `own-key`: the eval user approves with a key of their own. `share`: a
+  // second eval user shares a key of theirs into the test workspace and
+  // approves with that share, so the eval user has nothing to approve.
+  @field keyFrom = contains(enumField(StringField, { options: [...KEY_FROM] }));
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <span class='approval'>
+        <code>{{@model.operation}}</code>
+        on
+        <@fields.card @format='atom' />, with
+        {{if
+          (eq @model.keyFrom 'share')
+          "another user's share"
+          "the user's own key"
+        }}
+      </span>
+    </template>
+  };
+}
+
 export class EvaluationCard extends CardDef {
   static displayName = 'Evaluation';
   static icon = FlaskConical;
@@ -113,6 +151,25 @@ export class EvaluationCard extends CardDef {
   // cards in the stack so they are part of the message context.
   @field initialCards = linksToMany(CardDef);
   @field initialFiles = linksToMany(FileDef);
+  // The seed script, by name, whose cards are copied in too: cards built in
+  // code by the runner (packages/ai-assistant-evals/eval-seeds/) instead of
+  // committed here, for a set too large to keep as fixtures. The script also
+  // names which of its cards are initial, prompt and expected changed cards.
+  @field seedScript = contains(StringField);
+  // Seeded cards the prompt asks the assistant to change, each one also in
+  // `initialCards` or a card `.json` in `initialFiles`. When set, the runner's
+  // "a card rendered" check needs every one of these to differ from its seed
+  // and one of them to be shown in the stack or the preview panel, so a run
+  // can't clear the check with a card that was already on screen or that only
+  // renders inside another one.
+  @field expectedChangedCards = linksToMany(CardDef);
+  // The card each prompt is about, by position: the runner brings the first
+  // one to the top of the stack before the first prompt, the second before
+  // the first follow-up, and so on, the way a person opens the card they are
+  // talking about. Only the top card of a stack goes into the message
+  // context, so an evaluation that opens several cards needs this. Each one
+  // is also in `initialCards`; a prompt with no entry leaves the stack as is.
+  @field promptCards = linksToMany(CardDef);
   // Skill features the evaluation needs switched on (`boxel-debug:feature:
   // enable:<name>` in the room before the first prompt). A skill section
   // between `<!-- feature:<name> -->` markers is left out of the prompt
@@ -122,6 +179,15 @@ export class EvaluationCard extends CardDef {
   // whose task is bigger than the hello-world the default of 200 was set on.
   // Empty means the default.
   @field secondsPerPrompt = contains(NumberField);
+  // Approvals made before the first prompt, each for scheduled pipelines
+  // only, for an evaluation of what the assistant does when an operation is
+  // refused "Interactive use not approved".
+  @field pipelineApprovals = containsMany(PipelineApprovalField);
+  // A conversation-only evaluation, graded on what the assistant says and
+  // which tools it calls: the run passes when every prompt was sent and
+  // nothing was written, and no card has to render. Writing anything fails
+  // it.
+  @field expectsNoWrites = contains(BooleanField);
 
   @field sessionReports = linksToMany(() => EvaluationReportCard, {
     query: {
@@ -175,6 +241,46 @@ export class EvaluationCard extends CardDef {
             <div class='links'>
               <@fields.initialFiles @format='atom' />
             </div>
+          </section>
+        {{/if}}
+
+        {{#if @model.seedScript}}
+          <section>
+            <h2>Seed script</h2>
+            <p class='hint'>Its cards are built when a run starts and copied
+              in with the initial cards and files.</p>
+            <code>{{@model.seedScript}}</code>
+          </section>
+        {{/if}}
+
+        {{#if (gt @model.expectedChangedCards.length 0)}}
+          <section>
+            <h2>Expected changed cards</h2>
+            <p class='hint'>The run must change every one of these, and show one
+              of them.</p>
+            <div class='links'>
+              <@fields.expectedChangedCards @format='atom' />
+            </div>
+          </section>
+        {{/if}}
+
+        {{#if (gt @model.promptCards.length 0)}}
+          <section>
+            <h2>Prompt cards</h2>
+            <p class='hint'>Brought to the top of the stack before each prompt,
+              in order.</p>
+            <div class='links'>
+              <@fields.promptCards @format='atom' />
+            </div>
+          </section>
+        {{/if}}
+
+        {{#if (gt @model.pipelineApprovals.length 0)}}
+          <section>
+            <h2>Pipeline approvals</h2>
+            <p class='hint'>Approved for scheduled pipelines only, before the
+              prompt.</p>
+            <@fields.pipelineApprovals @format='embedded' />
           </section>
         {{/if}}
 

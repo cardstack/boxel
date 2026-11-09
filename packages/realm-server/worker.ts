@@ -30,7 +30,7 @@ writeSync(
 import {
   Worker,
   VirtualNetwork,
-  isUrlLike,
+  isPrefixForm,
   logger,
   IndexWriter,
   type StatusArgs,
@@ -57,6 +57,7 @@ import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
 import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 import { getInstanceId } from './lib/instance-id.ts';
+import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 
 let log = logger('worker');
 
@@ -159,7 +160,7 @@ let virtualNetwork = new VirtualNetwork();
 for (let i = 0; i < fromUrls.length; i++) {
   let from = String(fromUrls[i]);
   let to = new URL(String(toUrls[i]));
-  if (isUrlLike(from)) {
+  if (!isPrefixForm(from)) {
     virtualNetwork.addURLMapping(new URL(from), to);
     // Convention: https://cardstack.com/X/ aliases @cardstack/X/. Also
     // register the realm-prefix mapping so unresolveURL on either form
@@ -264,6 +265,7 @@ let autoMigrate = migrateDB || undefined;
     queue,
     virtualNetwork,
     matrixURL: new URL(matrixURL),
+    matrixServerName: matrixServerNameFromEnv(),
     secretSeed: REALM_SECRET_SEED,
     reportStatus,
     reportProgress,

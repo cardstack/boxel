@@ -26,18 +26,30 @@ const MessageMeta: TemplateOnlyComponent<Signature> = <template>
     {{else if @profileAvatar}}
       <@profileAvatar />
     {{/if}}
-    <time datetime={{formatISO @datetime}} class='time'>
-      {{formatDate @datetime 'iiii MMM d, yyyy, h:mm aa'}}
+    {{! the transcript's one time format, "11:03 PM"; the full date is on
+        hover }}
+    <time
+      datetime={{formatISO @datetime}}
+      title={{formatDate @datetime 'iiii MMM d, yyyy, h:mm aa'}}
+      class='time'
+    >
+      {{formatDate @datetime 'h:mm aa'}}
     </time>
   </section>
 
   <style scoped>
+    /* on the spine: the mark in a 16px column at the transcript's edge,
+       the time on the 40px text edge */
     .meta {
       display: grid;
-      grid-template-columns: var(--ai-assistant-message-avatar-size) 1fr;
-      grid-template-rows: var(--ai-assistant-message-meta-height);
+      grid-template-columns: var(--step-16, 16px) 1fr;
+      grid-template-rows: minmax(var(--ai-assistant-message-meta-height), auto);
       align-items: center;
-      gap: var(--ai-assistant-message-gap);
+      justify-items: start;
+      column-gap: var(--step-8, 8px);
+    }
+    .meta > .time {
+      justify-self: stretch;
     }
     .ai-avatar {
       width: var(--ai-assistant-message-avatar-size);
@@ -53,11 +65,14 @@ const MessageMeta: TemplateOnlyComponent<Signature> = <template>
     .ai-avatar-animated {
       background-image: url('../ai-assist-icon-animated.webp');
     }
+    /* a time is a caption: sans, ink-3, tabular figures */
     .time {
       display: block;
-      font: 500 var(--boxel-font-xs);
-      letter-spacing: var(--boxel-lsp-sm);
-      color: var(--boxel-450);
+      font-size: var(--type-caption, 11px);
+      line-height: var(--leading-caption, 16px);
+      font-weight: 400;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-3);
       white-space: nowrap;
     }
   </style>

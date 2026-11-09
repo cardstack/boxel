@@ -429,6 +429,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
+    test('a realm that is not a string is refused with a 400', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, null],
+      });
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      assert.true(
+        response.text.includes('realms must be an array of strings'),
+        `the reason is given: ${response.text}`,
+      );
+    });
+
     test('a realm named by a registered prefix answers as its URL does', async function (assert) {
       // The prefix is registered after the realms indexed, so only the
       // request is in a different form: the rows the realm answers with are

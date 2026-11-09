@@ -8,9 +8,14 @@ export interface KeyValueItem {
 
 export type KeyValueLayout = 'horizontal' | 'stacked' | 'inline';
 
-export interface KeyValueSignature {
+export const KEY_VALUE_VALUE_ALIGNS = ['start', 'end'] as const;
+export type KeyValueValueAlign = (typeof KEY_VALUE_VALUE_ALIGNS)[number];
+
+export interface KeyValueSignature<T extends KeyValueItem = KeyValueItem> {
   Args: {
-    items: KeyValueItem[];
+    /** Each item may carry fields of its own beyond `key` and `value`; the
+     *  `value` block is given the item as passed, with them. */
+    items: T[];
     /** 'horizontal' (default): keys in one column, values beside them.
      *  'stacked': each key above its value. 'inline': pairs side by side,
      *  wrapping onto the next line. 'vertical' is an alias of 'stacked'. */
@@ -18,12 +23,18 @@ export interface KeyValueSignature {
     /** 'eyebrow' sets the keys in the theme's eyebrow role (uppercase,
      *  tracked out). Default 'default'. */
     labelStyle?: 'default' | 'eyebrow';
+    /** Draws a --border hairline between rows, unbroken across both
+     *  columns. Default false. Only the 'horizontal' layout takes it. */
+    divided?: boolean;
+    /** 'end' aligns the values to the inline end of their column.
+     *  Default 'start'. Only the 'horizontal' layout takes it. */
+    valueAlign?: KeyValueValueAlign;
   };
-  Blocks: { value: [item: KeyValueItem] };
+  Blocks: { value: [item: T] };
   Element: HTMLDListElement;
 }
 
-export class KeyValue extends Component<KeyValueSignature> {
+export class KeyValue<T extends KeyValueItem = KeyValueItem> extends Component<KeyValueSignature<T>> {
   get layout(): KeyValueLayout {
     let { layout } = this.args;
     if (layout === 'stacked' || layout === 'vertical') {
@@ -37,10 +48,23 @@ export class KeyValue extends Component<KeyValueSignature> {
   get labelStyle(): 'eyebrow' | undefined {
     return this.args.labelStyle === 'eyebrow' ? 'eyebrow' : undefined;
   }
+  get isHorizontal(): boolean {
+    return this.layout === 'horizontal';
+  }
+  get divided(): 'true' | undefined {
+    return this.args.divided && this.isHorizontal ? 'true' : undefined;
+  }
+  get valueAlign(): 'end' | undefined {
+    return this.args.valueAlign === 'end' && this.isHorizontal
+      ? 'end'
+      : undefined;
+  }
   <template>
     <dl
       class='pretui-kv'
       data-layout={{this.layout}}
+      data-divided={{this.divided}}
+      data-value-align={{this.valueAlign}}
       data-label-style={{this.labelStyle}}
       data-test-pretui-kv
       ...attributes
@@ -125,6 +149,32 @@ export class KeyValue extends Component<KeyValueSignature> {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-2xs);
+        }
+        /* Divided rows: the gaps move into the cells so each hairline runs
+           unbroken across both columns, and stretched cells keep both
+           halves of a row's border at the same height. */
+        .pretui-kv[data-divided] {
+          gap: 0;
+          align-items: stretch;
+        }
+        .pretui-kv[data-divided] dt,
+        .pretui-kv[data-divided] dd {
+          padding-block: var(--boxel-sp-xs);
+        }
+        .pretui-kv[data-divided] dt {
+          display: flex;
+          align-items: center;
+          padding-inline-end: var(--boxel-sp-lg);
+        }
+        /* :first-of-type, not :first-child: the first dd is the list's
+           second child, so :not(:first-child) would rule it too. */
+        .pretui-kv[data-divided] dt:not(:first-of-type),
+        .pretui-kv[data-divided] dd:not(:first-of-type) {
+          border-block-start: 1px solid var(--border);
+        }
+        .pretui-kv[data-value-align='end'] dd {
+          justify-content: flex-end;
+          text-align: end;
         }
         .pretui-kv[data-layout='stacked'] {
           grid-template-columns: minmax(0, 1fr);

@@ -19,6 +19,10 @@ module.exports = {
         '--mute-audio',
         '--remote-debugging-port=0',
         '--window-size=1440,900',
+        // Each test sets the page's address with history.replaceState, and
+        // Chrome otherwise ignores those calls past about 100 in ten seconds,
+        // so a long run would leave a later test at an earlier one's address.
+        '--disable-ipc-flooding-protection',
       ].filter(Boolean),
     },
   },

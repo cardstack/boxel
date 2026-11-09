@@ -39,14 +39,52 @@ module.exports = {
           {
             patterns: [
               {
-                group: ['@ember/*', '@glimmer/*', 'ember-*', 'ember'],
+                group: [
+                  '@ember/*',
+                  '@glimmer/*',
+                  'ember-*',
+                  'ember',
+                  '@cardstack/*',
+                  'glimmer-motion',
+                  'glimmer-motion/*',
+                ],
                 message:
-                  'src/security/ imports nothing from Ember or Glimmer: components call these modules, not the other way round.',
+                  'src/security/ imports nothing from Ember, Glimmer, Pret UI, boxel-icons or any other component package: components call these modules, not the other way round.',
               },
               {
                 group: ['../*', '!../security/*'],
                 message:
                   'src/security/ imports only other security modules, never the components or pages that call it.',
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      // The telemetry instrument: plain modules too, so what it records, and
+      // that it can't record a secret, is read and tested without rendering.
+      files: ['./src/telemetry/**'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            patterns: [
+              {
+                group: ['@ember/*', '@glimmer/*', 'ember-*', 'ember'],
+                message:
+                  'src/telemetry/ imports nothing from Ember or Glimmer: the shell reports to it, not the other way round.',
+              },
+              {
+                group: [
+                  '../*',
+                  '!../security',
+                  '!../security/**',
+                  '!../telemetry',
+                  '!../telemetry/**',
+                ],
+                message:
+                  'src/telemetry/ imports only telemetry and security modules, never the components or pages that report to it.',
               },
             ],
           },

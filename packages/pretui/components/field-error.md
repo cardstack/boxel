@@ -33,7 +33,7 @@ Pretui's improvements, each concrete:
 - **Optional rule provenance** as a Law 3 Token.
 - **A deliberate live-region policy**, which is the part everyone gets wrong.
 
-The glyph vocabulary (`✕` / `!` / `i`) is shared with **Alert**, so a field message and a banner about the same thing read as one system.
+The glyph vocabulary (boxel-icons `x`, `!` and `i`) is shared with **Alert** and **Cue**, so a field message and a banner about the same thing read as one system.
 
 ## Accessibility
 
@@ -48,14 +48,14 @@ Gaps and cautions:
 - **Severity is not exposed to assistive tech.** The glyph is decorative and the hue is visual; a warning and an error are announced identically as message text. `role="alert"` versus `role="status"` would be the natural distinction (assertive for blocking, polite for advisory) and it is not made — `@announce` produces `role="alert"` regardless of severity. Worth fixing.
 - **Nothing prefixes the message with "Error:".** GOV.UK's pattern adds a visually-hidden prefix to the inline message so a screen-reader user hears the severity before the text. Here they hear only the text.
 - **`role="alert"` on a message that is already in `aria-describedby`** will be announced twice when the field receives focus after the alert fires. This is inherent to the pattern rather than a Pretui bug, but it is the reason `@announce` is scoped to `record` mode.
-- **The glyph is `aria-hidden`**, so "✕" is never part of the announced text; the message carries the meaning.
+- **The glyph is `aria-hidden`**, so the mark is never part of the announced text; the message carries the meaning.
 - **Using `@announce` directly, outside FormField, is easy to get wrong.** The rule of thumb from the source is the one to follow: turn it on only where the message appears as the result of a discrete commit, never on a control that revalidates per keystroke.
 
 ## Theming
 
 Severity hues: `--destructive` (error), `--warning`, `--pretui-info`, which fill the glyph. The text is the severity's ink: `--destructive-ink`, `--warning-ink`, `--info-ink`. Type: `--text-ui-sm`. Provenance: **Token**'s `--font-mono`, `--inset`, `--muted-foreground`, `--pretui-shadow-hairline`.
 
-Because severity is carried by **glyph and hue together**, it survives WCAG 1.4.1 (Use of Color) even in a theme whose warning and error hues are close. That is why `@glyph={{false}}` drops only the error glyph: FormField uses it, because its control already wears the error edge, and an error without a glyph still differs from a warning or info, which keep theirs.
+Because severity is carried by **glyph and hue together**, it survives WCAG 1.4.1 (Use of Color) even in a theme whose warning and error hues are close. That is why `@glyph={{false}}` drops only the error glyph: an error without a glyph still differs from a warning or info, which keep theirs.
 
 A theme must define `--warning` and `--pretui-info` legibly at 11.5px against `--card`; amber and pale blue at small sizes are the two most common contrast failures in this territory.
 

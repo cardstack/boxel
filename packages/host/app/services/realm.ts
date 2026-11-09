@@ -41,6 +41,7 @@ import {
   ensureTrailingSlash,
   fetchPublishabilityReport,
   logger,
+  ReadinessTimeoutError,
   ri,
   rri,
   SupportedMimeType,
@@ -102,6 +103,18 @@ export const UNKNOWN_REALM_NAME = 'Unknown Workspace';
 // realm polls slowly rather than hot-looping; short enough that a transient blip
 // recovers without a reload.
 const INDEX_COUNTS_RETRY_MS = 5000;
+
+// The publish was accepted and its HTML is still rendering when the readiness
+// wait ran out of time, so the site goes live without another publish.
+export class PublishPendingError extends Error {
+  constructor(options: { cause: unknown }) {
+    super(
+      'Published, but the site is taking longer than usual to finish rendering. It goes live when rendering finishes.',
+      options,
+    );
+    this.name = 'PublishPendingError';
+  }
+}
 
 export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
@@ -336,8 +349,8 @@ class RealmResource {
               }
               // Renaming a realm edits its RealmConfig card (realm.json),
               // which surfaces as an incremental re-index that invalidates the
-              // config card. Refresh realm info then, so the workspace chooser
-              // label and index card title update without a reload. Other
+              // config card. Refresh realm info then, so the dashboard's
+              // workspace name and index card title update without a reload. Other
               // re-indexes (full, or incremental of unrelated cards) are
               // deliberately left alone — refetching on those would, among
               // other things, clobber client-managed publish state. Instance
@@ -450,7 +463,7 @@ class RealmResource {
       }
       // A realm that wasn't part of the boot-time batch (e.g. a workspace
       // created mid-session) still needs its lifecycle timestamps: the
-      // workspace chooser's menu footer and its createdAt sort read them, and
+      // dashboard's menu footer and its catalog order read them, and
       // only the federated `/_info` batch carries them — the per-realm
       // `/_info` fallback below is the lean variant without timestamps. Ask
       // the batch for just this realm first; it populates `this.info` via
@@ -532,8 +545,8 @@ class RealmResource {
   }
 
   // Re-fetches realm info after a re-index and mutates the existing tracked
-  // `info` object in place so consumers (workspace chooser label, index card
-  // title) reactively pick up changes such as a renamed realm. Mutating in
+  // `info` object in place so consumers (the dashboard's workspace name, index
+  // card title) reactively pick up changes such as a renamed realm. Mutating in
   // place — rather than replacing the object — keeps the reference stable for
   // `@cached` getters that hold onto it.
   private refreshInfo() {
@@ -644,6 +657,10 @@ class RealmResource {
 
     try {
       this._isPublishing = true;
+      // A publish is durable once `_publish-realm` accepts it, so its
+      // `lastPublishedAt` holds whatever the readiness wait reports.
+      let accepted: Awaited<ReturnType<RealmServerService['publishRealm']>>[] =
+        [];
       const publishPromises = urls.map(async (url) => {
         if (this._publishingRealms.includes(url)) {
           return;
@@ -653,14 +670,27 @@ class RealmResource {
 
         try {
           let result = await this.realmServer.publishRealm(this.url, url);
+          accepted.push(result);
           // `_publish-realm` returns 202 before the published realm is
           // indexed. Keep the "Publishing…" state until the realm passes its
           // readiness check so "Open Site" only enables once the page is
           // actually viewable. Poll the URL the server actually published to —
           // a server-side domain override can make that differ from `url`.
-          await this.realmServer.waitForRealmReady(result.publishedRealmURL, {
-            onProgress: (progress) => this._publishProgress.set(url, progress),
-          });
+          try {
+            await this.realmServer.waitForRealmReady(result.publishedRealmURL, {
+              onProgress: (progress) =>
+                this._publishProgress.set(url, progress),
+            });
+          } catch (error) {
+            if (
+              error instanceof ReadinessTimeoutError &&
+              error.stage === 'prerender-html' &&
+              !error.stalled
+            ) {
+              throw new PublishPendingError({ cause: error });
+            }
+            throw error;
+          }
           return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
@@ -673,15 +703,11 @@ class RealmResource {
 
       const results = await Promise.allSettled(publishPromises);
       if (this.info) {
-        let lastPublishedAt = results.reduce(
-          (acc, result) => {
-            if (result.status === 'fulfilled' && result.value) {
-              acc[result.value.publishedRealmURL] =
-                result.value.lastPublishedAt;
-            }
-            return acc;
-          },
-          {} as Record<string, any>,
+        let lastPublishedAt = Object.fromEntries(
+          accepted.map((result) => [
+            result.publishedRealmURL,
+            result.lastPublishedAt,
+          ]),
         );
         this.info = {
           ...this.info,
@@ -774,8 +800,8 @@ export default class RealmService extends Service {
   private bulkInfoPromise: Promise<void> | undefined;
   // Lazily-loaded tile counts, keyed by trailing-slashed realm URL. A
   // TrackedMap so a tile re-renders when its counts land. `inFlightIndexCounts`
-  // dedupes concurrent requests for the same realm — the workspace chooser can
-  // ask on every render pass.
+  // dedupes concurrent requests for the same realm — the dashboard can ask on
+  // every render pass.
   private indexCountsByRealm = new TrackedMap<string, RealmIndexCounts>();
   private inFlightIndexCounts = new Set<string>();
   // Realms whose displayed counts are known to be behind the index. Values stay
@@ -788,7 +814,9 @@ export default class RealmService extends Service {
   // function of the realm URL string (cache entries never go stale), and a
   // resolved id→realm answer stays valid as long as that realm is still
   // known — validated against `realms` on every hit, so realm removal and
-  // resetState can't serve a stale answer.
+  // resetState can't serve a stale answer — and learning a realm evicts the
+  // answers for ids inside it, since a realm nested under an answer takes its
+  // ids over.
   private realmPathsCache = new Map<string, RealmPaths>();
   private realmOfCache = new Map<string, string>();
   // The authorization middleware reads `token()` on every fetch, and a single
@@ -1239,6 +1267,20 @@ export default class RealmService extends Service {
     return this.knownRealm(url)?.isRealmOwner ?? false;
   };
 
+  // Whether the user can publish the realm: they own it, and it's marked
+  // publishable (a published copy isn't). A writer can also publish to the
+  // realm's domain override, which this leaves out.
+  canPublish = (url: string): boolean => {
+    return this.isRealmOwner(url) && this.info(url).publishable === true;
+  };
+
+  // Whether the realm's info has loaded. Until it has, `info()` answers a
+  // placeholder whose `publishable: null` reads the same as a realm that
+  // isn't marked publishable.
+  isInfoLoaded = (realm: RealmIdentifier): boolean => {
+    return this.knownRealm(this.toLookupURL(realm))?.info !== undefined;
+  };
+
   url = (url: string): string | undefined => {
     return this.knownRealm(url)?.url;
   };
@@ -1289,20 +1331,10 @@ export default class RealmService extends Service {
       // stale id doesn't pay validation + full scan on every call.
       this.realmOfCache.delete(id);
     }
-    for (const realm of this.realms.keys()) {
-      let paths = this.realmPathsCache.get(realm);
-      if (!paths) {
-        // Built from the identifier rather than parsed as a URL: a realm key
-        // is whatever form the realm was registered under, and only URL-form
-        // keys survive `new URL()`. The string overload ensures the trailing
-        // slash the URL constructor would have supplied.
-        paths = new RealmPaths(ri(realm));
-        this.realmPathsCache.set(realm, paths);
-      }
-      if (paths.inRealm(id)) {
-        this.realmOfCache.set(id, realm);
-        return ri(realm);
-      }
+    let best = this.knownRealmKey(id);
+    if (best !== undefined) {
+      this.realmOfCache.set(id, best);
+      return ri(best);
     }
     // Misses are not cached: a realm learned later may claim this id.
     return undefined;
@@ -1429,8 +1461,13 @@ export default class RealmService extends Service {
   // run refreshers against a virtual clock. A method rather than a field, since
   // the resources restored from storage start refreshing while this service's
   // fields are still being initialized.
-  async waitForTokenRefresh(ms: number): Promise<void> {
-    await rawTimeout(ms);
+  //
+  // Not `async`: it returns the yieldable itself, so the refresher task awaits
+  // it directly and cancelling the task clears its timer. Wrapped in an async
+  // function, the timer keeps running after the task is cancelled, and holds
+  // the destroyed resource and its owner until the session's refresh time.
+  waitForTokenRefresh(ms: number): PromiseLike<void> {
+    return rawTimeout(ms);
   }
 
   async publish(realmURL: string, publishedRealmURLs: string[]) {
@@ -1645,28 +1682,44 @@ export default class RealmService extends Service {
     return vn.isRegisteredPrefix(url) ? vn.toURL(url).href : url;
   }
 
-  // Untracked: callers that render the answer pair it with a tracked read.
-  private knownRealmKey(url: string): string | undefined {
-    // `this.realms` is keyed by the user-facing realm URL (typically a
-    // virtual alias like `https://cardstack.com/base/`). Callers may
-    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
-    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
-    // match the same realm. Normalize both sides via
-    // `virtualNetwork.unresolveURL` (chases through any registered
-    // virtual → real URL mapping and unifies to the realm-prefix RRI
-    // form) so the comparison is form-agnostic.
+  // The known realm that owns `id`: the innermost one containing it, so a
+  // realm nested under another realm's URL owns its own resources whichever of
+  // the two was learned first. `this.realms` is keyed by the form each realm
+  // was registered under (typically a virtual alias like
+  // `https://cardstack.com/base/`), and `id` may come as that form, the
+  // resolved real URL or an RRI prefix, so both sides are compared after
+  // `virtualNetwork.unresolveURL` folds them onto one form, and nesting is
+  // measured in that form too. Untracked: callers that render the answer pair
+  // it with a tracked read.
+  private knownRealmKey(id: string): string | undefined {
     let vn = this.network.virtualNetwork;
-    let normalizedUrl = vn.unresolveURL(url);
+    let normalizedId = vn.unresolveURL(id);
+    let best: string | undefined;
+    let bestLength = -1;
     for (let key of this.realms.keys()) {
-      if (url.startsWith(key)) {
-        return key;
-      }
       let normalizedKey = vn.unresolveURL(key);
-      if (normalizedUrl.startsWith(normalizedKey)) {
-        return key;
+      if (
+        normalizedKey.length > bestLength &&
+        this.contains(normalizedKey, normalizedId)
+      ) {
+        best = key;
+        bestLength = normalizedKey.length;
       }
     }
-    return undefined;
+    return best;
+  }
+
+  private contains(realm: string, id: string): boolean {
+    let paths = this.realmPathsCache.get(realm);
+    if (!paths) {
+      // Built from the identifier rather than parsed as a URL: a realm key is
+      // whatever form the realm was registered under, and only URL-form keys
+      // survive `new URL()`. The string overload ensures the trailing slash
+      // the URL constructor would have supplied.
+      paths = new RealmPaths(ri(realm));
+      this.realmPathsCache.set(realm, paths);
+    }
+    return paths.inRealm(id as RealmResourceIdentifier);
   }
 
   // By default, this does a tracked read from currentKnownRealms so that your
@@ -1756,6 +1809,19 @@ export default class RealmService extends Service {
     if (!resource) {
       resource = this.createRealmResource(realmURL, token);
       this._realms.set(realmURL, resource);
+      // A cached answer for an id inside the new realm may name a realm that
+      // contains it, which the new realm now takes over from.
+      let normalizedRealm = this.network.virtualNetwork.unresolveURL(realmURL);
+      for (let id of this.realmOfCache.keys()) {
+        if (
+          this.contains(
+            normalizedRealm,
+            this.network.virtualNetwork.unresolveURL(id),
+          )
+        ) {
+          this.realmOfCache.delete(id);
+        }
+      }
       // only after the set has happened can we safely do the tracked read to
       // establish our depenency.
       this.currentKnownRealms.add(realmURL);
@@ -1781,8 +1847,14 @@ export default class RealmService extends Service {
         // could have already been discovered while we were queued
         return;
       }
+      // Asked as a card document so the realm answers it. A request that
+      // accepts anything is answered by the host app's page instead — which
+      // names no realm — wherever the realm server also serves the app, as it
+      // does on a published site. The realm names itself on every response to
+      // this, a card's, a module's and a missing path's alike.
       let response = await this.network.authedFetch(url, {
         method: 'HEAD',
+        headers: { Accept: SupportedMimeType.CardJson },
       });
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {

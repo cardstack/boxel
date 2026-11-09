@@ -160,6 +160,18 @@ jobs:
           set -eo pipefail
           DIFF_FILE="$(mktemp)"
           ./scripts/diff.sh --env staging --only-changed-since="origin/${PR_BASE_REF}" > "$DIFF_FILE"
+          # Dashboards the next apply deletes: diff.sh only compares what the
+          # repo defines, and a removed dashboard is no longer defined, so the
+          # prune lists them itself (a `#` header and one `-` line each, which
+          # the ```diff block shows in red). Empty when there are none.
+          PRUNE_FILE="$(mktemp)"
+          ./scripts/prune-dashboards.sh --env staging --dry-run > "$PRUNE_FILE"
+          if [[ -s "$PRUNE_FILE" ]]; then
+            if [[ -s "$DIFF_FILE" ]]; then
+              echo >> "$DIFF_FILE"
+            fi
+            cat "$PRUNE_FILE" >> "$DIFF_FILE"
+          fi
           # Persist the diff path for the next step (raw stdout via $GITHUB_OUTPUT
           # has multi-line / size limits we want to handle in JS instead).
           echo "diff_file=$DIFF_FILE" >> "$GITHUB_OUTPUT"

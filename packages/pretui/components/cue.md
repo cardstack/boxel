@@ -41,13 +41,14 @@ Where it is thinner: no icon slot, no dismissal, and no multi-line structure —
 
 - **`@kind` selects the ARIA relationship**, which is the component's reason to exist.
 - **`'status'` announces politely on change**, which is correct for a live validation hint and wrong for static help text — the arg is how you say which you have.
+- **A status cue rendered together with its first message may not announce it**, since a live region has to exist before its text changes. Keep a stable `role="status"` region and render a description cue inside it, as Field does.
 - **`'error'` is a description in the danger tone**, not a live region: an error that announces itself on every keystroke is the failure this avoids.
 - **`@decorative` removes it from the tree**, which is the honest way to repeat something visually without repeating it aloud.
 - **A pinned `@id` is a promise**: the control pointing at it must exist, or the reference dangles.
 
 ## Theming
 
-Tone resolves through the kit's shared semantic hues; position and kind are structural.
+A neutral cue is `--muted-foreground` text. Each other tone's text is its `-ink` (`--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink`), and its glyph is the tone's fill with the paired `-foreground`. Text is `--boxel-font-size-2xs` at `--boxel-lsp` on a `--pretui-cue-line-height` line (1rem by default), and a `'label'` cue reads the label role (`--boxel-ui-label-*`), in `--foreground` unless it has a tone. Success and danger draw Alert's boxel-icons check and x; info and warning are the text `i` and `!`. The glyph's size, type size and weight, and the error and danger weight, are the `--pretui-cue-glyph-size`, `-glyph-font-size`, `-glyph-font-weight` and `-emphasis-font-weight` knobs on the cue; the glyph size is in the glyph's own em, so it scales with `-glyph-font-size`. Only `--pretui-cue-line-height` can be set on an ancestor; the other four are declared on the cue, so set them on the cue itself. Position and kind are structural.
 
 There is no cue-specific palette, which is what keeps an error beside a field the same red as an error anywhere else in the theme.
 

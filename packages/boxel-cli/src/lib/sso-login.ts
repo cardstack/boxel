@@ -105,9 +105,9 @@ ${bodyHtml}
 </html>`;
 }
 
-function successPage(): string {
+function successPage(title = 'You’re signed in'): string {
   return page(
-    'You’re signed in',
+    title,
     `<p>Return to your terminal to continue. You can close this tab.</p>`,
   );
 }
@@ -139,13 +139,22 @@ export interface PostedSecureSession {
 // The ways a browser can finish the flow:
 //
 // - a single-use Matrix login token, for this process to redeem for a device
-//   of its own. The secure origin's `cli-auth` page sends it, and Synapse's
-//   single sign-on returns one to the app's `/cli-auth` page. A `?loginToken=`
-//   navigation is the form every version of the CLI accepts; the secure
-//   origin POSTs it instead when it also hands over a secure session.
-// - the app's `/cli-auth` page POSTing a Matrix session it already signed in
-//   (its password branch).
+//   of its own. The secure origin's `cli-auth` page sends it, and so does a
+//   Google sign-in on the `/cli-auth` page of a server with no secure origin,
+//   through its Matrix server's single sign-on. A `?loginToken=` navigation is
+//   the form every version of the CLI accepts; the secure origin POSTs it
+//   instead when it also hands over a secure session.
+// - the `/cli-auth` page of a server with no secure origin POSTing a Matrix
+//   session it already signed in with a password.
 // - the secure origin POSTing a secure session alone (`boxel keys sign-in`).
+// - the secure window's `connected` page POSTing the end of an OAuth sign-in
+//   `boxel keys connect` started: the service's one-use code and the
+//   sign-in's state, which the CLI finishes with its own secure session, or
+//   why the sign-in ended without them.
+// - a page of the secure window the CLI opened to finish a change there (an
+//   approval that grants a key a new destination, or a swap that does),
+//   POSTing how it ended. It carries no session and no result to act on: the
+//   CLI reads what changed from the realm server.
 export type LoopbackResult =
   | {
       kind: 'loginToken';
@@ -153,7 +162,19 @@ export type LoopbackResult =
       secureSession?: PostedSecureSession;
     }
   | { kind: 'session'; session: PostedSession }
-  | { kind: 'secureSession'; session: PostedSecureSession };
+  | { kind: 'secureSession'; session: PostedSecureSession }
+  | {
+      kind: 'oauth';
+      outcome: { code: string; state: string } | { error: string };
+    }
+  | { kind: 'window'; outcome: WindowOutcome };
+
+// How a page of the secure window the CLI opened ended: the change it was
+// opened for was made (`done`), or the user cancelled or closed the window
+// first (`cancelled`). Only the realm server says what changed.
+export type WindowOutcome = 'done' | 'cancelled';
+
+const WINDOW_OUTCOMES: readonly string[] = ['done', 'cancelled'];
 
 export interface LoopbackCallback {
   // Where the browser should come back to. The authorization page rebuilds this
@@ -217,9 +238,13 @@ export async function startLoopbackCallback(opts?: {
     res.end(errorPage(shown), () => rejectResult(new Error(thrown)));
   };
 
-  const succeed = (res: ServerResponse, result: LoopbackResult) => {
+  const succeed = (
+    res: ServerResponse,
+    result: LoopbackResult,
+    title?: string,
+  ) => {
     res.writeHead(200, HTML_RESPONSE_HEADERS);
-    res.end(successPage(), () => resolveResult(result));
+    res.end(successPage(title), () => resolveResult(result));
   };
 
   const server = createServer((req, res) => {
@@ -230,8 +255,8 @@ export async function startLoopbackCallback(opts?: {
         return;
       }
 
-      // The password branch POSTs a session it already obtained; the SSO branch
-      // arrives as Synapse's redirect. Both carry the nonce.
+      // A POST carries a session or login token the page already obtained; a
+      // navigation carries a login token. Both carry the nonce.
       let posted: URLSearchParams | undefined;
       if (req.method === 'POST') {
         try {
@@ -252,6 +277,54 @@ export async function startLoopbackCallback(opts?: {
           res,
           'This sign-in request was not recognized.',
           'callback did not carry the expected state value',
+        );
+        return;
+      }
+
+      if (posted?.has('window_outcome')) {
+        const outcome = posted.get('window_outcome') ?? '';
+        if (!WINDOW_OUTCOMES.includes(outcome)) {
+          fail(
+            res,
+            'That response from the secure window was not recognized.',
+            'callback POST named an unknown window_outcome',
+          );
+          return;
+        }
+        succeed(
+          res,
+          { kind: 'window', outcome: outcome as WindowOutcome },
+          'Back to your terminal',
+        );
+        return;
+      }
+
+      if (posted?.has('oauth_error')) {
+        succeed(
+          res,
+          {
+            kind: 'oauth',
+            outcome: { error: posted.get('oauth_error') || 'failed' },
+          },
+          'Back to your terminal',
+        );
+        return;
+      }
+      if (posted?.has('oauth_code')) {
+        const code = posted.get('oauth_code');
+        const oauthState = posted.get('oauth_state');
+        if (!code || !oauthState) {
+          fail(
+            res,
+            'That sign-in did not include its code.',
+            'callback POST was missing oauth_code or oauth_state',
+          );
+          return;
+        }
+        succeed(
+          res,
+          { kind: 'oauth', outcome: { code, state: oauthState } },
+          'Back to your terminal',
         );
         return;
       }
@@ -550,9 +623,10 @@ export function watchForCopyKey(
 
 export const CLI_AUTH_PATH = 'cli-auth';
 
-// The host app's authorization page, which offers the same sign-in choices as
-// the web login: a password form and a Google button. The CLI opens it when
-// the realm server's secure origin can't sign a profile in (see
+// The host app's authorization page. On a server with a secure origin it
+// forwards to the secure origin's `cli-auth` page with the same port and
+// state; on one without, it is that host app's own sign-in. The CLI opens it
+// when the realm server's secure origin can't sign a profile in (see
 // `buildSecureCliAuthUrl`), or when `--host-url` names it.
 //
 // The listener is identified by port rather than by handing over its URL. A URL
@@ -570,7 +644,18 @@ export function buildCliAuthUrl(
   return url.href;
 }
 
-// The secure origin's sign-in for a new profile (its `cli-auth` mode). It
+// The address of one of the secure origin's pages, each at its own path
+// beneath the secure origin's URL.
+export function secureOriginPageUrl(
+  secureOriginUrl: string,
+  page: string,
+): URL {
+  const url = new URL(secureOriginUrl);
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/${page}`;
+  return url;
+}
+
+// The secure origin's sign-in for a new profile (its `cli-auth` page). It
 // hands the listener a Matrix login token to redeem, and, because this CLI
 // asks for one with `session=secure`, the secure session `boxel keys` uses,
 // so one sign-in sets up both. As with the app's page, the listener is named
@@ -579,8 +664,7 @@ export function buildSecureCliAuthUrl(
   secureOriginUrl: string,
   callback: { port: number; state: string },
 ): string {
-  const url = new URL(secureOriginUrl);
-  url.searchParams.set('mode', 'cli-auth');
+  const url = secureOriginPageUrl(secureOriginUrl, 'cli-auth');
   url.searchParams.set('port', String(callback.port));
   url.searchParams.set('state', callback.state);
   url.searchParams.set('session', 'secure');

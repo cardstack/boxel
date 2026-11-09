@@ -80,11 +80,12 @@ module('bot tools', () => {
     assert.deepEqual(names({ humanMemberCount: 1, realmDelegation: true }), [
       'readRealmFile',
       'readUrl',
+      'viewAttachment',
     ]);
     assert.deepEqual(
       names({ humanMemberCount: 1, realmDelegation: false }),
-      ['readUrl'],
-      'realm reads need delegation; web reads do not',
+      ['readUrl', 'viewAttachment'],
+      'realm reads need delegation; web reads and attachment views do not',
     );
     assert.deepEqual(
       names({ humanMemberCount: 2, realmDelegation: true }),

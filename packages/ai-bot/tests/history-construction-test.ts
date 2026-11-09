@@ -5,6 +5,8 @@ import {
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
 import {
   constructHistory,
@@ -16,7 +18,10 @@ import type {
   CardMessageEvent,
   MatrixEvent as DiscreteMatrixEvent,
 } from '@cardstack/base/matrix-event';
-import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
+import {
+  FakeMatrixClient,
+  matrixMediaUrl,
+} from './helpers/fake-matrix-client.ts';
 
 module('constructHistory', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
@@ -423,7 +428,7 @@ module('constructHistory', (hooks) => {
 
   test('should download the card content from url', async () => {
     // Set up the mock response for this test
-    mockResponses.set('http://mock-server/Author/1', {
+    mockResponses.set(matrixMediaUrl('mxc://mock-server/author-1'), {
       ok: true,
       text: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
     });
@@ -445,7 +450,7 @@ module('constructHistory', (hooks) => {
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/1',
-                url: 'http://mock-server/Author/1',
+                url: matrixMediaUrl('mxc://mock-server/author-1'),
                 name: 'Author',
                 contentType: 'text/plain',
               },
@@ -479,7 +484,7 @@ module('constructHistory', (hooks) => {
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/1',
-                url: 'http://mock-server/Author/1',
+                url: matrixMediaUrl('mxc://mock-server/author-1'),
                 name: 'Author',
                 contentType: 'text/plain',
                 content: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
@@ -500,7 +505,7 @@ module('constructHistory', (hooks) => {
   test('should download the COMMAND_RESULT card content from url', async () => {
     // Set up the mock response for this test
     let contentText = `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`;
-    mockResponses.set('http://mock-server/Author/1', {
+    mockResponses.set(matrixMediaUrl('mxc://mock-server/author-1'), {
       ok: true,
       text: contentText,
     });
@@ -521,7 +526,7 @@ module('constructHistory', (hooks) => {
           data: JSON.stringify({
             card: {
               sourceUrl: 'http://localhost:4201/drafts/Author/1',
-              url: 'http://mock-server/Author/1',
+              url: matrixMediaUrl('mxc://mock-server/author-1'),
               contentType: 'text/plain',
               name: 'Author',
             },
@@ -553,7 +558,7 @@ module('constructHistory', (hooks) => {
           data: {
             card: {
               sourceUrl: 'http://localhost:4201/drafts/Author/1',
-              url: 'http://mock-server/Author/1',
+              url: matrixMediaUrl('mxc://mock-server/author-1'),
               contentType: 'text/plain',
               name: 'Author',
               content: contentText,
@@ -572,7 +577,7 @@ module('constructHistory', (hooks) => {
 
   test('should handle fetch card content errors', async () => {
     // Set up a mock response that will fail
-    mockResponses.set('http://mock-server/Author/2', {
+    mockResponses.set(matrixMediaUrl('mxc://mock-server/author-2'), {
       ok: false,
       text: 'Not Found',
     });
@@ -594,7 +599,7 @@ module('constructHistory', (hooks) => {
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/2',
-                url: 'http://mock-server/Author/2',
+                url: matrixMediaUrl('mxc://mock-server/author-2'),
                 name: 'Author',
                 contentType: 'text/plain',
               },
@@ -628,7 +633,7 @@ module('constructHistory', (hooks) => {
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/2',
-                url: 'http://mock-server/Author/2',
+                url: matrixMediaUrl('mxc://mock-server/author-2'),
                 name: 'Author',
                 contentType: 'text/plain',
                 error:
@@ -727,5 +732,75 @@ module('constructHistory', (hooks) => {
         },
       } as unknown as CardMessageEvent,
     ]);
+  });
+
+  test('a split answer takes whether it finished and whether it was canceled from its last part', async () => {
+    // The publisher sends every part but the last as finished and not
+    // canceled; only the last part records how the answer ended.
+    let part = (
+      eventId: string,
+      ts: number,
+      body: string,
+      content: Record<string, unknown>,
+    ): IRoomEvent => ({
+      event_id: eventId,
+      room_id: 'room-id',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      origin_server_ts: ts,
+      content: {
+        body,
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        ...content,
+      },
+    });
+
+    let [canceled] = await constructHistory(
+      [
+        part('1', 1, 'first ', {
+          isStreamingFinished: true,
+          [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+        }),
+        part('2', 2, 'second ', {
+          isStreamingFinished: true,
+          [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+          [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: '1',
+        }),
+        part('3', 3, 'third', {
+          isStreamingFinished: true,
+          isCanceled: true,
+          [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: '2',
+        }),
+      ],
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      (canceled.content as { body?: string }).body,
+      'first second third',
+    );
+    assert.true(
+      (canceled.content as { isCanceled?: boolean }).isCanceled,
+      'an answer whose last part was canceled reads as canceled',
+    );
+
+    let [streaming] = await constructHistory(
+      [
+        part('1', 1, 'first ', {
+          isStreamingFinished: true,
+          [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+        }),
+        part('2', 2, 'second', {
+          isStreamingFinished: false,
+          [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: '1',
+        }),
+      ],
+      fakeMatrixClient,
+    );
+    assert.false(
+      (streaming.content as { isStreamingFinished?: boolean })
+        .isStreamingFinished,
+      'an answer whose last part is still streaming reads as unfinished',
+    );
   });
 });

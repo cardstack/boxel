@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Raise the price of every Coffee product variant by 10%, rounded to the cent.",
+      "followUpPrompts": [
+        "Sam Rivera is leaving the team. Reassign all of his open tickets to Priya Shah."
+      ],
+      "successCriteria": "**A: raise every Coffee product's variant prices by 10% (prompt 1)**\nA1. In all 110 Products with `category` `coffee`, every variant's `price` is its seed price times 1.1, rounded to the cent. For example `Product/ethiopia-yirgacheffe-washed`: 12.59 → 13.85, 36.16 → 39.78, 57.36 → 63.1.\nA2. Each of those products keeps every variant's `sku` and `size`, the same number of variants in the same order, and its `name`, `category` and `origin`.\nA3. The 15 tea and equipment products are byte-identical to the seed.\nA4. Each coffee price went up exactly once and none was missed. There are 110 coffee products, more than two pages of the 50 a search returns when it names no page size, so a run that stops before the last page or repeats a page fails here.\nA5. The reply to prompt 1 says how many products (110) or variants (260) it changed, and that number matches the snapshot.\n\n**B: reassign Sam Rivera's open tickets to Priya Shah (prompt 2)**\nB1. These 12 open tickets now have `assignee` linked to `Agent/priya-shah`: ticket-5101, ticket-5107, ticket-5116, ticket-5134, ticket-5137, ticket-5155, ticket-5158, ticket-5164, ticket-5167, ticket-5170, ticket-5173, ticket-5182.\nB2. Sam's 4 closed tickets still link to `Agent/sam-rivera`: ticket-5104, ticket-5113, ticket-5125, ticket-5179.\nB3. On the 12 reassigned tickets, every attribute (`subject`, `requester`, `status`, `openedOn`) matches the seed, and every other ticket is byte-identical to the seed.\nB4. Every Agent card is byte-identical to the seed, and every `assignee` link resolves to an existing Agent.\nB5. The reply to prompt 2 says it reassigned 12 tickets, and the snapshot agrees.\n\n**All tasks**\nZ1. `Product/ethiopia-yirgacheffe-washed` and `Agent/sam-rivera` stay open and render with no error boundary at the end of the run.\nZ2. Every tool call applied or was repaired by the model, and the assistant did not ask a question or wait for confirmation before acting after any prompt.\nZ3. The definition modules (`store/product.gts`, `helpdesk/support-ticket.gts`) are byte-identical to the seed, every change was made in place, and no card was added or deleted.",
+      "cardInfo": {
+        "name": "Bulk operations: prices and reassignments",
+        "summary": "A shop workspace holds 125 products, 110 of them coffee with 2 or 3 variants each, and a helpdesk holds 30 tickets assigned to 4 agents. Two prompts in one session ask to raise every coffee variant price by 10% and to move a leaving agent's open tickets to a colleague. This eval tests a change computed per card across more cards than two default search pages hold, kept inside a list field without losing the other fields of each item, and a link change that `realm.cards.update` cannot make.",
+        "notes": "Use case: bulk operations. Each prompt goes out as its own message in one session, and each task is judged on its own cards. The runner brings each task's card (`promptCards`) to the top of the stack before its prompt. Judge each criterion by comparing a card's seed (base64 under `files[].content` in the run's `evaluation.json`) with its file under `files` and its indexed document under `cards` in the workspace snapshot, and read the room for how the work was done. `expectedChangedCards` (declared by the seed script) lists a sample of each task's targets, chosen at the edges of the set; the runner fails the render check unless every card in it changed and one of them is shown in the stack or the preview panel, so the rest of each set is judged from the snapshot. The bulk path the skills give (`source-code-editing`) is one `run-realm-code` script that searches, updates and reports, paging until `truncated` is false, within 200 `realm.cards.update` calls, 20 files and 55 seconds per run; `realm.cards.update` changes attributes only, so a link or `adoptsFrom` change goes through `realm.fs.replace`, which counts toward the 20 files.\n\nA (prices): the seed script `eval-seeds/bulk-records.ts` builds 125 Product cards under `bulk-operations/store/` when a run starts: 110 coffee (2 or 3 variants each, 260 variants in all), 10 tea and 5 equipment. `category` is an enum that stores `coffee` and shows `Coffee`, so a filter on `Coffee` finds nothing. No raised price falls exactly on a half cent, so rounding has no tie: each expected price is the seed price times 1.1, rounded to two decimals. The trap criteria are A2 (`realm.cards.update` replaces a whole array, so a `variants` value with only the new prices drops `sku` and `size`) and A4 (a search returns 50 cards when it names no page size, so a script that does not page misses some products). The set is past 100 cards, so a run also shows that a bulk edit that size is still checked in full.\n\nB (tickets): the seed script builds 4 Agent cards and 30 SupportTicket cards under `bulk-operations/helpdesk/`: Sam Rivera has 12 open and 4 closed, and Priya Shah, Diego Alvarez and Hana Kim have the other 14. `Agent/sam-rivera` is open for prompt 2. The trap criteria are B1 and B2: `assignee` is a link, which `realm.cards.update` cannot set, so a correct run rewrites each of the 12 files with `realm.fs.replace` (12 files fit in one run), and a run that reassigns every ticket of Sam's also moves the closed ones.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "seedScript": "bulk-records",
+      "secondsPerPrompt": 240
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../bulk-operations/store/product.gts"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/support-ticket.gts"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

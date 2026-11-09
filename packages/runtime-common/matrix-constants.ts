@@ -129,6 +129,14 @@ export function getToolDefinitions<T = unknown>(
 ): T[] | undefined {
   return content?.toolDefinitions ?? content?.commandDefinitions;
 }
+// The most JSON-encoded content a Matrix event should carry. Synapse refuses
+// an event over 65,536 bytes (M_TOO_LARGE), and that limit counts the whole
+// event, so the content budget leaves room for the envelope.
+export const MAX_MATRIX_EVENT_CONTENT_BYTES = 56 * 1024;
+// Lists the fields an event carries in Matrix media because its content would
+// pass MAX_MATRIX_EVENT_CONTENT_BYTES, by field name, each with its mxc:// URL.
+// See ai/external-fields.ts.
+export const APP_BOXEL_EXTERNAL_FIELDS_KEY = 'app.boxel.externalFields';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
   'app.boxel.codePatchCorrectness';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =
@@ -147,6 +155,10 @@ export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
 // list. Deliberately a bare signal — the host re-fetches authoritatively rather
 // than trusting any payload.
 export const REALMS_LIST_UPDATED_EVENT_TYPE = 'realms-list-updated';
+// The same kind of signal, sent to a key's owner when a notice about their
+// keys is recorded for them, so the app can show that they have one waiting.
+// It carries nothing; the app asks the realm server how many are unread.
+export const KEY_NOTICES_UPDATED_EVENT_TYPE = 'key-notices-updated';
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const APP_BOXEL_REALM_SERVERS_EVENT_TYPE = 'app.boxel.realm-servers';

@@ -40,7 +40,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/welcome-to-boxel",
+        "module": "@cardstack/base/welcome-to-boxel",
         "name": "WelcomeToBoxel"
       }
     }

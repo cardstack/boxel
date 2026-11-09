@@ -49,7 +49,7 @@ async function pickOption(wrapper: HTMLElement, text: string) {
   await click(opt);
 }
 function announcement(): string | undefined {
-  return builder().querySelector('[role="status"]')?.textContent?.trim();
+  return builder().querySelector('[data-test-pretui-expression-announcement]')?.textContent?.trim();
 }
 
 module('Pretui | components/expression-builder', function (hooks) {

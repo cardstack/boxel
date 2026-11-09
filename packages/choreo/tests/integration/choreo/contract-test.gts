@@ -1213,7 +1213,7 @@ module('Integration | choreo | contract', function (hooks) {
             >
               {{#if this.show}}
                 <div
-                  id='bye'
+                  data-test-id='bye'
                   style='margin:60px 0 0 140px;width:120px;height:60px;background:#0af'
                   {{motion id='bye' role='bye'}}
                 ></div>
@@ -1230,13 +1230,13 @@ module('Integration | choreo | contract', function (hooks) {
       let app: App | undefined;
       await render(<template><App /></template>);
       await animationsSettled();
-      const before = el('#bye').getBoundingClientRect();
+      const before = el('[data-test-id="bye"]').getBoundingClientRect();
 
       app!.show = false;
       await settled();
       await nextFrame();
       assert.strictEqual(orphanCount(), 1, 'the leaver was lifted');
-      const after = el('#bye').getBoundingClientRect();
+      const after = el('[data-test-id-memory="bye"]').getBoundingClientRect();
       assert.true(
         Math.abs(after.left - before.left) < 2 &&
           Math.abs(after.top - before.top) < 2,
@@ -1262,12 +1262,12 @@ module('Integration | choreo | contract', function (hooks) {
           <Choreo class='stage' style='height:200px' as |c|>
             {{#if this.show}}
               <div
-                id='parent'
+                data-test-id='parent'
                 style='width:120px;height:60px'
                 {{motion id='parent' role='card'}}
               >
                 <span
-                  id='child'
+                  data-test-id='child'
                   style='display:block;width:40px;height:20px'
                   {{motion id='child' role='card'}}
                 ></span>
@@ -1295,7 +1295,9 @@ module('Integration | choreo | contract', function (hooks) {
         'one thing was lifted into the layer, not two',
       );
       assert.ok(
-        el('#child').closest('#parent'),
+        el('[data-test-id-memory="child"]').closest(
+          '[data-test-id-memory="parent"]',
+        ),
         'the child rode along inside its parent',
       );
       await animationsSettled();

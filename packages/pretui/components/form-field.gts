@@ -413,7 +413,6 @@ export class FormField
                 @issue={{issue}}
                 @announce={{this.announce}}
                 @showRuleId={{@showRuleId}}
-                @glyph={{false}}
               />
             {{/each}}
           </div>

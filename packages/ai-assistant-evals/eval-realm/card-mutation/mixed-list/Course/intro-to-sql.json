@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "title": "Intro to SQL",
+      "level": "Beginner",
+      "blocks": [
+        {
+          "title": "Your first query",
+          "videoUrl": "https://videos.example.com/sql/first-query",
+          "minutes": 8
+        },
+        {
+          "title": "Reading: SELECT and FROM",
+          "body": "`SELECT` names the columns you want and `FROM` names the table they come from.\n\n```sql\nSELECT name, city FROM customers;\n```\n\nUse `*` to ask for every column, but name them in real queries so a new column doesn't change your results."
+        },
+        {
+          "title": "Filtering with WHERE",
+          "videoUrl": "https://videos.example.com/sql/where",
+          "minutes": 11
+        },
+        {
+          "title": "Reading: sorting with ORDER BY",
+          "body": "`ORDER BY` sorts the rows a query returns. Add `DESC` to reverse the order.\n\n```sql\nSELECT name FROM customers ORDER BY name DESC;\n```"
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../course",
+        "name": "Course"
+      },
+      "fields": {
+        "blocks": [
+          {
+            "adoptsFrom": {
+              "module": "../course",
+              "name": "VideoBlock"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../course",
+              "name": "ReadingBlock"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../course",
+              "name": "VideoBlock"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../course",
+              "name": "ReadingBlock"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

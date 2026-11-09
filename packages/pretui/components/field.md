@@ -6,15 +6,23 @@ The wrapper every control needs: a label bound to the control by id, and a **res
 
 ```
 @label?, @hint?, @error?
-<:default as |controlId|>
+@orientation?  'vertical' (default) | 'horizontal'
+@icon?         an icon drawn before the label, aria-hidden
+@labelTag?     'label' (default) | 'span'
+@reserveMessage?  true (default) | false — keep no line for a message
+<:default as |controlId messageId labelId|>
 Element: HTMLDivElement
 ```
 
 Two decisions carry the component.
 
-**It mints the id and yields it.** `guidFor(this) + '-ctl'` goes on `<label for>` and is handed to the block, which passes it to the control's own id arg. Ownership of the association sits in exactly one place, and no control has to generate an id it might collide on. The cost is real and worth stating: **a control that takes no id arg cannot be labeled through this API at all** — which currently rules out `RadioGroup`, `Slider`, `Checkbox` and `Rating`.
+**It mints the id and yields it.** `guidFor(this) + '-ctl'` goes on `<label for>` and is handed to the block, which passes it to the control's own id arg. Ownership of the association sits in exactly one place, and no control has to generate an id it might collide on. The cost is real and worth stating: **a control that takes no id arg cannot be pointed at by the label** — `Checkbox` takes `@controlId` for it, and a group such as `RadioGroup` names itself by the label's id instead (below); `Slider` and `Rating` take neither yet.
 
-**The message line is always there.** `.pretui-fieldmsg` has `min-height: 1rem` whether or not there is anything to say. This is the kit's alignment law: two fields side by side never shift when an error appears on one of them. Every design system eventually learns this; most learn it after shipping the jump.
+**Horizontal is a record's edit row.** `@orientation='horizontal'` puts the label (and its `@icon`) in a column of its own (a horizontal Field with no label gives its control the whole row), `--pretui-field-label-size` wide (`minmax(8rem, 25%)` by default), and the control with its message line in the column beside it, which the control fills. The label sits `--pretui-field-label-offset` (`--boxel-sp-sm`) down, on the first line of an input box beside it; a row whose control is text or a list of choices sets it to 0. `--pretui-field-column-gap` sets the gap between the columns.
+
+**A group names itself by the label's id.** A radio group, a fieldset, several controls, or a value shown rather than edited is no single element a `<label for>` can point at. `@labelTag='span'` draws the label as a `span`, and the group takes `aria-labelledby={{labelId}}`, the block's third param. The label always has that id; it is yielded only when there is a label, so nothing points at an id no element has.
+
+**The message line is always there.** `.pretui-fieldmsg` is one line tall (1rem by default) whether or not there is anything to say. This is the kit's alignment law: two fields side by side never shift when an error appears on one of them. Every design system eventually learns this; most learn it after shipping the jump.
 
 `@error` takes precedence over `@hint` — one line, error wins — rather than stacking both. That keeps the reserved height at exactly one line and forces the hint to be genuinely optional guidance rather than something the user needs while fixing an error.
 
@@ -36,21 +44,23 @@ What works: `<label for={{controlId}}>` gives a real programmatic label, and cli
 
 Gaps, and they matter:
 
-- **The hint and error are not wired to the control.** There is no `aria-describedby`, and neither message element carries an id. A screen-reader user hears the label and the control's value; the hint and the error text are floating content they may or may not encounter. React Aria's `useField` exists precisely to solve this, and it is the standard.
+- **The hint and error are not wired to the control automatically.** The message line has an id, yielded as the block's second param, but Field sets no `aria-describedby`; the caller has to put it on the control. Without it, a screen-reader user hears the label and the control's value; the hint and the error text are floating content they may or may not encounter. React Aria's `useField` exists precisely to solve this, and it is the standard.
 - **`@error` sets no `aria-invalid` on the control.** `data-invalid` drives the red dress and nothing else. Visually the field is clearly wrong; to assistive tech it is unremarkable. This is a direct 3.3.1 failure when Field is used standalone.
 - Worth noting what the ecosystem has settled on: `aria-errormessage` is still poorly supported, and React Aria carries an explicit code comment that it uses `aria-describedby` for error text "because `aria-errormessage` is unsupported using VoiceOver or NVDA". If Field adds wiring, `aria-describedby` carrying both description and error ids is the shape to copy, with `aria-errormessage` added only additively.
 - **Controls without a `@controlId` arg cannot be associated.** Wrapping a `RadioGroup` or `Slider` in a `Field` produces a visible label pointing at nothing — `for` references an id that no element has. That is worse than no label, because it looks correct in review.
 - No `aria-required` and no required marker.
 
+What a `@status` does: it renders inside a `role="status"` region that is on the page from the first render, so its first message is announced and not only its later changes. The hint and the error sit outside that region and never announce on their own.
+
 Use **FormField** for anything validated. Field is right for a labeled control on a settings panel, not for a form that reports errors.
 
 ## Theming
 
-`--foreground` (label ink), `--muted-foreground` (hint ink, through Cue), `--destructive` (error ink, through Cue), `--destructive-ink` (an invalid control's edge), `--field` (an invalid control's face), the label role (`--boxel-ui-label-*`), `--text-ui-sm` (messages, through Cue).
+`--foreground` (label ink), `--muted-foreground` (hint ink, through Cue), `--destructive-ink` (error ink, through Cue, and an invalid control's edge), `--info-ink` / `--success-ink` / `--warning-ink` (`@status` ink by `@statusTone`, through Cue), `--field` (an invalid control's face), `--boxel-ui-label-*` (label), `--boxel-font-size-2xs` (messages, through Cue).
 
 Repointed into descendants when invalid: on Input, Textarea and the other boxel-ui-wrapped controls, `--border` → `--destructive-ink` and `--background` → `--field`, matching Select and Autocomplete; and on the Field itself `--input` → `--destructive-ink`, which the select-type triggers draw their edge from. A Field whose control is disabled keeps the usual edges.
 
-The `--boxel-sp-3xs` row gap and 1rem reserved message line are fixed. A theme must keep `--muted-foreground` and `--destructive` distinguishable at 11.5px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
+The row gap is `--boxel-sp-3xs`. The reserved message line's height is `--pretui-cue-line-height` (1rem by default); a field whose control shows its own errors passes `@reserveMessage={{false}}`, and the line, with its row gap, is drawn only while there is a message. Horizontal: `--pretui-field-label-size`, `--pretui-field-label-offset`, `--pretui-field-column-gap`; an `@icon` is `--pretui-field-icon-size` (1rem) square. Otherwise the line height is `--pretui-cue-line-height`: the flex row takes it as its `min-height` and the message Cue as its line-height, so setting it on an ancestor changes both. A `@status` or error shows its tone's glyph, so the tone isn't hue alone. A theme must keep `--muted-foreground` and `--destructive-ink` distinguishable at 11px — hint and error occupy the same slot, so the error's glyph, its weight (`--pretui-cue-emphasis-font-weight`, 500 by default) and its hue tell them apart.
 
 The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
 

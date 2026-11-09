@@ -66,7 +66,7 @@ A layout change alone (content shrank, the viewport grew, a clamp) never stops f
 
 ## When to correct: inside the render pass, before motion measures
 
-The correction must land after the DOM for the pass is in, and before anything measures or paints. StickToBottom settles in the render commit of a change it is told about (`@revision`, `@active`), and on resize. A host with a motion layer calls `settle()` after the pass commits and before the motion layer measures.
+The correction must land after the DOM for the pass is in, and before anything measures or paints. StickToBottom settles in the render commit of a change it is told about (`@revision`, `@active`), and in the commit of a render pass that a resize starts. A host with a motion layer calls `settle()` after the pass commits and before the motion layer measures.
 
 Choreo's render-pass barrier (`far.ts`) has that moment: `runBarrier()` calls `beforeMeasure()` (Choreo's own mount flush), then every region's `measurePass()`, then MATCH and RUN. The plan adds a **SETTLE** phase there (not built yet):
 
@@ -94,7 +94,7 @@ The protocol, per scroll owner:
 
 **One pass, one clock.** Every cause that lands in the same frame is settled once, together, against one anchor. A click that collapses a question while a reply streams is one correction, not two that race.
 
-**Outside a render pass.** Some changes don't come from a render: an image decodes, fonts swap, the viewport resizes. The scroll owner's ResizeObserver runs the same settle step on its own (`onResize`), and the next pass's motion sees the result.
+**Outside a render pass.** Some changes don't come from a render: an image decodes, fonts swap, the viewport resizes. The scroll owner's ResizeObserver starts a render pass (`onResize`) and settles in its commit, so the motion layer measures that pass with the anchor held, as it does for a change from a render.
 
 ## Architecture
 
@@ -106,7 +106,7 @@ The protocol, per scroll owner:
 | Navigation API      | `api.reveal(id)`, `api.scrollToEnd()`, `api.navigate(element, block)`, instead of the app's own `scrollIntoView` calls; focus moved into the content | sets priority 1                                                                                                                                          |
 | Press tracking      | `pointerdown`, and Enter or Space, in the content                                                                                                    | sets priority 2 (element and time)                                                                                                                       |
 | SETTLE phase        | planned: Choreo's barrier, run after MOUNT and before MEASURE                                                                                        | calls each live coordinator's `settle()`                                                                                                                 |
-| Fallback            | the coordinator's ResizeObserver                                                                                                                     | runs `settle()` for changes outside a render pass                                                                                                        |
+| Fallback            | the coordinator's ResizeObserver                                                                                                                     | starts a render pass for changes outside one, and settles in its commit                                                                                  |
 
 Prepend is "anchor = reading line" with nothing special about it. Send is "mode = follow". The jump chip is a navigation.
 

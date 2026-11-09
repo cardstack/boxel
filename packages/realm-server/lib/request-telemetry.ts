@@ -46,28 +46,45 @@ const proxyRoutePaths = new Set([
 ]);
 
 // The routes that manage a user's own keys: `/_user-keys`, each key beneath
-// it, the key write tickets, and the shares of keys into realms with their
-// notices. With them, the secure-origin sign-in routes, whose bodies carry a
+// it, the key write tickets, the grants of keys to destinations, the bindings
+// of keys to operations, and the shares of keys into realms with their notices. With them, the secure-origin sign-in routes, whose bodies carry a
 // password or the session they sign in, and the routes that sign a user's
-// secure sessions out, one of which takes the account's new password.
+// secure sessions out, one of which takes the account's new password. And
+// what the secure window asks about what it was opened for.
 export const USER_KEYS_PATH = '/_user-keys';
 export const KEY_WRITE_TICKETS_PATH = '/_key-write-tickets';
+export const USER_KEY_GRANTS_PATH = '/_user-key-grants';
+export const KEY_BINDINGS_PATH = '/_key-bindings';
 export const KEY_SHARES_PATH = '/_key-shares';
 export const KEY_SHARE_NOTICES_PATH = '/_key-share-notices';
+export const KEY_POLICY_NOTICES_PATH = '/_key-policy-notices';
+export const KEY_LIMIT_NOTICES_PATH = '/_key-limit-notices';
 export const SECURE_SESSION_PATH = '/_secure-session';
 export const SECURE_SESSIONS_PATH = '/_secure-sessions';
+export const SECURE_WINDOW_PATH = '/_secure-window';
+// Connecting through an OAuth client, and the callback the vendor sends the
+// person back to, whose query string carries the authorization code.
+export const OAUTH_PATH = '/_oauth';
 
 const keyRoutePaths = [
   USER_KEYS_PATH,
   KEY_WRITE_TICKETS_PATH,
+  USER_KEY_GRANTS_PATH,
+  KEY_BINDINGS_PATH,
   KEY_SHARES_PATH,
   KEY_SHARE_NOTICES_PATH,
+  KEY_POLICY_NOTICES_PATH,
+  KEY_LIMIT_NOTICES_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
+  SECURE_WINDOW_PATH,
+  OAUTH_PATH,
 ];
 
 // The operator routes that store a system key, and everything beneath them.
 export const SYSTEM_KEYS_PATH = '/_system-keys';
+// The operator routes that store the platform's own OAuth clients.
+export const PLATFORM_OAUTH_CLIENTS_PATH = '/_platform-oauth-clients';
 
 // The headers whose value is a credential: the caller's session token, its
 // cookies, the HMAC signatures that authenticate a worker request
@@ -191,9 +208,14 @@ export function isKeyRoutePath(pathname: string): boolean {
   );
 }
 
+// The operator routes that store a platform secret: system keys, and the
+// platform's own OAuth clients.
 function isSystemKeysPath(pathname: string): boolean {
   let path = pathname.toLowerCase();
-  return path === SYSTEM_KEYS_PATH || path.startsWith(`${SYSTEM_KEYS_PATH}/`);
+  return [SYSTEM_KEYS_PATH, PLATFORM_OAUTH_CLIENTS_PATH].some(
+    (operatorPath) =>
+      path === operatorPath || path.startsWith(`${operatorPath}/`),
+  );
 }
 
 function escapeRegExp(path: string): string {

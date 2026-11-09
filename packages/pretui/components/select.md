@@ -5,7 +5,7 @@ Choose one value from a known list. Use it when the options are enumerable and t
 ## The contract
 
 ```
-@options: { value, label }[]   (required)
+@options: { value, label, meta? }[]   (required; meta is a muted second part after the label, such as an address that tells two same-named options apart; search matches the label alone)
 @value?, @defaultValue?, @placeholder? (default 'Select…'), @disabled?, @controlId?
 @searchEnabled?   (a search box above the list, focused on open)
 @label?, @labelledBy?   (the trigger's accessible name)
@@ -50,11 +50,15 @@ Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--rin
 
 Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-font-size`, `--boxel-select-trigger-line-height`, `--boxel-select-trigger-letter-spacing`, `--boxel-select-trigger-content-display`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. Hovered or keyboard-highlighted, the selected row darkens a shade in both schemes, the same as an accent Button's hover.
 
-Per-instance knob: `--pretui-select-h` (the trigger's height, `--boxel-form-control-height-sm` (1.75rem) by default), set on your class.
+Per-instance knobs: `--pretui-select-h` (the trigger's height) falls back to `--pretui-field-h`, the knob Input and SearchInput share, then to `--boxel-form-control-height-sm` (1.75rem). Set either on your class or a parent; `--pretui-field-h` on a row sizes Select with its neighbours. `--pretui-field-font-size` sets the trigger's type size the same way, falling back to `--boxel-font-size-xs`.
+
+`@display` is `full` (default) or `icon`: under `icon` the trigger shows only `@icon` and the current value goes into its name and title; the list keeps its labels. `icon` needs `@icon`.
 
 On touch screens (`pointer: coarse`) the trigger, its placeholder, the options and the search box are at least 16px (`--boxel-form-control-touch-font-size`), matching **Input** and **Autocomplete**, so iOS doesn't zoom into the search box on focus; the trigger keeps its height.
 
-BoxelSelect has no knobs for the dropdown's type or row metrics, and the wormhole is outside Select's subtree, so Select restyles it through unscoped rules on its dropdown class: the options and search box take the trigger's type, inline padding and height, the search box takes the trigger's hairline and focus ring and an icon inset, and on touch screens the option rows grow as Autocomplete's do. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so `:deep()` rules set them. All of these sit in `@layer PretComponent`, which outranks BoxelSelect's layers.
+The options take the trigger's font size and line height, so setting `--boxel-select-trigger-font-size` and `--boxel-select-trigger-line-height` on your class resizes both. Select copies them onto the list each time it opens. The search box keeps its own size, so on touch screens it stays at 16px.
+
+BoxelSelect has no knobs for the dropdown's type or row metrics, and the wormhole is outside Select's subtree, so a hidden marker Select renders inside the list gives the list its scope attribute, and Select restyles it with plain scoped rules (`:deep()` for boxel-ui's option rows). Those survive every compiler of the module, the realm's included, which refuses `:global()`, and no unscoped `<style>` is needed, which a policy that refuses inline style would block: the options and search box take the trigger's type, inline padding and height, the search box takes the trigger's hairline and focus ring and an icon inset, and on touch screens the option rows grow as Autocomplete's do. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so `:deep()` rules set them. All of these sit in `@layer PretComponent`, which outranks BoxelSelect's layers.
 
 ## React ecosystem
 

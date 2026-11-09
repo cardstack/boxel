@@ -1,7 +1,7 @@
 ---
 name: pr-review
-description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, and classifies each finding (regression / pre-existing / follow-up). The output is critique only: every comment asks the author for a change, a decision, or an answer, and carries just the mechanism that ask rests on — no verification logs, no narrating the diff back to the person who wrote it, no subsystem tours. Use whenever asked to review a PR, give feedback on a pull request, or re-review after the author pushes changes. For the local working diff use the built-in code-review skill (a Claude Code built-in, not a repo skill); for a local guided tour without posting anything, use review-branch.
-allowed-tools: Read, Grep, Bash(gh pr view *, gh pr diff *, gh api *, git fetch *, git log *, git diff *, git worktree *), mcp__github__pull_request_review_write, mcp__github__add_comment_to_pending_review, mcp__github__add_reply_to_pull_request_comment
+description: Review a GitHub pull request thoroughly and post the findings as one inline-first pending review. Builds subsystem context before judging, verifies every claim empirically against the checked-out branch, and classifies each finding (regression / pre-existing / follow-up). The output is critique only: every comment asks the author for a change, a decision, or an answer, and carries just the mechanism that ask rests on — no verification logs, no narrating the diff back to the person who wrote it, no subsystem tours. A PR that changes UI (templates, components, scoped styles) also gets the UI lens: the boxel-ui-guidelines review procedure and better-interface's accessibility, layout, writing, typography, color and polish checks. Use whenever asked to review a PR, give feedback on a pull request, do a UI or design review of one, or re-review after the author pushes changes. For the local working diff use the built-in code-review skill (a Claude Code built-in, not a repo skill), or ui-code-review when it changes UI; for a local guided tour without posting anything, use review-branch.
+allowed-tools: Read, Grep, Glob, Bash(gh pr view *, gh pr diff *, gh api *, git fetch *, git log *, git diff *, git worktree *), mcp__github__pull_request_review_write, mcp__github__add_comment_to_pending_review, mcp__github__add_reply_to_pull_request_comment
 ---
 
 # PR Review
@@ -22,6 +22,8 @@ Load these companion skills before writing a single comment; each applies in **b
 
 If the diff touches an area with a dedicated domain skill (index-query-engine, search, gts-component-conventions, ember-best-practices, …), load it — those files carry the invariants the change must preserve, which is exactly what a review checks.
 
+If the diff is a UI change, as `references/ui-lens.md` defines it, also run that lens in full: Phase 1 step 7 loads it, and the pre-submit self-check confirms it ran. Its findings go through Phases 3–6 like any other.
+
 ## Phase 1 — Context before judgment
 
 1. **The PR itself**: description, linked issues, and every existing comment — issue comments, review bodies, and inline threads, including bot reviewers (`gh pr view`, `gh api repos/{owner}/{repo}/pulls/{n}/comments`, `.../pulls/{n}/reviews`, `.../issues/{n}/comments`).
@@ -30,6 +32,7 @@ If the diff touches an area with a dedicated domain skill (index-query-engine, s
 4. **Check out the head branch** read-only in a worktree under `.claude/worktrees/`. Never commit to or push another author's branch. The diff shows what changed; the review is about how that lands in the code around it, which requires the whole tree.
 5. **Read beyond the diff.** For each non-trivial hunk, read the enclosing file, then the callers and callees of everything it touches. The highest-value findings usually live one call site away from the diff.
 6. **Read the ADRs that govern the diff.** Run `node scripts/adr-for.mts $(gh pr diff {n} --name-only)` from the head worktree; it lists the ADRs whose scope globs match the changed files. Read every `accepted` or `proposed` ADR that matches before judging the change. Each one records a decision the change must keep, or must explicitly supersede.
+7. **Load the UI lens, when the diff is a UI change.** Reading `references/ui-lens.md` is not running it. Load, with the Skill tool, every skill its §1 names: `gts-component-conventions` when a `.gts` file is in scope; `boxel-skills:boxel-ui-guidelines`, then read its three reference files and run the procedure's steps 0–9, starting with the step-0 grep; and `interfaces:better-interface`, then each of its six domain skills in order. A smaller hand-picked pass replaces none of them, whatever the diff's size or the review's effort level. Without the `boxel-skills` plugin, read `boxel-ui-guidelines` from the `fetch:skills` cache with the Read tool, starting with its `SKILL.md`, as AGENTS.md's "UI changes" section describes. A skill that can't be loaded or read that way is the only reason a lens is missing, and Phase 5's opening sentence then says it wasn't reviewed, by its skill name (`better-interface` for the whole `interfaces` plugin). The project's `PreToolUse` hook refuses to post a review of a UI change until every one of these skills that the session can load has been loaded, and refuses a review body that doesn't say one it couldn't wasn't reviewed.
 
 ## Phase 2 — Investigate like the next owner
 
@@ -66,7 +69,7 @@ Work through the diff as if inheriting the code, not skimming it.
 - **Decisions hold, or are superseded on purpose.** Load the `adr` skill when any of the following applies:
   - A change breaks an ADR from Phase 1. Severity follows the key word (ADR 001 §1.9):
     - Breaking a MUST or MUST NOT of an `accepted` ADR, with no superseding ADR in the diff, is blocking. Ask the author to conform or to add the superseding ADR.
-    - Breaking a MUST or MUST NOT of a `proposed` ADR in new code is blocking in the same way, including in the PR that adds the ADR. Ask the author to conform or to edit the ADR's Decision (§1.6). Code listed under its Remediation section is a known gap and not a finding, unless the diff copies it into new code (§1.9).
+    - Breaking a MUST or MUST NOT of a `proposed` ADR in new code is blocking in the same way, including in the PR that adds the ADR. Ask the author to conform or to edit the ADR's Decision (§1.6). Code listed in its remediation file is a known gap and not a finding — `scripts/adr-for.mts` prints the entries for the paths it is given, unless the diff copies it into new code (§1.9).
     - A diff that closes a listed gap and leaves its entry is blocking. An existing gap that isn't listed is non-blocking: ask for an entry (§1.9).
     - Departing from a SHOULD with no stated reason is non-blocking. Ask for the reason.
     - Cite the requirement by number ("ADR 004 §1.2") rather than restating it.
@@ -75,7 +78,7 @@ Work through the diff as if inheriting the code, not skimming it.
     - it is not self-marked `accepted` (§1.6);
     - its `scope` globs match the code it governs, and the index row is added (§1.2);
     - its structure and length follow §1.3 and §1.5;
-    - if it is `proposed`, it ends with a Remediation section that lists, by file, the gaps you can find in its scope, or says there are none (§1.3, §1.6). A missing section, a missing gap, or an entry whose file its `scope` doesn't match is a finding;
+    - if it is `proposed`, it ends with a Remediation section that links `docs/adr/remediation/<number>.md`, and that file lists, by file path, the gaps you can find in its scope, or says there are none (§1.3, §1.6). A missing file, a missing gap, or an entry whose file its `scope` doesn't match is a finding;
     - in a retroactive ADR, every reason cites a source or sits under Open questions (§1.7). An uncited "why" is a finding even when it sounds right.
 
 ## Phase 3 — Classify every finding
@@ -150,6 +153,7 @@ Pre-submit self-check over every comment and the body:
 - Evergreen: no ticket IDs, no PR numbers, no journey narration in your prose.
 - Every claim either carries its evidence or states that it was verified and how.
 - Every finding carries its class and blocking-ness.
+- On a UI change, every skill Phase 1 step 7 names was loaded with the Skill tool and run, or the opening sentence names it as not reviewed and says why it didn't load. This holds for a draft that is never posted, too.
 - Every comment asks for something — a change, a decision, or an answer. Anything that only records that the code is correct comes out. A reply that closes a thread the author opened is the exception: stating that a fix lands _is_ the answer they are waiting on.
 - **One pass with a knife, over every comment and the body.** Take each sentence and ask what the author does differently for having read it. Cut what narrates their own diff back to them, what tours a subsystem the ask doesn't turn on, what explains why other code is fine, and what reports a clean check. On a review whose findings are all non-blocking, expect this pass to remove more than it keeps — that is exactly where volume substitutes for substance.
 

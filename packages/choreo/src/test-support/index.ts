@@ -18,8 +18,9 @@
  *
  * `setupChoreo()` is the one setup call a Choreo suite makes. It is
  * `setupMotion()`, and Choreo's document-wide state — the beacon registry, the
- * far-match barrier, the gesture samples — is reset alongside glimmer-motion's
- * own, because loading this module adds those resets to `resetMotion()`.
+ * far-match barrier, the gesture samples, the run clock's once-a-page warning
+ * — is reset alongside glimmer-motion's own, because loading this module adds
+ * those resets to `resetMotion()`.
  *
  * They are document-wide by design: a beacon in the chrome has to be visible to
  * a region in an outlet, and the barrier exists to see across regions. That is
@@ -38,11 +39,12 @@ import { frame, visualElementStore } from 'motion-dom';
 import { resetBeacons } from '../beacons.ts';
 import { resetBarrier } from '../far.ts';
 import { resetGestures } from '../gesture.ts';
-import { activeRuns } from '../run.ts';
+import { activeRuns, resetRunWarnings } from '../run.ts';
 
 registerMotionReset(resetBeacons);
 registerMotionReset(resetGestures);
 registerMotionReset(resetBarrier);
+registerMotionReset(resetRunWarnings);
 
 const nextFrame = () =>
   new Promise<void>((resolve) => frame.postRender(() => resolve()));
@@ -90,37 +92,16 @@ export function orphanCount(root: HTMLElement = testRoot()): number {
 }
 
 /**
- * The first LIVE match for `selector` — the copy that is still part of the
- * rendered tree, never a leaver parked in a region's orphan layer.
- *
- * Mid-crossing an identity exists twice: the arriving element in the live
- * tree, and the departing skin the region locked into `[data-choreo-orphans]`
- * so it can be flown and faded. That layer is the region's FIRST child, so a
- * bare `querySelector` answers with the ghost — an element whose component
- * has already been torn down, whose listeners are gone, and whose box is
- * where the OLD scene stood. Clicking it does nothing; measuring it measures
- * the past. Neither failure names itself.
- *
- * So any assertion or interaction a test performs while a crossing may be
- * aloft should come through here. A raised sprite (`c.Raise`) is deliberately
- * still live: it is the real element on a different layer, not a copy.
+ * `live()` / `liveAll()`: queries that skip memories. Mid-crossing an identity
+ * exists twice: the arriving element in the live tree, and the departing one
+ * the region keeps as a memory in its orphan layer so it can be flown and
+ * faded. The memory's test hooks carry a suffix (`data-test-title-memory`),
+ * but a class or role selector matches both, and the orphan layer is the
+ * region's FIRST child, so a bare `querySelector` answers with the memory. A
+ * raised sprite (`c.Raise`) is deliberately still live: it is the real element
+ * on a different layer, not a memory.
  */
-export function live<E extends Element = HTMLElement>(
-  selector: string,
-  root: ParentNode = testRoot(),
-): E | null {
-  return liveAll<E>(selector, root)[0] ?? null;
-}
-
-/** every live match for `selector`, in document order — see `live()` */
-export function liveAll<E extends Element = HTMLElement>(
-  selector: string,
-  root: ParentNode = testRoot(),
-): E[] {
-  return [...root.querySelectorAll<E>(selector)].filter(
-    (el) => !el.closest('[data-choreo-orphans]'),
-  );
-}
+export { live, liveAll } from 'glimmer-motion/test-support';
 
 /**
  * Elements still wearing a transform that nothing is animating.

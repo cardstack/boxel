@@ -6,12 +6,24 @@
 //
 // The CLI signs in here for one of two things:
 //
-// - `boxel keys sign-in` (the `cli-sign-in` mode) wants a secure session,
+// - `boxel keys sign-in` (the `cli-sign-in` page) wants a secure session,
 //   which it uses to change the user's keys.
-// - `boxel profile add` (the `cli-auth` mode) wants a Matrix device of its
+// - `boxel profile add` (the `cli-auth` page) wants a Matrix device of its
 //   own. It gets a single-use Matrix login token, which it redeems for one. A
 //   CLI that says so (`session=secure`) also gets a secure session in the
 //   same hand-off, so a new profile can manage keys without signing in again.
+//
+// `boxel keys connect` also waits here, for the end of a sign-in at a service
+// through OAuth: the `connected` page hands it the service's one-use code and
+// the sign-in's `state`, or why there is none, and the CLI finishes the
+// sign-in with its own secure session. No session leaves this window for it.
+//
+// `boxel keys approve` and `boxel keys swap` wait here too, when their change
+// grants a key a destination it has none for: that is confirmed in this
+// window, under its own session, and the page tells the CLI only how it
+// ended: `window: 'done'` once the change is made, or `window: 'cancelled'`
+// when the user cancels or closes the window first. The CLI reads what
+// changed from the realm server either way.
 
 const LOOPBACK_CALLBACK_PATH = '/callback';
 const STATE = /^[A-Za-z0-9_-]{16,128}$/;
@@ -67,19 +79,36 @@ export function cliCallback(
 }
 
 /**
- * What a hand-off carries: a secure session, a login token, or both.
- * @typedef {{ session?: import('./session.js').Session, loginToken?: string }} Handoff
+ * What a hand-off carries: a secure session, a login token, or both; or the
+ * end of an OAuth sign-in the CLI started.
+ * @typedef {{ code: string, state: string } | { error: string }} OAuthOutcome
+ * @typedef {'done' | 'cancelled'} WindowOutcome
+ * @typedef {{ session?: import('./session.js').Session, loginToken?: string, oauth?: OAuthOutcome, window?: WindowOutcome }} Handoff
  */
 
 // What the CLI's listener is sent: the state it expects back, the login
-// token for a profile sign-in, and the secure session when the CLI takes one.
+// token for a profile sign-in, the secure session when the CLI takes one, and
+// for an OAuth sign-in its code and state or the reason it ended without one,
+// and for a change finished here, how it ended.
 /**
  * @param {CliCallback} callback
  * @param {Handoff} handoff
  */
-export function handoffFields(callback, { session, loginToken }) {
+export function handoffFields(
+  callback,
+  { session, loginToken, oauth, window },
+) {
   return [
     ['state', callback.state],
+    ...(window ? [['window_outcome', window]] : []),
+    ...(oauth
+      ? 'error' in oauth
+        ? [['oauth_error', oauth.error]]
+        : [
+            ['oauth_code', oauth.code],
+            ['oauth_state', oauth.state],
+          ]
+      : []),
     ...(loginToken ? [['login_token', loginToken]] : []),
     ...(session
       ? [

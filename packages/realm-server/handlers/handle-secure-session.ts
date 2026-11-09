@@ -14,8 +14,8 @@ import {
   endWindowSessions,
   googleSignInStart,
   isSecureSession,
-  matrixServerName,
   mintLoginToken,
+  renewSecureSession,
   resumeDeviceSweeps,
   SecureSessionError,
   secureSignInConfigured,
@@ -284,10 +284,11 @@ export function resumePasswordChangeDeviceSweeps(args: CreateRoutesArgs): void {
 }
 
 // GET /_secure-session/google: where the secure window sends the user to sign
-// in with Google, and as which client. 503 when this server has no Google
-// client.
+// in with Google, and as which client. Answered only for the secure origin
+// (403 otherwise); 503 when this server has no Google client.
 export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
     await sendJSON(ctxt, 200, {
       data: {
         type: 'google-sign-in',
@@ -383,6 +384,24 @@ export function handleMintLoginToken(args: CreateRoutesArgs): Handler {
   });
 }
 
+// POST /_secure-session/renewal: the window's session again, with a fresh
+// token, renewed while the app device it handed its sign-in to still exists
+// (`renewSecureSession`). The token presented may have expired. Answered only
+// for the secure origin, since only the window holds a session to renew: 401
+// `signed-out` once its session has ended.
+export function handleRenewSecureSession(args: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
+    await sendSession(
+      ctxt,
+      await renewSecureSession(
+        deps(args),
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ),
+    );
+  });
+}
+
 // DELETE /_secure-sessions?client=window: signs the token user's secure
 // windows out, for the app's own sign-out. Any of the user's sessions may call
 // it, card code included; all it can do is sign the user out of key
@@ -430,7 +449,7 @@ export function handleSecureOriginInfo({
         type: 'secure-origin',
         attributes: {
           url: secureOriginURL.href,
-          matrixServerName: await matrixServerName({ matrixClient }),
+          matrixServerName: matrixClient.serverName,
           // Its `cli-auth` page signs a CLI profile in, handing the CLI a
           // Matrix login token, whenever this server can sign anyone in
           // there. A CLI that finds this false or missing signs in on the

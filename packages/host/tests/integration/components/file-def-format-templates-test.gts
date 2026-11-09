@@ -1,5 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { find, settled } from '@ember/test-helpers';
+import { click, find, settled, waitFor } from '@ember/test-helpers';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -118,6 +118,78 @@ module('Integration | FileDef format templates', function (hooks) {
     assert.dom('[data-test-file-copy-link]').hasText('Copy link');
     assert.dom('[data-test-file-isolated]').containsText('application/pdf');
     assert.dom('[data-test-file-isolated]').containsText('12,345 bytes');
+  });
+
+  test('Download saves the bytes fetched from the file URL under its name', async function (assert) {
+    let bytes = 'report body bytes';
+    let sourceURL = URL.createObjectURL(
+      new Blob([bytes], { type: 'application/pdf' }),
+    );
+    let saved: { href: string; download: string } | undefined;
+    let resolveSave!: () => void;
+    let savedClick = new Promise<void>((resolve) => (resolveSave = resolve));
+    let captureSave = (event: MouseEvent) => {
+      let anchor = event.target;
+      if (
+        anchor instanceof HTMLAnchorElement &&
+        anchor.href.startsWith('blob:') &&
+        anchor.href !== sourceURL
+      ) {
+        // Stop the browser from writing the file to disk during the test.
+        event.preventDefault();
+        saved = { href: anchor.href, download: anchor.download };
+        resolveSave();
+      }
+    };
+    document.addEventListener('click', captureSave, true);
+    let saveTimeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await renderCard(
+        loader,
+        makeFile({ id: sourceURL, url: sourceURL, sourceUrl: sourceURL }),
+        'isolated',
+      );
+      await click('[data-test-file-download]');
+      // A Download that never saves fails here rather than at the QUnit
+      // timeout.
+      await Promise.race([
+        savedClick,
+        new Promise<void>((_, reject) => {
+          saveTimeout = setTimeout(
+            () => reject(new Error('Download never saved the file')),
+            5000,
+          );
+        }),
+      ]);
+      assert.strictEqual(saved?.download, 'report.pdf');
+      await settled();
+      assert
+        .dom('[data-test-file-download]')
+        .hasText('Download')
+        .doesNotHaveAttribute('data-download-state');
+      let savedBytes = await (await fetch(saved!.href)).text();
+      assert.strictEqual(savedBytes, bytes, 'the saved blob holds the file');
+    } finally {
+      clearTimeout(saveTimeout);
+      document.removeEventListener('click', captureSave, true);
+      URL.revokeObjectURL(sourceURL);
+    }
+  });
+
+  test('a Download whose bytes cannot be fetched offers a retry', async function (assert) {
+    let sourceURL = URL.createObjectURL(new Blob(['gone']));
+    URL.revokeObjectURL(sourceURL);
+    await renderCard(
+      loader,
+      makeFile({ id: sourceURL, url: sourceURL, sourceUrl: sourceURL }),
+      'isolated',
+    );
+    await click('[data-test-file-download]');
+    await waitFor('[data-test-file-download][data-download-state="failed"]');
+    assert
+      .dom('[data-test-file-download]')
+      .hasText('Retry download')
+      .hasAttribute('aria-live', 'polite');
   });
 
   test('a file with no resource URL renders no download action', async function (assert) {

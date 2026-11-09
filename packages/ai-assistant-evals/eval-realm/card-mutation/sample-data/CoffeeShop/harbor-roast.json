@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "asdf",
+      "tagline": "TODO",
+      "description": "TODO write description\n\nasdf asdf",
+      "phone": "123",
+      "email": "test@test",
+      "website": "TODO",
+      "address": {
+        "addressLine1": "asdf",
+        "addressLine2": null,
+        "city": "TODO",
+        "state": null,
+        "postalCode": "00000",
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "seatingCapacity": 0,
+      "hasWifi": null,
+      "openedOn": null,
+      "priceLevel": null,
+      "menuHighlights": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../ShopOwner/dana-whitfield"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../coffee-shop",
+        "name": "CoffeeShop"
+      }
+    }
+  }
+}

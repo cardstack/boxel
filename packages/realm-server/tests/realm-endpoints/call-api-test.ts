@@ -308,11 +308,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
 
   test('a request with a credential slot is refused binding-not-approved, and nothing is sent', async function (assert) {
     let response = await post(envelope(invoke('withKey', { href: '/repo' })));
-    assert.strictEqual(response.status, 403);
+    assert.strictEqual(response.status, 409);
     assert.strictEqual(response.body.errors[0].code, 'binding-not-approved');
     assert.deepEqual(response.body.errors[0].meta.slots, [
       { name: 'userKey', key: 'userKey' },
     ]);
+    assert.true(
+      response.body.errors[0].detail.includes(
+        `the credential slot "userKey" for the invoking user's own key`,
+      ),
+      `the detail says whose key fills the slot: ${response.body.errors[0].detail}`,
+    );
     assert.strictEqual(vendor.requests.length, 0);
   });
 

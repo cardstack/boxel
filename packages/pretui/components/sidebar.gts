@@ -11,7 +11,7 @@
 // `:deep()`, no `:global()`, no dark branches, unnamed container queries only.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { hash } from '@ember/helper';
+import { concat, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
@@ -20,6 +20,9 @@ import { cssDeclaration, cssStyleFrom } from '../pretui-css';
 import { listenDocumentCapture } from '../focus';
 import { Drawer } from './drawer';
 import { Tooltip } from './tooltip';
+import { ResizeHandle, resolveLength } from './resize-handle';
+import type { ResizeHandleLength } from './resize-handle';
+import type { ComponentLike } from '@glint/template';
 import { pretuiSize } from '../internal/structure-layout';
 import type { SizeAlias } from '../internal/structure-layout';
 
@@ -110,6 +113,7 @@ function shellPlacement(
 // `[&>button]:hidden`, which is the tell that the composition was wrong.
 
 export type SidebarCollapsible = 'rail' | 'offcanvas' | 'none';
+export type SidebarScroll = 'page' | 'content';
 
 /**
  * Reads a persisted collapse preference exactly once, on insert.
@@ -124,7 +128,11 @@ export type SidebarCollapsible = 'rail' | 'offcanvas' | 'none';
 const restoresOpen = modifier(
   (
     _el: HTMLElement,
-    [key, apply]: [string | undefined, (open: boolean) => void],
+    [key, apply, applyWidth]: [
+      string | undefined,
+      (open: boolean) => void,
+      (width: number) => void,
+    ],
   ) => {
     if (!key || typeof localStorage === 'undefined') {
       return;
@@ -134,6 +142,10 @@ const restoresOpen = modifier(
       if (stored === 'open' || stored === 'closed') {
         apply(stored === 'open');
       }
+      let width = Number(localStorage.getItem('pretui-sidebar:' + key + ':width'));
+      if (width > 0) {
+        applyWidth(width);
+      }
     } catch {
       // Storage unavailable. The `@defaultOpen` value stands.
     }
@@ -141,7 +153,7 @@ const restoresOpen = modifier(
 );
 
 /**
- * Publishes the shell's own inline size as a coarse `wide | narrow` fact.
+ * Publishes the shell's own inline size; the component sorts it into bands.
  *
  * `ResizeObserver`, never a viewport media query: a card does not know the
  * window, it knows its pane. The callback fires after layout, outside render,
@@ -150,20 +162,18 @@ const restoresOpen = modifier(
 const measuresPane = modifier(
   (
     element: HTMLElement,
-    [breakpoint, apply]: [number, (narrow: boolean) => void],
+    // the breakpoints ride along so a change re-runs the modifier, and the
+    // fresh observer's first report re-sorts the current width; they must be
+    // read here, since a function modifier only tracks the args it reads
+    [apply, ...breakpoints]: [(width: number) => void, ...unknown[]],
   ) => {
+    void breakpoints;
     let observer = new ResizeObserver((entries) => {
       let entry = entries[0];
       if (!entry) {
         return;
       }
-      // A width of 0 is not "narrow", it is "not laid out" — a shell inside a
-      // `display: none` tab panel, a collapsed accordion, or a card that has
-      // not been measured yet. Treating it as narrow would silently promote
-      // the rail to a modal drawer the moment the pane was hidden, and the
-      // reader would find it in the top layer when the tab came back.
-      let width = entry.contentRect.width;
-      apply(width > 0 && width < breakpoint);
+      apply(entry.contentRect.width);
     });
     // The observer reports once as soon as observation starts, and does so
     // asynchronously — a synchronous first report here would write tracked
@@ -216,8 +226,35 @@ export interface SidebarSignature {
     mobile?: boolean;
     /** Pane width in px below which the rail becomes a drawer. Default `640`. */
     mobileBreakpoint?: number;
+    /**
+     * Pane width in px below which the expanded rail folds to the icon rail
+     * on its own, and at or above which it opens again. Opt-in, and only with
+     * `@collapsible='rail'`. A manual toggle holds until the pane crosses into
+     * another band; the automatic change is reported through `@onOpenChange`
+     * (a controlled caller applies it) and is never persisted.
+     */
+    railBreakpoint?: number;
     /** Draw the hairline between rail and content. Default `false`. */
     bordered?: boolean;
+    /**
+     * What scrolls when the content is taller than the shell. `page` (default)
+     * lets the content grow and the page (rail with it) scroll. `content`
+     * locks the shell to its container's height, keeps the rail in place and
+     * scrolls only the content pane. Needs a container with a definite height.
+     */
+    scroll?: SidebarScroll;
+    /**
+     * Drag the seam (or arrow keys on it) to set the expanded width, between
+     * `@minWidth` and `@maxWidth`. Dragging below `@minWidth` folds the rail;
+     * a click on the seam still toggles. Opt-in; default `false`. With
+     * `@persistKey` the width is remembered too.
+     */
+    resizable?: boolean;
+    /** Smallest dragged width, px number or px/rem string. Default `12rem`. */
+    minWidth?: ResizeHandleLength;
+    /** Largest dragged width, px number or px/rem string. Default `24rem`;
+     * floored at `@minWidth`. */
+    maxWidth?: ResizeHandleLength;
   };
   Blocks: {
     /** Rail chrome above the scrolling nav — a brand, a workspace switcher. */
@@ -283,6 +320,26 @@ export class Sidebar extends Component<SidebarSignature> {
   /** The drawer's own uncontrolled state, separate from the rail's expanded
    * state, so a narrow pane starts with the modal closed. */
   @tracked private drawerOpen = false;
+  /** Last band the pane was measured in. Starts `full`, so a first wide
+   * measurement leaves `@defaultOpen` and a persisted preference alone. */
+  private band: 'full' | 'rail' | 'drawer' = 'full';
+  /** False until the pane's first non-zero width arrives. */
+  @tracked private measured = false;
+  /** Dragged width in px; unset leaves `@width` in charge. */
+  @tracked private dragWidth: number | undefined;
+  /** Set when a pressed pointer moves on the seam, so the click that ends
+   * the drag doesn't toggle, even when the drag changed no size (at a bound). */
+  private dragged = false;
+  /** With rail bands on, the rail stays invisible until the first
+   * measurement, so a pane that opens in the rail band doesn't flash the
+   * full rail for a frame first. */
+  get measuring(): boolean {
+    return (
+      !this.measured &&
+      this.railBreakpoint !== undefined &&
+      this.args.mobile === undefined
+    );
+  }
   railId = `${guidFor(this)}-rail`;
 
   get open(): boolean {
@@ -318,11 +375,42 @@ export class Sidebar extends Component<SidebarSignature> {
   get showHandle(): boolean {
     return !this.mobile && this.collapsible !== 'none';
   }
+  get scroll(): SidebarScroll {
+    return this.args.scroll === 'content' ? 'content' : 'page';
+  }
+  /** The seam is a resize separator while the rail shows its full width;
+   * folded, it is the plain toggle again. */
+  get showResize(): boolean {
+    return Boolean(this.args.resizable) && !this.mobile && !this.collapsed;
+  }
+  get resizePlacement(): 'start' | 'end' {
+    return this.placement === 'end' ? 'start' : 'end';
+  }
+  /** The bounds in px, the max floored at the min, so the handle, a restore
+   * and a resize all clamp to the same range. */
+  get minPx(): number {
+    return resolveLength(this.args.minWidth ?? '12rem') ?? 0;
+  }
+  get maxPx(): number {
+    return Math.max(
+      resolveLength(this.args.maxWidth ?? '24rem') ?? Infinity,
+      this.minPx,
+    );
+  }
+  private clampWidth(width: number): number {
+    return Math.min(this.maxPx, Math.max(width, this.minPx));
+  }
+  get defaultWidth(): string {
+    return this.args.width ?? '16rem';
+  }
   get handleLabel(): string {
     return this.open ? 'Collapse ' + this.label : 'Expand ' + this.label;
   }
   get mobileBreakpoint(): number {
     return this.args.mobileBreakpoint ?? 640;
+  }
+  get railBreakpoint(): number | undefined {
+    return this.collapsible === 'rail' ? this.args.railBreakpoint : undefined;
   }
   get shortcutKey(): string {
     return (this.args.shortcutKey ?? 'b').toLowerCase();
@@ -332,13 +420,21 @@ export class Sidebar extends Component<SidebarSignature> {
   }
   get style() {
     return cssStyleFrom([
-      cssDeclaration('--pretui-sidebar-width', this.args.width),
+      cssDeclaration(
+        '--pretui-sidebar-width',
+        this.dragWidth === undefined ? this.args.width : this.dragWidth + 'px',
+      ),
       cssDeclaration('--pretui-sidebar-rail-width', this.args.railWidth),
       cssDeclaration('--pretui-drawer-size', this.args.mobileWidth),
     ]);
   }
 
   private setOpen = (next: boolean) => {
+    // A drag that folds the rail unmounts the seam before its click can
+    // clear the mark, so reopening clears it.
+    if (next) {
+      this.dragged = false;
+    }
     // Internal state moves only while UNcontrolled; the callback always fires.
     if (this.args.open === undefined && this.mobile) {
       this.drawerOpen = next;
@@ -372,6 +468,41 @@ export class Sidebar extends Component<SidebarSignature> {
   toggle = () => {
     this.setOpen(!this.open);
   };
+  restoreWidth = (width: number) => {
+    this.dragWidth = this.clampWidth(width);
+  };
+  moveSeam = (event: Event) => {
+    if ((event as PointerEvent).buttons !== 0) {
+      this.dragged = true;
+    }
+  };
+  clickSeam = () => {
+    if (!this.dragged) {
+      this.toggle();
+    }
+    this.dragged = false;
+  };
+  /** The separator runs from 0 (folded) so a drag past `@minWidth` can fold
+   * the rail; a width between 0 and the minimum folds rather than renders. */
+  resize = (size: number) => {
+    if (size < this.minPx && this.collapsible !== 'none') {
+      this.setOpen(false);
+      return;
+    }
+    this.dragWidth = this.clampWidth(size);
+    let key = this.args.persistKey;
+    if (!key || typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      localStorage.setItem(
+        'pretui-sidebar:' + key + ':width',
+        String(this.dragWidth),
+      );
+    } catch {
+      // Width not persisted. Nothing else changes.
+    }
+  };
   closeDrawer = () => {
     this.setOpen(false);
   };
@@ -382,11 +513,51 @@ export class Sidebar extends Component<SidebarSignature> {
       this.internal = stored;
     }
   };
-  setNarrow = (narrow: boolean) => {
+  /**
+   * A width of 0 is not "narrow", it is "not laid out" — a shell inside a
+   * `display: none` tab panel, a collapsed accordion, or a card that has not
+   * been measured yet. Treating it as narrow would silently promote the rail
+   * to a modal drawer the moment the pane was hidden, so it changes nothing.
+   */
+  setWidth = (width: number) => {
+    let narrow = width > 0 && width < this.mobileBreakpoint;
     if (narrow !== this.narrowPane) {
       this.drawerOpen = false;
     }
     this.narrowPane = narrow;
+    if (width > 0 && !this.measured) {
+      this.measured = true;
+    }
+    // @mobile bypasses measurement, so it bypasses the rail bands too
+    if (width === 0 || this.args.mobile !== undefined) {
+      return;
+    }
+    let rb = this.railBreakpoint;
+    let band: 'full' | 'rail' | 'drawer' = 'full';
+    if (width < this.mobileBreakpoint) {
+      band = 'drawer';
+    } else if (rb !== undefined) {
+      // 16px of hysteresis: leaving the rail band needs a clear move past the
+      // edge, so a pane resting on it does not flip the rail every frame.
+      band = width < (this.band === 'rail' ? rb + 16 : rb) ? 'rail' : 'full';
+    }
+    if (band === this.band) {
+      return;
+    }
+    this.band = band;
+    // Crossing into another band hands control back to the automatic choice;
+    // a manual toggle within a band is just `internal`, untouched until then.
+    if (rb === undefined || band === 'drawer') {
+      return;
+    }
+    let next = band === 'full';
+    let changed = next !== this.open;
+    if (this.args.open === undefined) {
+      this.internal = next;
+    }
+    if (changed) {
+      this.args.onOpenChange?.(next);
+    }
   };
 
   /** The shell element, so the shortcut can tell which sidebar owns focus. */
@@ -436,9 +607,15 @@ export class Sidebar extends Component<SidebarSignature> {
       data-collapsible={{this.collapsible}}
       data-mobile={{if this.mobile 'true' 'false'}}
       data-bordered={{if @bordered 'true' 'false'}}
+      data-scroll={{this.scroll}}
       data-test-pretui-sidebar
-      {{restoresOpen @persistKey this.restore}}
-      {{measuresPane this.mobileBreakpoint this.setNarrow}}
+      {{restoresOpen @persistKey this.restore this.restoreWidth}}
+      {{measuresPane
+        this.setWidth
+        this.mobileBreakpoint
+        this.railBreakpoint
+        @mobile
+      }}
       {{!-- A document listener, not an `on 'keydown'` modifier on this div —
             realm lint's no-invalid-interactive rejects a template listener on
             a non-widget element, and the shortcut has to work while focus is
@@ -498,6 +675,7 @@ export class Sidebar extends Component<SidebarSignature> {
           aria-label={{this.label}}
           data-state={{this.state}}
           data-mobile='false'
+          data-measuring={{if this.measuring 'true'}}
           data-test-pretui-sidebar-rail
         >
           {{#if (has-block 'header')}}
@@ -529,7 +707,23 @@ export class Sidebar extends Component<SidebarSignature> {
           {{/if}}
         </nav>
 
-        {{#if this.showHandle}}
+        {{#if this.showResize}}
+          {{! Clicks still toggle; a press that moved the seam does not. }}
+          <ResizeHandle
+            class='pretui-sidebar-resize'
+            @size={{this.dragWidth}}
+            @min={{0}}
+            @max={{this.maxPx}}
+            @defaultSize={{this.defaultWidth}}
+            @onSizeChange={{this.resize}}
+            @placement={{this.resizePlacement}}
+            @label={{concat 'Resize ' this.label}}
+            @controls={{this.railId}}
+            data-test-pretui-sidebar-resize
+            {{on 'pointermove' this.moveSeam}}
+            {{on 'click' this.clickSeam}}
+          />
+        {{else if this.showHandle}}
           {{! A REAL tab stop. shadcn's rail is a <button tabIndex={-1}> and
               Ant's is a <div onClick> — in both, the rail's own affordance is
               mouse-only. The name states the action rather than the object,
@@ -547,7 +741,7 @@ export class Sidebar extends Component<SidebarSignature> {
         {{/if}}
       {{/if}}
 
-      <div class='pretui-sidebar-content'>
+      <div class='pretui-sidebar-content' data-test-pretui-sidebar-content>
         {{yield
           (hash
             open=this.open
@@ -604,6 +798,28 @@ export class Sidebar extends Component<SidebarSignature> {
         .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail'] {
           --pretui-sidebar-track: var(--pretui-sidebar-rail-width);
         }
+        /* The icon rail's look reaches SidebarGroup and SidebarItem through
+           custom properties inherited from the rail element, so page content
+           beside it is untouched. Their scoped rules cannot match this
+           component's ancestors, and a consumer that forgets @collapsed or
+           @hideLabel still gets icons only. The drawer's rail has no
+           data-state, so it never matches. */
+        .pretui-sidebar-shell[data-collapsible='rail']
+          > .pretui-sidebar-rail[data-state='collapsed'] {
+          --pretui-sbrail-text: none;
+          --pretui-sbrail-head-pad: 0;
+          --pretui-sbrail-divider: 1px solid var(--border);
+          --pretui-sbrail-item-justify: center;
+          --pretui-sbrail-item-pad: 0;
+          --pretui-sbrail-item-size: var(--control-h, 1.75rem);
+          --pretui-sbrail-item-margin: auto;
+        }
+        @media (any-pointer: coarse) {
+          .pretui-sidebar-shell[data-collapsible='rail']
+            > .pretui-sidebar-rail[data-state='collapsed'] {
+            --pretui-sbrail-item-size: 2.75rem;
+          }
+        }
         .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas'] {
           --pretui-sidebar-track: 0px;
         }
@@ -639,6 +855,9 @@ export class Sidebar extends Component<SidebarSignature> {
         }
         /* The drawer's own rail is not a grid child — it lives inside a
            <dialog> in the top layer. */
+        .pretui-sidebar-rail[data-measuring] {
+          visibility: hidden;
+        }
         .pretui-sidebar-rail[data-mobile='true'] {
           display: flex;
           block-size: 100%;
@@ -699,6 +918,37 @@ export class Sidebar extends Component<SidebarSignature> {
         .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-handle {
           inset-inline-start: auto;
           inset-inline-end: calc(var(--pretui-sidebar-track) - 0.5rem);
+        }
+        /* @scroll='content': one row the shell's height, so the content pane
+           scrolls on its own and the rail never moves. */
+        .pretui-sidebar-shell[data-scroll='content'] {
+          grid-template-rows: minmax(0, 1fr);
+          overflow: hidden;
+        }
+        .pretui-sidebar-shell[data-scroll='content'] > .pretui-sidebar-content {
+          overflow-y: auto;
+          overscroll-behavior: contain;
+        }
+        /* The resize seam: a 0.5rem strip inside the rail's edge whose hit
+           area reaches 1rem past it, a 24px target without widening the
+           rail. */
+        .pretui-sidebar-resize {
+          --pretui-resize-handle-size: 0.5rem;
+          --pretui-resize-handle-outset: 1rem;
+          position: absolute;
+          inset-block: 0;
+          inset-inline-start: calc(var(--pretui-sidebar-track) - 0.5rem);
+          z-index: var(--pretui-z-raised, 1);
+        }
+        .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-resize {
+          inset-inline-start: auto;
+          inset-inline-end: calc(var(--pretui-sidebar-track) - 0.5rem);
+        }
+        /* While the seam is dragged the grid follows the pointer instead of
+           sliding behind it. Keyed off ResizeHandle's own drag state, so the
+           sidebar holds no animation-only state. */
+        .pretui-sidebar-shell:has(> .pretui-sidebar-resize[data-dragging='true']) {
+          transition: none;
         }
         .pretui-sidebar-handle-line {
           inline-size: 2px;
@@ -878,6 +1128,7 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
           <span
             id={{this.labelId}}
             class='pretui-sbgroup-label'
+            data-test-pretui-sidebar-group-label
             data-hidden={{if @hideLabel 'true' 'false'}}
           >{{@label}}</span>
           {{#if (has-block 'action')}}
@@ -899,10 +1150,19 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
           align-items: center;
           justify-content: space-between;
           gap: var(--space-2, 6px);
-          padding: var(--space-2, 6px) var(--space-2, 6px) 2px;
+          padding: var(
+            --pretui-sbrail-head-pad,
+            var(--space-2, 0.375rem) var(--space-2, 0.375rem) 0.125rem
+          );
           min-inline-size: 0;
+          /* the icon rail swaps the label for a hairline between groups */
+          border-block-start: var(--pretui-sbrail-divider, 0 solid transparent);
+        }
+        .pretui-sbgroup:first-child > .pretui-sbgroup-head {
+          border-block-start: 0;
         }
         .pretui-sbgroup-label {
+          display: var(--pretui-sbrail-text, block);
           font-family: var(--font-mono);
           font-size: var(--text-ui-xs, 11px);
           font-weight: 500;
@@ -926,6 +1186,7 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
           white-space: nowrap;
         }
         .pretui-sbgroup-action {
+          display: var(--pretui-sbrail-text, block);
           flex: none;
         }
         .pretui-sbgroup-body {
@@ -960,9 +1221,12 @@ export interface SidebarItemSignature {
     collapsed?: boolean;
     /** Announced and styled as disabled; stays focusable (`aria-disabled`). */
     disabled?: boolean;
+    /** The leading glyph as an icon component (a boxel-icon), sized to the
+     * icon box whatever its own width and height. Wins over `<:icon>`. */
+    icon?: ComponentLike<{ Element: SVGSVGElement }>;
   };
   Blocks: {
-    /** The leading glyph. Kept visible at icon width. */
+    /** The leading glyph, yielded as is: size it yourself, or pass `@icon`. */
     icon: [];
   };
   Element: HTMLElement;
@@ -979,6 +1243,7 @@ export interface SidebarItemSignature {
  * carry. Here the name is an argument, so it cannot go missing.
  */
 export class SidebarItem extends Component<SidebarItemSignature> {
+  badgeId = `${guidFor(this)}-badge`;
   get isLink(): boolean {
     return this.args.href !== undefined && !this.args.disabled;
   }
@@ -1010,7 +1275,13 @@ export class SidebarItem extends Component<SidebarItemSignature> {
             data-test-pretui-sidebar-item
             ...attributes
           >
-            <span class='pretui-sbitem-icon'>{{yield to='icon'}}</span>
+            <span
+              class='pretui-sbitem-icon'
+              data-test-pretui-sidebar-item-icon
+            >{{#if @icon}}<@icon
+              class='pretui-sbitem-glyph'
+              aria-hidden='true'
+            />{{else}}{{yield to='icon'}}{{/if}}</span>
           </a>
         {{else}}
           <button
@@ -1025,7 +1296,13 @@ export class SidebarItem extends Component<SidebarItemSignature> {
             {{on 'click' this.act}}
             ...attributes
           >
-            <span class='pretui-sbitem-icon'>{{yield to='icon'}}</span>
+            <span
+              class='pretui-sbitem-icon'
+              data-test-pretui-sidebar-item-icon
+            >{{#if @icon}}<@icon
+              class='pretui-sbitem-glyph'
+              aria-hidden='true'
+            />{{else}}{{yield to='icon'}}{{/if}}</span>
           </button>
         {{/if}}
       </Tooltip>
@@ -1033,22 +1310,36 @@ export class SidebarItem extends Component<SidebarItemSignature> {
       <a
         class='pretui-sbitem'
         href={{@href}}
+        aria-label={{@label}}
+        aria-describedby={{if @badge this.badgeId}}
         aria-current={{this.current}}
         data-active={{if @active 'true' 'false'}}
         data-collapsed='false'
         data-test-pretui-sidebar-item
         ...attributes
       >
-        <span class='pretui-sbitem-icon'>{{yield to='icon'}}</span>
-        <span class='pretui-sbitem-label'>{{@label}}</span>
+        <span
+              class='pretui-sbitem-icon'
+              data-test-pretui-sidebar-item-icon
+            >{{#if @icon}}<@icon
+              class='pretui-sbitem-glyph'
+              aria-hidden='true'
+            />{{else}}{{yield to='icon'}}{{/if}}</span>
+        <span class='pretui-sbitem-label' data-test-pretui-sidebar-item-label>{{@label}}</span>
         {{#if @badge}}
-          <span class='pretui-sbitem-badge'>{{@badge}}</span>
+          <span
+            id={{this.badgeId}}
+            class='pretui-sbitem-badge'
+            data-test-pretui-sidebar-item-badge
+          >{{@badge}}</span>
         {{/if}}
       </a>
     {{else}}
       <button
         type='button'
         class='pretui-sbitem'
+        aria-label={{@label}}
+        aria-describedby={{if @badge this.badgeId}}
         aria-current={{this.current}}
         aria-disabled={{if @disabled 'true'}}
         data-active={{if @active 'true' 'false'}}
@@ -1057,10 +1348,20 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         {{on 'click' this.act}}
         ...attributes
       >
-        <span class='pretui-sbitem-icon'>{{yield to='icon'}}</span>
-        <span class='pretui-sbitem-label'>{{@label}}</span>
+        <span
+              class='pretui-sbitem-icon'
+              data-test-pretui-sidebar-item-icon
+            >{{#if @icon}}<@icon
+              class='pretui-sbitem-glyph'
+              aria-hidden='true'
+            />{{else}}{{yield to='icon'}}{{/if}}</span>
+        <span class='pretui-sbitem-label' data-test-pretui-sidebar-item-label>{{@label}}</span>
         {{#if @badge}}
-          <span class='pretui-sbitem-badge'>{{@badge}}</span>
+          <span
+            id={{this.badgeId}}
+            class='pretui-sbitem-badge'
+            data-test-pretui-sidebar-item-badge
+          >{{@badge}}</span>
         {{/if}}
       </button>
     {{/if}}
@@ -1080,10 +1381,12 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           display: flex;
           align-items: center;
           gap: 0.6em;
-          inline-size: 100%;
+          inline-size: var(--pretui-sbrail-item-size, 100%);
+          margin-inline: var(--pretui-sbrail-item-margin, 0);
           min-inline-size: 0;
           min-block-size: var(--control-h, 28px);
-          padding: 0 0.6em;
+          justify-content: var(--pretui-sbrail-item-justify, flex-start);
+          padding: 0 var(--pretui-sbrail-item-pad, 0.6em);
           border: 0;
           border-radius: var(--radius-chip, 6px);
           background: none;
@@ -1097,9 +1400,12 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           transition: background var(--pretui-dur-snap, 180ms)
             var(--pretui-ease-snap, ease);
         }
+        /* Icon rail: a square around the icon, centred in the rail. */
         .pretui-sbitem[data-collapsed='true'] {
           justify-content: center;
           padding: 0;
+          inline-size: var(--control-h, 1.75rem);
+          margin-inline: auto;
         }
         .pretui-sbitem:hover {
           background: var(--hover, var(--boxel-100));
@@ -1131,7 +1437,12 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           inline-size: 1.15em;
           block-size: 1.15em;
         }
+        .pretui-sbitem-glyph {
+          inline-size: 100%;
+          block-size: 100%;
+        }
         .pretui-sbitem-label {
+          display: var(--pretui-sbrail-text, inline);
           flex: 1 1 auto;
           min-inline-size: 0;
           overflow: hidden;
@@ -1139,6 +1450,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           white-space: nowrap;
         }
         .pretui-sbitem-badge {
+          display: var(--pretui-sbrail-text, inline);
           flex: none;
           font-variant-numeric: tabular-nums;
           font-size: 0.9em;
@@ -1149,6 +1461,9 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         @media (any-pointer: coarse) {
           .pretui-sbitem {
             min-block-size: 44px;
+          }
+          .pretui-sbitem[data-collapsed='true'] {
+            inline-size: 2.75rem;
           }
         }
         @media (prefers-reduced-motion: reduce) {

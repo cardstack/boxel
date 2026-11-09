@@ -16,6 +16,7 @@ import {
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
+import { htmlSafe } from '@ember/template';
 import {
   click,
   render,
@@ -37,6 +38,7 @@ import { realmFile } from './lib/realm-url';
 import { Theater } from './lib/theater';
 import { setThemeMode, theme } from './lib/theme';
 import { DemoPage } from './shell/demo-page';
+import { FilmStage } from './shell/film-stage';
 import { KeyframesDemo } from './stages/keyframes';
 
 function root(): HTMLElement {
@@ -381,6 +383,170 @@ module('Choreo gallery | demo page', function (hooks) {
       motionSpeed(),
       1,
       'closing the demo puts the clock back for the rest of the host',
+    );
+  });
+});
+
+module('Choreo gallery | film frame', function (hooks) {
+  setupCardTest(hooks);
+  setupChoreo(hooks);
+
+  const SIZE_KEY = 'choreo-gallery:test-film-size';
+  // the well's size is the one thing the frame measures, so the test gives
+  // it one inline: no component stylesheet arrives to size it
+  const WELL = htmlSafe('position:relative;width:1000px;height:600px');
+  const FILL = htmlSafe('position:absolute;inset:0');
+
+  hooks.beforeEach(() => window.localStorage.removeItem(SIZE_KEY));
+  hooks.afterEach(() => window.localStorage.removeItem(SIZE_KEY));
+
+  function grip(): HTMLElement {
+    return one('[data-test-film-grip]')!;
+  }
+  /** presses Escape on the grip, and says how the press reached the host:
+   *  not at all, or whether as unhandled */
+  async function escapeToHost(): Promise<'stopped' | 'handled' | 'passed'> {
+    let reached: 'stopped' | 'handled' | 'passed' = 'stopped';
+    let listen = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        reached = event.defaultPrevented ? 'handled' : 'passed';
+      }
+    };
+    root().addEventListener('keydown', listen);
+    await triggerKeyEvent(grip(), 'keydown', 'Escape');
+    root().removeEventListener('keydown', listen);
+    return reached;
+  }
+  function resetButton(): HTMLElement | undefined {
+    return Array.from(root().querySelectorAll<HTMLElement>('button')).find(
+      (button) => button.textContent?.includes('Default size'),
+    );
+  }
+
+  test('the grip resizes the frame from the keyboard and says its size', async function (assert) {
+    await render(
+      <template>
+        <div style={{WELL}}>
+          <FilmStage
+            style={{FILL}}
+            @face='stage'
+            @film='towers'
+            @title='Towers'
+            @ground='#000'
+            @poster=''
+            @sizeKey={{SIZE_KEY}}
+          />
+        </div>
+      </template>,
+    );
+    await waitUntil(
+      () => grip().getAttribute('aria-valuetext') !== 'Default size',
+    );
+
+    assert.strictEqual(grip().getAttribute('role'), 'slider', 'a slider');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '1000 × 600, default size',
+      'at the well’s own size',
+    );
+
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowLeft');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '984 × 600',
+      'Left narrows the frame a step',
+    );
+    assert.ok(resetButton(), 'and the frame is hand-sized');
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem(SIZE_KEY) ?? 'null'),
+      { h: 600, w: 984 },
+      'which is remembered',
+    );
+
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowDown', { shiftKey: true });
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '984 × 536',
+      'Shift+Down shortens it a longer step',
+    );
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowUp');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '984 × 552',
+      'Up heightens it a step',
+    );
+
+    for (let i = 0; i < 12; i++) {
+      await triggerKeyEvent(grip(), 'keydown', 'ArrowLeft', { shiftKey: true });
+    }
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '384 × 384',
+      'the width stops at the floor, and the height follows it so the frame never goes portrait',
+    );
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowUp', { shiftKey: true });
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '384 × 384',
+      'nor grows taller than it is wide',
+    );
+
+    assert.strictEqual(
+      await escapeToHost(),
+      'stopped',
+      'Escape is the grip’s while there is a hand-set size to undo',
+    );
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '1000 × 600, default size',
+      'Escape snaps back',
+    );
+    assert.notOk(resetButton(), 'to the well’s own size');
+    assert.strictEqual(
+      window.localStorage.getItem(SIZE_KEY),
+      null,
+      'and forgets the hand-set one',
+    );
+
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowRight', { shiftKey: true });
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '1000 × 600, default size',
+      'the frame grows no larger than the well',
+    );
+
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowUp');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '1000 × 600, default size',
+      'on either side',
+    );
+
+    await triggerKeyEvent(grip(), 'keydown', 'Home');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '384 × 216',
+      'Home takes it to the floor',
+    );
+    await triggerKeyEvent(grip(), 'keydown', 'End');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '1000 × 600, default size',
+      'and End to the well',
+    );
+
+    await triggerKeyEvent(grip(), 'keydown', 'ArrowLeft');
+    await triggerKeyEvent(grip(), 'keydown', 'Enter');
+    assert.strictEqual(
+      grip().getAttribute('aria-valuetext'),
+      '1000 × 600, default size',
+      'Enter snaps back too',
+    );
+
+    assert.strictEqual(
+      await escapeToHost(),
+      'passed',
+      'at its own size Escape has nothing to undo and goes on to the host',
     );
   });
 });

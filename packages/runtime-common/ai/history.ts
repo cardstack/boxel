@@ -24,7 +24,8 @@ import {
   isToolResultWithOutputMsgtype,
 } from '../matrix-constants.ts';
 
-import { downloadFile } from './matrix-utils.ts';
+import { restoreExternalFields } from './external-fields.ts';
+import { downloadFile, downloadMatrixMediaText } from './matrix-utils.ts';
 import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { HistoryConstructionError } from './types.ts';
 
@@ -113,6 +114,12 @@ export async function constructHistory(
               [],
           );
           delete content[LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY];
+          // Every part but the last is published finished and not canceled;
+          // the last part records how the answer ended, so the merged answer
+          // reads as still streaming, or as canceled, exactly when an answer
+          // that fit in one event would.
+          content.isStreamingFinished = continuationContent.isStreamingFinished;
+          content.isCanceled = continuationContent.isCanceled;
           event.origin_server_ts = continuationEvent.origin_server_ts;
           delete content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
         }
@@ -178,6 +185,12 @@ function parseContentData(event: IRoomEvent) {
 }
 
 async function downloadAttachments(event: IRoomEvent, client: MatrixClient) {
+  let externalFieldErrors = await restoreExternalFields(event.content, (url) =>
+    downloadMatrixMediaText(client, url),
+  );
+  for (let error of externalFieldErrors) {
+    getLog().error(`event ${event.event_id}: ${error}`);
+  }
   if (
     event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
     event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE

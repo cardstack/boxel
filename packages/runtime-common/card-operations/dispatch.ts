@@ -1,10 +1,15 @@
 import type { Readable } from 'stream';
 import { RealmPaths, ensureTrailingSlash, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
-import { codeRefFromInternalKey } from '../index.ts';
+import { codeRefFromInternalKey, trimExecutableExtension } from '../index.ts';
 import { baseRealm } from '../constants.ts';
 import { indexedInstance, readOperation } from './read.ts';
-import { callApiOperation, type CallApiSender } from './call-api.ts';
+import {
+  callApiOperation,
+  type AnonymousCallApiCaller,
+  type CallApiMode,
+  type CallApiSender,
+} from './call-api.ts';
 import { readSourceOperation } from './read-source.ts';
 import {
   hasTransforms,
@@ -50,6 +55,7 @@ import {
   type OperationRequest,
   type OperationSourceBody,
   type OperationTarget,
+  unresolvableAsUndefined,
 } from './types.ts';
 import {
   PRERENDERED_HTML_FORMATS,
@@ -336,6 +342,16 @@ export interface RunOperationOptions {
   // marked as a prerender's own fetch and for one made on a realm-authority
   // session, which only a realm rendering its own cards holds.
   duringPrerender?: boolean;
+  // How a `callApi` invocation arrived, which decides whether a binding
+  // approved for pipelines only fills its slots. Absent is `interactive`: the
+  // realm sets `pipeline` only for a run it makes on its own, never for a
+  // request off the network.
+  callApiMode?: CallApiMode;
+  // Where a `callApi` invoked by a caller who isn't signed in was admitted
+  // from, which the share filling its slots counts them by. A request the
+  // realm admitted without a session from an address it couldn't place sets
+  // none, and a keyed `callApi` is refused to it.
+  callApiAnonymous?: AnonymousCallApiCaller;
   // Report a stored-bytes read's `version` only where the realm already
   // recorded one, rather than reading the file to fingerprint it.
   //
@@ -954,15 +970,23 @@ async function resolveAndGate(
   if (opts.builtInOnly && declared && scope.coarseDeclined !== 'none') {
     throw notPermitted(target, name);
   }
-  let decision = await gateOperation(
-    core,
-    gateSubject(target, typeChain),
-    name,
-    definition,
-    typeDefinition,
-    scope,
-    loaded,
-  );
+  // A refusal the gate's own reads raise is told as resolution's are: a
+  // definition that is not ready names the type a stored document adopts,
+  // which a caller the ACL declined may not learn.
+  let decision: Awaited<ReturnType<typeof gateOperation>>;
+  try {
+    decision = await gateOperation(
+      core,
+      gateSubject(target, typeChain),
+      name,
+      definition,
+      typeDefinition,
+      scope,
+      loaded,
+    );
+  } catch (e: unknown) {
+    throw refusal(e);
+  }
   if (
     decision.kind === GATE_REFUSED.kind ||
     decision.kind === GATE_MISSING.kind ||
@@ -1302,11 +1326,9 @@ export async function htmlDeclarationOf(
   let resolved = codeRef ? core.resolveCodeRef(codeRef, url) : undefined;
   let typeDefinition: Definition | undefined;
   if (resolved) {
-    try {
-      typeDefinition = await core.definitionLookup.lookupDefinition(resolved);
-    } catch {
-      typeDefinition = undefined;
-    }
+    typeDefinition = await unresolvableAsUndefined(() =>
+      core.definitionLookup.lookupDefinition(resolved),
+    );
   }
   if (!typeDefinition) {
     return {
@@ -1586,7 +1608,10 @@ async function runBaseOperation(
       return await callApiOperation(canonical, definition, {
         realmURL: core.realmURL,
         duringPrerender: opts.duringPrerender ?? false,
+        mode: opts.callApiMode ?? 'interactive',
         sender: core.callApi,
+        ...(opts.callApiAnonymous ? { anonymous: opts.callApiAnonymous } : {}),
+        type: () => resolvedTypeOf(core, canonical.target, scope),
         ...(canonical.target.kind === 'instance'
           ? {
               instance: () =>
@@ -1886,15 +1911,43 @@ async function definitionFor(
   if (!resolved) {
     return undefined;
   }
-  try {
+  return await unresolvableAsUndefined(async () => {
     if (target.kind === 'type') {
       return await core.definitionLookup.lookupDefinitionEntry(resolved);
     }
     let definition = await core.definitionLookup.lookupDefinition(resolved);
     return definition ? { definition } : undefined;
-  } catch {
-    return undefined;
+  });
+}
+
+// The type an operation on `target` resolves through, as the module and export
+// a binding records: the type a type target names, or the one a card adopts
+// from, its module resolved against the realm with any executable extension
+// trimmed, as an approval resolves the type it names.
+export async function resolvedTypeOf(
+  core: OperationCore,
+  target: OperationTarget,
+  scope: OperationScope,
+): Promise<{ module: string; name: string } | undefined> {
+  let codeRef: CodeRef | undefined;
+  let relativeTo: URL | undefined;
+  if (target.kind === 'type') {
+    codeRef = target.codeRef;
+    relativeTo = new URL(target.realm);
+  } else {
+    relativeTo = parseTargetURL(target.url);
+    codeRef = relativeTo ? await adoptsFromOf(scope, relativeTo) : undefined;
   }
+  let resolved =
+    codeRef && relativeTo
+      ? core.resolveCodeRef(codeRef, relativeTo)
+      : undefined;
+  return resolved
+    ? {
+        module: trimExecutableExtension(String(resolved.module)),
+        name: resolved.name,
+      }
+    : undefined;
 }
 
 // The type a stored card names, read off the index row rather than the source

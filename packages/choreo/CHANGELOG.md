@@ -14,8 +14,38 @@ versions may change behavior until `1.0.0`.
 
 ## [Unreleased]
 
+### Added
+
+- **A region renders `data-motion-render-detector`.** A region snapshots every projecting element
+  before a render pass patches the DOM, so `{{motion layout=true}}` inside it animates without a
+  `<LayoutGroup>`. The marker (glimmer-motion's `RENDER_DETECTOR_ATTRIBUTE`) tells glimmer-motion's
+  development-mode check for an ungrouped `layout` or `layoutId` element that the elements inside a
+  region are measured.
+
+### Changed
+
+- **A parked leaver is kept as a memory** (see glimmer-motion's `keepAsMemory`). An element in a
+  region's orphan layer is inert and `aria-hidden`, holds its stylesheet animations at the frame it
+  showed, and keeps its scroll offsets. Its HTML elements lose their `id`, `autofocus` and
+  form-control `name`, and its `data-test-*` hooks are renamed with a `-memory` suffix:
+  `data-test-id` becomes `data-test-id-memory`, with its value. CSS or a test that finds a parked
+  leaver by `#id` or by its test hook needs the suffixed hook instead. The memory treatment replaces
+  the orphan stylesheet, which set `animation: none` on everything in the layer.
+- **`live()` and `liveAll()` come from `glimmer-motion/test-support`**, and
+  `@cardstack/choreo/test-support` re-exports them. They skip every memory, a parked leaver or a
+  `<Presence @mode="snapshot">` copy, for selectors other than test hooks.
+
 ### Fixed
 
+- **A run's tweens start on the frame the run first paints.** motion-dom dates a tween from a
+  clock that holds one reading through a synchronous stretch of work, so a run compiled late in a
+  long render could open its tweens that far in: the first painted frame of a move already showed
+  part of its travel. The run's own clock already started fresh; its tweens now do too, with or
+  without `@maxFrameStep`, and a run resumed from a pause carries them on from where they were held
+  instead of restarting them. A run that replaces one already moving on screen is the exception:
+  its first frame advances like any other, clock and tweens alike, so that motion doesn't stand
+  still for a frame. A run replaced before it painted was never seen moving, and its replacement
+  opens at its start.
 - **`animationsSettled()` waits for a text delivery to give its text back.** A `@by='character'`
   or `@by='word'` delivery lands on its own platform animations, which can finish after the run's
   clock has ended. The region now reports `delivery in flight` until the sprite's original text is

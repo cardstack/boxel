@@ -12,6 +12,8 @@ import {
   receiveSecretsKeyring,
   resetSecretsAtRest,
   SecretDecryptionError,
+  setSecretOpenFailureSink,
+  type SecretOpenFailedEvent,
   secretEncryptionContext,
   SecretsAtRestStartupError,
   SecretsKeyring,
@@ -282,6 +284,53 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(String((error as Error).message).includes('k1'));
     });
 
+    test('every value that fails to open is recorded with the field, row, data key and reason, never the owner or value', function (assert) {
+      let events: SecretOpenFailedEvent[] = [];
+      setSecretOpenFailureSink((event) => events.push(event));
+      try {
+        let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
+        let ring = keyring('k1');
+        let sealed = ring.seal(SECRET, binding);
+        openError(keyring('k2'), sealed, binding);
+        openError(ring, { ...sealed, tag: flip(sealed.tag) }, binding);
+        openError(
+          ring,
+          { ...sealed, nonce: sealed.nonce.subarray(0, 4) },
+          binding,
+        );
+        assert.strictEqual(ring.open(sealed, binding), SECRET);
+        assert.deepEqual(events, [
+          {
+            event: 'open-failed',
+            field: FIELD,
+            id: ROW_ID,
+            keyId: 'k1',
+            reason: 'unknown-data-key',
+          },
+          {
+            event: 'open-failed',
+            field: FIELD,
+            id: ROW_ID,
+            keyId: 'k1',
+            reason: 'not-authentic',
+          },
+          {
+            event: 'open-failed',
+            field: FIELD,
+            id: ROW_ID,
+            keyId: 'k1',
+            reason: 'malformed',
+          },
+        ]);
+        assert.false(
+          JSON.stringify(events).includes(OWNER),
+          'no event names the owner',
+        );
+      } finally {
+        setSecretOpenFailureSink(undefined);
+      }
+    });
+
     test('a key id swapped onto a value sealed under another key does not open', function (assert) {
       let k1 = randomBytes(32);
       let ring = new SecretsKeyring(
@@ -397,6 +446,45 @@ module(basename(import.meta.filename), function (hooks) {
           owner: OWNER,
           id: ROW_ID,
         },
+      );
+    });
+
+    test('a copy names the row it copies, and opens only beside that row', function (assert) {
+      let ring = keyring();
+      let parentId = '6f2d4c1e-0b7a-4e95-8c3d-1a2b3c4d5e6f';
+      let copy: SecretBinding = {
+        field: FIELD,
+        owner: OWNER,
+        id: ROW_ID,
+        parentId,
+        destination: DESTINATION,
+      };
+      assert.strictEqual(
+        secretEncryptionContext(copy).parent_id,
+        parentId,
+        'the context carries the parent id',
+      );
+      let sealed = ring.seal(SECRET, copy);
+      assert.strictEqual(ring.open(sealed, copy), SECRET);
+      assert.throws(
+        () =>
+          ring.open(sealed, {
+            ...copy,
+            parentId: '0e9a1b2c-3d4e-4f5a-8b6c-7d8e9f0a1b2c',
+          }),
+        SecretDecryptionError,
+        'not beside another parent',
+      );
+      let { parentId: _parentId, ...withoutParent } = copy;
+      assert.throws(
+        () => ring.open(sealed, withoutParent),
+        SecretDecryptionError,
+        'nor with no parent',
+      );
+      assert.throws(
+        () => ring.open(ring.seal(SECRET, withoutParent), copy),
+        SecretDecryptionError,
+        'and a value sealed with no parent does not open as a copy',
       );
     });
   });

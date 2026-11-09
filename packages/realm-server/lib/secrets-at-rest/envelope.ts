@@ -4,14 +4,16 @@ import {
   createHash,
   randomBytes,
 } from 'node:crypto';
+import { logger } from '@cardstack/runtime-common';
 
 // Seals a secret with AES-256-GCM under a data key the process holds in
 // memory, so sealing and opening never leave the process. Each sealed value is
 // bound to where it is stored and where it goes: the field it lives in, the
 // owner, the row id and, for a secret sent to one place, the destination it
-// is sent to go into the additional authenticated data. A database writer who moves a
-// ciphertext to another column or row, or re-pairs it with another
-// destination, gets a value that no longer opens.
+// is sent to go into the additional authenticated data, and, for a copy of a
+// secret held in another row, that row's id. A database writer who moves a
+// ciphertext to another column or row, re-pairs it with another destination,
+// or points a copy at another original, gets a value that no longer opens.
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_BYTES = 32;
@@ -19,8 +21,10 @@ const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 
 // Changing what goes into the additional authenticated data changes this
-// label, so a value sealed under one layout can never open under another.
+// label, so a value sealed under one layout can never open under another. A
+// binding that names a parent is laid out under its own label.
 const AAD_LABEL = 'boxel-secret/v1';
+const AAD_LABEL_WITH_PARENT = 'boxel-secret/v2-parent';
 
 export interface DataKey {
   keyId: string;
@@ -32,11 +36,15 @@ export interface DataKey {
 // and its refresh token, say) can't be swapped for each other. `destination`
 // is the place the secret is sent (for example an endpoint's URL); a secret
 // with no destination of its own, such as a user's key, is bound to field,
-// owner and id only.
+// owner and id only. `parentId` names the row a copy was made from when the
+// secret is held in two rows: a grant's copy of a user's key names the key, so
+// it is bound to both the grant (`id`) and the key, and opens only on that
+// grant of that key.
 export interface SecretBinding {
   field: string;
   owner: string;
   id: string;
+  parentId?: string;
   destination?: string;
 }
 
@@ -61,6 +69,7 @@ export interface SecretEncryptionContext {
   field: string;
   owner: string;
   id: string;
+  parent_id?: string;
   destination_sha256?: string;
 }
 
@@ -72,6 +81,9 @@ export function secretEncryptionContext(
     owner: binding.owner,
     id: binding.id,
   };
+  if (binding.parentId !== undefined) {
+    context.parent_id = binding.parentId;
+  }
   if (binding.destination !== undefined) {
     context.destination_sha256 = createHash('sha256')
       .update(binding.destination, 'utf8')
@@ -80,14 +92,75 @@ export function secretEncryptionContext(
   return context;
 }
 
-// Thrown whenever a value can't be opened: an unknown data key, a value moved
-// to another binding, or tampered bytes. GCM can't tell those apart, and the
-// message names none of the inputs.
+// Why a value didn't open. `unknown-data-key`: it was sealed under a data key
+// this process hasn't loaded. `malformed`: its nonce or tag has the wrong
+// length. `not-authentic`: GCM refused it, because its bytes were altered or
+// it was moved to another binding; GCM can't tell those two apart.
+export type SecretOpenFailure =
+  | 'unknown-data-key'
+  | 'malformed'
+  | 'not-authentic';
+
+// Thrown whenever a value can't be opened. The message names none of the
+// inputs.
 export class SecretDecryptionError extends Error {
-  constructor(message: string) {
+  readonly reason: SecretOpenFailure;
+  constructor(message: string, reason: SecretOpenFailure) {
     super(message);
     this.name = 'SecretDecryptionError';
+    this.reason = reason;
   }
+}
+
+// Every value that fails to open is one JSON line on this channel, wherever
+// it was being opened, so operators see a broken data key or a tampered row
+// without relying on each caller's own log line. It names the field, the row
+// and the data key, never the owner or the value.
+export const SECRETS_AT_REST_CHANNEL = 'boxel:secrets-at-rest';
+
+export interface SecretOpenFailedEvent {
+  event: 'open-failed';
+  field: string;
+  id: string;
+  keyId: string;
+  reason: SecretOpenFailure;
+}
+
+let openFailureSink: ((event: SecretOpenFailedEvent) => void) | undefined;
+
+export function setSecretOpenFailureSink(
+  sink: ((event: SecretOpenFailedEvent) => void) | undefined,
+): void {
+  openFailureSink = sink;
+}
+
+let channelLog: ReturnType<typeof logger> | undefined;
+
+function openFailed(
+  sealed: SealedSecret,
+  binding: SecretBinding,
+  reason: SecretOpenFailure,
+  message: string,
+): SecretDecryptionError {
+  let event: SecretOpenFailedEvent = {
+    event: 'open-failed',
+    field: binding.field,
+    id: binding.id,
+    keyId: sealed.keyId,
+    reason,
+  };
+  try {
+    if (openFailureSink) {
+      openFailureSink(event);
+    } else {
+      (channelLog ??= logger(SECRETS_AT_REST_CHANNEL)).warn(
+        JSON.stringify({ channel: SECRETS_AT_REST_CHANNEL, ...event }),
+      );
+    }
+  } catch {
+    // A record that can't be written leaves the refusal as it is.
+  }
+  return new SecretDecryptionError(message, reason);
 }
 
 export class SecretsKeyring {
@@ -144,7 +217,10 @@ export class SecretsKeyring {
   open(sealed: SealedSecret, binding: SecretBinding): string {
     let key = this.#keys.get(sealed.keyId);
     if (!key) {
-      throw new SecretDecryptionError(
+      throw openFailed(
+        sealed,
+        binding,
+        'unknown-data-key',
         `The secret was sealed under data key ${sealed.keyId}, which this process has not loaded`,
       );
     }
@@ -152,7 +228,10 @@ export class SecretsKeyring {
       sealed.nonce.length !== NONCE_BYTES ||
       sealed.tag.length !== TAG_BYTES
     ) {
-      throw new SecretDecryptionError(
+      throw openFailed(
+        sealed,
+        binding,
+        'malformed',
         'The secret could not be decrypted: its nonce or tag has the wrong length',
       );
     }
@@ -167,8 +246,11 @@ export class SecretsKeyring {
         decipher.final(),
       ]).toString('utf8');
     } catch {
-      throw new SecretDecryptionError(
-        'The secret could not be decrypted: it was altered, or it is bound to a different field, owner, row or destination',
+      throw openFailed(
+        sealed,
+        binding,
+        'not-authentic',
+        'The secret could not be decrypted: it was altered, or it is bound to a different field, owner, row, parent or destination',
       );
     }
   }
@@ -188,14 +270,26 @@ export class SecretsKeyring {
 function additionalData(keyId: string, binding: SecretBinding): Buffer {
   let context = secretEncryptionContext(binding);
   return Buffer.from(
-    JSON.stringify([
-      AAD_LABEL,
-      keyId,
-      context.field,
-      context.owner,
-      context.id,
-      context.destination_sha256 ?? null,
-    ]),
+    JSON.stringify(
+      context.parent_id === undefined
+        ? [
+            AAD_LABEL,
+            keyId,
+            context.field,
+            context.owner,
+            context.id,
+            context.destination_sha256 ?? null,
+          ]
+        : [
+            AAD_LABEL_WITH_PARENT,
+            keyId,
+            context.field,
+            context.owner,
+            context.id,
+            context.parent_id,
+            context.destination_sha256 ?? null,
+          ],
+    ),
     'utf8',
   );
 }

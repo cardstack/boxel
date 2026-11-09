@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Ember & Oak",
+      "tagline": "Wood-fired roasts on the corner of Fifth and Pine",
+      "description": "A neighbourhood espresso bar that roasts in small batches over oak every Tuesday. Single-origin pour-overs, house-made pastries, and a long communal table by the window.",
+      "phone": "+12065550187",
+      "email": "hello@emberandoak.example.com",
+      "website": "https://emberandoak.example.com",
+      "address": {
+        "addressLine1": "1520 5th Ave",
+        "addressLine2": null,
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98101",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "seatingCapacity": 34,
+      "hasWifi": true,
+      "openedOn": "2019-04-12",
+      "priceLevel": "$$",
+      "menuHighlights": [
+        "Oak-smoked cortado",
+        "Ethiopia Guji pour-over",
+        "Cardamom morning bun"
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../ShopOwner/dana-whitfield"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../coffee-shop",
+        "name": "CoffeeShop"
+      }
+    }
+  }
+}

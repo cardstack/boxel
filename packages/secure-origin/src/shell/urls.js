@@ -6,33 +6,39 @@ import {
   SECURE_SESSION_VALUE,
 } from '../security/cli-handoff.js';
 
-// The addresses of the shell's pages. Every mode is the same document at the
-// shell's path, told apart by its `mode` query parameter; Google returns to
-// `google-callback` beneath it.
+import { splitPagePath } from './pages.js';
 
-const GOOGLE_CALLBACK_SUFFIX = /\/google-callback$/;
+// The addresses of the shell's pages. Each page is the same document at its
+// own path beneath the shell's address (`pages.js`); what a page is told
+// rides in the query string or the fragment.
 
 // The shell's own address, from wherever beneath it the page is.
 export function shellPath() {
-  return window.location.pathname.replace(GOOGLE_CALLBACK_SUFFIX, '/');
+  return splitPagePath(window.location.pathname).shell;
+}
+
+// The page this document is, as its path beneath the shell's address.
+export function currentPage() {
+  return splitPagePath(window.location.pathname).page;
 }
 
 // Whether this page is the address Google returns to.
 export function isGoogleCallback() {
-  return GOOGLE_CALLBACK_SUFFIX.test(window.location.pathname);
+  return currentPage() === 'google-callback';
 }
 
-// The address of one of the shell's modes. `params` are plain values, never
+// The address of one of the shell's pages. `params` are plain values, never
 // an origin or URL, which a firewall in front of a deployment may refuse in a
 // query string.
-export function modeURL(mode, params = {}) {
-  let query = new URLSearchParams({ mode });
+export function pageURL(page, params = {}) {
+  let query = new URLSearchParams();
   for (let [name, value] of Object.entries(params)) {
     if (value !== undefined && value !== '') {
       query.set(name, value);
     }
   }
-  return `${shellPath()}?${query}`;
+  let search = query.size > 0 ? `?${query}` : '';
+  return `${shellPath()}${page}${search}`;
 }
 
 // The CLI a page signs in for, as the query parameters that name it on every
@@ -67,7 +73,7 @@ export function cliParams(cli, username) {
 
 // The sign-in page for a CLI: `cli-auth` for a profile sign-in, which hands
 // over a login token, and `cli-sign-in` for `boxel keys sign-in`.
-export function cliSignInMode(cli) {
+export function cliSignInPage(cli) {
   return cli?.profile ? 'cli-auth' : 'cli-sign-in';
 }
 
@@ -79,7 +85,7 @@ export function startURL(resume) {
   let cli = resume?.client === 'cli' ? resume.cli : undefined;
   let params = cliParams(cli, resume?.username);
   if (!params.port || !params.state) {
-    return modeURL('sign-in');
+    return pageURL('sign-in');
   }
-  return modeURL(cliSignInMode(cli), params);
+  return pageURL(cliSignInPage(cli), params);
 }

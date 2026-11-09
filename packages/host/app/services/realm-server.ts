@@ -361,7 +361,13 @@ export default class RealmServerService
     await this.setAvailableRealmIdentifiers(
       this.userRealmIdentifiers.filter((url) => url !== identifier),
     );
-    await this.fetchArchivedRealms({ force: true });
+    // The realm is archived by now, so a failed refresh of the archived list
+    // doesn't fail the archive: callers still have to leave the sealed realm.
+    try {
+      await this.fetchArchivedRealms({ force: true });
+    } catch (err) {
+      console.error(`Failed to refresh archived realms after archiving`, err);
+    }
   }
 
   // Restore an archived realm via the owner-only `POST /_unarchive-realm`
@@ -1077,8 +1083,8 @@ export default class RealmServerService
     return { data: json.data ?? [], publicReadableRealms };
   }
 
-  // Cards / files / definitions per realm, for the workspace chooser's favorite
-  // tiles. Deliberately separate from `fetchRealmInfos`: the counts are an
+  // Cards / files / definitions per realm, for the dashboard's favorite
+  // desks. Deliberately separate from `fetchRealmInfos`: the counts are an
   // aggregate over every index row in a realm, and only a favorited realm's
   // tile renders them, so callers ask for the handful they need instead of
   // paying it for every realm at boot.
@@ -1322,19 +1328,15 @@ export default class RealmServerService
   });
 
   // How the token refresher waits for its next mint. Tests replace it to run
-  // the refresher against a virtual clock.
-  async waitForTokenRefresh(ms: number): Promise<void> {
-    await rawTimeout(ms);
+  // the refresher against a virtual clock. Not `async`, for the reason given on
+  // `RealmService.waitForTokenRefresh`.
+  waitForTokenRefresh(ms: number): PromiseLike<void> {
+    return rawTimeout(ms);
   }
 
   private refreshSchedule = new TokenRefreshSchedule();
   private loggingIn: Promise<void> | undefined;
-  private pendingRegistrationToken: string | undefined;
-
-  async login(registrationToken?: string): Promise<void> {
-    if (registrationToken) {
-      this.pendingRegistrationToken = registrationToken;
-    }
+  async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
       return;
     }
@@ -1359,10 +1361,8 @@ export default class RealmServerService
         this.network.authedFetch.bind(this.network),
         {
           authWithRealmServer: true,
-          registrationToken: this.pendingRegistrationToken,
         },
       );
-      this.pendingRegistrationToken = undefined;
       let token = await realmAuthClient.getJWT();
       this.refreshSchedule.minted(token);
       this.token = token;

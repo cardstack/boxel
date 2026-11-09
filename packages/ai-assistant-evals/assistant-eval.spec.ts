@@ -9,8 +9,21 @@ import {
 } from './matrix-api.ts';
 import { analyzeRoom } from './room-analysis.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
-import { RealmClient } from './realm-api.ts';
-import { prepopulate, type EvaluationBundle } from './eval-card.ts';
+
+import {
+  RealmClient,
+  RealmResponseError,
+  type CardDocument,
+} from './realm-api.ts';
+import {
+  expectedChangedSeeds,
+  pipelineApprovalTargets,
+  promptCardIds,
+  seededCardSeeds,
+  prepopulate,
+  type EvaluationBundle,
+} from './eval-card.ts';
+import { seedPipelineApprovals } from './key-seed.ts';
 import { captureWorkspace } from './workspace-snapshot.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
@@ -144,7 +157,7 @@ async function loginViaLocalStorage(page: Page, username: string) {
   await page.goto('/');
   let rendered = page
     .locator(
-      '[data-test-workspace-chooser], [data-test-workspace-chooser-toggle], [data-test-login-form]',
+      '[data-test-dashboard], [data-test-workspace-chooser-toggle], [data-test-login-form]',
     )
     .first();
   // The first tab of a fresh browser context can lose every module load to
@@ -187,15 +200,15 @@ async function createWorkspace(
   displayName: string,
   endpoint: string,
 ) {
-  // A fresh login lands on the chooser; a restored session lands in the last
-  // workspace, where the chooser is behind a toggle. Wait for whichever is
-  // there before deciding.
-  let chooser = page.locator('[data-test-workspace-chooser]');
+  // A fresh login lands on the dashboard; a restored session lands in the
+  // last workspace, where the dashboard is behind a toggle. Wait for whichever
+  // is there before deciding.
+  let dashboard = page.locator('[data-test-dashboard]');
   let toggle = page.locator('[data-test-workspace-chooser-toggle]');
-  await expect(chooser.or(toggle).first()).toBeVisible({ timeout: 60_000 });
-  if (!(await chooser.isVisible())) {
+  await expect(dashboard.or(toggle).first()).toBeVisible({ timeout: 60_000 });
+  if (!(await dashboard.isVisible())) {
     await toggle.click();
-    await chooser.waitFor();
+    await dashboard.waitFor();
   }
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(displayName);
@@ -294,18 +307,36 @@ async function selectModel(page: Page, requested: string) {
       }. Available: ${names.join(' | ')}`,
     );
   }
-  await items.nth(matches[0].index).locator('button').click();
-  await expect(page.locator('[data-test-llm-select-selected]')).toContainText(
-    matches[0].name,
-  );
-  // The picker stays expanded after a choice and hides the mode toggle while
-  // it is open. Escape does not close it; a second click on the pill does.
-  if ((await page.locator('[data-test-llm-select-item]').count()) > 0) {
-    await page.locator('[data-test-llm-select-selected]').click();
+  // The trigger shows a short name without the provider, so the pick is
+  // confirmed by option id rather than by text.
+  let optionId = await items
+    .nth(matches[0].index)
+    .getAttribute('data-test-llm-select-item');
+  if (optionId === null) {
+    throw new Error(
+      `picker option "${matches[0].name}" has no data-test-llm-select-item id`,
+    );
   }
-  await expect(page.locator('[data-test-llm-select-item]')).toHaveCount(0, {
-    timeout: 15_000,
-  });
+  await items.nth(matches[0].index).locator('button').click();
+  await expect(page.locator('[data-test-llm-select-selected]')).toHaveAttribute(
+    'data-test-llm-select-selected',
+    optionId,
+  );
+  // The picker closes itself after a choice, with an animation; a click on
+  // the pill while it is closing would open it again. It hides the mode
+  // toggle while open, so if it is still open once the animation has had
+  // its time, a click on the pill closes it (Escape does not).
+  let list = page.locator('[data-test-llm-select-item]');
+  let closed = await expect(list)
+    .toHaveCount(0, { timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  // Look once more right before the click: a list that finished closing
+  // after the probe gave up would be opened again by it.
+  if (!closed && (await list.count()) > 0) {
+    await page.locator('[data-test-llm-select-selected]').click();
+    await expect(list).toHaveCount(0, { timeout: 15_000 });
+  }
   return matches[0].name;
 }
 
@@ -313,16 +344,22 @@ async function selectModel(page: Page, requested: string) {
 // tool call waits for a click nobody makes. The toggle renders only once
 // the room knows its model, a moment after the pick, so wait for it rather
 // than reading "not there yet" as "not needed"; then confirm the click took.
+// The option is found by its mode value, not its label, so a rename of the
+// label does not break the runner. The toggle is disabled while the room
+// activates a mode, so wait for it to be enabled; the radio input is visually
+// hidden, so the check is forced past the visibility test, and Playwright
+// still confirms that it took.
 async function ensureActMode(page: Page, requestedModel: string) {
-  let act = page.locator('[data-test-llm-mode-option="act"]');
-  await act.waitFor({ state: 'visible', timeout: 60_000 });
-  if (!(await act.evaluate((el) => el.classList.contains('selected')))) {
-    await act.click();
+  let toggle = page.locator('[data-test-llm-mode-toggle]');
+  await toggle.waitFor({ state: 'visible', timeout: 60_000 });
+  let act = toggle.locator('[data-test-pretui-segmented-option="act"]');
+  if (!(await act.isChecked())) {
+    await expect(act).toBeEnabled({ timeout: 30_000 });
+    await act.check({ force: true });
   }
-  await expect(act, `${requestedModel}: room is in Act mode`).toHaveClass(
-    /selected/,
-    { timeout: 30_000 },
-  );
+  await expect(act, `${requestedModel}: room is in Act mode`).toBeChecked({
+    timeout: 30_000,
+  });
   console.log(`[eval] ${requestedModel}: mode toggle shows act`);
 }
 
@@ -337,7 +374,7 @@ async function ensureInsideWorkspace(
   realmUrl: string,
   openCards: string[] = [],
 ) {
-  let chooser = page.locator('[data-test-workspace-chooser]');
+  let dashboard = page.locator('[data-test-dashboard]');
   let indexCard = page.locator(`[data-test-stack-card="${realmUrl}index"]`);
   let missingOpenCard = false;
   for (let id of openCards) {
@@ -346,36 +383,69 @@ async function ensureInsideWorkspace(
     }
   }
   if (
-    (await chooser.count()) > 0 ||
+    (await dashboard.count()) > 0 ||
     (await indexCard.count()) === 0 ||
     missingOpenCard
   ) {
     // Re-enter through the URL rather than the tile, so this works whatever
-    // state the chooser is in.
-    let state = encodeURIComponent(
-      JSON.stringify({
-        stacks: [
-          [
-            { id: `${realmUrl}index`, format: 'isolated' },
-            ...openCards.map((id) => ({ id, format: 'isolated' })),
-          ],
-        ],
-        submode: 'interact',
-        workspaceChooserOpened: false,
-        aiAssistantOpen: true,
-      }),
-    );
-    await page.goto(`/?operatorModeState=${state}`);
-    await indexCard.waitFor({ timeout: 60_000 });
-    for (let id of openCards) {
-      await page
-        .locator(`[data-test-stack-card="${id}"]`)
-        .waitFor({ timeout: 60_000 });
-    }
-    await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+    // state the dashboard is in.
+    await openStack(page, realmUrl, openCards);
   }
-  await expect(chooser).toHaveCount(0);
+  await expect(dashboard).toHaveCount(0);
   await expect(indexCard).toBeVisible();
+}
+
+// One stack: the workspace index, then `openCards` in order, the last on top.
+async function openStack(page: Page, realmUrl: string, openCards: string[]) {
+  let state = encodeURIComponent(
+    JSON.stringify({
+      stacks: [
+        [
+          { id: `${realmUrl}index`, format: 'isolated' },
+          ...openCards.map((id) => ({ id, format: 'isolated' })),
+        ],
+      ],
+      submode: 'interact',
+      workspaceChooserOpened: false,
+      aiAssistantOpen: true,
+    }),
+  );
+  await page.goto(`/?operatorModeState=${state}`);
+  await page
+    .locator(`[data-test-stack-card="${realmUrl}index"]`)
+    .waitFor({ timeout: 60_000 });
+  for (let id of openCards) {
+    await page
+      .locator(`[data-test-stack-card="${id}"]`)
+      .waitFor({ timeout: 60_000 });
+  }
+  await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+}
+
+// Puts the card a prompt is about on top of the stack, above the other open
+// cards, since only a stack's top card goes into the message context. Does
+// nothing when it is already the top card.
+async function bringToTop(
+  page: Page,
+  realmUrl: string,
+  openCards: string[],
+  cardId: string,
+  roomId: string,
+) {
+  let top = await page.evaluate(
+    () =>
+      [...document.querySelectorAll('[data-test-stack-card]')]
+        .at(-1)
+        ?.getAttribute('data-test-stack-card') ?? null,
+  );
+  if (top === cardId) {
+    return;
+  }
+  await openStack(page, realmUrl, [
+    ...openCards.filter((id) => id !== cardId),
+    cardId,
+  ]);
+  await returnToRoom(page, roomId);
 }
 
 async function sendPrompt(
@@ -451,22 +521,17 @@ async function readActivityOnce(page: Page): Promise<Activity> {
   return page.evaluate(() => {
     let q = (sel: string) => document.querySelectorAll(sel).length;
     let settled = q('[data-test-room-settled]') > 0;
-    // The bar's "new messages" button stays while the panel is not scrolled
-    // to the end, and it takes the place of the bar's other states, the Stop
-    // button among them. Scroll to the last message so the next read sees the
-    // bar's real state; until then the bar counts as busy.
+    // The composer's action bar (its Stop button) shows while the bot works.
+    // The "new messages" chip is not read here: it floats above the bar
+    // without hiding it, and says only where the transcript is scrolled,
+    // which can leave it up in a room that has finished.
     let actionBar = q('[data-test-ai-assistant-action-bar]');
-    let unread = q('[data-test-unread-messages-button]') > 0;
-    if (unread) {
-      let messages = document.querySelectorAll('[data-test-message-idx]');
-      messages[messages.length - 1]?.scrollIntoView({ block: 'end' });
-    }
     // Only a call the host is running. A call still streaming ("preparing")
     // is the model writing, which the stall check below watches instead.
     let applying = q('[data-test-apply-state="applying"]');
     let preparing = q('[data-test-apply-state="preparing"]');
     let loading = q('[data-test-session-preparation]');
-    let pending = q('[data-test-ai-assistant-message-pending="true"]');
+    let pending = q('[data-test-ai-assistant-message-pending]');
     let generating = q('[data-test-stop-generating]') > 0;
     let awaitingApproval = q('[data-test-tool-call-approval]');
     let irregularities: string[] = [];
@@ -541,8 +606,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     }
     let busy = [
       settled ? '' : 'room not settled',
-      unread ? 'new messages button' : '',
-      actionBar && !unread ? `${actionBar} action bar` : '',
+      actionBar ? `${actionBar} action bar` : '',
       applying ? `${applying} applying` : '',
       preparing ? `${preparing} preparing` : '',
       loading ? 'session preparation' : '',
@@ -573,6 +637,31 @@ async function readActivityOnce(page: Page): Promise<Activity> {
         ),
     };
   });
+}
+
+// The screenshot is judged as what the reader sees at the end of the run, so
+// it should show the transcript's last answer. The transcript can be left
+// scrolled above its end with the "new messages" chip up, even in a finished
+// room. Scroll its scroll area, not the last message: a scroll that lands at
+// the very end is what makes the transcript follow its end again, and a
+// message's own scrollIntoView can stop short of it. Best effort: a page
+// without a transcript is captured as it is.
+async function showTranscriptEnd(page: Page) {
+  try {
+    await page.evaluate(() => {
+      let viewport = document.querySelector<HTMLElement>(
+        '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
+      );
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    });
+    await expect(
+      page.locator('[data-test-unread-messages-button]'),
+    ).toHaveCount(0, { timeout: 2_000 });
+  } catch {
+    // the chip stayed or the page is gone: capture what is there
+  }
 }
 
 async function stopGeneration(page: Page) {
@@ -720,36 +809,67 @@ async function waitForIdle(
 // render the instance through the card renderer, which stamps
 // `data-test-card="<id>"`, so look for that anywhere on the page.
 //
-// `seededCardIds` are the evaluation's `initialCards`, which the run copies in
-// and stacks before the prompt goes out. They render exactly like a card the
-// assistant produced, so they are excluded here — otherwise an evaluation that
-// seeds cards clears the "a card rendered" leg before the assistant does
-// anything.
+// `seeded` are the card instances the run copies in before the prompt goes out
+// (`initialCards` and card `.json` files in `initialFiles`). They render
+// exactly like a card the assistant produced, so they are excluded here —
+// otherwise an evaluation that seeds cards clears the "a card rendered" leg
+// before the assistant does anything.
+//
+// `required`, when given, are the only cards that count, and `seeded` is not
+// consulted: an evaluation that names the cards it expects changed is
+// satisfied only by one of those, changed and shown in the stack or the
+// preview panel — not rendered embedded inside another card, the way a linked
+// card appears in the card that links to it.
 async function findRenderedCard(
   page: Page,
   realmUrl: string,
-  seededCardIds: string[] = [],
+  {
+    seeded = [],
+    required,
+    missingReason = 'no card the assistant produced is rendered, in the stack or the preview panel',
+  }: { seeded?: string[]; required?: string[]; missingReason?: string },
 ) {
-  let seeded = new Set(seededCardIds);
+  let excluded = new Set(required ? [] : seeded);
+  let counted = required ? new Set(required) : undefined;
   let cardIds: string[] = [];
   try {
     await expect
       .poll(
         async () => {
-          let ids = (await page
+          // A card is shown, rather than embedded in another one, when it is
+          // the card of the stack item or the preview panel it renders in.
+          let rendered = await page
             .locator('[data-test-card]')
             .evaluateAll((els) =>
-              els.map((el) => el.getAttribute('data-test-card')),
-            )) as (string | null)[];
+              els.map((el) => {
+                let id = el.getAttribute('data-test-card');
+                let stackCard = el
+                  .closest('[data-test-stack-card]')
+                  ?.getAttribute('data-test-stack-card');
+                let previewCard = el.closest(
+                  '[data-test-code-mode-card-renderer-body]',
+                )
+                  ? document
+                      .querySelector(
+                        '[data-test-code-mode-card-renderer-header]',
+                      )
+                      ?.getAttribute('data-test-code-mode-card-renderer-header')
+                  : undefined;
+                return { id, shown: id === stackCard || id === previewCard };
+              }),
+            );
           cardIds = [
             ...new Set(
-              ids.filter(
-                (id): id is string =>
-                  !!id &&
-                  id.startsWith(realmUrl) &&
-                  !id.endsWith('index') &&
-                  !seeded.has(id),
-              ),
+              rendered
+                .filter(({ id, shown }) =>
+                  counted
+                    ? !!id && counted.has(id) && shown
+                    : !!id &&
+                      id.startsWith(realmUrl) &&
+                      !id.endsWith('index') &&
+                      !excluded.has(id),
+                )
+                .map(({ id }) => id as string),
             ),
           ];
           return cardIds.length;
@@ -760,9 +880,7 @@ async function findRenderedCard(
   } catch {
     return {
       cardId: undefined,
-      reasons: [
-        'no card the assistant produced is rendered, in the stack or the preview panel',
-      ],
+      reasons: [missingReason],
       where: undefined,
     };
   }
@@ -791,6 +909,114 @@ async function findRenderedCard(
     reasons,
     where: (inStack ? 'stack' : 'preview') as 'stack' | 'preview',
   };
+}
+
+type ExpectedSeed = ReturnType<typeof expectedChangedSeeds>[number];
+
+interface SeedState {
+  seed: ExpectedSeed;
+  // `missing` when the file is gone (the run deleted or renamed it).
+  state: 'same' | 'changed' | 'missing';
+  // The file's Last-Modified, in whole seconds.
+  lastModified?: number;
+}
+
+// How a seeded card's file compares with its seed. `bytes` compares the file
+// byte for byte, which is what the copy has to keep. `data` compares the
+// card's data (attributes, relationships and `adoptsFrom`, whatever their key
+// order), so a write that only reformats the file is not a change; it falls
+// back to bytes when either side does not parse. Any read failure but a 404
+// throws, so it ends the run as a runner failure rather than reading as a
+// card the model left alone.
+async function seedState(
+  client: RealmClient,
+  realmUrl: string,
+  seed: ExpectedSeed,
+  compare: 'bytes' | 'data',
+): Promise<SeedState> {
+  let source;
+  try {
+    source = await client.getSource(realmUrl, seed.cardId + '.json');
+  } catch (error) {
+    if (error instanceof RealmResponseError && error.status === 404) {
+      return { seed, state: 'missing' };
+    }
+    throw error;
+  }
+  let body = Buffer.from(source.body);
+  let same =
+    compare === 'bytes'
+      ? seed.content.equals(body)
+      : (sameCardData(seed.content, body) ?? seed.content.equals(body));
+  return {
+    seed,
+    state: same ? 'same' : 'changed',
+    lastModified: source.lastModified,
+  };
+}
+
+function sameCardData(a: Buffer, b: Buffer): boolean | undefined {
+  let data = (bytes: Buffer) => {
+    let doc = JSON.parse(bytes.toString('utf8')) as CardDocument;
+    return canonicalJSON({
+      attributes: doc.data.attributes ?? {},
+      relationships: doc.data.relationships ?? {},
+      adoptsFrom: doc.data.meta?.adoptsFrom,
+    });
+  };
+  try {
+    return data(a) === data(b);
+  } catch {
+    return undefined;
+  }
+}
+
+// JSON with object keys sorted, so two documents that differ only in key order
+// serialize the same.
+function canonicalJSON(value: unknown): string {
+  return JSON.stringify(value, (_key, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : v,
+  );
+}
+
+// Waits until the realm's index has caught up with a changed card's file, so
+// the render check sees the card the change produced rather than the one still
+// on screen from before it. Returns why it gave up, if it did.
+async function waitForIndexedChange(
+  client: RealmClient,
+  realmUrl: string,
+  { seed, lastModified }: SeedState,
+  timeoutMs = 60_000,
+): Promise<string | undefined> {
+  let deadline = Date.now() + timeoutMs;
+  let problem = 'it never indexed';
+  for (;;) {
+    try {
+      let doc = await client.getCard(realmUrl, seed.cardId);
+      let indexed = doc.data.meta.lastModified;
+      if (
+        lastModified === undefined ||
+        typeof indexed !== 'number' ||
+        indexed >= lastModified
+      ) {
+        return undefined;
+      }
+      problem = 'the index still serves the version before the change';
+    } catch (error) {
+      if (!(error instanceof RealmResponseError)) {
+        throw error;
+      }
+      problem = `the realm answers ${error.status} for it`;
+    }
+    if (Date.now() > deadline) {
+      return `the change to ${seed.path} did not index within ${timeoutMs / 1000}s: ${problem}`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
 }
 
 function skillsUsed(events: MatrixEvent[]): string[] {
@@ -827,6 +1053,7 @@ function classify(
   analysis: RunResult['analysis'] & object,
   promptsSent: number,
   promptsTotal: number,
+  expectsNoWrites = false,
 ): { verdict: Verdict; reasons: string[] } {
   let reasons: string[] = [];
   // A run the runner cut short is a failure whatever is on screen when it
@@ -885,6 +1112,28 @@ function classify(
     return { verdict: 'host-failure', reasons };
   }
   let writes = analysis.realmCodeWrites + analysis.toolWrites;
+  // A conversation-only evaluation is about what the assistant says and which
+  // tools it calls; its criteria forbid writing anything, so a write is the
+  // failure and no card needs to render. `cardReasons` then holds any seeded
+  // card that no longer matches its seed, which catches a change made by a
+  // tool the write counts don't know.
+  if (expectsNoWrites) {
+    reasons.push(...cardReasons);
+    if (writes > 0) {
+      reasons.push(
+        `the evaluation expects no writes, but ${writes} file write(s) were applied`,
+      );
+    }
+    if (promptsSent < promptsTotal) {
+      reasons.push(
+        `only ${promptsSent} of ${promptsTotal} prompts were sent before the run ended`,
+      );
+    }
+    return {
+      verdict: reasons.length === 0 ? 'pass' : 'model-failure',
+      reasons,
+    };
+  }
   if (writes === 0) {
     reasons.push(
       'no file was written (no applied run-realm-code or other writing tool call)',
@@ -957,6 +1206,8 @@ async function runModel(
     sessionId: SESSION_ID,
     initialCards: [],
     initialFiles: [],
+    expectedChangedCards: [],
+    changedCards: [],
     skillsUsed: [],
     skillFeatures: [],
     roomReturns: 0,
@@ -971,6 +1222,8 @@ async function runModel(
   // Declared out here so the snapshot in `finally` can still reach it when the
   // run ends early.
   let realmClient: RealmClient | undefined;
+  let expected: ExpectedSeed[] = [];
+  let seededCards: string[] = [];
   let step = 'start';
   let setStep = (next: string) => {
     step = next;
@@ -1010,6 +1263,36 @@ async function runModel(
       );
       result.initialCards = copied.cards;
       result.initialFiles = copied.files;
+      seededCards = copied.seededCards;
+      // Read the cards the evaluation expects changed back before the prompt:
+      // the check after the run compares each one with its seed, so the copy
+      // has to have kept the seed's bytes.
+      expected = expectedChangedSeeds(evaluation, result.realmUrl);
+      result.expectedChangedCards = expected.map((seed) => seed.cardId);
+      let client = realmClient;
+      let realmUrl = result.realmUrl;
+      let states = await Promise.all(
+        expected.map((seed) => seedState(client, realmUrl, seed, 'bytes')),
+      );
+      for (let { seed, state } of states) {
+        if (state !== 'same') {
+          throw new Error(
+            `${seed.path} does not read back as its seed after the copy, so a change to it could not be told apart`,
+          );
+        }
+      }
+      if (evaluation.pipelineApprovals?.length) {
+        setStep('approve operations for pipelines only');
+        await seedPipelineApprovals(
+          pipelineApprovalTargets(evaluation, realmUrl),
+          {
+            user: credentials.userId,
+            owner: client,
+            password: PASSWORD,
+            log: (line) => console.log(`[eval] ${requestedModel}: ${line}`),
+          },
+        );
+      }
     }
     setStep('open room');
     result.roomId = await openRoom(page);
@@ -1050,7 +1333,20 @@ async function runModel(
     let deadline = Date.now() + MAX_MINUTES * 60_000;
     let botMessagesBefore = 0;
     let roomReturns = { count: 0 };
+    let promptCards = evaluation
+      ? promptCardIds(evaluation, result.realmUrl)
+      : [];
     for (let [index, prompt] of prompts.entries()) {
+      if (promptCards[index]) {
+        setStep(`open the card for prompt ${index + 1}`);
+        await bringToTop(
+          page,
+          result.realmUrl,
+          result.initialCards,
+          promptCards[index],
+          result.roomId,
+        );
+      }
       setStep(
         index === 0 ? 'send prompt' : `send follow-up prompt ${index + 1}`,
       );
@@ -1103,14 +1399,68 @@ async function runModel(
     result.roomReturns = roomReturns.count;
     setStep('check render');
 
-    let rendered = await findRenderedCard(
-      page,
-      result.realmUrl,
-      result.initialCards,
+    // An evaluation that names the cards it expects changed passes only when
+    // every one of them differs from its seed, and one of them is shown, after
+    // the index has caught up with it.
+    let checkClient = realmClient;
+    let checkRealmUrl = result.realmUrl;
+    let states = await Promise.all(
+      expected.map((seed) =>
+        seedState(checkClient, checkRealmUrl, seed, 'data'),
+      ),
     );
+    let changed = states.filter(({ state }) => state === 'changed');
+    result.changedCards = changed.map(({ seed }) => seed.cardId);
+    let cardReasons = states.flatMap(({ seed, state }) =>
+      state === 'same'
+        ? [`${seed.path} is expected to change but still holds its seed data`]
+        : state === 'missing'
+          ? [`${seed.path} is expected to change but no longer exists`]
+          : [],
+    );
+    // A conversation-only evaluation fails on any change to a seeded card,
+    // whichever tool made it, not only on the writes the room analysis counts.
+    if (evaluation?.expectsNoWrites) {
+      let seeds = await Promise.all(
+        seededCardSeeds(evaluation, checkRealmUrl).map((seed) =>
+          seedState(checkClient, checkRealmUrl, seed, 'data'),
+        ),
+      );
+      for (let { seed, state } of seeds) {
+        if (state !== 'same') {
+          cardReasons.push(
+            `${seed.path} was ${state === 'missing' ? 'removed' : 'changed'}, and the evaluation expects no writes`,
+          );
+        }
+      }
+    }
+    let indexProblems = await Promise.all(
+      changed.map((state) =>
+        waitForIndexedChange(checkClient, checkRealmUrl, state),
+      ),
+    );
+    cardReasons.push(...indexProblems.filter((p): p is string => !!p));
+    // A conversation-only evaluation renders no card of its own, so there is
+    // nothing to wait for.
+    let rendered = evaluation?.expectsNoWrites
+      ? { cardId: undefined, reasons: [], where: undefined }
+      : expected.length === 0
+        ? await findRenderedCard(page, result.realmUrl, {
+            seeded: seededCards,
+          })
+        : changed.length === 0
+          ? { cardId: undefined, reasons: [], where: undefined }
+          : await findRenderedCard(page, result.realmUrl, {
+              required: result.changedCards,
+              missingReason: `no card the evaluation expects to change is shown in the stack or the preview panel (${changed
+                .map(({ seed }) => seed.path)
+                .join(', ')} changed)`,
+            });
+    rendered.reasons = [...cardReasons, ...rendered.reasons];
     result.cardRendered = rendered.cardId;
     result.renderedIn = rendered.where;
     result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+    await showTranscriptEnd(page);
     await page.screenshot({ path: result.screenshot, fullPage: false });
 
     let events = await allRoomEvents(result.roomId, credentials.accessToken);
@@ -1127,6 +1477,7 @@ async function runModel(
       result.analysis,
       result.promptsSent,
       prompts.length,
+      evaluation?.expectsNoWrites ?? false,
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
@@ -1150,6 +1501,7 @@ async function runModel(
     );
     try {
       result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+      await showTranscriptEnd(page);
       await page.screenshot({ path: result.screenshot });
     } catch {
       // the page may be gone

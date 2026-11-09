@@ -6,8 +6,24 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { Querier } from '@cardstack/runtime-common/expression';
+import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-name';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
-import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
+import {
+  consumeKeyWriteTicket,
+  servesVisitorsSQL,
+  UserKeyError,
+} from './user-keys.ts';
+import { moveShareBindingsIn } from './key-bindings.ts';
+import { isUUID, namedToViewer } from './named-users.ts';
+
+export { isUUID };
+import {
+  KEY_LIMIT_COLUMNS,
+  limitsViewOf,
+  type KeyLimitsView,
+} from './key-limit-settings.ts';
+import type { SecretsKeyring } from './secrets-at-rest/index.ts';
+import type { SecureSessionClient } from './secure-session.ts';
 
 // Shares: a key its owner has put into a realm for other people there to
 // consume. A share holds no secret, only the key it refers to, so one key may
@@ -29,7 +45,9 @@ import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
 //   user's key.
 // - A share's owner sees all of their shares, in every realm. A realm's direct
 //   writers see its shares, with owner and state, and the notices recorded
-//   when one is suspended. Nobody else sees anything of a realm's shares.
+//   when one is suspended, with the owner and suspender named only while a
+//   permission row in the realm names them. Nobody else sees anything of a
+//   realm's shares.
 //
 // Suspensions that follow from other changes are made by triggers on the
 // tables those changes write (see the migration that adds `key_shares`), so
@@ -55,16 +73,41 @@ export interface KeyShare {
   id: string;
   realm: string;
   label: string;
-  owner: string;
+  // Null in a writer's view once no permission row in the realm names the
+  // owner (see `withholdUnnamed`); a share's owner always sees their own id.
+  owner: string | null;
   // The key the share holds; given only to the share's owner, and null once
   // the key is deleted.
   keyId?: string | null;
   state: KeyShareState;
   suspensionReason: KeyShareSuspensionReason | null;
+  // Null when no writer suspended the share, or once permission rows in the
+  // realm no longer name both the viewer and the one who did.
   suspendedBy: string | null;
   suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // How much of the key anyone may spend through the share, its owner's
+  // settings with the platform's defaults filled in, and which of them the
+  // owner set (see `KeyLimitsView`). Seen only by the share's owner and the
+  // realm's direct writers, as every share is.
+  limits: KeyLimitsView;
+  // In a realm's listing: the operations the share is approved for there,
+  // one per binding, so the realm's writers see what each share is used by.
+  operations?: KeyShareOperation[];
+}
+
+export interface KeyShareOperation {
+  bindingId: string;
+  type: { module: string; name: string };
+  operation: string;
+  instance: string | null;
+  slot: string;
+  state: 'active' | 'needs-reapproval' | 'suspended';
+  // Where it sends, as last approved: the destination a key swapped into the
+  // share is granted for it, so a swapper can tell beforehand which of them
+  // their key has no grant for.
+  destination: string;
 }
 
 export interface KeyShareNotice {
@@ -72,7 +115,8 @@ export interface KeyShareNotice {
   shareId: string;
   realm: string;
   label: string;
-  owner: string;
+  // Null, as is `suspendedBy`, once no permission row in the realm names them.
+  owner: string | null;
   reason: KeyShareSuspensionReason;
   suspendedBy: string | null;
   createdAt: string;
@@ -81,7 +125,7 @@ export interface KeyShareNotice {
 // The most notices a realm's listing returns, newest first.
 export const MAX_KEY_SHARE_NOTICES = 100;
 
-const SHARE_COLUMNS = `id, realm_url, label, owner, key_id, state, suspension_reason, suspended_by, suspended_at, created_at, updated_at`;
+const SHARE_COLUMNS = `id, realm_url, label, owner, key_id, state, suspension_reason, suspended_by, suspended_at, created_at, updated_at, ${KEY_LIMIT_COLUMNS}`;
 
 function iso(value: unknown): string | null {
   return value == null ? null : new Date(value as string).toISOString();
@@ -95,7 +139,7 @@ function toShare(
     id: row.id as string,
     realm: row.realm_url as string,
     label: row.label as string,
-    owner: row.owner as string,
+    owner: (row.owner as string | null) ?? null,
     ...(withKey ? { keyId: (row.key_id as string | null) ?? null } : {}),
     state: row.state as KeyShareState,
     suspensionReason:
@@ -104,13 +148,39 @@ function toShare(
     suspendedAt: iso(row.suspended_at),
     createdAt: iso(row.created_at)!,
     updatedAt: iso(row.updated_at)!,
+    limits: limitsViewOf(row),
   };
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isUUID(value: unknown): value is string {
-  return typeof value === 'string' && UUID.test(value);
+// Share or notice rows as `viewer` may see them: `owner` and `suspended_by`
+// are null except for the ids `namedToViewer` lets the viewer see in the
+// row's realm. A share and its notices outlive their owner's and their
+// suspender's rows.
+async function withholdUnnamed(
+  txQuery: Querier,
+  viewer: string,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  let isNamed = await namedToViewer(
+    txQuery,
+    viewer,
+    rows.map((row) => row.realm_url as string),
+    rows.flatMap((row) =>
+      [row.owner, row.suspended_by].filter(
+        (id): id is string => typeof id === 'string',
+      ),
+    ),
+  );
+  return rows.map((row) => {
+    let realm = row.realm_url as string;
+    let shown = (id: unknown) =>
+      typeof id === 'string' && isNamed(realm, id) ? id : null;
+    return {
+      ...row,
+      owner: shown(row.owner),
+      suspended_by: shown(row.suspended_by),
+    };
+  });
 }
 
 function noSuchShare() {
@@ -184,22 +254,37 @@ async function lockDirectWriters(
 }
 
 // The user's own key, locked against a concurrent delete until the caller's
-// transaction ends. Another user's key answers as one that doesn't exist.
+// transaction ends, with whether it can serve people who aren't signed in
+// and whether its owner lets them. Another user's key answers as one that
+// doesn't exist.
 async function lockOwnKey(
   txQuery: Querier,
   owner: string,
   keyId: string,
-): Promise<void> {
+): Promise<{ anonymous: boolean; servesVisitors: boolean }> {
   let rows = await txQuery([
-    `SELECT id FROM user_keys WHERE id = `,
+    `SELECT k.kind, k.anonymous, ${servesVisitorsSQL('k', 'c')} AS serves_visitors FROM user_keys k LEFT JOIN oauth_clients c ON c.key_id = k.id WHERE k.id = `,
     param(keyId),
-    ` AND owner = `,
+    ` AND k.owner = `,
     param(owner),
-    ` FOR SHARE`,
+    ` FOR SHARE OF k`,
   ]);
   if (rows.length === 0) {
     throw noSuchKey();
   }
+  // An OAuth connection is one person's sign-in at the vendor, so it serves
+  // only its owner's own calls. Teammates share the client and each connect
+  // their own account through it.
+  if (rows[0].kind === 'oauth-connection') {
+    throw new UserKeyError(
+      400,
+      "a connection is its owner's own sign-in and is never shared: share the OAuth client, and each teammate connects through it",
+    );
+  }
+  return {
+    anonymous: Boolean(rows[0].anonymous),
+    servesVisitors: Boolean(rows[0].serves_visitors),
+  };
 }
 
 // The share, locked for the caller's change, if `user` may see it: as its
@@ -260,6 +345,17 @@ async function lockVisibleShare(
   }
 }
 
+// Shares a key. Who can use a shared key is the realm's policy's to say, and
+// whether people who aren't signed in may use this key is its owner's, made
+// for the key itself (`anonymous` on the key, see `user-keys.ts`), never when
+// sharing. `opensToAnonymous`, read from the realm's policy by the caller,
+// says whether the realm lets such people make a call that sends a shared
+// key; sharing into it means they will use the key, so a key that doesn't
+// allow them isn't shared there, and a visitor the policy admits when the key
+// is shared is never refused for want of it. The policy is asked only once
+// the ticket and the owner's direct write are checked, so nobody else learns
+// from the answer what it opens. A policy that changes later is a matter for
+// its own audit.
 export async function shareKey(
   dbAdapter: DBAdapter,
   {
@@ -267,12 +363,15 @@ export async function shareKey(
     realm,
     keyId,
     label,
+    opensToAnonymous = async () => false,
     ticket,
   }: {
     owner: string;
     realm: unknown;
     keyId: unknown;
     label: unknown;
+    // Absent where the caller knows the realm opens nothing to such people.
+    opensToAnonymous?: (realmURL: URL) => Promise<boolean>;
     ticket: unknown;
   },
 ): Promise<KeyShare> {
@@ -298,7 +397,20 @@ export async function shareKey(
         'a key is shared only into a realm its owner is a direct writer of',
       );
     }
-    await lockOwnKey(txQuery, owner, keyId);
+    let key = await lockOwnKey(txQuery, owner, keyId);
+    // Refusing rolls the transaction back, so the ticket isn't spent.
+    // A sign-in app never serves someone who isn't signed in, so sharing it
+    // puts it in front of nobody it can't serve.
+    if (
+      key.servesVisitors &&
+      !key.anonymous &&
+      (await opensToAnonymous(realmURL))
+    ) {
+      throw new UserKeyError(
+        400,
+        "this realm's policy lets people who aren't signed in make calls that send a shared key, so sharing a key into it means they will use it, and this key doesn't allow them. Its owner allows it for the key first (the key's page, or `boxel keys anonymous <name> on`)",
+      );
+    }
     let [row] = await txQuery([
       `INSERT INTO key_shares (id, realm_url, label, owner, key_id, state) VALUES (`,
       param(id),
@@ -357,7 +469,8 @@ export async function suspendShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    return toShare(updated, { withKey: updated.owner === user });
+    let [shown] = await withholdUnnamed(txQuery, user, [updated]);
+    return toShare(shown, { withKey: shown.owner === user });
   });
 }
 
@@ -405,22 +518,39 @@ export async function resumeShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    return toShare(updated, { withKey: updated.owner === user });
+    let [shown] = await withholdUnnamed(txQuery, user, [updated]);
+    return toShare(shown, { withKey: shown.owner === user });
   });
 }
 
 // A direct writer puts one of their own keys into a suspended share. They
 // become its owner and it resumes; its label, and so every card that names
-// it, is unchanged.
+// it, is unchanged. Every operation approved for the share moves to the new
+// key: the swap is the new owner's approval of each, so it grants the new key
+// the destinations they send to, which takes a session signed in on the
+// secure origin (`via`) when the share has any.
 export async function swapKeyIntoShare(
   dbAdapter: DBAdapter,
+  keyring: SecretsKeyring,
   {
     user,
     shareId,
     keyId,
     ticket,
-  }: { user: string; shareId: string; keyId: unknown; ticket: unknown },
-): Promise<KeyShare> {
+    via,
+    opensToAnonymous = async () => false,
+  }: {
+    user: string;
+    shareId: string;
+    keyId: unknown;
+    ticket: unknown;
+    via: SecureSessionClient | undefined;
+    // As for sharing: whether the share's realm lets people who aren't
+    // signed in make a call that sends a shared key. Absent where the caller
+    // knows it opens nothing to them.
+    opensToAnonymous?: (realmURL: URL) => Promise<boolean>;
+  },
+): Promise<{ share: KeyShare; reapprovedBindings: string[] }> {
   if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a swap names the key it puts in');
   }
@@ -446,8 +576,39 @@ export async function swapKeyIntoShare(
     if (row.state !== 'suspended') {
       throw new UserKeyError(409, 'only a suspended share takes another key');
     }
+    // Swapping a key in puts it where sharing would: in a realm that lets
+    // people who aren't signed in use its shared keys, they will use this
+    // one, so it is held to the same rule as sharing.
+    let key = await lockOwnKey(txQuery, user, keyId);
+    if (
+      key.servesVisitors &&
+      !key.anonymous &&
+      (await opensToAnonymous(new URL(row.realm_url as string)))
+    ) {
+      throw new UserKeyError(
+        400,
+        "this realm's policy lets people who aren't signed in make calls that send a shared key, so swapping a key into one of its shares means they will use it, and this key doesn't allow them. Its owner allows it for the key first (the key's page, or `boxel keys anonymous <name> on`)",
+      );
+    }
+    // Limits are the key owner's to set, so a share taken over by another
+    // writer starts from the platform's defaults rather than spending the new
+    // owner's key under limits someone else chose. A writer swapping another
+    // of their own keys into their own share keeps the limits they set.
+    // Whether people who aren't signed in may use it follows the key swapped
+    // in, as its owner set it.
     let [updated] = await txQuery([
-      `UPDATE key_shares SET owner = `,
+      `UPDATE key_shares SET `,
+      ...[
+        'rate_burst',
+        'rate_refill_per_minute',
+        'daily_budget',
+        'monthly_budget',
+      ].flatMap((column, index) => [
+        `${index === 0 ? '' : ', '}${column} = CASE WHEN owner = `,
+        param(user),
+        ` THEN ${column} END`,
+      ]),
+      `, owner = `,
       param(user),
       `, key_id = `,
       param(keyId),
@@ -455,7 +616,13 @@ export async function swapKeyIntoShare(
       param(shareId),
       ` RETURNING ${SHARE_COLUMNS}`,
     ]);
-    return toShare(updated, { withKey: true });
+    let reapprovedBindings = await moveShareBindingsIn(txQuery, keyring, {
+      shareId,
+      keyId,
+      owner: user,
+      via,
+    });
+    return { share: toShare(updated, { withKey: true }), reapprovedBindings };
   });
 }
 
@@ -469,13 +636,120 @@ export async function listOwnShares(
   if (keyId !== undefined && !isUUID(keyId)) {
     return [];
   }
-  let rows = await query(dbAdapter, [
-    `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE owner = `,
-    param(owner),
-    ...(keyId !== undefined ? [` AND key_id = `, param(keyId)] : []),
-    ` ORDER BY realm_url, label`,
-  ]);
+  let rows = await withholdUnnamed(
+    (expression) => query(dbAdapter, expression),
+    owner,
+    await query(dbAdapter, [
+      `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE owner = `,
+      param(owner),
+      ...(keyId !== undefined ? [` AND key_id = `, param(keyId)] : []),
+      ` ORDER BY realm_url, label`,
+    ]),
+  );
   return rows.map((row) => toShare(row, { withKey: true }));
+}
+
+// A realm one of the user's keys is shared into: its address, its name as its
+// `realm.json` gives it, and the key's shares there. The name is null when
+// the user can't read the realm by a permission row of their own or a public
+// one (`*`, `users`), as after they are removed from it, and while its
+// `realm.json` isn't indexed. A share outlives its owner's access, so the
+// address is all an owner who can no longer read the realm keeps of it.
+export interface SharedRealm {
+  url: string;
+  name: string | null;
+  // `approvedCalls`: how many bindings send the share (one per slot an
+  // approval fills, and per card for an operation approved per card),
+  // whatever state each is in. None means no card there calls with it yet.
+  shares: {
+    id: string;
+    label: string;
+    state: KeyShareState;
+    approvedCalls: number;
+  }[];
+}
+
+// The realms each of the user's keys is shared into, by key id, each realm
+// once with every share that puts the key there, by name and then address.
+// These are the shares `listOwnShares` lists, read for every key at once.
+// With `keyId`, only that key's. `matrixServerName` names the paired
+// homeserver.
+export async function listOwnSharedRealms(
+  dbAdapter: DBAdapter,
+  owner: string,
+  { keyId, matrixServerName }: { keyId?: string; matrixServerName: string },
+): Promise<Map<string, SharedRealm[]>> {
+  let byKey = new Map<string, SharedRealm[]>();
+  if (keyId !== undefined && !isUUID(keyId)) {
+    return byKey;
+  }
+  // A realm's name is shown to an owner who may read the realm: through its
+  // `*` row, their own row, or its `users` row, which grants only to users of
+  // the paired homeserver (ADR 004 §1.4).
+  let readingRows = isUserOfMatrixServer(owner, matrixServerName)
+    ? `'*', 'users', ks.owner`
+    : `'*', ks.owner`;
+  let rows = (await query(dbAdapter, [
+    `SELECT ks.id, ks.label, ks.state, ks.key_id, ks.realm_url,
+            (SELECT config.pristine_doc->'attributes'->'cardInfo'->>'name'
+             FROM boxel_index config
+             WHERE config.url = ks.realm_url || 'realm.json'
+               AND config.realm_url = ks.realm_url
+               AND config.type = 'instance'
+               AND (config.is_deleted = FALSE OR config.is_deleted IS NULL)
+               AND EXISTS (
+                 SELECT 1 FROM realm_user_permissions rup
+                 WHERE rup.realm_url = ks.realm_url
+                   AND rup.read = true
+                   AND rup.username IN (${readingRows}))
+             LIMIT 1) AS name,
+            (SELECT COUNT(*) FROM key_bindings kb WHERE kb.share_id = ks.id)
+              AS approved_calls
+     FROM key_shares ks
+     WHERE ks.key_id IS NOT NULL AND ks.owner = `,
+    param(owner),
+    ...(keyId !== undefined ? [` AND ks.key_id = `, param(keyId)] : []),
+    ` ORDER BY ks.key_id, ks.realm_url, ks.label`,
+  ])) as {
+    id: string;
+    label: string;
+    state: KeyShareState;
+    key_id: string;
+    realm_url: string;
+    name: string | null;
+    approved_calls: number | string;
+  }[];
+  for (let {
+    id,
+    label,
+    state,
+    key_id,
+    realm_url,
+    name,
+    approved_calls,
+  } of rows) {
+    let realms = byKey.get(key_id) ?? [];
+    let realm = realms.find((r) => r.url === realm_url);
+    if (!realm) {
+      realm = { url: realm_url, name, shares: [] };
+      realms.push(realm);
+    }
+    realm.shares.push({
+      id,
+      label,
+      state,
+      approvedCalls: Number(approved_calls),
+    });
+    byKey.set(key_id, realms);
+  }
+  for (let realms of byKey.values()) {
+    realms.sort(
+      (a, b) =>
+        (a.name ?? '').localeCompare(b.name ?? '') ||
+        a.url.localeCompare(b.url),
+    );
+  }
+  return byKey;
 }
 
 // Reads `realm`'s rows for one of its direct writers, with their permission
@@ -509,13 +783,50 @@ export async function listRealmShares(
     user,
     realm,
     async (txQuery, realmURL) =>
-      await txQuery([
-        `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE realm_url = `,
-        param(realmURL.href),
-        ` ORDER BY label`,
-      ]),
+      await withholdUnnamed(
+        txQuery,
+        user,
+        await txQuery([
+          `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE realm_url = `,
+          param(realmURL.href),
+          ` ORDER BY label`,
+        ]),
+      ),
   );
-  return rows.map((row) => toShare(row, { withKey: row.owner === user }));
+  let operations = new Map<string, KeyShareOperation[]>();
+  if (rows.length > 0) {
+    let bindings = await query(dbAdapter, [
+      `SELECT b.id, b.share_id, b.definition_url, b.export_name, b.operation_name, b.instance_url, b.slot, b.state, last.destination
+         FROM key_bindings b JOIN key_binding_approvals last ON last.id = b.approval_id
+        WHERE b.share_id IN (`,
+      ...rows.flatMap((row, i) => [
+        ...(i > 0 ? [', '] : []),
+        param(row.id as string),
+      ]),
+      `) ORDER BY b.definition_url, b.export_name, b.operation_name, b.instance_url NULLS FIRST, b.slot`,
+    ]);
+    for (let binding of bindings) {
+      let shareId = binding.share_id as string;
+      let list = operations.get(shareId) ?? [];
+      list.push({
+        bindingId: binding.id as string,
+        type: {
+          module: binding.definition_url as string,
+          name: binding.export_name as string,
+        },
+        operation: binding.operation_name as string,
+        instance: (binding.instance_url as string | null) ?? null,
+        slot: binding.slot as string,
+        state: binding.state as KeyShareOperation['state'],
+        destination: binding.destination as string,
+      });
+      operations.set(shareId, list);
+    }
+  }
+  return rows.map((row) => ({
+    ...toShare(row, { withKey: row.owner === user }),
+    operations: operations.get(row.id as string) ?? [],
+  }));
 }
 
 // The notices recorded when one of a realm's shares was suspended, or when
@@ -531,18 +842,22 @@ export async function listRealmShareNotices(
     user,
     realm,
     async (txQuery, realmURL) =>
-      await txQuery([
-        `SELECT id, share_id, realm_url, label, owner, reason, suspended_by, created_at FROM key_share_notices WHERE realm_url = `,
-        param(realmURL.href),
-        ` ORDER BY created_at DESC, id DESC LIMIT ${MAX_KEY_SHARE_NOTICES}`,
-      ]),
+      await withholdUnnamed(
+        txQuery,
+        user,
+        await txQuery([
+          `SELECT id, share_id, realm_url, label, owner, reason, suspended_by, created_at FROM key_share_notices WHERE realm_url = `,
+          param(realmURL.href),
+          ` ORDER BY created_at DESC, id DESC LIMIT ${MAX_KEY_SHARE_NOTICES}`,
+        ]),
+      ),
   );
   return rows.map((row) => ({
     id: String(row.id),
     shareId: row.share_id as string,
     realm: row.realm_url as string,
     label: row.label as string,
-    owner: row.owner as string,
+    owner: (row.owner as string | null) ?? null,
     reason: row.reason as KeyShareSuspensionReason,
     suspendedBy: (row.suspended_by as string | null) ?? null,
     createdAt: iso(row.created_at)!,

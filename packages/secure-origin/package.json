@@ -6,18 +6,20 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "build": "node build/ensure-icons.ts && vite build",
+    "build:if-stale": "node build/ensure-build.ts",
+    "lint": "node build/ensure-icons.ts && concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
-    "lint:build": "SECURE_ORIGIN_BUILD_RECORD=check vite build --outDir dist-lint --emptyOutDir",
+    "lint:build": "node build/ensure-icons.ts && SECURE_ORIGIN_BUILD_RECORD=check vite build --outDir dist-lint --emptyOutDir && node build/ensure-build.ts --check dist-lint",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:hbs": "ember-template-lint . --no-error-on-unmatched-pattern",
     "lint:hbs:fix": "ember-template-lint . --no-error-on-unmatched-pattern --fix",
+    "lint:pretui": "node build/pret-ui-lint.ts",
     "test": "pnpm test:unit && pnpm test:components",
-    "lint:types": "ember-tsc --noEmit",
+    "lint:types": "node build/ensure-icons.ts && node build/type-check.ts",
     "test:unit": "node --test 'tests/**/*.test.ts'",
-    "test:components": "vite build --mode=development --outDir dist-tests && ember test --config-file testem.cjs --path dist-tests"
+    "test:components": "node build/ensure-icons.ts && NODE_ENV=development vite build --mode=development --outDir dist-tests && ember test --config-file testem.cjs --path dist-tests"
   },
   "exports": {
     "./package.json": "./package.json",
@@ -25,12 +27,16 @@
     "./screens/*": "./src/screens/*",
     "./security/*": "./src/security/*",
     "./shell/*": "./src/shell/*",
+    "./telemetry/*": "./src/telemetry/*",
     "./dist/*": "./dist/*"
   },
   "dependencies": {
     "@babel/runtime": "catalog:",
+    "@cardstack/boxel-icons": "workspace:*",
+    "@cardstack/pretui": "workspace:*",
     "@glimmer/component": "catalog:",
     "decorator-transforms": "catalog:",
+    "ember-modifier": "^4.1.0",
     "ember-source": "catalog:"
   },
   "devDependencies": {
@@ -38,6 +44,7 @@
     "@babel/plugin-transform-runtime": "^7.29.0",
     "@babel/plugin-transform-typescript": "catalog:",
     "@ember/test-helpers": "catalog:",
+    "@ember/test-waiters": "catalog:",
     "@embroider/core": "^4.6.3",
     "@embroider/macros": "^1.20.5",
     "@embroider/vite": "^1.7.10",
@@ -49,6 +56,7 @@
     "babel-plugin-ember-template-compilation": "catalog:",
     "concurrently": "catalog:",
     "ember-cli": "~6.12.0",
+    "ember-concurrency": "catalog:",
     "ember-eslint-parser": "catalog:",
     "ember-qunit": "catalog:",
     "ember-template-lint": "catalog:",

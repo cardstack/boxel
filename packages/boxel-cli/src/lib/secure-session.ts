@@ -7,6 +7,7 @@ import {
   startLoopbackCallback,
   watchForCopyKey,
   copyToClipboard,
+  secureOriginPageUrl,
   type PostedSecureSession,
 } from './sso-login.ts';
 
@@ -150,8 +151,7 @@ export function buildSecureSignInUrl(
   callback: { port: number; state: string },
   username?: string,
 ): string {
-  let url = new URL(secureOriginUrl);
-  url.searchParams.set('mode', 'cli-sign-in');
+  let url = secureOriginPageUrl(secureOriginUrl, 'cli-sign-in');
   url.searchParams.set('port', String(callback.port));
   url.searchParams.set('state', callback.state);
   if (username) {

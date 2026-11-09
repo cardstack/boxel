@@ -1,5 +1,6 @@
 // Pretui — FieldError: the message line under a field, one severity glyph per issue.
 import Component from '@glimmer/component';
+import XIcon from '@cardstack/boxel-icons/x';
 import { Token } from './token';
 import { normalizeSeverity } from '../internal/forms-core';
 import type { FormIssue, FormSeverity } from '../internal/forms-core';
@@ -23,10 +24,10 @@ import type { FormIssue, FormSeverity } from '../internal/forms-core';
 // message is still read whenever the field itself is focused because
 // FormField put its id in the control's aria-describedby.
 
-const SEVERITY_GLYPHS: Record<FormSeverity, string> = {
-  // Same glyph vocabulary as Alert, so a field message and a
+const SEVERITY_GLYPHS: Record<FormSeverity, string | typeof XIcon> = {
+  // Same glyph vocabulary as Alert and Cue, so a field message and a
   // banner about the same thing read as one system.
-  error: '✕',
+  error: XIcon,
   warning: '!',
   info: 'i',
 };
@@ -55,11 +56,17 @@ export class FieldError extends Component<FieldErrorSignature> {
   get severity(): FormSeverity {
     return normalizeSeverity(this.args.issue?.severity);
   }
-  get glyph(): string | undefined {
+  get glyph(): string | typeof XIcon | undefined {
     if (this.args.glyph === false && this.severity === 'error') {
       return undefined;
     }
     return SEVERITY_GLYPHS[this.severity];
+  }
+  get glyphText() {
+    return typeof this.glyph === 'string' ? this.glyph : undefined;
+  }
+  get glyphIcon() {
+    return typeof this.glyph === 'string' ? undefined : this.glyph;
   }
   get role(): string | undefined {
     return this.args.announce ? 'alert' : undefined;
@@ -76,7 +83,16 @@ export class FieldError extends Component<FieldErrorSignature> {
       ...attributes
     >
       {{#if this.glyph}}
-        <span class='pretui-field-error-glyph' aria-hidden='true'>{{this.glyph}}</span>
+        <span
+          class='pretui-field-error-glyph'
+          aria-hidden='true'
+          data-test-pretui-field-error-glyph={{this.severity}}
+        >{{#if this.glyphIcon}}<this.glyphIcon
+              class='pretui-field-error-icon'
+              width='10'
+              height='10'
+              stroke-width='3.5'
+            />{{else}}{{this.glyphText}}{{/if}}</span>
       {{/if}}
       <span class='pretui-field-error-msg'>{{@issue.message}}</span>
       {{#if this.ruleId}}
@@ -123,6 +139,12 @@ export class FieldError extends Component<FieldErrorSignature> {
           line-height: 1;
           background: var(--pretui-issue-hue);
           color: var(--pretui-on-neutral, var(--boxel-light));
+        }
+        /* the icon's width/height attributes hold it before this CSS applies;
+           here it scales with the circle */
+        .pretui-field-error-icon {
+          inline-size: 78%;
+          block-size: 78%;
         }
         .pretui-field-error-msg {
           min-width: 0;

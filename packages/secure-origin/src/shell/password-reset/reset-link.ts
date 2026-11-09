@@ -1,6 +1,6 @@
 import type { CliCallback } from '../../security/cli-handoff.js';
 import { cliFrom } from '../cli-links.ts';
-import { cliParams, modeURL } from '../urls.js';
+import { cliParams, pageURL } from '../urls.js';
 
 // The link a password reset email carries, and reading it where it lands.
 //
@@ -17,7 +17,10 @@ import { cliParams, modeURL } from '../urls.js';
 // session.
 
 // Where the reset link lands: `reset-password`, with the client secret, the
-// email address and the CLI's listener in the fragment.
+// email address and the CLI's listener in the fragment. The Matrix server
+// adds the session id with `&sid=` to a link that has a query string and
+// with `?sid=` to one that hasn't, so the link carries an empty query (`?`)
+// to make it `&sid=`, one more fragment parameter.
 export function resetLink(
   clientSecret: string,
   email: string,
@@ -29,7 +32,7 @@ export function resetLink(
       fragment.set(name, String(value));
     }
   }
-  return new URL(`${modeURL('reset-password')}#${fragment}`, location.href)
+  return new URL(`${pageURL('reset-password')}?#${fragment}`, location.href)
     .href;
 }
 
@@ -43,8 +46,13 @@ export interface ResetLink {
 // Reads the reset link from the page's address, and takes it out of the
 // address bar and the history: the secret has done its job once it is read.
 export function takeResetLink(): ResetLink {
-  let fragment = new URLSearchParams(location.hash.replace(/^#/, ''));
-  history.replaceState(null, '', modeURL('reset-password'));
+  // A link sent without its empty query has the session id after a `?` in
+  // the fragment; every `?` in a value is percent-encoded, so a literal one
+  // only ever separates the Matrix server's addition.
+  let fragment = new URLSearchParams(
+    location.hash.replace(/^#/, '').replace('?', '&'),
+  );
+  history.replaceState(null, '', pageURL('reset-password'));
   return {
     clientSecret: fragment.get('clientSecret') ?? '',
     sid: fragment.get('sid') ?? '',

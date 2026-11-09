@@ -7,6 +7,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { Badge } from '@cardstack/pretui/components/badge';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -28,17 +29,20 @@ import { rri } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
+
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
-import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
 import type { SearchResultKind } from '@cardstack/host/utils/search/types';
+
+import QuickLookMotion from '../ai-assistant/motion/quick-look-motion';
+import AssistantQuickLook from '../ai-assistant/quick-look';
 
 import SearchSheet, { SearchSheetModes } from '../search-sheet';
 
@@ -46,11 +50,14 @@ import SubmodeSwitcher, { Submodes } from '../submode-switcher';
 
 import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
 import Dashboard from './dashboard';
+import SectionRail from './dashboard/section-rail';
+import DashboardSections from './dashboard/sections';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
-import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
+import type AssistantQuickLookService from '../../services/assistant-quick-look';
+import type KeyNoticesService from '../../services/key-notices';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
@@ -112,7 +119,6 @@ const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
-  @tracked private topBarCenterElement: Element | null = null;
   @tracked private currentWindowWidth = 0;
 
   private get topBarButtonsCollapsed(): boolean {
@@ -138,8 +144,11 @@ export default class SubmodeLayout extends Component<Signature> {
   });
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
+  @service declare private keyNotices: KeyNoticesService;
   @service declare private store: StoreService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service('assistant-quick-look')
+  declare private quickLook: AssistantQuickLookService;
   @service declare private recentCardsService: RecentCardsService;
   @service('search-sheet-state')
   declare private searchSheetState: SearchSheetStateService;
@@ -152,11 +161,6 @@ export default class SubmodeLayout extends Component<Signature> {
   private storeExpandedCardHeaderElement(element: Element) {
     this.operatorModeStateService.expandedCardHeaderElement =
       element as HTMLElement;
-  }
-
-  @action
-  private storeTopBarCenterElement(element: Element) {
-    this.topBarCenterElement = element;
   }
 
   @action
@@ -182,13 +186,17 @@ export default class SubmodeLayout extends Component<Signature> {
       ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
       : undefined;
 
-    if (!persistedWidth || persistedWidth < aiPanelDefaultWidth) {
+    let aiPanelMinWidth = (Math.min(320, windowWidth) / windowWidth) * 100;
+    if (!persistedWidth || persistedWidth < aiPanelMinWidth) {
       this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
     } else {
       this.aiPanelWidths.defaultWidth = persistedWidth;
     }
 
-    this.aiPanelWidths.minWidth = aiPanelDefaultWidth;
+    // The panel opens at 371px but may be dragged down to 320px: the
+    // assistant is designed to read at 320 (narrow), 440 and 680 (wide).
+    let aiPanelMinWidthInPixels = Math.min(320, windowWidth);
+    this.aiPanelWidths.minWidth = (aiPanelMinWidthInPixels / windowWidth) * 100;
   };
 
   get operatorModeController(): IndexController {
@@ -390,16 +398,13 @@ export default class SubmodeLayout extends Component<Signature> {
       workspaceChooserOpened;
   }
 
-  // Read at render time rather than once at module load, so a test can turn
-  // the flag on for its module.
-  private get isDashboardV2Enabled() {
-    return Boolean(ENV.featureFlags?.DASHBOARD_V2);
-  }
-
   @action private toggleWorkspaceChooser() {
     this.operatorModeStateService.workspaceChooserOpened =
       !this.operatorModeStateService.workspaceChooserOpened;
   }
+
+  // The dashboard's sections, which the section rail lists.
+  private dashboardSections = new DashboardSections();
 
   @action private toggleProfileSettings() {
     this.operatorModeStateService.toggleProfileSettings();
@@ -458,9 +463,12 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private isChooseSubscriptionPlanModalOpen = false;
 
   <template>
+    {{! Quick Look covers the whole viewport and is modal: the layout under
+        it is inert, so a screen reader or a shortcut can't reach it }}
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
       class={{cn 'submode-layout' this.aiAssistantVisibilityClass}}
+      inert={{if this.quickLook.current true}}
       data-test-submode-layout
       ...attributes
     >
@@ -486,12 +494,6 @@ export default class SubmodeLayout extends Component<Signature> {
               data-workspace-chooser-toggle
               data-test-workspace-chooser-toggle
             />
-            {{#if this.workspaceChooserOpened}}
-              <div
-                class='submode-layout-top-bar-center'
-                {{captureElement this.storeTopBarCenterElement}}
-              ></div>
-            {{/if}}
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
@@ -525,27 +527,38 @@ export default class SubmodeLayout extends Component<Signature> {
               {{yield to='topBar'}}
             {{/if}}
 
-            <button
-              class='profile-icon-button'
-              {{on 'click' this.toggleProfileSummary}}
-              data-test-profile-icon-button
+            {{! How many key notices the user hasn't seen, as the profile
+                menu's API Keys item shows too. }}
+            <Badge
+              class='profile-icon-badge'
+              @circular={{true}}
+              @count={{this.keyNotices.unread}}
+              @label='unseen key notices'
+              @invisible={{not this.keyNotices.unread}}
+              data-test-profile-icon-key-notices-badge={{if
+                this.keyNotices.unread
+                'unread'
+              }}
             >
-              <Avatar
-                @isReady={{this.matrixService.profile.isLoaded}}
-                @userId={{this.matrixService.userId}}
-                @displayName={{this.matrixService.profile.displayName}}
-              />
-            </button>
-          </div>
-          {{#if this.workspaceChooserOpened}}
-            <div class='workspace-overlay'>
-              {{#if this.isDashboardV2Enabled}}
-                <Dashboard />
-              {{else}}
-                <WorkspaceChooser
-                  @topBarCenterElement={{this.topBarCenterElement}}
+              <button
+                class='profile-icon-button'
+                {{on 'click' this.toggleProfileSummary}}
+                data-test-profile-icon-button
+              >
+                <Avatar
+                  @isReady={{this.matrixService.profile.isLoaded}}
+                  @userId={{this.matrixService.userId}}
+                  @displayName={{this.matrixService.profile.displayName}}
                 />
-              {{/if}}
+              </button>
+            </Badge>
+          </div>
+          {{! Ahead of the page, so Tab reaches the rail right after the top
+              bar, as it reads. }}
+          {{#if this.workspaceChooserOpened}}
+            <SectionRail @sections={{this.dashboardSections}} />
+            <div class='workspace-overlay'>
+              <Dashboard @sections={{this.dashboardSections}} />
             </div>
           {{/if}}
 
@@ -619,6 +632,10 @@ export default class SubmodeLayout extends Component<Signature> {
         {{/if}}
       </ResizablePanelGroup>
     </div>
+    {{! the assistant's Quick Look, over the whole viewport (motion/) }}
+    <QuickLookMotion>
+      <AssistantQuickLook />
+    </QuickLookMotion>
 
     {{#if this.operatorModeStateService.profileSettingsOpen}}
       <ProfileSettingsModal
@@ -632,12 +649,11 @@ export default class SubmodeLayout extends Component<Signature> {
     />
 
     <style scoped>
-      /* Covers the stacks with whichever of the workspace chooser and the
-         dashboard is shown; the child fills it. */
+      /* Covers the stacks with the dashboard, which fills it. */
       .workspace-overlay {
         display: grid;
-        /* Tracks no bigger than the overlay, so a tall chooser scrolls inside
-           it instead of growing past it. */
+        /* Tracks no bigger than the overlay, so a tall dashboard scrolls
+           inside it instead of growing past it. */
         grid-template: minmax(0, 1fr) / minmax(0, 1fr);
         position: absolute;
         height: 100%;
@@ -712,30 +728,6 @@ export default class SubmodeLayout extends Component<Signature> {
         gap: var(--operator-mode-spacing);
       }
 
-      .submode-layout-top-bar-center {
-        /* Narrow default: stay in flow as a flex child. `flex: 1` reserves the
-           middle track between the workspace button and the profile controls,
-           so the content can neither slide under those controls nor intercept
-           clicks meant for them — it just sits on the one line between them. */
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        min-width: 0;
-      }
-      /* Wider top bars have room to center the content within the whole bar
-         rather than only within the asymmetric middle track (the 160px
-         workspace button makes the flex track off-centre). Take it out of flow
-         and pin it to the bar's centre; the breakpoint is high enough that the
-         centred content clears the workspace button on the left. */
-      @container (min-width: 60rem) {
-        .submode-layout-top-bar-center {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-        }
-      }
-
       /* Slot for the expanded stack-item's CardHeader pill. When a
          card is expanded, stack-item portals its CardHeader here via
          the in-element block helper. The slot grows to take available
@@ -784,11 +776,16 @@ export default class SubmodeLayout extends Component<Signature> {
         background: none;
 
         padding: 0;
-        margin-left: auto;
 
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
+      }
+      /* The badge wraps the button, so it is the top bar's item and carries
+         its stacking. The button takes none of its own, which would lift the
+         avatar over the badge's mark. */
+      .profile-icon-badge {
+        margin-left: auto;
         z-index: var(--host-profile-z-index);
       }
 

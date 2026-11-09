@@ -3,8 +3,6 @@ import {
   codeRefWithAbsoluteIdentifier,
   getClass,
   rri,
-  loaderForModule,
-  type Loader,
   type ResolvedCodeRef,
   type ToolContext,
   type ToolSchemaError,
@@ -153,7 +151,8 @@ async function generateToolDefinitions(
     name: typeof entry?.codeRef?.name === 'string' ? entry.codeRef.name : '',
   });
 
-  let loader = myLoader();
+  // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+  let loader = import.meta.loader;
   let mappings: Awaited<ReturnType<typeof basicMappings>>;
   try {
     mappings = await basicMappings(loader);
@@ -178,7 +177,7 @@ async function generateToolDefinitions(
     };
   }
 
-  let skillURL = new URL(fileURL);
+  let skillId = rri(fileURL);
   // Tools are independent; the loader dedupes concurrent module imports, so
   // enriching in parallel overlaps the per-tool module fetches.
   let results = await Promise.all(
@@ -206,7 +205,7 @@ async function generateToolDefinitions(
         // specifiers pass through verbatim.
         let resolvedRef = codeRefWithAbsoluteIdentifier(
           { module: rri(module), name },
-          skillURL,
+          skillId,
           undefined,
         ) as ResolvedCodeRef;
         try {
@@ -267,11 +266,4 @@ async function generateToolDefinitions(
       result.error ? [result.error] : [],
     ),
   };
-}
-
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
 }

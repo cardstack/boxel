@@ -43,7 +43,11 @@ export {
 export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
 export type { CapabilityCaller } from './capabilities.ts';
 export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
-export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
+export type {
+  CapabilityAnswer,
+  CapabilityCheck,
+  KeyReadiness,
+} from './capability-wire.ts';
 export {
   policyQueryScope,
   principalQueryScope,
@@ -276,14 +280,27 @@ export {
   refusalSeenBy,
   unshareableFormatsOf,
   AUTHENTICATION_REQUIRED,
+  definitionNotReady,
+  DEFINITION_RETRY_AFTER_SECONDS,
 } from './types.ts';
 export {
   buildCallApiRequest,
   destinationCovers,
+  notApproved,
+  slotKeyKinds,
   slotsIn,
+  type CallApiKeyKind,
+  type AnonymousCallApiCaller,
   type CallApiCredential,
+  type CallApiFilledSlot,
+  type CallApiGrantUse,
+  type CallApiUse,
+  type CallApiUseSubject,
+  type CallApiMode,
+  type CallApiReadinessLookup,
   type CallApiRequest,
   type CallApiSender,
+  type CallApiSlotLookup,
 } from './call-api.ts';
 export type {
   BaseOperation,
@@ -330,3 +347,7 @@ export type {
   ValidatedPolicyIssue,
   ValidatedRule,
 } from './types.ts';
+export {
+  requestDefinitionLookup,
+  REQUEST_DEFINITION_DEADLINE_MS,
+} from './request-definition-lookup.ts';

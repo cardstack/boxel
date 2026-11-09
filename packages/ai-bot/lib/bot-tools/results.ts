@@ -1,6 +1,9 @@
 import { createHash } from 'crypto';
 import { logger } from '@cardstack/runtime-common';
-import { sendMatrixEvent } from '@cardstack/runtime-common/ai';
+import {
+  declinedByReactionReason,
+  sendMatrixEvent,
+} from '@cardstack/runtime-common/ai';
 import {
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
@@ -8,6 +11,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import type { MatrixClient } from 'matrix-js-sdk';
+import type { ApprovalClaims, DeclinedToolCall } from './approval.ts';
 import type { BotToolCall, BotToolOutcome, BotToolTarget } from './types.ts';
 
 // What every tool ai-bot runs itself does with what it read: store it in the
@@ -121,4 +125,64 @@ export async function publishCanceledResult(
     call.function.name,
   );
   return { commandRequestId: call.id, published };
+}
+
+// Answers a held call a person declined with a 👎 (see
+// runtime-common/ai/approval-reaction.ts) with an 'invalid' result naming
+// who declined it, as the host's Decline does, so the call settles and the
+// model reads why on its next turn.
+export async function publishDeclinedResult(
+  call: BotToolCall,
+  target: BotToolTarget,
+  reason: string,
+): Promise<BotToolOutcome> {
+  let published = await publishToolResult(
+    target.client,
+    target.roomId,
+    {
+      msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      commandRequestId: call.id,
+      failureReason: reason,
+      'm.relates_to': {
+        rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        key: 'invalid',
+        event_id: target.requestEventId,
+      },
+      data: { context: { agentId: target.agentId } },
+    },
+    call.function.name,
+  );
+  return { commandRequestId: call.id, published };
+}
+
+// Posts each declined call's 'invalid' result, naming who declined it by
+// `memberName`, or by their user id when the room does not know them. A call
+// whose result never reached the room is released, so a later run answers
+// it. `room.agentId` is the agent of a call whose message names none.
+export async function answerDeclinedToolCalls(
+  declined: DeclinedToolCall[],
+  claims: ApprovalClaims,
+  room: Omit<BotToolTarget, 'requestEventId'>,
+  memberName: (userId: string) => string | undefined,
+): Promise<void> {
+  await Promise.all(
+    declined.map(async (entry) => {
+      let outcome = await publishDeclinedResult(
+        entry.call,
+        {
+          client: room.client,
+          roomId: room.roomId,
+          requestEventId: entry.requestEventId,
+          agentId: entry.agentId ?? room.agentId,
+        },
+        declinedByReactionReason(
+          entry.call.function.name,
+          memberName(entry.reaction.sender) ?? entry.reaction.sender,
+        ),
+      );
+      if (!outcome.published) {
+        claims.release(entry.call.id);
+      }
+    }),
+  );
 }

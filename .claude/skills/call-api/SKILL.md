@@ -53,6 +53,27 @@ batch's results, where a list reads as a group's answers and `null` as a
 removal. `input` works as on any operation. A `transformations` program is
 refused (`unrunnable-program`): there is no document to run it over.
 
+`perInstance: true` makes a key's owner approve the operation for each card
+on its own (one webhook per channel card): it lowers to
+`OperationCallApi.perInstance`, and a binding for it names the instance.
+
+`keyKind` says what kind of key fills a slot: `static`, `google-service-account`
+or `oauth` (an OAuth connection, or a `client_credentials` client), one kind for
+every slot or one per slot by name (an unnamed slot's name is `userKey` or
+`apiKey`). Lowering (`lowerKeyKind`) refuses an unknown kind, a name the
+request has no slot for, and any kind but `static` on a `|basic` slot
+(`invalid-request`), and keeps the kind on the slot as `CallApiSlot.keyKind`. The kinds live in `runtime-common/call-api-key-kind.ts`,
+which base re-exports; runtime-common takes only types from base, since a value
+import closes a cycle through `card-api`. A declared kind is binding: approval
+refuses a key of another kind (`assertKeyFitsSlot` in `lib/key-bindings.ts`),
+and a binding whose key no longer fits reads as `binding-needs-reapproval` at
+the call and `changed` in the batch. Undeclared, any key fills the slot, and
+`slotKeyKinds` says which kinds the secure window offers for it: every kind,
+less those that can't work there. A `|basic` slot sends a user and password,
+which a minted token isn't; a service account's tokens are only for
+`googleapis.com` and `firebaseio.com`. A minted token goes wherever its slot
+stands, so placement rules out nothing else.
+
 `callApi` is declaration-only (nothing implies it) and is carried only by a
 card def. It is invocable on an instance and on the type: the client puts it
 in both buckets once declared (`carriesMember` in `card-operations/client.ts`).
@@ -87,9 +108,24 @@ for a stored entry whatever produced it.
 | `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                                                                                                                                     |
 | `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a trailing dot on the host, a `path` key no segment takes, a `path` value written as text that is `''`, `.` or `..` or holds `/` or `\`, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET |
 
+**Before indexing, `boxel lint` reports the same issues.** The realm's `_lint`
+engine (`tasks/lint-engines.ts`) runs two rules from `tasks/lint-call-api.ts`,
+registered as the `@cardstack/boxel-operations` plugin. Each reads every
+`@operation static … = { base: 'callApi', … }` from source (string and
+template literals, objects, arrays, `params()`/`instance()`/`actor()`/
+`realmConfig()`/`card()`, `bxl`, and `const`s in the file), and hands it to
+`lowerCallApiRequest` in `lowering.ts`, the function lowering itself calls.
+`call-api` (error) reports each issue as `<code>: <message>` and a `label`
+lowering refuses; `call-api-advice` (warning) reports an operation with no
+`label` and a destination that isn't `https:`. A value source doesn't settle
+(an imported constant, another call) stands in as an opaque reference, and a
+request whose URL or whole member is one isn't lowered at all, so the rules
+never guess. A lint check that mirrors lowering belongs in lowering, where
+both pick it up.
+
 The lowered entry keeps every value as a marker and every slot as the text the
 author wrote, plus `slots: CallApiSlot[]` — `{name, key, transform?,
-placement, at}` — so dispatch knows what a request needs without walking it.
+placement, at, keyKind?}` — so dispatch knows what a request needs without walking it.
 
 ## The destination
 
@@ -117,7 +153,8 @@ host. A host with a trailing dot is refused too, since it names the same host
 as one without.
 
 The definition cache holds both. The destination is the unit a key is
-approved for; nothing reads it for that until a binding fills a slot.
+approved for: creating a grant (see the `user-keys` skill) reads it from here
+and stores it on the grant, and sending under a grant never reads it again.
 
 **`destinationCovers(destination, url)`** is the one rule for whether a request
 goes where a destination says: the send-time check asks it of every request,
@@ -148,9 +185,25 @@ refusal also writes a key-use line.
    (`assertMayWrite` in `services/operations.ts`), so this is the server's own
    copy of that rule.
 2. **`actor-required`** (401) — the request has a slot and no signed-in caller.
-3. **`binding-not-approved`** (403) — the request has a slot. No binding
-   fills a slot, so every slotted request stops here, with
-   `meta.slots: [{name, key}]`. A keyless request continues.
+3. **Slots are filled** — the request has a slot, so the sender's `fill`
+   finds the binding for each (see the `key-bindings` skill) and opens its
+   key under the binding's grant, or refuses: `binding-not-approved` (409,
+   `meta.slots: [{name, key}]`), `share-suspended` (409),
+   `binding-needs-reapproval` (409), `interactive-use-not-approved` (403) or
+   `credential-rejected` (424: the vendor rejected the key at the grant's
+   destination, or Google's token endpoint refused the service-account key,
+   and no probe is due; see the `user-keys` skill, _Rejected grants_ and
+   _Rejected keys_).
+   Every invocation off the network is interactive, and is served only by a
+   binding its owner approved for interactive use; a pipeline
+   (`Realm.handlePipeline`) is served by any active binding. An interactive
+   call also counts against the key's limits (see the `key-limits` skill). The `binding-not-approved` detail names
+   each slot with whose key fills it (`the credential slot "weather" for the
+invoking user's own key`, `… for the realm's key`, from `describeSlots`),
+   because a caller that sees only the message, such as the AI assistant,
+   gets neither the code nor `meta`, and a slot's name alone doesn't say. The
+   assistant's rule for opening the secure window keys on that wording. A
+   keyless request continues.
 4. **Build** (`buildCallApiRequest`): markers filled from the payload, the
    caller, the realm's settings and — on an instance target — the card's
    _indexed_ document (`indexedInstance` in `read.ts`, so computed fields are
@@ -170,12 +223,29 @@ refusal also writes a key-use line.
    appended with `URLSearchParams`. A JSON body gets `content-type:
 application/json` unless the declaration set one.
 5. **`guard-refused`** (502, `meta.reason: 'destination'`) — the built URL
-   is not covered by the lowered `destination`. Every value is encoded into a
-   segment or the query string, so a request can't leave it; this is the
-   send-time check that what goes out is what was declared.
+   is not covered by the lowered `destination`, or by the destination stored
+   on the grant a filled slot's key is sent under. Every value is encoded
+   into a segment or the query string, so a request can't leave it; these
+   are the send-time checks that what goes out is what was declared and what
+   the key's owner approved, made on the request with its slots still
+   tokens.
 6. **Send** through `core.callApi`, the `CallApiSender` the realm server
    passes to `new Realm({ callApi })`. A realm without one (the host's
-   in-browser test realm) answers 501.
+   in-browser test realm) answers 501. The realm server's sender first
+   refuses a request addressed to one of the platform's token endpoints
+   (`tokenEndpointAt` in `lib/outbound/token-endpoints.ts`: Google's, at each
+   address Google exchanges an assertion, and each platform OAuth client's
+   token URL), key or no key, with `guard-refused` (502,
+   `meta.reason: 'platform-only'`). A user's own OAuth client is never
+   consulted: any user may store one with any token URL, and one user's must
+   not refuse another's requests. The check is made on the address the
+   operation declares.
+
+The same sender answers `readiness`: what a card learns from
+`@context.keyReadiness` before it calls, through a `_capabilities` pair that
+asks for it. `lib/key-readiness.ts` reads the rows `fill` checks, in the same
+order, opens no key and writes nothing (see the `key-bindings` skill,
+_Readiness_). A check added to `fill` belongs there too.
 
 Which realm: an instance target's is the realm serving it; a type target's
 is the one the entry names in `data.meta.realmURL`, and `assertInRealm`
@@ -212,14 +282,18 @@ A secret destination — a credential in the path, like a webhook URL — is a
 `{{apiKey}}` in a `path` value; the recorded URL carries the token, never the
 value.
 
-The binding that fills a slot must pass the value _as sent_ (with `|basic`
-applied) as `CallApiCredential.value`, and register the raw value with the
-scrubber as well when the transform changes it.
+The binding fills each slot with the value _as sent_ (with `|basic`
+applied) as `CallApiCredential.value`, and its stored value as `raw` when
+the transform changes it, which the sender registers with the scrubber too.
 
 ### The answer
 
-Whatever the vendor answered: `{status, headers, body}`. A 404 or a 500 is a
-result the card reads. `headers` is an allowlist (`safeResponseHeaders`):
+Whatever the vendor answered: `{status, headers, body}`. A 404, a 403 or a
+500 is a result the card reads. The one exception is a **401 to a request
+that carried a credential**: it rejects the grants the request was sent
+under and is refused `credential-rejected` (424), so a card stops instead of
+reading the vendor's refusal as data. A keyless request's 401 is an answer
+like any other. `headers` is an allowlist (`safeResponseHeaders`):
 content type, language and disposition, caching validators, `link`,
 `location`, `retry-after`, `www-authenticate`, and rate-limit headers.
 `set-cookie`, `server` and everything else stay on the server. The body is
@@ -228,12 +302,127 @@ with every registered credential removed by the scrubber.
 
 Only these refuse the operation:
 
-| Code                 | Status                           | When                                                                                                                                                                                            |
-| -------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `guard-refused`      | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; or the built request left its lowered destination |
-| `upstream-timeout`   | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                      |
-| `response-too-large` | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered                               |
-| `internal-error`     | 502                              | the connection broke before any response arrived                                                                                                                                                |
+| Code                  | Status                           | When                                                                                                                                                                                                                                                                                                     |
+| --------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard-refused`       | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; the built request left its lowered destination; or it is addressed to a token endpoint (`meta.reason: 'platform-only'`)                                    |
+| `upstream-timeout`    | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                                                                                                                               |
+| `response-too-large`  | 502                              | the response passed the `call-api` size cap: its declared length was over it (nothing was read), or its decompressed body passed it while streaming (`meta.measured`: `declared-length` / `stream-reached-cap`; `meta.cap` in bytes). The card never gets a cut-off body. See the `outbound-guard` skill |
+| `internal-error`      | 502                              | the connection broke before any response arrived                                                                                                                                                                                                                                                         |
+| `credential-rejected` | 424                              | the vendor answered 401 to a request carrying a credential; its grants are now rejected                                                                                                                                                                                                                  |
+
+## A card that uses the realm's key or the user's own
+
+A slot is either `{{apiKey}}` or `{{userKey}}`, and each is approved on its
+own terms: an `apiKey` slot has one binding per realm, pointing at a share
+and serving every caller there, and a `userKey` slot has one per user,
+serving only them (see the `key-bindings` skill). So a card that should work
+with whichever key is available declares **one operation per slot**: each
+request twice, identical but for the slot.
+
+```ts
+@operation static forecastShared = {
+  base: 'callApi',
+  label: 'Get the 5-day forecast for a place, with the workspace’s key',
+  params: { lat: NumberField, lon: NumberField },
+  url: 'https://api.openweathermap.org/data/2.5/forecast',
+  query: { lat: params('lat'), lon: params('lon'), appid: '{{apiKey}}' },
+} satisfies OperationDeclaration;
+
+@operation static forecastOwn = {
+  // the same request, with appid: '{{userKey}}'
+} satisfies OperationDeclaration;
+```
+
+The card asks `@context.keyReadiness` about both and calls the shared one
+when it answers `ready`, otherwise the caller's own when that one does:
+
+```ts
+let shared = this.args.context?.keyReadiness?.('forecastShared', model);
+let own = this.args.context?.keyReadiness?.('forecastOwn', model);
+let name =
+  shared === 'ready'
+    ? 'forecastShared'
+    : own === 'ready'
+      ? 'forecastOwn'
+      : undefined;
+let answer = name && (await operations(model)[name]({ lat, lon }));
+```
+
+A card that calls several operations with each key asks about all of them
+and treats a key as ready only when every one is: each operation has its own
+binding, so one can need re-approval, or be left unticked on the approve page,
+while the rest are ready. Ask `@context.canInvoke` about the same pairs too.
+Readiness is never answered for an operation the realm's policy doesn't let
+the caller invoke, so `undefined` alone can't tell "still asking" from
+"refused"; `canInvoke` answering `false` can.
+
+When neither is ready, the card opens the secure window itself for the one
+request that fixes it, once per request (a closed window leaves a prompt
+with the same button, and a browser that blocks the popup gets the host's
+button that opens it). The weather showing is the signal that a key works,
+so the card needn't say whose key it is using. The requests:
+
+- `approve` on the caller's own operation at `needs-connect` or
+  `needs-approval`; `review-changes` at `needs-reapproval`.
+- `approve` on the `apiKey` operation at `needs-approval`, for the writer
+  whose share isn't approved for it yet, asked even while the card runs on their own key,
+  since nobody else in the realm can use the share until then.
+- `replace-key` after `credential-rejected`, from the card's error, not
+  opened by itself.
+
+At `needs-connect`, open `approve` rather than `enter-key`: the approve page
+lets the user pick one of their keys or add one, and approving grants the key
+the operation's destination. A key saved through `enter-key` alone has no
+grant, so readiness stays `needs-connect`. The approve page offers first,
+and starts on, letting the operations run on the schedule and when a card is
+opened, which is what a card calling from its template needs; the user can
+narrow it to scheduled pipelines only. It starts on pipelines only when every
+request it asks about was last approved for pipelines only, and when
+`boxel keys approve` opened it without `--interactive`.
+A call that a fix makes ready needs no reload: readiness is asked again when
+the user comes back from the window. Swapping a key into a stopped share is
+the keys page's job, not the card's.
+
+Readiness is also asked again whenever the page takes focus and an answer is
+more than a few seconds old, so a key shared from the key page in another tab
+reaches the card too: the writer who shared it gets `needs-approval` for the
+`apiKey` operation, and the card's approval request opens. A card needs no
+focus handling of its own for readiness.
+
+Don't write one operation whose slot falls back from the realm's key to the
+user's. Who pays would be implicit: every share that was suspended or over
+budget would quietly move calls onto readers' own keys. With two operations
+every approval stays simple, and the `boxel:key-use` line names the
+operation, so it shows whose key paid.
+
+What a card can and can't learn:
+
+- `keyReadiness` answers `needs-admin` for every share problem: no share, a
+  suspended share, a share not approved for the operation. A reader is never
+  told about a realm's shares. The exception is a caller who can fix it: the
+  owner of the share's key is told `needs-approval` or `needs-reapproval`,
+  and a caller with an active share of their own in the realm is told
+  `needs-approval` when the slot has no binding yet, since the approve page
+  offers them their shares for it. Offer them `approve` on the `apiKey`
+  operation. A direct writer can tell the `needs-admin` cases
+  apart with `ListRealmKeySharesTool`
+  (`@cardstack/boxel-host/tools/list-realm-key-shares`). It answers
+  `visible: false` to anyone else, and for a writer it gives each share's
+  `state`, `suspensionReason` and `shareId`, which `swap-key` takes.
+- `needs-sign-in` on the `userKey` operation means the caller isn't signed
+  in. Showing the shared answer is the most such a visitor can be offered.
+- A refusal reaches card code as an `OperationsError` carrying `code`,
+  `title`, `detail`, `retryAfterSeconds` and the card-actionable part of its
+  `meta` (`OperationsErrorMeta`); a share's suspension reason is not part of
+  it. Treat
+  `rate-limited` and `over-budget` as a state ("try again shortly") rather
+  than an error. `credential-rejected` stops the card until the key is
+  replaced (`replace-key`).
+- Calls are refused during a render (`not-during-render`), so the card calls
+  from an action or a modifier when someone opens it or presses refresh,
+  never from a getter or on a timer.
+
+`packages/experiments-realm/weather-app.gts` is a complete example.
 
 ## The key-use channel
 
@@ -263,6 +452,9 @@ null when the refusal came before a request was built. Tests capture it with
   one test per lowering check, lowered from plain data, and the normalized URL
   and destination.
 - `packages/host/tests/unit/call-api-destination-test.ts`: `destinationCovers`.
+- `packages/boxel-cli/tests/integration/file-lint.test.ts`: the lint rules
+  through the realm's `_lint`, one declaration per lowering issue, the
+  `http:` destination and the missing label.
 - `packages/realm-server/tests/realm-endpoints/call-api-test.ts`: end to end
   through `_operations` against the stub vendor on a fixed port, because the
   vendor URL is written into the card module.
@@ -278,4 +470,7 @@ the `agent-peer-collaboration` skill on serving your own dist.
 - **`outbound-guard`** — what the client refuses, the response cap's observe
   mode, the scrubber.
 - **`operations-diagnosis`** — the `boxel:operations` channel around the call.
+- **`key-bindings`** — the bindings that fill slots, and their refusals.
 - **`secrets-at-rest`** — where a key a binding fills from is stored.
+- **`key-outage-triage`** — reading key-use lines across realms and hosts:
+  one key, one vendor, or us; the Keys dashboard and its alerts.

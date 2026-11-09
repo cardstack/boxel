@@ -23,7 +23,10 @@ import {
   isPdfContentType,
   isAudioContentType,
   isVideoContentType,
+  formatKilobytes,
+  isSvgTooLargeForText,
   isTextBasedContentType,
+  MAX_SVG_TEXT_BYTES,
   modalityLabel,
   requiredModality,
 } from './modality.ts';
@@ -79,8 +82,13 @@ import {
   READ_REALM_FILE_TOOL_NAME,
   SKILL_INSTRUCTIONS_MESSAGE,
   SYSTEM_MESSAGE,
+  VIEW_ATTACHMENT_TOOL_NAME,
 } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
+import {
+  describeCheckTargetCount,
+  isCardCheckTarget,
+} from './correctness-targets.ts';
 import { humanReadable } from '../code-ref.ts';
 import { readStopState } from './stop.ts';
 import {
@@ -125,14 +133,19 @@ function getLog() {
  *
  * 3. **MIME type handling** (see `modality.ts` for classification):
  *    - Text-based types (text/*, application/vnd.card+json,
- *      application/vnd.card+source) → content downloaded and displayed
- *      with line numbers, in the history message that attached them.
+ *      application/vnd.card+source, image/svg+xml) → content downloaded
+ *      and displayed with line numbers, in the history message that
+ *      attached them. An SVG over MAX_SVG_TEXT_BYTES (by its declared
+ *      size, or by the downloaded text when it declares none) is sent as
+ *      metadata with a note that its markup was left out.
  *    - Media types are listed in history as metadata ([contentType,
- *      contentSize bytes]); their bodies are embedded only for the
- *      current turn — the current human message's attachments and those
- *      of every tool result since it (see currentTurnToolResultMedia) — as
- *      native content parts on the volatile trailing message (after the
- *      history cache breakpoint):
+ *      contentSize bytes], with a fixed note that the content is not in
+ *      that message); their bodies are embedded only for the current turn
+ *      — the attachments of every human message since the bot's last
+ *      completed answer (see currentTurnMessageMedia) and those of every
+ *      tool result since the last human message (see
+ *      currentTurnToolResultMedia) — as native content parts on the
+ *      volatile trailing message (after the history cache breakpoint):
  *      - Supported images (PNG, JPEG, WEBP, GIF) → `image_url` parts.
  *      - PDF (application/pdf) → `file` parts with base64 data URL in
  *        `file_data`.
@@ -145,6 +158,10 @@ function getLog() {
  *      would rewrite an older message's bytes as history grows and reset
  *      the cache prefix. The trailing message is rebuilt every turn, so
  *      it can carry the current media without touching history bytes.
+ *      A media file a user attached to an earlier, answered message comes
+ *      back only when the model calls viewAttachment for it: the tool's
+ *      result attaches the same stored file again, so it rides the trailing
+ *      message as tool-result media under the same limits.
  *
  * 4. **Model capability gating**: When `inputModalities` is provided
  *    (from the active LLM's model configuration), the current turn's
@@ -853,16 +870,57 @@ export async function getAttachedFiles(
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
     attachedFiles.map(async (file: SerializedFileDef) => {
+      // the declared size skips the download; the downloaded text is the
+      // check that holds, since the client declares the size, or may not
+      if (isSvgTooLargeForText(file)) {
+        return svgTooLarge(file, file.contentSize!);
+      }
       if (isTextBasedContentType(file.contentType)) {
-        return downloadTextContent(client, file);
+        let result = await downloadTextContent(client, file);
+        let bytes =
+          result.content === undefined
+            ? undefined
+            : new TextEncoder().encode(result.content).length;
+        if (isSvgTooLargeForText(file, bytes)) {
+          return svgTooLarge(file, bytes!);
+        }
+        return result;
       }
       return toFileDefMetadata(file);
     }),
   );
 }
 
+function svgTooLarge(
+  file: SerializedFileDef,
+  bytes: number,
+): SerializedFileDef {
+  return {
+    ...toFileDefMetadata(file),
+    error: `SVG markup not sent: the file is ${formatKilobytes(bytes)}, over the ${formatKilobytes(MAX_SVG_TEXT_BYTES)} limit`,
+  };
+}
+
+// Follows each media file's metadata wherever a message lists it. Media
+// bodies ride only on the last message of a request, and only while their
+// turn is open (see buildCurrentTurnMediaParts), so a model reading history
+// alone cannot tell whether it has seen a file. The note is the same at
+// every age of the message: a note that changed once the turn was answered
+// would rewrite already-sent history bytes and reset the cache prefix.
+export const MEDIA_NOT_IN_HISTORY_NOTE =
+  '(its content is not in this message; you can see it only if the last message of this request includes it)';
+
+// MEDIA_NOT_IN_HISTORY_NOTE for a media file attached to a message someone
+// sent, which the viewAttachment tool can bring back into the current turn.
+// A tool result's media keep the plain note: the tool shows only files a
+// user attached to a message. The tool is offered only in rooms with one
+// human, and the note can't follow that without depending on more than the
+// message itself, so it names the tool only for a model that has it.
+export const ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE = `(its content is not in this message; you can see it only if the last message of this request includes it, and if it doesn't and you have the ${VIEW_ATTACHMENT_TOOL_NAME} tool, call it with this file's URL to see it)`;
+
 export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
+  mediaNote: string = MEDIA_NOT_IN_HISTORY_NOTE,
 ): string {
   if (!attachedFiles.length) {
     return 'No attached files';
@@ -891,7 +949,9 @@ export function attachedFilesToMessage(
         ]
           .filter(Boolean)
           .join(', ');
-        return `${hyperlink}: [${meta}]`;
+        return requiredModality(f.contentType)
+          ? `${hyperlink}: [${meta}] ${mediaNote}`
+          : `${hyperlink}: [${meta}]`;
       } else {
         return `${hyperlink}`;
       }
@@ -1447,13 +1507,6 @@ function getToolResults(
   return toolResultEvents;
 }
 
-function isCheckCorrectnessToolResultEvent(
-  toolResultEvent: ToolResultEvent,
-  history: DiscreteMatrixEvent[],
-) {
-  return checkCorrectnessBatchFor(toolResultEvent, history) !== undefined;
-}
-
 // The latest result that is a call's outcome. A request can accumulate
 // several result events — a 'failed' from a first attempt and an 'applied'
 // from a later retry — and an approval is not an outcome at all.
@@ -1687,6 +1740,22 @@ function buildCheckCorrectnessResultContent(
   }
   let status = toolResult.content['m.relates_to']?.key ?? 'unknown';
   let read = readCorrectnessResult(toolResult);
+  let batchTargets = batchTargetsOf(request);
+  if (batchTargets && read.kind === 'card') {
+    return batchCheckCorrectnessResultContent(
+      batchTargets,
+      read.summary,
+      status,
+    );
+  }
+  if (batchTargets && read.kind === 'no-card' && status === 'applied') {
+    // A check of several targets always answers with a result card; without
+    // one, nothing says which targets passed.
+    return {
+      toolMessage: `The correctness result for ${targetDescription} could not be read.`,
+      followUp: 'unresolved',
+    };
+  }
   if (read.kind === 'card') {
     let formattedSummary = formatCorrectnessResultSummary(
       targetDescription,
@@ -1737,15 +1806,16 @@ function buildCheckCorrectnessResultContent(
 // A card can be written as its .json file, so that counts too.
 function isCardCorrectnessTarget(request?: ToolRequest): boolean {
   let { targetType, targetRef } = extractCheckCorrectnessTargetParts(request);
-  return (
-    targetType === 'card' ||
-    (typeof targetRef === 'string' && targetRef.endsWith('.json'))
-  );
+  return isCardCheckTarget({ type: targetType, ref: targetRef });
 }
 
 function describeCheckCorrectnessTarget(request?: ToolRequest) {
   if (!request) {
     return 'the requested target';
+  }
+  let batchTargets = batchTargetsOf(request);
+  if (batchTargets) {
+    return describeCheckTargetCount(batchTargets);
   }
   let attributes =
     (((request.arguments as Record<string, any>) ?? {}).attributes as
@@ -1761,6 +1831,15 @@ function describeCheckCorrectnessTarget(request?: ToolRequest) {
 
 type CorrectnessResultSummary = {
   correct: boolean;
+  errors: string[];
+  warnings: string[];
+  // A check of several targets: one entry per target that failed or warned.
+  targetResults?: CorrectnessTargetResult[];
+};
+
+type CorrectnessTargetResult = {
+  targetType?: string;
+  targetRef?: string;
   errors: string[];
   warnings: string[];
 };
@@ -1818,7 +1897,7 @@ const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
 const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
   'The write above passed its checks, but the warnings above may point at mistakes in what you just wrote: a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist. Fix the ones that are mistakes now by re-reading the file and using the run-realm-code tool. If none are mistakes, note the warnings in at most one line and finish your answer to the user. Do not mention correctness, automated checks or tool calls.';
 
-const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
+const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the errors above remain. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
 // Rides the trailing context message after a batch with a check that did
 // not come back clean and no instruction to act on: a card that says it is
@@ -1860,6 +1939,7 @@ function readCorrectnessResult(
             correct?: boolean;
             errors?: string[];
             warnings?: string[];
+            targetResults?: Partial<CorrectnessTargetResult>[];
           };
         };
       }
@@ -1880,8 +1960,27 @@ function readCorrectnessResult(
       correct: Boolean(attributes.correct),
       errors: Array.isArray(attributes.errors) ? attributes.errors : [],
       warnings: Array.isArray(attributes.warnings) ? attributes.warnings : [],
+      ...(Array.isArray(attributes.targetResults)
+        ? {
+            targetResults: attributes.targetResults.map((result) => ({
+              targetType: result?.targetType,
+              targetRef: result?.targetRef,
+              errors: nonEmptyLines(result?.errors),
+              warnings: nonEmptyLines(result?.warnings),
+            })),
+          }
+        : {}),
     },
   };
+}
+
+function nonEmptyLines(entries: unknown): string[] {
+  return Array.isArray(entries)
+    ? entries.filter(
+        (entry): entry is string =>
+          typeof entry === 'string' && entry.trim().length > 0,
+      )
+    : [];
 }
 
 function correctnessErrorLines(summary: CorrectnessResultSummary): string[] {
@@ -1919,6 +2018,187 @@ function correctnessCheckHasWarnings(toolResult: ToolResultEvent): boolean {
   );
 }
 
+// One file or card a correctness check covers, from either request shape:
+// one target per request (`targetType` and `targetRef`, the shape older rooms
+// carry) or several (`targets`). `replyEventId` is the reply whose edits the
+// check covers. `attempt` is 0 when a one-target request doesn't say; a
+// target of several without one is on its first round.
+interface CheckedTarget {
+  type: string;
+  ref: string;
+  attempt: number;
+  replyEventId?: string;
+}
+
+function checkCorrectnessAttributes(
+  request?: Partial<ToolRequest>,
+): Record<string, any> {
+  return (
+    (((request?.arguments as Record<string, any>) ?? {}).attributes as
+      | Record<string, any>
+      | undefined) ?? {}
+  );
+}
+
+// The targets of a check of several targets, or undefined for a request in
+// the one-target shape. A target's attempt is left out on its first round.
+function batchTargetsOf(
+  request?: Partial<ToolRequest>,
+  sourceEvent?: DiscreteMatrixEvent,
+): CheckedTarget[] | undefined {
+  let { targets } = checkCorrectnessAttributes(request);
+  if (!Array.isArray(targets)) {
+    return undefined;
+  }
+  let replyEventId = correctnessReplyEventId(sourceEvent);
+  return targets
+    .filter((target) => typeof target?.ref === 'string' && target.ref)
+    .map((target) => ({
+      type: typeof target.type === 'string' ? target.type : 'target',
+      ref: target.ref,
+      attempt:
+        typeof target.attempt === 'number' && Number.isFinite(target.attempt)
+          ? target.attempt
+          : 1,
+      replyEventId,
+    }));
+}
+
+function checkedTargetsOf(
+  request: Partial<ToolRequest>,
+  sourceEvent: DiscreteMatrixEvent,
+): CheckedTarget[] {
+  let batchTargets = batchTargetsOf(request, sourceEvent);
+  if (batchTargets) {
+    return batchTargets;
+  }
+  let { targetRef, targetType, targetEventId } =
+    extractCheckCorrectnessTargetParts(request as ToolRequest);
+  if (!targetRef) {
+    return [];
+  }
+  return [
+    {
+      type: targetType ?? 'target',
+      ref: String(targetRef),
+      attempt: getCorrectnessCheckAttemptFromRequest(request as ToolRequest),
+      replyEventId: targetEventId,
+    },
+  ];
+}
+
+// Added to the fix instruction when some failing targets are under the
+// attempt limit and others are at it. The checks will not run on the ones at
+// the limit again, so an edit to them would never be confirmed.
+const CORRECTNESS_AT_LIMIT_NOTE =
+  'Leave the targets marked as at the attempt limit unchanged: report their remaining errors to the user instead.';
+
+// The result of a check of several targets: each failing target with its
+// errors and its attempt, the warnings, and how many passed. The instruction
+// that follows is decided across the targets: fix while any failing target
+// has attempts left, stop at the limit when none has.
+function batchCheckCorrectnessResultContent(
+  targets: CheckedTarget[],
+  summary: CorrectnessResultSummary,
+  status: string,
+): CheckCorrectnessResultContent {
+  let results = summary.targetResults ?? [];
+  let resultFor = (target: CheckedTarget) =>
+    results.find(
+      (result) =>
+        result.targetRef === target.ref && result.targetType === target.type,
+    );
+  let attemptOf = (target: CheckedTarget) => Math.max(1, target.attempt);
+  let failing = targets.filter((target) => resultFor(target)?.errors.length);
+  let warned = targets.filter(
+    (target) =>
+      !resultFor(target)?.errors.length && resultFor(target)?.warnings.length,
+  );
+  let description = describeCheckTargetCount(targets);
+  let sections: string[] = [];
+  if (status !== 'applied') {
+    sections.push(
+      `Check correctness was marked as ${status} for ${description}.`,
+    );
+  } else if (failing.length) {
+    sections.push(
+      `Check correctness found errors in ${failing.length} of ${description}; the other ${targets.length - failing.length} passed.`,
+    );
+  } else if (!summary.correct) {
+    sections.push(`Check correctness was marked as failed for ${description}.`);
+  } else {
+    sections.push(`Check correctness passed for ${description}.`);
+  }
+  if (failing.length) {
+    sections.push(
+      `Errors:\n${failing
+        .map((target) => {
+          let attempt = attemptOf(target);
+          let attemptNote = `automated fix attempts so far: ${Math.min(attempt, MAX_CORRECTNESS_FIX_ATTEMPTS)} of ${MAX_CORRECTNESS_FIX_ATTEMPTS}`;
+          if (attempt >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
+            attemptNote = `${attemptNote}, at the attempt limit`;
+          }
+          return [
+            `- ${target.type} "${target.ref}" (${attemptNote}):`,
+            ...resultFor(target)!.errors.map((line) => `  - ${line}`),
+          ].join('\n');
+        })
+        .join('\n')}`,
+    );
+  }
+  let warningLines = targets.flatMap(
+    (target) => resultFor(target)?.warnings ?? [],
+  );
+  if (warningLines.length) {
+    sections.push(
+      `Warnings:\n${warningLines.map((line) => `- ${line}`).join('\n')}`,
+    );
+  }
+  let toolMessage = sections.join('\n\n');
+
+  if (failing.length) {
+    let withAttemptsLeft = failing.filter(
+      (target) => attemptOf(target) < MAX_CORRECTNESS_FIX_ATTEMPTS,
+    );
+    if (!withAttemptsLeft.length) {
+      return {
+        toolMessage,
+        followUpUserMessage: CORRECTNESS_FAILURE_LIMIT_INSTRUCTION,
+        followUp: 'limit',
+      };
+    }
+    return {
+      toolMessage,
+      followUpUserMessage:
+        withAttemptsLeft.length < failing.length
+          ? `${CODE_FIX_INSTRUCTION}\n3. ${CORRECTNESS_AT_LIMIT_NOTE}`
+          : CODE_FIX_INSTRUCTION,
+      followUp: 'fix',
+    };
+  }
+  if (status !== 'applied' || !summary.correct) {
+    return { toolMessage, followUp: 'unresolved' };
+  }
+  if (
+    warned.some(
+      (target) =>
+        isCardCheckTarget(target) &&
+        attemptOf(target) < MAX_CORRECTNESS_FIX_ATTEMPTS,
+    )
+  ) {
+    return {
+      toolMessage,
+      followUpUserMessage: CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
+      followUp: 'warnings',
+    };
+  }
+  return {
+    toolMessage,
+    followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+    followUp: 'success',
+  };
+}
+
 function formatCorrectnessResultSummary(
   targetDescription: string,
   result: CorrectnessResultSummary,
@@ -1950,20 +2230,6 @@ function formatCorrectnessResultSummary(
     hasErrors: errorLines.length > 0,
     hasWarnings: warningLines.length > 0,
   };
-}
-
-function findCheckCorrectnessToolRequest(
-  history: DiscreteMatrixEvent[],
-  commandRequestId: string,
-): ToolRequest | undefined {
-  for (let event of history) {
-    let requests = getCheckCorrectnessToolRequests(event);
-    let match = requests.find((request) => request.id === commandRequestId);
-    if (match) {
-      return match;
-    }
-  }
-  return undefined;
 }
 
 function formatCorrectnessTargetKeyWithEvent(
@@ -2004,22 +2270,6 @@ function extractCheckCorrectnessTargetParts(
   return { targetRef, targetType, targetEventId };
 }
 
-function getCheckCorrectnessTargetKey(
-  request?: ToolRequest,
-  { withEvent = true }: { withEvent?: boolean } = {},
-): string | undefined {
-  let { targetRef, targetType, targetEventId } =
-    extractCheckCorrectnessTargetParts(request);
-  if (!targetRef) {
-    return undefined;
-  }
-  return formatCorrectnessTargetKeyWithEvent(
-    targetType,
-    targetRef,
-    withEvent ? targetEventId : undefined,
-  );
-}
-
 function getCorrectnessCheckAttemptFromRequest(request?: ToolRequest): number {
   if (!request) {
     return 0;
@@ -2035,58 +2285,90 @@ function getCorrectnessCheckAttemptFromRequest(request?: ToolRequest): number {
   return 0;
 }
 
-type CorrectnessCheckAttemptInfo = { attempt: number; succeeded: boolean };
+// One target's outcome in one check result, in history order.
+interface CorrectnessCheckRecord {
+  type: string;
+  ref: string;
+  replyEventId?: string;
+  attempt: number;
+  succeeded: boolean;
+  historyIndex: number;
+}
 
-function getLatestCorrectnessCheckAttemptInfo(
+// Every target outcome of the check results in the history, read once so
+// the attempts of a bulk edit's hundreds of targets are each a lookup.
+function collectCorrectnessCheckRecords(
   history: DiscreteMatrixEvent[],
-  targetKey: string,
-  opts: {
-    // match on the target alone, across the patch events that wrote it
-    ignoreEvent?: boolean;
-    // stop looking back at (and don't look past) an event matching this
-    stopAt?: (event: DiscreteMatrixEvent) => boolean;
-  } = {},
-): CorrectnessCheckAttemptInfo | undefined {
-  for (let index = history.length - 1; index >= 0; index--) {
-    let event = history[index];
-    if (opts.stopAt?.(event)) {
-      return undefined;
+): CorrectnessCheckRecord[] {
+  let requestsById = new Map<
+    string,
+    { request: ToolRequest; event: DiscreteMatrixEvent }
+  >();
+  for (let event of history) {
+    for (let request of getCheckCorrectnessToolRequests(event)) {
+      if (!requestsById.has(request.id)) {
+        requestsById.set(request.id, { request, event });
+      }
     }
+  }
+  let records: CorrectnessCheckRecord[] = [];
+  history.forEach((event, historyIndex) => {
     if (!isToolResultEventType(event.type)) {
-      continue;
+      return;
     }
     let toolResult = event as ToolResultEvent;
-    if (!isCheckCorrectnessToolResultEvent(toolResult, history)) {
-      continue;
-    }
-    let sourceRequest = findCheckCorrectnessToolRequest(
-      history,
-      toolResult.content.commandRequestId,
-    );
-    if (!sourceRequest) {
-      continue;
-    }
+    let source = requestsById.get(toolResult.content.commandRequestId);
     if (
-      getCheckCorrectnessTargetKey(sourceRequest, {
-        withEvent: !opts.ignoreEvent,
-      }) !== targetKey
+      !source ||
+      toolResult.content['m.relates_to']?.event_id !== source.event.event_id
     ) {
-      continue;
+      return;
     }
-    let attempt = Math.max(
-      1,
-      getCorrectnessCheckAttemptFromRequest(sourceRequest),
-    );
-    // A pass that still carries warnings asks for a fix, so it keeps the
-    // attempt count running rather than resetting it.
-    return {
-      attempt,
-      succeeded:
-        correctnessCheckPassed(toolResult) &&
-        !correctnessCheckHasWarnings(toolResult),
-    };
+    let isBatch = batchTargetsOf(source.request) !== undefined;
+    for (let target of checkedTargetsOf(source.request, source.event)) {
+      records.push({
+        ...target,
+        attempt: Math.max(1, target.attempt),
+        succeeded: isBatch
+          ? batchTargetSucceeded(toolResult, target)
+          : // A pass that still carries warnings asks for a fix, so it keeps
+            // the attempt count running rather than resetting it.
+            correctnessCheckPassed(toolResult) &&
+            !correctnessCheckHasWarnings(toolResult),
+        historyIndex,
+      });
+    }
+  });
+  return records;
+}
+
+// A target of a check of several targets passed clean when the check ran and
+// its result names no error or warning for it. A check that failed, timed
+// out, was canceled or can't be read says nothing about any of its targets.
+function batchTargetSucceeded(
+  toolResult: ToolResultEvent,
+  target: CheckedTarget,
+): boolean {
+  if (toolResult.content['m.relates_to']?.key !== 'applied') {
+    return false;
   }
-  return undefined;
+  let read = readCorrectnessResult(toolResult);
+  if (read.kind !== 'card') {
+    return false;
+  }
+  let results = read.summary.targetResults ?? [];
+  let result = results.find(
+    (candidate) =>
+      candidate.targetRef === target.ref &&
+      candidate.targetType === target.type,
+  );
+  if (result) {
+    return !result.errors.length && !result.warnings.length;
+  }
+  // Not named: it passed, unless the check failed without naming a target.
+  return (
+    read.summary.correct || results.some((candidate) => candidate.errors.length)
+  );
 }
 
 // Attempts count consecutive automated rounds on one target. Each fix the AI
@@ -2094,26 +2376,30 @@ function getLatestCorrectnessCheckAttemptInfo(
 // patch event continues the count from its last check under an earlier
 // event — unless the user has spoken since, which starts a fresh run.
 function getNextCorrectnessCheckAttempt(
-  history: DiscreteMatrixEvent[],
-  targetKey: string,
-  targetKeyWithoutEvent: string | undefined,
-  aiBotUserId: string,
+  records: CorrectnessCheckRecord[],
+  { type, ref }: { type: string; ref: string },
+  replyEventId: string | undefined,
+  lastUserMessageIndex: number,
 ): number {
+  let sameTarget = (record: CorrectnessCheckRecord) =>
+    record.type === type && record.ref === ref;
   let latest =
-    getLatestCorrectnessCheckAttemptInfo(history, targetKey) ??
-    (targetKeyWithoutEvent
-      ? getLatestCorrectnessCheckAttemptInfo(history, targetKeyWithoutEvent, {
-          ignoreEvent: true,
-          stopAt: (event) => isUserChatMessage(event, aiBotUserId),
-        })
-      : undefined);
-  if (!latest) {
+    (replyEventId
+      ? findLast(
+          records,
+          (record) =>
+            sameTarget(record) && record.replyEventId === replyEventId,
+        )
+      : undefined) ??
+    findLast(
+      records,
+      (record) =>
+        sameTarget(record) && record.historyIndex > lastUserMessageIndex,
+    );
+  if (!latest || latest.succeeded) {
     return 1;
   }
-  if (latest.succeeded) {
-    return 1;
-  }
-  return Math.max(1, latest.attempt + 1);
+  return latest.attempt + 1;
 }
 
 function toCheckCorrectnessResultContent(
@@ -2323,14 +2609,21 @@ export async function buildPromptForModel(
   // The correctness-summary instruction applies to this request only, so it
   // rides the volatile trailing message; a history entry that vanishes on
   // the next request would both churn the history and waste the marker.
-  let currentUserMessageEvent = findLast(history, (event) =>
-    isHumanMessage(event, aiBotUserId),
-  ) as MatrixEventWithBoxelContext | undefined;
+  let toolResultMedia = currentTurnToolResultMedia(
+    history,
+    aiBotUserId,
+    inputModalities,
+  );
   let { mediaParts, unsupportedNote } = await buildCurrentTurnMediaParts(
     client,
-    currentUserMessageEvent,
+    currentTurnMessageMedia(
+      history,
+      aiBotUserId,
+      inputModalities,
+      toolResultMedia,
+    ),
     inputModalities,
-    currentTurnToolResultMedia(history, aiBotUserId, inputModalities),
+    toolResultMedia,
   );
   let trailingContent = [
     TRAILING_CONTEXT_PREAMBLE,
@@ -2346,7 +2639,7 @@ export async function buildPromptForModel(
   ]
     .filter(Boolean)
     .join('\n\n');
-  // The current message's media parts ride here too — see
+  // The current turn's media parts ride here too — see
   // buildCurrentTurnMediaParts for why they never ride in history.
   messages.push(
     mediaParts.length
@@ -2482,6 +2775,8 @@ function resolveCodeEdits(
   };
 }
 
+// The checks for a reply's edits, once per reply. Targets past the attempt
+// limit are left out; undefined when nothing is left to check.
 function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
   { content, relevantTools, toolResults }: ResolvedCodeEdits,
@@ -2499,10 +2794,6 @@ function buildCodePatchCorrectnessMessage(
   let files = gatherPatchedFiles(relevantTools, toolResults);
   let cards = gatherPatchedCards(relevantTools, toolResults);
 
-  if (files.length === 0 && cards.length === 0) {
-    return undefined;
-  }
-
   let attemptsByTargetKey = buildCorrectnessCheckAttemptMap(
     history,
     files,
@@ -2510,6 +2801,18 @@ function buildCodePatchCorrectnessMessage(
     aiBotUserId,
     messageEvent.event_id,
   );
+  let withinLimit = (type: string, ref: string) =>
+    (attemptsByTargetKey[
+      formatCorrectnessTargetKeyWithEvent(type, ref, messageEvent.event_id)!
+    ] ?? 1) <= MAX_CORRECTNESS_FIX_ATTEMPTS;
+  files = files.filter((file) =>
+    withinLimit('file', file.sourceUrl || file.displayName),
+  );
+  cards = cards.filter((card) => withinLimit('card', card.cardId));
+
+  if (files.length === 0 && cards.length === 0) {
+    return undefined;
+  }
 
   return {
     targetEventId: messageEvent.event_id!,
@@ -2616,6 +2919,10 @@ function buildCorrectnessCheckAttemptMap(
   targetEventId?: string,
 ): Record<string, number> {
   let attempts: Record<string, number> = {};
+  let records = collectCorrectnessCheckRecords(history);
+  let lastUserMessageIndex = findLastIndex(history, (event) =>
+    isUserChatMessage(event, aiBotUserId),
+  );
   let targets = [
     ...files.map((file) => ({
       type: 'file',
@@ -2633,10 +2940,10 @@ function buildCorrectnessCheckAttemptMap(
       continue;
     }
     attempts[targetKey] = getNextCorrectnessCheckAttempt(
-      history,
-      targetKey,
-      formatCorrectnessTargetKeyWithEvent(type, ref),
-      aiBotUserId,
+      records,
+      { type, ref },
+      targetEventId,
+      lastUserMessageIndex,
     );
   }
   return attempts;
@@ -2676,20 +2983,25 @@ function isCodePatchCorrectnessEventForMessage(
   event: DiscreteMatrixEvent,
   targetEventId: string,
 ) {
+  return correctnessReplyEventId(event) === targetEventId;
+}
+
+// The reply whose edits a correctness event checks; undefined for any other
+// event.
+function correctnessReplyEventId(
+  event: DiscreteMatrixEvent | undefined,
+): string | undefined {
   if (
-    event.type !== 'm.room.message' ||
+    event?.type !== 'm.room.message' ||
     event.content?.msgtype !== APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
   ) {
-    return false;
+    return undefined;
   }
   let relatesTo = event.content?.['m.relates_to'];
-  if (!relatesTo) {
-    return false;
+  if (relatesTo?.rel_type !== APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE) {
+    return undefined;
   }
-  return (
-    relatesTo.rel_type === APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE &&
-    relatesTo.event_id === targetEventId
-  );
+  return relatesTo.event_id;
 }
 
 function formatFileDisplayName(identifier?: string) {
@@ -2724,7 +3036,9 @@ function hasAppliedChanges(
 // message is the current one: the rendering becomes part of the cached
 // prompt prefix, and any retroactive change re-bills everything after it
 // (see getAttachedCards). Media bodies are handled separately, by
-// buildCurrentTurnMediaParts.
+// buildCurrentTurnMediaParts. A message's media are listed with the note
+// that names the viewAttachment tool, a tool result's with the plain one;
+// the choice rests on the event's own type, which never changes.
 export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
@@ -2738,6 +3052,9 @@ export const buildAttachmentsMessagePart = async (
   if (attachedFiles.length > 0) {
     text += `Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):\n${attachedFilesToMessage(
       attachedFiles,
+      matrixEvent.type === 'm.room.message'
+        ? ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE
+        : MEDIA_NOT_IN_HISTORY_NOTE,
     )}\n`;
   }
   return text;
@@ -2771,12 +3088,137 @@ export const MAX_TOOL_RESULT_MEDIA_FILE_BYTES = Math.floor(
 );
 export const MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES = 16 * 1024 * 1024;
 
-export interface CurrentTurnToolResultMedia {
+// The bytes of media one request carries that the media of a turn's earlier
+// messages must fit within: the same 16 MiB tool-result media are held to,
+// sized against the provider request limit. The turn's tool-result media and
+// the newest message's own media count first and are never cut to make room,
+// so media from earlier messages only fill what those leave and never raise a
+// request beyond what the newest message and the tool results reach alone.
+export const MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES =
+  MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES;
+
+export interface CurrentTurnMedia {
   // The files to embed, oldest first.
   included: SerializedFileDef[];
   // Media files the limits left out, each with the reason, so the model can
   // be told it cannot see them.
   omitted: { file: SerializedFileDef; reason: string }[];
+}
+
+// A bot message that answered the human messages before it: the reply a tool
+// loop ends on. An answer that was canceled (the user stopped it, or wrote
+// again before it finished) or is still streaming answered nothing, and a
+// message that makes tool calls is a step of the loop, not its end — the
+// user can write again while a call runs or waits for approval — so the
+// messages before either stay part of the turn. An answer that ended in an
+// error counts as answered: sending the same media again would repeat
+// whatever failed.
+function isCompletedAnswer(
+  event: DiscreteMatrixEvent,
+  aiBotUserId: string,
+): boolean {
+  if (event.type !== 'm.room.message' || event.sender !== aiBotUserId) {
+    return false;
+  }
+  let content = event.content as CardMessageContent;
+  return (
+    content.isStreamingFinished !== false &&
+    !isCanceledAnswer(event as CardMessageEvent) &&
+    !getToolRequests<Partial<EncodedToolRequest>>(content)?.length
+  );
+}
+
+// The human messages of the current turn, oldest first: the last message a
+// human sent and every human message before it back to the bot's last
+// completed answer. A user who writes again before the bot has answered adds
+// to the same turn, so what they attached to the earlier message still
+// reaches the model.
+function currentTurnHumanMessages(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): MatrixEventWithBoxelContext[] {
+  let messages: MatrixEventWithBoxelContext[] = [];
+  let lastHumanMessageIndex = findLastIndex(history, (event) =>
+    isHumanMessage(event, aiBotUserId),
+  );
+  for (let i = lastHumanMessageIndex; i >= 0; i--) {
+    let event = history[i];
+    if (isHumanMessage(event, aiBotUserId)) {
+      messages.unshift(event as MatrixEventWithBoxelContext);
+    } else if (isCompletedAnswer(event, aiBotUserId)) {
+      break;
+    }
+  }
+  return messages;
+}
+
+// The media files (images, PDFs, audio, video) attached to the current
+// turn's human messages (see currentTurnHumanMessages), oldest first. The
+// newest message's media are always included. Media from the turn's earlier
+// messages are added newest first while they fit in what the turn's
+// tool-result media (`toolResultMedia`, as currentTurnToolResultMedia chose
+// them) and the newest message's media leave of
+// MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES; an earlier file with no recorded size
+// is left out, since its bytes cannot be counted against the budget. Files
+// the active model cannot take (per `inputModalities`, when given) use none
+// of the budget: they are included, and buildCurrentTurnMediaParts names
+// them in its note instead of sending them. Text-based attachments are
+// excluded: their content rides in the history message that attached them.
+// A file attached to more than one of the turn's messages (the host attaches
+// the file open in code mode to every message) is sent once, as its newest
+// attachment, which history already tells the model supersedes the others.
+// A file a tool result of the turn attaches again (viewAttachment) is sent
+// once too, but that is settled at download time (see
+// buildCurrentTurnMediaParts), once it is known which copy arrived.
+export function currentTurnMessageMedia(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  inputModalities?: string[],
+  toolResultMedia: CurrentTurnMedia = { included: [], omitted: [] },
+): CurrentTurnMedia {
+  let messages = currentTurnHumanMessages(history, aiBotUserId);
+  let included: SerializedFileDef[] = [];
+  let omitted: CurrentTurnMedia['omitted'] = [];
+  let newerAttachments = new Set<string>();
+  let totalBytes = toolResultMedia.included.reduce(
+    (sum, file) => sum + (file.contentSize ?? 0),
+    0,
+  );
+  for (let i = messages.length - 1; i >= 0; i--) {
+    let isNewestMessage = i === messages.length - 1;
+    let attachedFiles: SerializedFileDef[] =
+      messages[i].content?.data?.attachedFiles ?? [];
+    let mediaFiles = attachedFiles
+      .filter((file) => file.url && requiredModality(file.contentType))
+      .map(toFileDefMetadata);
+    for (let file of mediaFiles.reverse()) {
+      let identity = mediaIdentity(file);
+      if (newerAttachments.has(identity)) {
+        continue;
+      }
+      newerAttachments.add(identity);
+      let modality = requiredModality(file.contentType)!;
+      let sendable = !inputModalities || inputModalities.includes(modality);
+      let size = file.contentSize;
+      let reason: string | undefined;
+      if (sendable && !isNewestMessage) {
+        if (typeof size !== 'number') {
+          reason = 'its size is unknown';
+        } else if (totalBytes + size > MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES) {
+          reason = `newer media already fill the ${formatMiB(MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES)} sent per turn`;
+        }
+      }
+      if (reason) {
+        omitted.unshift({ file, reason });
+        continue;
+      }
+      included.unshift(file);
+      if (sendable && typeof size === 'number') {
+        totalBytes += size;
+      }
+    }
+  }
+  return { included, omitted };
 }
 
 // The media files (images, PDFs, audio, video) attached to the tool results
@@ -2789,14 +3231,16 @@ export interface CurrentTurnToolResultMedia {
 // takes the position of its latest result. Files the active model cannot
 // take (per `inputModalities`, when given) are left out before the limits
 // apply, so they never use up a slot or budget a sendable file could have.
-// The rest are chosen newest first within the limits above; a file with no recorded size is left out, since
-// its bytes cannot be counted against the budget. Text-based attachments are
-// excluded: their content rides in the tool message itself.
+// The rest are chosen newest first within the limits above. A file
+// toolResultMediaRefusal refuses is left out first: one that names no Matrix
+// media item, one over the per-file limit, and one with no recorded size,
+// since its bytes cannot be counted against the budget. Text-based
+// attachments are excluded: their content rides in the tool message itself.
 export function currentTurnToolResultMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   inputModalities?: string[],
-): CurrentTurnToolResultMedia {
+): CurrentTurnMedia {
   let lastHumanMessageIndex = findLastIndex(history, (event) =>
     isHumanMessage(event, aiBotUserId),
   );
@@ -2823,23 +3267,20 @@ export function currentTurnToolResultMedia(
     }
   }
   let included: SerializedFileDef[] = [];
-  let omitted: CurrentTurnToolResultMedia['omitted'] = [];
+  let omitted: CurrentTurnMedia['omitted'] = [];
   let totalBytes = 0;
   for (let file of [...candidates].reverse()) {
+    // Read only once toolResultMediaRefusal has let the file through, which
+    // it does only for a file with a recorded size.
     let size = file.contentSize;
-    let modality = requiredModality(file.contentType);
-    let reason: string | undefined;
-    if (inputModalities && modality && !inputModalities.includes(modality)) {
-      reason = `the active model does not accept ${modalityLabel(modality)}`;
-    } else if (typeof size !== 'number') {
-      reason = 'its size is unknown';
-    } else if (size > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
-      reason = `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`;
-    } else if (included.length >= MAX_CURRENT_TURN_TOOL_RESULT_MEDIA) {
-      reason = `only the newest ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} tool-result media files are sent`;
-    } else if (totalBytes + size > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES) {
-      reason = `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`;
-    }
+    let reason =
+      toolResultMediaRefusal(file, inputModalities) ??
+      (included.length >= MAX_CURRENT_TURN_TOOL_RESULT_MEDIA
+        ? `only the newest ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} tool-result media files are sent`
+        : undefined) ??
+      (totalBytes + size! > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES
+        ? `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`
+        : undefined);
     if (reason) {
       omitted.unshift({ file, reason });
     } else {
@@ -2848,6 +3289,39 @@ export function currentTurnToolResultMedia(
     }
   }
   return { included, omitted };
+}
+
+const NOT_STORED_IN_CONVERSATION =
+  'it is not a file stored in this conversation';
+
+// Why a tool result's media file can never be sent, whatever else the turn
+// holds: the active model doesn't take its kind of media (per
+// `inputModalities`, when given), its URL names no Matrix media item, its
+// size is unknown, or it is over MAX_TOOL_RESULT_MEDIA_FILE_BYTES. Undefined
+// when only the turn's shared count and byte limits can still leave it out.
+// The viewAttachment tool refuses the same files, so it never reports a file
+// as shown that the next request leaves out on its own account.
+export function toolResultMediaRefusal(
+  file: Pick<SerializedFileDef, 'url' | 'contentSize' | 'contentType'>,
+  inputModalities?: string[],
+): string | undefined {
+  let modality = requiredModality(file.contentType);
+  if (inputModalities && modality && !inputModalities.includes(modality)) {
+    return `the active model does not accept ${modalityLabel(modality)}`;
+  }
+  if (
+    !file.url ||
+    !canonicalizeMatrixMediaKey(file.url)?.startsWith('mxc://')
+  ) {
+    return NOT_STORED_IN_CONVERSATION;
+  }
+  if (typeof file.contentSize !== 'number') {
+    return 'its size is unknown';
+  }
+  if (file.contentSize > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
+    return `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`;
+  }
+  return undefined;
 }
 
 function formatMiB(bytes: number): string {
@@ -2883,12 +3357,12 @@ function toolResultMediaDownloadUrl(
 
 // Downloads the current turn's media attachments (images, PDFs, audio,
 // video) and renders them as native content parts for the volatile trailing
-// message: the media attached to the current human message, then the media
-// attached to the current turn's tool results (see
-// currentTurnToolResultMedia), each of the latter preceded by a text part
-// naming the file so the model can tell which result an image came from.
-// Tool-result media the limits left out are named in the returned note, as
-// are files the model's input modalities exclude.
+// message: the media attached to the current turn's human messages (see
+// currentTurnMessageMedia), then the media attached to its tool results (see
+// currentTurnToolResultMedia). Each is preceded by a text part naming the
+// file, so the model can match it to the metadata history lists and tell
+// which message or result it came from. Media the limits left out are named
+// in the returned note, as are files the model's input modalities exclude.
 // Media bodies never ride in history: embedding them there would grow the
 // request by every media file ever attached — re-downloaded and re-encoded
 // on each turn, with nothing bounding it — while gating on "is this the
@@ -2897,19 +3371,21 @@ function toolResultMediaDownloadUrl(
 // anyway (it carries the current time), so the current media can ride there
 // without touching a single history byte; history lists the same files as
 // stable metadata (see buildAttachmentsMessagePart).
+// A file both a message and a tool result attach (viewAttachment attaches a
+// user's file again) rides once. Message media download first, so the
+// message's copy is the one sent whenever it arrives, and a tool result's
+// copy fills in only for a message copy that was left out or failed to
+// download. A file the request carries is never named as left out.
 export const buildCurrentTurnMediaParts = async (
   client: MatrixClient,
-  matrixEvent: MatrixEventWithBoxelContext | undefined,
+  messageMedia: CurrentTurnMedia = { included: [], omitted: [] },
   inputModalities?: string[],
-  toolResultMedia: CurrentTurnToolResultMedia = { included: [], omitted: [] },
+  toolResultMedia: CurrentTurnMedia = { included: [], omitted: [] },
 ): Promise<{ mediaParts: ContentPart[]; unsupportedNote?: string }> => {
   let mediaParts: ContentPart[] = [];
-  let messageFiles = matrixEvent
-    ? await getAttachedFiles(client, matrixEvent)
-    : [];
   let unsupportedFiles: { name: string; contentType: string }[] = [];
   let files = [
-    ...messageFiles.map((file) => ({ file, fromToolResult: false })),
+    ...messageMedia.included.map((file) => ({ file, fromToolResult: false })),
     // Newest first, so the per-turn byte budget keeps the newest media;
     // their parts are put back in chronological order below.
     ...[...toolResultMedia.included].reverse().map((file) => ({
@@ -2918,12 +3394,17 @@ export const buildCurrentTurnMediaParts = async (
     })),
   ];
   let toolResultPartGroups: ContentPart[][] = [];
-  let omittedAtDownload: CurrentTurnToolResultMedia['omitted'] = [];
+  let omittedAtDownload: CurrentTurnMedia['omitted'] = [];
   // The bytes tool-result media actually downloaded this turn; declared
   // sizes chose the files, but the budget holds on what arrives.
   let toolResultBytes = 0;
+  // The files whose bytes this request carries, by mediaIdentity.
+  let carried = new Set<string>();
   for (let { file: f, fromToolResult } of files) {
     if (!f.url) {
+      continue;
+    }
+    if (fromToolResult && carried.has(mediaIdentity(f))) {
       continue;
     }
     let downloadUrl = f.url;
@@ -2932,7 +3413,7 @@ export const buildCurrentTurnMediaParts = async (
       if (!mediaUrl) {
         omittedAtDownload.push({
           file: f,
-          reason: 'it is not a file stored in this conversation',
+          reason: NOT_STORED_IN_CONVERSATION,
         });
         continue;
       }
@@ -3023,10 +3504,11 @@ export const buildCurrentTurnMediaParts = async (
       // file's metadata is still in history, so nothing byte-stable drifts.
       getLog().error(`Failed to download media file ${f.url}:`, e);
     }
-    if (fromToolResult && mediaParts.length > partCountBefore) {
+    if (mediaParts.length > partCountBefore) {
+      carried.add(mediaIdentity(f));
       mediaParts.splice(partCountBefore, 0, {
         type: 'text',
-        text: `Attached to a tool result: ${mediaFileLabel(f)}`,
+        text: `${fromToolResult ? 'Attached to a tool result' : 'Attached to a user message'}: ${mediaFileLabel(f)}`,
       });
     }
     if (fromToolResult) {
@@ -3042,6 +3524,17 @@ export const buildCurrentTurnMediaParts = async (
       .join(', ');
     notes.push(
       `Note: The following files were not sent to the model because it does not support their input type, so you cannot see them: ${fileList}. Do not guess at their contents; tell the user you cannot view them with the current model.`,
+    );
+  }
+  let messageOmitted = messageMedia.omitted.filter(
+    ({ file }) => !carried.has(mediaIdentity(file)),
+  );
+  if (messageOmitted.length > 0) {
+    let fileList = messageOmitted
+      .map(({ file, reason }) => `${mediaFileLabel(file)}: ${reason}`)
+      .join('; ');
+    notes.push(
+      `Note: The following files attached to the user's messages were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; if you need one and you have the ${VIEW_ATTACHMENT_TOOL_NAME} tool, call it with the file's URL, and otherwise ask the user to attach it again.`,
     );
   }
   let omitted = [...toolResultMedia.omitted, ...omittedAtDownload];
@@ -3064,6 +3557,12 @@ function base64DataUrlByteLength(dataUrl: string): number {
   let base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
   let padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
   return (base64.length * 3) / 4 - padding;
+}
+
+// Which file a media attachment is, across the messages and tool results of
+// a turn: its source URL, or its stored URL when it has none.
+function mediaIdentity(file: SerializedFileDef): string {
+  return file.sourceUrl || file.url!;
 }
 
 function mediaFileLabel(file: SerializedFileDef): string {
@@ -3328,6 +3827,15 @@ export const isToolResultStatusApplied = (event?: MatrixEvent) => {
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };
+
+// The input modalities of the room's active model, as the prompt builder
+// gates media on them. Undefined when the model doesn't say, and then every
+// modality passes.
+export function activeModelInputModalities(
+  eventlist: DiscreteMatrixEvent[],
+): string[] | undefined {
+  return getActiveLLMDetails(eventlist).inputModalities;
+}
 
 function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   model: string;

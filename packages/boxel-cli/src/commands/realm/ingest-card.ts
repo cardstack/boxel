@@ -1,6 +1,16 @@
 import type { Command } from 'commander';
 import * as path from 'path';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import {
+  ensureTrailingSlash,
+  RealmPaths,
+} from '@cardstack/runtime-common/paths';
+import type { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
+import {
+  isAbsoluteIdentifier,
+  resolveRRIReference,
+  rri,
+} from '@cardstack/runtime-common/realm-identifiers';
+import { baseRealmRRI } from '@cardstack/runtime-common/realm-prefixes';
 import {
   RealmSyncBase,
   SupportedMimeType,
@@ -11,7 +21,12 @@ import {
   type CheckpointChange,
 } from '../../lib/checkpoint-manager.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
-import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
+import {
+  resolveRealmIdentifier,
+  resolveRealmNetwork,
+  resolveRealmServerUrl,
+} from '../../lib/resolve-realm-identifier.ts';
+import { deriveRealmServerUrl } from '../../lib/seed-auth.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import {
   getProfileManager,
@@ -22,7 +37,7 @@ import { searchEntryRequestBody, itemsFromSearchEntryDoc } from '../search.ts';
 
 const CARD_JSON = 'application/vnd.card+json';
 const MODULE_EXTENSIONS = ['.gts', '.gjs', '.ts', '.js'];
-const SPEC_MODULE = 'https://cardstack.com/base/spec';
+const SPEC_MODULE = `${baseRealmRRI}spec`;
 
 /**
  * The realm index identifies modules without their executable extension;
@@ -90,10 +105,39 @@ export function extractExportedClassNames(source: string): string[] {
 }
 
 /**
+ * The realm-relative path of an identifier, in URL or prefix form, in the
+ * realm served at `realmRoot`. A relative reference first joins against
+ * `relativeTo`. The identifier resolves on `network`, so a prefix maps to
+ * wherever the realm server says that realm is served (ADR 002 §1.2), never to
+ * a guess from the prefix's spelling. Null when the identifier resolves
+ * outside the realm, or does not resolve at all: an npm scope such as
+ * `@glimmer/component` is not a registered prefix.
+ */
+export function realmRelativePath(
+  reference: string,
+  realmRoot: string,
+  network: PrefixRealmNetwork,
+  relativeTo?: string,
+): string | null {
+  let identifier = resolveRRIReference(
+    reference,
+    relativeTo === undefined ? undefined : rri(relativeTo),
+  );
+  let url: URL;
+  try {
+    url = network.toURL(identifier);
+  } catch {
+    return null;
+  }
+  let paths = new RealmPaths(new URL(realmRoot));
+  return paths.inRealm(url) ? paths.local(url) : null;
+}
+
+/**
  * Resolve a same-realm import specifier to a realm-relative file path that
- * exists in `fileSet`. Handles relative (`./`, `../`), same-origin absolute
- * (`https://…/<realm>/…`), and registered-prefix (`@cardstack/<realm>/…`)
- * forms. Returns null for anything outside this realm (base realm, other
+ * exists in `fileSet`. Handles relative (`./`, `../`, `/`) specifiers against
+ * the importing module's id, and absolute identifiers in URL or prefix form on
+ * `network`. Returns null for anything outside this realm (base realm, other
  * realms, bare npm packages) — those resolve at runtime and aren't copied.
  */
 export function resolveSameRealmFile(
@@ -101,25 +145,18 @@ export function resolveSameRealmFile(
   fromAbsUrl: string,
   realmRoot: string,
   fileSet: Set<string>,
+  network: PrefixRealmNetwork,
 ): string | null {
-  let rel: string;
-  if (spec.startsWith('.') || spec.startsWith('/')) {
-    let absUrl = new URL(spec, fromAbsUrl).href;
-    if (!absUrl.startsWith(realmRoot)) return null; // base realm / other realm
-    rel = absUrl.slice(realmRoot.length).replace(/^\/+/, '');
-  } else if (/^https?:\/\//.test(spec)) {
-    if (!spec.startsWith(realmRoot)) return null;
-    rel = spec.slice(realmRoot.length).replace(/^\/+/, '');
-  } else if (spec.startsWith('@')) {
-    // Registered-prefix form (`@cardstack/<realm>/…`). Map onto this realm by
-    // its path tail (e.g. `catalog/`). npm-scoped packages (`@glimmer/…`)
-    // won't contain the realm tail and fall through to null (external).
-    let tail = new URL(realmRoot).pathname.replace(/^\/+/, '');
-    let idx = tail ? spec.indexOf(tail) : -1;
-    if (idx < 0) return null;
-    rel = spec.slice(idx + tail.length).replace(/^\/+/, '');
-  } else {
+  if (
+    !spec.startsWith('.') &&
+    !spec.startsWith('/') &&
+    !isAbsoluteIdentifier(spec)
+  ) {
     return null; // bare npm module — external
+  }
+  let rel = realmRelativePath(spec, realmRoot, network, fromAbsUrl);
+  if (rel === null) {
+    return null;
   }
   let candidates = MODULE_EXTENSIONS.some((ext) => rel.endsWith(ext))
     ? [rel]
@@ -134,14 +171,16 @@ class RealmCardIngester extends RealmSyncBase {
   hasError = false;
   copiedFiles: string[] = [];
   private cardUrl: string;
+  private network: PrefixRealmNetwork;
   private sourceCache = new Map<string, string | null>();
 
   constructor(
-    options: SyncOptions & { cardUrl: string },
+    options: SyncOptions & { cardUrl: string; network: PrefixRealmNetwork },
     authenticator: RealmAuthenticator,
   ) {
     super(options, authenticator);
     this.cardUrl = options.cardUrl;
+    this.network = options.network;
   }
 
   private get realmRoot(): string {
@@ -149,40 +188,25 @@ class RealmCardIngester extends RealmSyncBase {
   }
 
   private relToAbs(rel: string): string {
-    return this.realmRoot + rel.replace(/^\/+/, '');
+    return new RealmPaths(new URL(this.realmRoot)).fileURL(rel).href;
   }
 
   private toRel(absUrl: string): string {
-    return absUrl.startsWith(this.realmRoot)
-      ? absUrl.slice(this.realmRoot.length).replace(/^\/+/, '')
-      : absUrl;
+    return this.relativize(absUrl) ?? absUrl;
   }
 
   /**
-   * Normalize any reference to a realm-relative path. The realm is reachable
-   * under two URL spaces: the served root (`https://…/catalog/`, used by file
-   * I/O and `_mtimes`) and a published alias (`@cardstack/catalog/`, used by
-   * search-result `id`s and `ref.module`). Both share the realm's path tail
-   * (`catalog/`), so we relativize against that.
+   * The realm-relative path of an identifier in this realm. File I/O and
+   * `_mtimes` use the served root (`https://…/catalog/`), while search-result
+   * `id`s and `ref.module` may be in prefix form (`@cardstack/catalog/…`);
+   * both resolve on the network to the served URL.
    */
-  private relativize(url: string): string {
-    if (url.startsWith(this.realmRoot)) {
-      return url.slice(this.realmRoot.length).replace(/^\/+/, '');
-    }
-    let tail = new URL(this.realmRoot).pathname.replace(/^\/+/, ''); // e.g. catalog/
-    let idx = tail ? url.indexOf(tail) : -1;
-    if (idx >= 0) return url.slice(idx + tail.length).replace(/^\/+/, '');
-    return url.replace(/^\/+/, '');
-  }
-
-  /** Resolve a module ref (absolute alias/https or relative) to a realm-relative path. */
-  private refToRel(refModule: string, baseRel: string): string {
-    if (/^https?:\/\//.test(refModule) || refModule.startsWith('@')) {
-      return this.relativize(refModule);
-    }
-    return new URL(refModule, `https://_/${baseRel}`).pathname.replace(
-      /^\/+/,
-      '',
+  private relativize(identifier: string, relativeTo?: string): string | null {
+    return realmRelativePath(
+      identifier,
+      this.realmRoot,
+      this.network,
+      relativeTo,
     );
   }
 
@@ -272,6 +296,7 @@ class RealmCardIngester extends RealmSyncBase {
           this.relToAbs(instanceRel),
           this.realmRoot,
           fileSet,
+          this.network,
         );
         return {
           moduleRels: moduleFile ? [moduleFile] : [],
@@ -285,6 +310,7 @@ class RealmCardIngester extends RealmSyncBase {
       this.realmRoot,
       this.realmRoot,
       fileSet,
+      this.network,
     );
     if (!moduleFile) {
       throw new Error(
@@ -313,6 +339,7 @@ class RealmCardIngester extends RealmSyncBase {
           this.relToAbs(rel),
           this.realmRoot,
           fileSet,
+          this.network,
         );
         if (dep && !seen.has(dep)) queue.push(dep);
       }
@@ -373,33 +400,20 @@ class RealmCardIngester extends RealmSyncBase {
   }
 
   /**
-   * Resolve a relationship `links.self` (relative `../Foo/x`, published alias
-   * `@cardstack/<realm>/…`, or absolute https — and without a `.json` extension)
-   * to a same-realm instance file that exists in `fileSet`, or null for
-   * cross-realm / missing links.
+   * Resolve a relationship `links.self` (relative `../Foo/x`, or absolute in
+   * URL or prefix form, and without a `.json` extension) to a same-realm
+   * instance file that exists in `fileSet`, or null for cross-realm / missing
+   * links. A link into another realm is left as a runtime reference, not
+   * copied (mirrors resolveSameRealmFile).
    */
   private resolveLinkedInstanceRel(
     self: string,
     fromRel: string,
     fileSet: Set<string>,
   ): string | null {
-    let rel: string;
-    if (self.startsWith('@')) {
-      // Published-alias form — map onto this realm by its path tail. A tail
-      // that isn't ours (another realm's alias) won't resolve to a local file.
-      rel = this.relativize(self);
-    } else {
-      // Relative or absolute https: resolve to an absolute URL and require it
-      // to live under THIS realm's served root. A link into another realm —
-      // even one whose URL happens to share our path tail — is left as a
-      // runtime reference, not copied (mirrors resolveSameRealmFile).
-      let absUrl = /^https?:\/\//.test(self)
-        ? self
-        : new URL(self, this.relToAbs(fromRel)).href;
-      if (!absUrl.startsWith(this.realmRoot)) {
-        return null;
-      }
-      rel = absUrl.slice(this.realmRoot.length).replace(/^\/+/, '');
+    let rel = this.relativize(self, this.relToAbs(fromRel));
+    if (rel === null) {
+      return null;
     }
     let candidate = rel.endsWith('.json') ? rel : `${rel}.json`;
     return fileSet.has(candidate) ? candidate : null;
@@ -421,10 +435,11 @@ class RealmCardIngester extends RealmSyncBase {
       if (specType !== 'card' && specType !== 'app') continue;
       let ref = attrs.ref as { module?: string } | undefined;
       if (!ref?.module || !spec.id) continue;
-      let refRel = stripModuleExt(
-        this.refToRel(ref.module, this.relativize(spec.id)),
-      );
-      if (!moduleRelsNoExt.has(refRel)) continue;
+      // A relative module joins against the Spec's own id.
+      let refRel = this.relativize(ref.module, spec.id);
+      if (refRel === null || !moduleRelsNoExt.has(stripModuleExt(refRel))) {
+        continue;
+      }
       let r = this.cardIdToInstanceRel(spec.id);
       if (r && fileSet.has(r)) out.add(r);
     }
@@ -558,6 +573,11 @@ export interface IngestCardCommandOptions {
    * bypassing both seed resolution and the profile flow.
    */
   authenticator?: RealmAuthenticator;
+  /**
+   * @internal Test hook: supply the network prefix-form identifiers resolve
+   * on, instead of reading the realm server's prefix map.
+   */
+  network?: PrefixRealmNetwork;
 }
 
 export async function ingestCard(
@@ -570,13 +590,15 @@ export async function ingestCard(
   // card path rather than the realm) and realm auto-detection below.
   cardUrl = cardUrl.replace(/\/$/, '');
   let pm = options.profileManager ?? getProfileManager();
-  let resolvedCard = resolveRealmIdentifier(cardUrl, { profileManager: pm });
+  let resolvedCard = await resolveRealmIdentifier(cardUrl, {
+    profileManager: pm,
+  });
   if (!resolvedCard.ok) {
     return { files: [], error: resolvedCard.error };
   }
   cardUrl = resolvedCard.url;
   if (options.realm) {
-    let resolvedRealm = resolveRealmIdentifier(options.realm, {
+    let resolvedRealm = await resolveRealmIdentifier(options.realm, {
       profileManager: pm,
     });
     if (!resolvedRealm.ok) {
@@ -614,6 +636,27 @@ export async function ingestCard(
     }
   }
 
+  // References in the source realm resolve on the network of the server that
+  // holds it. Seed auth already assumes that server is at the source realm's
+  // origin, so it reads the map there, not from a profile or REALM_SERVER_URL
+  // that can name another server. Otherwise the configured realm server holds
+  // it, or, with none configured, the server at the source realm's origin.
+  let network = options.network;
+  if (!network) {
+    let server = resolveRealmServerUrl({ profileManager: pm });
+    let resolvedNetwork = await resolveRealmNetwork({
+      profileManager: pm,
+      realmServerUrl:
+        resolution.mode === 'seed' || !server.ok
+          ? deriveRealmServerUrl(realmRoot)
+          : server.url,
+    });
+    if (!resolvedNetwork.ok) {
+      return { files: [], error: resolvedNetwork.error };
+    }
+    network = resolvedNetwork.network;
+  }
+
   try {
     let ingester = new RealmCardIngester(
       {
@@ -621,6 +664,7 @@ export async function ingestCard(
         localDir,
         dryRun: options.dryRun,
         cardUrl,
+        network,
       },
       authenticator,
     );

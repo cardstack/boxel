@@ -1,35 +1,32 @@
 import window from 'ember-window-mock';
 
-import type { ResetPasswordParams } from '@cardstack/host/components/matrix/forgot-password';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import type { ResetPasswordParams } from '@cardstack/host/lib/reset-password-link';
 
-// Signing in to Boxel on the secure origin's own page. With
-// `signInOnSecureOrigin` on, the app never draws a sign-in form: a signed-out
-// app sends the user to the secure origin with the page to come back to, and
-// the secure origin sends them back with a single-use Matrix login token,
-// which the app redeems for its Matrix session (see the secure origin's
-// `security/app-handoff.js`).
+// Signing in to Boxel on the secure origin's own page. The app never draws a
+// sign-in form: a signed-out app sends the user to the secure origin with the
+// page to come back to, and the secure origin sends them back with a
+// single-use Matrix login token, which the app redeems for its Matrix session
+// (see the secure origin's `security/app-handoff.js`).
 //
 // Anything that names an origin or a URL travels to the secure origin in the
 // fragment, never the query string: a firewall in front of a deployment
 // refuses a query string that names a loopback origin, and a fragment never
 // leaves the browser.
 
-export function signInOnSecureOrigin(): boolean {
-  return Boolean(ENV.signInOnSecureOrigin);
-}
-
-function modeURL(mode: string, params: Record<string, string> = {}) {
+// The address of one of the secure origin's pages: each is at its own path
+// beneath the secure origin's URL.
+export function pageURL(page: string, params: Record<string, string> = {}) {
   let url = new URL(ENV.secureOriginURL);
-  url.searchParams.set('mode', mode);
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/${page}`;
   for (let [name, value] of Object.entries(params)) {
     url.searchParams.set(name, value);
   }
   return url;
 }
 
-function withFragment(url: URL, fragment: Record<string, string>) {
+export function withFragment(url: URL, fragment: Record<string, string>) {
   url.hash = new URLSearchParams(fragment).toString();
   return url.href;
 }
@@ -72,19 +69,20 @@ export function landsOnWorkspaceChooser(): boolean {
 
 // Where a signed-out app sends the user to sign in.
 export function secureSignInURL(returnTo = currentAppPage()): string {
-  return withFragment(modeURL('sign-in'), { return: returnTo });
+  return withFragment(pageURL('sign-in'), { return: returnTo });
 }
 
 // Where the app sends the user once it has signed out of its own session, so
-// the secure origin ends its session too and comes back here signed out.
+// the secure origin ends its session too and goes on to its sign-in page,
+// whose next sign-in hands back to `returnTo`.
 export function secureSignOutURL(returnTo: string): string {
-  return withFragment(modeURL('sign-out'), { return: returnTo });
+  return withFragment(pageURL('sign-out'), { return: returnTo });
 }
 
 // Where a `boxel` CLI that sends the browser to the app's `/cli-auth` signs
 // in instead. Neither the port nor the state names an origin.
 export function secureCliAuthURL(port: string, state: string): string {
-  return modeURL('cli-auth', {
+  return pageURL('cli-auth', {
     ...(port ? { port } : {}),
     ...(state ? { state } : {}),
   }).href;
@@ -98,15 +96,16 @@ export function secureResetPasswordURL({
   clientSecret,
   email,
 }: ResetPasswordParams): string {
-  return withFragment(modeURL('reset-password'), {
+  return withFragment(pageURL('reset-password'), {
     clientSecret,
     ...(email ? { email } : {}),
     sid,
   });
 }
 
-// The app's own page, at its root, signed out: where signing out comes back
-// to. It carries no card ids, so no private card is named in the address.
+// The app's own page, at its root: where the sign-in that follows a sign-out
+// comes back to. It carries no card ids, so no private card is named in the
+// address.
 export function appRootURL(): string {
   return new URL('/', window.location.href).href;
 }

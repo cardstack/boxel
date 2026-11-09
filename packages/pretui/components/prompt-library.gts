@@ -32,7 +32,7 @@ export interface PromptTemplate {
   category?: string;
   /** free tags, rendered as chips and searched */
   tags?: string[];
-  /** boxel-ui icon export name, resolved through icon-registry */
+  /** an icon-registry key, resolved to its boxel-icons icon */
   icon?: string;
 }
 

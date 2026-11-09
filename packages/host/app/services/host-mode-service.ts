@@ -2,16 +2,24 @@ import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
+import { dropTask } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
 import {
+  ensureTrailingSlash,
   isExternalRedirectTarget,
+  logger,
+  type RealmIdentifier,
   normalizeRoutingPath,
   sanitizeHeadHTML,
   type HostRoutingRule,
 } from '@cardstack/runtime-common';
 
+import { Submodes } from '@cardstack/host/components/submode-switcher';
+
 import config from '@cardstack/host/config/environment';
+
+const log = logger('host-mode-service');
 
 const DEFAULT_HEAD_HTML = '<title>Boxel</title>';
 
@@ -26,6 +34,7 @@ function ensureSingleTitle(headHTML: string): string {
 }
 
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -43,12 +52,18 @@ export default class HostModeService extends Service {
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare session: SessionService;
+  @service declare private network: NetworkService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
 
   // tracks whether the current head template contains a title tag
   @tracked headTemplateContainsTitle = false;
+
+  // The workspace host mode's publish dialog is open for. Kept here rather
+  // than in host mode itself, so the dashboard can open host mode with it
+  // already open; host mode shows it only for that workspace.
+  @tracked publishDialogRealm: string | undefined;
 
   constructor(owner: Owner) {
     super(owner);
@@ -58,7 +73,31 @@ export default class HostModeService extends Service {
   resetState() {
     this.headUpdateRequestId = 0;
     this.headTemplateContainsTitle = false;
+    this.publishDialogRealm = undefined;
+    // A Publish still opening its workspace doesn't carry into the next
+    // session.
+    this.openToPublishTask.cancelAll();
   }
+
+  // Opens the workspace in host mode, on its index card, with the publish
+  // dialog open: where the dashboard's Publish actions lead. A second click
+  // while the first is still opening the workspace is ignored.
+  openToPublishTask = dropTask(async (realm: RealmIdentifier) => {
+    let realmURL = this.network.virtualNetwork.toURL(realm).href;
+    let operatorModeState = this.operatorModeStateService;
+    try {
+      await operatorModeState.openWorkspace(realmURL);
+    } catch (error) {
+      log.error(`opening ${realmURL} to publish failed`, error);
+      return;
+    }
+    operatorModeState.setHostModePrimaryCard(
+      `${ensureTrailingSlash(realmURL)}index`,
+    );
+    operatorModeState.updateSubmode(Submodes.Host);
+    // Host mode's own realm URL, which is what it compares this to.
+    this.publishDialogRealm = ensureTrailingSlash(this.realmURL);
+  });
 
   // `index.html`'s boot script makes the same decision before the app loads,
   // to paint the app's boot and leave a published realm's page plain. A change

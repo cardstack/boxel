@@ -1,6 +1,6 @@
 ---
 name: gts-component-conventions
-description: Styling and authoring conventions for `.gts` components and their CSS in the host and boxel-ui packages, plus the content-tag `<template>`-detection hazards that silently break `.gts` parsing. Use whenever writing, reviewing, or refactoring a `.gts` component, a `<style scoped>` block, or a glimmer template — especially component-styling review passes ("apply these design-review notes", "clean up this component's CSS") and when a `.gts` file mysteriously fails to type-check or lints with phantom unused-import errors. Triggers on editing component markup/CSS, adding SVG icons, writing conditional class names, choosing colors or units, improving or designing a boxel-ui component's API or behavior (benchmark against reference design systems), and any cascading "Cannot find name 'template'" or template-was-dropped symptom.
+description: Styling and authoring conventions for `.gts` components and their CSS in the host and Pret UI packages, plus the content-tag `<template>`-detection hazards that silently break `.gts` parsing. Use whenever writing, reviewing, or refactoring a `.gts` component, a `<style scoped>` block, or a glimmer template — especially component-styling review passes ("apply these design-review notes", "clean up this component's CSS") and when a `.gts` file mysteriously fails to type-check or lints with phantom unused-import errors. Triggers on editing component markup/CSS, adding SVG icons, writing conditional class names, choosing colors or units, improving or designing a Pret UI component's API or behavior (benchmark against reference design systems), and any cascading "Cannot find name 'template'" or template-was-dropped symptom.
 ---
 
 # `.gts` Component Conventions
@@ -48,7 +48,7 @@ font-size: 0.625rem; /* was 10px */
 
 ### 3. Save hardcoded colors as CSS variables
 
-Never ship a raw hex/rgb in a component. If a color recurs across components, promote it to a shared token in `packages/boxel-ui/src/styles/variables.css`; if it's truly local, define a component-scoped custom property. Falling back to another variable is fine (`var(--token, var(--other))`); a hardcoded literal fallback is not.
+Never ship a raw hex/rgb in a component. If a color recurs across components, promote it to a shared `--boxel-*` token, defined once beside the other shared tokens and named by its role (see below); if it's truly local, define a component-scoped custom property. Falling back to another variable is fine (`var(--token, var(--other))`); a hardcoded literal fallback is not.
 
 Reuse an existing semantic token before inventing a new one, and **name tokens by role, not by hue**. A color named for its appearance (`--boxel-teal-ink`, `--boxel-dark-teal`) is a palette primitive; a color named for its job (`--boxel-highlight`, `--boxel-highlight-hover`) is what components should reference.
 
@@ -100,7 +100,7 @@ Don't hand-concatenate classes with inline `{{if}}`/`{{unless}}` inside a class 
 
 ### 5. SVGs: keep them separate, stroke/fill with `currentColor`
 
-- Factor SVG artwork into dedicated icon **components** (the repo convention — e.g. `selection-checkmark-icon.gts`) or `@cardstack/boxel-icons` / `@cardstack/boxel-ui/icons`, rather than duplicating raw `<svg>` markup. Ship compressed/optimized SVG.
+- Factor SVG artwork into dedicated icon **components** (the repo convention — e.g. `selection-checkmark-icon.gts`) or `@cardstack/boxel-icons`, rather than duplicating raw `<svg>` markup. Ship compressed/optimized SVG.
 - Make the themeable parts `stroke='currentColor'` / `fill='currentColor'` so a parent can color the icon via `color:`. Parts that are intentionally a fixed brand color (e.g. a dark circle behind a themeable check) reference a token instead of a literal.
 
 ```hbs
@@ -133,9 +133,9 @@ font-size: var(--boxel-font-size-xs);
 line-height: var(--boxel-line-height-xs);
 ```
 
-### 8. Reach for an existing boxel-ui component before hand-rolling
+### 8. Reach for an existing Pret UI component before hand-rolling
 
-Before building a common UI primitive — progress bar, pill, button, avatar, tabs, tooltip, badge — check `@cardstack/boxel-ui/components` for one. The shared components are already themed (they consume `--primary`/`--muted`/etc.) and carry their accessibility markup, so reusing one is both less code and correct-by-default. Hand-roll only when nothing fits, and surface the gap.
+Before building a common UI primitive — progress bar, pill, button, avatar, tabs, tooltip, badge — check Pret UI for one: `packages/pretui/components/`, imported per file as `@cardstack/pretui/components/<name>`. For a component only host uses, check `packages/host/app/components/`. The shared components are already themed (they consume `--primary`/`--muted`/etc.) and carry their accessibility markup, so reusing one is both less code and correct-by-default. Hand-roll only when nothing fits, and surface the gap. New code doesn't take a component from `@cardstack/boxel-ui/components` when Pret UI has one for the job, and a missing component is added to Pret UI (or to host, when only host uses it), not to boxel-ui (ADR 009 §1.1).
 
 ```hbs
 {{! Wrong — a hand-rolled track + fill div you then have to theme yourself }}
@@ -144,16 +144,20 @@ Before building a common UI primitive — progress bar, pill, button, avatar, ta
 <ProgressBar @value={{this.percent}} @max={{100}} />
 ```
 
-### 9. Benchmark boxel-ui components against reference design systems
+```ts
+import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
+```
 
-When designing, extending, or reviewing a **boxel-ui** component (`packages/boxel-ui/src/components/**`), don't reason about its API and behavior from scratch — compare it against how the mature design systems solve the same control, and use the differences as a checklist. Each reference is authoritative for something different:
+### 9. Benchmark Pret UI components against reference design systems
+
+When designing, extending, or reviewing a **Pret UI** component (`packages/pretui/components/**`), don't reason about its API and behavior from scratch — compare it against how the mature design systems solve the same control, and use the differences as a checklist. Each reference is authoritative for something different:
 
 - **React Aria (Adobe)** — behavior and accessibility contracts: keyboard support, focus management, controlled-state semantics, RTL. If React Aria handles an interaction (e.g. hit-target padding, direction-aware thumb travel), treat its absence here as a gap to justify, not a default.
 - **Radix / shadcn** — API shape: controlled vs. uncontrolled props, form participation (`name`/`value` reaching the real input), where `...attributes`-equivalents land, composition via slots/blocks.
 - **Material (Google)** — interaction polish and metrics: minimum touch targets, pressed/hover states, motion (including `prefers-reduced-motion`).
 - **WAI-ARIA APG** — the normative keyboard/ARIA contract for the role itself; check it before trusting any library's interpretation.
 
-The method: enumerate what the references do that the boxel-ui component doesn't, rank the differences (a11y/correctness first, API second, polish last), and adopt _patterns_, not wholesale code — everything still lands as boxel idiom (semantic tokens, `--boxel-*` override knobs, `<style scoped>`, native elements over ARIA re-implementations).
+The method: enumerate what the references do that the Pret UI component doesn't, rank the differences (a11y/correctness first, API second, polish last), and adopt _patterns_, not wholesale code — everything still lands as Pret UI idiom (semantic tokens, `--pretui-*` override knobs, `<style scoped>` inside `@layer PretComponent`, native elements over ARIA re-implementations).
 
 Worked example: the Switch review that produced this section measured the component against those four references and yielded, in rank order — fully controlled state with the arg as single source of truth (Radix/React Aria's controlled contract), WCAG 2.5.8 hit-target extension and RTL thumb travel (React Aria), form participation and a visible-label block (Radix/React Aria API shape), reduced-motion guards, pressed-state affordance, and `cursor: not-allowed` (Material/shadcn polish). None of those came from intuition; all came from asking "what do the reference systems do here that we don't?"
 

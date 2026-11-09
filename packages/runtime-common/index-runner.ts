@@ -36,7 +36,7 @@ import {
   type SearchIndexEntry,
 } from './index.ts';
 import { moduleFrom } from './code-ref.ts';
-import { baseRealm } from './constants.ts';
+import { baseRRI } from './constants.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -62,6 +62,10 @@ import {
 } from './index-runner/visit-file.ts';
 import { performCardIndexing } from './index-runner/card-indexer.ts';
 import { performFileIndexing } from './index-runner/file-indexer.ts';
+import {
+  WRITTEN_FILE_REREAD_DELAYS_MS,
+  WrittenFileRereads,
+} from './index-runner/written-file-rereads.ts';
 
 // The result of a prefetched render, with any thrown error captured rather
 // than rejected so an un-awaited prefetch can't surface as an unhandled
@@ -107,8 +111,10 @@ const REMOVAL_READ_CONCURRENCY = 8;
 
 // A module every realm depends on and none owns. When consecutive renders
 // have timed out idle, whether this renders decides between a stack that
-// cannot render anything and cards that happen to hang on their own.
-const CANARY_MODULE_URL = new URL('card-api', baseRealm.url).href;
+// cannot render anything and cards that happen to hang on their own. Named
+// by prefix, which the module route's loader resolves through its
+// VirtualNetwork like any other base-realm import.
+const CANARY_MODULE_ID = baseRRI('card-api');
 
 // Whether a visit's render timed out with nothing in flight. The timeout error
 // carries the diagnostics the prerender server captured as it fired (see
@@ -252,6 +258,14 @@ export class IndexRunner {
   // jobInfo is known so the id is easy to correlate with a job in logs.
   #batchId!: string;
   #idleRenderTimeoutAbortAfter: number;
+  #writtenFileRereadDelaysMs: readonly number[];
+  // The re-read budget an incremental pass's visits share (see
+  // WrittenFileRereads). Any URL the pass visits can be one another instance
+  // just wrote: the job's own writes, and also a dependent or a validation
+  // round's URL that a peer's pass committed. So every visit that reads a file
+  // as missing re-reads it while the realm's record says it just created the
+  // file, and a file the realm has removed is visited as gone at once.
+  #visitRereads: WrittenFileRereads | undefined;
 
   constructor({
     realmURL,
@@ -271,6 +285,7 @@ export class IndexRunner {
     fetch,
     realmOwnerUserId,
     idleRenderTimeoutAbortAfter = IDLE_RENDER_TIMEOUT_ABORT_AFTER,
+    writtenFileRereadDelaysMs = WRITTEN_FILE_REREAD_DELAYS_MS,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -285,6 +300,9 @@ export class IndexRunner {
     // Consecutive idle render timeouts after which a from-scratch pass gives
     // up; see IDLE_RENDER_TIMEOUT_ABORT_AFTER. 0 disables the guard.
     idleRenderTimeoutAbortAfter?: number;
+    // The delays an incremental pass re-reads a file the realm records through
+    // when it reads as missing; see WRITTEN_FILE_REREAD_DELAYS_MS.
+    writtenFileRereadDelaysMs?: readonly number[];
     jobInfo?: JobInfo;
     // Optional override of `jobInfo.priority`. When both are present,
     // `jobPriority` wins — this is the path the worker handler takes
@@ -332,6 +350,7 @@ export class IndexRunner {
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
     this.#idleRenderTimeoutAbortAfter = idleRenderTimeoutAbortAfter;
+    this.#writtenFileRereadDelaysMs = writtenFileRereadDelaysMs;
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
@@ -359,6 +378,9 @@ export class IndexRunner {
 
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
     current.#dependencyResolver.reset();
+    // A from-scratch pass visits what the realm lists, not files a write
+    // named, so a miss in it is a file that is gone.
+    current.#visitRereads = undefined;
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
     // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
@@ -618,6 +640,9 @@ export class IndexRunner {
     for (let href of await current.#removalsBackOnDisk(removals)) {
       operations.set(href, 'update');
     }
+    current.#visitRereads = new WrittenFileRereads({
+      delaysMs: current.#writtenFileRereadDelaysMs,
+    });
     let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
@@ -1028,9 +1053,13 @@ export class IndexRunner {
         batchId: this.#batchId,
         renderScopeRound: this.#renderScopeRound,
         prerenderer: this.#prerenderer,
+        ...(this.#visitRereads
+          ? { writtenFileRereads: this.#visitRereads }
+          : {}),
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         consumeResetStoreForRender: () => this.#consumeResetStoreForRender(),
         logDebug: (message) => this.#log.debug(message),
+        logInfo: (message) => this.#log.info(message),
         logWarn: (message) => this.#log.warn(message),
       });
       return result ? { status: 'rendered', result } : { status: 'skipped' };
@@ -1141,7 +1170,7 @@ export class IndexRunner {
           if (!canary) {
             this.#log.warn(
               `${jobIdentity(this.#jobInfo)}: ${idleTimeouts.length} consecutive renders timed out idle (${idleTimeouts.join(', ')}) ` +
-                `but ${CANARY_MODULE_URL} renders, so the stack is healthy and these are recorded as the files' own errors`,
+                `but ${CANARY_MODULE_ID} renders, so the stack is healthy and these are recorded as the files' own errors`,
             );
             idleTimeouts = [];
             continue;
@@ -1162,7 +1191,7 @@ export class IndexRunner {
     }
   }
 
-  // Renders CANARY_MODULE_URL on this pass's affinity and reports why it did
+  // Renders CANARY_MODULE_ID on this pass's affinity and reports why it did
   // not render, or undefined when it did. A module render rather than a card
   // render: it needs nothing from this realm but the loader epoch, and it goes
   // through the same page, host bundle, realm-server and icons origins every
@@ -1173,7 +1202,7 @@ export class IndexRunner {
         affinityType: 'realm',
         affinityValue: this.#realmURL.href,
         realm: this.#realmURL.href,
-        url: CANARY_MODULE_URL,
+        url: CANARY_MODULE_ID,
         auth: this.#auth,
         priority: this.#jobPriority,
         renderOptions: { loaderEpoch: this.batch.loaderEpoch },

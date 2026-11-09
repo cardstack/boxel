@@ -27,10 +27,7 @@ import { hasExecutableExtension } from '@cardstack/runtime-common';
 import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-file-modal';
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import { Submodes } from '../submode-switcher';
 
 import type { FileDef } from '@cardstack/base/file-api';
 
@@ -44,25 +41,14 @@ export default class AttachedFileDropdownMenu extends Component<{
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @service declare cardService: CardService;
-  @service declare network: NetworkService;
   @tracked isRestorePatchedFileModalOpen = false;
   @tracked fileContent: string | null = null;
   @action private openInCodeMode() {
-    if (this.operatorModeStateService.workspaceChooserOpened) {
-      this.operatorModeStateService.closeWorkspaceChooser();
+    if (this.args.file.sourceUrl) {
+      this.operatorModeStateService.openFileInCodeMode(
+        this.args.file.sourceUrl,
+      );
     }
-    if (
-      this.operatorModeStateService.state.submode === Submodes.Code &&
-      this.args.file.sourceUrl &&
-      this.network.virtualNetwork.unresolveURL(this.args.file.sourceUrl) ===
-        this.operatorModeStateService.state.codePath
-    ) {
-      return;
-    }
-    this.operatorModeStateService.updateSubmode(Submodes.Code);
-    this.operatorModeStateService.updateCodePath(
-      new URL(this.args.file.sourceUrl!),
-    );
   }
 
   copySubmittedContentTask = dropTask(async () => {

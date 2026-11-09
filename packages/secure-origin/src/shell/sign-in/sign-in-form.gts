@@ -15,14 +15,14 @@ import {
 import type { Session } from '../../security/session.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
 import AuthFormField from '../../components/auth-form-field.gts';
-import BoxelInput from '../../components/input.gts';
-import { bool } from '../../helpers/truth-helpers.ts';
+import { Input } from '@cardstack/pretui/components/input';
+import { bool } from '@cardstack/pretui/helpers';
 import SignInScreen from '../../screens/sign-in.gts';
 import { navigation } from '../navigation.js';
 import { asSentence, signInFailed } from '../sign-in-copy.js';
-import { cliParams, modeURL } from '../urls.js';
+import { cliParams, pageURL } from '../urls.js';
 
-import { autofocus } from '../../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 type Config = ReturnType<typeof import('../../security/session.js').readConfig>;
 
@@ -57,28 +57,35 @@ const Fields: TemplateOnlyComponent<{
   <AuthFormField
     @label='Email Address or Username'
     data-test-secure-field='username'
+    as |_labelId controlId|
   >
-    <BoxelInput
+    <Input
+      @controlId={{controlId}}
       @type='text'
-      @autocomplete='username'
+      autocomplete='username'
       @placeholder='Your email address'
       @value={{@username}}
       @onInput={{@onUsername}}
       name='username'
       data-test-secure-username
-      {{autofocus @focusUsername}}
+      {{focusWhen @focusUsername}}
     />
   </AuthFormField>
-  <AuthFormField @label='Password' data-test-secure-field='password'>
-    <BoxelInput
+  <AuthFormField
+    @label='Password'
+    data-test-secure-field='password'
+    as |_labelId controlId|
+  >
+    <Input
+      @controlId={{controlId}}
       @type='password'
-      @autocomplete='current-password'
+      autocomplete='current-password'
       @placeholder='Your password'
       @value={{@password}}
       @onInput={{@onPassword}}
       name='password'
       data-test-secure-password
-      {{autofocus @focusPassword}}
+      {{focusWhen @focusPassword}}
     />
   </AuthFormField>
 </template>;
@@ -189,11 +196,11 @@ export default class SignInForm extends Component<Signature> {
   };
 
   private forgotPassword = () => {
-    navigation.assign(modeURL('forgot-password', this.pageParams));
+    navigation.assign(pageURL('forgot-password', this.pageParams));
   };
 
   private register = () => {
-    navigation.assign(modeURL('register', this.pageParams));
+    navigation.assign(pageURL('register', this.pageParams));
   };
 
   private submit = async (event: Event) => {

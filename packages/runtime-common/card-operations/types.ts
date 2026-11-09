@@ -17,6 +17,7 @@ import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from '../prerendered-html-format.ts';
+import type { CallApiKeyKind } from '../call-api-key-kind.ts';
 import type {
   BaseOperationName,
   CallApiMethod,
@@ -601,6 +602,12 @@ export type PolicyIssueCode =
   // an operation to a caller who isn't signed in before it runs, so the grant
   // never admits one. It is kept for signed-in callers.
   | 'anonymous-grant-reads-actor'
+  // A grant whose `where` names the caller who isn't signed in, on a
+  // `callApi` with a credential slot for the invoking user's own key
+  // (`{{userKey}}`). Such a caller has no key of their own, so the realm
+  // refuses them before anything is sent, and the grant never admits one. It
+  // is kept for signed-in callers.
+  | 'anonymous-grant-user-key'
   // An `actingUser` that is never used: on a grant whose `where` never names
   // the caller who isn't signed in, whose writes are made as themselves, or on
   // a grant for an operation that doesn't write. The grant is kept.
@@ -631,7 +638,15 @@ export type PolicyIssueCode =
 // an operation is one invocation of its base, and a write it makes is made as
 // the user the grant's `actingUser` names. A named query
 // is the exception: it runs a stored query on the search lane, and stays a
-// contract for signed-in callers.
+// contract for signed-in callers. A `callApi` may be opened too, where it
+// sends no key or only keys shared with the realm (`{{apiKey}}`): a shared key
+// serves such a caller only where its owner allows anonymous use on the key
+// itself, and counts them by address against the share's per-person rate,
+// against their part of the share's daily budget, and against the key's
+// anonymous cap where one is set. One that sends no
+// key is limited only by the grant's own rate limit and blocklist, as any
+// other operation opened to them is, and goes through the outbound guard as
+// every `callApi` does.
 export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
   'read',
   'readSource',
@@ -650,6 +665,7 @@ export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
   'render-reaches-ungranted-type',
   'anonymous-write-without-acting-user',
   'anonymous-grant-reads-actor',
+  'anonymous-grant-user-key',
   'acting-user-never-used',
   'acting-user-from-submitted-card',
   'grant-expression-wrong-type',
@@ -1475,6 +1491,9 @@ export interface CallApiSlot {
   // The dotted path to the string that carries it — `headers.authorization`,
   // `json.auth.token`.
   at: string;
+  // The kind of key the declaration says fills it. Absent, the kinds that fit
+  // follow from where it stands (`slotKeyKinds`).
+  keyKind?: CallApiKeyKind;
 }
 
 export type CallApiBodyTemplate =
@@ -1502,6 +1521,11 @@ export interface OperationCallApi {
   query?: Record<string, OperationTemplate>;
   body?: CallApiBodyTemplate;
   slots: CallApiSlot[];
+  // Each instance is approved on its own: the binding that fills a slot names
+  // the card the operation is invoked on, so one card's key is never another
+  // card's (a webhook per channel card, say). Absent, one binding per realm
+  // serves every invocation there, on any instance or on the type.
+  perInstance?: true;
 }
 
 // What a `callApi` answers with: the vendor's response, whatever its status.
@@ -1678,17 +1702,53 @@ export type OperationErrorCode =
   // touch the same target.
   | 'conflicting-targets'
   // A caller who isn't signed in, admitted by the realm's policy, has used up
-  // the invocations the realm allows their address in the current window.
-  // Nothing was done. Carries a 429 with `Retry-After`, and
-  // `meta.retryAfterSeconds`.
+  // the invocations the realm allows their address in the current window; or
+  // an interactive `callApi` caller has made as many calls with a share or key
+  // as its owner's per-caller limit allows for now. Nothing was done. Carries
+  // a 429 with `Retry-After`, and `meta.retryAfterSeconds`.
   | 'rate-limited'
-  // The realm couldn't count an invocation by a caller who isn't signed in, so
-  // it turned the caller away rather than let it through uncounted. Nothing
-  // was done. Carries a 503 with `Retry-After`.
+  // An interactive `callApi` whose share or key has served its owner's daily
+  // or monthly budget of calls. Nothing was sent. Carries a 429 with
+  // `Retry-After` at the period's reset, and `meta.retryAfterSeconds`.
+  | 'over-budget'
+  // The realm couldn't count an invocation by a caller who isn't signed in,
+  // or an interactive `callApi` against its key's limits, so it turned the
+  // caller away rather than let it through uncounted. Nothing was done.
+  // Carries a 503 with `Retry-After`, and `meta.retryAfterSeconds`.
   | 'rate-limit-unavailable'
-  // A `callApi` whose request carries a credential slot that no binding the
-  // realm's owner approved fills. Nothing was sent.
+  // A `callApi` whose request carries a credential slot that no binding fills:
+  // none was approved for the operation in this realm (for the caller, for a
+  // `{{userKey}}` slot), or the key or grant it named was removed. Nothing was
+  // sent.
   | 'binding-not-approved'
+  // A `callApi` slot's binding names a share the realm suspended. Nothing was
+  // sent.
+  | 'share-suspended'
+  // A `callApi` whose request differs from the one its key's owner approved:
+  // the declaration was edited since. Nothing was sent until they approve it
+  // again.
+  | 'binding-needs-reapproval'
+  // A `callApi` invoked interactively — from a browser, the AI assistant or
+  // the CLI — whose binding was approved for pipelines only. Nothing was sent.
+  | 'interactive-use-not-approved'
+  // A `callApi` invoked by a caller who isn't signed in, filled from a share
+  // whose key doesn't allow anonymous use. Carries a 401:
+  // signing in is what serves the caller. Nothing was sent.
+  | 'anonymous-use-not-approved'
+  // A `callApi` slot has no usable credential: its key was rejected, or it
+  // mints its access token and minting failed. Carries a 424 and
+  // `meta.slot`. For a stored key the vendor answered 401 at the slot's
+  // destination (`meta.destination`); nothing is sent there except a periodic
+  // probe, and the key's owner replaces it or a probe the vendor accepts
+  // brings it back. For a minted token `meta.reason` says why: `rejected`
+  // (the vendor refused it, as an OAuth refresh answered `invalid_grant` or
+  // Google's token endpoint refused a service-account key; its owner
+  // reconnects or replaces it, and a refused service-account key is sent to
+  // Google only as a periodic probe), `needs-admin` (the OAuth client it mints through was
+  // deleted, unshared, suspended or answered `invalid_client`) or
+  // `unavailable` (the token endpoint kept failing after retries), and
+  // nothing was sent.
+  | 'credential-rejected'
   // A `callApi` invoked while a card is being rendered. A render is replayed
   // and cached, and must not send requests to the world on anyone's behalf.
   // Nothing was sent.
@@ -1746,6 +1806,55 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
   return err instanceof OperationFailure;
 }
 
+// The answer of a definition read, or undefined when the type cannot be
+// resolved: its module is missing or fails to build, or names no such export.
+// A refusal the read itself raised passes through instead. Such a refusal
+// names its own answer — a definition the realm has not produced yet, to be
+// retried — and an `undefined` in its place would be reported as a type that
+// does not exist.
+export async function unresolvableAsUndefined<T>(
+  read: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await read();
+  } catch (err: unknown) {
+    if (isOperationFailure(err)) {
+      throw err;
+    }
+    return undefined;
+  }
+}
+
+// How long a caller turned away over a definition that is still being built is
+// told to wait before it tries again. A definition render that misses the
+// cache takes a few seconds; longer than that and the caller is only waiting
+// on the queue.
+export const DEFINITION_RETRY_AFTER_SECONDS = 5;
+
+// A refusal over a type definition the realm cannot produce yet: its module is
+// being rebuilt, or its render is queued behind other work and did not finish
+// within the request's deadline. Nothing was done, and nothing the caller sent
+// is wrong, so it carries `target-not-indexed` — the code that says waiting
+// resolves it — as a 503 with `meta.retryAfterSeconds`, which the operations
+// response turns into a `Retry-After`.
+export function definitionNotReady(
+  id: string | undefined,
+  codeRef: unknown,
+  reason = 'is not available yet',
+): OperationFailure {
+  return new OperationFailure({
+    ...(id ? { id } : {}),
+    status: 503,
+    code: 'target-not-indexed',
+    title: 'Definition not ready',
+    detail: `the definition of ${JSON.stringify(codeRef)} ${reason}; retry shortly`,
+    meta: {
+      awaitingIndex: true,
+      retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+    },
+  });
+}
+
 // A refusal as a caller the realm ACL would not let read the realm is told it.
 //
 // Such a caller is not told which cards exist. A card no grant admits and a
@@ -1764,11 +1873,30 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
 // the predicate throws. A caller who may read the realm is told it as the 500
 // it is.
 //
+// A refusal over something not indexed yet keeps its status and its retry
+// hint and loses the rest: the detail of a definition's names its type, which
+// is the realm's module path and export name, and the id names a card. Such a
+// caller may be told to wait, not what they are waiting for.
+//
 // A refusal of any other kind passes through. Such a caller is refused, as
 // the target is resolved, every invocation the gate did not admit outright, a
 // write whose predicate is still to run included. So nothing past that point
 // is about a target they were not admitted to.
 export function refusalForNonReader(error: OperationError): OperationError {
+  if (error.code === 'target-not-indexed') {
+    let { entry, awaitingIndex, retryAfterSeconds } = error.meta ?? {};
+    return {
+      status: error.status,
+      code: error.code,
+      title: error.title,
+      detail: 'what this request needs is not indexed yet; retry shortly',
+      meta: {
+        ...(entry !== undefined ? { entry } : {}),
+        ...(awaitingIndex !== undefined ? { awaitingIndex } : {}),
+        ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+      },
+    };
+  }
   if (
     error.code !== 'target-not-found' &&
     error.code !== 'operation-not-permitted' &&

@@ -1,0 +1,117 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Two confirmed people dropped out of the pottery workshop: Marcus Lee and Aiko Tanaka. Remove them and move the first two people on the waitlist into their spots.",
+      "followUpPrompts": [
+        "Jonah's email on the Harbor app redesign project is out of date, it's jonah.park@northwind.example now. Show me his card when you're done."
+      ],
+      "successCriteria": "**A: move attendees in `Event/intro-to-pottery` (prompt 1)**\nA1. `confirmed` of `Event/intro-to-pottery` holds exactly Priya Shah, Tom Becker, Elena Petrova and Kwame Mensah, each once, in any order; Marcus Lee and Aiko Tanaka are in neither list.\nA2. `waitlist` holds only Lucy Hart.\nA3. Every link in the indexed document resolves to an existing Attendee card, and no person appears twice in a list.\nA4. `host` still links to Rosa Delgado, `capacity` is 4, and the indexed `spotsLeft` is 0.\nA5. Every Attendee card is byte-identical to the seed, and none was added or deleted.\nA6. The definition module (`card-mutation/relink/event.gts`) is byte-identical to the seed, and the change was made in place: the same instance file, with the same `adoptsFrom`, and no new instance written beside it.\n\n**B: change `Contact/jonah-park`, not `Project/harbor-app` (prompt 2)**\nB1. `Contact/jonah-park` has `email` exactly `jonah.park@northwind.example`, and its other fields are unchanged.\nB2. `Project/harbor-app` is byte-identical to the seed: no new attribute, `billingEmail` unchanged, links unchanged.\nB3. `Contact/mei-lin` and `Contact/sara-okafor` are byte-identical, and no Contact was created or deleted.\nB4. The definition module (`card-mutation/linked-card/project.gts`) is byte-identical to the seed, and the change was made in place: the same instance file, with the same `adoptsFrom`, and no new instance written beside it.\n\n**All tasks**\nZ1. The Event stays open, Jonah's Contact card is shown on screen (in the stack or the preview panel) as the second prompt asks, and both render with no error boundary at the end of the run.\nZ2. Every tool call applied or was repaired by the model, and the assistant did not ask a question or wait for confirmation before acting after any prompt.",
+      "cardInfo": {
+        "name": "Card mutation: change links and linked cards",
+        "summary": "Two cards are open: an Event whose confirmed attendees and waitlist are `linksToMany` fields to Attendee cards, and a Project that links to three Contact cards and has its own billing email. Two prompts in one session ask to replace two confirmed attendees with the first two on the waitlist, and to correct one contact's email and show that contact's card. This eval tests whether the assistant edits relationships, which `realm.cards.update` cannot set, without a dangling or duplicate link, and whether it changes the linked Contact rather than writing the value onto the open Project.",
+        "notes": "Use case: card mutation. Every task changes card data only; every field it needs already exists, so an edit to a definition module is wrong. Each prompt goes out as its own message in one session, and each task is judged on its own card. The runner brings each task's card (`promptCards`) to the top of the stack before its prompt, so it is the card in the message context. Judge each criterion by comparing a card's seed (base64 under `files[].content` in the run's `evaluation.json`) with its file under `files` and its indexed document under `cards` in the workspace snapshot. The runner fails the render check unless every card in `expectedChangedCards` changed, and one of them is shown in the stack or the preview panel, not only embedded in another card.\n\nA (event): seed confirmed = Priya Shah, Marcus Lee, Tom Becker, Aiko Tanaka; waitlist in sign-up order = Elena Petrova, Kwame Mensah, Lucy Hart; host = Rosa Delgado; capacity 4. The trap criteria are A1 (wrong people or a person in both lists) and A3 (a link that does not resolve, or a person twice). Contiguous `confirmed.N` keys are not required: a gap does not drop a link.\n\nB (contact): the trap criterion is B2, since the update tool does not check field names and loading a card ignores an unknown attribute, so a `jonahEmail` written onto the Project looks fine in the run. `expectedChangedCards` names the Contact, which is copied in but not opened. The Project lists its contacts, but an embedded render does not count: the runner credits the Contact only when the assistant shows it.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../card-mutation/relink/Event/intro-to-pottery"
+        }
+      },
+      "initialCards.1": {
+        "links": {
+          "self": "../card-mutation/linked-card/Project/harbor-app"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../card-mutation/relink/Attendee/rosa-delgado.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../card-mutation/relink/Attendee/priya-shah.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../card-mutation/relink/Attendee/marcus-lee.json"
+        }
+      },
+      "initialFiles.3": {
+        "links": {
+          "self": "../card-mutation/relink/Attendee/tom-becker.json"
+        }
+      },
+      "initialFiles.4": {
+        "links": {
+          "self": "../card-mutation/relink/Attendee/aiko-tanaka.json"
+        }
+      },
+      "initialFiles.5": {
+        "links": {
+          "self": "../card-mutation/relink/Attendee/elena-petrova.json"
+        }
+      },
+      "initialFiles.6": {
+        "links": {
+          "self": "../card-mutation/relink/Attendee/kwame-mensah.json"
+        }
+      },
+      "initialFiles.7": {
+        "links": {
+          "self": "../card-mutation/relink/Attendee/lucy-hart.json"
+        }
+      },
+      "initialFiles.8": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/jonah-park.json"
+        }
+      },
+      "initialFiles.9": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/mei-lin.json"
+        }
+      },
+      "initialFiles.10": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/sara-okafor.json"
+        }
+      },
+      "expectedChangedCards.0": {
+        "links": {
+          "self": "../card-mutation/relink/Event/intro-to-pottery"
+        }
+      },
+      "expectedChangedCards.1": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/jonah-park"
+        }
+      },
+      "promptCards.0": {
+        "links": {
+          "self": "../card-mutation/relink/Event/intro-to-pottery"
+        }
+      },
+      "promptCards.1": {
+        "links": {
+          "self": "../card-mutation/linked-card/Project/harbor-app"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

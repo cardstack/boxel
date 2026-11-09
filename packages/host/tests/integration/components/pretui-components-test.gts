@@ -1,13 +1,17 @@
 import { array, hash } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import { click } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
+import PlusIcon from '@cardstack/boxel-icons/plus';
 import { Button } from '@cardstack/pretui/components/button';
 import { EmailInput } from '@cardstack/pretui/components/email-input';
 import { Field } from '@cardstack/pretui/components/field';
+import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Input as PretuiInput } from '@cardstack/pretui/components/input';
 import { NativeSelect } from '@cardstack/pretui/components/native-select';
+import { Select } from '@cardstack/pretui/components/select';
 import { Switch } from '@cardstack/pretui/components/switch';
 import { Textarea as PretuiTextarea } from '@cardstack/pretui/components/textarea';
 import { TreeSelect } from '@cardstack/pretui/components/tree-select';
@@ -42,6 +46,76 @@ module('Integration | pretui components', function (hooks) {
       .hasAttribute('data-size', 'l');
   });
 
+  test('an icon passed to Button as a child is centred on the label line, like @icon', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#each (array 'xs' 's' 'm' 'l' 'xl') as |size|}}
+            <Button @size={{size}}><PlusIcon
+                width='14'
+                height='14'
+                aria-hidden='true'
+              />New ticket</Button>
+            <Button @size={{size}}><PlusIcon
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />New ticket</Button>
+            <Button @size={{size}} @icon={{PlusIcon}}>New ticket</Button>
+          {{/each}}
+        </template>
+      },
+    );
+    let centre = (el: Element) => {
+      let r = el.getBoundingClientRect();
+      return r.top + r.height / 2;
+    };
+    let labels = document.querySelectorAll('[data-test-pretui-button-label]');
+    assert.strictEqual(labels.length, 15);
+    for (let label of labels) {
+      let svg = label.querySelector('svg')!;
+      let size = label.closest('[data-size]')!.getAttribute('data-size');
+      // measured in layout px; the test container is scaled
+      let scale =
+        label.getBoundingClientRect().height / label.clientHeight || 1;
+      let delta = Math.abs(centre(svg) - centre(label)) / scale;
+      assert.true(
+        delta <= 0.5,
+        `${size} ${svg.getAttribute('width') ?? '@icon'}: icon centre is ${delta}px from the label centre`,
+      );
+    }
+  });
+
+  test("a Select's options take the font size its trigger is given", async function (assert) {
+    let small = htmlSafe(
+      '--boxel-select-trigger-font-size: 0.625rem; --boxel-select-trigger-line-height: 1;',
+    );
+    let options = [
+      { value: 'green', label: 'Green' },
+      { value: 'oolong', label: 'Oolong' },
+    ];
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <Select @options={{options}} @label='Tea' style={{small}} />
+        </template>
+      },
+    );
+
+    await click('[data-test-pretui-select-trigger]');
+
+    let option = document.querySelector(
+      "[role='listbox'] [data-test-pretui-select-option]",
+    )!;
+    let rootSize = parseFloat(
+      getComputedStyle(document.documentElement).fontSize,
+    );
+    assert.strictEqual(
+      getComputedStyle(option).fontSize,
+      `${rootSize * 0.625}px`,
+    );
+  });
+
   test('Switch toggles and notifies through the workspace package', async function (assert) {
     let seen: boolean[] = [];
     let onCheckedChange = (checked: boolean) => seen.push(checked);
@@ -60,6 +134,45 @@ module('Integration | pretui components', function (hooks) {
       .dom('[data-test-pretui-switch]')
       .hasAttribute('aria-checked', 'true');
     assert.deepEqual(seen, [true]);
+  });
+
+  test('a pressed IconButton is tinted unless @pressedTint is false', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <IconButton @label='Pin' @appearance='plain' data-test-unpressed />
+          <IconButton
+            @label='Pin'
+            @appearance='plain'
+            @pressed={{true}}
+            data-test-tinted
+          />
+          <IconButton
+            @label='Pin'
+            @appearance='plain'
+            @pressed={{true}}
+            @pressedTint={{false}}
+            data-test-untinted
+          />
+        </template>
+      },
+    );
+
+    let surface = (selector: string) =>
+      getComputedStyle(document.querySelector(selector)!)
+        .getPropertyValue('--pretui-btn-surface')
+        .trim();
+
+    assert.notStrictEqual(
+      surface('[data-test-tinted]'),
+      surface('[data-test-unpressed]'),
+      'pressed takes the tint',
+    );
+    assert.strictEqual(
+      surface('[data-test-untinted]'),
+      surface('[data-test-unpressed]'),
+      'the opt-out keeps the unpressed surface',
+    );
   });
 
   test('an invalid Field gives every wrapped control the -ink edge and no tint', async function (assert) {

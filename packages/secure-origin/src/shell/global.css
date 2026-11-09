@@ -89,17 +89,20 @@
   }
 
   button,
-  input {
+  input,
+  textarea {
     font: inherit;
     letter-spacing: inherit;
   }
 
-  input:focus:not(:focus-visible) {
+  input:focus:not(:focus-visible),
+  textarea:focus:not(:focus-visible) {
     outline-color: transparent;
   }
 
-  input:focus-visible {
-    outline-color: var(--boxel-highlight);
+  input:focus-visible,
+  textarea:focus-visible {
+    outline-color: var(--ring, var(--boxel-highlight));
   }
 
   /* The app's operator-mode container, while it shows the sign-in screens. */
@@ -112,7 +115,66 @@
   }
 }
 
-/* AuthContainer draws on this. */
+/*
+  ember-basic-dropdown's own stylesheet, which boxel-ui's global.css brings in
+  (inside ember-power-select's) in the vendor layer: it places a Select's list,
+  which renders in the wormhole at the end of the page, over the page beside
+  its trigger.
+*/
+@layer vendor {
+  .ember-basic-dropdown {
+    position: relative;
+  }
+
+  .ember-basic-dropdown,
+  .ember-basic-dropdown-content,
+  .ember-basic-dropdown-content * {
+    box-sizing: border-box;
+  }
+
+  .ember-basic-dropdown-content {
+    position: absolute;
+    width: auto;
+    z-index: var(--ember-basic-dropdown-content-z-index, 1000);
+    background-color: var(
+      --ember-basic-dropdown-content-background-color,
+      #fff
+    );
+  }
+
+  .ember-basic-dropdown-content--left {
+    left: 0;
+  }
+
+  .ember-basic-dropdown-content--right {
+    right: 0;
+  }
+
+  .ember-basic-dropdown-overlay {
+    position: fixed;
+    background: var(
+      --ember-basic-dropdown-overlay-background,
+      rgba(0, 0, 0, 0.5)
+    );
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    top: 0;
+    left: 0;
+    pointer-events: var(--ember-basic-dropdown-overlay-pointer-events, none);
+  }
+
+  .ember-basic-dropdown-content-wormhole-origin {
+    display: inline;
+  }
+}
+
+/* The purple behind the shell's pages, which AuthContainer and the key
+   window draw on. */
+:root {
+  --auth-page-background: #191624;
+}
+
 body {
-  background-color: #191624;
+  background-color: var(--auth-page-background);
 }

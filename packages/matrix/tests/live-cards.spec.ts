@@ -139,17 +139,12 @@ test.describe('Live Cards', () => {
       page.locator(`[data-test-stack-card="${newCardURL}"]`),
     ).toContainText('Hello Mango !!!!');
 
-    // assert that code mode file tree is live bound
-    await page.goto(
-      `${realmURL}?operatorModeState=${encodeURIComponent(
-        JSON.stringify({
-          stacks: [],
-          codePath: `${realmURL}index.json`,
-          fileView: 'browser',
-          submode: 'code',
-        }),
-      )}`,
-    );
+    // assert that code mode file tree is live bound. Switch submodes in the
+    // app rather than with a page.goto: a reload boots the app again and costs
+    // several seconds of a test that is already long.
+    await page.locator('[data-test-submode-switcher] button').click();
+    await page.locator('[data-test-boxel-menu-item-text="Code"]').click();
+    await page.locator('[data-test-file-browser-toggle]').click();
     await expect(page.locator('[data-test-file="index.json"]')).toHaveCount(1);
     await expect(page.locator('[data-test-file="hello.gts"]')).toHaveCount(0);
 

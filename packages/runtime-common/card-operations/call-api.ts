@@ -13,10 +13,22 @@ import {
   type OperationRequest,
   type OperationTemplate,
 } from './types.ts';
-import { emitKeyUse, type KeyUseOutcome } from './telemetry.ts';
+import { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
+import { emitKeyUse, recordSafely, type KeyUseOutcome } from './telemetry.ts';
+import { destinationCovers } from './destination-covers.ts';
+
+export { destinationCovers };
+import type { KeyReadiness } from './capability-wire.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
+import {
+  CALL_API_KEY_KINDS,
+  isCallApiKeyKind,
+  type CallApiKeyKind,
+} from '../call-api-key-kind.ts';
+
+export type { CallApiKeyKind };
 
 // ============================================================================
 // callApi: a request to a service outside the realm, declared as data on a
@@ -122,6 +134,8 @@ export interface CallApiClauses {
   query?: unknown;
   json?: unknown;
   graphql?: unknown;
+  perInstance?: unknown;
+  keyKind?: unknown;
 }
 
 const METHODS: readonly CallApiMethod[] = [
@@ -382,6 +396,21 @@ export function lowerCallApi(
     }
   }
 
+  // Whether each instance is approved on its own.
+  if (
+    clauses.perInstance !== undefined &&
+    typeof clauses.perInstance !== 'boolean'
+  ) {
+    fail(
+      'invalid-request',
+      'perInstance',
+      `\`perInstance\` is true, to approve each card's key on its own, or left out`,
+    );
+  }
+
+  // The kind of key each slot takes, where the declaration says.
+  let declaredKind = lowerKeyKind(clauses.keyKind, byName, fail);
+
   if (!ok || !lowered?.url || !lowered.destination) {
     return undefined;
   }
@@ -393,8 +422,113 @@ export function lowerCallApi(
     ...(headers ? { headers } : {}),
     ...(query ? { query } : {}),
     ...(body ? { body } : {}),
-    slots: slots.map(({ text: _text, ...slot }) => slot),
+    slots: slots.map(({ text: _text, ...slot }) => {
+      let keyKind = declaredKind(slot.name);
+      return keyKind ? { ...slot, keyKind } : slot;
+    }),
+    ...(clauses.perInstance === true ? { perInstance: true as const } : {}),
   };
+}
+
+const KEY_KIND_LIST = CALL_API_KEY_KINDS.map((k) => `"${k}"`).join(', ');
+
+// `keyKind` as declared: one kind for every slot, or a kind for each slot
+// named. Answers the kind declared for a slot, by its name. A `|basic` slot
+// sends the base64 of a user and password, which a minted token isn't, so it
+// is declared only `static`.
+function lowerKeyKind(
+  keyKind: unknown,
+  slots: Map<string, Pick<CallApiSlot, 'transform'>>,
+  fail: (
+    code: OperationLoweringIssueCode,
+    path: string,
+    message: string,
+  ) => void,
+): (slot: string) => CallApiKeyKind | undefined {
+  if (keyKind === undefined) {
+    return () => undefined;
+  }
+  let basicOnly = (kind: CallApiKeyKind, name: string, path: string) => {
+    if (kind !== 'static' && slots.get(name)?.transform === 'basic') {
+      fail(
+        'invalid-request',
+        path,
+        `the "${name}" slot is sent as HTTP Basic credentials, which only a key sent as it is can be, so \`${path}\` is "static"`,
+      );
+      return false;
+    }
+    return true;
+  };
+  if (isCallApiKeyKind(keyKind)) {
+    for (let name of slots.keys()) {
+      basicOnly(keyKind, name, 'keyKind');
+    }
+    return () => keyKind;
+  }
+  if (!isPlainObject(keyKind)) {
+    fail(
+      'invalid-request',
+      'keyKind',
+      `\`keyKind\` is one of ${KEY_KIND_LIST} for every slot, or an object giving one for each slot by its name`,
+    );
+    return () => undefined;
+  }
+  let bySlot = new Map<string, CallApiKeyKind>();
+  for (let [name, kind] of Object.entries(keyKind)) {
+    if (!slots.has(name)) {
+      fail(
+        'invalid-request',
+        `keyKind.${name}`,
+        `the request has no "${name}" slot for \`keyKind.${name}\` to describe`,
+      );
+    } else if (!isCallApiKeyKind(kind)) {
+      fail(
+        'invalid-request',
+        `keyKind.${name}`,
+        `\`keyKind.${name}\` must be one of ${KEY_KIND_LIST}`,
+      );
+    } else if (basicOnly(kind, name, `keyKind.${name}`)) {
+      bySlot.set(name, kind);
+    }
+  }
+  return (slot) => bySlot.get(slot);
+}
+
+// The kinds of key that can fill a slot, in `CALL_API_KEY_KINDS` order: the
+// one its declaration names, or else every kind that can work there. The
+// realm server fills a slot with a minted access token wherever it stands, so
+// only two things rule a kind out. A `|basic` slot sends the base64 of a user
+// and password, which a minted token isn't. And a Google service account's
+// tokens are only for Google's own services.
+export function slotKeyKinds(
+  slot: CallApiSlot,
+  request: Pick<OperationCallApi, 'destination'>,
+): CallApiKeyKind[] {
+  if (slot.keyKind) {
+    return [slot.keyKind];
+  }
+  if (slot.transform === 'basic') {
+    return ['static'];
+  }
+  return isGoogleDestination(request.destination)
+    ? [...CALL_API_KEY_KINDS]
+    : ['static', 'oauth'];
+}
+
+// The domains of Google's services that take a service account's access
+// tokens: its APIs, and the Firebase Realtime Database.
+const GOOGLE_TOKEN_DOMAINS = ['googleapis.com', 'firebaseio.com'];
+
+function isGoogleDestination(destination: string): boolean {
+  let host: string;
+  try {
+    host = new URL(destination).hostname;
+  } catch {
+    return false;
+  }
+  return GOOGLE_TOKEN_DOMAINS.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
 }
 
 interface LoweredUrl {
@@ -519,34 +653,6 @@ function lowerUrlTemplate(
   destination.search = '';
   destination.hash = '';
   return { names, url: normalized, destination: destination.href };
-}
-
-// Whether a request to `url` goes where `destination` says. Both are compared
-// as the URL parser serializes them, and a destination's path ends with `/`, so
-// a match always ends at a `/`: `https://api.example.com/` does not cover
-// `https://api.example.com.evil.net/`, and `https://api.example.com/v1/` does
-// not cover `https://api.example.com/v1beta`. This is the one rule for that
-// question: the send-time check asks it of every request, and an approval of a
-// key for a destination is judged by it too.
-export function destinationCovers(destination: string, url: string): boolean {
-  let parsedDestination: URL;
-  let parsedURL: URL;
-  try {
-    parsedDestination = new URL(destination);
-    parsedURL = new URL(url);
-  } catch {
-    return false;
-  }
-  if (
-    parsedDestination.username ||
-    parsedDestination.password ||
-    parsedDestination.search ||
-    parsedDestination.hash ||
-    !parsedDestination.pathname.endsWith('/')
-  ) {
-    return false;
-  }
-  return parsedURL.href.startsWith(parsedDestination.href);
 }
 
 function lowerGraphql(
@@ -760,14 +866,144 @@ export interface CallApiCredential {
   token: string;
   // The value exactly as it is sent, transform applied.
   value: string;
+  // The value as stored, where a transform makes what is sent differ from it.
+  // Removed from the response as well, since a vendor can echo either.
+  raw?: string;
+  // The grant the value was opened under, as `fill` reported it.
+  grant?: CallApiGrantUse;
 }
 
-// The realm server's side of a `callApi`: it sends the request through its
-// guarded outbound client and answers with the vendor's response, its
-// credentials removed. A refusal or a failure to get any response at all is
-// thrown as an `OperationFailure` carrying `guard-refused`, `upstream-timeout`
-// or `response-too-large`.
+// The grant a slot's value was opened under, which the sender's `fill`
+// reports and its `send` reads back to act on the vendor's answer: a 401
+// rejects the grant, a 403 is recorded on it, and a probe the vendor accepts
+// clears it. The executor carries it from one to the other unread.
+export interface CallApiGrantUse {
+  id: string;
+  destination: string;
+  slot: { name: string; key: CallApiSlot['key'] };
+  realmURL: string;
+  // The share the key was used through, for an `apiKey` slot.
+  shareId?: string;
+  // The grant's sealed copy that was opened, so a vendor's answer is held
+  // against the value it was sent, not one that replaced it meanwhile.
+  copy: string;
+  // Whether this call is the probe of a grant the vendor rejected.
+  probe: boolean;
+}
+
+// How an invocation arrived. An interactive one carries a user's session: a
+// card in the browser, the AI assistant, the CLI. A pipeline one is a run the
+// realm server makes on its own, as a schedule's payer or whoever started it,
+// and is never reached from a request off the network.
+export type CallApiMode = 'interactive' | 'pipeline';
+
+// What names the binding that fills a request's slots.
+export interface CallApiSlotLookup {
+  realmURL: string;
+  // The type the operation was resolved on, and the operation's name there.
+  // The binding is for this type's operation, whichever class declared it.
+  type: { module: string; name: string };
+  operation: string;
+  // The card the operation was invoked on; absent for one invoked on the type.
+  instance?: string;
+  // Who the invocation acts for: the signed-in caller, or a pipeline's payer.
+  // A `{{userKey}}` slot is filled only from this user's own binding. For a
+  // caller who isn't signed in, it is `"anonymous"` (`ANONYMOUS_ACTOR`), and
+  // `anonymous` says where they called from.
+  caller: string;
+  // Set for a caller who isn't signed in, whom the realm's policy admitted.
+  // Only `{{apiKey}}` slots are filled for one, from a share whose key allows
+  // anonymous use, and each call counts against the share's limit for their
+  // address, their part of the share's budget, and the key's anonymous cap.
+  anonymous?: AnonymousCallApiCaller;
+  mode: CallApiMode;
+  // The request as the definition cache holds it now, which the binding's
+  // fingerprint is checked against.
+  request: OperationCallApi;
+}
+
+// A caller who isn't signed in, as a `callApi` counts them: by the address
+// the realm admitted them from, in the form the anonymous rate limiter counts
+// it under (`rateLimitKey`).
+export interface AnonymousCallApiCaller {
+  address: string;
+}
+
+// What names the bindings a readiness answer is about: the same as a call's,
+// for a caller invoking from a card, who may be nobody signed in. `anonymous`
+// is set where the realm admitted such a caller from a known address.
+export interface CallApiReadinessLookup extends Omit<
+  CallApiSlotLookup,
+  'caller' | 'mode'
+> {
+  caller: string | undefined;
+}
+
+// One slot's credential, as the binding that fills it provides it.
+export interface CallApiFilledSlot {
+  name: string;
+  // As it is sent, transform applied.
+  value: string;
+  // As stored, where a transform makes `value` differ from it.
+  raw?: string;
+  // Where the key's owner approved it to be sent: the request, as built and
+  // before anything is filled into it, must be under this destination.
+  destination: string;
+  grant?: CallApiGrantUse;
+  // The share or personal key this slot's use is counted against, which the
+  // executor hands back to the sender's `recordUse` unread.
+  countsAgainst?: CallApiUseSubject;
+}
+
+// A share, or one of a user's own keys, whose use is recorded.
+export interface CallApiUseSubject {
+  kind: 'share' | 'key';
+  id: string;
+}
+
+// One invocation's use of the shares and keys filling its slots, as the
+// executor reports it to the sender once the slots are filled: how it ended,
+// and for whom. A refusal raised while the slots are being filled is the
+// sender's own to record, since only it knows which share or key refused.
+export interface CallApiUse {
+  realmURL: string;
+  operation: string;
+  caller: string | null;
+  mode: CallApiMode;
+  // The origin and path of the request as declared, or null when it was
+  // refused before one was built.
+  url: string | null;
+  outcome: KeyUseOutcome;
+  code?: string;
+  status?: number;
+  countsAgainst: CallApiUseSubject[];
+}
+
+// The realm server's side of a `callApi`. `fill` finds the binding for every
+// slot a request carries and opens its key under the grant it names, or
+// refuses with `binding-not-approved`, `share-suspended`,
+// `binding-needs-reapproval`, `interactive-use-not-approved`,
+// `anonymous-use-not-approved` or `credential-rejected`; an interactive call over its key's limits with
+// `rate-limited` or `over-budget`, or `rate-limit-unavailable` when they
+// couldn't be counted. `send` sends the request through the guarded
+// outbound client and answers with the vendor's response, its credentials
+// removed; a refusal or a failure to get any response at all is thrown as an
+// `OperationFailure` carrying `guard-refused`, `upstream-timeout` or
+// `response-too-large`, and a 401 to a credential as `credential-rejected`.
+//
+// `readiness` answers, without opening any key, whether `fill` would fill
+// every slot for this caller invoking from a card, and what would fix it if
+// not, or `undefined` where no approval could make it fill. A sender that
+// can't tell leaves it out.
+//
+// `recordUse` keeps the record of each invocation that got as far as filled
+// slots, against the shares and keys `fill` said they count against. It
+// describes what happened and never changes it, so whatever it throws is
+// logged and dropped.
 export interface CallApiSender {
+  fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
+  recordUse?(use: CallApiUse): Promise<void>;
+  readiness?(lookup: CallApiReadinessLookup): Promise<KeyReadiness | undefined>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],
@@ -1065,7 +1301,13 @@ export interface CallApiInvocation {
   realmURL: string;
   // Whether the request this invocation arrived in is part of a render.
   duringPrerender: boolean;
+  mode: CallApiMode;
   sender: CallApiSender | undefined;
+  // Set for a request that authenticated nobody, which the realm's policy
+  // admitted from this address.
+  anonymous?: AnonymousCallApiCaller;
+  // The type the operation resolved on, read only once a slot needs filling.
+  type: () => Promise<{ module: string; name: string } | undefined>;
   // The target's indexed document, read only once the request is going to be
   // built.
   instance?: () => Promise<SingleCardDocument>;
@@ -1079,11 +1321,14 @@ export async function callApiOperation(
 ): Promise<OperationCallApiResult> {
   let declared = definition.callApi;
   let id = request.target.kind === 'instance' ? request.target.url : undefined;
-  let refuse = (
+  // The slots' credentials once `fill` has found them, whose shares and keys
+  // each outcome from then on is recorded against.
+  let filled: CallApiFilledSlot[] = [];
+  let refuse = async (
     error: ConstructorParameters<typeof OperationFailure>[0],
     url?: string,
-  ): never => {
-    recordKeyUse(request, invocation, url, {
+  ): Promise<never> => {
+    await recordKeyUse(request, invocation, url, filled, {
       outcome: 'refused',
       code: error.code,
     });
@@ -1107,24 +1352,26 @@ export async function callApiOperation(
       detail: `operation "${request.name}" sends a request to an outside service, which a card being rendered may not do`,
     });
   }
+  // A caller who isn't signed in has no key of their own, so a `{{userKey}}`
+  // slot can't be filled for them. A shared key can, where its owner allowed
+  // anonymous use, and the share counts such callers by address, so one the
+  // realm couldn't place is refused too.
+  let anonymous =
+    !request.actor && declared.slots.length > 0
+      ? invocation.anonymous
+      : undefined;
   if (declared.slots.length > 0 && !request.actor) {
-    return refuse({
-      status: 401,
-      code: 'actor-required',
-      title: 'Operation needs an identity',
-      detail: `operation "${request.name}" sends a credential, and this request authenticated nobody`,
-    });
-  }
-  // A slot is filled only by a key its realm's owner bound to it, and no
-  // binding fills one here, so a request that carries a slot is not sent.
-  if (declared.slots.length > 0) {
-    return refuse({
-      status: 403,
-      code: 'binding-not-approved',
-      title: 'Binding not approved',
-      detail: `operation "${request.name}" sends ${describeSlots(declared.slots)}, and no binding approved for realm ${invocation.realmURL} fills ${declared.slots.length === 1 ? 'it' : 'them'}`,
-      meta: { slots: declared.slots.map(({ name, key }) => ({ name, key })) },
-    });
+    let sendsUserKey = declared.slots.some(({ key }) => key === 'userKey');
+    if (sendsUserKey || !anonymous) {
+      return refuse({
+        status: 401,
+        code: 'actor-required',
+        title: 'Operation needs an identity',
+        detail: sendsUserKey
+          ? `operation "${request.name}" sends the invoking user's own key, and this request authenticated nobody`
+          : `operation "${request.name}" sends a credential, and this request authenticated nobody`,
+      });
+    }
   }
   if (!invocation.sender) {
     return refuse({
@@ -1133,6 +1380,32 @@ export async function callApiOperation(
       title: 'Operation not implemented',
       detail: `this realm sends no request to an outside service, so operation "${request.name}" cannot be carried out here`,
     });
+  }
+  // A slot is filled only by the key a binding names: one its owner approved
+  // for this operation in this realm. The binding is found before anything is
+  // built, so a request nobody approved reads nothing of the card either.
+  if (declared.slots.length > 0) {
+    let type = await invocation.type();
+    if (!type) {
+      return refuse(notApproved(request.name, declared, invocation.realmURL));
+    }
+    try {
+      filled = await invocation.sender.fill({
+        realmURL: invocation.realmURL,
+        type,
+        operation: request.name,
+        ...(id ? { instance: id } : {}),
+        caller: request.actor || ANONYMOUS_ACTOR,
+        ...(anonymous ? { anonymous } : {}),
+        mode: invocation.mode,
+        request: declared,
+      });
+    } catch (error) {
+      if (error instanceof OperationFailure) {
+        return refuse(error.error);
+      }
+      throw error;
+    }
   }
   let built: CallApiRequest;
   try {
@@ -1164,48 +1437,142 @@ export async function callApiOperation(
       built.url,
     );
   }
+  // Each key is sent only under the destination its owner approved it for,
+  // which the grant stored when they did. The request is checked as built,
+  // with every slot still a token, so a credential in the path can't move it.
+  let credentials: CallApiCredential[] = [];
+  for (let slot of built.slots) {
+    let fill = filled.find(({ name }) => name === slot.name);
+    if (!fill) {
+      return refuse(notApproved(request.name, declared, invocation.realmURL));
+    }
+    if (!destinationCovers(fill.destination, built.url)) {
+      return refuse(
+        {
+          status: 502,
+          code: 'guard-refused',
+          title: 'Destination refused',
+          detail: `operation "${request.name}" built a request outside ${fill.destination}, where the key for the credential slot "${slot.name}" was approved to be sent`,
+          meta: { reason: 'destination' },
+        },
+        built.url,
+      );
+    }
+    credentials.push({
+      token: slot.token,
+      value: fill.value,
+      ...(fill.raw !== undefined ? { raw: fill.raw } : {}),
+      ...(fill.grant ? { grant: fill.grant } : {}),
+    });
+  }
   let response: CallApiResponse;
   try {
-    response = await invocation.sender.send(built, []);
+    response = await invocation.sender.send(built, credentials);
   } catch (error) {
     if (error instanceof OperationFailure) {
       return refuse(error.error, built.url);
     }
-    recordKeyUse(request, invocation, built.url, {
+    await recordKeyUse(request, invocation, built.url, filled, {
       outcome: 'failed',
     });
     throw error;
   }
-  recordKeyUse(request, invocation, built.url, {
+  await recordKeyUse(request, invocation, built.url, filled, {
     outcome: 'sent',
     status: response.status,
   });
   return { callApi: response };
 }
 
-function describeSlots(slots: CallApiSlot[]): string {
-  let names = slots.map(({ name }) => `"${name}"`).join(', ');
-  return slots.length === 1
-    ? `the credential slot ${names}`
-    : `the credential slots ${names}`;
+// The refusal for a slot no binding fills. The detail names each slot with
+// whose key fills it, because a caller that sees only the message, such as the
+// AI assistant, gets neither the code nor `meta`, and a slot's name alone
+// doesn't say.
+export function notApproved(
+  name: string,
+  declared: OperationCallApi,
+  realmURL: string,
+): ConstructorParameters<typeof OperationFailure>[0] {
+  return {
+    status: 409,
+    code: 'binding-not-approved',
+    title: 'Binding not approved',
+    detail: `operation "${name}" sends ${describeSlots(declared.slots)}, and no binding approved for realm ${realmURL} fills ${declared.slots.length === 1 ? 'it' : 'them'}`,
+    meta: { slots: declared.slots.map(({ name, key }) => ({ name, key })) },
+  };
 }
 
-// One line per invocation on the key-use channel. The URL is the origin and
-// path of the request as declared, never one a credential was filled into,
-// and never its query string, which can carry a value of the caller's.
-function recordKeyUse(
+// Says whose key fills each slot: the invoking user's own (`userKey`) or one
+// the realm holds (`apiKey`). A slot's name alone doesn't say, and this text is
+// all a caller such as the AI assistant sees of the refusal.
+function describeSlots(slots: CallApiSlot[]): string {
+  let groups: [string, CallApiSlot[]][] = [
+    ["the invoking user's own key", slots.filter((s) => s.key === 'userKey')],
+    ["the realm's key", slots.filter((s) => s.key === 'apiKey')],
+  ];
+  return groups
+    .filter(([, group]) => group.length > 0)
+    .map(([whose, group]) => {
+      let names = group.map(({ name }) => `"${name}"`).join(', ');
+      return group.length === 1
+        ? `the credential slot ${names} for ${whose}`
+        : `the credential slots ${names} for ${whose}`;
+    })
+    .join(' and ');
+}
+
+// One line per invocation on the key-use channel, and, once slots are filled,
+// the sender's record against the shares and keys filling them. The URL is the
+// origin and path of the request as declared, never one a credential was
+// filled into, and never its query string, which can carry a value of the
+// caller's.
+async function recordKeyUse(
   request: OperationRequest,
   invocation: CallApiInvocation,
   url: string | undefined,
+  filled: CallApiFilledSlot[],
   outcome: { outcome: KeyUseOutcome; code?: string; status?: number },
-) {
-  emitKeyUse({
+): Promise<void> {
+  let event = {
     operation: request.name,
     realm: invocation.realmURL,
     caller: request.actor || null,
     url: url ? originAndPath(url) : null,
     ...outcome,
-  });
+  };
+  emitKeyUse(event);
+  let countsAgainst = useSubjects(filled);
+  let recordUse = invocation.sender?.recordUse;
+  if (!recordUse || countsAgainst.length === 0) {
+    return;
+  }
+  try {
+    await recordUse({
+      realmURL: event.realm,
+      operation: event.operation,
+      caller: event.caller,
+      mode: invocation.mode,
+      url: event.url,
+      ...outcome,
+      countsAgainst,
+    });
+  } catch (e: unknown) {
+    recordSafely('key use record', () => {
+      throw e;
+    });
+  }
+}
+
+// Each share and key the filled slots count against, once: a call whose two
+// slots are filled from one share is one use of it.
+function useSubjects(filled: CallApiFilledSlot[]): CallApiUseSubject[] {
+  let seen = new Map<string, CallApiUseSubject>();
+  for (let { countsAgainst } of filled) {
+    if (countsAgainst) {
+      seen.set(`${countsAgainst.kind}:${countsAgainst.id}`, countsAgainst);
+    }
+  }
+  return [...seen.values()];
 }
 
 function originAndPath(url: string): string {

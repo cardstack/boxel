@@ -48,6 +48,7 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
     data-kind={{@kind}}
     data-selected={{if @selected 'true' 'false'}}
     data-disabled={{if @disabled 'true' 'false'}}
+    data-test-pretui-choice-card={{@option.value}}
     ...attributes
   >
     <input
@@ -89,7 +90,7 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
         --oc-snap: var(--pretui-dur-snap, 180ms) var(--pretui-ease-snap, ease);
         --oc-shadow: var(--pretui-shadow-control, 0 1px 2px rgb(0 0 0 / 0.04));
         --oc-highlight: var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
-        --oc-tone: var(--primary);
+        --oc-tone: var(--pretui-choice-card-tone, var(--primary));
         --oc-mark: 0.9375rem;
         position: relative;
         display: flex;
@@ -110,14 +111,20 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
           box-shadow var(--oc-snap),
           background-color var(--oc-snap);
       }
+      /* --hover is translucent, so it's laid over the card, not in place of it */
       .pretui-optioncard:hover {
-        background-color: var(--hover);
+        background-image: linear-gradient(var(--hover), var(--hover));
       }
       .pretui-optioncard[data-selected='true'] {
         box-shadow:
           0 0 0 1px var(--oc-tone),
           0 0 0 4px color-mix(in oklch, var(--oc-tone) 12%, transparent),
           var(--oc-shadow);
+        /* Forced colors drop the box shadows; this outline, unseen
+           otherwise, is repainted there, so the chosen card still stands
+           out. The focus outline below is more specific and wins. */
+        outline: 2px solid transparent;
+        outline-offset: -2px;
       }
       .pretui-optioncard:has(.pretui-optioncard-input:focus-visible) {
         outline: 2px solid var(--ring);
@@ -170,8 +177,8 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
         display: grid;
         place-content: center;
         border-radius: 50%;
-        background-color: var(--field);
-        box-shadow: 0 0 0 1px var(--input);
+        background-color: var(--pretui-control-rest, var(--field));
+        box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
         transition:
           background-color var(--oc-snap),
           box-shadow var(--oc-snap);

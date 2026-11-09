@@ -57,7 +57,7 @@ The **Cardstack Catalog** (served from [cardstack/boxel-catalog](https://github.
 | --------------------- | --------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **Cardstack Catalog** | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/catalog/` | Official catalog. New listings and community submissions land here via `pr-listing-create` PRs to `cardstack/boxel-catalog`. |
 
-The catalog appears in the workspace chooser by default; setting `SKIP_CATALOG=true` skips its setup and startup.
+The catalog appears on the dashboard by default; setting `SKIP_CATALOG=true` skips its setup and startup.
 
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
@@ -155,7 +155,7 @@ In order to run the realm server hosted app:
 1. `mise run services:host-build` to re-build the host app (this step can be omitted if you do not want host app re-builds)
 2. `mise run dev` to serve the base and experiments realms
 
-The recommended way to view a realm's app is the host vite dev server at `https://localhost:4200` — open it and navigate via the workspace chooser. Both the host (vite) on `:4200` and the realm-server on `:4201` terminate HTTPS+HTTP/2 using the same mkcert leaf (see "Local HTTPS dev access" below for the one-time cert setup), so the in-browser host's realm fetches multiplex per Chrome's HTTP/2 connection rules without any mixed-content concerns. Visiting `https://localhost:4201/<realm>` directly also works.
+The recommended way to view a realm's app is the host vite dev server at `https://localhost:4200` — open it and navigate from the dashboard. Both the host (vite) on `:4200` and the realm-server on `:4201` terminate HTTPS+HTTP/2 using the same mkcert leaf (see "Local HTTPS dev access" below for the one-time cert setup), so the in-browser host's realm fetches multiplex per Chrome's HTTP/2 connection rules without any mixed-content concerns. Visiting `https://localhost:4201/<realm>` directly also works.
 
 Live reloads are not available in this mode, however, if you use start the server with the environment variable `DISABLE_MODULE_CACHING=true` you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
@@ -505,38 +505,25 @@ mise run infra:stop-admin
 
 #### Google Sign-In (local dev)
 
-The dev Synapse template ships with a Google OIDC block and a custom `user_mapping_provider` (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`) that auto-links Google sign-ins to existing Matrix accounts by verified email. The whole block is **gated on env vars** — without them, `packages/matrix/support/synapse/index.ts` strips the OIDC block from the generated `homeserver.yaml` so Synapse boots cleanly for unrelated work. The host's "Sign in with Google" button appears whenever the homeserver's login flows advertise the `oidc-google` IdP, so it shows up automatically once the OIDC block is in place.
+Users sign in with Google on the secure origin's sign-in page, and the realm server is its own OpenID Connect client (`packages/realm-server/lib/google-sign-in.ts`). It resolves a Google identity to a Matrix account itself: by the Google subject already linked to an account, then by verified email, and otherwise it makes a new account. The page offers Google only when the realm server has a Google client.
 
 To enable Google sign-in locally:
 
-1. **Create a Google Cloud OAuth 2.0 client** (Web application) in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add `http://localhost:8008/_synapse/client/oidc/callback` as an authorized redirect URI (exact match — `http`, no trailing slash, port `8008`). If you haven't configured an OAuth consent screen, create one in **Testing** mode and add your own Google account as a test user.
+1. **Create a Google Cloud OAuth 2.0 client** (Web application) in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add `https://localhost:4208/secure/google-callback` as an authorized redirect URI (exact match). If you haven't configured an OAuth consent screen, create one in **Testing** mode and add your own Google account as a test user.
 
-2. **Export the client ID and secret** in the same shell that runs `mise`:
+2. **Export the client ID and secret** in the same shell that runs `mise`, so the realm server reads them:
 
    ```sh
    export GOOGLE_OAUTH_CLIENT_ID='<your-id>.apps.googleusercontent.com'
    export GOOGLE_OAUTH_CLIENT_SECRET='<your-secret>'
    ```
 
-3. **Restart Synapse** so the OIDC block is interpolated into the generated `homeserver.yaml`:
-
-   ```sh
-   pnpm stop:synapse
-   mise run infra:start-synapse
-   ```
-
-4. **Verify** Synapse advertises the Google IDP:
-
-   ```sh
-   curl -s http://localhost:8008/_matrix/client/v3/login | jq
-   ```
-
-   You should see a flow with `type: "m.login.sso"` and an `identity_providers` entry whose `id` is `"oidc-google"`. The "Sign in with Google" button will now appear on the host login screen.
+3. **Restart the realm server.** The secure origin's sign-in page now shows "Sign in with Google".
 
 Notes:
 
 - Each developer uses their own Google OAuth client locally. The shared client used for staging/prod is provisioned separately.
-- To reset the link and see Google's consent screen again, revoke the OAuth client at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions). To also re-trigger Synapse's username picker, wipe the dev Synapse DB: `pnpm stop:synapse && rm -rf packages/matrix/synapse-data && mise run infra:start-synapse`.
+- To see Google's consent screen again, revoke the OAuth client at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions).
 
 #### SMTP Server
 

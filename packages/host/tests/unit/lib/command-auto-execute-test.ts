@@ -135,4 +135,19 @@ module('Unit | Lib | tool-auto-execute', function () {
       'act mode from another agent does not auto-execute',
     );
   });
+
+  test('a question never auto-executes, even before its tool has resolved', function (assert) {
+    assert.false(
+      isAutoExecutableTool(cmd('AskUserTool_3eed', false), 'act', true),
+      'a realm-defined ask-user call in Act mode waits for the pick',
+    );
+    assert.false(
+      isAutoExecutableTool(cmd('ask-user', true), 'act', true),
+      'the host ask-user call waits for the pick',
+    );
+    assert.true(
+      isAutoExecutableTool(cmd('assignTaskUser_3eed', false), 'act', true),
+      'a tool whose name only contains "askuser" is not a question',
+    );
+  });
 });

@@ -9,6 +9,7 @@ import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { FieldError } from './field-error';
 import type { FormIssue } from '../internal/forms-core';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 const ERR: FormIssue = { targetPath: 'Total', severity: 'error', message: 'Total exceeds the budget.', ruleId: 'R-12' };
 const WARN: FormIssue = { targetPath: 'Total', severity: 'warning', message: 'Unusually high.' };
@@ -34,6 +35,14 @@ module('Pretui | components/field-error', function (hooks) {
       'the glyph is colour-plus-shape; the text carries the meaning',
     );
     assert.strictEqual(el().dataset['severity'], 'error');
+  });
+
+  test("an error's glyph is Cue's x icon; warning and info stay text", async function (assert) {
+    await render(<template><FieldError @issue={{ERR}} /></template>);
+    assert.dom('[data-test-pretui-field-error-glyph="error"] svg').exists();
+
+    await render(<template><FieldError @issue={{WARN}} /></template>);
+    assert.dom('[data-test-pretui-field-error-glyph="warning"]').hasText('!');
   });
 
   test('renders each severity, and fails closed on one it does not recognise', async function (assert) {
@@ -71,5 +80,19 @@ module('Pretui | components/field-error', function (hooks) {
   test('asks for the rule id but renders nothing when the issue has none', async function (assert) {
     await render(<template><FieldError @issue={{WARN}} @showRuleId={{true}} /></template>);
     assert.notOk(el().querySelector('[data-test-pretui-token]'), 'no empty token');
+  });
+
+  test('renders no style attribute, its rule Token included', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(
+        <template>
+          <FieldError @issue={{ERR}} @showRuleId={{true}} />
+          <FieldError @issue={{WARN}} />
+          <FieldError @issue={{INFO}} />
+        </template>,
+      ),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.strictEqual(all().length, 3);
   });
 });

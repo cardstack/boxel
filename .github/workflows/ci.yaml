@@ -39,6 +39,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
+      claude-hooks: ${{ steps.filter.outputs.claude-hooks }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
       bot-runner: ${{ steps.filter.outputs.bot-runner }}
       eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
@@ -84,6 +85,11 @@ jobs:
               - '.github/actions/**'
               - 'mise-tasks/**'
               - 'packages/observability/scripts/**'
+            # builds the host that the suites listing *test-web-assets download
+            test-web-assets: &test-web-assets
+              - '.github/workflows/test-web-assets.yaml'
+            claude-hooks:
+              - '.claude/hooks/**'
             boxel:
               - *shared
               # The host compiles this package's source as a workspace dependency,
@@ -137,6 +143,7 @@ jobs:
               - 'packages/pretui/**'
             choreo:
               - *shared
+              - *test-web-assets
               - 'packages/choreo/**'
               - 'packages/choreo-film-app/**'
               - 'packages/choreo-gallery/**'
@@ -151,8 +158,14 @@ jobs:
             glimmer-motion:
               - *shared
               - 'packages/glimmer-motion/**'
+            # The secure origin's build compiles Pret UI and boxel-ui from
+            # their source and reads boxel-icons' build, so a change to any of
+            # them can change what the origin ships (ADR 019 §1.8).
             secure-origin:
               - *shared
+              - 'packages/boxel-icons/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/pretui/**'
               - 'packages/secure-origin/**'
             # Realm content the realm-server image carries and each deploy
             # copies onto the realm's disk, so a change to it needs a staging
@@ -166,7 +179,9 @@ jobs:
               - 'packages/glimmer-motion/**'
             matrix:
               - *shared
+              - *test-web-assets
               - 'packages/base/**'
+              - 'packages/bot-runner/lib/membership-handler.ts'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
@@ -174,8 +189,12 @@ jobs:
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
+            # Pret UI is here for the secure origin's policy test
+            # (`secure-origin-policy-test.ts`), which loads each page the
+            # origin's build makes from Pret UI, boxel-ui and boxel-icons.
             realm-server:
               - *shared
+              - *test-web-assets
               - 'packages/billing/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
@@ -183,14 +202,17 @@ jobs:
               - 'packages/host/**'
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
+              - 'packages/pretui/**'
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
             vscode-boxel-tools:
               - *shared
+              - *test-web-assets
               - 'packages/vscode-boxel-tools/**'
             boxel-cli:
               - *shared
+              - *test-web-assets
               - 'packages/boxel-cli/**'
               # The boxel-skills pin lives in the marketplaces, and the
               # boxel-cli suite checks it (both refs agree, the pinned release
@@ -200,6 +222,10 @@ jobs:
               # boxel-cli bundles these packages' source for `boxel parse`.
               - 'packages/glimmer-motion/**'
               - 'packages/choreo/**'
+              # boxel-cli bundles the Pret UI realm, filtered by its
+              # .boxelignore, for `boxel test`'s local mode, and the
+              # local-mode fixture renders a Pret UI component.
+              - 'packages/pretui/**'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the
@@ -257,6 +283,9 @@ jobs:
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci
+      # The Realm Server and Matrix shards wait on this build, so it follows
+      # them onto RunsOn under the same rule; see realm-server-test.
+      runs_on_spec: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.RUNS_ON_SPEC || '' }}
     concurrency:
       group: ci-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -355,6 +384,25 @@ jobs:
       - name: Host deploy cache-control suite
         run: pnpm test:deploy-cache-control
         working-directory: packages/host
+
+  claude-hooks-test:
+    name: Claude Hooks Tests
+    needs: change-check
+    if: needs.change-check.outputs.claude-hooks == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: claude-hooks-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
+        with:
+          install: true
+      # The PreToolUse hook that gates skill-bound tool calls. It is shell
+      # parsing with no dependencies, so Node alone runs it.
+      - name: Hook suite
+        run: node --test .claude/hooks/require-skill.test.mjs
 
   eslint-plugin-boxel-test:
     name: ESLint Plugin Boxel Tests
@@ -581,21 +629,21 @@ jobs:
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     concurrency:
       group: choreo-gallery-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: "24"
+      - uses: ./.github/actions/init
       # The boxel-cli test engine mounts realm/ as an in-memory realm and
-      # drives a host test harness, so no workspace install or realm-server
-      # is needed. The harness is this commit's host, from test-web-assets,
-      # not the one bundled with the CLI release: the gallery uses
-      # glimmer-motion and Choreo as they are in this commit, which a
-      # published CLI's host predates. The pin decides only the test engine.
+      # drives a host test harness, so no realm-server is needed. Both halves
+      # come from this commit. The harness is this commit's host, from
+      # test-web-assets: the gallery uses glimmer-motion and Choreo as they
+      # are in this commit, which a published CLI's host predates. The engine
+      # compiles the realm's modules for that host, which identifies the
+      # classes they export by what the compiler records in them, so it has
+      # to be the compiler the host was built against too.
       - name: Download test web assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -606,15 +654,16 @@ jobs:
         run: |
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
-      - name: Install Boxel CLI
-        run: npm install -g @cardstack/boxel-cli@0.9.0-unstable.1
+      - name: Build Boxel CLI
+        run: pnpm build
+        working-directory: packages/boxel-cli
       # The browser revision must match the CLI's own @playwright/test pin,
-      # so install through the CLI's nested playwright binary.
+      # so install through the CLI's playwright binary.
       - name: Install Chromium
-        run: |
-          "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/boxel-cli
       - name: Run tests
-        run: boxel test realm
+        run: node ../boxel-cli/bin/boxel.js test realm
         working-directory: packages/choreo-gallery
         env:
           # the host package directory; the CLI reads its dist/
@@ -676,6 +725,13 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
+      # The pages read boxel-icons from its build; `test:components` builds it
+      # when this misses. It doesn't save on a miss: the key belongs to the
+      # build Lint makes and saves.
+      - name: Restore boxel-icons build cache
+        uses: ./.github/actions/restore-icons-cache
+        with:
+          save: "false"
       - name: Run test suite
         run: pnpm test:components
         working-directory: packages/secure-origin
@@ -782,7 +838,9 @@ jobs:
     name: Matrix Client Tests
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
+    # Follows the spill onto RunsOn; see realm-server-test. The label carries
+    # the shard so that each matrix entry gets an instance of its own.
+    runs-on: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-matrix-client-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -828,12 +886,6 @@ jobs:
       - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
-      - name: Run OIDC mapping provider unit tests
-        # Fast (~no boot) and stack-independent — it only needs the warmed
-        # Synapse image — so run it once on shard 1 rather than every shard.
-        if: matrix.shardIndex == 1
-        run: pnpm test:oidc-mapping-provider
-        working-directory: packages/matrix
       - name: Run shard-assignment unit tests
         # Guards the property the split below rests on: the shards partition
         # the spec files, so every spec runs on exactly one of them. Needs
@@ -956,7 +1008,8 @@ jobs:
       - matrix-client-test
     # !cancelled() makes it run even if a matrix-client-test shard fails, but still respects cancellation
     if: ${{ !cancelled() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
-    runs-on: ubuntu-latest
+    # Follows the spill onto RunsOn; see realm-server-test.
+    runs-on: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-matrix-merge-reports/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 15
     concurrency:
       group: matrix-client-merge-reports-${{ github.head_ref || github.run_id }}
@@ -1133,7 +1186,21 @@ jobs:
     name: Realm Server Tests
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
+    # While GitHub's runner pool is near full, the Realm Server and Matrix
+    # jobs (shards, report merges and the web asset build they wait on)
+    # move to RunsOn with the host tests: the repo variable RUNS_ON_SPILL is
+    # `true`, and RUNS_ON_SPEC holds the instance spec. See host-test in
+    # ci-host.yaml for how the collector sets RUNS_ON_SPILL, and for why fork
+    # PRs never leave GitHub's runners.
+    #
+    # Unlike the host tests, pushes to main follow the spill too, and on spot.
+    # These suites upload no Percy build, so a spot reclaim only re-runs a
+    # shard. The shard timings measured on main then come from both kinds of
+    # runner; the host shards showed close times on the two.
+    #
+    # `runs-on` cannot read `env`, so this condition is repeated in each of
+    # those jobs.
+    runs-on: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-realm-server-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 40
     concurrency:
       group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
@@ -1286,7 +1353,8 @@ jobs:
       group: realm-server-merge-reports-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     needs: [change-check, realm-server-test]
-    runs-on: ubuntu-latest
+    # Follows the spill onto RunsOn; see realm-server-test.
+    runs-on: ${{ vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-realm-server-merge-reports/{1}', github.run_id, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -1787,15 +1855,8 @@ jobs:
           retention-days: 30
       # The host-scoped snapshot covers only the realms a host test shard
       # serves, so a shard downloads and replays a fraction of the full one.
-      # Verified with its own expected-tables sidecar (the script's default
-      # would resolve to the full snapshot's, which happens to list the same
-      # tables — passing it explicitly keeps that a fact rather than a
-      # coincidence).
       - name: Verify host-scoped index cache is complete
-        run: |
-          scripts/verify-index-cache.sh \
-            /tmp/boxel-index-cache-host.sql.gz \
-            /tmp/boxel-index-cache-host.tables
+        run: scripts/verify-index-cache.sh /tmp/boxel-index-cache-host.sql.gz
       - name: Upload host-scoped index cache
         uses: ./.github/actions/upload-artifact-retry
         with:
@@ -1806,10 +1867,7 @@ jobs:
       # database, so they get their own snapshot. A test shard waits on their
       # readiness alongside base and skills.
       - name: Verify test-realm index cache is complete
-        run: |
-          scripts/verify-index-cache.sh \
-            /tmp/boxel-index-cache-test.sql.gz \
-            /tmp/boxel-index-cache-test.tables
+        run: scripts/verify-index-cache.sh /tmp/boxel-index-cache-test.sql.gz
       - name: Upload test-realm index cache
         uses: ./.github/actions/upload-artifact-retry
         with:

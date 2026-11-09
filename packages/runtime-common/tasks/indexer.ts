@@ -645,7 +645,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   reportStatus,
   reportProgress,
   dbAdapter,
-  matrixURL,
+  matrixServerName,
   indexWriter,
   getReader,
   getAuthedFetch,
@@ -662,7 +662,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       `${jobIdentity(args.jobInfo)} starting from-scratch indexing for job: ${JSON.stringify(args)}`,
     );
     reportStatus(jobInfo, 'start');
-    let userId = userIdFromUsername(realmUsername, matrixURL);
+    let userId = userIdFromUsername(realmUsername, matrixServerName);
     let permissions = await fetchUserPermissions(dbAdapter, {
       userId,
       includePublicRealms: true,
@@ -803,7 +803,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   reportStatus,
   reportProgress,
   dbAdapter,
-  matrixURL,
+  matrixServerName,
   indexWriter,
   getReader,
   getAuthedFetch,
@@ -821,7 +821,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       `${jobIdentity(jobInfo)} starting incremental indexing for job: ${JSON.stringify(args)}`,
     );
     reportStatus(jobInfo, 'start');
-    let userId = userIdFromUsername(realmUsername, matrixURL);
+    let userId = userIdFromUsername(realmUsername, matrixServerName);
     let permissions = await fetchUserPermissions(dbAdapter, {
       userId,
       includePublicRealms: true,

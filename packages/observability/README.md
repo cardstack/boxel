@@ -23,6 +23,8 @@ There are **two source-of-truth trees** in this package, because Grafana 12 mana
 | `grafanactl/resources/` | `grafanactl resources push`        | Dashboards, folders                       | API push (CI on merge)                                         |
 | `provisioning/`         | Grafana built-in file provisioning | Data sources, alert rules, contact points | Files mounted at `/etc/grafana/provisioning/`, read at startup |
 
+**The repo owns its folders.** `grafanactl resources push` creates and updates but never deletes, so after the push `apply.sh` runs `prune-dashboards.sh`: every dashboard in a folder that `grafanactl/resources/folders/` defines (today **Boxel Status**) whose UID is not in `grafanactl/resources/dashboards/` is deleted. Removing a dashboard's file therefore removes it from Grafana on the next apply. A dashboard made by hand in one of these folders is deleted too, so make those in another folder. `apply.sh --dry-run` only lists the deletions, and the observability-diff PR comment shows them for staging.
+
 **Why two trees?** `grafanactl` (Grafana Labs' official CLI replacing the archived Grizzly) only manages App Platform resources — `grafanactl resources list` shows dashboards, folders, playlists, snapshots, but **not data sources or alert rules**. Those still live behind the legacy HTTP API.
 
 Locally, `provisioning/` files are mounted into the Grafana container by `docker-compose.yml` and read at startup with `${ENV_VAR}` substitution. **For staging and production, `apply-datasources.sh` reads the same YAML files, env-var-substitutes them (e.g. `${LOKI_URL}` from SSM `/<env>/loki/internal_url`), and upserts each entry through Grafana's `/api/datasources` HTTP API** — a small bridge that gives us file-as-source-of-truth without needing image bakes or EFS mounts on the hosted side.
@@ -38,8 +40,14 @@ grafanactl/
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
-  alerting/            # alert rule groups for every env; routing uses
-                       # Grafana's default notification policy
+  alerting/            # alert rule groups for every env; a rule routes
+                       # through Grafana's default notification policy, or
+                       # to a contact point by `notification_settings.receiver`
+                       # (the response size cap rules in keys-group.json go
+                       # to Techops). local-techops-contact-point.json is the
+                       # local stand-in for that contact point, with no SMTP
+                       # behind it; apply-alerting.sh skips it, as it skips
+                       # any file here with no rule groups
   alerting-hosted/     # NOT mounted locally. <env>/contact-points/ and
                        # <env>/rules/ exist in that hosted env only;
                        # apply-alerting.sh pushes contact points first, with
@@ -66,6 +74,8 @@ scripts/
   apply.sh             # ./scripts/apply.sh --env <local|staging|production>
   apply-datasources.sh # internal — pushes provisioning/datasources/* via HTTP API
                        # (called by apply.sh; staging/production only)
+  prune-dashboards.sh  # internal — deletes dashboards in the repo's folders that the
+                       # repo no longer defines (called by apply.sh; --dry-run lists them)
   pull.sh              # ./scripts/pull.sh  --env <name> --path <dir>
   check.sh             # ./scripts/check.sh --env <name>  (connectivity smoke test)
   tail-logs.sh         # ./scripts/tail-logs.sh --env <name> --service <task family>
@@ -95,14 +105,15 @@ GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts --once
 GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts   # loops, default 60s
 ```
 
-It emits four event types, all on channel `boxel:actions-queue`:
+It emits five event types, all on channel `boxel:actions-queue`:
 
-| `event_type`                             | one line per                   | carries                                                                                     |
-| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step` |
-| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`              |
-| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `active_runs`, `rate_limit_remaining`        |
-| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                    |
+| `event_type`                             | one line per                   | carries                                                                                                                                         |
+| ---------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step`                                                     |
+| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`                                                                  |
+| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `github_hosted_running_jobs`, `github_hosted_queued_jobs`, `active_runs`, `rate_limit_remaining` |
+| `spill`                                  | spill decision                 | the pool count, `diverted_jobs`, `pool_complete`, `spill_before`, `spill`, `changed`, `reason`, `mode`, `written`; see [CI spill](#ci-spill)    |
+| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                                                                        |
 
 GitHub reports a job as `pending` while a concurrency group holds it, and as
 `queued` while it waits for a runner. The two are counted apart, so a
@@ -118,17 +129,79 @@ Two constraints are load-bearing:
 - **It must not run as a scheduled GitHub Actions workflow.** It would queue
   behind the backlog it measures and go blind during the incident it exists
   for. Hosted, it belongs on a schedule outside Actions.
-- **A sample costs one request per active run, plus three.** The hourly spend
-  therefore scales with how busy the repository is, against a token's 5,000
-  requests an hour. At the observed peak of ~50 concurrent runs a 60-second
-  interval spends around 3,200 an hour, which is comfortable; 30 seconds
-  exceeds the budget above roughly forty concurrent runs, so higher resolution
-  needs the per-sample cost reduced rather than the interval shortened.
-  Sampling stops rather than reporting partial depth when the remaining budget
-  nears its reserve.
+- **A sample costs one request per active run whose jobs changed, plus three
+  per repository.** The collector sends each job-list request with the ETag of
+  the last answer, and GitHub does not count a `304 Not Modified` against the
+  token's 5,000 requests an hour. About 45% of the job lists are unchanged
+  between two samples, so a 60-second interval can keep up with about 120
+  active runs for an hour (the busiest hour seen had up to 114). A 30-second
+  interval doubles the cost. Sampling stops rather than reporting partial depth
+  when the remaining budget gets to its reserve.
 
 The dashboard reads `{service="actions-collector", env="$env"}`, so a hosted
 deployment needs to log under that service name.
+
+#### CI spill
+
+GitHub's hosted runners cost nothing for this public repository, and the
+RunsOn instances in our AWS account do not. So the host test jobs in
+`ci-host.yaml` and the Realm Server and Matrix test jobs in `ci.yaml` use
+GitHub's runners, and take RunsOn only while the repo variable `RUNS_ON_SPILL`
+is `true`. The variable `RUNS_ON_SPEC` holds the RunsOn instance spec. CI
+Host's pushes to `main` always take RunsOn; CI's follow the spill. Each
+sample decides what the variable should hold (`collectors/spill.ts`):
+
+- It counts the jobs on GitHub's free pool: those whose label names a standard
+  hosted image, such as `ubuntu-latest` or `macos-15`. Paid larger runners and
+  labels that no runner serves are not counted. A job queued longer than
+  `SPILL_STALE_QUEUED_SECONDS` is taken to be stuck and is not counted either.
+  The repositories in `SPILL_POOL_REPOS` share the pool and are counted too,
+  but emit no lines, so the dashboard still describes `--repo` alone.
+- Demand is the jobs running on the pool plus the RunsOn jobs that the spill
+  moved off it: all of them except CI Host's pushes to `main`. Without them, spilling would
+  make the pool look quiet, and turning the spill off would bring the same
+  load back.
+- It turns the spill on when demand reaches `SPILL_ON_RUNNING`, or a job has
+  waited `SPILL_ON_QUEUED_SECONDS` for a runner.
+- It turns the spill off after `SPILL_OFF_QUIET_SAMPLES` samples in a row with
+  demand below `SPILL_OFF_RUNNING` and no job waiting
+  `SPILL_OFF_QUEUED_SECONDS`.
+- If a pool repository cannot be counted, the sample still decides, with
+  `pool_complete: false`. A partial count can turn the spill on, but not off.
+
+GitHub reads the variable when each job is queued, so a change reaches every
+job queued after it, and no job already queued.
+
+The collector writes the variable as a GitHub App installed only on the
+repository, with the "Variables: read and write" permission. The App's
+settings come from the environment. Without them every sample runs as
+`--dry-run`: the decision is logged with `mode: "dry-run"` and nothing is
+written.
+
+| Variable                     | Default                   |                                                                              |
+| ---------------------------- | ------------------------- | ---------------------------------------------------------------------------- |
+| `SPILL_APP_ID`               |                           | the App's ID                                                                 |
+| `SPILL_APP_INSTALLATION_ID`  |                           | its installation on the repository                                           |
+| `SPILL_APP_PRIVATE_KEY`      |                           | its private key (PEM)                                                        |
+| `SPILL_VARIABLE`             | `RUNS_ON_SPILL`           | the repo variable to write, on `--repo`                                      |
+| `SPILL_POOL_REPOS`           | `cardstack/boxel-catalog` | comma-separated repositories that share the pool                             |
+| `SPILL_ON_RUNNING`           | `48`                      | queue wait rises at about 50 running jobs; below that the median wait is 2 s |
+| `SPILL_ON_QUEUED_SECONDS`    | `60`                      |                                                                              |
+| `SPILL_OFF_RUNNING`          | `35`                      | must not exceed `SPILL_ON_RUNNING`                                           |
+| `SPILL_OFF_QUEUED_SECONDS`   | `15`                      | must not exceed `SPILL_ON_QUEUED_SECONDS`                                    |
+| `SPILL_OFF_QUIET_SAMPLES`    | `5`                       | at least 1                                                                   |
+| `SPILL_STALE_QUEUED_SECONDS` | `1800`                    | must exceed `SPILL_ON_QUEUED_SECONDS`                                        |
+
+The collector owns the variable while it has the App settings: it reads the
+variable on every sample, and changes it back when a sample's decision
+differs. To pin the spill on or off by hand, deploy the collector without the
+App settings first.
+
+If the collector stops while the variable is `true`, pull requests stay on
+RunsOn, which costs money but breaks nothing. If it stops while the variable
+is `false`, pull requests queue for GitHub's runners.
+
+Run the tests with `pnpm test`; `pnpm lint` runs them too.
 
 #### Hosted
 
@@ -155,8 +228,12 @@ made private, it would need Actions: Read-only on it.
 The staging alert "Actions Collector Silent in Loki"
 (`provisioning/alerting-hosted/staging/rules/actions-collector-group.json`)
 posts to the `alarms-staging-internal` Discord channel when Loki receives no
-collector lines for ten minutes. Its summary says how to tell a stalled log
-router from a stopped collector.
+collector lines for ten minutes. "Silent" means a query that completed and found
+no lines. Its summary says how to tell a stalled log router from a stopped
+collector. A query that Loki fails to run does not fire it. That arrives in the
+same channel as a `DatasourceError` alert for the rule, and the fault is Loki,
+not the collector (see [Alert rules: no data and query
+errors](#alert-rules-no-data-and-query-errors)).
 
 Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
 `workflow_dispatch` only — putting the deploy of a queue sampler on a CI
@@ -332,6 +409,33 @@ curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/labels" | jq
 curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/label/service/values" | jq
 ```
 
+### Query cost on hosted Loki
+
+The hosted Loki runs as one small task, and the alert rules share it with
+everyone's dashboards and ad-hoc queries. When a burst of heavy queries fills
+its queue, alert rule evaluations time out with the rest.
+
+What a query costs is the bytes it must read. That is set by the streams its
+selector matches and the time it covers, not by its line filter: Loki reads
+every line of `{service=~"realm-server|worker"}` in the window before `|=`
+discards most of them. Measured on staging:
+
+| Query                                                        | Bytes read | Time      |
+| ------------------------------------------------------------ | ---------- | --------- |
+| one alert rule over realm-server + worker, `[5m]` or `[10m]` | 2–50 MB    | 10–230 ms |
+| the same selector over `[1d]` (an instant query)             | 0.3–2.4 GB | 2–17 s    |
+
+The alert rules together read about 5 GB an hour. About 100 `[1d]` queries sent
+every 30 s for 23 minutes read 159 GB, and Loki cancelled queries, alert rules
+among them, until they stopped. By those figures, a 24-panel dashboard over a day reads
+7–60 GB each time it loads or refreshes. So:
+
+- Start with the shortest window that answers the question, and widen it only
+  when you need to. `/api/v1/index/volume_range` gives bytes per stream at
+  almost no cost, when you need to know how much is there.
+- Do not run a `[1d]` or multi-day query in a loop. For a count over days,
+  Logs Insights on the service's CloudWatch group does not load Loki.
+
 ### LogQL cookbook
 
 These run identically against local, staging, and production — only the
@@ -444,6 +548,53 @@ once Loki has been load-bearing for a full release cycle.
 | `reject_old_samples` | `false` (so backfills work)                          | `true` (default, ~7d window)                                                  |
 | Auth                 | none                                                 | bearer token at the Grafana ALB (`/loki*` path rule); SG-only on internal NLB |
 | Reachable from       | localhost only                                       | Grafana ECS tasks + FireLens log_router sidecars; laptops via the public path |
+
+## Alert rules: no data and query errors
+
+Each rule sets two states for evaluations that produce no number to compare:
+
+- `noDataState` is for a query that ran and returned no series. Set it to
+  `Alerting` when no series is the condition the rule exists to catch (a log
+  stream that has gone silent, a metric that stopped publishing), and to `OK`
+  when no series means nothing happened.
+- `execErrState` is for a query that failed: the data source timed out,
+  cancelled it or was unreachable. Every rule here sets it to `Error`. Grafana
+  then sends a separate alert named `DatasourceError`, with the rule's name in
+  its `rulename` label. The rule's own alert stays quiet, because its title
+  and summary state a fact about the service (it is silent, it has no healthy
+  targets, a secret failed to open) that a failed query does not show.
+
+A `DatasourceError` alert carries the rule's labels, including the routing
+labels that `notification_settings.receiver` adds, so it goes where the rule's
+own alert would: a rule with a receiver sends it to that contact point, and a
+rule without one sends it through the default notification policy. The rule's
+`for` period applies to it too: a rule with `for: 0s` sends one on the first
+failed query, as it fired its own alert before. When one arrives, look at the data source (for Loki, the Loki task and its
+`context canceled` / `context deadline exceeded` errors), not at the service
+the rule watches.
+
+A `DatasourceError` alert also carries the rule's annotations, and the
+notification shows them. So a summary that states the condition must not read
+as true when the query failed:
+
+- With `noDataState: OK`, wrap the summary in
+  `{{ if $values }}…{{ else }}…{{ end }}`. A failed query has no values, and
+  for these rules no data never notifies, so the `else` text is what a
+  `DatasourceError` shows: say the query failed and what to check, naming
+  the rule's own data source (Loki or CloudWatch). Do the
+  same for every other annotation the rule's contact point shows: the
+  `Techops` email uses `title` as its subject and `description` as its body.
+- With `noDataState: Alerting`, a rule that found no data has no values
+  either, so the `else` text cannot tell the two apart: give both cases there,
+  keyed on the alert name (`DatasourceError` or the rule's title). When the
+  rule's usual firing case has a value, put that text in the `if` branch. When
+  no data is the firing case, as for a log stream gone silent, there is no
+  `if` branch to use: open the summary with both cases.
+
+A resolved notification keeps the text from the last evaluation that had
+values. When a rule moves to Normal through no data, Grafana copies the
+alert's state and does not expand its annotations again, so the `else` text
+does not appear on a rule's resolved notice.
 
 ## Staging / production workflow
 

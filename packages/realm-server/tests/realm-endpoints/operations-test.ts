@@ -556,6 +556,66 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       return rows.map((row) => Number(row.id));
     }
 
+    // Asserts that one index job carries every card in `cards` and that no
+    // other job carries any of them — the shape of a batch whose writes commit
+    // together, as one pass. A job that carries none of them is not the
+    // batch's pass, and the realm is shared by every test in the file, so it
+    // is not counted: a later pass that re-indexes cards some other pass left
+    // stale is the queue's repair rather than the batch splitting, unless it
+    // re-indexes one of the batch's own cards.
+    //
+    // Such a job is still worth knowing about, since it is not obvious what
+    // enqueues one inside a batch's window. Whenever the realm gained any
+    // number of jobs other than one, the jobs that `before` does not list, and
+    // any older job carrying one of the cards, are written to the log with
+    // what each indexes, who asked for it and what it reported, and the same
+    // dump goes in the failure message when the assertion fails.
+    async function assertIndexedUnderOneJob(
+      assert: Assert,
+      cards: string[],
+      before: number[],
+      message: string,
+    ) {
+      let urls = cards.map((card) => `${testRealmHref}${card}.json`);
+      let rows = (await testDbAdapter.execute(
+        `select id, status, priority, concurrency_group, lane_family,
+                initiated_by, created_at, finished_at,
+                args->'changes' as changes,
+                args->'coalescedCallers' as callers,
+                args->'readsOwnWrite' as "readsOwnWrite",
+                args->'realmEvents' as "realmEvents",
+                result->'stats' as stats
+         from jobs where job_type = 'incremental-index'
+         and (concurrency_group = $1 or lane_family = $1) order by id`,
+        { bind: [`indexing:${realm.url}`] },
+      )) as {
+        id: number | string;
+        changes: { url: string }[] | null;
+      }[];
+      let carries = (row: (typeof rows)[number]) =>
+        (row.changes ?? []).some((change) => urls.includes(change.url));
+      let carrying = rows.filter(carries);
+      let relevant = rows.filter(
+        (row) => !before.includes(Number(row.id)) || carries(row),
+      );
+      let dump = JSON.stringify(relevant, null, 2);
+      let added = rows.filter((row) => !before.includes(Number(row.id)));
+      if (added.length !== 1) {
+        console.warn(
+          `${message}: the realm gained ${added.length} index jobs while the batch ran: ${dump}`,
+        );
+      }
+      assert.deepEqual(
+        carrying.map((row) =>
+          urls.every((url) =>
+            (row.changes ?? []).some((change) => change.url === url),
+          ),
+        ),
+        [true],
+        `${message}; the realm's index jobs since the batch started, and any carrying its cards: ${dump}`,
+      );
+    }
+
     async function incrementalIndexEventsSince(
       since: number,
     ): Promise<IncrementalIndexEventContent[]> {
@@ -1862,9 +1922,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             `${card} was written`,
           );
         }
-        assert.strictEqual(
-          (await indexJobIds()).length - jobsBefore.length,
-          1,
+        await assertIndexedUnderOneJob(
+          assert,
+          ['report-parallel-1', 'report-parallel-2', 'report-parallel-3'],
+          jobsBefore,
           'the whole group indexed under one job',
         );
         // The realm broadcasts out of band from the commit, so the event is
@@ -2147,9 +2208,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           [{ body: 'after the inner group', postedBy: TESTER }],
           'the entry after the innermost group composed over what it staged',
         );
-        assert.strictEqual(
-          (await indexJobIds()).length - jobsBefore.length,
-          1,
+        await assertIndexedUnderOneJob(
+          assert,
+          ['report-nested-1', 'report-nested-2', 'report-nested-3'],
+          jobsBefore,
           'and the whole tree indexed under one job',
         );
       });
@@ -2258,9 +2320,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         ]);
         // And the expansion is still one batch — the found targets commit
         // together, under one job, the way the caller's own entries do.
-        assert.strictEqual(
-          (await indexJobIds()).length - jobsBefore.length,
-          1,
+        await assertIndexedUnderOneJob(
+          assert,
+          ['find-many-a', 'find-many-b'],
+          jobsBefore,
           'the whole expansion indexed under one job',
         );
       });

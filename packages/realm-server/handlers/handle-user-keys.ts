@@ -19,6 +19,18 @@ import {
   validateKeyWriteTarget,
   type UserKeyMetadata,
 } from '../lib/user-keys.ts';
+import {
+  listKeyGrants,
+  listOwnerGrants,
+  type UserKeyGrant,
+} from '../lib/user-key-grants.ts';
+import { listOwnSharedRealms, type SharedRealm } from '../lib/key-shares.ts';
+import { registrableDomain } from '../lib/secure-window.ts';
+import {
+  addOAuthClient,
+  describeOAuthKeys,
+  type OAuthKeyDescription,
+} from '../lib/oauth.ts';
 
 // The management API for the signed-in user's own keys. The shares API
 // (`handle-key-shares.ts`) answers with the same helpers. Every route answers
@@ -43,13 +55,75 @@ interface KeyRequestBody {
   meta?: Record<string, unknown>;
 }
 
-// The attributes a request may set.
-const ADD_ATTRIBUTES = new Set(['name', 'kind', 'value']);
-const REPLACE_ATTRIBUTES = new Set(['value']);
+// The attributes a request may set. `subject` and `scopes` belong to a
+// google-service-account key, whose `value` is its JSON key file; `oauth` to
+// an OAuth client. `anonymous`, `anonymousDailyCap` and `anonymousMonthlyCap`
+// say whether people who aren't signed in may use the key, and how much
+// (`validateAnonymousUse`).
+const ADD_ATTRIBUTES = new Set([
+  'name',
+  'kind',
+  'value',
+  'subject',
+  'scopes',
+  'oauth',
+  'anonymous',
+  'anonymousDailyCap',
+  'anonymousMonthlyCap',
+]);
+const REPLACE_ATTRIBUTES = new Set(['value', 'subject', 'scopes']);
 
 function serialize(key: UserKeyMetadata) {
   let { id, ...attributes } = key;
   return { type: 'user-key', id, attributes };
+}
+
+// A key's metadata as listed and shown, with where it is used: the
+// destinations it may be sent to (its grants), the services those are, by
+// registrable domain (`usedWith`), and the realms it is shared into, with the
+// key's shares in each (`sharedInto`). The key page shows every key's from
+// this one listing.
+function serializeWithUse(
+  key: UserKeyMetadata,
+  grants: UserKeyGrant[],
+  sharedInto: SharedRealm[],
+  oauth: OAuthKeyDescription | undefined,
+) {
+  let serialized = serialize(key);
+  return {
+    ...serialized,
+    attributes: {
+      ...serialized.attributes,
+      ...(oauth ? { oauth } : {}),
+      grants: grants.map(
+        ({
+          id,
+          destination,
+          state,
+          approvedAt,
+          approvedVia,
+          rejectedAt,
+          vendorForbidden,
+        }) => ({
+          id,
+          destination,
+          state,
+          approvedAt,
+          approvedVia,
+          rejectedAt,
+          vendorForbidden,
+        }),
+      ),
+      usedWith: [
+        ...new Set(
+          grants.map(({ destination }) =>
+            registrableDomain(new URL(destination).hostname),
+          ),
+        ),
+      ].sort(),
+      sharedInto,
+    },
+  };
 }
 
 export async function sendJSON(
@@ -105,10 +179,17 @@ async function readRawBody(ctxt: Koa.Context): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// `emptyIsObject` reads an empty body as `{}`, for a DELETE whose body is
+// optional, so a caller that sends none gets the route's own refusal rather
+// than a parse error.
 export async function readJSON(
   ctxt: Koa.Context,
+  { emptyIsObject = false }: { emptyIsObject?: boolean } = {},
 ): Promise<Record<string, unknown>> {
   let raw = await readRawBody(ctxt);
+  if (emptyIsObject && raw.trim() === '') {
+    return {};
+  }
   let json: unknown;
   try {
     json = JSON.parse(raw);
@@ -273,19 +354,52 @@ export function handleMintKeyWriteTicket({
   });
 }
 
-export function handleListUserKeys({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleListUserKeys({
+  dbAdapter,
+  matrixClient,
+}: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let keys = await listUserKeys(dbAdapter, owner);
-    await sendJSON(ctxt, 200, { data: keys.map(serialize) });
+    let grants = await listOwnerGrants(dbAdapter, owner);
+    let sharedInto = await listOwnSharedRealms(dbAdapter, owner, {
+      matrixServerName: matrixClient.serverName,
+    });
+    let oauth = await describeOAuthKeys(dbAdapter, owner, keys);
+    await sendJSON(ctxt, 200, {
+      data: keys.map((key) =>
+        serializeWithUse(
+          key,
+          grants.get(key.id) ?? [],
+          sharedInto.get(key.id) ?? [],
+          oauth.get(key.id),
+        ),
+      ),
+    });
   });
 }
 
-export function handleShowUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleShowUserKey({
+  dbAdapter,
+  matrixClient,
+}: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let key = await getUserKey(dbAdapter, owner, ctxt.params.keyId);
-    await sendJSON(ctxt, 200, { data: serialize(key) });
+    let grants = await listKeyGrants(dbAdapter, owner, key.id);
+    let sharedInto = await listOwnSharedRealms(dbAdapter, owner, {
+      keyId: key.id,
+      matrixServerName: matrixClient.serverName,
+    });
+    let oauth = await describeOAuthKeys(dbAdapter, owner, [key]);
+    await sendJSON(ctxt, 200, {
+      data: serializeWithUse(
+        key,
+        grants,
+        sharedInto.get(key.id) ?? [],
+        oauth.get(key.id),
+      ),
+    });
   });
 }
 
@@ -294,13 +408,34 @@ export function handleAddUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
     let owner = ownerOf(ctxt);
     let body = await readBody(ctxt);
     let attributes = attributesOf(body, ADD_ATTRIBUTES);
-    let key = await addUserKey(dbAdapter, secretsKeyring(), {
-      owner,
-      name: attributes.name,
-      kind: attributes.kind,
-      value: attributes.value,
-      ticket: ticketOf(body),
-    });
+    // An OAuth client is added with its settings beside its secret; every
+    // other kind is the value alone, with a service account's subject and
+    // scopes.
+    let key: UserKeyMetadata;
+    if (attributes.kind === 'oauth-client') {
+      key = await addOAuthClient(dbAdapter, secretsKeyring(), {
+        owner,
+        name: attributes.name,
+        value: attributes.value,
+        oauth: attributes.oauth,
+        ticket: ticketOf(body),
+      });
+    } else if (attributes.oauth !== undefined) {
+      throw new UserKeyError(400, `'oauth' is set only for an OAuth client`);
+    } else {
+      key = await addUserKey(dbAdapter, secretsKeyring(), {
+        owner,
+        name: attributes.name,
+        kind: attributes.kind,
+        value: attributes.value,
+        subject: attributes.subject,
+        scopes: attributes.scopes,
+        anonymous: attributes.anonymous,
+        anonymousDailyCap: attributes.anonymousDailyCap,
+        anonymousMonthlyCap: attributes.anonymousMonthlyCap,
+        ticket: ticketOf(body),
+      });
+    }
     await sendJSON(ctxt, 201, { data: serialize(key) });
   });
 }
@@ -314,6 +449,8 @@ export function handleReplaceUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
       owner,
       id: ctxt.params.keyId,
       value: attributes.value,
+      subject: attributes.subject,
+      scopes: attributes.scopes,
       ticket: ticketOf(body),
     });
     await sendJSON(ctxt, 200, { data: serialize(key) });

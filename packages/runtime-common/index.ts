@@ -1847,13 +1847,15 @@ export * from './card-operations/client.ts';
 // reaching neither bxl nor a realm.
 export * from './card-operations/label.ts';
 // The capability check's wire shapes and its cap, for the same reason and on
-// the same terms: a card asking `@context.canInvoke` holds these and nothing
+// the same terms: a card asking `@context.canInvoke` or `@context.keyReadiness`
+// holds these and nothing
 // else, and this module reaches neither bxl nor a realm. The check itself does
 // both, and stays behind the `card-operations` entry.
 export { CAPABILITY_CHECK_CAP } from './card-operations/capability-wire.ts';
 export type {
   CapabilityAnswer,
   CapabilityCheck,
+  KeyReadiness,
 } from './card-operations/capability-wire.ts';
 // Only the lowered *shapes*, not the pass that produces them: lowering reaches
 // `@cardstack/bxl` for the program canonicalizer, and a barrel re-export would
@@ -1945,6 +1947,7 @@ export * from './card-document-cache.ts';
 export * from './request-timings.ts';
 export * from './write-timing.ts';
 export * from './prerendered-html-format.ts';
+export * from './call-api-key-kind.ts';
 export * from './query-field-utils.ts';
 export * from './relationship-utils.ts';
 export * from './formats.ts';
@@ -1957,7 +1960,6 @@ export { Loader };
 export {
   fetchWithTransientRetry,
   isRetryableStatus,
-  loaderForModule,
   DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
 } from './loader.ts';
 export {
@@ -1978,7 +1980,7 @@ export * from './pr-manifest.ts';
 export * from './file-def-code-ref.ts';
 export * from './policy-file-def.ts';
 
-import { executableExtensions } from './constants.ts';
+import { executableExtensions, trimExecutableExtension } from './constants.ts';
 // Extensions covered by the realm-wide pre-warm sweep that primes the
 // modules cache before the visit loop. This is an optimization, not a
 // correctness gate: a `.ts` / `.js` file CAN host a `CardDef`
@@ -2080,8 +2082,7 @@ export { sanitizeHtml } from './dompurify-runtime.ts';
 
 export { getPlural } from './pluralize-runtime.ts';
 
-import type { CardDef, FieldDef, BaseDef } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 import type { RealmInfo } from './realm.ts';
 import type { QueryResultsMeta } from './index-query-engine.ts';
 
@@ -2481,22 +2482,6 @@ export function hasCardExtension(path: string): boolean {
   return false;
 }
 
-// Trimming preserves the form of what it is given: an identifier stays an
-// identifier, and a plain string — a URL href, say — stays a plain string
-// rather than acquiring a brand it does not warrant.
-export function trimExecutableExtension(
-  input: RealmResourceIdentifier,
-): RealmResourceIdentifier;
-export function trimExecutableExtension(input: string): string;
-export function trimExecutableExtension(input: string): string {
-  for (let extension of executableExtensions) {
-    if (input.endsWith(extension)) {
-      return input.replace(new RegExp(`\\${extension}$`), '');
-    }
-  }
-  return input;
-}
-
 export function internalKeyFor(
   ref: CodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
@@ -2538,40 +2523,6 @@ export function codeRefFromInternalKey(
     module: internalKey.slice(0, lastSlash) as RealmResourceIdentifier,
     name: internalKey.slice(lastSlash + 1),
   };
-}
-
-export function loaderFor(cardOrField: CardDef | FieldDef) {
-  let clazz = Reflect.getPrototypeOf(cardOrField)!.constructor;
-  let loader = Loader.getLoaderFor(clazz);
-  if (!loader) {
-    throw new Error(`bug: could not determine loader for card or field`);
-  }
-  return loader;
-}
-
-export async function apiFor(
-  cardOrFieldType: typeof CardDef | typeof FieldDef | typeof BaseDef,
-): Promise<typeof CardAPI>;
-export async function apiFor(
-  cardOrField: CardDef | FieldDef | BaseDef,
-): Promise<typeof CardAPI>;
-export async function apiFor(
-  cardOrFieldOrClass:
-    | CardDef
-    | FieldDef
-    | BaseDef
-    | typeof CardDef
-    | typeof FieldDef
-    | typeof BaseDef,
-) {
-  let loader =
-    Loader.getLoaderFor(cardOrFieldOrClass) ??
-    loaderFor(cardOrFieldOrClass as CardDef | FieldDef | BaseDef);
-  let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
-  if (!api) {
-    throw new Error(`could not load card API`);
-  }
-  return api;
 }
 
 export function splitStringIntoChunks(str: string, maxSizeKB: number) {
@@ -2628,3 +2579,5 @@ export {
   type BotCommandFilter,
   type BotCommandMatrixFilter,
 } from './bot-command.ts';
+export * from './policy-share-audit.ts';
+export * from './realm-history.ts';

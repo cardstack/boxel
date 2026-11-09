@@ -62,11 +62,21 @@ const runningInStages = () =>
  * it finds at once, and looks again within a second for effects a score
  * starts by script, so a tile whose score passes as the page opens over it
  * rests a moment later than the rest.
+ *
+ * It then waits for the grid to stop being written to. A finite spring Motion
+ * drives by script (the Enter tile's notices, still landing as the page opens
+ * over them) writes for a moment and then stops; resting cannot pause it, and
+ * it is not a loop. Only a writer that never stops is left for the count.
  */
-const stagesSettled = () =>
-  waitUntil(() => runningInStages() === 0, { timeout: 2500 }).catch(
+async function stagesSettled() {
+  await waitUntil(() => runningInStages() === 0, { timeout: 2500 }).catch(
     () => undefined,
   );
+  let deadline = performance.now() + 2500;
+  while (performance.now() < deadline && (await tileWrites(3)) > 0) {
+    // a finite animation is still landing
+  }
+}
 
 /**
  * A click on a tile's title as a pointer makes it. The `click` helper also
@@ -135,22 +145,6 @@ async function tileWrites(count = 10) {
   return writes;
 }
 
-/**
- * Waits for the tiles to go a run of painted frames without a write, and
- * returns how many writes the last run took. A tile's entrance, which Motion
- * springs by script, can still be settling when the page opens over the grid,
- * and it stops on its own. A loop still running under the cover writes every
- * frame and never goes quiet.
- */
-async function gridQuiet(timeout = 2500) {
-  let until = performance.now() + timeout;
-  let writes = await tileWrites();
-  while (writes > 0 && performance.now() < until) {
-    writes = await tileWrites();
-  }
-  return writes;
-}
-
 module('Acceptance | Choreo gallery | covered by a demo', function () {
   module('in interact mode', function (hooks) {
     setupApplicationTest(hooks);
@@ -211,7 +205,7 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         'and its own loop asks for no frames',
       );
       assert.strictEqual(
-        await gridQuiet(),
+        await tileWrites(),
         0,
         'and nothing in the grid is written to, frame after frame',
       );
@@ -299,7 +293,7 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         'and its own loop asks for no frames',
       );
       assert.strictEqual(
-        await gridQuiet(),
+        await tileWrites(),
         0,
         'and nothing in the grid is written to, frame after frame',
       );

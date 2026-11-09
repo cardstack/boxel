@@ -79,7 +79,12 @@ export function rememberReturn(listed) {
     '',
     window.location.pathname + window.location.search,
   );
-  let target = returnFromFragment(hash, listed);
+  keepReturn(returnFromFragment(hash, listed));
+}
+
+// Keeps `target`, already checked, as the page this tab's sign-in hands over
+// to; undefined forgets any kept before.
+export function keepReturn(target) {
   if (target) {
     sessionStorage.setItem(RETURN_KEY, target);
   } else {
@@ -115,11 +120,16 @@ export function needsConfirmation(target, config) {
 }
 
 // `target` with the login token in its fragment, in place of any fragment it
-// carried. The fragment never reaches a server, so no request log or access
-// log records the token on its way to the app.
-export function handOffURL(target, loginToken) {
+// carried, and the device id the app signs in as with it, which binds the
+// window's session to the app's (see `liveSession` in session.js). The
+// fragment never reaches a server, so no request log or access log records
+// the token on its way to the app.
+export function handOffURL(target, loginToken, deviceId) {
   let url = new URL(target);
   url.searchParams.delete('loginToken');
-  url.hash = new URLSearchParams({ loginToken }).toString();
+  url.hash = new URLSearchParams({
+    loginToken,
+    ...(deviceId ? { deviceId } : {}),
+  }).toString();
   return url.href;
 }

@@ -348,7 +348,7 @@ export async function search(
 
   let realms: string[] = [];
   for (let realm of Array.isArray(realmUrls) ? realmUrls : [realmUrls]) {
-    let resolved = resolveRealmIdentifier(realm, { profileManager: pm });
+    let resolved = await resolveRealmIdentifier(realm, { profileManager: pm });
     if (!resolved.ok) {
       return { ok: false, error: resolved.error };
     }

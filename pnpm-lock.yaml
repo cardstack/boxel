@@ -850,12 +850,18 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.0
+      '@types/jsonwebtoken':
+        specifier: 'catalog:'
+        version: 9.0.10
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -865,6 +871,9 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
+      jsonwebtoken:
+        specifier: 'catalog:'
+        version: 9.0.3
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -3015,6 +3024,9 @@ importers:
       '@embroider/macros':
         specifier: ^1.20.5
         version: 1.21.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/reverse-exports':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@embroider/vite':
         specifier: ^1.1.1
         version: 1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@26.1.2)(terser@5.49.0)(yaml@2.9.0))
@@ -3679,6 +3691,9 @@ importers:
       puppeteer:
         specifier: ^25.0.2
         version: 25.2.1
+      tldts:
+        specifier: ^6.1.86
+        version: 6.1.86
     devDependencies:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'
@@ -4338,12 +4353,21 @@ importers:
       '@babel/runtime':
         specifier: 'catalog:'
         version: 7.29.7
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
+      '@cardstack/pretui':
+        specifier: workspace:*
+        version: link:../pretui
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.1.1(supports-color@8.1.1)
       decorator-transforms:
         specifier: 'catalog:'
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
+      ember-modifier:
+        specifier: ^4.1.0
+        version: 4.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1)
@@ -4360,6 +4384,9 @@ importers:
       '@ember/test-helpers':
         specifier: 'catalog:'
         version: 5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      '@ember/test-waiters':
+        specifier: 'catalog:'
+        version: 4.1.2(supports-color@8.1.1)
       '@embroider/core':
         specifier: ^4.6.3
         version: 4.6.7(@glint/template@1.7.7)(supports-color@8.1.1)
@@ -4393,6 +4420,9 @@ importers:
       ember-cli:
         specifier: ~6.12.0
         version: 6.12.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/node@24.13.2)(debug@4.4.3(supports-color@8.1.1))(ejs@3.1.10)(handlebars@4.7.9)(supports-color@8.1.1)(underscore@1.13.8)
+      ember-concurrency:
+        specifier: 'catalog:'
+        version: 5.2.0(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
       ember-eslint-parser:
         specifier: 'catalog:'
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(eslint@8.57.1(supports-color@8.1.1)))(@typescript-eslint/parser@8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(typescript@5.9.3)
@@ -4569,15 +4599,33 @@ importers:
 
   packages/test-realm-cards:
     devDependencies:
+      '@babel/plugin-proposal-decorators':
+        specifier: 'catalog:'
+        version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/eslint-plugin-boxel':
+        specifier: workspace:*
+        version: link:../eslint-plugin-boxel
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@typescript-eslint/parser':
+        specifier: 'catalog:'
+        version: 8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
+      ember-eslint-parser:
+        specifier: 'catalog:'
+        version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(eslint@8.57.1(supports-color@8.1.1)))(@typescript-eslint/parser@8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(typescript@5.9.3)
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1(supports-color@8.1.1)
 
   packages/vscode-boxel-tools:
     dependencies:
@@ -21579,7 +21627,7 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 26.1.2
+      '@types/node': 24.13.2
 
   '@types/keygrip@1.0.6': {}
 

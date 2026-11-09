@@ -14,7 +14,7 @@ class BreadcrumbUsage extends Component {
   <template>
     <FreestyleUsage @name='Breadcrumb' @description='A semantic navigation trail whose current location is plain emphasized text and whose ancestors remain links.' @source='<Breadcrumb @items={{this.items}} />'>
       <:example><Breadcrumb @items={{this.items}} /></:example>
-      <:api as |Args|><Args.Object @name='items' @value={{this.items}} /></:api>
+      <:api as |Args|><Args.Object @name='items' @value={{this.items}} /><Args.Action @name='onSelect' @description='A linked crumb was clicked: its item and the click. The link follows its href unless the handler calls preventDefault().' /></:api>
     </FreestyleUsage>
   </template>
 }

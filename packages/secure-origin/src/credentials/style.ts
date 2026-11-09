@@ -2,7 +2,7 @@
 // frame sits, every custom property the fields' styles read and the text
 // styles they inherit, and sends them over; these write them onto the frame's
 // document through the CSSOM, which the secure origin's policy allows where it
-// refuses a `style` attribute (ADR 008 §1.5).
+// refuses a `style` attribute (ADR 019 §1.5).
 
 export interface StyleMessage {
   properties?: Record<string, unknown>;
@@ -36,9 +36,12 @@ const LOCAL_PROPERTIES = new Set([
   '--icon-space',
   '--_icon-full-length',
   '--icon-color',
-  '--boxel-field-label-align',
-  '--boxel-field-label-padding-top',
-  '--boxel-label-letter-spacing',
+  '--boxel-ui-label-font-size',
+  '--boxel-ui-label-font-weight',
+  '--boxel-ui-label-line-height',
+  '--boxel-ui-label-letter-spacing',
+  '--pretui-field-label-size',
+  '--pretui-field-column-gap',
 ]);
 
 export function applyStyle(
@@ -94,13 +97,23 @@ export function applyStyle(
   root.classList.add('styled');
 }
 
-// Resolves once the document's stylesheets have loaded, so the fields are
-// measured, and their custom properties read, in their own styles.
-export function whenStyled(doc: Document): Promise<void> {
+// The longest the fields wait on their stylesheets before asking the app for
+// its styles. A stylesheet still loading by then is one the fields are better
+// drawn without than not drawn at all.
+export const STYLESHEET_WAIT_LIMIT_MS = 5000;
+
+// Resolves once the document's stylesheets have loaded or failed to, so the
+// fields are measured, and their custom properties read, in their own styles,
+// or once the wait limit passes, so one that never settles leaves them drawn
+// without it rather than hidden.
+export function whenStyled(
+  doc: Document,
+  limitMs = STYLESHEET_WAIT_LIMIT_MS,
+): Promise<void> {
   let pending = [
     ...doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
   ].filter((link) => !link.sheet);
-  return Promise.all(
+  let loaded = Promise.all(
     pending.map(
       (link) =>
         new Promise<void>((resolve) => {
@@ -109,6 +122,14 @@ export function whenStyled(doc: Document): Promise<void> {
         }),
     ),
   ).then(() => undefined);
+  if (pending.length === 0) {
+    return loaded;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let limit = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, limitMs);
+  });
+  return Promise.race([loaded, limit]).finally(() => clearTimeout(timer));
 }
 
 // The custom properties the stylesheets read, so the page can be asked for

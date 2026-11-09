@@ -67,6 +67,32 @@ function getSearchResourceForTest(
   };
 }
 
+// A live re-run follows the realm's index event over matrix, then searches the
+// server and loads the new rows. On a loaded runner that chain can outlast
+// `waitUntil`'s 1 s default even though it completes, so the wait has a 10 s
+// budget. The wait is bounded, not `settled()`, so a waiter that never drains
+// still reaches the diagnostic: the elapsed time and the ids the resource
+// holds tell "never refreshed" apart from "refreshed late" and "refreshed
+// with the wrong rows".
+async function waitForLiveRefresh(
+  search: Pick<SearchResource, 'instances' | 'isLoading'>,
+  isRefreshed: () => boolean,
+  expectation: string,
+) {
+  let waitStart = performance.now();
+  try {
+    await waitUntil(isRefreshed, { timeout: 10_000 });
+  } catch (e) {
+    throw new Error(
+      `live search did not reach ${expectation} ${Math.round(
+        performance.now() - waitStart,
+      )} ms after the write; it holds ${JSON.stringify(
+        search.instances.map((i) => i.id),
+      )}, isLoading=${search.isLoading}: ${e}`,
+    );
+  }
+}
+
 module(`Integration | search resource`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
@@ -696,7 +722,11 @@ module(`Integration | search resource`, function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    await waitUntil(() => search.instances.length === 3);
+    await waitForLiveRefresh(
+      search,
+      () => search.instances.length === 3,
+      '3 instances',
+    );
 
     assert.strictEqual(search.instances.length, 3);
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
@@ -1613,7 +1643,11 @@ module(`Integration | search resource`, function (hooks) {
     // Write a new file to trigger a live update
     await realm.write('files/new-file.txt', 'New content');
 
-    await waitUntil(() => search.instances.length > initialCount);
+    await waitForLiveRefresh(
+      search,
+      () => search.instances.length > initialCount,
+      `more than ${initialCount} instances`,
+    );
 
     let ids = search.instances.map((i) => i.id);
     assert.ok(

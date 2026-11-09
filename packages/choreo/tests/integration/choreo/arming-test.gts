@@ -120,6 +120,9 @@ module('Integration | choreo | arming', function (hooks) {
     crossing.begin(ctx);
     app!.far = true;
     await settled();
+    // the first frame a run paints is its start; the second is flight, and
+    // a reversal measured at the start would find nothing moved
+    await nextFrame();
     await nextFrame();
     const first = ctx.run;
     assert.ok(first, 'a run is aloft');

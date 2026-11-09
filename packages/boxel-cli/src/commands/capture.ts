@@ -2,7 +2,10 @@ import type { Command } from 'commander';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import {
+  ensureTrailingSlash,
+  RealmPaths,
+} from '@cardstack/runtime-common/paths';
 import { resolveRealmAuthenticator } from '../lib/auth-resolver.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../lib/colors.ts';
@@ -183,7 +186,7 @@ export async function capture(
 
   // Resolve each card identifier to an absolute, extensionless instance URL.
   for (let job of jobs) {
-    let resolved = resolveRealmIdentifier(job.card, {
+    let resolved = await resolveRealmIdentifier(job.card, {
       profileManager: options.profileManager,
     });
     if (!resolved.ok) {
@@ -198,9 +201,16 @@ export async function capture(
     job.card = url;
   }
 
-  let realmFlag = options.realm
-    ? ensureTrailingSlash(options.realm)
-    : undefined;
+  let realmFlag: string | undefined;
+  if (options.realm) {
+    let resolvedRealm = await resolveRealmIdentifier(options.realm, {
+      profileManager: options.profileManager,
+    });
+    if (!resolvedRealm.ok) {
+      return topLevelError(resolvedRealm.error);
+    }
+    realmFlag = ensureTrailingSlash(resolvedRealm.url);
+  }
 
   let resolution = resolveRealmAuthenticator({
     realmUrl: realmFlag ?? jobs[0].card,
@@ -367,7 +377,7 @@ async function runJob(
   // render is queued.
   let realmURL: string;
   if (ctx.realmFlag) {
-    if (!job.card.startsWith(ctx.realmFlag)) {
+    if (!new RealmPaths(new URL(ctx.realmFlag)).inRealm(new URL(job.card))) {
       return fail(`Card is not within --realm ${ctx.realmFlag}`);
     }
     realmURL = ctx.realmFlag;
@@ -533,9 +543,11 @@ async function runJob(
     let contentType =
       typeof attrs.contentType === 'string' ? attrs.contentType : 'image/png';
     let extension = EXTENSION_BY_CONTENT_TYPE[contentType] ?? 'png';
-    let localPath = job.card.startsWith(realmURL)
-      ? job.card.slice(realmURL.length)
-      : new URL(job.card).pathname.replace(/^\//, '');
+    let cardURL = new URL(job.card);
+    let realmPaths = new RealmPaths(new URL(realmURL));
+    let localPath = realmPaths.inRealm(cardURL)
+      ? realmPaths.local(cardURL)
+      : cardURL.pathname.replace(/^\//, '');
     entries = [];
     for (let capture of captures) {
       entries.push(

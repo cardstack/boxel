@@ -4,12 +4,17 @@
 // run as the eval users, never need access to the workspace the evaluation
 // lives in: only the writer that made the bundle does.
 
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+
+import { evaluationSeed } from './eval-seeds/index.ts';
 import {
   ensureTrailingSlash,
   waitForCard,
   type CardDocument,
   type RealmClient,
 } from './realm-api.ts';
+
+import type { PipelineApprovalTarget } from './key-seed.ts';
 
 export interface Evaluation {
   url: string;
@@ -20,11 +25,40 @@ export interface Evaluation {
   // Absolute URLs, as the realm serializes them.
   initialCards: string[];
   initialFiles: string[];
+  // Seeded cards the prompt asks the assistant to change, each one in
+  // `initialCards` or a card `.json` in `initialFiles`. When set, every one of
+  // these must differ from its seed, and only one of them, shown on screen,
+  // counts as a rendered card.
+  expectedChangedCards: string[];
+  // The card each prompt is about, by position, each one in `initialCards`.
+  // The runner brings it to the top of the stack before that prompt.
+  promptCards: string[];
   // Skill features to enable in the room before the first prompt.
   skillFeatures: string[];
   // Overrides the GOOD grade's default time budget per prompt.
   secondsPerPrompt?: number;
+  // Operations approved for scheduled pipelines only before the first prompt.
+  pipelineApprovals: PipelineApproval[];
+  // A conversation-only evaluation: the run passes when every prompt was sent
+  // and nothing was written, with no card to render.
+  expectsNoWrites: boolean;
+  // The seed script (eval-seeds/) whose cards the run starts from. Its
+  // contents are already listed in `initialFiles`, and its card lists merged
+  // into the fields above.
+  seedScript?: string;
   adoptsFrom: { module: string; name: string };
+}
+
+// Whose key fills the approved slots: the eval user's own key, or a share
+// another user puts into the test workspace.
+export type KeyFrom = 'own-key' | 'share';
+
+export interface PipelineApproval {
+  // One of `initialCards`, without its `.json` suffix; its card type is what
+  // is approved.
+  card: string;
+  operation: string;
+  keyFrom: KeyFrom;
 }
 
 export interface BundledFile {
@@ -32,7 +66,7 @@ export interface BundledFile {
   path: string;
   // Base64 of the bytes.
   content: string;
-  // Card instances are awaited in the index after the copy.
+  // One of the evaluation's `initialCards`, which the runner opens.
   isCard: boolean;
 }
 
@@ -78,9 +112,58 @@ export async function loadEvaluation(
       )
     : [];
   let id = doc.data.id ?? cardUrl;
+  let evaluationRealmUrl = ensureTrailingSlash(
+    doc.data.meta.realmURL ?? realmUrl,
+  );
+  let initialCards = linkedIds(doc, 'initialCards', id);
+  let initialFiles = linkedIds(doc, 'initialFiles', id);
+  let expectedChangedCards = linkedIds(doc, 'expectedChangedCards', id);
+  let promptCards = linkedIds(doc, 'promptCards', id);
+  let seedScript: string | undefined =
+    typeof attributes.seedScript === 'string' && attributes.seedScript.trim()
+      ? attributes.seedScript.trim()
+      : undefined;
+  if (seedScript) {
+    let seed = evaluationSeed(seedScript);
+    let realm = new RealmPaths(new URL(evaluationRealmUrl));
+    let urlOf = (path: string) => realm.fileURL(path).href;
+    initialFiles.push(...Object.keys(seed.contents).map(urlOf));
+    initialCards.push(...seed.initialCards.map(urlOf));
+    expectedChangedCards.push(...seed.expectedChangedCards.map(urlOf));
+    promptCards.push(...seed.promptCards.map(urlOf));
+  }
+  // A card link may be spelled with its `.json` suffix, as `initialCards`
+  // tolerates; the id without it is what the runner compares.
+  expectedChangedCards = expectedChangedCards.map(cardIdOf);
+  for (let card of expectedChangedCards) {
+    if (
+      !initialCards.some((seed) => cardIdOf(seed) === card) &&
+      !initialFiles.includes(`${card}.json`)
+    ) {
+      throw new Error(
+        `${cardUrl} expects ${card} to change, but does not seed it in initialCards or initialFiles`,
+      );
+    }
+  }
+  promptCards = promptCards.map(cardIdOf);
+  for (let card of promptCards) {
+    if (!initialCards.some((seed) => cardIdOf(seed) === card)) {
+      throw new Error(
+        `${cardUrl} names ${card} as a prompt card, but does not open it in initialCards`,
+      );
+    }
+  }
+  let pipelineApprovals = pipelineApprovalsOf(doc, id, cardUrl);
+  for (let { card } of pipelineApprovals) {
+    if (!initialCards.some((seed) => cardIdOf(seed) === card)) {
+      throw new Error(
+        `${cardUrl} approves an operation of ${card}, but does not seed it in initialCards`,
+      );
+    }
+  }
   return {
     url: id,
-    realmUrl: ensureTrailingSlash(doc.data.meta.realmURL ?? realmUrl),
+    realmUrl: evaluationRealmUrl,
     name:
       attributes.cardInfo?.name ??
       attributes.cardTitle ??
@@ -89,8 +172,10 @@ export async function loadEvaluation(
       'evaluation',
     prompts: [prompt, ...followUps],
     successCriteria: attributes.successCriteria ?? '',
-    initialCards: linkedIds(doc, 'initialCards', id),
-    initialFiles: linkedIds(doc, 'initialFiles', id),
+    initialCards,
+    initialFiles,
+    expectedChangedCards,
+    promptCards,
     skillFeatures: Array.isArray(attributes.skillFeatures)
       ? attributes.skillFeatures.filter(
           (f: unknown): f is string => typeof f === 'string' && f.trim() !== '',
@@ -101,17 +186,58 @@ export async function loadEvaluation(
       attributes.secondsPerPrompt > 0
         ? attributes.secondsPerPrompt
         : undefined,
+    pipelineApprovals,
+    expectsNoWrites: attributes.expectsNoWrites === true,
+    seedScript,
     adoptsFrom: doc.data.meta.adoptsFrom,
   };
 }
 
-function relativePath(url: string, realmUrl: string): string {
-  if (!url.startsWith(realmUrl)) {
+// `pipelineApprovals` is a containsMany of a field whose card is a link, so
+// each entry's attributes are at its position in the attribute array and its
+// card is the relationship `pipelineApprovals.<position>.card`.
+function pipelineApprovalsOf(
+  doc: CardDocument,
+  id: string,
+  cardUrl: string,
+): PipelineApproval[] {
+  let entries: unknown = doc.data.attributes?.pipelineApprovals;
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return entries.map((entry, position) => {
+    let { operation, keyFrom } = (entry ?? {}) as Record<string, unknown>;
+    let [card] = linkedIds(doc, `pipelineApprovals.${position}.card`, id);
+    if (!card || typeof operation !== 'string' || !operation.trim()) {
+      throw new Error(
+        `${cardUrl} pipelineApprovals[${position}] names no card or no operation`,
+      );
+    }
+    if (keyFrom !== 'own-key' && keyFrom !== 'share') {
+      throw new Error(
+        `${cardUrl} pipelineApprovals[${position}] has keyFrom ${JSON.stringify(keyFrom)}; it is "own-key" or "share"`,
+      );
+    }
+    return { card: cardIdOf(card), operation: operation.trim(), keyFrom };
+  });
+}
+
+// A card's id: its instance URL without the `.json` suffix.
+function cardIdOf(url: string): string {
+  return url.replace(/\.json$/, '');
+}
+
+// `url`'s path inside the evaluation's realm. Paths are decoded, so a URL is
+// rebuilt from one with `RealmPaths.fileURL`, which encodes it again the way
+// the realm and the rendered `data-test-card` ids spell it.
+function localPath(url: string, realmUrl: string): string {
+  let paths = new RealmPaths(new URL(realmUrl));
+  if (!paths.inRealm(new URL(url))) {
     throw new Error(
       `${url} is outside the evaluation's realm ${realmUrl}; initial cards and files must live in the same workspace as the evaluation`,
     );
   }
-  return url.slice(realmUrl.length);
+  return paths.local(new URL(url));
 }
 
 // Fetches every initial file and card. A card's own module is bundled too
@@ -123,16 +249,36 @@ export async function loadEvaluationBundle(
 ): Promise<EvaluationBundle> {
   let evaluation = await loadEvaluation(client, cardUrl);
   let files = new Map<string, BundledFile>();
+  // A seed script's cards come from the script, not the realm, which never
+  // holds them.
+  let seeded = new Map<string, Uint8Array>(
+    Object.entries(
+      evaluation.seedScript
+        ? evaluationSeed(evaluation.seedScript).contents
+        : {},
+    ).map(([path, doc]) => [
+      path,
+      new TextEncoder().encode(`${JSON.stringify(doc, null, 2)}\n`),
+    ]),
+  );
 
   let addFile = async (sourceUrl: string, isCard: boolean) => {
-    let { url, body } = await client.getSource(evaluation.realmUrl, sourceUrl);
-    let path = relativePath(url, evaluation.realmUrl);
-    if (!files.has(path)) {
+    let seededPath = localPath(sourceUrl, evaluation.realmUrl);
+    let seededBody = seeded.get(seededPath);
+    let { url, body } = seededBody
+      ? { url: sourceUrl, body: seededBody }
+      : await client.getSource(evaluation.realmUrl, sourceUrl);
+    let path = localPath(url, evaluation.realmUrl);
+    let existing = files.get(path);
+    if (!existing) {
       files.set(path, {
         path,
         content: Buffer.from(body).toString('base64'),
         isCard,
       });
+    } else if (isCard) {
+      // Listed as a file first (a seed's cards all are), and opened as a card.
+      existing.isCard = true;
     }
     return { path, body };
   };
@@ -161,15 +307,19 @@ export async function loadEvaluationBundle(
 }
 
 export interface Prepopulated {
-  // Card ids in the test workspace, in the order the evaluation listed them.
+  // Ids of the evaluation's `initialCards` in the test workspace, in the order
+  // the evaluation listed them: the cards the runner opens.
   cards: string[];
   files: string[];
+  // Every card instance copied in, `initialCards` and card `.json` files from
+  // `initialFiles` alike.
+  seededCards: string[];
 }
 
 // Writes the bundle's files into the test workspace at the same path they
 // had in the source, so relative references between them keep working, then
-// waits for the cards to be indexed so the prompt goes out to a workspace
-// that already shows them.
+// waits for every card instance among them to be indexed, so the prompt goes
+// out to a workspace that already serves them.
 export async function prepopulate(
   client: RealmClient,
   bundle: EvaluationBundle,
@@ -177,10 +327,12 @@ export async function prepopulate(
   log: (line: string) => void = () => {},
 ): Promise<Prepopulated> {
   testRealmUrl = ensureTrailingSlash(testRealmUrl);
+  let testRealm = new RealmPaths(new URL(testRealmUrl));
   let cards: string[] = [];
   let files: string[] = [];
+  let seededCards: string[] = [];
   for (let file of bundle.files) {
-    let url = `${testRealmUrl}${file.path}`;
+    let url = testRealm.fileURL(file.path).href;
     let bytes = Buffer.from(file.content, 'base64');
     if (TEXT_EXTENSIONS.test(file.path)) {
       await client.putSource(testRealmUrl, url, bytes.toString('utf8'));
@@ -189,27 +341,135 @@ export async function prepopulate(
     }
     log(`copied ${file.path}`);
     if (file.isCard) {
-      cards.push(url.replace(/\.json$/, ''));
+      cards.push(cardIdOf(url));
     } else {
       files.push(url);
+    }
+    if (file.isCard || isCardInstance(file.path, bytes)) {
+      seededCards.push(cardIdOf(url));
     }
   }
   // Keep the evaluation's own order for the cards, since the first ones are
   // what the runner opens in the stack.
-  cards.sort(
-    (a, b) =>
-      bundle.initialCards.findIndex((id) =>
-        a.endsWith(relativeId(id, bundle)),
-      ) -
-      bundle.initialCards.findIndex((id) => b.endsWith(relativeId(id, bundle))),
+  let order = bundle.initialCards.map((id) =>
+    cardIdOf(localPath(id, bundle.realmUrl)),
   );
-  for (let cardId of cards) {
+  let position = (id: string) => order.indexOf(localPath(id, testRealmUrl));
+  cards.sort((a, b) => position(a) - position(b));
+  for (let cardId of seededCards) {
     await waitForCard(client, testRealmUrl, cardId);
     log(`indexed ${cardId}`);
   }
-  return { cards, files };
+  return { cards, files, seededCards };
 }
 
-function relativeId(id: string, bundle: Evaluation) {
-  return id.startsWith(bundle.realmUrl) ? id.slice(bundle.realmUrl.length) : id;
+// A `.json` file whose document adopts from a card definition.
+function isCardInstance(path: string, bytes: Buffer): boolean {
+  if (!path.endsWith('.json')) {
+    return false;
+  }
+  try {
+    let doc = JSON.parse(bytes.toString('utf8')) as Partial<CardDocument>;
+    return Boolean(doc.data?.meta?.adoptsFrom);
+  } catch {
+    return false;
+  }
+}
+
+// The id in the test workspace of each card the evaluation brings to the top
+// before a prompt, by prompt position.
+export function promptCardIds(
+  bundle: EvaluationBundle,
+  testRealmUrl: string,
+): string[] {
+  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  return (bundle.promptCards ?? []).map(
+    (id) => testRealm.fileURL(localPath(id, bundle.realmUrl)).href,
+  );
+}
+
+// Each pipeline approval as the test workspace names it: the card type of the
+// copied card, read from the seed's `adoptsFrom`, which a relative module
+// reference resolves against the copy's own URL.
+export function pipelineApprovalTargets(
+  bundle: EvaluationBundle,
+  testRealmUrl: string,
+): PipelineApprovalTarget[] {
+  testRealmUrl = ensureTrailingSlash(testRealmUrl);
+  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  return (bundle.pipelineApprovals ?? []).map(
+    ({ card, operation, keyFrom }) => {
+      let path = `${localPath(card, bundle.realmUrl)}.json`;
+      let file = bundle.files.find((f) => f.path === path);
+      if (!file) {
+        throw new Error(`the bundle has no seed for ${path}`);
+      }
+      let doc = JSON.parse(
+        Buffer.from(file.content, 'base64').toString('utf8'),
+      ) as CardDocument;
+      let adoptsFrom = doc.data.meta.adoptsFrom;
+      let copy = testRealm.fileURL(path);
+      // A relative module was copied beside the card, so it resolves against
+      // the copy. Any other reference (a URL, or a registered prefix such as
+      // `@cardstack/catalog/…`) names a module outside the test workspace and
+      // is passed on as it is, for the realm server to resolve.
+      let relative =
+        adoptsFrom.module.startsWith('.') || adoptsFrom.module.startsWith('/');
+      return {
+        realm: testRealmUrl,
+        module: relative
+          ? new URL(adoptsFrom.module, copy).href.replace(/\.gts$/, '')
+          : adoptsFrom.module,
+        name: adoptsFrom.name,
+        operation,
+        instance: copy.href.replace(/\.json$/, ''),
+        keyFrom,
+      };
+    },
+  );
+}
+
+// The seed of every card instance the bundle copies in, `initialCards` and
+// card `.json` files in `initialFiles` alike: for an evaluation that expects
+// no writes, each one must still hold its seed data after the run.
+export function seededCardSeeds(
+  bundle: EvaluationBundle,
+  testRealmUrl: string,
+): { cardId: string; path: string; content: Buffer }[] {
+  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  return bundle.files.flatMap((file) => {
+    let content = Buffer.from(file.content, 'base64');
+    if (!file.isCard && !isCardInstance(file.path, content)) {
+      return [];
+    }
+    return [
+      {
+        cardId: cardIdOf(testRealm.fileURL(file.path).href),
+        path: file.path,
+        content,
+      },
+    ];
+  });
+}
+
+// The seed of each card the evaluation expects the assistant to change: its
+// card id in the test workspace and the bytes it started with.
+export function expectedChangedSeeds(
+  bundle: EvaluationBundle,
+  testRealmUrl: string,
+): { cardId: string; path: string; content: Buffer }[] {
+  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  return (bundle.expectedChangedCards ?? []).map((id) => {
+    let local = localPath(id, bundle.realmUrl);
+    let path = `${local}.json`;
+    let file = bundle.files.find((f) => f.path === path);
+    if (!file) {
+      throw new Error(`the bundle has no seed for ${path}`);
+    }
+    return {
+      cardId: testRealm.fileURL(local).href,
+      path,
+      content: Buffer.from(file.content, 'base64'),
+    };
+  });
 }

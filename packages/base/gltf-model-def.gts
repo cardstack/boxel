@@ -1,5 +1,8 @@
 import File3dIcon from '@cardstack/boxel-icons/file-3d';
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  extensionOfIdentifier,
+} from '@cardstack/runtime-common';
 import { DEFAULT_FILE_SIZE_LIMIT_BYTES } from '@cardstack/runtime-common/constants';
 import {
   FileContentMismatchError,
@@ -8,7 +11,6 @@ import {
 } from './file-api';
 import {
   ThreeDModelDef,
-  getExtension,
   model3dAttributes,
   type SerializedModel3d,
 } from './three-d-model-def';
@@ -55,7 +57,7 @@ async function extractGltfAttributes(
     fileSizeLimitBytes?: number;
   },
 ): Promise<SerializedFile<Partial<{ model3d: SerializedModel3d }>>> {
-  let extension = getExtension(url);
+  let extension = extensionOfIdentifier(url);
   if (extension !== expectedExtension) {
     throw new FileContentMismatchError(
       `Expected ${expectedExtension} file extension, got "${extension || 'none'}"`,

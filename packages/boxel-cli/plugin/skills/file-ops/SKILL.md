@@ -67,6 +67,7 @@ Write a file to a realm (reads content from STDIN or --file)
 - `--file <filepath>` — Read content from a local file instead of STDIN
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 - `--no-realm-events` — Index the write without announcing it to open tabs, which pick it up on their next load (for deploys)
+- `--confirm-shared-keys` — Save a policy change that lets people who aren't signed in use keys shared into a workspace, after listing them, without asking
 - `--json` — Output raw JSON response
 
 ### `boxel file list`

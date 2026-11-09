@@ -20,11 +20,12 @@ A secure session is a realm-server JWT with `user`, `sessionRoom` and
 `secureSession`: the id of a `secure_sessions` row. It works anywhere the
 user's session does, and additionally:
 
-| Gate                                | Requires                                                                                         |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `POST /_key-write-tickets`          | `isSecureSession`: the claim, naming a row of the token's user, not expired                      |
-| `GET /_secure-session`              | The same; answers 204, or 401 `signed-out`                                                       |
-| `POST /_secure-session/login-token` | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user |
+| Gate                                | Requires                                                                                                            |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `POST /_key-write-tickets`          | `isSecureSession`: the claim, naming a row of the token's user, not expired                                         |
+| `GET /_secure-session`              | The same; answers 204, or 401 `signed-out`                                                                          |
+| `POST /_secure-session/login-token` | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user                    |
+| `POST /_secure-session/renewal`     | `Origin` the secure origin's, a `window` row that hasn't ended, and the row's current token, which may have expired |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
@@ -41,21 +42,65 @@ session minter in `jwt.ts` refuse it.
 | `sign_in_proof` | What signed in: `uia:<UIA session>` for a password, `google:<sha256 of the code>` for Google; unique |
 | `created_at`    | `timestamptz`                                                                                        |
 | `expires_at`    | Seven days after sign-in (`SECURE_SESSION_TTL_SECONDS`); signing out sets it to now (see below)      |
+| `app_device_id` | For a `window` row, the Matrix device its latest hand-off signed the app in as; renews the row       |
 
 Excluded from the SQLite schema dump and withheld from `readonly_role`.
 Signing out expires a row rather than deleting it, and rows are swept two
 days after they expire, so a proof can't sign in again after its session
-ends. To sign a user's secure sessions out, expire their rows; revoking all of
-a user's sessions (`isSessionRevoked`) ends these too.
+ends. A row with an `app_device_id` hasn't ended, whatever its `expires_at`
+says, and isn't swept (see below). To sign a user's secure sessions out,
+expire their rows and clear `app_device_id`; revoking all of a user's
+sessions (`isSessionRevoked`) ends these too.
+
+## How long a window's session lasts
+
+A window's session lasts as long as the app session it handed a sign-in to
+(ADR 005 §1.8). When the window mints a hand-off's login token, the realm
+server picks a fresh Matrix device id (ten capital letters), records it as
+the row's `app_device_id`, and answers it as `deviceId` beside the token. The
+window hands both to the app in the fragment
+(`return#loginToken=…&deviceId=…`), and the app redeems the token with an
+`m.login.token` login naming that `device_id`, so the app's Matrix device is
+the one the row names. A later hand-off from the same window rebinds the row
+to the later device. The CLI's rows are never bound, and the CLI's hand-offs
+carry no `deviceId`.
+
+The window renews its session in its last day, or once it has passed
+(`liveSession` in `packages/secure-origin/src/security/session.js`), with
+`POST /_secure-session/renewal` under its stored token, which may have
+expired. Within that day the realm server asks the Matrix server's admin API
+whether the device still exists (`GET
+/_synapse/admin/v2/users/<user>/devices/<device>`):
+
+- **It does:** the row's `expires_at` moves to a week from now, and the
+  answer is the session with a fresh token for that week.
+- **It doesn't:** the binding is cleared, and the row ends at its
+  `expires_at`, as one never bound does: the answer is the session as it
+  stands, or `401 signed-out` once it has passed.
+- **No answer:** a row that hasn't expired is answered as it stands, and one
+  that has is `503 unavailable`; the window keeps its stored session and
+  tries again when it next opens or regains focus.
+
+Earlier than that day, renewal answers the session as it stands and asks the
+Matrix server nothing. Only the row's current token renews it: one whose
+`exp` is the row's `expires_at`, within five seconds. A renewal that moves
+the row's end leaves every earlier token behind, so a token copied out of the
+window renews nothing once the window has renewed past it. `DELETE
+/_secure-session` takes an expired token too, so a window can sign out a
+session bound to the app's after its token has run out, which also clears the
+binding. A row bound to a device that never shows up, as when
+the app never redeems a hand-off, lasts its week. A bound row whose device
+has gone, and which no window renews again, stays in the table until a
+renewal finds the device gone.
 
 ## What ends a secure session
 
 | What                   | Route                                    | Ends                                                                |
 | ---------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
-| Its seven days pass    | —                                        | That session                                                        |
+| Its seven days pass    | —                                        | That session, unless it is bound to an app device that still exists |
 | Signing out of it      | `DELETE /_secure-session` (the session)  | That session: `boxelSignOut()` in the window, `boxel keys sign-out` |
-| Signing out of the app | `DELETE /_secure-sessions?client=window` | Every unexpired `window` row of the token's user                    |
-| Changing the password  | `POST /_secure-sessions/password-change` | Every unexpired row of the account, `cli` included, once it is set  |
+| Signing out of the app | `DELETE /_secure-sessions?client=window` | Every unended `window` row of the token's user                      |
+| Changing the password  | `POST /_secure-sessions/password-change` | Every unended row of the account, `cli` included, once it is set    |
 | Revoking all sessions  | —                                        | Every session of the user (`isSessionRevoked`)                      |
 
 The app's sign-out (`MatrixService.logout()`) calls `DELETE
@@ -80,8 +125,8 @@ another machine.
 Every page that sets a password sets it through `POST
 /_secure-sessions/password-change` (a `password-change` resource), in place of
 the Matrix request: the secure origin's `reset-password` page, and the
-credential fields' `set-password`, which the app's own reset and its
-change-password use. The realm server makes the Matrix `account/password`
+credential fields' `set-password`, which the profile modal's change password
+uses. The realm server makes the Matrix `account/password`
 request itself (`changePassword` in `lib/secure-session.ts`), with
 `logout_devices: true`, and answers with the Matrix server's status and body,
 which the page reads as it would the Matrix server's own. Once the Matrix
@@ -151,8 +196,12 @@ the password, and ends no session.
 The window checks its stored session with `GET /_secure-session` (204 while
 it's live, 401 `signed-out` once it has ended) when it opens, and again when a
 request it makes under the session is refused with a 403, which is how a key
-write ticket refuses an ended session. An ended session is forgotten, and the
-window shows "Sign in to Boxel" with no error. When the check gets no answer
+write ticket refuses an ended session. An ended session is forgotten. A
+sign-in page then shows "Sign in to Boxel" with no error. A key page never
+signs in, as it never signs out: it says to sign in to Boxel from the page
+that opened it, and shows nothing else (ADR 005 §1.6). The window's session
+for its key pages is the one Boxel's own sign-in on this origin leaves here
+(§1.7). When the check gets no answer
 within ten seconds, or the server can't be reached, the window keeps its
 session.
 
@@ -214,10 +263,12 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
    secret, against its own redirect URI, and checks the ID token's issuer,
    audience, expiry and nonce (the token comes straight from Google over TLS,
    so its claims are checked, not its signature).
-4. It resolves the Google identity to an account exactly as Synapse's sign-in
-   for the app does with Boxel's OIDC mapping provider
-   (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`):
-   - **Linked by `sub`**: the account Synapse linked to the Google subject,
+4. It resolves the Google identity to an account. The Google link is a
+   Synapse external id under the `oidc-google` provider, the id Synapse's
+   single sign-on records its links under, so an account linked that way
+   resolves here too. Synapse has no OIDC provider configured: its admin API
+   reads and writes external ids whatever its configuration says.
+   - **Linked by `sub`**: the account linked to the Google subject,
      `GET /_synapse/admin/v1/auth_providers/oidc-google/users/<sub>`. A
      deactivated or locked account is refused.
    - **Not linked**: the email must be verified. The account holding it
@@ -225,8 +276,8 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
      as Google spells it) gets the Google link added to its `external_ids`
      (`PUT /_synapse/admin/v2/users/<user>`, keeping its other links), and
      signs in. More than one account holding it is refused.
-   - **No account**: a new one is made through the admin API, with the
-     mapping provider's localpart (the email's local part, sanitized, then
+   - **No account**: a new one is made through the admin API, with a
+     localpart from the email (the email's local part, sanitized, then
      `alice1`, `alice2`… past taken ones), Google's `name` as its display
      name, the email as a third-party id, and the Google link. An empty `PUT`
      makes the account, and only its `201` means this sign-in owns it, so a
@@ -236,10 +287,9 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
      counts the localpart as taken and the next one is tried. A sign-in that fails after making the
      account unlinks and deactivates it, so the next one resolves again.
 
-   The rules live in `lib/google-account.ts`; the two implementations share
-   `test_google_sign_in_vectors.json`, which both
-   `test_boxel_oidc_mapping_provider.py` and `tests/google-account-test.ts`
-   run. Change both together.
+   The rules live in `lib/google-account.ts`, and
+   `tests/google-sign-in-vectors.json` holds the cases
+   `tests/google-account-test.ts` runs.
 
 5. An account with no session room gets the app's first-sign-in setup before
    the session is minted, as a password sign-in's does: the realm-server user and its first credit grant, a
@@ -254,12 +304,13 @@ CLI never calls them; it opens a page of the window, which signs in with
 `http://127.0.0.1:<port>/callback` (after a Google round trip too; the CLI's
 port and state wait in session storage):
 
-- `boxel keys sign-in` opens `<secure origin>?mode=cli-sign-in&port=…&state=…`,
+- `boxel keys sign-in` opens `<secure origin>/cli-sign-in?port=…&state=…`,
   and the window posts the session (`secure_session`, `user_id`,
   `expires_at`, `state`).
-- `boxel profile add` opens `<secure origin>?mode=cli-auth&port=…&state=…&session=secure`
+- `boxel profile add` opens `<secure origin>/cli-auth?port=…&state=…&session=secure`
   when `GET /_secure-origin` says `cliAuth: true`, and the host app's
-  `/cli-auth` otherwise or under `--host-url`. Once signed in, the window
+  `/cli-auth` otherwise or under `--host-url`, which forwards to this page
+  with the same port and state. Once signed in, the window
   mints a Matrix login token with the session (`POST
 /_secure-session/login-token`) and posts it as `login_token` beside the
   session's fields. The CLI redeems it (`m.login.token`) for a Matrix device
@@ -267,7 +318,7 @@ port and state wait in session storage):
   serves realm commands and `boxel keys` alike. A `cli-auth` link without
   `session=secure` is one for a CLI that can't hold a secure session (one
   from before secure sessions opens the host app's `/cli-auth`, which
-  forwards to this page when the app signs in on the secure origin). For
+  forwards to this page). For
   it, the window ends the session it signed in and navigates to the listener
   with `?state=…&loginToken=…`, the form every released CLI accepts.
 
@@ -283,17 +334,14 @@ target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1
 
 ## Handing a sign-in to the app
 
-With `SIGN_IN_ON_SECURE_ORIGIN=true` on the realm server that serves the app,
-the app draws no sign-in form. The realm server writes the setting into the
-host's config as `signInOnSecureOrigin` when it builds the app's page, so a
-deployment turns it on or off without a rebuild. Outside development the
-realm server builds that page once and keeps it for as long as the process
-runs, so a changed setting takes effect when the realm server next starts,
-as on the next deploy. Unset, the host keeps what its build set, which is
-off.
+The app draws no sign-in, registration or password-reset form: users do all
+three on the secure origin's pages (ADR 005 §1.7). The Matrix server offers
+no single sign-on, so Google sign-in happens only on the secure origin too.
+Its password login stays, for the CLI's terminal sign-ins and the realm
+server's password check.
 
 1. A signed-out app (`components/matrix/secure-sign-in.gts`) replaces itself
-   with `<secure origin>?mode=sign-in#return=<the app page, path and query>`.
+   with `<secure origin>/sign-in#return=<the app page, path and query>`.
    `return` rides in the fragment, which no firewall or access log sees. The
    page is also a plain **Sign in to Boxel** link to the same address. A tab
    that comes back signed out within two minutes of being sent stops and
@@ -306,15 +354,17 @@ off.
    way the window signs in (password, Google, a new account) ends on
    `SignedIn`, which then mints a login token, `POST
 /_secure-session/login-token` under the window's secure session, and
-   replaces the location with `return#loginToken=…`, the token in the
-   fragment so no server log or access log records it. A `return` on a
+   replaces the location with `return#loginToken=…&deviceId=…`, the token
+   in the fragment so no server log or access log records it, and the device
+   the window's session is bound to beside it (see "How long a window's
+   session lasts"). A `return` on a
    loopback origin, `http:` or `https:`, first asks "Continue to
    http://localhost:4200?", unless it is the realm server's own. A `return` on an
    origin that isn't listed is dropped, and the window just says it is
    signed in.
 3. The app redeems the token (from the fragment, or the query, where
-   `boxel browse` and Synapse's SSO put it) with an `m.login.token` login
-   before it loads any card, takes it out of the address, and boots as after any sign-in:
+   `boxel browse` puts it) with an `m.login.token` login,
+   as the fragment's `deviceId` when it names one, before it loads any card, takes it out of the address, and boots as after any sign-in:
    realm-server session, realm tokens, service-worker sync.
    A token for another account than the one stored in the browser switches
    accounts (`MatrixService.switchAccount`), signing the stored one out. A
@@ -338,14 +388,17 @@ Signing out of the app (`MatrixService.signOut()`) runs the app's own
 `logout()` first, which ends the Matrix device, clears the service worker's
 realm tokens and asks the realm server to end the user's window sessions.
 It then replaces the location with
-`<secure origin>?mode=sign-out#return=<app root>` (an app in a frame signs
+`<secure origin>/sign-out#return=<app root>` (an app in a frame signs
 out of its own session only, since the secure origin can't be framed), which forgets the
-window's session, ends it on the server, and goes back to a listed `return`.
+window's session, ends it on the server, and moves straight on to the
+secure origin's `sign-in` page, keeping a listed `return` for the sign-in
+that follows. The app, signed out, would only send the user to that same
+page, so sign-out never loads the app again on the way.
 
 Links already sent keep working through the app: a reset link
 (`?clientSecret=…#email=…&sid=…`) is replaced by the secure origin's
 `reset-password` with all three in its fragment, and an older CLI's
-`/cli-auth?port=&state=` by the secure origin's `cli-auth` mode with the
+`/cli-auth?port=&state=` by the secure origin's `cli-auth` page with the
 same port and state.
 
 ## Refusals
@@ -354,7 +407,7 @@ same port and state.
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 403 `forbidden`           | A sign-in not from the secure origin                                                                                                                                                                                       |
 | 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                                                                                                                                                               |
-| 401 `signed-out`          | `GET /_secure-session` or `POST /_secure-session/login-token` with a session that isn't, or is no longer, secure                                                                                                           |
+| 401 `signed-out`          | `GET /_secure-session`, `POST /_secure-session/login-token` or `POST /_secure-session/renewal` with a session that isn't, or is no longer, secure                                                                          |
 | 429 `rate-limited`        | Too many failed password sign-ins for the account, or, from `POST /_secure-session/login-token`, a login token already minted for the user within the minute (the Matrix server's limit); see `meta.retryAfterMs`          |
 | 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                                                                                                                                                        |
 | 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                                                                                                                                                              |
@@ -366,7 +419,7 @@ same port and state.
 | 503 `unavailable`         | No Synapse admin credentials, Synapse didn't answer with a challenge, or a Google sign-in couldn't make or link an account (its `realm:secure-session` log line counts the lost races and the localparts taken or refused) |
 | 503 `google-unavailable`  | This server has no Google client                                                                                                                                                                                           |
 
-A Google refusal's message is the app's own copy: the mapping provider's
+A Google refusal's message is the app's own copy: `lib/google-account.ts`'s
 words for an unverified or shared email, and the app's sign-in error for a
 deactivated or locked account. Logged on `realm:secure-session` by error name and message only. The routes
 are key routes in `request-telemetry.ts`, so request logs and Sentry keep only

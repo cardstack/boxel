@@ -22,6 +22,7 @@ import {
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   keysAdd,
+  keysAnonymous,
   keysDelete,
   keysList,
   keysReplace,
@@ -51,7 +52,7 @@ const matrixId = `@${TEST_USERNAME}:localhost`;
 async function actAsSecureWindow(link: string): Promise<boolean> {
   let url = new URL(link);
   expect(url.origin).toBe(secureOriginURL.origin);
-  expect(url.searchParams.get('mode')).toBe('cli-sign-in');
+  expect(url.pathname).toBe('/secure/cli-sign-in');
   let completed = await fetch(`${realmServerUrl}_secure-session`, {
     method: 'POST',
     headers: {
@@ -259,6 +260,89 @@ describe('boxel keys: managing keys and shares (integration)', () => {
       ['weather-backup'],
     );
     await keysUnshare('weather', { ...deps, realm });
+  });
+
+  it("sets whether people who aren't signed in may use a key on the key itself", async () => {
+    await expect(
+      keysAdd('anon', {
+        ...deps,
+        stdin: true,
+        input: stdinWith('sk-anon\n'),
+        anonymousCap: '5',
+      }),
+    ).rejects.toThrow('--anonymous-cap is given with --anonymous');
+    await expect(
+      keysAdd('anon', {
+        ...deps,
+        stdin: true,
+        input: stdinWith('sk-anon\n'),
+        anonymousMonthlyCap: '500',
+      }),
+    ).rejects.toThrow('--anonymous-monthly-cap is given with --anonymous');
+    let added = await keysAdd('anon', {
+      ...deps,
+      stdin: true,
+      input: stdinWith('sk-anon\n'),
+      anonymous: true,
+      anonymousCap: '50',
+      anonymousMonthlyCap: '500',
+    });
+    expect(added).toMatchObject({
+      anonymous: true,
+      anonymousDailyCap: 50,
+      anonymousMonthlyCap: 500,
+    });
+    await expect(keysAnonymous('anon', 'maybe', deps)).rejects.toThrow(
+      'say on or off',
+    );
+    await expect(
+      keysAnonymous('anon', 'off', { ...deps, cap: '5' }),
+    ).rejects.toThrow('--cap is given with on');
+    await expect(
+      keysAnonymous('anon', 'off', { ...deps, monthlyCap: '5' }),
+    ).rejects.toThrow('--monthly-cap is given with on');
+    let off = await keysAnonymous('anon', 'off', deps);
+    expect(off).toMatchObject({
+      anonymous: false,
+      anonymousDailyCap: null,
+      anonymousMonthlyCap: null,
+    });
+    let on = await keysAnonymous('anon', 'on', {
+      ...deps,
+      cap: '10',
+      monthlyCap: '100',
+    });
+    expect(on).toMatchObject({
+      anonymous: true,
+      anonymousDailyCap: 10,
+      anonymousMonthlyCap: 100,
+    });
+    let monthlyKept = await keysAnonymous('anon', 'on', { ...deps, cap: '20' });
+    expect(monthlyKept).toMatchObject({
+      anonymousDailyCap: 20,
+      anonymousMonthlyCap: 100,
+    });
+    await expect(
+      keysAnonymous('anon', 'on', { ...deps, monthlyCap: 'lots' }),
+    ).rejects.toThrow(
+      '--monthly-cap is a whole number of calls, from 1 to 2147483647, or none',
+    );
+    let monthlyRemoved = await keysAnonymous('anon', 'on', {
+      ...deps,
+      monthlyCap: 'none',
+    });
+    expect(monthlyRemoved).toMatchObject({
+      anonymous: true,
+      anonymousDailyCap: 20,
+      anonymousMonthlyCap: null,
+    });
+
+    // This realm's policy lets only signed-in people make calls with a
+    // shared key, so sharing reflects nothing more.
+    let share = await keysShare('anon', { ...deps, realm, as: 'anon' });
+    expect(share).toMatchObject({ label: 'anon', state: 'active' });
+    await keysUnshare('anon', { ...deps, realm });
+    await keysDelete('anon', { ...deps, yes: true });
   });
 
   it('spends a ticket only on the change it was minted for', async () => {

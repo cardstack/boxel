@@ -13,6 +13,7 @@ import type {
   RoomMember,
 } from 'matrix-js-sdk';
 import type { GitHubClient } from '../lib/github.ts';
+import { MatrixError } from 'matrix-js-sdk';
 import { onMembershipEvent } from '../lib/membership-handler.ts';
 import { onTimelineEvent } from '../lib/timeline-handler.ts';
 
@@ -45,10 +46,15 @@ function makeRoom(membership: string, creator = '@alice:localhost') {
   } as unknown as Room;
 }
 
-function makeMembershipEvent(originServerTs: number) {
+// Synapse sends the invite as stripped state (MSC4319): type, state_key,
+// content and sender only, with no origin_server_ts.
+function makeStrippedInviteEvent(userId: string) {
   return {
     event: {
-      origin_server_ts: originServerTs,
+      type: 'm.room.member',
+      state_key: userId,
+      content: { membership: 'invite' },
+      sender: '@alice:localhost',
     },
   } as unknown as MatrixEvent;
 }
@@ -62,36 +68,146 @@ function makeMatrixClient(client: Partial<MatrixClient>): MatrixClient {
 }
 
 module('membership handler', () => {
-  let joinedRooms: string[] = [];
-  let handleMembershipEvent = onMembershipEvent({
-    client: makeMatrixClient({
+  const BOT = '@submissionbot:localhost';
+
+  function botInvite(roomId: string) {
+    return makeMember({
+      membership: 'invite',
+      userId: BOT,
+      roomId,
+      name: 'submissionbot',
+    });
+  }
+
+  function makeHandler(client: Partial<MatrixClient>) {
+    return onMembershipEvent({
+      client: makeMatrixClient(client),
+      authUserId: BOT,
+    });
+  }
+
+  function matrixError(errcode: string, httpStatus: number, extra = {}) {
+    return new MatrixError({ errcode, error: errcode, ...extra }, httpStatus);
+  }
+
+  test('auto-joins room after membership invite event for submissionbot', async (assert) => {
+    let joinedRooms: string[] = [];
+    let handle = makeHandler({
       joinRoom: async (roomId: string) => {
         joinedRooms.push(roomId);
         return makeRoom('join');
       },
-    }),
-    authUserId: '@submissionbot:localhost',
-    startTime: 1000,
-  });
+    });
 
-  test('auto-joins room after membership invite event for submissionbot', async (assert) => {
-    joinedRooms = [];
-
-    await handleMembershipEvent(
-      makeMembershipEvent(1001),
-      makeMember({
-        membership: 'invite',
-        userId: '@submissionbot:localhost',
-        roomId: '!room-id:localhost',
-        name: 'submissionbot',
-      }),
-    );
+    await handle(makeStrippedInviteEvent(BOT), botInvite('!room-id:localhost'));
 
     assert.deepEqual(
       joinedRooms,
       ['!room-id:localhost'],
       'joins the invited room for the bot user',
     );
+  });
+
+  test('does not join when another user is invited', async (assert) => {
+    let joinedRooms: string[] = [];
+    let handle = makeHandler({
+      joinRoom: async (roomId: string) => {
+        joinedRooms.push(roomId);
+        return makeRoom('join');
+      },
+    });
+
+    await handle(
+      makeStrippedInviteEvent('@alice:localhost'),
+      makeMember({
+        membership: 'invite',
+        userId: '@alice:localhost',
+        roomId: '!room-id:localhost',
+        name: 'alice',
+      }),
+    );
+
+    assert.deepEqual(joinedRooms, [], 'ignores invites for other users');
+  });
+
+  test('retries a join that hits the rate limit', async (assert) => {
+    let attempts = 0;
+    let handle = makeHandler({
+      joinRoom: async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw matrixError('M_LIMIT_EXCEEDED', 429, { retry_after_ms: 1 });
+        }
+        return makeRoom('join');
+      },
+    });
+
+    await handle(makeStrippedInviteEvent(BOT), botInvite('!room-id:localhost'));
+
+    assert.strictEqual(attempts, 2, 'joins after waiting out the limit');
+  });
+
+  for (let [label, error] of [
+    ['M_FORBIDDEN', () => matrixError('M_FORBIDDEN', 403)],
+    ['M_NOT_FOUND', () => matrixError('M_NOT_FOUND', 404)],
+    ['a room everyone has left', () => matrixError('M_UNKNOWN', 404)],
+  ] as const) {
+    test(`rejects the invite when the join fails with ${label}`, async (assert) => {
+      let leftRooms: string[] = [];
+      let handle = makeHandler({
+        joinRoom: async () => {
+          throw error();
+        },
+        leave: async (roomId: string) => {
+          leftRooms.push(roomId);
+          return {};
+        },
+      });
+
+      await handle(
+        makeStrippedInviteEvent(BOT),
+        botInvite('!dead-room:localhost'),
+      );
+
+      assert.deepEqual(leftRooms, ['!dead-room:localhost'], 'rejects it');
+    });
+  }
+
+  test('keeps the invite when joining fails for another reason', async (assert) => {
+    let leftRooms: string[] = [];
+    let handle = makeHandler({
+      joinRoom: async () => {
+        throw new Error('connection reset');
+      },
+      leave: async (roomId: string) => {
+        leftRooms.push(roomId);
+        return {};
+      },
+    });
+
+    await handle(makeStrippedInviteEvent(BOT), botInvite('!room-id:localhost'));
+
+    assert.deepEqual(leftRooms, [], 'leaves the invite pending');
+  });
+
+  test('survives a failure to reject the invite', async (assert) => {
+    let leaveAttempts = 0;
+    let handle = makeHandler({
+      joinRoom: async () => {
+        throw matrixError('M_FORBIDDEN', 403);
+      },
+      leave: async () => {
+        leaveAttempts++;
+        throw new Error('connection reset');
+      },
+    });
+
+    await handle(
+      makeStrippedInviteEvent(BOT),
+      botInvite('!dead-room:localhost'),
+    );
+
+    assert.strictEqual(leaveAttempts, 1, 'tried to reject, and did not throw');
   });
 });
 

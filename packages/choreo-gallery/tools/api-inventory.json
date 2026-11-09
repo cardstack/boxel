@@ -684,10 +684,82 @@
     },
     {
       "entrypoint": "glimmer-motion",
+      "symbol": "RENDER_DETECTOR_ATTRIBUTE",
+      "source": "packages/glimmer-motion/src/layout-group.gts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
       "symbol": "snapshotOnRender",
       "source": "packages/glimmer-motion/src/layout-group.gts",
       "kind": "value",
       "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollPosition",
+      "source": "packages/glimmer-motion/src/memory.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Shown",
+      "source": "packages/glimmer-motion/src/memory.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ShownAnimation",
+      "source": "packages/glimmer-motion/src/memory.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "keepAsMemory",
+      "source": "packages/glimmer-motion/src/memory.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MEMORY_ATTRIBUTE",
+      "source": "packages/glimmer-motion/src/memory.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MEMORY_HOOK_SUFFIX",
+      "source": "packages/glimmer-motion/src/memory.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "readAnimations",
+      "source": "packages/glimmer-motion/src/memory.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "trackScrolls",
+      "source": "packages/glimmer-motion/src/memory.ts",
+      "kind": "value",
+      "guide": "core-host",
       "declaration": "packages/glimmer-motion/src/index.ts"
     },
     {
@@ -2220,6 +2292,22 @@
     },
     {
       "entrypoint": "glimmer-motion/test-support",
+      "symbol": "live",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "liveAll",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
       "symbol": "SettleOptions",
       "source": "packages/glimmer-motion/src/test-support/index.ts",
       "kind": "type",
@@ -2301,7 +2389,7 @@
     {
       "entrypoint": "@cardstack/choreo/test-support",
       "symbol": "live",
-      "source": "packages/choreo/src/test-support/index.ts",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
       "kind": "value",
       "guide": "core-test-geometry",
       "declaration": "packages/choreo/src/test-support/index.ts"
@@ -2309,7 +2397,7 @@
     {
       "entrypoint": "@cardstack/choreo/test-support",
       "symbol": "liveAll",
-      "source": "packages/choreo/src/test-support/index.ts",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
       "kind": "value",
       "guide": "core-test-geometry",
       "declaration": "packages/choreo/src/test-support/index.ts"

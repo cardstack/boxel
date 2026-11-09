@@ -1,0 +1,273 @@
+// Where one of the user's keys may be sent, as the key page's tile lists it:
+// each grant's full host and path, and the approvals that send the key there
+// (an operation, on a card, in a workspace). A key used across a few cards
+// and workspaces has dozens of approvals, so each grant shows only how many
+// it has until its count is opened. Removing a grant first lists those
+// approvals, holding the list open while it asks, since removing it revokes
+// every one, then hands the grant to `@onRemove`, which removes it and
+// answers whether it did, in a Pret UI Alert. A card that needs the key there
+// again asks for its approval again. The question takes the place of Remove,
+// so focus moves to its Cancel, and Cancel gives it back to Remove, once: when
+// focus moves on from there, a later redraw of the list leaves it where it is.
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
+import { trackedObject } from '@ember/reactive/collections';
+
+import { Alert } from '@cardstack/pretui/components/alert';
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
+import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
+import { focusWhen } from '@cardstack/pretui/focus';
+
+import { Button } from '@cardstack/pretui/components/button';
+import cn from '../../helpers/cn.ts';
+import { eq, not } from '@cardstack/pretui/helpers';
+
+import type { KeyBinding, KeyGrant, ListedKey } from '../../security/keys.ts';
+import { addressOf } from './workspaces.ts';
+
+interface Signature {
+  Args: {
+    key: ListedKey;
+    // Undefined when they couldn't be read.
+    bindings: KeyBinding[] | undefined;
+    onRemove: (grant: KeyGrant) => Promise<boolean>;
+  };
+}
+
+// A destination as both key pages name it: its host and path, the prefix a
+// request must start with to be sent the key.
+export function hostAndPath(destination: string): string {
+  let url = new URL(destination);
+  return `${url.host}${url.pathname}`;
+}
+
+export default class KeyGrants extends Component<Signature> {
+  <template>
+    {{#if @key.grants.length}}
+      <ul class='grants' data-test-key-grants>
+        {{#each @key.grants key='id' as |grant|}}
+          <li
+            class={{cn 'grant' open=(this.isExpanded grant)}}
+            data-test-key-grant={{hostAndPath grant.destination}}
+          >
+            <div class='grant-row'>
+              <span
+                class='where'
+                id='key-grant-where-{{grant.id}}'
+              >{{hostAndPath grant.destination}}</span>
+              {{#if @bindings}}
+                {{#unless (this.hasBindings grant)}}
+                  <span class='count' data-test-key-grant-count>0 approvals</span>
+                {{/unless}}
+              {{/if}}
+              {{#unless (this.isRemoving grant)}}
+                <Button
+                  @variant='ghost'
+                  @size='xs'
+                  aria-label='Remove {{hostAndPath grant.destination}}'
+                  data-test-key-grant-remove
+                  {{focusWhen (eq this.state.returnFocus grant.id)}}
+                  {{on 'blur' this.forgetReturnFocus}}
+                  {{on 'click' (fn this.startRemove grant)}}
+                >Remove</Button>
+              {{/unless}}
+            </div>
+            {{#let (this.bindingsOf grant) as |bindings|}}
+              {{#if bindings.length}}
+                {{! Held open while Remove asks, since its confirmation
+                    names the approvals listed above it. }}
+                <Disclosure
+                  class='approvals'
+                  @size='s'
+                  @open={{this.isExpanded grant}}
+                  @onOpenChange={{fn this.toggle grant}}
+                  @disabled={{this.isRemoving grant}}
+                  data-test-key-grant-count
+                >
+                  <:trigger>{{bindings.length}}
+                    {{if
+                      (eq bindings.length 1)
+                      'approval'
+                      'approvals'
+                    }}<VisuallyHidden>
+                      sending it to
+                      {{hostAndPath
+                        grant.destination
+                      }}</VisuallyHidden></:trigger>
+                  <:default>
+                    <ul class='bindings' data-test-key-grant-bindings>
+                      {{#each bindings as |binding|}}
+                        <li data-test-key-grant-binding={{binding.operation}}>
+                          {{binding.operationLabel}}
+                          on
+                          {{binding.cardName}}
+                          in
+                          {{addressOf binding.realm}}
+                        </li>
+                      {{/each}}
+                    </ul>
+                  </:default>
+                </Disclosure>
+              {{/if}}
+            {{/let}}
+            {{#if (this.isRemoving grant)}}
+              <Alert
+                class='panel'
+                @tone='warning'
+                role='alert'
+                data-test-key-grant-remove-panel
+              >
+                <:default>
+                  <p class='confirm'>
+                    {{#let (this.bindingsOf grant) as |bindings|}}
+                      {{#if (not @bindings)}}
+                        Removing this stops the key being sent to
+                        {{hostAndPath grant.destination}}
+                        and revokes every approval that sends it there.
+                      {{else if bindings.length}}
+                        Removing this stops the key being sent to
+                        {{hostAndPath grant.destination}}
+                        and revokes
+                        {{if
+                          (eq bindings.length 1)
+                          'the approval'
+                          'the approvals'
+                        }}
+                        above. A card that needs it there will ask you again.
+                      {{else}}
+                        Removing this stops the key being sent to
+                        {{hostAndPath grant.destination}}.
+                      {{/if}}
+                    {{/let}}
+                  </p>
+                </:default>
+                <:action>
+                  <div class='panel-actions'>
+                    <Button
+                      @variant='secondary'
+                      @size='xs'
+                      data-test-key-grant-remove-cancel
+                      {{focusWhen true}}
+                      {{on 'click' this.cancel}}
+                    >Cancel</Button>
+                    <Button
+                      @variant='destructive'
+                      @size='xs'
+                      @loading={{this.state.removing}}
+                      data-test-key-grant-remove-confirm
+                      {{on 'click' (fn this.remove grant)}}
+                    >Remove</Button>
+                  </div>
+                </:action>
+              </Alert>
+            {{/if}}
+          </li>
+        {{/each}}
+      </ul>
+    {{/if}}
+
+    <style scoped>
+      .grants {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+      }
+      /* Closed grants stack as tightly as the rows above them; an open one
+         keeps its list clear of the next grant. */
+      .grant.open:not(:last-child) {
+        padding-bottom: var(--boxel-sp-xs);
+      }
+      .grant-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--boxel-sp-xs);
+      }
+      .where {
+        font-family: var(--boxel-monospace-font-family);
+        overflow-wrap: anywhere;
+      }
+      .count {
+        color: var(--muted-foreground);
+      }
+      .approvals {
+        color: var(--muted-foreground);
+      }
+      .bindings {
+        margin: var(--boxel-sp-5xs) 0 0;
+        padding-inline-start: var(--boxel-sp-lg);
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+      }
+      .panel {
+        margin-top: var(--boxel-sp-xs);
+      }
+      .confirm {
+        margin: 0;
+      }
+      .panel-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+
+  private state = trackedObject({
+    removing: false,
+    grant: undefined as string | undefined,
+    // The grant whose Remove takes focus back once its question is cancelled.
+    returnFocus: undefined as string | undefined,
+    // The grants whose approvals the user opened; every grant starts closed.
+    expanded: [] as string[],
+  });
+
+  private bindingsOf = (grant: KeyGrant) =>
+    (this.args.bindings ?? []).filter((b) => b.grantId === grant.id);
+
+  private hasBindings = (grant: KeyGrant) => this.bindingsOf(grant).length > 0;
+
+  private isRemoving = (grant: KeyGrant) => this.state.grant === grant.id;
+
+  // Removing's confirmation names the approvals above it, so they are listed
+  // while it is open, whatever the user had opened; Cancel returns the list
+  // to how they left it.
+  private isExpanded = (grant: KeyGrant) =>
+    this.isRemoving(grant) || this.state.expanded.includes(grant.id);
+
+  private toggle = (grant: KeyGrant) => {
+    this.state.expanded = this.state.expanded.includes(grant.id)
+      ? this.state.expanded.filter((id) => id !== grant.id)
+      : [...this.state.expanded, grant.id];
+  };
+
+  private startRemove = (grant: KeyGrant) => {
+    this.state.returnFocus = undefined;
+    this.state.grant = grant.id;
+  };
+
+  private cancel = () => {
+    this.state.returnFocus = this.state.grant;
+    this.state.grant = undefined;
+  };
+
+  private forgetReturnFocus = () => {
+    this.state.returnFocus = undefined;
+  };
+
+  private remove = async (grant: KeyGrant) => {
+    this.state.removing = true;
+    try {
+      if (await this.args.onRemove(grant)) {
+        this.state.grant = undefined;
+      }
+    } finally {
+      this.state.removing = false;
+    }
+  };
+}

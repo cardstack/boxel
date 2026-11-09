@@ -6,14 +6,14 @@ import { Tooltip } from './tooltip';
 import { Button } from './button';
 import { SIDE_OPTIONS } from '../demo-structure';
 
-// Note: Pretui Tooltip is CSS-only — it reveals on hover/focus-within, with
-// no floating-ui positioning or JS listeners (prerender-safe by design).
-// Dropped knobs: offset (fixed 6px gap, no arg); variant (single always-dark
+// Dropped knobs: offset (fixed 0.375rem gap, no arg); variant (single always-dark
 // treatment — "the lining"); the six boxel-tooltip-* CSS-variable knobs
 // (CSS knob layer not yet ported).
 class TooltipUsage extends GlimmerComponent {
   @tracked content = 'Tooltip Content';
   @tracked side = 'top';
+  @tracked disabled = false;
+  setDisabled = (v: boolean) => (this.disabled = v);
   setContent = (v: string) => (this.content = v);
   setSide = (v: string) => (this.side = v);
   get sideVal() {
@@ -22,17 +22,21 @@ class TooltipUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='Tooltip'
-      @description='Tooltips provide additional information when hovering over an element. Pretui Tooltip is CSS-only — it reveals on hover and focus-within, always dark in both modes, with no JS positioning.'
+      @description='Tooltips provide additional information when hovering over an element. Shown in the top layer; takes no space while hidden.'
     >
       <:example>
-        <Tooltip @content={{this.content}} @side={{this.sideVal}}>
+        <Tooltip
+          @content={{this.content}}
+          @side={{this.sideVal}}
+          @disabled={{this.disabled}}
+        >
           <Button @tone='neutral' @appearance='outlined'>Button With Tooltip</Button>
         </Tooltip>
       </:example>
       <:api as |Args|>
         <Args.String
           @name='side'
-          @description='The positioning of the tooltip relative to the reference element.'
+          @description='The side the tooltip prefers; it flips when that side has no room.'
           @value={{this.side}}
           @options={{SIDE_OPTIONS}}
           @defaultValue='top'
@@ -45,8 +49,15 @@ class TooltipUsage extends GlimmerComponent {
           @required={{true}}
           @onInput={{this.setContent}}
         />
+        <Args.Bool
+          @name='disabled'
+          @description='Keeps the tip hidden, as while something the trigger opened covers it.'
+          @value={{this.disabled}}
+          @defaultValue={{false}}
+          @onInput={{this.setDisabled}}
+        />
         <Args.Yield
-          @description='The element the tooltip is attached to; the tooltip reveals on its hover and focus-within.'
+          @description='The element the tooltip is attached to; the tooltip opens on its hover and keyboard focus.'
           @hideControls={{true}}
         />
       </:api>
