@@ -512,6 +512,39 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(exact.meta.page.totalIsEstimate, undefined);
     });
 
+    test("a realm's ms covers its whole part: its search and its mount", async function (assert) {
+      let measured = 0;
+      let fast = realm(A, [{ id: 'a1', price: 1, score: 1 }]);
+      let slow = {
+        url: B,
+        searchEntries: async (q: SearchEntryQuery) => {
+          let started = Date.now();
+          await new Promise((resolve) => setTimeout(resolve, 60));
+          let doc = await realm(B, [
+            { id: 'b1', price: 2, score: 2 },
+          ]).searchEntries(q);
+          measured = Date.now() - started;
+          return doc;
+        },
+      };
+      let doc = await searchEntryRealms([fast, slow], query({}));
+      assert.ok(
+        doc.meta.realms![B].ms! >= measured,
+        `at least the realm's measured wall time (${doc.meta.realms![B].ms} >= ${measured})`,
+      );
+      let mounted = await searchEntryRealms([fast, slow], query({}), {
+        realmPreparedMs: { [B]: 40 },
+      });
+      assert.ok(
+        mounted.meta.realms![B].ms! >= measured + 40,
+        `and the time its mount took (${mounted.meta.realms![B].ms} >= ${measured + 40})`,
+      );
+      assert.ok(
+        mounted.meta.realms![A].ms! < 40,
+        "another realm's mount is not counted in its time",
+      );
+    });
+
     test('a realm that never resolved is unavailable', async function (assert) {
       let doc = await searchEntryRealms(
         [realm(A, [{ id: 'a1', price: 1, score: 1 }]), null],

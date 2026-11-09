@@ -197,21 +197,29 @@ export default function handleSearch(opts: {
     // search itself: a realm that will not mount is tried once, and each step
     // after counts it as the one that tried did.
     let mounts = new Map<string, Promise<Realm | undefined>>();
+    // How long each realm's mount took in this request, counted into its
+    // `meta.realms[url].ms`.
+    let mountMs: Record<string, number> = {};
     let mountRealms: MountRealms = (urls, opts) =>
       Promise.all(
         urls.map((url) => {
           let mount = mounts.get(url);
           if (!mount) {
+            let started = Date.now();
             mount = resolveRealmsForFederatedRequest(
               reconciler,
               [url],
               opts,
-            ).then(([realm]) => realm);
+            ).then(([realm]) => {
+              mountMs[url] = Date.now() - started;
+              return realm;
+            });
             mounts.set(url, mount);
           }
           return mount;
         }),
       );
+    mountRealms.mountMs = mountMs;
     // The realms counted as failed because the declaration that would have
     // shaped their search could not be read. Set only for a named query no
     // realm offered to read its declaration through will mount.
@@ -895,6 +903,9 @@ export default function handleSearch(opts: {
             ...runSearchOpts,
             ...(signal ? { signal } : {}),
             ...(realmDeadline !== undefined ? { realmDeadline } : {}),
+            ...(mountRealms.mountMs
+              ? { realmPreparedMs: mountRealms.mountMs }
+              : {}),
           },
           scopedQueries.size === 0
             ? undefined
@@ -1029,10 +1040,11 @@ interface RefusalCacheIdentity {
 
 // Mounts each realm, or finds it already mounted, positional with `urls`; a
 // realm that will not mount is `undefined`.
-type MountRealms = (
+// `mountMs` holds how long each realm's mount took in this request.
+type MountRealms = ((
   urls: string[],
   opts?: { consumingRealm?: string | null },
-) => Promise<Array<Realm | undefined>>;
+) => Promise<Array<Realm | undefined>>) & { mountMs?: Record<string, number> };
 
 // What the caller may see of each realm a search names. A realm in neither
 // `readable` nor `scoped` nor `failed` contributes no rows: nothing grants the

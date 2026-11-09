@@ -2472,7 +2472,11 @@ export async function searchEntryRealms(
       if (!realm) {
         return { url, status: { status: 'unavailable' as const } };
       }
-      let t0 = Date.now();
+      // A realm's `ms` is its whole part of the request: what was spent
+      // preparing it before the fan-out (its mount), and its search from the
+      // moment the fan-out asks for it until its document is complete (rows,
+      // count, facets, link assembly and the rendering of each entry).
+      let t0 = Date.now() - (url ? (opts?.realmPreparedMs?.[url] ?? 0) : 0);
       try {
         let doc = await withRealmDeadline(
           opts?.realmDeadline,

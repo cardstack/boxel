@@ -206,6 +206,10 @@ export type SearchOpts = {
   // `realmDeadlineWithin`): a realm that has not answered by then is cut off
   // and reported as a timeout, and the search answers with the others.
   realmDeadline?: number;
+  // Per realm URL, the time this request already spent on that realm before
+  // the fan-out reached it (mounting it), so `meta.realms[url].ms` reports the
+  // realm's whole part of the request.
+  realmPreparedMs?: Record<string, number>;
 };
 
 // Indirection so a host integration test can deterministically capture
