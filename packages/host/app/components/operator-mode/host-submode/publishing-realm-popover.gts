@@ -32,7 +32,7 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
 
   <template>
     {{#if @isOpen}}
-      <div class='publishing-realm-popover'>
+      <div class='publishing-realm-popover' data-test-publishing-realm-popover>
         <div class='publishing-realm-header'>
           Publishing to:
         </div>

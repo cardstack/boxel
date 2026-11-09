@@ -1267,8 +1267,9 @@ export default class RealmService extends Service {
     return this.knownRealm(url)?.isRealmOwner ?? false;
   };
 
-  // The realm server publishes a realm only for its owner, and only one
-  // marked publishable; a published copy isn't.
+  // Whether the user can publish the realm: they own it, and it's marked
+  // publishable (a published copy isn't). A writer can also publish to the
+  // realm's domain override, which this leaves out.
   canPublish = (url: string): boolean => {
     return this.isRealmOwner(url) && this.info(url).publishable === true;
   };

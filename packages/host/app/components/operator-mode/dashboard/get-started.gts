@@ -16,28 +16,20 @@ import { Menu } from '@cardstack/pretui/components/menu';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { didCancel, dropTask, task, timeout } from 'ember-concurrency';
-import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { modifier } from 'ember-modifier';
 
 import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { logger, type RealmIdentifier } from '@cardstack/runtime-common';
 
-import PublishRealmDialog from '@cardstack/host/components/operator-mode/publish-realm-dialog';
-import { ifConnected } from '@cardstack/host/lib/modal-focus-trap';
 import { realmIdentifierSegments } from '@cardstack/host/lib/realm-utils';
-import {
-  ancestorsOf,
-  nearestWorkspaceTarget,
-} from '@cardstack/host/lib/workspace-actions';
 import { isHostedRealm } from '@cardstack/host/lib/workspace-list';
 import { NEW_SESSION_NAME } from '@cardstack/host/services/ai-assistant-panel-service';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
+import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
-import type RealmPublishingService from '@cardstack/host/services/realm-publishing';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
@@ -105,11 +97,10 @@ interface Signature {
 export default class GetStarted extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
-  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
-  @service declare private realmPublishing: RealmPublishingService;
+  @service declare private hostModeService: HostModeService;
   @service declare private recentCardsService: RecentCardsService;
 
   // The open list and the dismissed note each hold only for the dismissal
@@ -121,15 +112,6 @@ export default class GetStarted extends Component<Signature> {
   // Just dismissed: a note stands in for the list, with Undo.
   @tracked private dismissedIn: number | undefined;
   private dismissalChanges = new ChangeCounter<boolean>();
-  @tracked private isPublishDialogOpen = false;
-  // The workspace the publish dialog was last opened for. Kept after it
-  // closes, since the modal outlet removes the dialog a render later and it
-  // renders once more meanwhile.
-  @tracked private publishRealmURL: string | undefined;
-  private publishButton: HTMLElement | undefined;
-  // The button's ancestors when the dialog opened: publishing the last step
-  // removes the steps, button included, while the dialog is still open.
-  private publishButtonAncestors: HTMLElement[] = [];
   // Dismiss or Undo held focus and is gone, so the control that
   // replaces it takes it.
   private focusNext: 'undo' | 'dismiss' | undefined;
@@ -379,8 +361,8 @@ export default class GetStarted extends Component<Signature> {
       : 'Publishing needs a workspace you own. Create one to publish it.';
   }
 
-  // With one workspace to publish the button opens its dialog; with more,
-  // a menu asks which.
+  // With one workspace to publish the button opens it in host mode to
+  // publish; with more, a menu asks which.
   private get onlyWorkspaceToPublish() {
     let [only, ...rest] = this.workspacesToPublish;
     return rest.length === 0 ? only : undefined;
@@ -399,47 +381,15 @@ export default class GetStarted extends Component<Signature> {
         label: isRepeated
           ? `${name} (${realmIdentifierSegments(url).at(-1) ?? url})`
           : name,
-        onSelect: () => this.openPublishDialog(url),
+        onSelect: () => this.openToPublish(url),
       };
     });
   }
 
-  private capturePublishButton = modifier((element: HTMLElement) => {
-    this.publishButton = element;
-    return () => {
-      if (this.publishButton === element) {
-        this.publishButton = undefined;
-      }
-    };
-  });
-
-  @action private openPublishDialog(workspace: RealmIdentifier) {
-    this.publishButtonAncestors = ancestorsOf(this.publishButton);
-    this.publishRealmURL = this.network.virtualNetwork.toURL(workspace).href;
-    this.isPublishDialogOpen = true;
+  // Publishing happens in host mode, which shows the site it publishes.
+  @action private openToPublish(workspace: RealmIdentifier) {
+    this.hostModeService.openToPublishTask.perform(workspace);
   }
-
-  @action private closePublishDialog() {
-    this.isPublishDialogOpen = false;
-  }
-
-  private get publishDialog() {
-    let realmURL = this.publishRealmURL;
-    return realmURL
-      ? { realmURL, actions: this.realmPublishing.actionsFor(realmURL) }
-      : undefined;
-  }
-
-  // Back to the button, or to a workspace on the dashboard once publishing
-  // has finished the last step and the steps are gone. The dialog asks once,
-  // as it closes, so the removed steps aren't held after that.
-  private publishReturnFocus = () => {
-    let target =
-      ifConnected(this.publishButton) ??
-      nearestWorkspaceTarget(this.publishButtonAncestors);
-    this.publishButtonAncestors = [];
-    return target;
-  };
 
   @action private async askBoxelAi() {
     await this.aiAssistantPanelService.openNewSession();
@@ -551,11 +501,8 @@ export default class GetStarted extends Component<Signature> {
                         @size='s'
                         {{on
                           'click'
-                          (fn
-                            this.openPublishDialog this.onlyWorkspaceToPublish
-                          )
+                          (fn this.openToPublish this.onlyWorkspaceToPublish)
                         }}
-                        {{this.capturePublishButton}}
                         data-test-get-started-action={{step.id}}
                       >Publish a workspace</Button>
                     {{else if this.workspacesToPublish.length}}
@@ -570,7 +517,6 @@ export default class GetStarted extends Component<Signature> {
                             @appearance='outlined'
                             @size='s'
                             {{on 'click' toggle}}
-                            {{this.capturePublishButton}}
                             data-test-get-started-action={{step.id}}
                           >Publish a workspace
                             {{#if isMenuOpen}}
@@ -646,23 +592,6 @@ export default class GetStarted extends Component<Signature> {
       </div>
     {{else if this.isFinished}}
       <span hidden {{this.dismissWhenFinished}}></span>
-    {{/if}}
-    {{! Sent out of the dashboard so its size container can't trap this
-        fixed-position modal. }}
-    {{#if this.isPublishDialogOpen}}
-      {{#if this.publishDialog}}
-        <ToElsewhere
-          @named='modal-elsewhere'
-          @send={{component
-            PublishRealmDialog
-            realmURL=this.publishDialog.realmURL
-            actions=this.publishDialog.actions
-            isOpen=true
-            onClose=this.closePublishDialog
-            returnFocusTarget=this.publishReturnFocus
-          }}
-        />
-      {{/if}}
     {{/if}}
 
     <style scoped>

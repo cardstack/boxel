@@ -38,11 +38,11 @@ import {
 } from '@cardstack/host/lib/realm-utils';
 import { publishedRealmURLsFromInfo } from '@cardstack/host/lib/utils';
 import { wallpaperImage } from '@cardstack/host/lib/workspace-list';
+import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
-import type RealmPublishingService from '@cardstack/host/services/realm-publishing';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
@@ -53,38 +53,9 @@ export type TileStat = { label: string; count: number };
 
 export const WORKSPACE_TILE_TARGET = '[data-workspace-tile] [data-nav-index]';
 
-// Where focus goes once the control that had it is gone: the first workspace
-// in the nearest of `containers` still on the page that holds one, or else
-// the first dashboard item there. New Workspace comes last, so Enter doesn't
-// create a workspace. `containers` runs from the nearest outward.
-export function nearestWorkspaceTarget(
-  containers: HTMLElement[],
-): HTMLElement | undefined {
-  for (let selector of [WORKSPACE_TILE_TARGET, '[data-nav-index]']) {
-    for (let container of containers) {
-      let target = container.isConnected
-        ? container.querySelector<HTMLElement>(selector)
-        : null;
-      if (target) {
-        return target;
-      }
-    }
-  }
-  return undefined;
-}
-
-// The element's ancestors, nearest first.
-export function ancestorsOf(element: HTMLElement | undefined): HTMLElement[] {
-  let ancestors: HTMLElement[] = [];
-  for (let el = element?.parentElement; el; el = el.parentElement) {
-    ancestors.push(el);
-  }
-  return ancestors;
-}
-
 // The state and actions of one workspace as the dashboard shows it: its
-// options menu, the publish, delete, archive, duplicate and re-index flows
-// with their modals, and where focus goes once a modal closes.
+// options menu, the delete, archive, duplicate and re-index flows with their
+// modals, and where focus goes once a modal closes.
 // Each workspace component makes its own, since the modals and the focus
 // they return belong to that one item, and keeps only its markup.
 //
@@ -98,7 +69,7 @@ export class WorkspaceActions {
   @service declare private recentFilesService: RecentFilesService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
-  @service declare private realmPublishing: RealmPublishingService;
+  @service declare private hostModeService: HostModeService;
 
   @tracked showDeleteModal = false;
   @tracked deleteError: string | undefined;
@@ -112,7 +83,6 @@ export class WorkspaceActions {
     | { copied: number; total: number }
     | undefined;
   @tracked reindexError: string | undefined;
-  @tracked showPublishModal = false;
 
   #getRealmIdentifier: () => RealmIdentifier;
 
@@ -183,9 +153,13 @@ export class WorkspaceActions {
       this.focusContext = undefined;
       return;
     }
+    let ancestors: HTMLElement[] = [];
+    for (let el = list.parentElement; el; el = el.parentElement) {
+      ancestors.push(el);
+    }
     this.focusContext = {
       list,
-      ancestors: ancestorsOf(list),
+      ancestors,
       position: this.workspaceTargets(list).findIndex((target) =>
         this.tileElement?.contains(target),
       ),
@@ -194,7 +168,8 @@ export class WorkspaceActions {
 
   // Focus goes back to the menu trigger. Once the workspace is gone it goes
   // to the one that took its place in the list, or else the last one left in
-  // it, or else the nearest one outside it.
+  // it, or else the nearest one outside it. New Workspace comes last, so
+  // Enter doesn't create a workspace.
   returnFocusTarget = (): HTMLElement | undefined => {
     if (this.menuTrigger?.isConnected) {
       return this.menuTrigger;
@@ -210,7 +185,23 @@ export class WorkspaceActions {
         return target;
       }
     }
-    return nearestWorkspaceTarget([list, ...ancestors]);
+    for (let ancestor of ancestors) {
+      let target = ancestor.isConnected
+        ? ancestor.querySelector<HTMLElement>(WORKSPACE_TILE_TARGET)
+        : null;
+      if (target) {
+        return target;
+      }
+    }
+    for (let container of [list, ...ancestors]) {
+      let target = container.isConnected
+        ? container.querySelector<HTMLElement>('[data-nav-index]')
+        : null;
+      if (target) {
+        return target;
+      }
+    }
+    return undefined;
   };
 
   @cached
@@ -220,10 +211,6 @@ export class WorkspaceActions {
 
   get name() {
     return this.realmInfo.name;
-  }
-
-  get realmURL() {
-    return this.network.virtualNetwork.toURL(this.realmIdentifier).href;
   }
 
   get realmURLDescriptionId() {
@@ -287,7 +274,7 @@ export class WorkspaceActions {
         new MenuItem({
           label: 'Publish',
           icon: PublishIcon,
-          action: this.openPublishModal,
+          action: this.openToPublish,
         }),
       );
     }
@@ -398,12 +385,13 @@ export class WorkspaceActions {
     return this.realm.isRealmOwner(this.realmIdentifier);
   }
 
-  get publishActions() {
-    return this.realmPublishing.actionsFor(this.realmURL);
+  private get canPublish() {
+    return this.realm.canPublish(this.realmIdentifier);
   }
 
-  get canPublish() {
-    return this.realm.canPublish(this.realmIdentifier);
+  // Publishing happens in host mode, which shows the site it publishes.
+  @action private openToPublish() {
+    this.hostModeService.openToPublishTask.perform(this.realmIdentifier);
   }
 
   private get canDuplicateWorkspace() {
@@ -432,18 +420,6 @@ export class WorkspaceActions {
     }
     let { copied, total } = this.duplicateProgress;
     return `Copying ${copied} of ${total} ${pluralize('file', total)}…`;
-  }
-
-  @action private openPublishModal() {
-    if (!this.canPublish) {
-      return;
-    }
-    this.rememberFocusContext();
-    this.showPublishModal = true;
-  }
-
-  @action closePublishModal() {
-    this.showPublishModal = false;
   }
 
   @action private openDeleteModal() {
