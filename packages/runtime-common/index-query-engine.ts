@@ -192,6 +192,20 @@ import {
 // never made searchable (fixable by annotating it) from a query-backed
 // relationship, which is never in the doc at all and cannot be filtered
 // through.
+// The space of a near target read from a stored card (a one-card binding),
+// keyed by the target's array. A target written as numbers has none, and
+// compares with whatever the field holds at its size.
+const vectorTargetSpaces = new WeakMap<object, string>();
+
+// Restricts a vector-table alias to the target's space, when it has one.
+function spaceCondition(alias: string, target: unknown): Expression {
+  let space =
+    target && typeof target === 'object'
+      ? vectorTargetSpaces.get(target)
+      : undefined;
+  return space == null ? [] : [`AND ${alias}.space =`, param(space)];
+}
+
 export class FilterRefersToNonsearchableFieldError extends Error {
   type: CodeRef;
   // The full filter path as written (e.g. `bestFriend.friends.name`).
@@ -2858,6 +2872,12 @@ export class IndexQueryEngine {
     let cards: Record<string, Record<string, unknown> | null> = {};
     let rest: Record<string, LetBinding> = {};
     let letMeta: NonNullable<QueryResultsMeta['lets']> = {};
+    // Each bound card's own vectors, by field path, read from the vector
+    // table: a vector is not in the card's JSON when it lives in a sidecar.
+    let vectorsOf: Record<
+      string,
+      Map<string, { space: string; components: number[] }>
+    > = {};
     for (let [name, binding] of Object.entries(query.let ?? {})) {
       if (!binding.one) {
         rest[name] = binding;
@@ -2874,8 +2894,13 @@ export class IndexQueryEngine {
         ['SELECT i.url AS url, ANY_VALUE(i.search_doc) AS search_doc'],
         'instance',
       );
-      let doc = (results[0] as { search_doc?: unknown } | undefined)
-        ?.search_doc;
+      let first = results[0] as
+        | { url?: string; search_doc?: unknown }
+        | undefined;
+      let doc = first?.search_doc;
+      if (first?.url) {
+        vectorsOf[name] = await this.#oneCardVectors(realmURL, first.url);
+      }
       if (typeof doc === 'string') {
         try {
           doc = JSON.parse(doc);
@@ -2892,6 +2917,14 @@ export class IndexQueryEngine {
     }
     let names = new Set(Object.keys(cards));
     let read = (name: string, path: string, role?: CardReferenceRole) => {
+      // A vector read as a near target comes from the table, and remembers
+      // its space, so a near compares it only with vectors of that space.
+      let stored = role === 'vector' ? vectorsOf[name]?.get(path) : undefined;
+      if (stored) {
+        let target = [...stored.components];
+        vectorTargetSpaces.set(target, stored.space);
+        return target;
+      }
       let v: unknown = cards[name];
       for (let key of path.split('.')) {
         v =
@@ -4013,6 +4046,82 @@ export class IndexQueryEngine {
   // Resolves the VectorField a near sort or filter addresses and refuses
   // anything else: a path that is not a VectorField, or a Postgres without
   // the pgvector table.
+  // A card's single (non-list) vectors, by field path, with their spaces.
+  async #oneCardVectors(
+    realmURL: URL,
+    url: string,
+  ): Promise<Map<string, { space: string; components: number[] }>> {
+    let found = new Map<string, { space: string; components: number[] }>();
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      !(await hasVectorIndex(this.#dbAdapter))
+    ) {
+      return found;
+    }
+    let rows = await this.#dbAdapter.execute(
+      `SELECT field_path, space, embedding::text AS components FROM boxel_index_vectors WHERE realm_url = $1 AND url = $2 AND type = 'instance' AND item_id = ''`,
+      { bind: [realmURL.href, url] },
+    );
+    for (let row of rows) {
+      try {
+        let components = JSON.parse(String(row.components));
+        if (Array.isArray(components) && components.length > 0) {
+          found.set(String(row.field_path), {
+            space: String(row.space ?? ''),
+            components,
+          });
+        }
+      } catch {
+        // not a vector we can read; the binding falls back to the doc
+      }
+    }
+    return found;
+  }
+
+  // The spaces a field's vectors of one size are stored in, across realms.
+  // Cached briefly: a query may name the same field several times, and the
+  // answer changes only when a realm is indexed.
+  #fieldSpaces = new Map<string, { at: number; spaces: Promise<string[]> }>();
+  async #spacesOf(fieldPath: string, dims: number): Promise<string[]> {
+    let key = `${fieldPath} ${dims}`;
+    let cached = this.#fieldSpaces.get(key);
+    if (!cached || Date.now() - cached.at > 30_000) {
+      cached = {
+        at: Date.now(),
+        spaces: this.#dbAdapter
+          .execute(
+            `SELECT DISTINCT space FROM boxel_index_vectors WHERE field_path = $1 AND dims = $2 LIMIT 8`,
+            { bind: [fieldPath, dims] },
+          )
+          .then((rows) => rows.map((row) => String(row.space ?? '')))
+          .catch(() => []),
+      };
+      this.#fieldSpaces.set(key, cached);
+    }
+    return cached.spaces;
+  }
+
+  // A near target read from a card carries its space: comparing it with a
+  // field whose vectors are all in other spaces is refused, never answered
+  // with distances that mean nothing.
+  async #assertNearSpace(fieldPath: string, near: unknown, what: string) {
+    let space =
+      near && typeof near === 'object'
+        ? vectorTargetSpaces.get(near)
+        : undefined;
+    if (space == null || this.#dbAdapter.kind !== 'pg') {
+      return;
+    }
+    let dims = vectorDimensions(near as number[]);
+    let spaces = await this.#spacesOf(fieldPath, dims);
+    if (spaces.length > 0 && !spaces.includes(space)) {
+      throw new InvalidQueryError(
+        `${what}: the target vector is in the space "${space}", but "${fieldPath}" holds vectors in ${spaces.map((s) => `"${s}"`).join(', ')}; vectors from different spaces can't be compared`,
+        'vector-space-mismatch',
+      );
+    }
+  }
+
   async #assertNearField(on: CodeRef, path: string, what: string) {
     let definition = await this.getDefinition(on);
     let field = await getField(definition, path, this.#definitionLookup);
@@ -4495,6 +4604,7 @@ export class IndexQueryEngine {
         param(fieldPath),
         'AND nvf.dims =',
         param(dims),
+        ...spaceCondition('nvf', to),
         ...(minSimilarity == null
           ? []
           : [
@@ -4762,6 +4872,11 @@ export class IndexQueryEngine {
         component.by,
         `blend signal "${component.by}" near a vector`,
       );
+      await this.#assertNearSpace(
+        removeBrackets(component.by),
+        component.near,
+        `blend signal "${component.by}" near a vector`,
+      );
       let target = vectorToSqlLiteral(component.near);
       if (this.#dbAdapter.kind === 'pg') {
         joins.push(
@@ -4769,6 +4884,7 @@ export class IndexQueryEngine {
           param(removeBrackets(component.by)),
           `AND ${joinAlias}.dims =`,
           param(vectorDimensions(component.near)),
+          ...spaceCondition(joinAlias, component.near),
         );
         return [
           `MAX(1 - (${joinAlias}.embedding <=> CAST(`,
@@ -4823,6 +4939,11 @@ export class IndexQueryEngine {
         s.by,
         `sort by "${s.by}" near a vector`,
       );
+      await this.#assertNearSpace(
+        removeBrackets(s.by),
+        s.near,
+        `sort by "${s.by}" near a vector`,
+      );
       let alias = nearSimilarityAlias(sort, index);
       let target = vectorToSqlLiteral(s.near);
       let dims = vectorDimensions(s.near);
@@ -4833,6 +4954,7 @@ export class IndexQueryEngine {
           param(removeBrackets(s.by)),
           `AND ${v}.dims =`,
           param(dims),
+          ...spaceCondition(v, s.near),
         );
         nearColumns.push(
           `, MAX(1 - (${v}.embedding <=> CAST(`,

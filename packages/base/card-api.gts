@@ -305,6 +305,23 @@ export {
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
 export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
+// A field type may refuse to be declared: `contains` and `containsMany` call
+// `FieldType[assertDeclarable](fieldName, options)` when the card's class is
+// built, so a field the type can never serve fails when its module loads
+// rather than when a value arrives. A vector kind with no exact vectorizer
+// uses it (`needs-vectorizer`).
+export const assertDeclarable = Symbol.for('cardstack-assert-declarable');
+
+function checkDeclarable(field: unknown, fieldName: string, options?: Options) {
+  // a thunk (a function that is not a class) resolves later; only a class
+  // can be checked here
+  if (typeof field === 'function' && 'prototype' in field) {
+    let check = (field as any)[assertDeclarable];
+    if (typeof check === 'function') {
+      check.call(field, fieldName, options);
+    }
+  }
+}
 export const formatQuery = Symbol.for('cardstack-format-query');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const emptyValue = Symbol.for('cardstack-empty-value');
@@ -2725,6 +2742,7 @@ export function containsMany<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
+      checkDeclarable(field, fieldName, options);
       let { computeVia, searchable } = options ?? {};
       let instance = new ContainsMany({
         cardThunk: cardThunk(field, { fieldName, ownerPrototype }),
@@ -2747,6 +2765,7 @@ export function contains<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
+      checkDeclarable(field, fieldName, options);
       let { computeVia, searchable } = options ?? {};
       let instance = new Contains({
         cardThunk: cardThunk(field, { fieldName, ownerPrototype }),

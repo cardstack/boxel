@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "vectorizerId": "qwen/qwen3-embedding-8b@2026-11-05",
+      "provider": "openrouter:deepinfra",
+      "modality": "text",
+      "nativeDimensions": 4096,
+      "minDimensions": 32,
+      "dimensionsInUse": [1024, 256],
+      "inputLimit": "32k tokens",
+      "imageLimits": null,
+      "queryPrefix": "Instruct: Given a search query, retrieve relevant passages that answer the query\nQuery: ",
+      "documentPrefix": "",
+      "normalize": true,
+      "distance": "cosine",
+      "price": "about $0.01 per million tokens",
+      "sameSpaceAs": [],
+      "dataHandling": "Text is sent to OpenRouter and served by DeepInfra (US).",
+      "notes": "OpenRouter publishes no weights revision; the revision is the date the space was fixed. The standard text space (StandardTextVector) is this vectorizer at 1024 dimensions; OnTube's text vectors are its 256-dimension space."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/vectorizer",
+        "name": "Vectorizer"
+      }
+    }
+  }
+}

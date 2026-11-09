@@ -1,4 +1,9 @@
 import { ignore, type Ignore } from './ignore.ts';
+import {
+  cardForVectorSidecar,
+  isVectorSidecar,
+  vectorSidecarFor,
+} from './vector-sidecar.ts';
 // Isomorphic UUID — works in both Node and the browser (host tests
 // instantiate IndexRunner inside a Chrome tab, so Node's built-in
 // `crypto.randomUUID` is not available).
@@ -398,6 +403,7 @@ export class IndexRunner {
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
+      { readVectorSidecar: current.#readVectorSidecar },
     );
     let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation discovery and
@@ -645,6 +651,17 @@ export class IndexRunner {
     current.#visitRereads = new WrittenFileRereads({
       delaysMs: current.#writtenFileRereadDelaysMs,
     });
+    // A changed sidecar is a change to its card: the card is indexed again,
+    // which loads the sidecar's vectors. The sidecar is never a row itself.
+    for (let href of [...operations.keys()]) {
+      if (isVectorSidecar(href)) {
+        operations.delete(href);
+        let card = cardForVectorSidecar(href);
+        if (!operations.has(card)) {
+          operations.set(card, 'update');
+        }
+      }
+    }
     let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
@@ -655,6 +672,7 @@ export class IndexRunner {
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
+      { readVectorSidecar: current.#readVectorSidecar },
     );
     let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation — so the
@@ -1441,6 +1459,14 @@ export class IndexRunner {
     this.#shouldResetStoreForNextRender = false;
     return true;
   }
+
+  // A card's vector sidecar, read by the card's URL.
+  #readVectorSidecar = async (cardURL: string) => {
+    let ref = await this.#reader.readFile(new URL(vectorSidecarFor(cardURL)));
+    return ref
+      ? { content: ref.content, lastModified: ref.lastModified }
+      : undefined;
+  };
 
   private get ignoreMap() {
     if (this.#ignoreMap) {

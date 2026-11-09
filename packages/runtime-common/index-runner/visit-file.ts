@@ -1,5 +1,6 @@
 import type { Ignore } from 'ignore';
 
+import { isVectorSidecar } from '../vector-sidecar.ts';
 import {
   cardSourceForVisit,
   flattenPrerenderMeta,
@@ -159,7 +160,9 @@ export async function renderFileForIndexing({
   logInfo,
   logWarn,
 }: RenderFileForIndexingOptions): Promise<IndexVisitRenderResult | undefined> {
-  if (isIgnored(realmURL, ignoreMap, url)) {
+  // A vector sidecar belongs to its card and is loaded with it; it is never
+  // a file row of its own.
+  if (isIgnored(realmURL, ignoreMap, url) || isVectorSidecar(url)) {
     return undefined;
   }
   let start = Date.now();

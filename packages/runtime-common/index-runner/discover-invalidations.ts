@@ -1,5 +1,6 @@
 import { ignore, type Ignore } from '../ignore.ts';
 
+import { cardForVectorSidecar, isVectorSidecar } from '../vector-sidecar.ts';
 import {
   isIgnored,
   jobIdentity,
@@ -82,6 +83,26 @@ export async function discoverInvalidations({
     );
   }
 
+  // A vector sidecar is never a row of its own: it is loaded with its card.
+  // A sidecar written (or removed) since its card's vectors were loaded
+  // sends the card to be indexed again.
+  let sidecarCards = new Set<string>();
+  let loadedSidecars = await batch.vectorSidecarMtimes();
+  for (let mtimeUrl of Object.keys(filesystemMtimes)) {
+    if (!isVectorSidecar(mtimeUrl)) {
+      continue;
+    }
+    let card = cardForVectorSidecar(mtimeUrl);
+    if (loadedSidecars.get(card) !== filesystemMtimes[mtimeUrl]) {
+      sidecarCards.add(card);
+    }
+    loadedSidecars.delete(card);
+    delete filesystemMtimes[mtimeUrl];
+  }
+  for (let card of loadedSidecars.keys()) {
+    sidecarCards.add(card);
+  }
+
   let invalidationList: string[] = [];
   let skipList: string[] = [];
   for (let [mtimeUrl, lastModified] of Object.entries(filesystemMtimes)) {
@@ -89,6 +110,7 @@ export async function discoverInvalidations({
 
     if (
       !indexEntry ||
+      sidecarCards.has(mtimeUrl) ||
       indexEntry.hasError ||
       indexEntry.lastModified == null ||
       lastModified !== indexEntry.lastModified

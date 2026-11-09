@@ -1,15 +1,27 @@
-import { primitive, Component, FieldDef, queryableValue } from './card-api';
+import {
+  primitive,
+  Component,
+  FieldDef,
+  queryableValue,
+  assertDeclarable,
+} from './card-api';
 import type { BaseDef } from './card-api';
 import { htmlSafe } from '@ember/template';
 import ChartDotsIcon from '@cardstack/boxel-icons/chart-dots';
 import {
   fieldSerializer,
   VectorSerializer,
+  vectorSpace,
+  isExactSpace,
   type Vector,
 } from '@cardstack/runtime-common';
 
 // How many leading components the embedded view draws as its fingerprint.
 const FINGERPRINT_CELLS = 32;
+
+// Qwen3-Embedding-8B as served on 2026-11-05. OpenRouter publishes no
+// weights revision, so the revision is the date the space was fixed.
+const STANDARD_TEXT_VECTORIZER = 'qwen/qwen3-embedding-8b@2026-11-05';
 
 function describe(vector: Vector | null | undefined): string {
   if (vector == null) {
@@ -112,40 +124,64 @@ class Embedded extends Component<typeof VectorField> {
   </template>
 }
 
-// An embedding vector: fixed dimension, stored as base64 int8 (default) or
-// float32. Cards rank by it with a `near` sort:
+// A vector: a fixed number of components, stored as base64 int8 or float32.
+// Cards rank by it with a `near` sort:
 //
-//   sort: [{ on: momentRef, by: 'embedding', near: [ ... ] }]
+//   sort: [{ on: momentRef, by: 'textVector', near: [ ... ] }]
 //
-// A vector only compares with vectors from the same model at the same size,
-// so the field names both. The default is Qwen3-Embedding-8B at 1024
-// dimensions: the model emits 4,096 and can be trimmed to any size from 32
-// up, and 1024 is a quarter of the full size that stays under pgvector's
-// 2,000-dimension index limit. Declare another model or size with a
-// subclass:
+// A vector compares only with vectors from the same space: the exact
+// vectorizer (id and revision), the provider that serves it, and the size.
+// Every vector type names its space in full on a named subclass, and every
+// field meant to be comparable uses that one type:
 //
-//   class ClipEmbedding extends VectorField {
+//   export class TalkText extends TextVectorField {
+//     static vectorizer = 'qwen/qwen3-embedding-8b@2026-11-05';
+//     static provider = 'openrouter:deepinfra';
 //     static dimensions = 256;
-//     static embeddingModel = 'qwen/qwen3-embedding-8b';
 //   }
 //
-// Whatever writes the vectors, and whatever builds a `near` target, embeds
-// with `embeddingModel` at `dimensions`. A stored vector of any other
-// dimension fails indexing with an error on the card. Vectors are written
-// by code (an embedding command), so the edit format shows the same
-// read-only summary.
+// The kinds (`TextVectorField`, `MultimodalVectorField`,
+// `SuppliedVectorField`) name no vectorizer, so a field typed with one
+// directly, or with a subclass that leaves part of its space out, is refused
+// when its module loads (`needs-vectorizer`). `StandardTextVector` is the
+// pinned default for text. A newer default ships as a new type
+// (`StandardTextVector2`); a type's space is never edited in place.
+//
+// `VectorField` itself names no space. It stays usable for small,
+// hand-written cases, and its vectors compare only with other plain
+// `VectorField` vectors of the same size.
 export default class VectorField extends FieldDef {
   static displayName = 'Vector';
   static icon = ChartDotsIcon;
   static [primitive]: Vector;
   static [fieldSerializer] = 'vector';
   static dimensions = 1024;
-  // An OpenRouter model id. Declarative for now: the platform does not call
-  // the model itself.
-  static embeddingModel = 'qwen/qwen3-embedding-8b';
+  // The exact vectorizer id with its revision, as a Vectorizer registry card
+  // names it. Never an alias or `latest`.
+  static vectorizer: string | undefined = undefined;
+  // Where calls go, including a pinned host: `openrouter:deepinfra`.
+  static provider: string | undefined = undefined;
+  // What the vectorizer accepts: 'text', 'multimodal' (text and images in
+  // one space) or 'supplied' (written by a pipeline, never by the platform).
+  static vectorKind: 'text' | 'multimodal' | 'supplied' | undefined = undefined;
   static embedded = Embedded;
   static atom = Atom;
   static edit = Embedded;
+
+  // The full space every stored vector of this type records.
+  static get space(): string {
+    return vectorSpace(this);
+  }
+
+  static [assertDeclarable](fieldName: string) {
+    if (this.vectorKind && !isExactSpace(this)) {
+      let error = new Error(
+        `field "${fieldName}": ${this.name} is a ${this.vectorKind} vector kind with no exact space; declare a subclass with static vectorizer (id@revision), provider and dimensions, or use StandardTextVector`,
+      );
+      (error as Error & { code: string }).code = 'needs-vectorizer';
+      throw error;
+    }
+  }
 
   static [queryableValue](value: any, _stack: BaseDef[] = []): any {
     if (value == null) {
@@ -168,4 +204,36 @@ export default class VectorField extends FieldDef {
 }
 
 export { VectorField };
+
+// Text in, one vector out. A field of this kind names its exact space on a
+// subclass.
+export class TextVectorField extends VectorField {
+  static displayName = 'Text vector';
+  static vectorKind = 'text' as const;
+}
+
+// Text and images in one shared space, so text finds images and images find
+// each other.
+export class MultimodalVectorField extends VectorField {
+  static displayName = 'Multimodal vector';
+  static vectorKind = 'multimodal' as const;
+}
+
+// Vectors a pipeline computes and writes with a vector operation (video,
+// custom vectorizers). The platform never vectorizes them.
+export class SuppliedVectorField extends VectorField {
+  static displayName = 'Supplied vector';
+  static vectorKind = 'supplied' as const;
+}
+
+// The standard text space, fixed for good: Qwen3-Embedding-8B through
+// OpenRouter pinned to DeepInfra, at 1024 dimensions (the model emits 4,096
+// and can be trimmed to any size from 32; 1024 stays under pgvector's
+// 2,000-dimension index limit). A better default ships as a new type.
+export class StandardTextVector extends TextVectorField {
+  static displayName = 'Standard text vector';
+  static vectorizer = STANDARD_TEXT_VECTORIZER;
+  static provider = 'openrouter:deepinfra';
+  static dimensions = 1024;
+}
 export type { Vector };

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "vectorizerId": "amazon/titan-embed-image-v1@2026-11-05",
+      "provider": "openrouter",
+      "modality": "multimodal",
+      "nativeDimensions": 1024,
+      "minDimensions": 256,
+      "dimensionsInUse": [1024],
+      "inputLimit": "128 tokens of text",
+      "imageLimits": "JPEG or PNG, up to 25 MB, resized by the provider",
+      "queryPrefix": "",
+      "documentPrefix": "",
+      "normalize": true,
+      "distance": "cosine",
+      "price": "to be confirmed when vectorizing is billed (phase 2)",
+      "sameSpaceAs": [],
+      "dataHandling": "Images and text are sent to OpenRouter, which routes them to Amazon Bedrock.",
+      "notes": "Amazon Titan Multimodal Embeddings G1, called through OpenRouter. Text and images share one space. Supported sizes are 256, 384 and 1024."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/vectorizer",
+        "name": "Vectorizer"
+      }
+    }
+  }
+}
