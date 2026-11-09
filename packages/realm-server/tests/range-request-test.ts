@@ -2,8 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import type { FileRef, Realm, RealmAdapter } from '@cardstack/runtime-common';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
+import type { FileRef, RealmAdapter } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   withRealmPath,
@@ -21,7 +20,6 @@ module(basename(import.meta.filename), function () {
     let request: RealmRequest;
     let serverRequest: SuperTest<Test>;
     let adapter: RealmAdapter;
-    let testRealm: Realm;
 
     setupPermissionedRealmCached(hooks, {
       fixture: 'simple',
@@ -33,7 +31,6 @@ module(basename(import.meta.filename), function () {
       onRealmSetup: (args) => {
         serverRequest = args.request;
         adapter = args.testRealmAdapter;
-        testRealm = args.testRealm;
         request = withRealmPath(args.request, realmURL);
       },
     });
@@ -134,23 +131,25 @@ module(basename(import.meta.filename), function () {
     });
 
     // A path stat on a network filesystem can also say a file is there after
-    // another host has deleted it; only opening the file finds it gone. The
-    // request's file ref is opened as the stat describes and its file is then
-    // deleted, so the read meets the file missing only when it opens it. The
-    // upload's own indexing is settled first, so the deletion reaches only the
-    // request under test.
+    // another host has deleted it; only opening the file finds it gone, and
+    // the adapter's `openContent` then reports nothing to open. The request's
+    // file ref is opened as the stat describes, and its open reports the file
+    // gone, as the adapter's does on that filesystem.
     async function withFileGoneAfterStat<T>(
       path: string,
       run: () => Promise<T>,
     ): Promise<T> {
-      await testRealm.indexing();
       let openFile = adapter.openFile.bind(adapter);
-      let deleted = false;
+      let opened = false;
       adapter.openFile = async (openedPath) => {
         let ref: FileRef | undefined = await openFile(openedPath);
-        if (ref && !deleted && openedPath === path) {
-          deleted = true;
-          await adapter.remove(openedPath as LocalPath);
+        if (ref?.openContent && openedPath === path) {
+          Object.defineProperty(ref, 'openContent', {
+            value: () => {
+              opened = true;
+              return undefined;
+            },
+          });
         }
         return ref;
       };
@@ -158,10 +157,7 @@ module(basename(import.meta.filename), function () {
         return await run();
       } finally {
         adapter.openFile = openFile;
-        QUnit.assert.true(
-          deleted,
-          'the read opened the file the stat described',
-        );
+        QUnit.assert.true(opened, 'the response opened the file it served');
       }
     }
 
