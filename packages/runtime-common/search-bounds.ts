@@ -191,6 +191,15 @@ export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
   MIN_TIME_BUDGET_MS,
 );
 
+// The most matches a `page.total: 'capped'` search counts. Past it the
+// search reports this many with `meta.page.totalIsEstimate`, so a page over a
+// large realm never counts every row to say "more than this".
+export const SEARCH_TOTAL_CAP = parsePositiveInt(
+  env.SEARCH_TOTAL_CAP,
+  1_000,
+  1,
+);
+
 // The most cards a broad `matches` term ranks in one realm. A term that
 // matches more (a word nearly every card holds, like "card") ranks a capped
 // candidate set instead: its best field matches by rank, and that many of the

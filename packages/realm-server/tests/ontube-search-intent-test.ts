@@ -352,6 +352,121 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
+    test('a positive eq or in through a list is the index match alone, with no list walk', async function (assert) {
+      let statements: string[] = [];
+      let execute = dbAdapter.execute.bind(dbAdapter);
+      (dbAdapter as any).execute = async (sql: string, ...rest: unknown[]) => {
+        statements.push(String(sql));
+        return await (execute as any)(sql, ...rest);
+      };
+      try {
+        assert.deepEqual(
+          (
+            await ids({
+              filter: { on: moment(), eq: { 'concepts.name': 'CRDT' } },
+            })
+          ).sort(),
+          [idOf('local-first'), idOf('turning-the-database')].sort(),
+          'eq finds the cards',
+        );
+        assert.deepEqual(
+          (
+            await ids({
+              filter: { on: moment(), in: { 'concepts.name': ['CRDT'] } },
+            })
+          ).sort(),
+          [idOf('local-first'), idOf('turning-the-database')].sort(),
+          'in finds the same cards',
+        );
+      } finally {
+        (dbAdapter as any).execute = execute;
+      }
+      let searches = statements.filter((s) => /FROM boxel_index/.test(s));
+      assert.ok(searches.length > 0, 'the searches ran SQL');
+      assert.notOk(
+        searches.some((s) => /jsonb_tree/.test(s)),
+        'no statement joins a jsonb_tree walk of the list',
+      );
+    });
+
+    test('a plain page is an ordered LIMIT, and says whether more follows without counting', async function (assert) {
+      let all = await ids({ filter: { type: moment() } });
+      assert.ok(all.length >= 2, 'the fixture has at least two moments');
+      let statements: string[] = [];
+      let execute = dbAdapter.execute.bind(dbAdapter);
+      (dbAdapter as any).execute = async (sql: string, ...rest: unknown[]) => {
+        statements.push(String(sql));
+        return await (execute as any)(sql, ...rest);
+      };
+      let newest, exact, whole;
+      try {
+        newest = await search({
+          filter: { type: moment() },
+          sort: [{ by: 'lastModified', direction: 'desc' }],
+          page: { size: 1, total: 'none' },
+        } as Query);
+        exact = await search({
+          filter: { type: moment() },
+          sort: [{ by: 'lastModified', direction: 'desc' }],
+          page: { size: 1 },
+        } as Query);
+        whole = await search({
+          filter: { type: moment() },
+          page: { size: all.length + 5, total: 'none' },
+        } as Query);
+      } finally {
+        (dbAdapter as any).execute = execute;
+      }
+      assert.strictEqual(newest.data.length, 1, 'one row on the page');
+      assert.true(newest.meta.page.hasMore, 'more follows the first row');
+      assert.true(
+        newest.meta.page.totalIsEstimate,
+        "total: 'none' reports a lower bound",
+      );
+      assert.strictEqual(
+        exact.meta.page.total,
+        all.length,
+        'the default total counts every match',
+      );
+      assert.notOk(
+        exact.meta.page.totalIsEstimate,
+        'the default total is exact',
+      );
+      assert.false(
+        whole.meta.page.hasMore,
+        'a page holding every match has no next page',
+      );
+      assert.strictEqual(
+        whole.meta.page.total,
+        all.length,
+        'and is counted exactly from its own rows',
+      );
+      let searches = statements.filter((s) => /FROM boxel_index/.test(s));
+      assert.ok(searches.length > 0, 'the searches ran SQL');
+      assert.notOk(
+        searches.some(
+          (s) =>
+            /MATERIALIZED|GROUP BY i\.url, i\.type\s*\)?\s*(SELECT|ORDER)/.test(
+              s,
+            ) && /LIMIT 2 OFFSET/.test(s),
+        ),
+        'the page query neither materializes nor groups',
+      );
+      assert.ok(
+        searches.some(
+          (s) =>
+            /ORDER BY .*LIMIT 2 OFFSET 0/s.test(s) &&
+            !/GROUP BY/.test(s.split('ORDER BY')[0]),
+        ),
+        'the page is read one row past its size, ungrouped',
+      );
+      assert.strictEqual(
+        searches.filter((s) => /SELECT COUNT\(\*\)/.test(s)).length,
+        1,
+        "only the default page counted its matches; 'none' and the whole page did not",
+      );
+    });
+
     test('include: a filter reads an included field, and nothing else past the link', async function (assert) {
       assert.deepEqual(
         (

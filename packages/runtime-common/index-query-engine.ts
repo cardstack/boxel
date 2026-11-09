@@ -1,4 +1,4 @@
-import { matchCandidateCap } from './search-bounds.ts';
+import { matchCandidateCap, SEARCH_TOTAL_CAP } from './search-bounds.ts';
 import type * as JSONTypes from 'json-typescript';
 import { logger } from './log.ts';
 
@@ -44,6 +44,7 @@ import {
   dbExpression,
   isDbExpression,
   sortDirection,
+  expressionToSql,
 } from './expression.ts';
 import type {
   RangeOperator,
@@ -51,6 +52,7 @@ import type {
   NearSortTarget,
   BlendSortExpression,
   BlendComponent,
+  PageTotalMode,
 } from './query.ts';
 import {
   DEFAULT_RRF_K,
@@ -512,6 +514,9 @@ export interface QueryResultsMeta {
     // capped candidates were ranked and counted (see `#capBroadMatches`).
     // Absent when the total is exact. `page.exactTotal` asks for an exact one.
     totalIsEstimate?: boolean;
+    // Whether another page follows this one. Always set on a paged search, so
+    // a caller that only needs "is there more" can send `page.total: 'none'`.
+    hasMore?: boolean;
   };
   // A query's `facets`, counted over every match: per facet's `by`, its
   // values with how many matched cards hold each, most common first.
@@ -651,6 +656,15 @@ const NEVER_SPILLED_SERIALIZERS: ReadonlySet<string> = new Set([
   'phone',
   'ethereum-address',
 ]);
+
+// A page read by `#plainTopN`: its keys in order, the total as far as the
+// page's `total` mode counted it, and whether another page follows.
+interface PlainPage {
+  keys: Record<string, unknown>[];
+  total: number;
+  hasMore: boolean;
+  totalIsEstimate: boolean;
+}
 
 export const generalSortFields: Record<string, string> = {
   lastModified: 'i.last_modified',
@@ -1889,6 +1903,7 @@ export class IndexQueryEngine {
       let results: Record<string, unknown>[];
       let totalResults: Record<string, unknown>[];
       let facetResults: unknown[];
+      let plainPage: PlainPage | undefined;
       if (collapsed && collapseOn && !conditionalLiveDoc) {
         // Collapsed: the narrow pass keeps each group's best rows by the
         // query's own order, then orders, counts and pages what remains.
@@ -1943,6 +1958,34 @@ export class IndexQueryEngine {
           keys.length > 0
             ? await this.#pageRows(
                 keys,
+                selectClauseExpression,
+                baseConditions,
+                opts,
+                sort,
+              )
+            : [];
+      } else if (
+        page &&
+        !conditionalLiveDoc &&
+        (plainPage = await this.#plainTopN({
+          opts,
+          sort,
+          page,
+          facets: facets ?? [],
+          relevanceColumn,
+          nearJoins,
+          everyCondition,
+        }))
+      ) {
+        // A plain page: no facets and nothing that fans a match out into
+        // several rows, so the matches are already one row per (url, type) and
+        // the page is an ordered LIMIT the planner can read off an index.
+        facetResults = [];
+        totalResults = [{ total: plainPage.total }];
+        results =
+          plainPage.keys.length > 0
+            ? await this.#pageRows(
+                plainPage.keys,
                 selectClauseExpression,
                 baseConditions,
                 opts,
@@ -2147,7 +2190,17 @@ export class IndexQueryEngine {
         meta: {
           page: {
             total: Number(totalResults[0].total),
-            ...(candidatesCapped ? { totalIsEstimate: true } : {}),
+            ...(candidatesCapped || plainPage?.totalIsEstimate
+              ? { totalIsEstimate: true }
+              : {}),
+            ...(page
+              ? {
+                  hasMore:
+                    plainPage?.hasMore ??
+                    (page.number ?? 0) * page.size + results.length <
+                      Number(totalResults[0].total),
+                }
+              : {}),
           },
           ...(nearCtx.report ? { near: nearCtx.report } : {}),
           ...(passages ? { passages } : {}),
@@ -2233,6 +2286,146 @@ export class IndexQueryEngine {
   // page. The filter is not applied either; the rows are known to match it,
   // and `baseConditions` keeps the realm, deletion and entry-kind rules. A row
   // deleted between the passes is dropped from the page.
+  // A page as an ordered LIMIT over the matches, with no grouping and no
+  // materialized match set, when the query allows it: no facets (they count
+  // every match), no relevance, blend or near columns (they aggregate), and
+  // no condition that joins a table-valued function (a plural field walked
+  // with `jsonb_tree`, which yields several rows per match). Every other match
+  // is then exactly one (url, type) row — `boxel_index` and `prerendered_html`
+  // are both keyed (url, realm_url, type) and joined on that key — so the
+  // `GROUP BY i.url, i.type` the general path needs changes nothing here, and
+  // dropping it lets the planner read the page off an ordered index and stop.
+  //
+  // It reads one row past the page to answer `hasMore`, and counts the total
+  // only as far as `page.total` asks: `exact` counts every match, `capped`
+  // stops at `SEARCH_TOTAL_CAP`, `none` counts nothing. A page that has no next
+  // page is exactly counted from its own rows, so the count query runs only
+  // when there is more to count. Returns undefined when the query needs the
+  // general path.
+  async #plainTopN({
+    opts,
+    sort,
+    page,
+    facets,
+    relevanceColumn,
+    nearJoins,
+    everyCondition,
+  }: {
+    opts: QueryOptions;
+    sort: Sort | undefined;
+    page: { number?: number; size: number; total?: PageTotalMode };
+    facets: Facet[];
+    relevanceColumn: CardExpression;
+    nearJoins: CardExpression;
+    everyCondition: CardExpression;
+  }): Promise<PlainPage | undefined> {
+    if (
+      this.#dbAdapter.kind !== 'pg' ||
+      facets.length > 0 ||
+      relevanceColumn.length > 0 ||
+      nearJoins.length > 0 ||
+      Number(page.size) <= 0
+    ) {
+      return undefined;
+    }
+    if (
+      (sort ?? []).some(
+        (s) =>
+          isExprSort(s) ||
+          isBlendSort(s) ||
+          isNearSort(s) ||
+          isMatchRelevanceSort(s),
+      )
+    ) {
+      return undefined;
+    }
+    let sortColumns: CardExpression = [];
+    let orderKeys: CardExpression[] = [];
+    (sort ?? []).forEach((s, i) => {
+      let column =
+        'on' in s && s.on
+          ? fieldQuery(s.by, s.on, false, 'sort')
+          : this.generalFieldSortColumn(s.by);
+      sortColumns.push(', ', column, ` AS _sort_${i}`);
+      orderKeys.push([column, sortDirection(s.direction), nullsPlacement(s)]);
+    });
+    orderKeys.push(['i.url COLLATE "POSIX"'], ['i.type']);
+    let size = Number(page.size);
+    let offset = (page.number ?? 0) * size;
+    let from: CardExpression = [
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      tableValuedFunctionsPlaceholder,
+      'WHERE',
+      ...everyCondition,
+    ];
+    let keyExpression = await this.makeExpression([
+      'SELECT i.url AS url, i.type AS type',
+      ...sortColumns,
+      ...from,
+      'ORDER BY',
+      ...separatedByCommas(orderKeys),
+      `LIMIT ${size + 1} OFFSET ${offset}`,
+    ]);
+    if (
+      expressionToSql(this.#dbAdapter.kind, keyExpression).text.includes(
+        'CROSS JOIN LATERAL',
+      )
+    ) {
+      return undefined;
+    }
+    let run = (expression: Expression) =>
+      opts.timings
+        ? opts.timings.busyTime('sqlExec', () =>
+            this.#query(expression, opts.signal),
+          )
+        : this.#query(expression, opts.signal);
+    let rows = (await run(keyExpression)) as Record<string, unknown>[];
+    let hasMore = rows.length > size;
+    let keys = hasMore ? rows.slice(0, size) : rows;
+    if (!hasMore && (keys.length > 0 || offset === 0)) {
+      return {
+        keys,
+        total: offset + keys.length,
+        hasMore,
+        totalIsEstimate: false,
+      };
+    }
+    let mode: PageTotalMode = page.total ?? 'exact';
+    if (mode === 'none') {
+      return {
+        keys,
+        total: offset + rows.length,
+        hasMore,
+        totalIsEstimate: true,
+      };
+    }
+    if (mode === 'capped') {
+      let [row] = (await run(
+        await this.makeExpression([
+          'SELECT COUNT(*) AS total FROM (SELECT 1',
+          ...from,
+          `LIMIT ${SEARCH_TOTAL_CAP + 1}) AS capped`,
+        ]),
+      )) as { total: unknown }[];
+      let counted = Number(row?.total ?? 0);
+      return {
+        keys,
+        total: Math.min(counted, SEARCH_TOTAL_CAP),
+        hasMore,
+        totalIsEstimate: counted > SEARCH_TOTAL_CAP,
+      };
+    }
+    let [row] = (await run(
+      await this.makeExpression(['SELECT COUNT(*) AS total', ...from]),
+    )) as { total: unknown }[];
+    return {
+      keys,
+      total: Number(row?.total ?? 0),
+      hasMore,
+      totalIsEstimate: false,
+    };
+  }
+
   async #pageRows(
     keys: Record<string, unknown>[],
     selectClauseExpression: CardExpression,

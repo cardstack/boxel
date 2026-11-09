@@ -451,8 +451,21 @@ interface QueryCommon {
     // ranks a capped candidate set and reports an estimated total
     // (`meta.page.totalIsEstimate`). Still held to the time budget.
     exactTotal?: boolean;
+    // How much counting the total costs. `exact` (the default) counts every
+    // match. `capped` counts up to `SEARCH_TOTAL_CAP` and reports a lower
+    // bound past it. `none` counts nothing: `meta.page.hasMore` says whether
+    // another page exists, and the total is the rows seen so far. A page with
+    // no next page is always exactly counted, whatever the mode.
+    total?: PageTotalMode;
   };
 }
+
+export type PageTotalMode = 'exact' | 'capped' | 'none';
+export const PAGE_TOTAL_MODES: readonly PageTotalMode[] = [
+  'exact',
+  'capped',
+  'none',
+];
 
 // fields is only valid when asData is true. This discriminated union
 // makes it a compile-time error to specify fields without asData.
@@ -475,6 +488,7 @@ interface QueryWithInterpolationsBase {
     size: number | string;
     generation?: number;
     exactTotal?: boolean;
+    total?: PageTotalMode;
   };
 }
 
@@ -1925,9 +1939,18 @@ function assertPage(
 
   assertKnownMembers(
     page,
-    ['size', 'number', 'generation', 'exactTotal'],
+    ['size', 'number', 'generation', 'exactTotal', 'total'],
     pointer,
   );
+  if (
+    'total' in page &&
+    !(PAGE_TOTAL_MODES as readonly unknown[]).includes(page.total)
+  ) {
+    throw new InvalidQueryError(
+      `${pointer.concat('total').join('/') || '/'}: total is one of ${PAGE_TOTAL_MODES.join(', ')}`,
+      'invalid-page',
+    );
+  }
   if ('exactTotal' in page && typeof page.exactTotal !== 'boolean') {
     throw new InvalidQueryError(
       `${pointer.concat('exactTotal').join('/') || '/'}: exactTotal is true or false`,
