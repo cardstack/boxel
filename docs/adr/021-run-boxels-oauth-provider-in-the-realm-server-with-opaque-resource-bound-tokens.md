@@ -90,10 +90,13 @@ one of the token's scopes, so a route added later refuses OAuth tokens until
 an entry maps it. An entry MUST name a route as its router registers it: by
 method and path pattern, and in the realm by MIME type too. A controller MUST
 match the route its router selected for the request, after any method
-override, and never the request's URL against an entry. No entry MAY name a
-method or path pattern that no route is registered with. The realm can't read
-the registry, so the realm server hands each realm the part of the map that
-names realm routes. A route that checks its caller another way, by an
+override, and never the request's URL against an entry. An entry MUST NOT
+name a method or path pattern that no route is registered with. The realm
+can't read the registry, so the realm server hands each realm the part of the
+map that names realm routes. The check against the map MUST be one shared
+function, which each controller calls right after the lookup, and it MUST take
+only the verified caller and the route its router selected, never the
+request. A route that checks its caller another way, by an
 operator token, a shared secret, or a session token it verifies itself, never
 reaches a controller, and so refuses OAuth tokens. `/mcp`'s entry maps its one
 route to each scope, so `/mcp`'s controller MUST admit a tool call only when
@@ -161,8 +164,10 @@ resource, or whose grant was created before the user's OAuth grants were
 last revoked. The token endpoint MUST apply the same grant checks on every code and
 refresh exchange.
 
-The Boxel API's controllers MUST come out of an OAuth token with the same user
-a session token gives, so every permission check after them is unchanged. A
+A verified caller MUST hold exactly the user, the OAuth grant, the OAuth
+client, the token's scopes and the time the grant was created, and nothing
+taken from the request. The Boxel API's controllers MUST come out of an OAuth
+token with the same user a session token gives, so every permission check after them is unchanged. A
 token's scopes MUST act only as a ceiling on what its caller may do: the
 user's current realm permissions MUST still decide each call, and a scope MUST
 NOT grant what they don't (ADR 006). An OAuth token MUST NOT be exchanged for a
@@ -170,8 +175,8 @@ realm-server session, a realm session, a delegated session or a Matrix login.
 
 ### 1.6. What an OAuth token never reaches
 
-A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). No entry
-MAY map a scope to key management, reads included, to a route that needs a
+A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). An entry
+MUST NOT map a scope to key management, reads included, to a route that needs a
 secure session, to a route that mints a token or a signed URL, or to a route
 that changes a realm's permissions. Each of these refusals MUST be tested, on
 the realm server and in the realm.
@@ -274,7 +279,10 @@ method would fail both ways: `_capabilities` is a `POST` that only reads, a
 a signed URL. An entry names the route its router selected, not a pattern
 over URLs, because realm routes share paths: every card document is read
 through one pattern, and a URL pattern broad enough for card paths would also
-match `_sign-capture-urls`.
+match `_sign-capture-urls`. The check reads only who is calling and which
+route was selected, never how the credential arrived, so it can move whole
+into an access decision that never sees the request, and one shared function
+leaves that move a single call site.
 
 The library builds the URLs it publishes, and sets its cookies, from whatever
 host a request names. The realm server also answers for published sites,
