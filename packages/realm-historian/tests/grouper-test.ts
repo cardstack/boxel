@@ -441,6 +441,17 @@ module('grouper', (hooks) => {
         closeBefore: 'intent',
       });
     });
+
+    test('an intent event after the deadline closes the group for the time, as the clock would', (assert) => {
+      let intent = { kind: 'delete-realm' } as const;
+      assert.deepEqual(
+        decide(groupOf(event(0)), event(5, { intent }), LIMITS),
+        {
+          closeBefore: 'quiet-period',
+          closeAfter: 'intent',
+        },
+      );
+    });
   });
 
   module('push', () => {
