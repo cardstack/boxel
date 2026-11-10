@@ -249,6 +249,35 @@ function isDirectWriterRow(
 }
 
 /**
+ * Whether `userId` administers the realm whose permissions these are: they
+ * are a direct writer of it, as `isDirectWriter` answers it (ADR 024 §1.3).
+ * `realm-owner` plays no part: it names the user the realm is indexed as, not
+ * an authority (ADR 006 §1.2).
+ */
+export function isRealmAdministrator(
+  permissions: RealmPermissions,
+  userId: string,
+  matrixServerName: string,
+): boolean {
+  return isDirectWriterRow(
+    userId,
+    permissions[userId]?.includes('write') ?? false,
+    matrixServerName,
+  );
+}
+
+/**
+ * The users a realm's permission rows name: every row but `*` and `users`.
+ * These are the users whose realm lists change when the realm is archived,
+ * restored or deleted.
+ */
+export function namedRealmUsers(permissions: RealmPermissions): string[] {
+  return Object.keys(permissions).filter(
+    (username) => !wildcardUsernames.has(username),
+  );
+}
+
+/**
  * Whether `userId` is a direct writer of the realm: a person whose own
  * permission row grants `write`. It is the narrower question asked before a
  * realm takes something on in a person's name, such as a shared key or a
@@ -431,7 +460,7 @@ export async function fetchUserPermissions(
     // enumeration so _realm-auth, multi-realm authorization, the indexer
     // sweep, etc. see only active realms. Set true to include them.
     // The archive-management endpoints reach archived realms by URL via
-    // fetchRealmPermissions / fetchArchivedRealmsForOwner instead, so
+    // fetchRealmPermissions / fetchArchivedRealmsForAdministrator instead, so
     // they bypass this filter and don't need the opt-in.
     includeArchived?: boolean;
     // Realms readable by everyone (a `'*'` read row) are reachable by every

@@ -71,9 +71,10 @@ export async function readRealmPermissions({
 // Grants are merged by the realm rather than replacing the set, so a call
 // naming two users leaves everyone else's permissions alone.
 //
-// `realm-owner` can neither be granted nor modified through this endpoint —
-// the realm refuses both — so this cannot hand anyone the realm. The owner is
-// whoever `realm create` made the owner.
+// `realm-owner` can't be granted through this endpoint, and the owner keeps
+// `read` and the flag whatever a grant says, since the owner is the user the
+// realm is indexed as. A `write` grant makes its grantee one of the realm's
+// administrators (ADR 024 §1.3).
 export async function grantRealmPermissions({
   realmUrl,
   authorization,
