@@ -1,7 +1,8 @@
 // One `automation_runs` row per run of an automation: the source of truth for
 // where the run is, which queue attempt owns it, and whether its writes have
-// been committed. The realm server checks a run-token call against this row,
-// and a retried job reads it to learn whether the script still has to run.
+// been committed. The realm server must check each run-token call against this
+// row, and a retried job reads it to learn whether the script still has to
+// run.
 //
 // A run is keyed by its automation, trigger and slot (the same three a run's
 // `dedupeKey` names), so enqueueing the same run twice finds one row. The
@@ -10,15 +11,17 @@
 // of the person the run acts as.
 //
 // `state` moves pending → running → complete, error or canceled. `attempt`
-// names the queue attempt that owns a running run; a retry takes the run over
-// by writing its own. `commit_started_at` is set once, when the owning attempt
+// is the job reservation id of the queue attempt that owns a running run; a
+// retry, whose reservation id is greater, takes the run over by writing its
+// own. `commit_started_at` is set once, when the owning attempt
 // claims the commit, and `committed_at` when the batch has landed, so a run
 // commits at most once however many times its job runs. `error_reason` is a
 // code (such as `script-error` or `timed-out`) and `error_message` its
 // detail; `canceled_by` names who canceled.
 //
-// The metered counts are added to by the realm server where it does the
-// work, and never taken from the tab.
+// The metered counts are for the realm server to add to where it does the
+// work, never taking them from the tab. A deleted realm's runs are deleted
+// with it.
 //
 // The table is server-only, and excluded from the SQLite schema dump.
 
@@ -31,7 +34,7 @@ exports.up = (pgm) => {
       trigger text NOT NULL,
       slot text NOT NULL,
       acts_as text NOT NULL,
-      attempt text,
+      attempt bigint,
       script_id text,
       script_hash text,
       state text NOT NULL DEFAULT 'pending',

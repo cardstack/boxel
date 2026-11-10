@@ -6,11 +6,13 @@
 // and a commit) can't both win.
 //
 //   pending ──start──▶ running ──finish──▶ complete | error
-//      │                  │
+//      │                  │  └──abandon──▶ complete | error
 //      └─────cancel───────┴──▶ canceled   (only before the commit is claimed)
 //
 // A queue attempt takes a run with `startAutomationRunAttempt`, which makes
-// it the run's owner. Only the owner may record the script, claim the commit
+// it the run's owner. An attempt is the queue's reservation id, which grows
+// with each reservation, so only an attempt at least as new as the owner can
+// take the run over. Only the owner may record the script, claim the commit
 // or finish the run, so an attempt that a retry has replaced is refused at
 // each of them. The commit is claimed once (`commit_started_at`) before the
 // batch is sent, and recorded (`committed_at`) once it has landed, so a run
@@ -51,8 +53,9 @@ export interface AutomationRun extends AutomationRunCounts {
   slot: string;
   // The Matrix user id of the person the run acts as.
   actsAs: string;
-  // The queue attempt that owns the run, once one has started it.
-  attempt: string | null;
+  // The queue attempt (the job's reservation id) that owns the run, once one
+  // has started it.
+  attempt: number | null;
   scriptId: RealmResourceIdentifier | null;
   scriptHash: string | null;
   state: AutomationRunState;
@@ -83,12 +86,15 @@ export interface NewAutomationRun {
 //   before recording that it landed, so whether its batch landed is unknown.
 //   Finish the run as an error without running the script, since running it
 //   again could commit twice.
+// - `superseded`: a newer attempt owns the run. Stop without touching it.
 // - `over`: the run is complete, errored or canceled, and the attempt doesn't
 //   own it.
 // - `missing`: there is no such run.
 export type AutomationRunAttemptStart =
-  | { kind: 'run' | 'committed' | 'commit-interrupted'; run: AutomationRun }
-  | { kind: 'over'; run: AutomationRun }
+  | {
+      kind: 'run' | 'committed' | 'commit-interrupted' | 'superseded' | 'over';
+      run: AutomationRun;
+    }
   | { kind: 'missing' };
 
 export type AutomationRunOutcome =
@@ -147,23 +153,35 @@ export async function getAutomationRun(
 }
 
 // Makes `attempt` the owner of a pending or running run, and says what it must
-// do next. A running run is taken over: the attempt that owned it is refused
-// from then on.
+// do next. A running run is taken over by an attempt at least as new as its
+// owner: the attempt that owned it is refused from then on. `started_at` keeps
+// the first attempt's start.
 export async function startAutomationRunAttempt(
   dbAdapter: DBAdapter,
   id: string,
-  attempt: string,
+  attempt: number,
 ): Promise<AutomationRunAttemptStart> {
   let [row] = await query(dbAdapter, [
     "UPDATE automation_runs SET state = 'running', attempt =",
     param(attempt),
     ', started_at = COALESCE(started_at, now()) WHERE id =',
     param(id),
-    "AND state IN ('pending', 'running') RETURNING *",
+    "AND state IN ('pending', 'running') AND (attempt IS NULL OR attempt <=",
+    param(attempt),
+    ') RETURNING *',
   ]);
   if (!row) {
     let run = await getAutomationRun(dbAdapter, id);
-    return run ? { kind: 'over', run } : { kind: 'missing' };
+    if (!run) {
+      return { kind: 'missing' };
+    }
+    return {
+      kind:
+        run.state === 'pending' || run.state === 'running'
+          ? 'superseded'
+          : 'over',
+      run,
+    };
   }
   let run = runFromRow(row);
   if (run.committedAt) {
@@ -179,7 +197,7 @@ export async function startAutomationRunAttempt(
 export async function recordAutomationRunScript(
   dbAdapter: DBAdapter,
   id: string,
-  attempt: string,
+  attempt: number,
   script: { scriptId: RealmResourceIdentifier; scriptHash: string },
 ): Promise<AutomationRun | undefined> {
   return await updateOwned(dbAdapter, id, attempt, [
@@ -196,7 +214,7 @@ export async function recordAutomationRunScript(
 export async function claimAutomationRunCommit(
   dbAdapter: DBAdapter,
   id: string,
-  attempt: string,
+  attempt: number,
 ): Promise<AutomationRun | undefined> {
   return await updateOwned(
     dbAdapter,
@@ -223,11 +241,12 @@ export async function recordAutomationRunCommitted(
 }
 
 // Ends a running run that `attempt` owns. A run whose commit was claimed can
-// finish as complete only once the commit has landed.
+// finish as complete only once the commit has landed, and a run whose commit
+// landed can't finish as an error, since its writes are in the realm.
 export async function finishAutomationRun(
   dbAdapter: DBAdapter,
   id: string,
-  attempt: string,
+  attempt: number,
   outcome: AutomationRunOutcome,
 ): Promise<AutomationRun | undefined> {
   if (outcome.state === 'complete') {
@@ -239,12 +258,39 @@ export async function finishAutomationRun(
       ['AND (commit_started_at IS NULL OR committed_at IS NOT NULL)'],
     );
   }
-  return await updateOwned(dbAdapter, id, attempt, [
-    "state = 'error', finished_at = now(), error_reason =",
-    param(outcome.reason),
-    ', error_message =',
-    param(outcome.message ?? null),
+  return await updateOwned(
+    dbAdapter,
+    id,
+    attempt,
+    [
+      "state = 'error', finished_at = now(), error_reason =",
+      param(outcome.reason),
+      ', error_message =',
+      param(outcome.message ?? null),
+    ],
+    ['AND committed_at IS NULL'],
+  );
+}
+
+// Closes a pending or running run whose job is gone, such as one whose job ran
+// out of retries, whoever owned it. A run whose commit landed finishes as
+// complete. Any other run finishes as an error with `reason`, including one
+// whose commit was claimed but never recorded as landed.
+export async function abandonAutomationRun(
+  dbAdapter: DBAdapter,
+  id: string,
+  reason: string,
+): Promise<AutomationRun | undefined> {
+  let [row] = await query(dbAdapter, [
+    'UPDATE automation_runs SET finished_at = now(),',
+    "state = CASE WHEN committed_at IS NOT NULL THEN 'complete' ELSE 'error' END,",
+    'error_reason = CASE WHEN committed_at IS NOT NULL THEN NULL ELSE',
+    param(reason),
+    'END WHERE id =',
+    param(id),
+    "AND state IN ('pending', 'running') RETURNING *",
   ]);
+  return row ? runFromRow(row) : undefined;
 }
 
 // Cancels a pending or running run, for `canceledBy`. A run whose commit was
@@ -303,7 +349,7 @@ export async function addAutomationRunCounts(
 async function updateOwned(
   dbAdapter: DBAdapter,
   id: string,
-  attempt: string,
+  attempt: number,
   set: Expression,
   where: Expression = [],
 ): Promise<AutomationRun | undefined> {
@@ -328,7 +374,7 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     trigger: String(row.trigger),
     slot: String(row.slot),
     actsAs: String(row.acts_as),
-    attempt: (row.attempt as string | null) ?? null,
+    attempt: row.attempt == null ? null : Number(row.attempt),
     scriptId: (row.script_id as RealmResourceIdentifier | null) ?? null,
     scriptHash: (row.script_hash as string | null) ?? null,
     state: row.state as AutomationRunState,

@@ -16,9 +16,10 @@ server row).
 ## The run row
 
 Every run has one row in `automation_runs`, and that row is the source of
-truth for where the run is. The worker reads it to decide whether to run the
-script, the realm server checks every run-token call against it, and a cancel
-works by changing it. The functions that change it are in
+truth for where the run is. Its contract with the code around it: the worker
+must start each attempt through the row and do what the start says, the realm
+server must check every run-token call against the row (ADR 026 §1.3), and a
+cancel works by changing it. The functions that change it are in
 `packages/runtime-common/automation-runs.ts`, exported from
 `@cardstack/runtime-common`.
 
@@ -29,13 +30,13 @@ works by changing it. The functions that change it are in
 | `automation_id`, `realm`                                                       | The automation card and its realm, as canonical identifiers (ADR 002), never served URLs                                     |
 | `trigger`, `slot`                                                              | The trigger's label and the slot it fired for: the scheduled instant, a webhook delivery's id, a batch's id, or a click's id |
 | `acts_as`                                                                      | The Matrix user id of the person the run acts as (ADR 026 §1.1)                                                              |
-| `attempt`                                                                      | The queue attempt that owns the run                                                                                          |
+| `attempt`                                                                      | The queue attempt that owns the run: the job's reservation id, which grows with each reservation                             |
 | `script_id`, `script_hash`                                                     | The script file the run read, as an identifier, and the hash of the text it ran                                              |
 | `state`                                                                        | `pending`, `running`, `complete`, `error` or `canceled`                                                                      |
 | `error_reason`, `error_message`                                                | For an error: a code (such as `script-error`, `timed-out`, `commit-interrupted`) and its detail                              |
 | `canceled_by`                                                                  | Who canceled the run                                                                                                         |
-| `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, added to by the realm server where it does the work, never reported by the tab                           |
-| `created_at`, `started_at`, `commit_started_at`, `committed_at`, `finished_at` | When the run was enqueued, first started, claimed its commit, had its commit land, and ended                                 |
+| `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, which the realm server must add to where it does the work, never taking them from the tab                |
+| `created_at`, `started_at`, `commit_started_at`, `committed_at`, `finished_at` | When the run was enqueued, first started (a retry keeps it), claimed its commit, had its commit land, and ended              |
 
 A run is unique by `(automation_id, trigger, slot)`, the same three its
 `dedupeKey` names, so `createAutomationRun` called twice for one firing
@@ -46,7 +47,7 @@ SQLite schema dump (`packages/postgres/scripts/schema-dump.sh`).
 
 ```
 pending ──start──▶ running ──finish──▶ complete | error
-   │                  │
+   │                  │  └──abandon──▶ complete | error
    └─────cancel───────┴──▶ canceled   (only before the commit is claimed)
 ```
 
@@ -57,8 +58,10 @@ says why) rather than throwing.
 
 - **`startAutomationRunAttempt(db, id, attempt)`** makes `attempt` the owner
   of a pending or running run and moves it to `running`. Taking a running run
-  is how a retry takes over from an attempt that died or timed out; the old
-  attempt is refused at every later step. It returns what to do next:
+  is how a retry takes over from an attempt that died or timed out. Only an
+  attempt at least as new as the owner can take it, so the old attempt is
+  refused at every later step, its own late start included. It returns what to
+  do next:
   - `run`: run the script.
   - `committed`: an earlier attempt's commit landed. Finish the run as
     complete without running the script.
@@ -67,6 +70,7 @@ says why) rather than throwing.
     as an error with reason `commit-interrupted`, without running the script,
     because running it again could commit twice. The next scheduled run
     compares with the realm and catches up (ADR 027 §1.1).
+  - `superseded`: a newer attempt owns the run. Stop without touching it.
   - `over`: the run already finished or was canceled.
   - `missing`: no such run.
 - **`recordAutomationRunScript`** records the script file and its hash. Owner
@@ -79,8 +83,13 @@ says why) rather than throwing.
   check the owner, because the batch landed whichever attempt sent it.
 - **`finishAutomationRun`** ends a running run as `complete` or `error`, owner
   only. A run that claimed its commit can't finish as complete until the
-  commit is recorded as landed. A Preview never claims a commit and finishes
-  complete.
+  commit is recorded as landed, and a run whose commit landed can't finish as
+  an error. A Preview never claims a commit and finishes complete.
+- **`abandonAutomationRun(db, id, reason)`** closes a pending or running run
+  whose job is gone, whoever owned it: the queue gives up on a job after its
+  last reservation, and no attempt is left to finish the run. This is for the
+  reconcile pass (ADR 028 §1.5). A run whose commit landed finishes complete;
+  any other finishes as an error with `reason`.
 - **`cancelAutomationRun`** cancels a pending or running run, and records who
   canceled it. It is refused once the commit is claimed, since the writes may
   already be landing. A canceled run can't be started, claim a commit or
@@ -103,6 +112,7 @@ switch (start.kind) {
       reason: 'commit-interrupted',
     });
     return;
+  case 'superseded':
   case 'over':
   case 'missing':
     return;
@@ -128,13 +138,16 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
  ORDER BY created_at DESC LIMIT 10;
 ```
 
-- `running` with an old `started_at` and no live job: the attempt died. The
-  next attempt of the job takes the run over.
+- `running` with no live job: the attempt died. If the job has a reservation
+  left, its next attempt takes the run over. If not, the run stays `running`
+  until the reconcile pass closes it with `abandonAutomationRun`. `started_at`
+  is the first attempt's start, so an old one alone says only that the run was
+  retried.
 - `commit_started_at` set and `committed_at` null on a finished run: the
   claiming attempt stopped between the claim and the landing. Check the
   realm's files for the batch's writes to see whether it landed.
-- `committed_at` set on an `error` run: the batch landed after a retry
-  had already finished the run as `commit-interrupted`.
+- `committed_at` set on an `error` run: the batch landed after a retry or
+  the reconcile pass had already closed the run as an error.
 
 The row holds run state only. A run's log (its console lines and platform
 calls) doesn't go on it.

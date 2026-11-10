@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { randomUUID } from 'crypto';
 import {
+  abandonAutomationRun,
   addAutomationRunCounts,
   cancelAutomationRun,
   claimAutomationRunCommit,
@@ -18,6 +19,7 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
+import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
 
 const REALM = ri('http://127.0.0.1:4444/payroll/');
 const AUTOMATION = rri('http://127.0.0.1:4444/payroll/Automation/nightly-sync');
@@ -45,7 +47,7 @@ module(basename(import.meta.filename), function () {
       });
     }
 
-    async function startedRun(attempt = 'attempt-1'): Promise<AutomationRun> {
+    async function startedRun(attempt = 1): Promise<AutomationRun> {
       let run = await newRun();
       let start = await startAutomationRunAttempt(dbAdapter, run.id, attempt);
       if (start.kind !== 'run') {
@@ -90,30 +92,24 @@ module(basename(import.meta.filename), function () {
 
     test('an attempt starts a pending run and owns it', async function (assert) {
       let run = await newRun();
-      let start = await startAutomationRunAttempt(
-        dbAdapter,
-        run.id,
-        'attempt-1',
-      );
+      let start = await startAutomationRunAttempt(dbAdapter, run.id, 1);
       assert.strictEqual(start.kind, 'run');
       let started = 'run' in start ? start.run : undefined;
       assert.strictEqual(started?.state, 'running');
-      assert.strictEqual(started?.attempt, 'attempt-1');
+      assert.strictEqual(started?.attempt, 1);
       assert.ok(started?.startedAt, 'the start is timestamped');
     });
 
     test('the owning attempt records the script it ran', async function (assert) {
       let run = await startedRun();
-      let recorded = await recordAutomationRunScript(
-        dbAdapter,
-        run.id,
-        'attempt-1',
-        { scriptId: SCRIPT, scriptHash: 'sha256:abc' },
-      );
+      let recorded = await recordAutomationRunScript(dbAdapter, run.id, 1, {
+        scriptId: SCRIPT,
+        scriptHash: 'sha256:abc',
+      });
       assert.strictEqual(recorded?.scriptId, SCRIPT);
       assert.strictEqual(recorded?.scriptHash, 'sha256:abc');
       assert.strictEqual(
-        await recordAutomationRunScript(dbAdapter, run.id, 'attempt-0', {
+        await recordAutomationRunScript(dbAdapter, run.id, 0, {
           scriptId: SCRIPT,
           scriptHash: 'sha256:other',
         }),
@@ -124,20 +120,16 @@ module(basename(import.meta.filename), function () {
 
     test('a run commits once and finishes complete', async function (assert) {
       let run = await startedRun();
-      let claimed = await claimAutomationRunCommit(
-        dbAdapter,
-        run.id,
-        'attempt-1',
-      );
+      let claimed = await claimAutomationRunCommit(dbAdapter, run.id, 1);
       assert.ok(claimed?.commitStartedAt, 'the commit is claimed');
       assert.strictEqual(
-        await claimAutomationRunCommit(dbAdapter, run.id, 'attempt-1'),
+        await claimAutomationRunCommit(dbAdapter, run.id, 1),
         undefined,
         'a second claim is refused',
       );
       let committed = await recordAutomationRunCommitted(dbAdapter, run.id);
       assert.ok(committed?.committedAt, 'the landed commit is recorded');
-      let finished = await finishAutomationRun(dbAdapter, run.id, 'attempt-1', {
+      let finished = await finishAutomationRun(dbAdapter, run.id, 1, {
         state: 'complete',
       });
       assert.strictEqual(finished?.state, 'complete');
@@ -146,7 +138,7 @@ module(basename(import.meta.filename), function () {
 
     test('a run that never commits, such as a Preview, finishes complete', async function (assert) {
       let run = await startedRun();
-      let finished = await finishAutomationRun(dbAdapter, run.id, 'attempt-1', {
+      let finished = await finishAutomationRun(dbAdapter, run.id, 1, {
         state: 'complete',
       });
       assert.strictEqual(finished?.state, 'complete');
@@ -155,7 +147,7 @@ module(basename(import.meta.filename), function () {
 
     test('a run finishes as an error with its reason', async function (assert) {
       let run = await startedRun();
-      let finished = await finishAutomationRun(dbAdapter, run.id, 'attempt-1', {
+      let finished = await finishAutomationRun(dbAdapter, run.id, 1, {
         state: 'error',
         reason: 'script-error',
         message: 'TypeError: rows is undefined (line 12)',
@@ -169,73 +161,57 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a stale attempt is refused at commit once a retry has taken the run over', async function (assert) {
-      let run = await startedRun('attempt-1');
-      let retry = await startAutomationRunAttempt(
-        dbAdapter,
-        run.id,
-        'attempt-2',
-      );
+      let run = await startedRun(1);
+      let retry = await startAutomationRunAttempt(dbAdapter, run.id, 2);
       assert.strictEqual(retry.kind, 'run', 'the retry runs the script');
       assert.strictEqual(
-        await claimAutomationRunCommit(dbAdapter, run.id, 'attempt-1'),
+        await claimAutomationRunCommit(dbAdapter, run.id, 1),
         undefined,
         'the replaced attempt cannot commit',
       );
       assert.strictEqual(
-        await finishAutomationRun(dbAdapter, run.id, 'attempt-1', {
+        await finishAutomationRun(dbAdapter, run.id, 1, {
           state: 'complete',
         }),
         undefined,
         'the replaced attempt cannot finish the run',
       );
-      let claimed = await claimAutomationRunCommit(
-        dbAdapter,
-        run.id,
-        'attempt-2',
-      );
-      assert.strictEqual(claimed?.attempt, 'attempt-2', 'the retry commits');
+      let claimed = await claimAutomationRunCommit(dbAdapter, run.id, 2);
+      assert.strictEqual(claimed?.attempt, 2, 'the retry commits');
     });
 
     test('a retry after a commit finishes without running the script again', async function (assert) {
-      let run = await startedRun('attempt-1');
-      await claimAutomationRunCommit(dbAdapter, run.id, 'attempt-1');
+      let run = await startedRun(1);
+      await claimAutomationRunCommit(dbAdapter, run.id, 1);
       await recordAutomationRunCommitted(dbAdapter, run.id);
 
-      let retry = await startAutomationRunAttempt(
-        dbAdapter,
-        run.id,
-        'attempt-2',
-      );
+      let retry = await startAutomationRunAttempt(dbAdapter, run.id, 2);
       assert.strictEqual(retry.kind, 'committed');
       assert.strictEqual(
-        await claimAutomationRunCommit(dbAdapter, run.id, 'attempt-2'),
+        await claimAutomationRunCommit(dbAdapter, run.id, 2),
         undefined,
         'the retry cannot commit again',
       );
-      let finished = await finishAutomationRun(dbAdapter, run.id, 'attempt-2', {
+      let finished = await finishAutomationRun(dbAdapter, run.id, 2, {
         state: 'complete',
       });
       assert.strictEqual(finished?.state, 'complete');
     });
 
     test('a retry after a claimed commit that never landed finishes as an error', async function (assert) {
-      let run = await startedRun('attempt-1');
-      await claimAutomationRunCommit(dbAdapter, run.id, 'attempt-1');
+      let run = await startedRun(1);
+      await claimAutomationRunCommit(dbAdapter, run.id, 1);
 
-      let retry = await startAutomationRunAttempt(
-        dbAdapter,
-        run.id,
-        'attempt-2',
-      );
+      let retry = await startAutomationRunAttempt(dbAdapter, run.id, 2);
       assert.strictEqual(retry.kind, 'commit-interrupted');
       assert.strictEqual(
-        await finishAutomationRun(dbAdapter, run.id, 'attempt-2', {
+        await finishAutomationRun(dbAdapter, run.id, 2, {
           state: 'complete',
         }),
         undefined,
         'the run cannot read complete while its commit is unaccounted for',
       );
-      let finished = await finishAutomationRun(dbAdapter, run.id, 'attempt-2', {
+      let finished = await finishAutomationRun(dbAdapter, run.id, 2, {
         state: 'error',
         reason: 'commit-interrupted',
       });
@@ -244,9 +220,9 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the batch of a replaced attempt is still recorded as landed', async function (assert) {
-      let run = await startedRun('attempt-1');
-      await claimAutomationRunCommit(dbAdapter, run.id, 'attempt-1');
-      await startAutomationRunAttempt(dbAdapter, run.id, 'attempt-2');
+      let run = await startedRun(1);
+      await claimAutomationRunCommit(dbAdapter, run.id, 1);
+      await startAutomationRunAttempt(dbAdapter, run.id, 2);
       let committed = await recordAutomationRunCommitted(dbAdapter, run.id);
       assert.ok(committed?.committedAt);
       assert.strictEqual(
@@ -262,11 +238,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(canceled?.state, 'canceled');
       assert.strictEqual(canceled?.canceledBy, PAYER);
       assert.ok(canceled?.finishedAt);
-      let start = await startAutomationRunAttempt(
-        dbAdapter,
-        run.id,
-        'attempt-1',
-      );
+      let start = await startAutomationRunAttempt(dbAdapter, run.id, 1);
       assert.strictEqual(start.kind, 'over');
     });
 
@@ -279,11 +251,11 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(canceled?.state, 'canceled');
       assert.strictEqual(
-        await claimAutomationRunCommit(dbAdapter, run.id, 'attempt-1'),
+        await claimAutomationRunCommit(dbAdapter, run.id, 1),
         undefined,
       );
       assert.strictEqual(
-        await finishAutomationRun(dbAdapter, run.id, 'attempt-1', {
+        await finishAutomationRun(dbAdapter, run.id, 1, {
           state: 'complete',
         }),
         undefined,
@@ -293,7 +265,7 @@ module(basename(import.meta.filename), function () {
 
     test('a run whose commit was claimed cannot be canceled', async function (assert) {
       let run = await startedRun();
-      await claimAutomationRunCommit(dbAdapter, run.id, 'attempt-1');
+      await claimAutomationRunCommit(dbAdapter, run.id, 1);
       assert.strictEqual(
         await cancelAutomationRun(dbAdapter, run.id, PAYER),
         undefined,
@@ -306,19 +278,15 @@ module(basename(import.meta.filename), function () {
 
     test('a finished run is over for every later attempt', async function (assert) {
       let run = await startedRun();
-      await finishAutomationRun(dbAdapter, run.id, 'attempt-1', {
+      await finishAutomationRun(dbAdapter, run.id, 1, {
         state: 'error',
         reason: 'timed-out',
       });
-      let start = await startAutomationRunAttempt(
-        dbAdapter,
-        run.id,
-        'attempt-2',
-      );
+      let start = await startAutomationRunAttempt(dbAdapter, run.id, 2);
       assert.strictEqual(start.kind, 'over');
       if (start.kind === 'over') {
         assert.strictEqual(start.run.state, 'error');
-        assert.strictEqual(start.run.attempt, 'attempt-1');
+        assert.strictEqual(start.run.attempt, 1);
       }
       assert.strictEqual(
         await cancelAutomationRun(dbAdapter, run.id, PAYER),
@@ -328,12 +296,96 @@ module(basename(import.meta.filename), function () {
     });
 
     test('an attempt at a run that does not exist finds nothing', async function (assert) {
-      let start = await startAutomationRunAttempt(
-        dbAdapter,
-        randomUUID(),
-        'attempt-1',
-      );
+      let start = await startAutomationRunAttempt(dbAdapter, randomUUID(), 1);
       assert.strictEqual(start.kind, 'missing');
+    });
+
+    test('an attempt older than the owner that starts late is superseded', async function (assert) {
+      let run = await startedRun(1);
+      await startAutomationRunAttempt(dbAdapter, run.id, 2);
+      let late = await startAutomationRunAttempt(dbAdapter, run.id, 1);
+      assert.strictEqual(late.kind, 'superseded');
+      assert.strictEqual(
+        'run' in late ? late.run.attempt : undefined,
+        2,
+        'the newer attempt keeps the run',
+      );
+      let claimed = await claimAutomationRunCommit(dbAdapter, run.id, 2);
+      assert.strictEqual(claimed?.attempt, 2, 'the newer attempt commits');
+    });
+
+    test('a run whose commit landed cannot finish as an error', async function (assert) {
+      let run = await startedRun();
+      await claimAutomationRunCommit(dbAdapter, run.id, 1);
+      await recordAutomationRunCommitted(dbAdapter, run.id);
+      assert.strictEqual(
+        await finishAutomationRun(dbAdapter, run.id, 1, {
+          state: 'error',
+          reason: 'script-error',
+        }),
+        undefined,
+      );
+      let finished = await finishAutomationRun(dbAdapter, run.id, 1, {
+        state: 'complete',
+      });
+      assert.strictEqual(finished?.state, 'complete');
+    });
+
+    test('abandoning a run whose job is gone finishes it whoever owned it', async function (assert) {
+      let uncommitted = await startedRun();
+      let abandoned = await abandonAutomationRun(
+        dbAdapter,
+        uncommitted.id,
+        'job-lost',
+      );
+      assert.strictEqual(abandoned?.state, 'error');
+      assert.strictEqual(abandoned?.errorReason, 'job-lost');
+      assert.ok(abandoned?.finishedAt);
+      assert.strictEqual(
+        await abandonAutomationRun(dbAdapter, uncommitted.id, 'job-lost'),
+        undefined,
+        'a finished run is left as it is',
+      );
+
+      let landed = await newRun('2026-11-11T05:30:00.000Z');
+      await startAutomationRunAttempt(dbAdapter, landed.id, 1);
+      await claimAutomationRunCommit(dbAdapter, landed.id, 1);
+      await recordAutomationRunCommitted(dbAdapter, landed.id);
+      let completed = await abandonAutomationRun(
+        dbAdapter,
+        landed.id,
+        'job-lost',
+      );
+      assert.strictEqual(
+        completed?.state,
+        'complete',
+        'a landed commit completes',
+      );
+      assert.strictEqual(completed?.errorReason, null);
+
+      let claimed = await newRun('2026-11-12T05:30:00.000Z');
+      await startAutomationRunAttempt(dbAdapter, claimed.id, 1);
+      await claimAutomationRunCommit(dbAdapter, claimed.id, 1);
+      let interrupted = await abandonAutomationRun(
+        dbAdapter,
+        claimed.id,
+        'job-lost',
+      );
+      assert.strictEqual(
+        interrupted?.state,
+        'error',
+        'a claimed commit that never landed is an error',
+      );
+    });
+
+    test('deleting a realm removes its runs, so a realm made at the same URL starts afresh', async function (assert) {
+      let run = await startedRun();
+      await finishAutomationRun(dbAdapter, run.id, 1, { state: 'complete' });
+      await removeRealmDatabaseArtifacts({ dbAdapter, realmURL: REALM });
+      assert.strictEqual(await getAutomationRun(dbAdapter, run.id), undefined);
+      let again = await newRun();
+      assert.notStrictEqual(again.id, run.id);
+      assert.strictEqual(again.state, 'pending');
     });
 
     test('metered counts add up, in any state', async function (assert) {
@@ -347,7 +399,7 @@ module(basename(import.meta.filename), function () {
         resolveCalls: 3,
         writes: 5,
       });
-      await finishAutomationRun(dbAdapter, run.id, 'attempt-1', {
+      await finishAutomationRun(dbAdapter, run.id, 1, {
         state: 'complete',
       });
       await addAutomationRunCounts(dbAdapter, run.id, { writes: 1 });
