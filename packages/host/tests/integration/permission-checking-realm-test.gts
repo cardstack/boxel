@@ -178,8 +178,11 @@ module('Integration | a realm that checks permissions', function (hooks) {
 
   async function setupSchool({
     enforcePermissions,
+    readableByTestUser,
   }: {
     enforcePermissions?: true;
+    // Gives the test user read on the school realm, and nothing more.
+    readableByTestUser?: true;
   }): Promise<TestRealmAdapter> {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -196,6 +199,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
       enforcePermissions,
       permissions: {
         [SCHOOL_ADMIN]: ['read', 'write', 'realm-owner'],
+        ...(readableByTestUser ? { [TEST_USER]: ['read'] } : {}),
       },
       contents: {
         'realm.json': realmConfigCardJSON({
@@ -279,6 +283,39 @@ module('Integration | a realm that checks permissions', function (hooks) {
         `[data-test-stack-card-header] [data-test-card-header-realm-icon="${SCHOOL_ICON}"]`,
       )
       .exists('with the realm’s icon in its header');
+  });
+
+  test('the AI context tells a user who can only read the realm what its policy grants', async function (assert) {
+    await setupSchool({ enforcePermissions: true, readableByTestUser: true });
+    let realmService = getService('realm');
+    assert.true(realmService.canRead(SCHOOL), 'the test user reads the school');
+    assert.false(realmService.canWrite(SCHOOL), 'and cannot write it');
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    let context = await operatorModeState.getSummaryForAIBot();
+    assert.strictEqual(context.realmUrl, SCHOOL, 'the user is in the school');
+    assert.deepEqual(
+      context.realmPolicy,
+      {
+        card: rri(`${SCHOOL}policies/classrooms`),
+        rules: [
+          {
+            targetType: {
+              module: rri(`${DEFINITIONS}classroom`),
+              name: 'Classroom',
+            },
+            grants: [
+              { operation: 'read' },
+              { operation: 'rename', where: TEACHES },
+            ],
+          },
+        ],
+      },
+      'the context carries the rules of the policy the school names',
+    );
   });
 
   test('a sign-in that fails is reported, and the next one tries again', async function (assert) {

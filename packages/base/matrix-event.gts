@@ -29,6 +29,7 @@ import type {
 import type {
   LLMMode,
   RealmResourceIdentifier,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import type { SerializedFile } from './file-api';
 
@@ -191,6 +192,21 @@ export interface BoxelErrorForContext {
   diagnostics?: Record<string, unknown>;
 }
 
+// A realm's policy as the user can read it: the card the realm's config names,
+// and the rules that card holds. Each rule grants operations on cards of its
+// `targetType` and of the types that extend it; a grant with a `where` admits
+// only when that BXL condition holds for the caller and the card. The realm
+// decides each invocation itself, so this says what the policy offers, not
+// what any one call will be allowed.
+export interface RealmPolicyForContext {
+  card: RealmResourceIdentifier;
+  // Absent when the user can't read the policy card.
+  rules?: {
+    targetType: ResolvedCodeRef;
+    grants: { operation: string; where?: string }[];
+  }[];
+}
+
 export interface BoxelContext {
   agentId?: string;
   openCardIds?: RealmResourceIdentifier[];
@@ -203,6 +219,10 @@ export interface BoxelContext {
     canRead: boolean;
     canWrite: boolean;
   };
+  // The policy of the realm at `realmUrl`, sent when the user can't write that
+  // realm: its grants are what let the user run operations there anyway.
+  // Absent when the realm names no policy, or its config can't be read.
+  realmPolicy?: RealmPolicyForContext;
   errorsDisplayed?: BoxelErrorForContext[];
   tools?: Tool[];
   toolChoice?: ToolChoice;

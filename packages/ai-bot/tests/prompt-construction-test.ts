@@ -31,6 +31,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
   CardMessageContent,
+  RealmPolicyForContext,
 } from '@cardstack/base/matrix-event';
 import { EventStatus } from 'matrix-js-sdk';
 import type { CardDef } from '@cardstack/base/card-api';
@@ -53,6 +54,7 @@ import {
   absolutizeSkillLinks,
   ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE,
   attachedFilesToMessage,
+  buildContextMessage,
   buildPromptForModel,
   CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
   constructHistory,
@@ -329,6 +331,117 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ),
       'the open file keeps its prefix form',
     );
+  });
+
+  module('a workspace the user can only read', function () {
+    const WORKSPACE = 'http://localhost:4201/example-library/';
+    const POLICY = rri(
+      'http://localhost:4201/example-library/policies/lending',
+    );
+    const LIBRARY = rri('http://localhost:4201/example-library/library');
+
+    async function contextFor(
+      realmPolicy?: RealmPolicyForContext,
+    ): Promise<string> {
+      const history: DiscreteMatrixEvent[] = [
+        {
+          type: 'm.room.message',
+          event_id: '1',
+          origin_server_ts: 1234567890,
+          content: {
+            msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+            format: 'org.matrix.custom.html',
+            body: 'What can I do here?',
+            isStreamingFinished: true,
+            data: {
+              context: {
+                submode: 'interact',
+                realmUrl: WORKSPACE,
+                realmPermissions: { canRead: true, canWrite: false },
+                ...(realmPolicy ? { realmPolicy } : {}),
+              },
+            },
+          },
+          sender: '@reader:localhost',
+          room_id: 'room1',
+          unsigned: { age: 1000, transaction_id: '1' },
+          status: EventStatus.SENT,
+        },
+      ];
+      return await buildContextMessage(history, '@aibot:localhost', []);
+    }
+
+    test('lists the operations its policy grants, with their conditions', async () => {
+      let context = await contextFor({
+        card: POLICY,
+        rules: [
+          {
+            targetType: { module: LIBRARY, name: 'Book' },
+            grants: [
+              { operation: 'borrow' },
+              { operation: 'renew', where: '.borrowerId == actor()' },
+            ],
+          },
+          {
+            targetType: { module: LIBRARY, name: 'Shelf' },
+            grants: [{ operation: 'addBook' }],
+          },
+        ],
+      });
+
+      assert.false(
+        context.includes('edits to its cards and files will be rejected'),
+        'the workspace is not described as refusing every change',
+      );
+      assert.true(
+        context.includes(
+          `its policy, ${POLICY}, grants them these operations.`,
+        ),
+        'the policy is named as granting operations',
+      );
+      assert.true(
+        context.includes(
+          ` - Book from ${LIBRARY}: borrow; renew when \`.borrowerId == actor()\`\n` +
+            ` - Shelf from ${LIBRARY}: addBook\n`,
+        ),
+        'each type lists its grants, each with its condition',
+      );
+      assert.true(
+        context.includes('actor() is the user (@reader:localhost)'),
+        'the condition says who actor() is',
+      );
+      assert.true(
+        context.includes(
+          'offer the operation and run it with invoke-card-operation',
+        ),
+        'the assistant is told to offer the granted operations',
+      );
+    });
+
+    test('says its policy may grant operations when the user cannot read the policy', async () => {
+      let context = await contextFor({ card: POLICY });
+
+      assert.true(
+        context.includes(
+          `Its policy, ${POLICY}, can still grant them operations here, but the user can't read it`,
+        ),
+        'the policy is named, with its grants unknown',
+      );
+      assert.false(
+        context.includes('edits to its cards and files will be rejected'),
+        'the workspace is not described as refusing every change',
+      );
+    });
+
+    test('refuses every edit when the realm names no policy', async () => {
+      let context = await contextFor();
+
+      assert.true(
+        context.includes(
+          'This workspace is read-only for the user: edits to its cards and files will be rejected.\n',
+        ),
+      );
+    });
   });
 
   test('should generate a prompt from the user (viewing CardDef in code mode)', async () => {

@@ -39,6 +39,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   EncodedToolRequest,
   MatrixEventWithBoxelContext,
+  RealmPolicyForContext,
   SkillsConfigEvent,
   Tool,
 } from '@cardstack/base/matrix-event';
@@ -3570,6 +3571,37 @@ function mediaFileLabel(file: SerializedFileDef): string {
   return file.sourceUrl ? `${name} (${file.sourceUrl})` : name;
 }
 
+// What the context says about a workspace the user can't write. The realm's
+// policy can still grant them operations there, so where the realm names one,
+// the note lists what it grants rather than saying every change is refused.
+// `user` is the Matrix id that a policy condition's `actor()` reads.
+function readOnlyWorkspaceNote(
+  policy: RealmPolicyForContext | undefined,
+  user: string | undefined,
+): string {
+  let refused = `This workspace is read-only for the user: edits to its cards and files will be rejected.`;
+  if (!policy) {
+    return `${refused}\n`;
+  }
+  if (!policy.rules) {
+    return `The user can't edit this workspace's cards and files directly. Its policy, ${policy.card}, can still grant them operations here, but the user can't read it, so which ones it grants is unknown. The realm refuses an operation the policy doesn't grant when it runs.\n`;
+  }
+  if (policy.rules.length === 0) {
+    return `${refused} Its policy, ${policy.card}, grants no operations.\n`;
+  }
+  let note = `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them these operations. Each applies to cards of the type named and of the types that extend it, and the realm allows it only when its condition holds for the user and the card it runs on:\n`;
+  for (let { targetType, grants } of policy.rules) {
+    let granted = grants
+      .map(({ operation, where }) =>
+        where ? `${operation} when \`${where}\`` : operation,
+      )
+      .join('; ');
+    note += ` - ${humanReadable(targetType)}: ${granted}\n`;
+  }
+  note += `In a condition, actor() is the user${user ? ` (${user})` : ''}, and a path that starts with "." reads a field of the card. When the user asks what they can do here, or for a change one of these operations makes, offer the operation and run it with invoke-card-operation, or realm.operations in run-realm-code, instead of telling them they need write access. Any other change to this workspace is refused.\n`;
+  return note;
+}
+
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -3603,7 +3635,10 @@ export const buildContextMessage = async (
     if (context?.realmUrl) {
       result += `Workspace: ${context.realmUrl}\n`;
       if (context?.realmPermissions?.canWrite === false) {
-        result += `This workspace is read-only for the user: edits to its cards and files will be rejected.\n`;
+        result += readOnlyWorkspaceNote(
+          context.realmPolicy,
+          lastEventWithContext?.sender,
+        );
       }
     }
     if (context?.workspaces) {
