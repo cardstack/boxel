@@ -2,6 +2,7 @@ import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import CurrencyEthereum from '@cardstack/boxel-icons/currency-ethereum';
 import {
   fieldSerializer,
@@ -29,6 +30,7 @@ class Edit extends Component<typeof EthereumAddressField> {
       @errorMessage={{this.textInputValidator.errorMessage}}
       @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
       @disabled={{not @canEdit}}
+      {{ignoredByPasswordManagers}}
     />
   </template>
 
