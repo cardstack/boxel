@@ -7,17 +7,16 @@ import AuthFormField from '../components/auth-form-field.gts';
 import { Input } from '@cardstack/pretui/components/input';
 import { focusWhen } from '@cardstack/pretui/focus';
 import {
-  MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
   PASSWORD_RULES,
 } from '../security/password-rules.js';
 import type { NewPassword } from './new-password.ts';
 
 // The new password and confirmation fields of the app's registration and
-// password reset forms. Each states the password rule in `minlength`,
-// `maxlength` and `passwordrules`, so a password manager generates a password
-// the form accepts. `@hints` shows registration's check-marked hint under
-// each once it is right.
+// password reset forms. Each states the password rule in `minlength` and
+// `passwordrules`, so a password manager generates a password the form
+// accepts; neither carries `maxlength` (see `newPasswordError`). `@hints`
+// shows registration's check-marked hint under each once it is right.
 interface Signature {
   Args: {
     password: NewPassword;
@@ -44,7 +43,6 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
       name='password'
       autocomplete='new-password'
       minlength={{MIN_PASSWORD_LENGTH}}
-      maxlength={{MAX_PASSWORD_LENGTH}}
       passwordrules={{PASSWORD_RULES}}
       @type='password'
       @value={{@password.password}}
@@ -78,7 +76,6 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
       name='confirm-password'
       autocomplete='new-password'
       minlength={{MIN_PASSWORD_LENGTH}}
-      maxlength={{MAX_PASSWORD_LENGTH}}
       passwordrules={{PASSWORD_RULES}}
       @type='password'
       @value={{@password.confirm}}

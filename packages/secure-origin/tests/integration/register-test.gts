@@ -342,13 +342,8 @@ module('Integration | register', function (hooks) {
     assert
       .dom(error('password'))
       .hasText('Password must be at least 8 characters long');
-    // A password manager can fill past `maxlength`, which typing can't.
-    let passwordInput = document.querySelector<HTMLInputElement>(
-      '[data-test-password-field]',
-    )!;
-    passwordInput.value = 'a'.repeat(513);
-    await triggerEvent(passwordInput, 'input');
-    await triggerEvent(passwordInput, 'blur');
+    await fillIn('[data-test-password-field]', 'a'.repeat(513));
+    await triggerEvent('[data-test-password-field]', 'blur');
     assert
       .dom(error('password'))
       .hasText('Password must be at most 512 characters long');
@@ -573,8 +568,9 @@ module('Integration | register', function (hooks) {
         .dom(field)
         .hasAttribute('autocomplete', 'new-password')
         .hasAttribute('minlength', '8')
-        .hasAttribute('maxlength', '512')
-        .hasAttribute('passwordrules', 'minlength: 8; maxlength: 512;');
+        .hasAttribute('passwordrules', 'minlength: 8; maxlength: 512;')
+        // A browser cuts a pasted password to `maxlength` without a word.
+        .doesNotHaveAttribute('maxlength');
     }
   });
 

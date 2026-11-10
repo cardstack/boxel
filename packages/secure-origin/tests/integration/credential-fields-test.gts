@@ -176,8 +176,9 @@ module('Integration | credential fields', function (hooks) {
           .dom(field)
           .hasAttribute('autocomplete', 'new-password')
           .hasAttribute('minlength', '8')
-          .hasAttribute('maxlength', '512')
-          .hasAttribute('passwordrules', 'minlength: 8; maxlength: 512;');
+          .hasAttribute('passwordrules', 'minlength: 8; maxlength: 512;')
+          // A browser cuts a pasted password to `maxlength` without a word.
+          .doesNotHaveAttribute('maxlength');
       }
       assert
         .dom('[data-test-current-password-field]')

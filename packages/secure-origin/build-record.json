@@ -59,7 +59,7 @@
       "bytes": 1146
     },
     "credentials.js": {
-      "bytes": 13471,
+      "bytes": 13353,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -69,7 +69,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/credential-fields.gts",
-          "size": 5729
+          "size": 5594
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2071,7 +2071,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 573276,
+      "bytes": 573224,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2739,7 +2739,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/new-password-fields.gts",
-          "size": 2756
+          "size": 2697
         },
         {
           "package": "@cardstack/secure-origin",

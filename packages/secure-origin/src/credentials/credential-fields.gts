@@ -8,7 +8,6 @@ import { Input } from '@cardstack/pretui/components/input';
 import cn from '../helpers/cn.ts';
 import type { CredentialFrame } from '../security/credentials.js';
 import {
-  MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
   PASSWORD_RULES,
 } from '../security/password-rules.js';
@@ -175,7 +174,6 @@ export default class CredentialFields extends Component<Signature> {
                 @type={{entry.field.type}}
                 autocomplete={{entry.field.autocomplete}}
                 minlength={{if entry.field.validate MIN_PASSWORD_LENGTH}}
-                maxlength={{if entry.field.validate MAX_PASSWORD_LENGTH}}
                 passwordrules={{if entry.field.validate PASSWORD_RULES}}
                 placeholder={{entry.field.placeholder}}
                 @value={{entry.value}}
@@ -205,7 +203,6 @@ export default class CredentialFields extends Component<Signature> {
                 @type={{entry.field.type}}
                 autocomplete={{entry.field.autocomplete}}
                 minlength={{if entry.field.validate MIN_PASSWORD_LENGTH}}
-                maxlength={{if entry.field.validate MAX_PASSWORD_LENGTH}}
                 passwordrules={{if entry.field.validate PASSWORD_RULES}}
                 placeholder={{entry.field.placeholder}}
                 @value={{entry.value}}
