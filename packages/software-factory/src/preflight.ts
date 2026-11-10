@@ -214,7 +214,9 @@ export function checkPrerequisites(): Prerequisite[] {
         playwrightHeadlessShellDirName() ?? 'chromium_headless_shell-*'
       })`,
       satisfied: playwrightHeadlessShellPresent(),
-      fix: 'npx playwright install chromium-headless-shell',
+      // This package's own Playwright, so the install fetches the revision
+      // the check looks for.
+      fix: 'pnpm --filter @cardstack/software-factory exec playwright install chromium-headless-shell',
     },
   ];
 }
