@@ -11,7 +11,7 @@ import { FG_RED, RESET } from '../lib/colors.ts';
 // `boxel operations invoke`: one operation, invoked on a card or on a card
 // type, through the realm's `_operations` endpoint, as a card in the browser
 // invokes it. The CLI counts as interactive: it invokes with the profile's
-// own session, never as a pipeline, so a `callApi` operation that sends a key
+// own session, never as an automation, so a `callApi` operation that sends a key
 // is refused unless it was approved for interactive use, while a keyless one
 // is sent and answers with what the vendor answered.
 

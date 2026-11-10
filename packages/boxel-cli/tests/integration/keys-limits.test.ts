@@ -54,7 +54,7 @@ import { SecureSessionRequestError } from '../../src/lib/secure-session.ts';
 // refused changing them, and usage counts the calls and refusals the CLI's
 // invokes made.
 //
-// The approval API approves a binding for pipelines only, so the test turns
+// The approval API approves a binding for automations only, so the test turns
 // each binding interactive in the database, as allowing interactive use
 // would: limits count interactive calls only.
 // ============================================================================

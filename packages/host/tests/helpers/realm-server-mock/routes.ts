@@ -729,27 +729,11 @@ function registerAuthRoutes() {
 
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
       let permissions = state.realmPermissions.get(normalizedRealmURL);
-      if (!permissions?.includes('realm-owner')) {
+      if (!permissions?.includes('write')) {
         return new Response(JSON.stringify({ errors: ['Forbidden'] }), {
           status: 403,
           headers: { 'content-type': SupportedMimeType.JSONAPI },
         });
-      }
-
-      let namespace = new URL(normalizedRealmURL).pathname
-        .split('/')
-        .filter(Boolean)
-        .at(-2);
-      if (namespace !== 'testuser') {
-        return new Response(
-          JSON.stringify({
-            errors: ['You can only delete realms that you created'],
-          }),
-          {
-            status: 403,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-        );
       }
 
       state.realmPermissions.delete(normalizedRealmURL);
@@ -786,10 +770,10 @@ function registerArchiveRoutes() {
         };
       }[] = [];
       for (let [realmURL, { archivedAt }] of state.archivedRealms.entries()) {
-        // The endpoint is owner-scoped server-side; mirror that by surfacing
-        // only realms the caller owns.
+        // The endpoint is scoped server-side to the realms the caller
+        // administers; mirror that by surfacing only realms it can write.
         let permissions = state.realmPermissions.get(realmURL);
-        if (!permissions?.includes('realm-owner')) {
+        if (!permissions?.includes('write')) {
           continue;
         }
         let info = await getRealmInfoForURL(realmURL);
@@ -805,7 +789,7 @@ function registerArchiveRoutes() {
         });
       }
       // Order most-recently-archived first, breaking ties by url, matching
-      // fetchArchivedRealmsForOwner's `archived_at DESC, url ASC`.
+      // fetchArchivedRealmsForAdministrator's `archived_at DESC, url ASC`.
       data.sort((a, b) => {
         if (a.attributes.archivedAt !== b.attributes.archivedAt) {
           return a.attributes.archivedAt < b.attributes.archivedAt ? 1 : -1;
@@ -836,7 +820,7 @@ async function handleArchiveToggle(
 
   let normalizedRealmURL = ensureTrailingSlash(realmURL);
   let permissions = state.realmPermissions.get(normalizedRealmURL);
-  if (!permissions?.includes('realm-owner')) {
+  if (!permissions?.includes('write')) {
     return new Response(JSON.stringify({ errors: ['Forbidden'] }), {
       status: 403,
       headers: { 'content-type': SupportedMimeType.JSONAPI },

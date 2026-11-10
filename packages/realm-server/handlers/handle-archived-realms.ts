@@ -2,7 +2,7 @@ import type Koa from 'koa';
 import {
   any,
   every,
-  fetchArchivedRealmsForOwner,
+  fetchArchivedRealmsForAdministrator,
   logger,
   param,
   query,
@@ -50,9 +50,9 @@ interface ArchivedRealmAttributes {
 }
 
 // GET /_archived-realms — returns the archived realms the authenticated
-// caller owns, with the display metadata the workspace chooser's archived
-// section needs (URL, name, icon, archived_at). Ownership and the
-// archived/published filtering live in fetchArchivedRealmsForOwner; this
+// caller administers, with the display metadata the workspace chooser's
+// archived section needs (URL, name, icon, archived_at). Administration and the
+// archived/published filtering live in fetchArchivedRealmsForAdministrator; this
 // handler layers on the per-realm display info.
 //
 // Name/icon are read straight from the indexed RealmConfig card rather than
@@ -74,7 +74,7 @@ export default function handleArchivedRealms({
 
     try {
       let { user: username } = token;
-      let archivedRealms = await fetchArchivedRealmsForOwner(
+      let archivedRealms = await fetchArchivedRealmsForAdministrator(
         dbAdapter,
         username,
       );

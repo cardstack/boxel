@@ -2320,7 +2320,71 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('POST /_unpublish-realm returns forbidden for user without realm-owner permission', async function (assert) {
+      test('POST /_publish-realm lets an administrator who does not own the source realm publish it, and the same user unpublish it', async function (assert) {
+        let administratorUserId = '@kiwi:localhost';
+        await dbAdapter.execute(`
+          INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+          VALUES ('${sourceRealmUrlString}', '${administratorUserId}', true, true, false)
+        `);
+        let auth = `Bearer ${createRealmServerJWT(
+          { user: administratorUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`;
+        let publishResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', auth)
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
+            }),
+          );
+        assert.strictEqual(publishResponse.status, 202, 'publish is accepted');
+        let publishedRealmURL =
+          publishResponse.body.data.attributes.publishedRealmURL;
+
+        let unpublishResponse = await request
+          .post('/_unpublish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', auth)
+          .send(JSON.stringify({ publishedRealmURL }));
+        assert.strictEqual(unpublishResponse.status, 200, 'unpublish succeeds');
+      });
+
+      test('POST /_publish-realm refuses a user who may only read the source realm', async function (assert) {
+        let readerUserId = '@kiwi:localhost';
+        await dbAdapter.execute(`
+          INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+          VALUES ('${sourceRealmUrlString}', '${readerUserId}', true, false, false)
+        `);
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: readerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
+            }),
+          );
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+        assert.strictEqual(
+          response.text,
+          `{"errors":["${readerUserId} does not have enough permission to publish this realm"]}`,
+        );
+      });
+
+      test('POST /_unpublish-realm returns forbidden for a user who does not administer the source realm', async function (assert) {
         // First publish a realm as the owner
         let publishResponse = await request
           .post('/_publish-realm')
@@ -2344,7 +2408,7 @@ module(basename(import.meta.filename), function () {
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
 
-        // Now try to unpublish as a non-owner
+        // Now try to unpublish as a user with no permission on the source realm
         let nonOwnerUserId = '@non-realm-owner:localhost';
         let response = await request
           .post('/_unpublish-realm')
