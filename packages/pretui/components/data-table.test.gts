@@ -21,6 +21,7 @@ interface Row {
 const COLUMNS: DataColumn<Row>[] = [{ key: 'name', label: 'Name' }];
 const ROWS: Row[] = [{ id: 'a', name: 'Assam' }];
 const rowKey = (row: Row) => row.id;
+const noop = () => {};
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- a DEMOS registry is
    Record<string, unknown> by contract; mounting one requires the cast. */
@@ -160,6 +161,25 @@ module('Pretui | components/data-table', function (hooks) {
     assert.strictEqual(activated, 0, 'click does not activate');
     await triggerKeyEvent('[data-test-pretui-dt-row]', 'keydown', 'Enter');
     assert.strictEqual(activated, 1, 'Enter activates');
+  });
+
+  test('@onActivate with single selection: a row click selects, a second deselects, and the radio follows', async function (assert) {
+    await render(
+      <template>
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{ROWS}}
+          @key={{rowKey}}
+          @selectionMode='single'
+          @onActivate={{noop}}
+        />
+      </template>,
+    );
+    await click('[data-test-pretui-dt-row]');
+    assert.dom('[data-test-pretui-dt-select]').isChecked();
+    await click('[data-test-pretui-dt-row]');
+    assert.dom('[data-test-pretui-dt-select]').isNotChecked();
+    assert.dom('[data-test-pretui-dt-row]').hasAttribute('aria-selected', 'false');
   });
 
   test('without @onActivate rows are not focusable', async function (assert) {
