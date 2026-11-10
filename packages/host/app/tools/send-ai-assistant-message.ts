@@ -39,7 +39,6 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
   ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
     let { matrixService, operatorModeStateService } = this;
     let roomId = input.roomId;
-    let requireToolCall = input.requireCommandCall ?? false;
 
     let attachedOpenCards: CardAPI.CardDef[] = [];
     if (input.openCardIds) {
@@ -72,7 +71,6 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
     );
 
     context.realmUrl = input.realmIdentifier;
-    context.requireToolCall = requireToolCall;
     context.tools = [];
     context.functions = [];
 

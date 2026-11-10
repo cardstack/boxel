@@ -94,7 +94,6 @@ export default class UseAiAssistantTool extends HostBaseTool<
         attachedFileIdentifiers: input.attachedFileIdentifiers,
         openCardIds: openCardIds.length ? openCardIds : input.openCardIds,
         realmIdentifier: this.operatorModeStateService.realmURL,
-        requireCommandCall: input.requireCommandCall,
       });
       return sendMessageResult;
     }
