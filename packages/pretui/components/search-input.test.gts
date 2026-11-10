@@ -273,9 +273,12 @@ module('Pretui | components/search-input', function (hooks) {
     );
     await openOver();
     let square = root().getBoundingClientRect();
-    let wide = innerWidth;
-    let narrow = Math.ceil(square.right + 120);
-    // the harness can't resize the window, so innerWidth stands in for it
+    let wide = window.innerWidth;
+    let before = Math.max(wide - square.left, square.right) - 8;
+    let narrow = Math.max(Math.ceil(square.right) + 40, wide - 200);
+    // the harness can't resize the window, so an own innerWidth stands in for
+    // it; restore exactly what was there so later tests read the real width
+    let original = Object.getOwnPropertyDescriptor(window, 'innerWidth');
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       value: narrow,
@@ -285,12 +288,15 @@ module('Pretui | components/search-input', function (hooks) {
       await settled();
       let room = Math.max(narrow - square.left, square.right) - 8;
       assert.strictEqual(field()?.style.maxInlineSize, `${room}px`);
-      assert.true(
-        room < Math.max(wide - square.left, square.right) - 8,
-        'shrank',
-      );
+      assert.true(room < before, 'shrank');
     } finally {
-      delete (window as { innerWidth?: number }).innerWidth;
+      if (original) {
+        Object.defineProperty(window, 'innerWidth', original);
+      } else {
+        delete (window as { innerWidth?: number }).innerWidth;
+      }
+      window.dispatchEvent(new Event('resize'));
+      await settled();
     }
   });
 
