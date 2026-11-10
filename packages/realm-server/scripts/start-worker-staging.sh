@@ -38,6 +38,7 @@ NODE_NO_WARNINGS=1 \
   exec node worker-manager.ts \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
+  --automationCount="${WORKER_AUTOMATION_COUNT:-0}" \
   ${TASK_MEMORY_MB:+--taskMemoryMb="$TASK_MEMORY_MB"} \
   --prerendererUrl='http://boxel-prerender-manager.boxel-staging-internal:4222' \
   --matrixURL='https://matrix-staging.stack.cards' \

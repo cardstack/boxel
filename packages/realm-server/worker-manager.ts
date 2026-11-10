@@ -41,9 +41,6 @@ writeSync(
 
 import {
   logger,
-  userInitiatedPriority,
-  userInitiatedPrerenderHtmlPriority,
-  systemInitiatedPrerenderHtmlPriority,
   query as _query,
   IndexWriter,
   isPrefixForm,
@@ -87,6 +84,7 @@ import {
   taskMemoryLimitMb,
   workerHeapLimitMb,
 } from './lib/worker-heap-limit.ts';
+import { workerSpecs } from './lib/worker-lanes.ts';
 import {
   markFailedJob,
   type MarkFailedJobResult,
@@ -142,6 +140,7 @@ let {
   allPriorityCount = 1,
   highPriorityCount = 0,
   userIndexCount = 0,
+  automationCount = 0,
   taskMemoryMb: configuredTaskMemoryMb,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -166,6 +165,11 @@ let {
     userIndexCount: {
       description:
         'The number of workers that claim only indexing job types at the user-initiated priority — a dedicated index lane that can never be occupied by prerender-html or other job types (default 0)',
+      type: 'number',
+    },
+    automationCount: {
+      description:
+        'The number of workers that service automation runs and user-initiated jobs, and nothing below the automation tier (default 0)',
       type: 'number',
     },
     allPriorityCount: {
@@ -267,6 +271,7 @@ if (port != null) {
       result = {
         ...result,
         highPriorityWorkers: highPriorityCount,
+        automationWorkers: automationCount,
         allPriorityWorkers: allPriorityCount,
       };
     }
@@ -695,6 +700,9 @@ let secretsKeyringMessage: string | undefined;
     )}, ${highPriorityCount} high-priority ${pluralize(
       'worker',
       highPriorityCount,
+    )}, ${automationCount} automation ${pluralize(
+      'worker',
+      automationCount,
     )} and ${allPriorityCount} all-priority ${pluralize(
       'worker',
       allPriorityCount,
@@ -731,45 +739,32 @@ let secretsKeyringMessage: string | undefined;
   // is set.
   eventSink.setAdapter(adapter);
 
-  // Each pool's minimum priority is a dequeue floor: its workers only claim
-  // jobs at or above it, oldest-first among those. The user-index pool is
-  // opt-in — it exists only when `--userIndexCount` > 0 (0 by default). When
-  // run, it floors at the user-initiated indexing tier and registers only the
-  // indexing job types (`--indexJobsOnly`), giving index jobs a lane no
-  // prerender-html sweep can hold; both guards carry weight there — the floor
-  // keeps out ordinary user prerender-html (one tier below), and the job-type
-  // filter keeps out a publish-awaited render (co-equal at the indexing tier,
-  // which the floor alone would admit). The contended matrix test stack runs
-  // this lane to keep realm provisioning responsive under indexing
+  // Each lane's floor and job-type filter is described in
+  // lib/worker-lanes.ts. The user-index and automation lanes are opt-in
+  // (0 workers by default). The contended matrix test stack runs the
+  // user-index lane to keep realm provisioning responsive under indexing
   // back-pressure; deployments that leave `--userIndexCount` at 0 rely on
   // high-priority-pool capacity, plus the render-tier gap that keeps HTML
   // rendering behind indexing in the prerender server's own admission queue.
-  //
-  // The high-priority pool floors at the user-initiated prerender-html tier
-  // (one below indexing), so it serves all user-initiated work — user
-  // indexing, publish-awaited renders, and ordinary user renders alike — and
-  // never system-tier jobs. The all-priority pool floors at the lowest tier
-  // and serves everything, including system-initiated prerender-html.
+  let specs = workerSpecs({
+    userIndexCount,
+    highPriorityCount,
+    automationCount,
+    allPriorityCount,
+  });
   let taskMemoryMb = await taskMemoryLimitMb(configuredTaskMemoryMb);
   if (taskMemoryMb !== undefined) {
-    workerHeapMb = workerHeapLimitMb(
-      taskMemoryMb,
-      userIndexCount + highPriorityCount + allPriorityCount,
-    );
+    workerHeapMb = workerHeapLimitMb(taskMemoryMb, specs.length);
     log.info(
       `task memory limit is ${taskMemoryMb} MB; limiting each worker's heap to ${workerHeapMb} MB`,
     );
   }
-  for (let i = 0; i < userIndexCount; i++) {
-    await startWorker(userInitiatedPriority, urlMappings, {
-      indexJobsOnly: true,
-    });
-  }
-  for (let i = 0; i < highPriorityCount; i++) {
-    await startWorker(userInitiatedPrerenderHtmlPriority, urlMappings);
-  }
-  for (let i = 0; i < allPriorityCount; i++) {
-    await startWorker(systemInitiatedPrerenderHtmlPriority, urlMappings);
+  for (let { priority, indexJobsOnly } of specs) {
+    await startWorker(
+      priority,
+      urlMappings,
+      indexJobsOnly ? { indexJobsOnly } : undefined,
+    );
   }
   isReady = true;
   log.info('All workers have been started');

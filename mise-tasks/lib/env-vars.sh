@@ -70,6 +70,7 @@ export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
 
 # Worker scaling
 export WORKER_HIGH_PRIORITY_COUNT="${WORKER_HIGH_PRIORITY_COUNT:-0}"
+export WORKER_AUTOMATION_COUNT="${WORKER_AUTOMATION_COUNT:-0}"
 export WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-1}"
 
 # Echo the first installed system Chrome/Chromium, or nothing. Lets tooling

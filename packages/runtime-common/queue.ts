@@ -12,6 +12,7 @@ import type { Deferred } from './deferred.ts';
 //   | -------- | ------------------------------------------------------- |
 //   | 10       | user indexing (+ any user job); publish-awaited render  |
 //   |  9       | user prerender-html (the common case)                   |
+//   |  5       | automation runs                                         |
 //   |  1       | system indexing (+ any system job)                      |
 //   |  0       | system prerender-html                                   |
 //
@@ -40,6 +41,20 @@ import type { Deferred } from './deferred.ts';
 // never system-tier jobs; the all-priority pool floors at
 // `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
 //
+// Automation runs sit between the two initiator tiers, at
+// `automationInitiatedPriority` (5): every run an automation enqueues — on
+// its schedule, from a webhook, as a batch follow-up, or from Preview and
+// Run now. The tier exists so a run due at a set time is not queued behind a
+// system backlog such as a full reindex, which only the all-priority pool
+// works through. The automation pool (`--automationCount`) floors there, so
+// it serves automation runs and every user-initiated job and never
+// system-tier work: when no automation is due it helps with user work. The
+// all-priority pool claims automation runs too, so a deployment that runs no
+// automation pool still runs every automation, in FIFO order with the rest
+// of that pool's work. The high-priority pool, flooring at 9, never claims
+// one, which keeps scheduled work out of the capacity held for a user who is
+// waiting.
+//
 // Two kinds of system-initiated job escape the system tier, because a
 // system-tier job can only be claimed by the all-priority pool and so has no
 // way past a backlog there. An index of the base realm — the realm every card
@@ -51,6 +66,7 @@ import type { Deferred } from './deferred.ts';
 // `enqueueDailyCreditGrant` in the realm server.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
+export const automationInitiatedPriority = 5;
 // ── Job heartbeats ─────────────────────────────────────────────────────────
 //
 // A job's `timeout` bounds how long it may go *without progress*, not how long
