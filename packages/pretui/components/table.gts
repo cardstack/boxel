@@ -19,6 +19,9 @@ export interface TableSignature {
     /** false drops the table's own radius and hairline, for a table seated
      * inside a panel that already draws them (default true) */
     framed?: boolean;
+    /** false drops the zebra stripe, so every body row sits on the card
+     * surface (default true) */
+    striped?: boolean;
   };
   Blocks: { caption: []; head: []; body: [] };
   Element: HTMLDivElement;
@@ -32,6 +35,7 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
   <div
     class='pretui-tablewrap'
     data-framed={{if (eq @framed false) 'false'}}
+    data-striped={{if (eq @striped false) 'false'}}
     data-test-pretui-table
     ...attributes
   >
@@ -140,9 +144,15 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
         text-align: start;
       }
       /* on the cells, so a caller that repaints a cell replaces the stripe
-         or hover instead of stacking a second one over the row's */
-      .pretui-table :deep(tbody tr:nth-child(even) td),
-      .pretui-table :deep(tbody tr:nth-child(even) th) {
+         or hover instead of stacking a second one over the row's; the
+         striped check sits in :where() so it adds no specificity and hover
+         still wins over the stripe */
+      :where(.pretui-tablewrap:not([data-striped='false']))
+        .pretui-table
+        :deep(tbody tr:nth-child(even) td),
+      :where(.pretui-tablewrap:not([data-striped='false']))
+        .pretui-table
+        :deep(tbody tr:nth-child(even) th) {
         background-color: var(--stripe);
         color: var(--foreground);
       }
