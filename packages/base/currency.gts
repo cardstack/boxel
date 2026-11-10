@@ -7,8 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
 import type Owner from '@ember/owner';
-// @ts-ignore
-import { currencyCodeSymbolMapping } from 'https://esm.run/currency-code-symbol-map';
+import { currencyCodeSymbolMapping } from './helpers/currency-symbols';
 
 export class Currency extends CardDef {
   static displayName = 'Currency';

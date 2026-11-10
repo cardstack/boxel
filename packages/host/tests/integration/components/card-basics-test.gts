@@ -39,6 +39,7 @@ import {
 import CodeRefField from '@cardstack/base/code-ref';
 import ColorField from '@cardstack/base/color';
 import CountryField from '@cardstack/base/country';
+import CurrencyField from '@cardstack/base/currency';
 import DateField from '@cardstack/base/date';
 import DateTimeField from '@cardstack/base/datetime';
 import EmailField from '@cardstack/base/email';
@@ -4495,6 +4496,41 @@ module('Integration | card-basics', function (hooks) {
       await click(portugal!);
       assert.strictEqual(mango.home.code, 'PT', 'choosing sets the code');
       assert.strictEqual(mango.home.name, 'Portugal', 'and the name');
+    });
+
+    test("the currency picker's search field tells password managers to skip it", async function (assert) {
+      class Invoice extends CardDef {
+        @field currency = contains(CurrencyField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Invoice });
+      let invoice = new Invoice({ currency: new CurrencyField() });
+
+      await renderCard(loader, invoice, 'edit');
+      let trigger =
+        '[data-test-field="currency"] [data-test-pretui-select-trigger]';
+      assert.dom(trigger).hasText('USD', 'a field with no code shows USD');
+
+      await click(trigger);
+      let search = '[data-test-pretui-select-search-input]';
+      assert.dom(search).hasAttribute('data-1p-ignore', '');
+      assert.dom(search).hasAttribute('data-lpignore', 'true');
+      assert.dom(search).hasAttribute('data-form-type', 'other');
+      assert.dom(search).hasAttribute('data-bwignore', '');
+
+      await fillIn(search, 'EUR');
+      let euro = Array.from(
+        document.querySelectorAll(
+          "[role='listbox'] [data-test-pretui-select-option]",
+        ),
+      ).find((option) => option.textContent?.trim() === 'EUR');
+      assert.ok(euro, 'the search finds the currency by code');
+      await click(euro!);
+      assert.strictEqual(
+        invoice.currency.code,
+        'EUR',
+        'choosing sets the code',
+      );
+      assert.dom(trigger).hasText('EUR');
     });
 
     test('the country picker shows the country the field stores', async function (assert) {

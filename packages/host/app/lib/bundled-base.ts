@@ -343,6 +343,8 @@ export const BUNDLED_BASE_MODULES: Record<
   'components/timeline': () => import('@cardstack/base/components/timeline'),
   'frontmatter-field': () => import('@cardstack/base/frontmatter-field'),
   'helpers/country': () => import('@cardstack/base/helpers/country'),
+  'helpers/currency-symbols': () =>
+    import('@cardstack/base/helpers/currency-symbols'),
   'join-the-community': () => import('@cardstack/base/join-the-community'),
   'llm-model': () => import('@cardstack/base/llm-model'),
   'matrix-event': () => import('@cardstack/base/matrix-event'),
