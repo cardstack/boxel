@@ -327,8 +327,13 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
 
   // ── shape ──────────────────────────────────────────────────────────────
 
-  get size(): PretuiSize {
-    return resolveSize(this.args.size);
+  // 'default' is the component's own default: no step, so the root's
+  // --pretui-data-table-font-size applies.
+  get size(): PretuiSize | undefined {
+    let { size } = this.args;
+    return size === undefined || size === 'default'
+      ? undefined
+      : resolveSize(size);
   }
   get placeholder(): string {
     return this.args.placeholder ?? '—';
@@ -1257,17 +1262,22 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt[data-actions='true'] {
           --pretui-dt-act-eff: var(--pretui-dt-act-w, 3em);
         }
+        /* size scale, the same steps as Token's and Autocomplete's; the
+           ladder has no step under 11px, so xs and s share it */
         .pretui-dt[data-size='xs'] {
-          font-size: var(--pretui-data-table-font-size, var(--boxel-font-size-2xs));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-dt[data-size='s'] {
-          font-size: var(--pretui-data-table-font-size, var(--boxel-font-size-2xs));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
+        }
+        .pretui-dt[data-size='m'] {
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
         }
         .pretui-dt[data-size='l'] {
-          font-size: var(--pretui-data-table-font-size, var(--boxel-font-size-sm));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-dt[data-size='xl'] {
-          font-size: var(--pretui-data-table-font-size, var(--boxel-font-size));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         .pretui-dt[aria-busy='true'] .pretui-dt-scroll {
           opacity: 0.62;

@@ -1,11 +1,12 @@
 // Pretui — DataTable unit tests: the text-size contract. The broader DataTable
-// behaviour is covered in reading-listing.test.gts.
+// behavior is covered in reading-listing.test.gts.
 //
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules
-// are not applied), so what the stylesheet reads from data-size and from
-// --pretui-data-table-font-size is checked on the usage page, not here.
+// are not applied), so the sizes the stylesheet reads from data-size, from
+// --pretui-size-* and from --pretui-data-table-font-size are checked on the
+// usage page, not here.
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -32,7 +33,7 @@ function sizeOf(selector: string): string | null {
 module('Pretui | components/data-table', function (hooks) {
   setupCardTest(hooks);
 
-  test('@size stamps the house size on the root, m by default', async function (assert) {
+  test('@size stamps the house size on the root, none by default', async function (assert) {
     await render(
       <template>
         <DataTable
@@ -42,11 +43,25 @@ module('Pretui | components/data-table', function (hooks) {
           @key={{rowKey}}
         />
         <DataTable
+          data-test-dt-default-arg
+          @columns={{COLUMNS}}
+          @rows={{ROWS}}
+          @key={{rowKey}}
+          @size='default'
+        />
+        <DataTable
           data-test-dt-s
           @columns={{COLUMNS}}
           @rows={{ROWS}}
           @key={{rowKey}}
           @size='s'
+        />
+        <DataTable
+          data-test-dt-m
+          @columns={{COLUMNS}}
+          @rows={{ROWS}}
+          @key={{rowKey}}
+          @size='m'
         />
         <DataTable
           data-test-dt-lg
@@ -57,15 +72,26 @@ module('Pretui | components/data-table', function (hooks) {
         />
       </template>,
     );
-    assert.strictEqual(sizeOf('[data-test-dt-default]'), 'm');
+    assert.strictEqual(
+      sizeOf('[data-test-dt-default]'),
+      null,
+      'no @size: the default comes from --pretui-data-table-font-size',
+    );
+    assert.strictEqual(
+      sizeOf('[data-test-dt-default-arg]'),
+      null,
+      "'default' is no step",
+    );
     assert.strictEqual(sizeOf('[data-test-dt-s]'), 's');
+    assert.strictEqual(sizeOf('[data-test-dt-m]'), 'm');
     assert.strictEqual(sizeOf('[data-test-dt-lg]'), 'l', 'lg is a spelling of l');
   });
 
-  test('the usage page documents --pretui-data-table-font-size', async function (assert) {
+  test('the usage page documents both size knobs', async function (assert) {
     await render(<template><Usage /></template>);
     assert
       .dom('[data-test-pretui-usage]')
       .includesText('pretui-data-table-font-size');
+    assert.dom('[data-test-pretui-usage]').includesText('--pretui-size-*');
   });
 });

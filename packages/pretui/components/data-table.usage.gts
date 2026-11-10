@@ -51,12 +51,13 @@ const PINNED_COLUMNS: DataColumn<Lot>[] = COLUMNS.map((col) =>
 
 class DataTableUsage extends Component {
   modes = MODES;
-  sizes = SIZES;
+  // 'default' is no step: the table reads --pretui-data-table-font-size.
+  sizes = ['default', ...SIZES];
   lots = LOTS;
   columns = COLUMNS;
 
   @tracked selectionMode: SelectionMode = 'multi';
-  @tracked size: ListingSizeArg = 'm';
+  @tracked size: ListingSizeArg = 'default';
   @tracked pinFirst = false;
   @tracked striped = true;
   @tracked flush = false;
@@ -226,8 +227,8 @@ class DataTableUsage extends Component {
           @name='size'
           @value={{this.size}}
           @options={{this.sizes}}
-          @defaultValue='m'
-          @description='Density. The house scale is xs|s|m|l|xl and it sets the host font-size only, so every internal dimension scales together. It reads the --boxel-font-size-* scale: xs and s are 2xs, m is xs, l is sm, xl is the base size. sm/md/lg/default/small/medium/large/middle are accepted spellings.'
+          @defaultValue='default'
+          @description='Density. The house scale xs|s|m|l|xl sets the host font-size only, so every internal dimension scales together. Each size reads its --pretui-size-* knob, falling back to --boxel-font-size-2xs (xs and s), -xs (m), -sm (l) and --boxel-font-size (xl). Omitted, the size is --boxel-font-size-xs, or --pretui-data-table-font-size when that is set. sm/md/lg/default/small/medium/large/middle are accepted spellings.'
           @onInput={{this.setSize}}
         />
         <Args.String
@@ -311,7 +312,7 @@ class DataTableUsage extends Component {
         <Css.Basic
           @name='pretui-data-table-font-size'
           @type='dimension'
-          @description='An exact text size for the table, set on the table or an ancestor. It overrides @size, and every internal dimension scales with it.'
+          @description='Exact font-size for a table with no @size, such as var(--boxel-font-size-sm). Set on the table or any ancestor; @size wins over it, and each size is retuned by its own --pretui-size-* knob.'
           @defaultValue='var(--boxel-font-size-xs)'
         />
       </:cssVars>
