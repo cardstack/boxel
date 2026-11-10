@@ -50,8 +50,8 @@ that switches an automation on or resumes it, and that caller MUST become the
 payer. A write to the card MUST NOT change the payer.
 
 A card edit that raises a cap above the snapshot, or turns on `batchedAI`,
-MUST pause the automation. Only a resume, which makes its caller the payer
-and takes a new snapshot, MUST end that pause.
+MUST pause the automation. That pause MUST end only through a resume, which
+makes its caller the payer and takes a new snapshot.
 
 ### 1.4. Triggers
 
