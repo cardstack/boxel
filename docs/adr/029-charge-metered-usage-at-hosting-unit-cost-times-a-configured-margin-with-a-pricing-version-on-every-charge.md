@@ -10,6 +10,7 @@ scope:
   - packages/realm-server/handlers/handle-add-credit.ts
   - packages/postgres/migrations/*billing*
   - packages/postgres/migrations/*credit*
+  - packages/postgres/migrations/*ledger*
 ---
 
 # 029. Charge metered usage at hosting unit cost times a configured margin, with a pricing version on every charge

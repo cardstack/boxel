@@ -10,6 +10,7 @@ import {
   logger,
   param,
   query,
+  ri,
   userInitiatedPrerenderHtmlPriority,
 } from '@cardstack/runtime-common';
 import QUnit from 'qunit';
@@ -1258,7 +1259,7 @@ module(basename(import.meta.filename), function () {
 
     module('ledger charges', function (hooks) {
       let user: User;
-      const realm = 'http://test-realm/ledger/';
+      const realm = ri('http://test-realm/ledger/');
       const runId = '6f1c1b1e-1b7a-4d5e-9b5f-6f0a3d1c2b10';
       const otherRunId = '0a8e3c55-2f0d-4c1c-8f6b-3e5b2a7d9c41';
       const pricingVersion = 'pv-test-1';
@@ -1422,16 +1423,21 @@ module(basename(import.meta.filename), function () {
           runId,
           pricingVersion,
         };
-        assert.true(await spendCredits(dbAdapter, user.id, 25, charge));
-        assert.false(
+        assert.strictEqual(
           await spendCredits(dbAdapter, user.id, 25, charge),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 25, charge),
+          'already-charged',
           'the retry reports the charge as already written',
         );
-        assert.false(
+        assert.strictEqual(
           await spendCredits(dbAdapter, user.id, 99, {
             ...charge,
             pricingVersion: 'pv-other',
           }),
+          'already-charged',
           'the identity is the kind and reference, not the amount or price',
         );
         assert.strictEqual(
@@ -1440,41 +1446,46 @@ module(basename(import.meta.filename), function () {
         );
 
         // Another kind or another reference is another charge.
-        assert.true(
+        assert.strictEqual(
           await spendCredits(dbAdapter, user.id, 5, {
             ...charge,
             kind: 'run_indexing',
           }),
+          'charged',
         );
-        assert.true(
+        assert.strictEqual(
           await spendCredits(dbAdapter, user.id, 5, {
             ...charge,
             runId: otherRunId,
           }),
+          'charged',
         );
-        assert.true(
+        assert.strictEqual(
           await spendCredits(dbAdapter, user.id, 5, {
             kind: 'batched_ai',
             realm,
             runId,
             batchId: 'batch_1',
           }),
+          'charged',
         );
-        assert.true(
+        assert.strictEqual(
           await spendCredits(dbAdapter, user.id, 5, {
             kind: 'batched_ai',
             realm,
             runId,
             batchId: 'batch_2',
           }),
+          'charged',
         );
-        assert.false(
+        assert.strictEqual(
           await spendCredits(dbAdapter, user.id, 5, {
             kind: 'batched_ai',
             realm,
             runId,
             batchId: 'batch_1',
           }),
+          'already-charged',
         );
         let storage = {
           kind: 'storage' as const,
@@ -1483,14 +1494,21 @@ module(basename(import.meta.filename), function () {
           day: '2026-11-10',
           pricingVersion,
         };
-        assert.true(await spendCredits(dbAdapter, user.id, 5, storage));
-        assert.true(
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, storage),
+          'charged',
+        );
+        assert.strictEqual(
           await spendCredits(dbAdapter, user.id, 5, {
             ...storage,
             day: '2026-11-11',
           }),
+          'charged',
         );
-        assert.false(await spendCredits(dbAdapter, user.id, 5, storage));
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, storage),
+          'already-charged',
+        );
         assert.strictEqual(
           await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
           945,
@@ -1509,10 +1527,54 @@ module(basename(import.meta.filename), function () {
             spendCredits(dbAdapter, user.id, 10, charge),
           ),
         );
-        assert.strictEqual(results.filter(Boolean).length, 1);
+        assert.strictEqual(results.filter((r) => r === 'charged').length, 1);
+        assert.strictEqual(
+          results.filter((r) => r === 'already-charged').length,
+          4,
+        );
         assert.strictEqual(
           await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
           990,
+        );
+      });
+
+      test('a charge the balance cannot pay writes nothing and stays chargeable', async function (assert) {
+        let broke = await insertUser(
+          dbAdapter,
+          '@ledger-broke:localhost',
+          'cus_ledger_broke',
+          'ledger-broke@test.com',
+        );
+        let charge = {
+          kind: 'run' as const,
+          realm,
+          runId,
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, broke.id, 10, charge),
+          'nothing-to-charge',
+        );
+        assert.deepEqual(await getLedgerEntries(dbAdapter, { runId }), []);
+        assert.strictEqual(
+          await spendCredits(dbAdapter, broke.id, 10, { kind: 'ai' }),
+          'nothing-to-charge',
+        );
+
+        await addToCreditsLedger(dbAdapter, {
+          userId: broke.id,
+          creditAmount: 50,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+        assert.strictEqual(
+          await spendCredits(dbAdapter, broke.id, 10, charge),
+          'charged',
+          'with no entry carrying its identity, a later call charges it',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: broke.id }),
+          40,
         );
       });
 
@@ -1555,8 +1617,14 @@ module(basename(import.meta.filename), function () {
           runId,
           pricingVersion,
         };
-        assert.true(await spendCredits(dbAdapter, user.id, 100, charge));
-        assert.false(await spendCredits(dbAdapter, user.id, 100, charge));
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 100, charge),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 100, charge),
+          'already-charged',
+        );
 
         let entries = await getLedgerEntries(dbAdapter, { runId });
         assert.deepEqual(

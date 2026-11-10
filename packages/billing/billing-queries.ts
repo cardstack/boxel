@@ -24,6 +24,7 @@ import type {
   LedgerChargeKind,
   LedgerEntry,
   Plan,
+  RealmIdentifier,
   SpendCharge,
   Subscription,
   SubscriptionCycle,
@@ -346,19 +347,23 @@ async function isCharged(q: Querier, charge: SpendCharge): Promise<boolean> {
     subscriptionCycleId: null,
     charge,
   });
+  // `=` and `IS NULL` per column, never `IS NOT DISTINCT FROM`, which no index
+  // serves: this way the lookup is an index scan on
+  // `credits_ledger_charge_once_idx`. The kind is written as a literal (it is
+  // one of the closed set `chargeIdentity` accepts) so the planner can match
+  // the index's partial predicate.
+  let match = (column: string, value: string | null): Expression =>
+    value === null
+      ? [` AND ${column} IS NULL`]
+      : [` AND ${column} = `, param(value)];
   let rows = await q([
-    `SELECT 1 FROM credits_ledger WHERE charge_kind = `,
-    param(columns.charge_kind),
-    ` AND run_id IS NOT DISTINCT FROM `,
-    param(columns.run_id),
-    `::uuid AND batch_id IS NOT DISTINCT FROM `,
-    param(columns.batch_id),
-    `::text AND automation_id IS NOT DISTINCT FROM `,
-    param(columns.automation_id),
-    `::text AND charge_day IS NOT DISTINCT FROM `,
-    param(columns.charge_day),
-    `::date LIMIT 1`,
-  ]);
+    `SELECT 1 FROM credits_ledger WHERE charge_kind = '${columns.charge_kind}'`,
+    ...match('run_id', columns.run_id),
+    ...match('batch_id', columns.batch_id),
+    ...match('automation_id', columns.automation_id),
+    ...match('charge_day', columns.charge_day),
+    ` LIMIT 1`,
+  ] as Expression);
   return rows.length > 0;
 }
 
@@ -382,7 +387,7 @@ export async function getLedgerEntries(
   filter: {
     userId?: string;
     chargeKind?: LedgerChargeKind;
-    realm?: string;
+    realm?: RealmIdentifier;
     runId?: string;
     batchId?: string;
     automationId?: string;
@@ -425,7 +430,7 @@ export async function getLedgerEntries(
     creditType: row.credit_type as CreditType,
     subscriptionCycleId: (row.subscription_cycle_id as string | null) ?? null,
     chargeKind: row.read_charge_kind as LedgerChargeKind,
-    realm: (row.realm as string | null) ?? null,
+    realm: (row.realm as RealmIdentifier | null) ?? null,
     runId: (row.run_id as string | null) ?? null,
     batchId: (row.batch_id as string | null) ?? null,
     automationId: (row.automation_id as string | null) ?? null,
@@ -682,6 +687,15 @@ export async function expireRemainingPlanAllowanceInSubscriptionCycle(
   });
 }
 
+// What `spendCredits` did with a charge:
+// - `charged`: it wrote the charge's ledger entries.
+// - `already-charged`: the charge's identity was already in the ledger, so it
+//   wrote nothing.
+// - `nothing-to-charge`: the user's buckets held nothing to draw on, so it
+//   wrote nothing. No entry carries the charge's identity, so a later call can
+//   still charge it.
+export type SpendResult = 'charged' | 'already-charged' | 'nothing-to-charge';
+
 // Spends `creditsToSpend` of the user's credits on `charge`, drawing on their
 // plan allowance first, then daily credits, then extra credits, and charging
 // only what those hold. It writes one ledger entry per bucket it draws from,
@@ -689,22 +703,16 @@ export async function expireRemainingPlanAllowanceInSubscriptionCycle(
 //
 // A charge with an identity (see `chargeIdentity`) is written at most once:
 // in one transaction, holding a lock on the identity, it checks whether the
-// charge is already in the ledger and writes nothing if it is. Returns whether
-// it wrote the charge.
+// charge is already in the ledger and writes nothing if it is.
 export async function spendCredits(
   dbAdapter: DBAdapter,
   userId: string,
   creditsToSpend: number,
   charge: SpendCharge = { kind: 'ai' },
-): Promise<boolean> {
+): Promise<SpendResult> {
   let identity = chargeIdentity(charge);
   if (identity === undefined) {
-    let entries = await planSpend(dbAdapter, userId, creditsToSpend);
-    await insertLedgerEntries(
-      dbAdapter,
-      entries.map((entry) => ({ ...entry, charge })),
-    );
-    return true;
+    return await writeSpend(dbAdapter, userId, creditsToSpend, charge);
   }
   return await dbAdapter.withTransaction(
     async (tx) => {
@@ -714,17 +722,29 @@ export async function spendCredits(
         `, 0))`,
       ]);
       if (await isCharged(tx, charge)) {
-        return false;
+        return 'already-charged';
       }
-      let entries = await planSpend(tx, userId, creditsToSpend);
-      await insertLedgerEntries(
-        tx,
-        entries.map((entry) => ({ ...entry, charge })),
-      );
-      return true;
+      return await writeSpend(tx, userId, creditsToSpend, charge);
     },
     { label: `ledger charge ${identity}` },
   );
+}
+
+async function writeSpend(
+  db: Queryable,
+  userId: string,
+  creditsToSpend: number,
+  charge: SpendCharge,
+): Promise<SpendResult> {
+  let entries = await planSpend(db, userId, creditsToSpend);
+  if (entries.length === 0) {
+    return 'nothing-to-charge';
+  }
+  await insertLedgerEntries(
+    db,
+    entries.map((entry) => ({ ...entry, charge })),
+  );
+  return 'charged';
 }
 
 // The ledger entries that spend `creditsToSpend` from the user's buckets.

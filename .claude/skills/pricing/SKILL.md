@@ -182,12 +182,14 @@ or a grant with a realm, is refused. A run's charges can outlive its
 `automation_runs` row (deleting a realm deletes its runs), so read them by
 `run_id` without joining the run.
 
-**Rows without a kind.** A row with a null `charge_kind` (written by a
-process that doesn't set it, as during a rolling deploy) reads the kind its
-credit type implies: a `*_used` row is `ai`, `plan_allowance`
-and `daily_credit` are `grant`, `extra_credit` is `purchase`, and
-`plan_allowance_expired` is `expiry`. Always read the kind through that
-mapping, never the raw column:
+**Rows without a kind.** A row has a null `charge_kind` when it was written
+before the column was added to the table, or by a process without the column
+during a rolling deploy. Such a row reads the kind its credit
+type implies: a `*_used` row is `ai`, `plan_allowance` and `daily_credit`
+are `grant`, `extra_credit` is `purchase`, and `plan_allowance_expired` is
+`expiry`. A query that spans those rows (a user's spend by kind, say) must
+read the kind through that mapping, not the raw column, or every historical
+AI spend lands in a null group:
 
 ```sql
 COALESCE(charge_kind, CASE credit_type
@@ -206,8 +208,11 @@ it and filters by user, kind, realm, run, batch, automation and day.
 `chargeKindForCreditType` (runtime-common) is the same mapping in
 TypeScript, and the two change together.
 
-Credits are negative on a spend, so a charge's cost in credits is
-`-SUM(credit_amount)`. For example, against the read-only database:
+A row with a `run_id`, `realm` or `automation_id` always carries its kind,
+since those columns are only written with one, so a query filtered on any of
+them may read `charge_kind` directly. Credits are negative on a spend, so a
+charge's cost in credits is `-SUM(credit_amount)`. For example, against the
+read-only database:
 
 ```sql
 -- Everything one run cost, by kind.
@@ -219,6 +224,15 @@ SELECT charge_kind, -SUM(credit_amount) AS credits
 FROM credits_ledger
 WHERE realm = '<realm identifier>'
   AND created_at > EXTRACT(EPOCH FROM now() - interval '30 days')
+GROUP BY 1;
+
+-- A user's spend by kind, across rows with and without a kind.
+SELECT COALESCE(charge_kind, CASE credit_type
+         WHEN 'plan_allowance_used' THEN 'ai' WHEN 'extra_credit_used' THEN 'ai'
+         WHEN 'daily_credit_used' THEN 'ai' END) AS kind,
+       -SUM(credit_amount) AS credits
+FROM credits_ledger
+WHERE user_id = '<users.id>' AND credit_type IN ('plan_allowance_used', 'extra_credit_used', 'daily_credit_used')
 GROUP BY 1;
 
 -- An automation's storage charges, a day at a time.
@@ -234,7 +248,10 @@ once per run, its indexing once, a batch once per batch, and storage once
 per automation per day. `spendCredits` writes a charge's rows in one
 transaction, holding an advisory lock on that identity, and writes nothing
 when the identity is already in the ledger, so a retried job can call it
-again safely; it returns `false` then. The unique index
+again safely. It returns `charged`, `already-charged`, or
+`nothing-to-charge` when the user's buckets held nothing to draw on. In
+that last case no row carries the identity, so a later call can still charge
+it. The unique index
 `credits_ledger_charge_once_idx` (identity plus credit type) backs that up in
 the database. An `ai` charge is one per call and a run makes many, so AI
 rows have no identity and every call writes.

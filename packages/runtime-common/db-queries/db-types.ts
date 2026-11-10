@@ -1,3 +1,5 @@
+import type { RealmIdentifier } from '../realm-identifiers.ts';
+
 export interface User {
   id: string;
   matrixUserId: string;
@@ -69,26 +71,26 @@ export type LedgerChargeKind =
 export type LedgerCharge =
   | {
       kind: 'ai';
-      realm?: string;
+      realm?: RealmIdentifier;
       runId?: string;
       pricingVersion?: string;
     }
   | {
       kind: 'batched_ai';
-      realm: string;
+      realm: RealmIdentifier;
       runId: string;
       batchId: string;
       pricingVersion?: string;
     }
   | {
       kind: 'run' | 'run_indexing';
-      realm: string;
+      realm: RealmIdentifier;
       runId: string;
       pricingVersion: string;
     }
   | {
       kind: 'storage';
-      realm: string;
+      realm: RealmIdentifier;
       automationId: string;
       day: string;
       pricingVersion: string;
@@ -113,7 +115,7 @@ export interface LedgerEntry {
 // `chargeKindForCreditType`) and has no reference.
 export interface ChargedLedgerEntry extends LedgerEntry {
   chargeKind: LedgerChargeKind;
-  realm: string | null;
+  realm: RealmIdentifier | null;
   runId: string | null;
   batchId: string | null;
   automationId: string | null;
