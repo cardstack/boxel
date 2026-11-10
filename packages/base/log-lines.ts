@@ -2,70 +2,129 @@
 //
 // A log line is a value, not a card: a FieldDef names its shape, and `record`
 // on the linked file appends `{ at, actor, what }` with `what` checked
-// against that FieldDef and normalized by its fields' own serializers before
-// the line is sent. The realm can't do the check itself, since a file doesn't
-// know which card's field links it; the field does, so the instance read
-// through it carries the type (`lineTypeOf` in card-api).
+// against that FieldDef and normalized before the line is sent. The realm
+// can't check it, since a file doesn't know which card's field links it; the
+// field does, so the instance read through it carries the type (`lineTypeOf`
+// in card-api), and the operations client applies the check to every entry
+// that instance makes, a single call or one inside atomic().
 //
-// The check is the shape a FieldDef declares:
+// Synchronous, because a batch registers its entries as the caller writes
+// them. The check is the shape the FieldDef declares:
 // - every key names one of the line type's own non-computed fields;
-// - a primitive field's value goes through that field type's deserialize and
-//   serialize, as a card's would on save (a NumberField reads "12" as 12, a
-//   DateField a date);
+// - a value is normalized by its field's family: a number field takes a
+//   number or a numeric string, a boolean field a boolean or "true" /
+//   "false", a date field `YYYY-MM-DD`, a datetime field an ISO time, a big
+//   integer its digits, a string field a string (a number or boolean becomes
+//   its text); anything else of the wrong shape is refused;
 // - a compound field is checked the same way, recursively; a containsMany
 //   takes a list;
 // - a link isn't a value, so a line type with a `linksTo` field is refused.
 
+import { fieldSerializer } from '@cardstack/runtime-common';
 import type { BaseDef } from './card-api';
-import {
-  deserialize,
-  getFields,
-  lineTypeOf,
-  primitive,
-  serialize,
-} from './card-api';
+import { getFields, lineTypeOf, primitive, StringField } from './card-api';
 
-export class LogLineError extends Error {}
+export class LogLineError extends Error {
+  name = 'LogLineError';
+}
 
-async function normalizeValue(
+function typeName(type: typeof BaseDef): string {
+  return type.displayName ?? type.name;
+}
+
+function normalizePrimitive(
   type: typeof BaseDef,
   value: unknown,
-  path: string,
-): Promise<unknown> {
+  at: string,
+): unknown {
+  let refuse = (wants: string): never => {
+    throw new LogLineError(
+      `${at} is a ${typeName(type)}, which takes ${wants}, not ${JSON.stringify(value)}`,
+    );
+  };
+  let serializer = (type as any)[fieldSerializer] as string | undefined;
+  switch (serializer) {
+    case 'number': {
+      let n =
+        typeof value === 'number'
+          ? value
+          : typeof value === 'string' && value.trim() !== ''
+            ? Number(value)
+            : NaN;
+      return Number.isFinite(n) ? n : refuse('a number');
+    }
+    case 'boolean':
+      if (typeof value === 'boolean') return value;
+      if (value === 'true' || value === 'false') return value === 'true';
+      return refuse('true or false');
+    case 'date':
+      return typeof value === 'string' && /^\d{4}-\d\d-\d\d$/.test(value)
+        ? value
+        : refuse('a date as YYYY-MM-DD');
+    case 'datetime':
+      if (value instanceof Date) return value.toISOString();
+      return typeof value === 'string' && !Number.isNaN(Date.parse(value))
+        ? new Date(value).toISOString()
+        : refuse('an ISO date and time');
+    case 'big-integer':
+      return (typeof value === 'string' && /^-?\d+$/.test(value)) ||
+        (typeof value === 'number' && Number.isInteger(value)) ||
+        typeof value === 'bigint'
+        ? String(value)
+        : refuse('an integer');
+  }
+  if (type === StringField || type.prototype instanceof StringField) {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return refuse('text');
+  }
+  // A primitive this module doesn't know: stored as given.
+  return value;
+}
+
+function normalizeValue(
+  type: typeof BaseDef,
+  value: unknown,
+  at: string,
+): unknown {
   if (value === null || value === undefined) {
     return null;
   }
   if (primitive in type) {
-    let read = await (type as any)[deserialize](value, undefined);
-    return (type as any)[serialize](read, { data: {} } as any);
+    return normalizePrimitive(type, value, at);
   }
   if (typeof value !== 'object' || Array.isArray(value)) {
     throw new LogLineError(
-      `${path || 'the line'} is a ${type.displayName ?? type.name}, so it takes an object`,
+      `${at} is a ${typeName(type)}, so it takes an object`,
     );
   }
-  return normalizeLine(type, value as Record<string, unknown>, path);
+  return normalizeLine(type, value, at);
 }
 
 // `what` as the line type declares it, or a `LogLineError` naming what's wrong.
-export async function normalizeLine(
+export function normalizeLine(
   lineType: typeof BaseDef,
-  what: Record<string, unknown>,
+  what: unknown,
   path = '',
-): Promise<Record<string, unknown>> {
+): Record<string, unknown> {
   if (typeof what !== 'object' || what === null || Array.isArray(what)) {
     throw new LogLineError(
-      `a ${lineType.displayName ?? lineType.name} line takes an object`,
+      `${path || 'what'} is a ${typeName(lineType)} line, which takes an object`,
     );
   }
-  let fields = getFields(lineType, { includeComputeds: false });
+  let fields = getFields(lineType, { includeComputeds: false }) as Record<
+    string,
+    any
+  >;
   let out: Record<string, unknown> = {};
-  for (let [key, value] of Object.entries(what)) {
+  for (let [key, value] of Object.entries(what as Record<string, unknown>)) {
     let at = path ? `${path}.${key}` : key;
-    let field = (fields as Record<string, any>)[key];
+    let field = fields[key];
     if (!field) {
       throw new LogLineError(
-        `${at} is not a field of ${lineType.displayName ?? lineType.name} (it has ${Object.keys(fields).join(', ') || 'none'})`,
+        `${at} is not a field of ${typeName(lineType)} (it has ${Object.keys(fields).join(', ') || 'none'})`,
       );
     }
     if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
@@ -81,12 +140,12 @@ export async function normalizeLine(
       if (!Array.isArray(value)) {
         throw new LogLineError(`${at} is a list`);
       }
-      out[key] = await Promise.all(
-        value.map((item, i) => normalizeValue(field.card, item, `${at}[${i}]`)),
+      out[key] = value.map((item, i) =>
+        normalizeValue(field.card, item, `${at}[${i}]`),
       );
       continue;
     }
-    out[key] = await normalizeValue(field.card, value, at);
+    out[key] = normalizeValue(field.card, value, at);
   }
   return out;
 }
@@ -98,4 +157,18 @@ export function lineTypeFor(instance: unknown): typeof BaseDef | undefined {
       ? ((instance as any)[lineTypeOf] as (() => typeof BaseDef) | undefined)
       : undefined;
   return thunk ? thunk() : undefined;
+}
+
+// The `paramsFor` an operations subject carries for a typed log: `record`'s
+// `what` checked and normalized as a line.
+export function lineParamsFor(
+  lineType: typeof BaseDef,
+): (name: string, payload: unknown) => unknown {
+  return (name, payload) => {
+    if (name !== 'record' || payload === null || typeof payload !== 'object') {
+      return payload;
+    }
+    let { what, ...rest } = payload as Record<string, unknown>;
+    return { ...rest, what: normalizeLine(lineType, what) };
+  };
 }

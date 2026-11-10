@@ -99,12 +99,13 @@ const CARD_OPERATIONS = carried({
   openReports: ['query', true, OPEN_REPORTS],
 });
 
-const FILE_OPERATIONS = carried({
+const FILE_ENTRIES: Record<string, [base: string, declared: boolean]> = {
   read: ['read', false],
   readSource: ['readSource', false],
   update: ['update', false],
   appendLine: ['appendLine', false],
-});
+};
+const FILE_OPERATIONS = carried(FILE_ENTRIES);
 
 function reportInstance(
   overrides: Partial<OperationsSubject> = {},
@@ -1256,6 +1257,67 @@ module(basename(import.meta.filename), function () {
         ['appendLine', 'appendLine'],
         'and the entries run the behavior every file carries',
       );
+    });
+
+    test("a subject's paramsFor checks a payload, in a single call and in a batch", async function (assert) {
+      // A log read through a typed field (`linksTo(JSONLFile, { of })`) is a
+      // subject whose `record` line is checked and normalized before any
+      // entry carries it: here, only `postUri` and `dwellMs`, the latter a
+      // number.
+      let typedLog: OperationsSubject = {
+        scope: 'instance',
+        family: 'file',
+        displayName: 'JSON Lines',
+        operations: carried({ ...FILE_ENTRIES, record: ['appendLine', true] }),
+        id: `${REALM}logs/history.jsonl`,
+        realmURL: REALM,
+        paramsFor(name, payload) {
+          if (name !== 'record') return payload;
+          let { what, ...rest } = payload as { what: Record<string, unknown> };
+          for (let key of Object.keys(what)) {
+            if (key !== 'postUri' && key !== 'dwellMs') {
+              throw new Error(`${key} is not a field of Reaction`);
+            }
+          }
+          return { ...rest, what: { ...what, dwellMs: Number(what.dwellMs) } };
+        },
+      };
+      let { sent, env } = harness({
+        answer: { 'atomic:results': [{ data: null }] },
+        subjects: { LOG: typedLog },
+      });
+      let log = buildOperations(typedLog, env);
+      await (log.record as (p: unknown) => Promise<unknown>)({
+        what: { postUri: 'at://p/1', dwellMs: '1200' },
+      });
+      assert.deepEqual(
+        (entries(sent[0])[0] as any).data,
+        { what: { postUri: 'at://p/1', dwellMs: 1200 } },
+        'a single call carries the normalized line',
+      );
+
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.on({ stub: 'LOG' }).record({
+            what: { postUri: 'at://p/2', dwellMs: '7' },
+          });
+        },
+      );
+      assert.deepEqual(
+        (entries(sent[1])[0] as any).data,
+        { what: { postUri: 'at://p/2', dwellMs: 7 } },
+        'and so does a batch entry',
+      );
+
+      await assert.rejects(
+        (log.record as (p: unknown) => Promise<unknown>)({
+          what: { postUri: 'at://p/3', bogus: 1 },
+        }),
+        /bogus is not a field of Reaction/,
+        'a refused line is refused before anything is sent',
+      );
+      assert.strictEqual(sent.length, 2, 'nothing more was sent');
     });
 
     test('a path names a file no instance stands for', async function (assert) {
