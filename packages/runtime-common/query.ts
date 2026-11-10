@@ -1154,6 +1154,9 @@ const QUERY_MEMBERS = [
   'fields',
 ] as const;
 
+// Set while a query in the older spelling is being checked.
+let readingOlderSpelling = false;
+
 export function assertQuery(
   query: any,
   pointer: string[] = [''],
@@ -1172,6 +1175,20 @@ export function assertQuery(
       lowerQuery(query, { knownFunctions: BXL_FORMULA_FUNCTIONS }).query,
       ['', ''],
     );
+    return;
+  }
+
+  // A query in the older spelling is read as it always was: a member the
+  // grammar doesn't know is ignored rather than refused, since queries saved
+  // in realms carry them (`page.cursor`, for one). The newer spellings are
+  // checked strictly, above.
+  if (pointer.length === 1 && pointer[0] === '' && !readingOlderSpelling) {
+    readingOlderSpelling = true;
+    try {
+      assertQuery(query, pointer);
+    } finally {
+      readingOlderSpelling = false;
+    }
     return;
   }
 
@@ -1622,6 +1639,7 @@ function assertKnownMembers(
   known: readonly string[],
   pointer: string[],
 ) {
+  if (readingOlderSpelling) return;
   for (let key of Object.keys(value)) {
     if (!known.includes(key)) {
       throw unknownMember(pointer.join('/') || '/', key, known);
@@ -1975,7 +1993,8 @@ function assertPage(
     if (
       (typeof page.size !== 'number' && typeof page.size !== 'string') ||
       !Number.isInteger(size) ||
-      size < 0
+      // a negative size is clamped to the default, as it always was
+      (size < 0 && !readingOlderSpelling)
     ) {
       throw new InvalidQueryError(
         `${pointer.concat('size').join('/') || '/'}: size must be a whole number, 0 or more`,
@@ -2136,7 +2155,11 @@ function assertFilter(
 
   let operator = operators[0];
   for (let key of Object.keys(filter)) {
-    if (key !== operator && !FILTER_MODIFIERS.includes(key)) {
+    if (
+      key !== operator &&
+      !FILTER_MODIFIERS.includes(key) &&
+      !readingOlderSpelling
+    ) {
       throw unknownMember(pointer.join('/') || '/', key, [
         ...FILTER_MODIFIERS,
         ...Object.keys(FILTER_OPERATOR_ASSERTS),

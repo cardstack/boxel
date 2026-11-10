@@ -66,11 +66,15 @@ module(basename(import.meta.filename), function (hooks) {
         { size: DEFAULT_SEARCH_PAGE_SIZE },
         'a default page size is injected',
       );
-      assert.strictEqual(DEFAULT_SEARCH_PAGE_SIZE, 50);
+      assert.strictEqual(
+        DEFAULT_SEARCH_PAGE_SIZE,
+        MAX_SEARCH_PAGE_SIZE,
+        'a card search with no page gets the cap, as it always has',
+      );
     });
 
-    test('an explicit page between the default and the cap is honored', function (assert) {
-      let query = { page: { size: DEFAULT_SEARCH_PAGE_SIZE + 1 } } as Query;
+    test('an explicit page under the cap is honored', function (assert) {
+      let query = { page: { size: MAX_SEARCH_PAGE_SIZE - 1 } } as Query;
       assert.strictEqual(applySearchPageBound(query), query);
     });
 
@@ -162,6 +166,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(normalize({ filter: { eq: { name: 'x' } } }).page, {
         size: QUERY_FIELD_DEFAULT_PAGE_SIZE,
         number: 0,
+        total: 'exact',
       });
       assert.true(QUERY_FIELD_DEFAULT_PAGE_SIZE > DEFAULT_SEARCH_PAGE_SIZE);
     });
@@ -169,7 +174,7 @@ module(basename(import.meta.filename), function (hooks) {
     test('a field keeps the page it declares', function (assert) {
       assert.deepEqual(
         normalize({ filter: { eq: { name: 'x' } }, page: { size: 7 } }).page,
-        { size: 7, number: 0 },
+        { size: 7, number: 0, total: 'exact' },
       );
     });
 
@@ -186,7 +191,6 @@ module(basename(import.meta.filename), function (hooks) {
         [{ by: '_expr', expr: 'rating * 2' }],
         [{ by: '_blend', of: [{ by: '_when', when: { eq: { name: 'x' } } }] }],
         [{ by: '_relevance' }],
-        [{ by: '_matchRelevance' }],
       ]) {
         assert.throws(
           () => normalize({ filter: { eq: { name: 'x' } }, sort }),
@@ -206,21 +210,30 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a field sorting by _matchRelevance, as saved queries do, is read', function (assert) {
+      for (let by of ['_matchRelevance', 'item._matchRelevance']) {
+        assert.ok(
+          normalize({ filter: { matches: 'x' }, sort: [{ by }] }),
+          `${by} is accepted`,
+        );
+      }
+    });
+
     test('the override lowers the field default', function (assert) {
       setSearchBoundsForTests({ queryFieldPageSize: 3 });
       assert.deepEqual(normalize({ filter: { eq: { name: 'x' } } }).page, {
         size: 3,
         number: 0,
+        total: 'exact',
       });
     });
   });
 
   module('applyServerSearchPageBound', function () {
-    test('a request naming no page gets the same default as a card search', function (assert) {
-      assert.strictEqual(
-        SERVER_MAX_SEARCH_PAGE_SIZE,
-        DEFAULT_SEARCH_PAGE_SIZE,
-        'one first page, whoever runs the query',
+    test('the server ceiling is higher than the card @context cap', function (assert) {
+      assert.true(
+        SERVER_MAX_SEARCH_PAGE_SIZE > MAX_SEARCH_PAGE_SIZE,
+        'the server backstop lets the host page larger than a card',
       );
     });
 

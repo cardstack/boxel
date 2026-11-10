@@ -23,7 +23,7 @@ A query is declarative: it says what it wants, and the engine chooses the order 
 | `facets`   | Counts and statistics over every match.                                                           | [Facets](#facets)                                          |
 | `explain`  | Each result's ranking signals and their shares.                                                   | [`explain`](#why-a-result-ranks-where-it-does-explain)     |
 | `select`   | Answer as a table of indexed values instead of entries.                                           | [`select`](#a-table-of-values-select)                      |
-| `page`     | Which slice of the results. A query that names none gets 50.                                      | [Pagination](#pagination)                                  |
+| `page`     | Which slice of the results. A card search that names none gets 100.                               | [Pagination](#pagination)                                  |
 
 Over HTTP the query also carries `realms`, and across several realms `federation` (see [Federated search](#federated-search)).
 
@@ -651,7 +651,7 @@ The Query object may have a `page` property, which controls pagination of search
 The `page` object has the following properties:
 
 - `number`: The page number (0-based indexing)
-- `size`: The number of results per page. A query that names none gets the first 50, whoever runs it: a card's `getCards`, a host search, or a `_search` or `_federated-search` request. Name a size for more: a card search takes up to 100, and a request to the server up to 2,000, clamped above that. A query-backed `linksToMany` field that names none takes 500, since it is read as the set it declares.
+- `size`: The number of results per page. A card search that names none gets the first 100, which is also the most a card search may ask for. A `_search` or `_federated-search` request that names none gets the first 500, and one that names a size takes up to 2,000, clamped above that. A query-backed `linksToMany` field that names none takes 500, since it is read as the set it declares.
 
 - `total`: How much counting the total costs:
   - `capped` (the default) counts up to 1,000 (`SEARCH_TOTAL_CAP`) and reports a lower bound past it.
@@ -805,7 +805,9 @@ A query the grammar refuses gets a 400 whose body carries a code a caller can ac
 
 ### Upgrading from the old keys
 
-Queries written before V2 used the engine's internal sort keys. A request or a query-backed field that uses one is now refused (`unknown-key`), with a message naming the key and where it is. Rewrite it as:
+A query written before the newer spellings is read as it always was, with no rewrite: `{ by: '_matchRelevance' }` still sorts by text relevance, a member the grammar never read (`page.cursor`, for one) is still ignored, and a search that names no page still gets 100 rows from a card and 500 from the server. Only a query that uses a newer spelling is checked strictly.
+
+Drafts of the newer spellings used the engine's internal sort keys. A request or a query-backed field that uses one is refused (`unknown-key`), with a message naming the key and where it is. Rewrite it as:
 
 | Old                                       | New                                  |
 | ----------------------------------------- | ------------------------------------ |
@@ -813,12 +815,10 @@ Queries written before V2 used the engine's internal sort keys. A request or a q
 | `{ by: '_expr', expr: '…' }`              | `{ expression: '…' }`                |
 | `{ by: '_when', when: <filter>, weight }` | `{ boost: <filter>, weight }`        |
 | `{ by: '_relevance', … }`                 | `{ relevance: true \| { weights } }` |
-| `{ by: '_matchRelevance' }`               | `{ by: 'textRelevance' }`            |
 | `"$name"` in an `in`                      | `{ "$let": "name" }`                 |
 | `"$name.path"`                            | `{ "$let": "name", "path": "path" }` |
-| `page.cursor`                             | removed; page by `number`            |
 
-The per-result response field `meta._matchRelevance` keeps its name.
+`{ by: 'textRelevance' }` is the newer name for `{ by: '_matchRelevance' }`; both work, and the per-result response field `meta._matchRelevance` keeps its name.
 
 Earlier V2 drafts called an expression `formula` (a sort key) and `expr` (in `rerank`). Both are refused now; write `expression`, the same word cards use in `computeVia: expression(…)`.
 

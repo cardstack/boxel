@@ -5,6 +5,10 @@
 // place an author's query comes in refuses them: the search request, and a
 // query-backed field's query, which the indexer runs in-process and the
 // client sends over the wire, so both legs refuse it alike.
+//
+// `_matchRelevance` is the exception: it was the text-relevance sort key
+// before `textRelevance` was, so queries saved in realms name it. It stays an
+// accepted spelling of that sort everywhere.
 export const INTERNAL_SORT_KEYS: ReadonlySet<string> = new Set([
   '_blend',
   '_expr',
@@ -13,7 +17,10 @@ export const INTERNAL_SORT_KEYS: ReadonlySet<string> = new Set([
   '_matchRelevance',
 ]);
 
-// The first internal sort key in `sort`, with where it is, or undefined.
+const ACCEPTED_FROM_AUTHORS: ReadonlySet<string> = new Set(['_matchRelevance']);
+
+// The first internal sort key an author may not write in `sort`, with where
+// it is, or undefined.
 export function internalSortKeyIn(
   sort: unknown,
   path = 'sort',
@@ -23,9 +30,12 @@ export function internalSortKeyIn(
     let entry = sort[i];
     if (entry == null || typeof entry !== 'object') continue;
     let by = (entry as Record<string, unknown>).by;
+    let bare = typeof by === 'string' ? by.replace(/^item\./, '') : undefined;
     if (
       typeof by === 'string' &&
-      INTERNAL_SORT_KEYS.has(by.replace(/^item\./, ''))
+      bare !== undefined &&
+      INTERNAL_SORT_KEYS.has(bare) &&
+      !ACCEPTED_FROM_AUTHORS.has(bare)
     ) {
       return { path: `${path}[${i}]/by`, by };
     }

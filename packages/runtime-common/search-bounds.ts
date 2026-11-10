@@ -73,7 +73,7 @@ const log = logger('search-bounds');
 // ---------------------------------------------------------------------------
 
 const DEFAULT_MAX_SEARCH_PAGE_SIZE = 100;
-const DEFAULT_SERVER_MAX_SEARCH_PAGE_SIZE = 50;
+const DEFAULT_SERVER_MAX_SEARCH_PAGE_SIZE = 500;
 const DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE = 2_000;
 const DEFAULT_MAX_REALMS_PER_SEARCH_REQUEST = 2;
 const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
@@ -108,40 +108,35 @@ function parsePositiveInt(
 let env: Record<string, string | undefined> =
   typeof process !== 'undefined' ? (process.env ?? {}) : {};
 
-// The page every search gets when it names none: a card's `getCards`, a host
-// search, a `_search` or `_federated-search` request. One number everywhere, so
-// a query returns the same first page whoever runs it. A caller that wants more
-// names a size. Fixed rather than env-tunable because the host bundle, which
-// applies it to card searches, has no env to read; the server's copy is
-// SERVER_MAX_SEARCH_PAGE_SIZE below, which defaults to it.
-export const DEFAULT_SEARCH_PAGE_SIZE = 50;
-
 // The page a query-backed `linksToMany` field resolves to when its query names
-// none. Larger than a search's default because a field is read as the set it
+// none. Larger than a card search's default because a field is read as the set it
 // declares, and its rollups count it; `totalMatchCount` still reports what the
 // page left out. Applied where the field's query is normalized, which the
 // indexer's expansion and the client's live refresh share, so every leg sends
-// the same explicit page and the seed URL matches the client's rebuild. Fixed,
-// for the same reason as the default above: both sides must agree on it.
+// the same explicit page and the seed URL matches the client's rebuild. Fixed
+// rather than env-tunable, because the host bundle has no env to read and
+// both sides must agree on it.
 export const QUERY_FIELD_DEFAULT_PAGE_SIZE = 500;
 
 // The card `@context` page cap: max results a card-initiated item-leg search
 // requests. Enforced client-side (see host StoreService). An explicit page.size
-// above this is rejected; an absent page gets DEFAULT_SEARCH_PAGE_SIZE
-// (mandatory pagination) so a non-paginating card gets the first page, not
-// every row.
+// above this is rejected; an absent page is clamped to it (mandatory
+// pagination) so a non-paginating card gets the first page, not every row.
 export const MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
   env.MAX_SEARCH_PAGE_SIZE,
   DEFAULT_MAX_SEARCH_PAGE_SIZE,
   MIN_PAGE_SIZE,
 );
 
+// The page a card search gets when it names none: the cap itself, as it has
+// always been, so a card written without a page keeps the rows it shows.
+export const DEFAULT_SEARCH_PAGE_SIZE = MAX_SEARCH_PAGE_SIZE;
+
 // The default page a server-side item-leg request gets when it asks for no
 // particular one, enforced regardless of caller (the trusted host and any card
-// that skips the client cap included). It defaults to DEFAULT_SEARCH_PAGE_SIZE,
-// the same first page a card search gets, and is the reason a non-paginating
-// caller gets a first page rather than every row. The host pages larger by
-// naming a size. It is not the rejection threshold:
+// that skips the client cap included). It is higher than the card cap, since
+// the host may page larger, and is the reason a non-paginating caller gets a
+// first page rather than every row. It is not the rejection threshold:
 // a caller that names a larger size has opted into that cost, and is held to
 // SERVER_ABSOLUTE_MAX_PAGE_SIZE instead.
 export const SERVER_MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
@@ -534,7 +529,7 @@ export const LINK_SHAPE_HEARTBEAT_MS = parsePositiveInt(
 // `setSearchBoundsForTests` to exercise a bound without adding realms or
 // waiting out the real time budget. Mirrors `setSearchTimingSinkForTests`.
 let maxPageSize = MAX_SEARCH_PAGE_SIZE;
-let defaultPageSize = DEFAULT_SEARCH_PAGE_SIZE;
+let defaultPageSize = MAX_SEARCH_PAGE_SIZE;
 let queryFieldPageSize = QUERY_FIELD_DEFAULT_PAGE_SIZE;
 let serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
 let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
@@ -596,7 +591,7 @@ export function setSearchBoundsForTests(overrides: {
 export function resetSearchBoundsForTests(): void {
   reportedClamps = new Set();
   maxPageSize = MAX_SEARCH_PAGE_SIZE;
-  defaultPageSize = DEFAULT_SEARCH_PAGE_SIZE;
+  defaultPageSize = MAX_SEARCH_PAGE_SIZE;
   queryFieldPageSize = QUERY_FIELD_DEFAULT_PAGE_SIZE;
   serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
   serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
