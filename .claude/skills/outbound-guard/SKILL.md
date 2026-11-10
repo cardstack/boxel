@@ -397,7 +397,7 @@ sizes over at least a week, separately for each environment, with the
 ```
 
 Run the same against `--service worker`, which sends `callApi` from
-pipelines. When one system key outgrows the path's cap, raise that key's own
+automations. When one system key outgrows the path's cap, raise that key's own
 cap (below), which needs no deploy. Change a path's cap in the task
 definition's environment (`OUTBOUND_RESPONSE_CAP_SYSTEM_KEY_BYTES` /
 `OUTBOUND_RESPONSE_CAP_CALL_API_BYTES`) only when every key on the path

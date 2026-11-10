@@ -280,8 +280,8 @@ export function namedRealmUsers(permissions: RealmPermissions): string[] {
 /**
  * Whether `userId` is a direct writer of the realm: a person whose own
  * permission row grants `write`. It is the narrower question asked before a
- * realm takes something on in a person's name, such as a shared key or a
- * scheduled pipeline they pay for, so it answers for that person alone. A
+ * realm takes something on in a person's name, such as a shared key or an
+ * automation they pay for, so it answers for that person alone. A
  * `*` or `users` row grants write to everyone it matches without naming
  * anyone, a bot account acts for the platform rather than a person, and a
  * policy grant admits a write without making its caller a writer of the

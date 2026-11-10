@@ -3008,10 +3008,10 @@ export class Realm {
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
   #policyWriteAuditor: PolicyWriteAuditor | undefined;
-  // The requests the realm server handed to `handlePipeline`: runs it makes
+  // The requests the realm server handed to `handleAutomation`: runs it makes
   // on its own, never a request off the network, which is a new object every
   // time and so never in here.
-  #pipelineRequests = new WeakSet<Request>();
+  #automationRequests = new WeakSet<Request>();
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // The change journal every write appends to, and the reader the history
   // operations read from. Absent in a realm that records no history, such as
@@ -7290,8 +7290,8 @@ export class Realm {
                 ? { duringPrerender: true }
                 : {}),
               ...(definition.base === 'callApi' &&
-              this.#pipelineRequests.has(request)
-                ? { callApiMode: 'pipeline' as const }
+              this.#automationRequests.has(request)
+                ? { callApiMode: 'automation' as const }
                 : {}),
               ...(definition.base === 'callApi'
                 ? this.#callApiAnonymous(requestContext)
@@ -8843,17 +8843,17 @@ export class Realm {
     return await this.internalHandle(request, false);
   };
 
-  // Handles a request a pipeline makes: an `_operations` batch the realm server
-  // runs on its own, carrying the session of the user it runs as (a
+  // Handles a request an automation makes: an `_operations` batch the realm
+  // server runs on its own, carrying the session of the user it runs as (a
   // schedule's payer, or whoever started the run). It is authorized as that
-  // user's request would be, and a `callApi` in it is a pipeline invocation,
-  // which a binding approved for pipelines only fills. Only code in this
-  // process can call this; nothing that arrives off the network is a pipeline
-  // invocation.
-  handlePipeline = async (
+  // user's request would be, and a `callApi` in it is an automation
+  // invocation, which a binding approved for automations only fills. Only
+  // code in this process can call this; nothing that arrives off the network
+  // is an automation invocation.
+  handleAutomation = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
-    this.#pipelineRequests.add(request);
+    this.#automationRequests.add(request);
     return await this.handle(request);
   };
 
