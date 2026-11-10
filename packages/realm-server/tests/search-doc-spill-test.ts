@@ -25,5 +25,13 @@ module(basename(import.meta.filename), function () {
     test('a doc still over the target after its leaves spill sends whole lists', async function (assert) {
       await runSharedTest(searchDocSpillTests, assert, {});
     });
+
+    test('a doc over the target keeps its short lists inline', async function (assert) {
+      await runSharedTest(searchDocSpillTests, assert, {});
+    });
+
+    test('a doc made only of short lists is promoted whole', async function (assert) {
+      await runSharedTest(searchDocSpillTests, assert, {});
+    });
   });
 });

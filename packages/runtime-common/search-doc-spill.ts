@@ -28,6 +28,13 @@ export const SEARCH_DOC_INLINE_STRING_MAX = 256;
 // In a doc over the target, an array with more elements than this spills
 // whole.
 export const SEARCH_DOC_INLINE_ARRAY_MAX = 64;
+// A root-level list whose own JSON is at most this many bytes never spills,
+// however large the rest of its doc is. A short list (a talk's concepts,
+// speakers, hooks) is what list filters read, and the search doc's GIN index
+// only finds a list that is still in the doc. So a doc can stay over the
+// target: that costs a TOAST read, where a spilled short list would cost every
+// filter on it a pass over the spilled rows.
+export const SEARCH_DOC_INLINE_LIST_MAX = 1024;
 
 export const SPILL_MARKER_KEY = '$spilled';
 
@@ -209,11 +216,12 @@ export async function spillSearchDoc(
   // A doc can still be over the target once its large leaves are gone: a
   // list of many small items (a transcript's segments, each keeping its
   // start, end and concept beside the markers for its text and vector) adds
-  // up. Then whole root-level lists spill, largest first, until the doc fits.
-  // A list spills as its original value, so the markers inside it, and their
-  // rows, go. Only lists: every plural path resolves a marker at its root (in
-  // `jsonb_tree`), while a singular path steps through objects with `->`, so
-  // an object stays inline.
+  // up. Then root-level lists that are themselves too big spill, largest
+  // first, until the doc fits; a short list stays even when the doc is still
+  // over the target (`SEARCH_DOC_INLINE_LIST_MAX`). A list spills as its
+  // original value, so the markers inside it, and their rows, go. Only lists:
+  // every plural path resolves a marker at its root (in `jsonb_tree`), while a
+  // singular path steps through objects with `->`, so an object stays inline.
   let size = () => JSON.stringify(promoted).length;
   if (size() > SEARCH_DOC_INLINE_TARGET) {
     let lists = Object.keys(promoted)
@@ -221,7 +229,8 @@ export async function spillSearchDoc(
         (rootKey) =>
           !neverSpills(rootKey) &&
           Array.isArray(promoted[rootKey]) &&
-          Array.isArray(searchDoc[rootKey]),
+          Array.isArray(searchDoc[rootKey]) &&
+          JSON.stringify(promoted[rootKey]).length > SEARCH_DOC_INLINE_LIST_MAX,
       )
       .sort(
         (a, b) =>

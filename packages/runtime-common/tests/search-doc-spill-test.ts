@@ -172,6 +172,67 @@ const tests = Object.freeze({
         talk,
       );
     },
+
+  'a doc over the target keeps its short lists inline': async (assert) => {
+    let talk = {
+      cardTitle: 'a long talk',
+      concepts: ['ownership-and-borrowing', 'lifetimes'],
+      speakers: ['Ada'],
+      segments: Array.from({ length: 30 }, (_, i) => ({
+        start: i * 60,
+        end: i * 60 + 60,
+        concept: `concept ${i}`,
+        text: `segment ${i} says something short`,
+      })),
+      // Short lists that together keep the doc over the target after the
+      // segments go.
+      ...Object.fromEntries(
+        Array.from({ length: 20 }, (_, i) => [
+          `facet${i}`,
+          Array.from(
+            { length: 8 },
+            (_, j) => `value ${i}-${j} of a short list`,
+          ),
+        ]),
+      ),
+    };
+    let { searchDoc, rows } = (await spillSearchDoc(talk, key))!;
+    assert.true(isSpillMarker(searchDoc.segments), 'the big list spilled');
+    assert.deepEqual(
+      rows.map((r) => r.fieldPath),
+      ['segments'],
+      'nothing else spilled',
+    );
+    assert.deepEqual(searchDoc.concepts, talk.concepts, 'concepts stay');
+    assert.deepEqual(searchDoc.speakers, talk.speakers, 'speakers stay');
+    assert.deepEqual(searchDoc.facet0, talk.facet0, 'every short list stays');
+    assert.true(
+      JSON.stringify(searchDoc).length > 2000,
+      'the doc stays over the target rather than spill a short list',
+    );
+    assert.deepEqual(
+      unspillSearchDoc(searchDoc, new Map(rows.map((r) => [r.ref, r.value]))),
+      talk,
+    );
+  },
+
+  'a doc made only of short lists is promoted whole': async (assert) => {
+    let doc = Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [
+        `facet${i}`,
+        Array.from({ length: 8 }, (_, j) => `value ${i}-${j} of a short list`),
+      ]),
+    );
+    assert.true(
+      JSON.stringify(doc).length > 2000,
+      'the doc is over the target',
+    );
+    assert.strictEqual(
+      await spillSearchDoc(doc, key),
+      undefined,
+      'no list is big enough to spill',
+    );
+  },
 } as SharedTests<{}>);
 
 export default tests;
