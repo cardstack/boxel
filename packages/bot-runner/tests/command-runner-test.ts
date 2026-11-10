@@ -38,8 +38,34 @@ function makeRunner(
     enqueueRunCommand: makeEnqueueRunCommand(queuePublisher, dbAdapter),
     githubClient,
     lintSubmissionFiles,
+    linkCheckDelayMs: 0,
   });
   return new CommandRunner(dbAdapter, queuePublisher, [workflowHandler]);
+}
+
+// A fetch-card-json result: the card's document, with its prCard link when
+// one is given.
+function fetchedCardResult(
+  cardId: string,
+  prCardLink?: string | null,
+): RunCommandResponse {
+  return {
+    status: 'ready',
+    cardResultString: JSON.stringify({
+      data: {
+        attributes: {
+          document: {
+            data: {
+              id: cardId,
+              ...(prCardLink !== undefined
+                ? { relationships: { prCard: { links: { self: prCardLink } } } }
+                : {}),
+            },
+          },
+        },
+      },
+    }),
+  };
 }
 
 module('command runner', () => {
@@ -151,7 +177,32 @@ module('command runner', () => {
     let queuePublisher: QueuePublisher = {
       publish: async (job: unknown) => {
         publishedJobs.push(job);
-        if (publishedJobs.length === 1) {
+        let { command, commandInput } = (
+          job as {
+            args: {
+              command: string;
+              commandInput: { cardIdentifier?: string };
+            };
+          }
+        ).args;
+        if (command.endsWith('/fetch-card-json/default')) {
+          let cardId = commandInput.cardIdentifier!;
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve(
+              cardId === submissionCardUrl
+                ? fetchedCardResult(cardId, prCardUrl)
+                : fetchedCardResult(cardId),
+            ),
+          } as any;
+        }
+        if (command.endsWith('/patch-card-instance/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({ status: 'ready', cardResultString: null }),
+          } as any;
+        }
+        if (command.endsWith('/collect-submission-files/default')) {
           return {
             id: 1,
             done: Promise.resolve({
@@ -276,8 +327,8 @@ module('command runner', () => {
 
     assert.strictEqual(
       publishedJobs.length,
-      6,
-      'enqueues collect-files, two lintStatus patches, create-pr-card, prCard-link patch, and clear-error patch',
+      8,
+      'enqueues collect-files, two lintStatus patches, create-pr-card, the PrCard read, prCard-link patch, the link check, and clear-error patch',
     );
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
@@ -307,18 +358,18 @@ module('command runner', () => {
       `command:${SUBMISSION_REALM_URL}`,
       'Job 4 (create-pr-card) uses submissions realm concurrency group',
     );
-    // Job 5: prCard link patch — user realm. Persisted immediately after
+    // Job 6: prCard link patch — user realm. Persisted immediately after
     // create-pr-card so retry on a later GitHub failure can find it.
-    assert.strictEqual(
-      (publishedJobs[4] as { concurrencyGroup: string }).concurrencyGroup,
-      'command:http://localhost:4201/test/',
-      'Job 5 (prCard link patch) uses default realm concurrency group',
-    );
-    // Job 6: clear-error patch — user realm
     assert.strictEqual(
       (publishedJobs[5] as { concurrencyGroup: string }).concurrencyGroup,
       'command:http://localhost:4201/test/',
-      'Job 6 (clear-error patch) uses default realm concurrency group',
+      'Job 6 (prCard link patch) uses default realm concurrency group',
+    );
+    // Job 8: clear-error patch — user realm
+    assert.strictEqual(
+      (publishedJobs[7] as { concurrencyGroup: string }).concurrencyGroup,
+      'command:http://localhost:4201/test/',
+      'Job 8 (clear-error patch) uses default realm concurrency group',
     );
 
     assert.deepEqual(
@@ -386,6 +437,30 @@ module('command runner', () => {
     assert.deepEqual(
       (publishedJobs[4] as { args: Record<string, unknown> }).args,
       {
+        realmURL: SUBMISSION_REALM_URL,
+        realmUsername: SUBMISSION_BOT_USER_ID,
+        runAs: SUBMISSION_BOT_USER_ID,
+        dedupeKey: null,
+        command: '@cardstack/boxel-host/commands/fetch-card-json/default',
+        commandInput: { cardIdentifier: prCardUrl },
+      },
+      'reads the new PrCard back as its writer before linking it',
+    );
+    assert.deepEqual(
+      (publishedJobs[6] as { args: Record<string, unknown> }).args,
+      {
+        realmURL: 'http://localhost:4201/test/',
+        realmUsername: '@alice:localhost',
+        runAs: '@alice:localhost',
+        dedupeKey: null,
+        command: '@cardstack/boxel-host/commands/fetch-card-json/default',
+        commandInput: { cardIdentifier: submissionCardUrl },
+      },
+      'reads the workflow card back to check the link saved',
+    );
+    assert.deepEqual(
+      (publishedJobs[5] as { args: Record<string, unknown> }).args,
+      {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
         runAs: '@alice:localhost',
@@ -407,7 +482,7 @@ module('command runner', () => {
       'persists prCard link on the workflow card immediately after create-pr-card succeeds (so retry on later failure can reuse the existing PrCard)',
     );
     assert.deepEqual(
-      (publishedJobs[5] as { args: Record<string, unknown> }).args,
+      (publishedJobs[7] as { args: Record<string, unknown> }).args,
       {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
@@ -1258,6 +1333,123 @@ module('command runner', () => {
     );
   });
 
+  test('a prCard link that does not save fails create-pr-card before the PR opens', async (assert) => {
+    let workflowCardUrl =
+      'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
+    let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
+    let publishedJobs: Array<{ args: Record<string, any> }> = [];
+    let queuePublisher: QueuePublisher = {
+      publish: async (job: any) => {
+        publishedJobs.push(job);
+        let command = (job.args.command as string | undefined) ?? '';
+        let result: RunCommandResponse = {
+          status: 'ready',
+          cardResultString: null,
+        };
+        if (command.endsWith('/collect-submission-files/default')) {
+          result = {
+            status: 'ready',
+            cardResultString: JSON.stringify({
+              data: {
+                attributes: {
+                  allFileContents: [
+                    {
+                      filename: 'catalog/MyListing/listing.json',
+                      contents: '{"data":{"type":"card"}}',
+                    },
+                  ],
+                },
+              },
+            }),
+          };
+        } else if (command.endsWith('/create-pr-card/default')) {
+          result = {
+            status: 'ready',
+            cardResultString: JSON.stringify({ data: { id: prCardUrl } }),
+          };
+        } else if (command.endsWith('/fetch-card-json/default')) {
+          let cardId = job.args.commandInput.cardIdentifier as string;
+          // The patch reported ready, but the saved card has no link.
+          result = fetchedCardResult(
+            cardId,
+            cardId === workflowCardUrl ? null : undefined,
+          );
+        }
+        return {
+          id: publishedJobs.length,
+          done: Promise.resolve(result),
+        } as any;
+      },
+      destroy: async () => {},
+    };
+    let openedPRs: unknown[] = [];
+    let githubClient: GitHubClient = {
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async () => ({ commitSha: 'def456' }),
+      openPullRequest: async (params) => {
+        openedPRs.push(params);
+        return { number: 1, html_url: 'https://example/pr/1' };
+      },
+    };
+    let dbAdapter = {
+      kind: 'pg',
+      notify: async () => {},
+      isClosed: false,
+      execute: async (sql: string) => {
+        if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+          return [
+            {
+              command_filter: {
+                type: 'matrix-event',
+                event_type: 'app.boxel.bot-trigger',
+                content_type: 'pr-listing-create',
+              },
+              command:
+                '@cardstack/catalog/commands/collect-submission-files/default',
+            },
+          ];
+        }
+        return [];
+      },
+      close: async () => {},
+      getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
+      withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
+    } as DBAdapter;
+
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
+    await assert.rejects(
+      commandRunner.maybeEnqueueCommand(
+        '@alice:localhost',
+        {
+          type: 'pr-listing-create',
+          realm: 'http://localhost:4201/test/',
+          userId: '@alice:localhost',
+          input: {
+            roomId: '!abc123:localhost',
+            listingId: 'http://localhost:4201/test/Listing/1',
+            listingName: 'My Listing',
+            workflowCardUrl,
+          },
+        },
+        'bot-registration-link',
+      ),
+      /PR card link did not save/,
+    );
+
+    assert.strictEqual(openedPRs.length, 0, 'does not open the pull request');
+    let lastAttrs = publishedJobs[publishedJobs.length - 1].args.commandInput
+      .patch.attributes as Record<string, unknown>;
+    assert.strictEqual(
+      lastAttrs.failedStep,
+      'create-pr-card',
+      'records the failure against create-pr-card, so the card offers Retry',
+    );
+  });
+
   test('lint failure blocks PR creation and records lint errors', async (assert) => {
     let workflowCardUrl =
       'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
@@ -1492,6 +1684,20 @@ module('command runner', () => {
             }),
           } as any;
         }
+        if (command.endsWith('/fetch-card-json/default')) {
+          let cardId = job.args.commandInput.cardIdentifier as string;
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve(
+              fetchedCardResult(
+                cardId,
+                cardId === workflowCardUrl
+                  ? 'http://localhost:4201/submissions/PrCard/pr-1'
+                  : undefined,
+              ),
+            ),
+          } as any;
+        }
         return {
           id: publishedJobs.length,
           done: Promise.resolve({ status: 'ready', cardResultString: null }),
@@ -1674,6 +1880,18 @@ module('command runner', () => {
                 data: { id: prCardUrl, attributes: {} },
               }),
             }),
+          } as any;
+        }
+        if (command.endsWith('/fetch-card-json/default')) {
+          let cardId = job.args.commandInput.cardIdentifier as string;
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve(
+              fetchedCardResult(
+                cardId,
+                cardId === workflowCardUrl ? prCardUrl : undefined,
+              ),
+            ),
           } as any;
         }
         return {
