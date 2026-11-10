@@ -246,7 +246,7 @@ export function plan(
   let key = batch.keys.find((k) => k.name === name);
   let share = batch.shares.find((s) => s.label === name);
   let offered = (token: string, id: string) =>
-    (batch.fillers[use][token] ?? []).includes(id);
+    (batch.fillers[use]?.[token] ?? []).includes(id);
   let refused = new Set<string>();
   let planned: Planned[] = [];
   for (let { operation: op, group } of chosenOperations(batch, operation)) {

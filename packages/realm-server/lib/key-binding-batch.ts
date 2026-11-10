@@ -171,8 +171,9 @@ export interface ApprovalBatch {
   // with `operations`, only those operations count. For
   // `automations`, an operation approved for automations only is left out, as the
   // window leaves it out of what it approves for automations, so a slot it
-  // sends to one more destination can take more keys.
-  fillers: Record<BatchUse, Record<string, string[]>>;
+  // sends to one more destination can take more keys. `pipelines` repeats
+  // `automations` for a client built before that use was named.
+  fillers: Record<BatchUse | 'pipelines', Record<string, string[]>>;
 }
 
 // Where the requests a batch approves run: from any card a reader opens, or
@@ -454,7 +455,10 @@ export async function approvalBatch(
       ...share,
       covers: coveredBy(grants),
     })),
-    fillers,
+    // `pipelines` is `automations` under the name a client built before the
+    // rename reads, so a window or CLI on the other side of a rolling deploy
+    // still finds the keys it may offer.
+    fillers: { ...fillers, pipelines: fillers.automations },
   };
 }
 

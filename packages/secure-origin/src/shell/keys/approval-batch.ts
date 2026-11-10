@@ -53,7 +53,7 @@ export function slotChoices(
     // One choice fills the slot in every ticked operation that sends it, so
     // it offers only the keys the realm server names as filling each of them
     // (`withTickedFillers`).
-    let fillers = new Set(batch.fillers[use][slot.slot] ?? []);
+    let fillers = new Set(batch.fillers[use]?.[slot.slot] ?? []);
     let options: SlotOption[] =
       kind === 'userKey'
         ? batch.keys

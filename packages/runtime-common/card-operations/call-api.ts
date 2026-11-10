@@ -892,8 +892,8 @@ export interface CallApiGrantUse {
 }
 
 // How an invocation arrived. An interactive one carries a user's session: a
-// card in the browser, the AI assistant, the CLI. An automation's is a run
-// the realm server makes on its own, as a schedule's payer or whoever started it,
+// card in the browser, the AI assistant, the CLI. An automation invocation is
+// a run the realm server makes on its own, as a schedule's payer or whoever started it,
 // and is never reached from a request off the network.
 export type CallApiMode = 'interactive' | 'automation';
 
