@@ -320,11 +320,17 @@ export async function createRealm(
 }
 
 // Appends the `scan` event that asks realm-historian to record a new realm's
-// seed files, as its first revision, by the realm's creator. The journal
-// writes it only while recording is on for the realm. The append runs under a
-// savepoint, so a journal failure rolls back only the event: the registry row
-// still commits and creating the realm still succeeds, and the realm's first
-// revision is then not attributed to its creator.
+// seed files, as its first revision, by the realm's creator. The append runs
+// under a savepoint, so a journal failure rolls back only the event: the
+// registry row still commits and creating the realm still succeeds, and the
+// realm's first revision is then not attributed to its creator.
+//
+// The journal writes the event only for a realm whose `realm_history_state`
+// row is already enabled. The realm's registry row is inserted on this same
+// transaction, so recording for a new realm has to be turned on there too,
+// before this append. A realm whose recording is turned on any later, such as
+// from the registry's NOTIFY, gets no scan, and its first revision isn't its
+// creator's.
 async function appendSeedScan(
   querier: Querier,
   journal: ChangeJournal,
