@@ -4497,6 +4497,26 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(mango.home.name, 'Portugal', 'and the name');
     });
 
+    test('the country picker shows the country the field stores', async function (assert) {
+      class Person extends CardDef {
+        @field home = contains(CountryField);
+        @field born = contains(CountryField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        home: new CountryField({ name: 'Kosovo', code: 'XK' }),
+        born: new CountryField({ name: 'Nippon', code: 'JP' }),
+      });
+
+      await renderCard(loader, mango, 'edit');
+      assert
+        .dom('[data-test-field="home"] [data-test-pretui-select-trigger]')
+        .hasText('Kosovo', 'a code the dataset lacks shows its stored name');
+      assert
+        .dom('[data-test-field="born"] [data-test-pretui-select-trigger]')
+        .hasText('🇯🇵 Nippon', 'a listed code keeps the name stored with it');
+    });
+
     test("the country picker's search box takes its options' type size", async function (assert) {
       class Person extends CardDef {
         @field home = contains(CountryField);

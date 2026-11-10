@@ -52,8 +52,28 @@ class CountryFieldEdit extends Component<typeof CountryField> {
     }));
   });
 
+  // The picker shows the country the field stores. A code the dataset lacks
+  // (one it doesn't list, or one saved in another case) gets an option of its
+  // own, and a listed code keeps the name stored with it.
+  get options(): SelectOption[] {
+    let { code, name } = this.args.model;
+    if (!code) {
+      return this.countries;
+    }
+    let listed = this.countries.find((option) => option.value === code);
+    if (!listed) {
+      return [{ value: code, label: name || code }, ...this.countries];
+    }
+    if (!name || name === listed.label) {
+      return this.countries;
+    }
+    return this.countries.map((option) =>
+      option === listed ? { ...option, label: name } : option,
+    );
+  }
+
   @action onSelectCountry(code: string) {
-    let country = this.countries.find((option) => option.value === code);
+    let country = this.options.find((option) => option.value === code);
     if (!country) {
       return;
     }
@@ -67,7 +87,7 @@ class CountryFieldEdit extends Component<typeof CountryField> {
     {{else}}
       <Select
         @placeholder='Choose a country'
-        @options={{this.countries}}
+        @options={{this.options}}
         @value={{@model.code}}
         @onValueChange={{this.onSelectCountry}}
         @searchEnabled={{true}}
