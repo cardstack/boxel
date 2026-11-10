@@ -70,15 +70,19 @@ every prerender server. The code holds no prices and no fallbacks.
   on different CPU architectures, which the provider prices differently, so
   set each family's rates to the architecture its task definition uses.
 - **Shapes describe the real task.** `PRICING_PRERENDER_TASK_TABS` is the
-  most tabs one prerender task runs. A deployed prerender task runs one
-  prerender server, so that is its page pool's ceiling,
+  tabs one prerender task runs in ordinary load. A deployed prerender task
+  runs one prerender server, so that is its page pool's ceiling,
   `PRERENDER_PAGE_POOL_MAX`, when the pool is sized by
   `PRERENDER_PAGE_POOL_MIN` and `PRERENDER_PAGE_POOL_MAX`, and the fixed
-  pool's page count otherwise. `PRICING_WORKER_TASK_PROCESSES` is the worker
-  processes one worker task runs, `WORKER_ALL_PRIORITY_COUNT` plus
-  `WORKER_HIGH_PRIORITY_COUNT`. When a task definition is resized or its pool
-  or worker counts change, change its shape values in the same deploy, or a
-  tab's or process's share of the task is wrong.
+  pool's page count otherwise. Leave out the high-priority tier
+  (`PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX`), which only high-priority
+  renders can grow into: dividing by fewer tabs charges each tab a larger
+  share, which never under-charges. `PRICING_WORKER_TASK_PROCESSES` is every
+  worker process one worker task runs: `WORKER_ALL_PRIORITY_COUNT` plus
+  `WORKER_HIGH_PRIORITY_COUNT`, plus the worker manager's `--userIndexCount`
+  when its start script passes one. When a task definition is resized or its
+  pool or worker counts change, change its shape values in the same deploy,
+  or a tab's or process's share of the task is wrong.
 - **Values are plain decimals**: digits, optionally a `.` and more digits.
   A sign, an exponent, a thousands separator or surrounding spaces fail the
   check rather than being guessed at.
