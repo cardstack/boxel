@@ -1,3 +1,10 @@
+import {
+  DEFAULT_NEW_CLIENT_LIMIT,
+  OAUTH_CLIENT_RATE_LIMIT_VAR,
+  parseNewClientLimit,
+  type NewClientLimit,
+} from './new-client-limit.ts';
+
 // What the OAuth provider needs from its environment. The provider runs only
 // where `BOXEL_OAUTH_PROVIDER_ENABLED=true`; anywhere else nothing here is
 // read, and the realm server serves none of its routes.
@@ -49,6 +56,25 @@ export function readOAuthProviderConfig(
     );
   }
   return parseOAuthProviderConfig(parsed);
+}
+
+// The limit on new clients (see `new-client-limit.ts`). Read only when the
+// provider is on. Unset, the default; a value that is not a limit stops the
+// server rather than leaving registration on a limit nobody chose.
+export function readNewClientLimit(
+  env: Record<string, string | undefined>,
+): NewClientLimit {
+  let spec = env[OAUTH_CLIENT_RATE_LIMIT_VAR]?.trim();
+  if (!spec) {
+    return DEFAULT_NEW_CLIENT_LIMIT;
+  }
+  let limit = parseNewClientLimit(spec);
+  if (!limit) {
+    throw new OAuthProviderConfigError(
+      `${OAUTH_CLIENT_RATE_LIMIT_VAR} must be two limits, per address and overall, each as requests/windowSeconds, for example 20/3600,500/3600, not "${spec}"`,
+    );
+  }
+  return limit;
 }
 
 export function parseOAuthProviderConfig(value: unknown): OAuthProviderConfig {
