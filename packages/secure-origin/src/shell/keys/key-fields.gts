@@ -6,8 +6,9 @@
 // in its own fields, so for one only the name is drawn here.
 //
 // A name beside a masked value is a login form's shape, on the origin where
-// the Boxel login is saved, so each field tells password managers to leave it
-// alone: none fills the login in, or offers to save the key as the password.
+// the Boxel login is saved, so each field carries the hints 1Password,
+// LastPass, Dashlane and Bitwarden read to leave a field alone. A browser's
+// own password manager reads none of them.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { Field } from '@cardstack/pretui/components/field';
