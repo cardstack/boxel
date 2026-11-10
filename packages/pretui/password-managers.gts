@@ -30,8 +30,9 @@ const CONTROLS = 'input, textarea, select';
 
 /** Marks the element as a field no password manager fills or decorates. On
  * an element that isn't a form control, such as the wrapper an input group
- * puts a caller's modifiers on, it marks each form control inside it as it
- * is drawn. */
+ * puts a caller's modifiers on, it marks the form controls inside it once,
+ * when it is installed. A control drawn inside that element later carries
+ * no hint, so a control that comes and goes takes the modifier itself. */
 export const ignoredByPasswordManagers = modifier((el: Element) => {
   let controls = el.matches(CONTROLS)
     ? [el]
