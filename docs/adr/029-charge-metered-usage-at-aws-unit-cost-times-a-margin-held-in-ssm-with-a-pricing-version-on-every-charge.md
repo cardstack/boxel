@@ -6,7 +6,10 @@ scope:
   - packages/realm-server/lib/billable-call.ts
   - packages/realm-server/**/*pricing*
   - packages/runtime-common/**/*pricing*
-  - packages/postgres/migrations/*ledger*
+  - packages/runtime-common/tasks/daily-credit-grant.ts
+  - packages/realm-server/handlers/handle-add-credit.ts
+  - packages/postgres/migrations/*billing*
+  - packages/postgres/migrations/*credit*
 ---
 
 # 029. Charge metered usage at AWS unit cost times a margin held in SSM, with a pricing version on every charge
@@ -31,18 +34,18 @@ does not change how a plain AI call is billed.
 ### 1.2. Prices live in SSM
 
 The AWS unit rates, the task shapes they are spread over, the margin and the
-minimum balance MUST be SSM parameters under `/${env}/boxel/`. They MUST
-reach the realm-server, worker and prerender tasks as environment variables.
-They MUST NOT be read from the database. Code MUST hold no prices other than
-the defaults of §1.3. The Terraform for each parameter MUST ignore changes to
-its value, so that a change needs only a console edit and a redeploy.
+floor of the minimum balance MUST be SSM parameters under `/${env}/boxel/`.
+They MUST reach the realm-server, worker and prerender tasks as environment
+variables. They MUST NOT be read from the database, and code MUST hold no
+prices. The Terraform for each parameter MUST ignore changes to its value, so
+that a change needs only a console edit and a redeploy.
 
-### 1.3. A bad value never under-charges
+### 1.3. A bad value stops new runs, never under-charges
 
 Each process MUST check the values at startup. A missing or malformed value,
-or a margin below 1.0, MUST fail the check, raise an alert, and make the
-code's defaults apply. The defaults MUST NOT be lower than the prices they
-stand in for.
+or a margin below 1.0, MUST fail the check for the whole set and raise an
+alert. While its check has failed, a process MUST NOT admit a new run or
+submit a new batch. It MUST NOT fall back to other prices.
 
 ### 1.4. A pricing version on every charge
 
@@ -52,19 +55,27 @@ priced at.
 
 ### 1.5. The minimum balance covers a run
 
-The minimum balance MUST be at least the most one run can cost under its
-automation's caps, with batched AI counted at 1.5 times the normal price for
-an automation that opts in to it. A run MUST NOT start when its payer's
-balance, less their runs in flight and their unsettled batches, is below the
-minimum.
+An automation's minimum balance MUST be computed from its caps snapshot at
+the current prices: the most one of its runs can cost, counting the most its
+batched AI can cost when it opts in. It MUST NOT be lower than the SSM floor.
+A run MUST NOT start when its payer's balance, less their runs in flight and
+their unsettled batches, is below that minimum.
 
 ### 1.6. A ledger entry says what it paid for, once
 
-Every ledger entry MUST record its charge kind (run, run indexing, storage,
-AI, batched AI, grant or purchase), its realm, and a reference to what it
-paid for: the run, the batch, or the automation and day. An entry with no
-kind MUST read as AI. A charge MUST be written once. A retry with the same
-reference MUST NOT charge again.
+Every ledger entry MUST record its charge kind: run, run indexing, storage,
+AI, batched AI, grant, purchase or expiry. A consumption entry (run, run
+indexing, storage, batched AI) MUST also record its realm and a reference to
+what it paid for: the run, the batch, or the automation and day. An AI entry
+MUST record its realm when it has one. An entry written before kinds existed
+MUST read its kind from its credit type: a `*_used` row is AI, a
+`daily_credit` or `plan_allowance` row is a grant, an `extra_credit` row is a
+purchase, and a `*_expired` row is an expiry.
+
+A charge's identity MUST be its kind and reference. All the ledger rows one
+charge writes, one per credit bucket it draws from, MUST share that identity
+and be written in one transaction. A retry that finds the identity already
+present MUST write nothing.
 
 ## 2. Rationale
 
@@ -76,20 +87,29 @@ and under-charge large ones, and it would drift from cost as runs change.
 Prices change more often than code ships, and a release to change a price
 would couple billing to the release train. SSM with `ignore_changes` makes a
 change an operator's edit plus a redeploy, with Terraform owning only the
-starting value. Prices in the database would be one more mutable store with
-its own access and audit, read on the hot path. The pricing version answers
+starting value. SSM keeps a version history of each parameter and limits
+edits to the IAM roles allowed to make them, and each process reads it once,
+at start. Prices in the database would be one more mutable store with its own
+access and audit, read on the hot path. The pricing version answers
 "what price was this charged at?" for every entry, across redeploys.
 
 `spendCredits` charges only what the balance holds, so a run that costs more
 than the balance leaves the rest unpaid. A minimum balance at least as large
-as the most one run can cost makes every admitted run fully payable. For the
-same reason a bad price falls back to the defaults: a mistyped margin of 0.1
-must never ship a tenfold discount.
+as the most one run can cost makes every admitted run fully payable. Caps are
+set per automation, so the minimum is computed per automation, and SSM holds
+only a floor. A mistyped margin of 0.1 must never ship a tenfold discount.
+Fallback prices in code would be lower than the live ones the moment an
+operator raised a rate, so a bad value stops new runs instead. Interactive
+work and runs already going are unaffected, and the alert names the value.
 
 A ledger that says only how much was spent can't answer what a charge was
 for, can't show a charge on its run, and can't tell a retry from a second
-charge. The kind, realm and reference answer the first two, and a unique
-reference answers the third.
+charge. The kind, realm and reference answer the first two. One run makes
+several charges of different kinds against the same reference, and one
+charge can draw from several credit buckets, so a charge's identity is its
+kind and reference, shared by every row it writes. Grants, purchases and
+expiries belong to a user, not a realm, so only consumption entries carry
+one.
 
 ## 3. Considered options
 
@@ -99,7 +119,9 @@ reference answers the third.
   run size.
 - **Prices in code.** Every change needs a release.
 - **Prices in the database.** It is another mutable store to secure and
-  audit, read on every charge, with no review on a change.
+  audit, read on every charge, without SSM's version history.
+- **Fallback prices in code.** A raised price makes the fallback an
+  under-charge, unless every increase also ships a release.
 - **Billing from the AWS bill after the fact.** The bill comes monthly and
   per account, so it can't be tied to a run, shown when the run ends, or
   checked against a balance before the run starts.
