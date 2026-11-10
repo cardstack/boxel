@@ -24,7 +24,7 @@ import {
   waitingOnLock,
   withSharedWork,
 } from './connection-scheduler.ts';
-import { postgresConfig } from './pg-config.ts';
+import { boxelDatabaseConfig, postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
 
 // node-pg-migrate is CJS and exposes the runner as its default export. Under
@@ -153,9 +153,7 @@ const { migrationRenames, buildUpdateMigrationSql } =
   migrationNameFixes as MigrationNameFixes;
 
 function config() {
-  return postgresConfig({
-    database: 'boxel',
-  });
+  return boxelDatabaseConfig();
 }
 
 type Config = ReturnType<typeof config>;
@@ -418,16 +416,18 @@ export class PgAdapter implements DBAdapter {
 
   // The connection scheduler's state when read, for the health sampler:
   // connections checked out against the pool's max, how many of those are
-  // held by `withConnection` callers, acquisitions waiting, and how many of
-  // those wait only because their tenant is at its share. `inUse` above
-  // `limit` is the overflow granted once every connection was held by a hold
-  // waiting on nested work or on a lock.
+  // held by `withConnection` callers, acquisitions waiting, how many of those
+  // wait only because their tenant is at its share, and how long the
+  // longest-waiting of them has waited. `inUse` above `limit` is the overflow
+  // granted once every connection was held by a hold waiting on nested work or
+  // on a lock.
   get connectionStats(): {
     inUse: number;
     holds: number;
     limit: number;
     waiting: number;
     waitingAtShare: number;
+    oldestWaitMs: number;
   } {
     return {
       inUse: this.#scheduler.inUse,
@@ -435,6 +435,7 @@ export class PgAdapter implements DBAdapter {
       limit: this.#scheduler.limit,
       waiting: this.#scheduler.waiting,
       waitingAtShare: this.#scheduler.waitingAtShare,
+      oldestWaitMs: this.#scheduler.oldestWaitMs,
     };
   }
 

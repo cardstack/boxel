@@ -25,7 +25,12 @@ import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
 import * as Sentry from '@sentry/node';
-import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  SessionProbe,
+  startSessionSampling,
+} from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
@@ -668,8 +673,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // against whether the process's event loop was starved at the time, and heap
   // growth toward the OOM limit is visible (and alertable) on a calm process
   // before a search storm — not only inside saturation windows.
+  // The session table is read on a connection of its own, outside the pool,
+  // so a starved pool cannot silence the reading that explains it.
+  let sessionSampling = startSessionSampling(new SessionProbe());
   let stopHealthSampler = startHealthSampler({
     connectionStats: () => dbAdapter.connectionStats,
+    sessionStats: sessionSampling.latest,
   });
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
@@ -1054,6 +1063,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
           livenessResponder?.stop(),
+          sessionSampling.stop(),
         ]);
         // Stopped only once the responder is gone, never before: the loop is
         // still turning while the shutdown above runs, and a check arriving in

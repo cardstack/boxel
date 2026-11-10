@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { performance } from 'node:perf_hooks';
 
 // Which tenant a piece of database work is done for, and how the pool's
 // connections are shared between tenants.
@@ -145,6 +146,7 @@ export class ConnectionScheduler {
   #nested: Waiter[] = [];
   #waiting = 0;
   #arrivals = 0;
+  #now: () => number;
   #unsubscribe: () => void;
   #unsubscribeLockWaits: () => void;
 
@@ -154,13 +156,21 @@ export class ConnectionScheduler {
   // and at least four — leaves room for any nesting the adapter's callers
   // make while keeping `limit + overflow` near the pool's own size. Zero turns
   // it off: a wedged pool then stays wedged.
-  constructor(opts: { limit: number; tenantShare: number; overflow?: number }) {
+  // `now` is a monotonic millisecond clock, replaceable so a test can age a
+  // waiter without waiting.
+  constructor(opts: {
+    limit: number;
+    tenantShare: number;
+    overflow?: number;
+    now?: () => number;
+  }) {
     this.#limit = normalizeCount(opts.limit);
     this.#overflow =
       opts.overflow === undefined
         ? defaultOverflow(this.#limit)
         : normalizeOverflow(opts.overflow);
     this.#tenantShare = normalizeCount(opts.tenantShare);
+    this.#now = opts.now ?? (() => performance.now());
     // A tenant whose last scope closes may leave another tenant's waiters
     // eligible; nothing else would wake them.
     this.#unsubscribe = onScopeClosed(() => this.#drain());
@@ -203,6 +213,29 @@ export class ConnectionScheduler {
     return this.#waiting;
   }
 
+  // How long the acquisition that has waited longest has been waiting, in
+  // milliseconds; 0 when none is waiting. Saturation that is only load keeps
+  // this short however many acquisitions queue, because the queue keeps
+  // moving. A pool whose connections are held by work that is not finishing
+  // stops granting, and this climbs for as long as that lasts — so it, not the
+  // number waiting, tells a stuck pool from a busy one.
+  get oldestWaitMs(): number {
+    let oldest: number | undefined;
+    let consider = (waiters: Waiter[]) => {
+      // Each queue is in arrival order, so its head is its oldest.
+      let head = waiters[0];
+      if (head && (oldest === undefined || head.since < oldest)) {
+        oldest = head.since;
+      }
+    };
+    consider(this.#nested);
+    for (let queues of this.#queues.values()) {
+      consider(queues.capped);
+      consider(queues.shared);
+    }
+    return oldest === undefined ? 0 : Math.max(0, this.#now() - oldest);
+  }
+
   // Acquisitions waiting only because their tenant is at its share — the ones
   // a free connection would not be handed to.
   get waitingAtShare(): number {
@@ -243,6 +276,7 @@ export class ConnectionScheduler {
         ordered,
         hold,
         arrival: this.#arrivals++,
+        since: this.#now(),
         resolve,
       };
       this.#waiting++;
@@ -622,6 +656,8 @@ interface Waiter {
   nestedIn?: HoldMarker;
   depth?: number;
   arrival: number;
+  // When it started waiting, on the scheduler's clock.
+  since: number;
   resolve: (release: () => void) => void;
 }
 
