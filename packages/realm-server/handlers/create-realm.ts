@@ -175,7 +175,7 @@ export async function createRealm(
   // concurrent publish/unpublish/delete). This is almost never a real
   // concurrency concern — the endpoint was already checked above for
   // collision.
-  await dbAdapter.withWriteLock(url, async () => {
+  await dbAdapter.withWriteLock(url, async (txQuerier) => {
     await insertPermissions(dbAdapter, new URL(url), {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
@@ -251,28 +251,33 @@ export async function createRealm(
     //
     // The seed files were written straight to disk, outside the realm, so
     // the realm's history learns of them from a `scan` event by the creator,
-    // appended on the registry row's transaction. No instance can mount the
-    // realm before both commit, so the scan comes before any write to it.
-    await dbAdapter.withTransaction(
-      async (querier) => {
-        await insertSourceRealmInRegistry(
-          dbAdapter,
-          {
-            url,
-            diskId: `${ownerUsername}/${endpoint}`,
-            ownerUsername,
-          },
-          querier,
-        );
-        if (changeJournal) {
-          await appendSeedScan(querier, changeJournal, {
-            realmURL: url,
-            author: ownerUserId,
-          });
-        }
-      },
-      { label: `register realm ${url}` },
-    );
+    // appended on the same transaction as the registry row: the write lock's
+    // own. No instance can mount the realm before both commit, so the scan
+    // comes before any write to it.
+    let register = async (querier: Querier) => {
+      await insertSourceRealmInRegistry(
+        dbAdapter,
+        {
+          url,
+          diskId: `${ownerUsername}/${endpoint}`,
+          ownerUsername,
+        },
+        querier,
+      );
+      if (changeJournal) {
+        await appendSeedScan(querier, changeJournal, {
+          realmURL: url,
+          author: ownerUserId,
+        });
+      }
+    };
+    if (txQuerier) {
+      await register(txQuerier);
+    } else {
+      await dbAdapter.withTransaction(register, {
+        label: `register realm ${url}`,
+      });
+    }
   });
 
   // virtualNetwork URL mapping was historically bridged here so a
