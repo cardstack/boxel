@@ -5488,10 +5488,23 @@ return reasons;`);
     );
   });
 
-  test('realm.transform refuses input over its size limit', async function (assert) {
+  test('realm.transform refuses input and params over its size limit', async function (assert) {
     await assert.rejects(
       run(`await realm.transform('x'.repeat(1_100_000), '.');`),
-      /realm.transform takes at most 1000000 bytes of input/,
+      /realm.transform takes at most 1000000 bytes of input and params/,
+    );
+    await assert.rejects(
+      run(
+        `await realm.transform({}, 'params("big")', { params: { big: 'x'.repeat(1_100_000) } });`,
+      ),
+      /realm.transform takes at most 1000000 bytes of input and params/,
+    );
+  });
+
+  test('realm.transform refuses output over its size limit', async function (assert) {
+    await assert.rejects(
+      run(`await realm.transform('x'.repeat(600_000), '[., .]');`),
+      /realm.transform returns at most 1000000 bytes/,
     );
   });
 

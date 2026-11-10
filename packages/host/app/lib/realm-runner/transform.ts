@@ -1,5 +1,13 @@
 import { jsonBytes } from './research';
 import { makeRealmWorker, resolveAssetURL } from './runner';
+import {
+  MAX_TRANSFORM_INPUT_BYTES,
+  MAX_TRANSFORM_OUTPUT_BYTES,
+  MAX_TRANSFORM_SOURCE_BYTES,
+  MAX_TRANSFORMS_PER_RUN,
+  TRANSFORM_TIMEOUT_MS,
+  TRANSFORM_WORKER_START_TIMEOUT_MS,
+} from './transform-limits';
 
 import WorkerURL from './transform-worker?worker&url';
 
@@ -7,15 +15,6 @@ import WorkerURL from './transform-worker?worker&url';
 // script hands it, under BXL's transform profile: the profile card
 // operations' input and output programs use. The program runs in a worker of
 // its own, never inside QuickJS.
-
-export const MAX_TRANSFORM_INPUT_BYTES = 1_000_000;
-export const MAX_TRANSFORM_OUTPUT_BYTES = 1_000_000;
-export const MAX_TRANSFORM_SOURCE_BYTES = 16 * 1024;
-// One program's time. A program that runs longer is stopped by ending its
-// worker; the next call starts a new one.
-export const TRANSFORM_TIMEOUT_MS = 10_000;
-// How many programs one run may run (ADR 022 §1.6).
-export const MAX_TRANSFORMS_PER_RUN = 100;
 
 const SPELLINGS = { jq: 'solidified', readable: 'readable' } as const;
 type Spelling = keyof typeof SPELLINGS;
@@ -30,12 +29,13 @@ export interface TransformWorkerRequest {
 }
 
 export type TransformWorkerResponse =
+  | { ready: true }
+  | { id: number; started: true }
   | { id: number; value: string }
+  | { id: number; outputTooLarge: true }
   | { id: number; error: string; phase?: 'parse' | 'profile' | 'evaluate' };
 
 export type TransformRequest = Omit<TransformWorkerRequest, 'id'>;
-
-const encoder = new TextEncoder();
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -52,16 +52,10 @@ export function transformRequest(
       "realm.transform expects a BXL program as its second argument, such as realm.transform(cards, 'map({title})')",
     );
   }
-  let sourceBytes = encoder.encode(source).byteLength;
+  let sourceBytes = new TextEncoder().encode(source).byteLength;
   if (sourceBytes > MAX_TRANSFORM_SOURCE_BYTES) {
     throw new RangeError(
       `realm.transform takes a program of at most ${MAX_TRANSFORM_SOURCE_BYTES} bytes; this one has ${sourceBytes}`,
-    );
-  }
-  let inputBytes = jsonBytes(input ?? null);
-  if (inputBytes > MAX_TRANSFORM_INPUT_BYTES) {
-    throw new RangeError(
-      `realm.transform takes at most ${MAX_TRANSFORM_INPUT_BYTES} bytes of input; this input has ${inputBytes}`,
     );
   }
   if (options !== undefined && options !== null && !isPlainObject(options)) {
@@ -82,6 +76,15 @@ export function transformRequest(
   if (params !== undefined && !isPlainObject(params)) {
     throw new TypeError(
       'realm.transform params must be an object of named values, read with params("name")',
+    );
+  }
+  // params reach the worker and the program as input does, so they count
+  // toward the same limit.
+  let inputBytes =
+    jsonBytes(input ?? null) + (params === undefined ? 0 : jsonBytes(params));
+  if (inputBytes > MAX_TRANSFORM_INPUT_BYTES) {
+    throw new RangeError(
+      `realm.transform takes at most ${MAX_TRANSFORM_INPUT_BYTES} bytes of input and params; this call has ${inputBytes}`,
     );
   }
   if (typeof spelling !== 'string' || !(spelling in SPELLINGS)) {
@@ -120,13 +123,15 @@ function transformError(
 interface Waiting {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  timer: number;
+  // Set when the worker starts the program, not when the call is posted.
+  timer?: number;
 }
 
 // The transform worker of one run. It starts on the run's first
 // realm.transform and ends with the run.
 export class RealmTransformer {
   private worker?: Worker;
+  private startTimer?: number;
   private waiting = new Map<number, Waiting>();
   private nextId = 1;
   private closed = false;
@@ -149,16 +154,7 @@ export class RealmTransformer {
     let worker = this.start();
     let id = this.nextId++;
     return new Promise((resolve, reject) => {
-      let timer = window.setTimeout(() => {
-        // A program past its time cannot be interrupted inside the worker, so
-        // the worker ends, and every call waiting on it with it.
-        this.stop(
-          new Error(
-            `realm.transform took longer than ${TRANSFORM_TIMEOUT_MS / 1000} s and was stopped`,
-          ),
-        );
-      }, TRANSFORM_TIMEOUT_MS);
-      this.waiting.set(id, { resolve, reject, timer });
+      this.waiting.set(id, { resolve, reject });
       worker.postMessage({ id, ...request } satisfies TransformWorkerRequest);
     });
   }
@@ -174,10 +170,34 @@ export class RealmTransformer {
     }
     let workerURL = resolveAssetURL(WorkerURL);
     let worker = makeRealmWorker(workerURL);
+    this.startTimer = window.setTimeout(() => {
+      this.stop(
+        new Error(
+          `realm.transform could not start: its worker did not load within ${TRANSFORM_WORKER_START_TIMEOUT_MS / 1000} s`,
+        ),
+      );
+    }, TRANSFORM_WORKER_START_TIMEOUT_MS);
     worker.onmessage = (event: MessageEvent<TransformWorkerResponse>) => {
       let message = event.data;
+      if ('ready' in message) {
+        window.clearTimeout(this.startTimer);
+        this.startTimer = undefined;
+        return;
+      }
       let waiting = this.waiting.get(message.id);
       if (!waiting) {
+        return;
+      }
+      if ('started' in message) {
+        waiting.timer = window.setTimeout(() => {
+          // A program past its time cannot be interrupted inside the worker,
+          // so the worker ends, and every call waiting on it with it.
+          this.stop(
+            new Error(
+              `realm.transform took longer than ${TRANSFORM_TIMEOUT_MS / 1000} s and was stopped`,
+            ),
+          );
+        }, TRANSFORM_TIMEOUT_MS);
         return;
       }
       this.waiting.delete(message.id);
@@ -186,11 +206,10 @@ export class RealmTransformer {
         waiting.reject(transformError(message.error, message.phase));
         return;
       }
-      let bytes = encoder.encode(message.value).byteLength;
-      if (bytes > MAX_TRANSFORM_OUTPUT_BYTES) {
+      if ('outputTooLarge' in message) {
         waiting.reject(
           new RangeError(
-            `realm.transform returns at most ${MAX_TRANSFORM_OUTPUT_BYTES} bytes; this program returned ${bytes}`,
+            `realm.transform returns at most ${MAX_TRANSFORM_OUTPUT_BYTES} bytes; this program returned more`,
           ),
         );
         return;
@@ -212,6 +231,8 @@ export class RealmTransformer {
   private stop(reason: Error) {
     this.worker?.terminate();
     this.worker = undefined;
+    window.clearTimeout(this.startTimer);
+    this.startTimer = undefined;
     for (let waiting of this.waiting.values()) {
       window.clearTimeout(waiting.timer);
       waiting.reject(reason);
