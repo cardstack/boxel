@@ -400,7 +400,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
-    test('a reader is refused with 403 on the realm-owner permissions route', async function (assert) {
+    test("a reader is refused with 403 on the administrators' permissions route", async function (assert) {
       assertRefusal(
         assert,
         await request

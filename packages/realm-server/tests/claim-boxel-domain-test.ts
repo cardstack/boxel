@@ -415,8 +415,8 @@ module(basename(import.meta.filename), function () {
           'test-user',
           'test-user@example.com',
         );
-        // Grant the caller realm-owner permission on the source realm so the
-        // ownership check in the handler passes.
+        // Grant the caller direct write on the source realm so the handler's
+        // administrator check passes.
         await dbAdapter.execute(
           `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ('${sourceRealmURL}', '${ownerUserId}', true, true, true)`,
         );
@@ -451,14 +451,14 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('returns 403 when the caller is not the realm owner', async function (assert) {
+    test('returns 403 when the caller does not administer the realm', async function (assert) {
       let response = await post(defaultToken, {
         sourceRealmURL: 'https://test-realm.example/someone-else/realm/',
       });
       assert.strictEqual(
         response.status,
         403,
-        'rejects a non-owner of the source realm',
+        'rejects a caller with no write on the source realm',
       );
     });
 

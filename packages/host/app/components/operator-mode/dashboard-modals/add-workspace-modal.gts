@@ -2,6 +2,7 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
@@ -69,6 +70,7 @@ export default class AddWorkspaceModal extends Component<AddWorkspaceModalSignat
               @value={{@displayName}}
               @onInput={{@setDisplayName}}
               @helperText='This is how your workspace will appear in the UI.'
+              {{ignoredByPasswordManagers}}
             />
           </FieldContainer>
           <FieldContainer
@@ -82,6 +84,7 @@ export default class AddWorkspaceModal extends Component<AddWorkspaceModalSignat
               @value={{@endpoint}}
               @onInput={{@setEndpoint}}
               @helperText='The endpoint is the unique identifier for your workspace. Use letters, numbers, and hyphens only.'
+              {{ignoredByPasswordManagers}}
             />
           </FieldContainer>
         {{/if}}

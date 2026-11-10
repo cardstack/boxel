@@ -14,6 +14,7 @@ import {
   type MenuItemOptions,
   not,
 } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -3765,6 +3766,7 @@ export class StringField extends FieldDef {
         @value={{@model}}
         @onInput={{@set}}
         @disabled={{not @canEdit}}
+        {{ignoredByPasswordManagers}}
       />
     </template>
   };
@@ -4041,6 +4043,7 @@ export class NumberField extends FieldDef {
         @errorMessage={{this.textInputValidator.errorMessage}}
         @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
         @disabled={{not @canEdit}}
+        {{ignoredByPasswordManagers}}
       />
     </template>
 

@@ -58,7 +58,7 @@ export async function createWorkspace(
   return { url: realmURL.href, name };
 }
 
-// Deletes a workspace (realm) the current user owns, with the same result as
+// Deletes a workspace (realm) the current user administers, with the same result as
 // "Delete Workspace" in a workspace's menu: the realm and all of
 // its content are removed on the realm server (published copies included), it
 // leaves the user's realm list, and the app falls back to the workspace
@@ -87,9 +87,9 @@ export async function deleteWorkspace(
   // URL, so it is never handed to `new URL()`; RealmPaths and the realm
   // services accept either form.
   let realmURL = ensureTrailingSlash(realmIdentifier);
-  if (!realm.isRealmOwner(realmURL)) {
+  if (!realm.canAdminister(realmURL)) {
     throw new Error(
-      `Cannot delete workspace ${realmURL}: the current user is not its owner.`,
+      `Cannot delete workspace ${realmURL}: the current user does not administer it.`,
     );
   }
 

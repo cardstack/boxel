@@ -7,7 +7,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   archiveRealm,
   fetchAllRealmsWithOwners,
-  fetchArchivedRealmsForOwner,
+  fetchArchivedRealmsForAdministrator,
   fetchRealmOwnerUserId,
   fetchUserPermissions,
   insertPermissions,
@@ -567,48 +567,65 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("fetchArchivedRealmsForOwner returns only the owner's archived realms", async function (assert) {
-      const owner = '@owner:localhost';
-      const otherOwner = '@other:localhost';
+    test('fetchArchivedRealmsForAdministrator returns only the archived realms the user administers', async function (assert) {
+      const admin = '@admin:localhost';
+      const other = '@other:localhost';
 
       const archivedOwned = 'http://example.com/owned-archived/';
+      const archivedShared = 'http://example.com/shared-archived/';
       const activeOwned = 'http://example.com/owned-active/';
-      const archivedOtherOwner = 'http://example.com/other-archived/';
+      const archivedOther = 'http://example.com/other-archived/';
       const archivedReadOnly = 'http://example.com/read-only-archived/';
+      const archivedPublicWrite = 'http://example.com/public-write-archived/';
 
       await insertPermissions(dbAdapter, new URL(archivedOwned), {
-        [owner]: ['read', 'write', 'realm-owner'],
+        [admin]: ['read', 'write', 'realm-owner'],
+      });
+      // A realm shared with the user as an administrator: direct write, owned
+      // by someone else.
+      await insertPermissions(dbAdapter, new URL(archivedShared), {
+        [admin]: ['read', 'write'],
+        [other]: ['read', 'write', 'realm-owner'],
       });
       await insertPermissions(dbAdapter, new URL(activeOwned), {
-        [owner]: ['read', 'write', 'realm-owner'],
+        [admin]: ['read', 'write', 'realm-owner'],
       });
-      await insertPermissions(dbAdapter, new URL(archivedOtherOwner), {
-        [otherOwner]: ['read', 'write', 'realm-owner'],
+      await insertPermissions(dbAdapter, new URL(archivedOther), {
+        [other]: ['read', 'write', 'realm-owner'],
       });
-      // owner can read this realm but is not its owner
       await insertPermissions(dbAdapter, new URL(archivedReadOnly), {
-        [owner]: ['read'],
-        [otherOwner]: ['read', 'write', 'realm-owner'],
+        [admin]: ['read'],
+        [other]: ['read', 'write', 'realm-owner'],
+      });
+      // A public write row names no one, so it makes no one an administrator.
+      await insertPermissions(dbAdapter, new URL(archivedPublicWrite), {
+        '*': ['read', 'write'],
+        [other]: ['read', 'write', 'realm-owner'],
       });
 
       await archiveRealm(dbAdapter, new URL(archivedOwned));
-      await archiveRealm(dbAdapter, new URL(archivedOtherOwner));
+      await archiveRealm(dbAdapter, new URL(archivedShared));
+      await archiveRealm(dbAdapter, new URL(archivedOther));
       await archiveRealm(dbAdapter, new URL(archivedReadOnly));
+      await archiveRealm(dbAdapter, new URL(archivedPublicWrite));
 
-      let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
+      let archived = await fetchArchivedRealmsForAdministrator(
+        dbAdapter,
+        admin,
+      );
 
       assert.deepEqual(
-        archived.map((r) => r.url),
-        [archivedOwned],
-        'returns only realms that are both archived and owned by the user',
+        archived.map((r) => r.url).sort(),
+        [archivedOwned, archivedShared].sort(),
+        'returns the archived realms whose own row grants the user write',
       );
       assert.ok(
-        archived[0]?.archivedAt,
+        archived.every((r) => r.archivedAt),
         'each archived realm carries its archived_at timestamp',
       );
     });
 
-    test('fetchArchivedRealmsForOwner excludes archived published snapshots', async function (assert) {
+    test('fetchArchivedRealmsForAdministrator excludes archived published snapshots', async function (assert) {
       const owner = '@owner:localhost';
       const sourceRealmURL = 'http://example.com/source/';
       const publishedRealmURL = 'http://example.com/published/';
@@ -616,7 +633,6 @@ module(basename(import.meta.filename), function () {
       await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
         [owner]: ['read', 'write', 'realm-owner'],
       });
-      // Publishing grants the owner realm-owner on the published URL too.
       await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL,
         publishedRealmId: uuidv4(),
@@ -624,15 +640,20 @@ module(basename(import.meta.filename), function () {
         sourceRealmURL,
         lastPublishedAt: Date.now(),
       });
+      // A write row on the published URL, so only its registry kind keeps
+      // it out of the list.
       await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-        [owner]: ['read', 'realm-owner'],
+        [owner]: ['read', 'write', 'realm-owner'],
         '*': ['read'],
       });
 
       await archiveRealm(dbAdapter, new URL(sourceRealmURL));
       await archiveRealm(dbAdapter, new URL(publishedRealmURL));
 
-      let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
+      let archived = await fetchArchivedRealmsForAdministrator(
+        dbAdapter,
+        owner,
+      );
 
       assert.deepEqual(
         archived.map((r) => r.url),
