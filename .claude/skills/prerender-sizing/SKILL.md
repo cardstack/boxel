@@ -309,7 +309,7 @@ The 16 GB resize is what makes HP_MAX=8 safe. On the existing 8 GB task, MAX=6 i
 - `MIN = 2`
 - `MAX = 6`
 - `HP_MAX = 8`
-- `HIGH_PRIORITY_THRESHOLD = 5`
+- `HIGH_PRIORITY_THRESHOLD = 5` (with no job priority between 1 and 9 in use, any value from 2 to 9 split user from non-user work the same way; Step 4 gives the value to use alongside the automation tier at 5)
 - `IDLE_CONTRACTION_MS = 60_000`
 - `SHARED_CONTEXT_CAP = 12` (HP_MAX × 1.5)
 
@@ -324,7 +324,7 @@ The 16 GB resize is what makes HP_MAX=8 safe. On the existing 8 GB task, MAX=6 i
 - **CPU < memory in priority for prerender.** If you're tempted to bump CPU, check the simultaneous-rendering count first. Almost always you can shrink CPU and grow memory for net wins.
 - **80 % is the working ceiling, not the maximum.** Reserve the last 20 % for LRU growth, standby refresh churn, runtime-exception capture buffers, and Node V8 retained-heap overhead.
 - **`HP_MAX` is the memory invariant, not `MAX`.** The pool can reach `HP_MAX` under any priority-10 burst; size memory for that worst case.
-- **Every automation worker is a tab of demand.** An automation run is a run-command job, and a run-command job runs its command in a prerender tab (`prerenderer.runCommand`) at its job priority, holding the tab until the command returns. The workers that can claim one are the automation lane (`--automationCount`, `WORKER_AUTOMATION_COUNT`) and the all-priority lane, and the automation lane also claims user-initiated work when no run is due. Raising `WORKER_AUTOMATION_COUNT` raises the number of tabs the workers can hold at once across every worker task that the prerender manager routes here. Re-run the projection in Step 3 with that many more concurrent tabs before raising it. On the worker side, the worker manager divides its own task memory across every worker it starts, automation workers included (`workerHeapLimitMb`), so each added worker also shrinks every other worker's heap in that task.
+- **Every automation worker is a tab of demand.** An automation run is a run-command job, and a run-command job runs its command in a prerender tab (`prerenderer.runCommand`) at its job priority, holding the tab until the command returns. The workers that can claim one are the automation lane (`--automationCount`, `WORKER_AUTOMATION_PRIORITY_COUNT`) and the all-priority lane, and the automation lane also claims user-initiated work when no run is due. Raising `WORKER_AUTOMATION_PRIORITY_COUNT` raises the number of tabs the workers can hold at once across every worker task that the prerender manager routes here. Re-run the projection in Step 3 with that many more concurrent tabs before raising it. On the worker side, the worker manager divides its own task memory across every worker it starts, automation workers included (`workerHeapLimitMb`), so each added worker also shrinks every other worker's heap in that task.
 - **Validate with a synthetic stress test before promoting to prod.** Concurrent catalog full reindex + simulated user reindex; pass criteria: high-priority p95 `tabQueueMs` < 1 s, memory peak < 80 %, CPU peak < 80 %, zero 145 s timeouts.
 
 ## Where to set the values

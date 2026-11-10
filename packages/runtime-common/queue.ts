@@ -42,9 +42,16 @@ import type { Deferred } from './deferred.ts';
 // `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
 //
 // Automation runs sit between the two initiator tiers, at
-// `automationInitiatedPriority` (5): every run an automation enqueues — on
-// its schedule, from a webhook, as a batch follow-up, or from Preview and
-// Run now. The tier exists so a run due at a set time is not queued behind a
+// `automationInitiatedPriority` (5): the run-command job that runs an
+// automation, whatever started the run — its schedule, reconcile, one of its
+// webhook triggers, a batch follow-up, Preview, or Run now. That job is the
+// tier's only member. Index and prerender-html work never enqueue at it:
+// `isUserInitiatedTier` in pg-queue and `prerenderHtmlPriority` treat
+// anything below 9 as system tier, so an index pass at 5 would wait behind
+// its family's system-tier exclusive work and render its HTML at 0. The
+// indexing a run's writes cause takes the tier the realm's write path gives
+// it. The run-command job runs in its realm's `command:` group, which belongs
+// to no lane family, so neither rule reaches it. The tier exists so a run due at a set time is not queued behind a
 // system backlog such as a full reindex, which only the all-priority pool
 // works through. The automation pool (`--automationCount`) floors there, so
 // it serves automation runs and every user-initiated job and never
