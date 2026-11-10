@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import type { PgAdapter } from '@cardstack/postgres';
+import { PostgresChangeJournal, type PgAdapter } from '@cardstack/postgres';
 import {
   query,
   param,
@@ -16,7 +16,6 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 import { commitBatch } from '@cardstack/runtime-common/card-operations';
-import { PostgresChangeJournal } from '../lib/change-journal.ts';
 import {
   setupPermissionedRealmCached,
   createJWT,

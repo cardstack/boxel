@@ -55,6 +55,12 @@ RUN pnpm --dir=packages/choreo-film-app build:realm
 # rather than building again (`build:secure-origin:if-stale`).
 RUN pnpm --dir=packages/secure-origin build
 
+# The commit the image is built from, which a deploy's scan events name as the
+# commit deployed (scripts/scan-deployed-realms.sh). It comes after every RUN
+# so that a new commit invalidates no cached layer.
+ARG boxel_commit
+ENV BOXEL_COMMIT=$boxel_commit
+
 EXPOSE 3000
 
 CMD exec /realm-server/packages/realm-server/$realm_server_script

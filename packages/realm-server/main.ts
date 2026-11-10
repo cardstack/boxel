@@ -29,6 +29,7 @@ import * as Sentry from '@sentry/node';
 import {
   PgAdapter,
   PgQueuePublisher,
+  PostgresChangeJournal,
   SessionProbe,
   startSessionSampling,
 } from '@cardstack/postgres';
@@ -38,7 +39,6 @@ import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
-import { PostgresChangeJournal } from './lib/change-journal.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
@@ -740,8 +740,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
   // One journal shared by every realm this server mounts. Each write appends
   // its change event through it, on the write's own transaction, for the
-  // realms whose recording is on. `REALM_HISTORY_JOURNAL=off` is the kill
-  // switch: no realm gets a journal, so no write touches it.
+  // realms whose recording is on, and create-realm appends a new realm's
+  // `scan` event through it. `REALM_HISTORY_JOURNAL=off` is the kill switch:
+  // no realm and no create-realm gets a journal, so nothing touches it.
   let changeJournal =
     process.env.REALM_HISTORY_JOURNAL === 'off'
       ? undefined
@@ -965,6 +966,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realms,
     reconciler,
     mediaCacheAdapter,
+    ...(changeJournal ? { changeJournal } : {}),
     virtualNetwork,
     matrixClient,
     realmsRootPath,

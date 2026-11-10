@@ -18,6 +18,10 @@ pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
 pnpm setup:openrouter-in-deployment
 pnpm setup:choreo-gallery-in-deployment
+# The setup steps above write realm content straight onto the realms' disks,
+# outside the realm server, so each rsynced realm gets a scan event that
+# attributes what changed to this deploy in its history.
+sh "$SCRIPTS_DIR/scan-deployed-realms.sh" stack.cards
 # The secure origin's pages are served from their build, which the realm
 # server reads once, at startup, and refuses to start without. The image
 # holds a build of its own sources, so this normally only checks it, in well

@@ -109,6 +109,14 @@ export interface ChangeEventChange {
 
 // An event that names its own revision. Such an event is never coalesced
 // with other writes.
+//
+// A `scan` comes from a writer that changed the realm's files outside the
+// realm: create-realm after seeding a new realm, or a deploy after its rsync.
+// It asks realm-historian to record every earlier event for the realm, then
+// sweep the realm and record what differs as one revision by the scan's
+// author, so it names no paths. A deploy's scan carries the repository it
+// deployed from as `source` (such as `cardstack/boxel`) and the deployed
+// commit's full SHA as `commit`; create-realm's carries neither.
 export type ChangeIntent =
   | { kind: 'revert'; revision: string; path: string; forced: boolean }
   | { kind: 'scan'; source?: string; commit?: string }
