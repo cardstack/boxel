@@ -32,6 +32,7 @@ import {
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
+import { automationAdmission } from '../lib/key-bindings.ts';
 import {
   markKeyRejected,
   setKeyGrantSink,
@@ -386,6 +387,45 @@ module(basename(import.meta.filename), function (hooks) {
         },
       ],
       'the refused mint is recorded against its vendor',
+    );
+  });
+
+  test('an automation is admitted while Google accepts the key, refused at admission once it is rejected, and admitted again when its probe is due', async function (assert) {
+    let key = await addServiceAccount();
+    await approve('values', { keyId: key.id });
+    let admission = async () => {
+      let refused = await automationAdmission(dbAdapter, {
+        core: realm.operationCore,
+        realmURL,
+        codeRef: SHEET,
+        operation: 'values',
+        payer: OWNER,
+      });
+      return refused
+        ? { code: refused.error.code, reason: refused.error.meta?.reason }
+        : undefined;
+    };
+    assert.strictEqual(await admission(), undefined, 'a key Google accepts');
+
+    vendor.googleTokenAnswers.push(REFUSED);
+    await invoke('values');
+    assert.strictEqual((await keyRow(key.id)).state, 'rejected');
+    let asked = tokenRequests().length;
+    assert.deepEqual(await admission(), {
+      code: 'credential-rejected',
+      reason: 'rejected',
+    });
+    assert.strictEqual(
+      tokenRequests().length,
+      asked,
+      'admission asks Google nothing',
+    );
+
+    await probeIsDue(key.id);
+    assert.strictEqual(
+      await admission(),
+      undefined,
+      'a run may be the probe, as a call would be',
     );
   });
 

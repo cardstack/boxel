@@ -44,6 +44,7 @@ import {
   type UserKeyState,
 } from './user-keys.ts';
 import {
+  mintingRefusal,
   oauthAccessToken,
   OAuthTokenError,
   type OAuthTokenFailure,
@@ -1210,7 +1211,9 @@ export interface CheckedSlotBinding {
 // would be filled (`probe`: under a grant the vendor rejected, as its probe;
 // `keyProbe`: with a service-account key Google refused, as the key's probe).
 // `key-rejected` is a service-account key Google refused whose probe isn't
-// due.
+// due. `credential-rejected` is a grant the vendor rejected whose probe isn't
+// due, or, with a `reason`, an OAuth connection or client that can't mint a
+// token (`mintingRefusal`).
 export type SlotCheck =
   | {
       slot: CallApiSlot;
@@ -1232,9 +1235,21 @@ export type SlotCheck =
         | 'binding-needs-reapproval'
         | 'interactive-use-not-approved'
         | 'anonymous-use-not-approved'
-        | 'credential-rejected'
         | 'key-rejected';
+    }
+  | {
+      slot: CallApiSlot;
+      binding: CheckedSlotBinding;
+      refused: 'credential-rejected';
+      reason?: OAuthTokenFailure;
     };
+
+// The kinds of key that mint their token through an OAuth client, which the
+// database says whether they can (`mintingRefusal`).
+const OAUTH_MINTING_KINDS: ReadonlySet<string> = new Set([
+  'oauth-connection',
+  'oauth-client',
+]);
 
 // Every slot of the request checked against the binding that would fill it:
 // approved in this realm, for this operation (and this card, when it is
@@ -1243,15 +1258,20 @@ export type SlotCheck =
 // approved for how the invocation arrived, and for a caller who isn't signed
 // in, its share's key allowing anonymous use; its grant still there for its
 // key;
-// that grant not rejected by the vendor, unless its probe is due; and the
+// that grant not rejected by the vendor, unless its probe is due; the
 // grant's key not a service-account key Google refused, unless the key's
-// probe is due. The first check a slot fails is its answer.
+// probe is due; and an OAuth connection or `client_credentials` client able
+// to mint a token, as far as the database records: a connection its vendor
+// refused, an access-only token past its expiry, and a client that is
+// broken, deleted, unshared or suspended can't. The first check a slot fails
+// is its answer.
 //
 // This is the one place a call (`fillSlots`), an automation's admission
 // (`automationAdmission`) and readiness (`keyReadiness`) learn what a call
 // would do, so a check added for one is a check for all three. It writes
-// nothing: what a refusal changes (moving a binding to `needs-reapproval`,
-// claiming a probe) is the call's to do.
+// nothing and opens no key: what a refusal changes (moving a binding to
+// `needs-reapproval`, claiming a probe) is the call's to do, and a token
+// endpoint that is failing right now is found only by the call that asks it.
 export async function checkSlots(
   dbAdapter: DBAdapter,
   lookup: BindingLookup,
@@ -1277,7 +1297,23 @@ export async function checkSlots(
         WHERE `,
       ...slotBindingConditions({ ...lookup, slot }),
     ])) as unknown as (CheckedSlotBinding | undefined)[];
-    checks.push(checkSlot(lookup, slot, binding));
+    let check = checkSlot(lookup, slot, binding);
+    if (
+      check.refused === undefined &&
+      check.binding.grant_key_id &&
+      OAUTH_MINTING_KINDS.has(check.binding.key_kind ?? '')
+    ) {
+      let reason = await mintingRefusal(dbAdapter, check.binding.grant_key_id);
+      if (reason) {
+        check = {
+          slot,
+          binding: check.binding,
+          refused: 'credential-rejected',
+          reason,
+        };
+      }
+    }
+    checks.push(check);
   }
   return checks;
 }
@@ -1454,13 +1490,32 @@ async function checkedBindings(
           ),
         );
       case 'credential-rejected':
+        // A call through a key that can't mint is a refused mint, as one the
+        // token endpoint refuses is; admission and readiness record nothing.
+        if (check.reason && rejection.claimProbe) {
+          emitKeyGrantEvent({
+            event: 'mint-failed',
+            key: check.binding.grant_key_id!,
+            kind: check.binding.key_kind!,
+            host: hostOf(check.binding.grant_destination!),
+            realm: lookup.realmURL,
+            reason: check.reason,
+          });
+        }
         throw refusedFrom(
           limitSubjectOf(check.binding),
-          credentialRejected(
-            lookup.operation,
-            slot,
-            check.binding.grant_destination!,
-          ),
+          check.reason
+            ? mintingRefused(
+                lookup.operation,
+                slot,
+                check.binding.grant_destination!,
+                check.reason,
+              )
+            : credentialRejected(
+                lookup.operation,
+                slot,
+                check.binding.grant_destination!,
+              ),
         );
       case 'key-rejected':
         throw refusedFrom(
@@ -1830,6 +1885,27 @@ const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
     'its token endpoint kept failing, so asking again later may succeed',
 };
 
+// The refusal for a slot whose OAuth connection or client can't mint a
+// token, for `reason`. Nothing was sent to the slot's destination.
+function mintingRefused(
+  operation: string,
+  slot: Pick<CallApiSlot, 'name' | 'key'>,
+  destination: string,
+  reason: OAuthTokenFailure,
+): OperationFailure {
+  return new OperationFailure({
+    status: 424,
+    code: 'credential-rejected',
+    title: 'Credential rejected',
+    detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${MINTING_REFUSALS[reason]}`,
+    meta: {
+      slot: { name: slot.name, key: slot.key },
+      destination,
+      reason,
+    },
+  });
+}
+
 const SERVICE_ACCOUNT_REJECTED =
   'Google no longer accepts its service account key, so nothing is sent with it until its owner replaces the key or a periodic retry mints a token';
 
@@ -1930,28 +2006,25 @@ async function mintedToken(
       }
       throw serviceAccountRejected(operation, slot, opened.destination);
     }
-    let why = MINTING_REFUSALS[error.reason];
-    throw new OperationFailure({
-      status: 424,
-      code: 'credential-rejected',
-      title: 'Credential rejected',
-      detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${why}`,
-      meta: {
-        slot: { name: slot.name, key: slot.key },
-        destination: opened.destination,
-        reason: error.reason,
-      },
-    });
+    throw mintingRefused(operation, slot, opened.destination, error.reason);
   }
 }
 
 // Whether an automation may invoke an operation, asked before the run starts: the
 // same checks a call makes, without opening any key. A Scheduling System run
 // asks this at admission for each operation it declares, as its payer, so a
-// missing or changed approval stops the run before anything is sent. Answers
-// with the refusal the call would get, or nothing when it would be served. A
-// grant the vendor rejected admits the run only while its probe is due, since
-// only then would the call be sent.
+// missing or changed approval, or a credential that can't mint a token,
+// stops the run before anything is sent. Answers with the refusal the call
+// would get, or nothing when it would be served. The slots are checked as
+// `checkSlots` checks them for every call and for readiness: an OAuth
+// connection its vendor refused or whose access-only token has expired is
+// refused `credential-rejected` (`reason: 'rejected'`), and one whose client
+// is broken, deleted, unshared or suspended, or a broken `client_credentials`
+// client, `credential-rejected` (`reason: 'needs-admin'`). A grant the
+// vendor rejected, or a service-account key Google refused, admits the run
+// only while its probe is due, since only then would the call be sent. A
+// token endpoint failing at the moment (`reason: 'unavailable'`) is found by
+// the call, not here.
 export async function automationAdmission(
   dbAdapter: DBAdapter,
   {
