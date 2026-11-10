@@ -2071,7 +2071,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 573298,
+      "bytes": 574197,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2387,6 +2387,12 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
+          "module": "password-managers.gts",
+          "sha256": "c7be85ec039dbd53873828ebf5c0cbf389752e3ff31c42ddb48ad872a7f4cc9e",
+          "size": 463
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
           "module": "pretui-css.gts",
           "sha256": "ecffd00181b8bcf481901aaf67cb53e9ec99955aab1aa633785143474a4bba27",
           "size": 1912
@@ -2509,7 +2515,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/anonymous-use-fields.gts",
-          "size": 4823
+          "size": 4894
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2524,7 +2530,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 42148
+          "size": 42235
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2534,7 +2540,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/connect-page.gts",
-          "size": 10487
+          "size": 10574
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2564,7 +2570,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/enter-key-page.gts",
-          "size": 20285
+          "size": 20372
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2574,7 +2580,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-fields.gts",
-          "size": 1620
+          "size": 1691
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2594,7 +2600,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 26574
+          "size": 26642
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2629,7 +2635,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/limits-form.gts",
-          "size": 8496
+          "size": 8582
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2644,7 +2650,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/oauth-client-fields.gts",
-          "size": 10930
+          "size": 11046
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2669,7 +2675,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/replace-key-page.gts",
-          "size": 19820
+          "size": 19854
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2684,7 +2690,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/service-account-fields.gts",
-          "size": 7068
+          "size": 7141
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2694,7 +2700,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 16723
+          "size": 16810
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2704,7 +2710,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 12954
+          "size": 12988
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2719,7 +2725,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/use-key-page.gts",
-          "size": 11217
+          "size": 11251
         },
         {
           "package": "@cardstack/secure-origin",

@@ -158,6 +158,30 @@ and every call through the key is refused **`credential-rejected`, 424**, with
 GitHub answers a refused grant with **200** and an `error` in the body; that is
 classified the same way.
 
+### Before a call: admission and readiness
+
+Every call, an automation's admission (`automationAdmission`) and readiness
+(`_capabilities`) check a slot's binding the same way (`checkSlots` in
+`lib/key-bindings.ts`). For an OAuth connection or a `client_credentials`
+client, that check asks the database what the key can mint
+(`mintingRefusal` in `lib/oauth.ts`), without opening the key or asking the
+vendor. It refuses the slot `credential-rejected` when:
+
+- **`reason: 'rejected'`**: the connection's vendor refused it
+  (`user_keys.state = 'rejected'`), or an access-only token is past
+  `access_expires_at`;
+- **`reason: 'needs-admin'`**: its client is broken, deleted, unshared or
+  suspended, or a `client_credentials` client isn't `active`.
+
+So an unattended run whose connection or client can't mint ends at admission
+and never starts its script. Readiness answers `credential-rejected` to the
+card for `rejected`, and `needs-admin` for `needs-admin`, since the connection
+itself is fine and reconnecting goes through the same client. A call refused
+here logs `mint-failed` with its reason, as a refusal at the token endpoint
+does; admission and readiness log nothing. A token endpoint that is failing at the moment (`unavailable`) can't
+be known in advance, so only the call that asks it finds out. A call refused
+here is refused before it counts against the key's limits.
+
 The realm server logs on `realm:oauth`: `OAuth connection <id> was refused as
 invalid_grant`, `an OAuth client (key <id> | platform <id>) was refused by its
 token endpoint as invalid_client …`, and `token request failed: token endpoint
@@ -382,7 +406,11 @@ answers as if they didn't exist. Both are installed at
   only for the person who started it, GitHub's error codes, another person's
   client fencing off nothing, a cached token stopping with its client, minting
   again after another process's refresh, access-only expiry, reconnecting
-  through the same client, and fresh grant markers on reconnect.
+  through the same client, and fresh grant markers on reconnect. Also an
+  automation's admission for each kind of minting key: admitted while it can
+  mint, refused `credential-rejected` for a rejected connection, an expired
+  access-only token, a broken client or suspended client share
+  (`needs-admin`), and a broken `client_credentials` client.
 - `packages/realm-server/tests/system-keys-test.ts` — the platform client
   operator routes: each add, secret replace and delete recorded with its note,
   the caller's address and the token's signing time, never the secret; a
