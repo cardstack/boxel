@@ -235,7 +235,7 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
-  fetchRealmOwnerUsername,
+  fetchRealmOwnerUserId,
   isSessionRevoked,
   isRealmArchived,
   baseRealm,
@@ -530,6 +530,7 @@ import {
   getMatrixUsername,
   isMatrixUserId,
 } from './matrix-client.ts';
+import { isUserOfMatrixServer } from './matrix-server-name.ts';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
 import RealmPermissionChecker from './realm-permission-checker.ts';
@@ -18116,13 +18117,29 @@ export class Realm {
   // visited the file: it settles having visited nothing, and its cache waits
   // out the cooldown before asking again.
   async #revisitPolicyCard(file: string, realmURL: string): Promise<void> {
-    let realmUsername =
+    let ownerUserId =
       realmURL === this.url
-        ? await this.getRealmOwnerUsername()
-        : await fetchRealmOwnerUsername(this.#dbAdapter, realmURL);
-    if (!realmUsername) {
+        ? await this.getRealmOwnerUserId()
+        : await fetchRealmOwnerUserId(
+            this.#dbAdapter,
+            realmURL,
+            this.#matrixClient.serverName,
+          );
+    if (!ownerUserId) {
       throw new Error(`the realm ${realmURL} has no owner to index it as`);
     }
+    // An indexing job names the user it runs as by localpart, which the
+    // worker qualifies with its own server name. For an owner on another
+    // homeserver that would name a different account, so the visit is
+    // refused.
+    if (!isUserOfMatrixServer(ownerUserId, this.#matrixClient.serverName)) {
+      throw new Error(
+        `the realm ${realmURL} is owned by ${ownerUserId}, on another homeserver, which an indexing job cannot run as`,
+      );
+    }
+    // The owner is on the worker's server, so the worker qualifies this
+    // localpart back to the owner's id.
+    let realmUsername = getMatrixUsername(ownerUserId);
     let args: IncrementalArgs = {
       realmURL,
       realmUsername,

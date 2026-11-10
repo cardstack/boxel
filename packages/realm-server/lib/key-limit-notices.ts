@@ -6,6 +6,7 @@ import {
   type DBAdapter,
   type Expression,
 } from '@cardstack/runtime-common';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import { limitsOf } from './key-limit-settings.ts';
 import { UserKeyError } from './user-keys.ts';
 
@@ -113,7 +114,12 @@ export async function listLimitNotices(
   let writesRealm = (realm: string) => {
     let answer = writes.get(realm);
     if (!answer) {
-      answer = isDirectWriter(dbAdapter, new URL(realm), recipient);
+      answer = isDirectWriter(
+        dbAdapter,
+        new URL(realm),
+        recipient,
+        matrixServerNameFromEnv(),
+      );
       writes.set(realm, answer);
     }
     return answer;

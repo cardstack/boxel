@@ -7,6 +7,8 @@ scope:
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
   - packages/realm-server/routes.ts
+  - packages/realm-server/lib/request-telemetry.ts
+  - packages/realm-server/tests/oauth-provider-*
   - packages/realm-server/lib/secure-session.ts
   - packages/realm-server/handlers/handle-revoke-user-sessions.ts
   - packages/runtime-common/realm.ts
@@ -44,9 +46,12 @@ caller_ is what a controller builds from a token.
 ### 1.1. The provider
 
 The provider MUST be `oidc-provider`, running in the realm server. The issuer
-MUST be the realm server's public URL, and the provider's endpoints and
-discovery documents MUST be realm-server routes, since the secure origin
-serves only its pages (ADR 019 §1.1). Its pages (sign-in, consent, device-code
+MUST be the realm server's public URL, with no path and no trailing slash, and
+the provider's endpoints and discovery documents MUST be realm-server routes,
+since the secure origin serves only its pages (ADR 019 §1.1). Every URL the
+provider publishes MUST be built from the issuer, never from the request, and
+discovery MUST list only what the realm server serves. The provider's routes
+MUST answer only on the issuer's host. Its pages (sign-in, consent, device-code
 entry, connected apps and its error pages) MUST be pages of the secure
 origin's app.
 
@@ -76,13 +81,31 @@ be sealed with the secrets-at-rest envelope: they hold no other secret.
 Resources MUST be declared in a registry in code, which the provider reads
 through `oidc-provider`'s `getResourceServerInfo` on every authorization and
 token request. The registry MUST NOT change at run time. Each entry MUST name
-its scopes, the kinds of client it accepts (§1.4), and, for each scope, the
-routes and methods it admits. A controller MUST refuse an OAuth token on a
-route its entry doesn't map to one of the token's scopes, so a route added
-later refuses OAuth tokens until an entry maps it. A resource that needs more
-than its scopes describe MUST be a new entry, not a wider scope.
-Each resource MUST publish protected-resource metadata (RFC 9728) naming the
-issuer and its scopes.
+its scopes, what consent says for each, the kinds of client it accepts
+(§1.4), and, for each scope, the routes it admits. A resource's identifier
+MUST be the issuer followed by the resource's path, with no trailing slash.
+
+A controller MUST refuse an OAuth token on a route its entry doesn't map to
+one of the token's scopes, so a route added later refuses OAuth tokens until
+an entry maps it. An entry MUST name a route as its router registers it: by
+method and path pattern, and in the realm by MIME type too. A controller MUST
+match the route its router selected for the request, after any method
+override, and never the request's URL against an entry. An entry MUST NOT
+name a method or path pattern that no route is registered with. The realm
+server MUST hand each realm the part of the map that names realm routes,
+since the realm can't read the registry. The check against the map MUST be
+one shared function, which each controller calls right after the lookup, and
+besides the map it MUST take only the verified caller and the route its
+router selected, never the request. A route that checks its caller another way, by an
+operator token, a shared secret, or a session token it verifies itself, never
+reaches a controller, and so refuses OAuth tokens. `/mcp` is one route for
+every tool, so `/mcp`'s controller MUST admit a tool call only when the tool,
+where it is defined, names a scope the token holds. A tool that
+names no scope MUST NOT be served.
+
+A resource that needs more than its scopes describe MUST be a new entry, not a
+wider scope. Each resource MUST publish protected-resource metadata (RFC 9728)
+naming the issuer and its scopes.
 
 Each consent MUST create a new OAuth grant, holding exactly the scopes the
 user approved at each resource the flow named, with its own expiry. A consent
@@ -128,7 +151,10 @@ lookup. Only its controller MAY call the lookup, and it MUST call it at most
 once per request. `/mcp`'s controller is its entry point. The Boxel API's
 controllers are `Realm.#verifySession`, `multiRealmAuthorization` and
 `jwtMiddleware`. A route that checks a session token itself, such as
-`/_download-realm`, MUST refuse an OAuth token. A controller MUST read an OAuth token only from the
+`/_download-realm`, MUST refuse an OAuth token. The lookup MUST be called from
+the controller itself, not from a helper that such a route and the controller
+share. A
+controller MUST read an OAuth token only from the
 `Authorization: Bearer` header, and MUST answer one sent anywhere else with
 `400` without looking it up. The token MUST NOT leave the controller: it MUST
 NOT be forwarded to another service or route, or logged.
@@ -139,9 +165,11 @@ resource, or whose grant was created before the user's OAuth grants were
 last revoked. The token endpoint MUST apply the same grant checks on every code and
 refresh exchange.
 
-The Boxel API's controllers MUST come out of an OAuth token with the same user
-a session token gives, so every permission check after them is unchanged. A
-token's scopes MUST act only as a ceiling on what its caller may do: the
+A verified caller MUST hold exactly the user, the OAuth grant, the OAuth
+client, the token's scopes and the time the grant was created, and nothing
+taken from the request. The Boxel API's controllers MUST come out of an OAuth
+token with the same user a session token gives, so every permission check after them is unchanged. A
+token's scopes MUST only narrow what its caller may do: the
 user's current realm permissions MUST still decide each call, and a scope MUST
 NOT grant what they don't (ADR 006). An OAuth token MUST NOT be exchanged for a
 realm-server session, a realm session, a delegated session or a Matrix login.
@@ -150,8 +178,9 @@ realm-server session, a realm session, a delegated session or a Matrix login.
 
 A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). An entry
 MUST NOT map a scope to key management, reads included, to a route that needs a
-secure session, to a route that mints a token, or to a route that changes a
-realm's permissions. Each of these refusals MUST be tested.
+secure session, to a route that mints a token or a signed URL, or to a route
+that changes a realm's permissions. Each of these refusals MUST be tested on
+the realm server, and each that names a realm route in the realm too.
 
 An OAuth token MUST NOT change what a realm's policy admits (ADR 006 §1.3): a
 write that changes `realm.json`'s `policy` or `config`, or the `RealmPolicy`
@@ -242,9 +271,25 @@ The resources ship with the provider, and each needs a controller in code that
 validates its tokens. A resource added without code would protect nothing, so
 the registry is code, reviewed like any other change. Each scope admits only
 the routes its entry maps, because many routes check nothing a scope could
-narrow. A route that deletes a realm checks ownership, not what the token
-allows. A list of refused routes would also let a route added later accept
-OAuth tokens until someone listed it.
+narrow: a route that deletes a realm checks ownership, not what the token
+allows. The map puts everything a scope reaches in one place, beside the text
+consent shows for it. A list of refused routes would fail open: a route added
+later would accept OAuth tokens until someone listed it. A rule on the HTTP
+method would fail both ways: `_capabilities` is a `POST` that only reads, a
+`QUERY` may arrive as a `POST` with a method override, and a `QUERY` can mint
+a signed URL. An entry names the route its router selected, not a pattern
+over URLs, because realm routes share paths: every card document is read
+through one pattern, and a URL pattern broad enough for card paths would also
+match `_sign-capture-urls`. The check reads only who is calling and which
+route was selected, never how the credential arrived, so how a token reached
+the server can't change what it admits, and one shared function keeps the
+check in one place.
+
+The library builds the URLs it publishes, and sets its cookies, from whatever
+host a request names. The realm server also answers for published sites,
+whose pages users write, so a flow started there would set its cookies on a
+host a user controls. Clients compare the issuer and resource identifiers as
+strings, and grants hold them, so their form is fixed here.
 
 An outside app acts on content the user didn't write, so widening who can
 reach a realm stays with the user in Boxel itself, whether by its permissions
@@ -329,9 +374,17 @@ more.
 - **A registry edited at run time.** It would add a way to create an audience,
   or widen a scope, without review, for resources whose controllers ship in
   code anyway.
-- **A list of routes that refuse a resource's tokens.** It fails open: a route
-  added later accepts OAuth tokens until someone lists it, and a scope can't
-  narrow a route that checks nothing a scope describes.
+- **A stance on each route where it is registered, and a permission ceiling
+  in the realm.** What a scope reaches would be spread over every registration
+  on the realm server and in the realm, with no one place to review it, and
+  the ceiling alone admits a realm route that needs only `read` but mints a
+  signed URL.
+- **A list of routes that refuse a resource's tokens, or admitting a token by
+  HTTP method.** A refusal list fails open: a route added later accepts OAuth
+  tokens until someone lists it, and a scope can't narrow a route that checks
+  nothing a scope describes. The method fails both ways: `_capabilities` is a
+  `POST` that reads, a `QUERY` may arrive as a `POST` with a method override,
+  and `_sign-capture-urls` is a `QUERY` that mints.
 - **Grants that share the session-revocation cutoff.** The follow-up
   revocation after a password change would end grants made in the hour after
   it, though nothing it covers can create one.

@@ -67,7 +67,10 @@ describe('realm pull with seed-based auth (integration)', () => {
 
     let res = await runBoxel(['realm', 'pull', realmUrl, localDir], {
       home,
-      env: { BOXEL_REALM_SECRET_SEED: TEST_REALM_SECRET_SEED },
+      env: {
+        BOXEL_REALM_SECRET_SEED: TEST_REALM_SECRET_SEED,
+        MATRIX_SERVER_NAME: 'localhost',
+      },
     });
     expect(res.ok, res.stderr).toBe(true);
 
@@ -97,7 +100,10 @@ describe('realm pull with seed-based auth (integration)', () => {
 
     let res = await runBoxel(['realm', 'pull', realmUrl, localDir], {
       home,
-      env: { BOXEL_REALM_SECRET_SEED: TEST_REALM_SECRET_SEED },
+      env: {
+        BOXEL_REALM_SECRET_SEED: TEST_REALM_SECRET_SEED,
+        MATRIX_SERVER_NAME: 'localhost',
+      },
     });
     expect(res.ok, res.stderr).toBe(true);
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);

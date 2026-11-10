@@ -65,6 +65,9 @@ export const SECURE_WINDOW_PATH = '/_secure-window';
 // Connecting through an OAuth client, and the callback the vendor sends the
 // person back to, whose query string carries the authorization code.
 export const OAUTH_PATH = '/_oauth';
+// Boxel's own OAuth provider, whose requests carry authorization codes, PKCE
+// verifiers and refresh tokens in their query strings and bodies.
+export const OAUTH_PROVIDER_PATH = '/_oauth-provider';
 
 const keyRoutePaths = [
   USER_KEYS_PATH,
@@ -79,6 +82,7 @@ const keyRoutePaths = [
   SECURE_SESSIONS_PATH,
   SECURE_WINDOW_PATH,
   OAUTH_PATH,
+  OAUTH_PROVIDER_PATH,
 ];
 
 // The operator routes that store a system key, and everything beneath them.
