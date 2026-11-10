@@ -96,14 +96,22 @@ const SearchField: TemplateOnlyComponent<SearchFieldSignature> = <template>
         /* the kit's 2px --ring, drawn inside so it stays clear of the
            field's edge; host's global button focus rule reads its offset
            from --host-outline-offset */
+        /* a 24px target around the 20px glyph box (WCAG 2.5.8) */
+        .pretui-searchclear::before {
+          content: '';
+          position: absolute;
+          inset: -0.125rem;
+        }
         .pretui-searchclear:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: -2px;
           --host-outline-offset: -2px;
         }
-        .pretui-searchclear:hover {
-          background-color: var(--hover);
-          color: var(--foreground);
+        @media (hover: hover) {
+          .pretui-searchclear:hover {
+            background-color: var(--hover);
+            color: var(--foreground);
+          }
         }
       }
     </style>
@@ -129,6 +137,9 @@ export interface SearchInputSignature {
 export class SearchInput extends Component<SearchInputSignature> {
   @tracked internal = this.args.value ?? '';
   @tracked open = false;
+  // where the open field lies over the square, read from the square on open
+  @tracked openPlacement = 'right-start';
+  @tracked openDistance = 0;
 
   get collapsed() {
     return this.args.display === 'collapsed';
@@ -140,12 +151,19 @@ export class SearchInput extends Component<SearchInputSignature> {
     let name = this.args.placeholder || 'Search';
     return this.current ? `${name}: ${this.current}` : name;
   }
-  expand = () => {
+  expand = (event: Event) => {
     // a second activation inside one render would write open twice, an
     // autotracking error
     if (this.open || this.disabled) {
       return;
     }
+    let square = event.currentTarget as HTMLElement;
+    // the panel is placed beside the square, pulled back by the square's own
+    // width so the field starts over it; toward the inline end, so RTL opens
+    // leftward, and Popup flips it to the other side when that end has no room
+    this.openPlacement =
+      getComputedStyle(square).direction === 'rtl' ? 'left-start' : 'right-start';
+    this.openDistance = -square.getBoundingClientRect().width;
     this.open = true;
   };
   // keydown and focusout from inside the field, on the wrapper
@@ -235,8 +253,8 @@ export class SearchInput extends Component<SearchInputSignature> {
         <Popup
           class='pretui-searchcollapse-anchor'
           @open={{this.open}}
-          @placement='bottom-start'
-          @distance={{0}}
+          @placement={{this.openPlacement}}
+          @distance={{this.openDistance}}
         >
           <:anchor>
             {{#unless this.open}}
@@ -288,7 +306,7 @@ export class SearchInput extends Component<SearchInputSignature> {
     <style scoped>
       @layer PretComponent {
         /* @display 'collapsed': a square the height of the field; the open
-           field lies over the square from its start, in the top layer */
+           field lies over the square from its start, in a fixed Popup panel */
         .pretui-searchcollapse {
           --_search-h: var(
             --pretui-field-h,
@@ -330,11 +348,10 @@ export class SearchInput extends Component<SearchInputSignature> {
           inline-size: 100%;
           block-size: 100%;
         }
-        /* the panel is placed below the square; the negative margin lifts the
-           field back over it */
+        /* capped to the viewport, so Popup can always shift it on screen */
         .pretui-searchcollapse-field {
-          margin-block-start: calc(-1 * var(--_search-h));
           inline-size: var(--pretui-search-open-w, 15rem);
+          max-inline-size: calc(100vw - 1rem);
         }
       }
     </style>
