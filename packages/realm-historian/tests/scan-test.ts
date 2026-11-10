@@ -157,6 +157,34 @@ module('scan', (hooks) => {
     );
   });
 
+  test('a directory two bootstrap rows share is scanned as the realm the last boot registered', async (assert) => {
+    // Rows are upserted by URL, so a realm whose URL changed leaves its old
+    // row on the same directory, no longer refreshed by each boot.
+    let stale = await insertRealm(database.db, {
+      url: 'https://realms.example.test/old-software-factory/',
+      kind: 'bootstrap',
+      diskId: '/persistent/software-factory',
+    });
+    await database.db.execute(
+      `UPDATE realm_registry SET updated_at = now() - interval '1 day'
+       WHERE id = $1`,
+      { bind: [stale.id] },
+    );
+    let current = await insertRealm(database.db, {
+      url: 'https://realms.example.test/software-factory/',
+      kind: 'bootstrap',
+      diskId: '/persistent/software-factory',
+    });
+
+    let run = await scan('--realm=/persistent/software-factory');
+
+    assert.strictEqual(run.code, 0, `the script succeeds (log: ${run.log})`);
+    assert.deepEqual(
+      (await events()).map((event) => event.realmURL),
+      [current.url],
+    );
+  });
+
   test('a realm named with its bot needs the Matrix server name', async (assert) => {
     await insertRealm(database.db, {
       url: 'https://cardstack.com/base/',

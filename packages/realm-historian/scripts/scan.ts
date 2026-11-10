@@ -97,8 +97,12 @@ let failed = false;
 
 try {
   for (let { directory, botUsername } of realms) {
+    // Bootstrap rows are upserted by URL, so a realm whose URL changed leaves
+    // its old row on the same directory. The row the last boot upserted is
+    // the realm the directory holds now.
     let [row] = await db.execute(
-      `SELECT url FROM realm_registry WHERE kind = 'bootstrap' AND disk_id = $1`,
+      `SELECT url FROM realm_registry WHERE kind = 'bootstrap' AND disk_id = $1
+       ORDER BY updated_at DESC LIMIT 1`,
       { bind: [directory] },
     );
     if (!row) {
