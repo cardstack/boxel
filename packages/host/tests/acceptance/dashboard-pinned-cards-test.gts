@@ -598,6 +598,33 @@ module('Acceptance | dashboard pinned cards', function (hooks) {
     assert.deepEqual(await savedPins(2), ['./missing', undefined]);
   });
 
+  test("the Workspace Home's pin adds the chosen card and keeps the other pins, even one whose card is missing", async function (assert) {
+    await mainRealm.write('roadmap.json', JSON.stringify(cardJSON('Roadmap')));
+    await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
+    await mainRealm.write(
+      'index.json',
+      JSON.stringify(
+        workspaceIndexJSON({
+          'entryPoints.0': { links: { self: './roadmap' } },
+          'entryPoints.1': { links: { self: './missing' } },
+        }),
+      ),
+    );
+    await visitOperatorMode({
+      stacks: [[{ id: `${realmURL}index`, format: 'isolated' }]],
+    });
+
+    await click('[data-test-door-add]');
+    await waitFor(`[data-test-item-button="${realmURL}notes"]`);
+    await click(`[data-test-item-button="${realmURL}notes"]`);
+    await click('[data-test-card-chooser-go-button]');
+
+    assert.deepEqual(await savedPins(3), ['./roadmap', './missing', './notes']);
+    // The Home draws the new pin without a reload.
+    await waitFor('[data-test-door-unpin="2"]');
+    assert.dom('[data-test-door-unpin="2"]').exists();
+  });
+
   test("the code mode preview's menu pins a card to its workspace", async function (assert) {
     await mainRealm.write('notes.json', JSON.stringify(cardJSON('Notes')));
     await mainRealm.write('index.json', JSON.stringify(workspaceIndexJSON({})));

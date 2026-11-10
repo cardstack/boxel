@@ -20,15 +20,17 @@ import {
 import { and, bool, cn, eq } from '@cardstack/boxel-ui/helpers';
 import { ignoredByPasswordManagers } from './components/password-managers';
 import BooleanField from './boolean';
-// host-mode mutation: publish and unpublish are registered host tools
+// host-mode mutation: publishing and workspace pins use registered host tools
 // (tools/index.ts shims them onto the loader's virtual network, so these
 // specifiers resolve for card code in operator mode and under prerender)
 import GetPublishedRealmsTool from '@cardstack/boxel-host/tools/get-published-realms';
 import PublishRealmTool from '@cardstack/boxel-host/tools/publish-realm';
+import SetWorkspacePinTool from '@cardstack/boxel-host/tools/set-workspace-pin';
 import UnpublishRealmTool from '@cardstack/boxel-host/tools/unpublish-realm';
 import {
   GetPublishedRealmsInput,
   PublishRealmInput,
+  SetWorkspacePinInput,
   UnpublishRealmInput,
   type PublishedRealmInfo,
   type PublishTargetResult,
@@ -62,12 +64,9 @@ import {
   isCardInstance,
   isFileDefInstance,
   excludeCardInstanceFileRows,
-  resolveRRIReference,
-  rri,
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
-  trimJsonExtension,
   type Query,
   type Filter,
   type CodeRef,
@@ -75,7 +74,6 @@ import {
 
 import { ResizeHandle } from './components/resize-handle';
 import { rawArrayValues } from './watched-array';
-import { isNonPresentLink } from './field-support';
 import CardsGridLayout, {
   VIEW_OPTIONS,
   SORT_OPTIONS,
@@ -828,6 +826,7 @@ class Isolated extends Component<typeof Workspace> {
                         @size='auto'
                         class='door-add'
                         {{on 'click' this.pinCard}}
+                        data-test-door-add
                       >
                         <span class='door-add-mark' aria-hidden='true'>＋</span>
                         <span class='door-add-label'>Pin a card…</span>
@@ -2768,13 +2767,17 @@ class Isolated extends Component<typeof Workspace> {
     }
   };
 
-  // Pin management: the ghost tile appends via the card chooser; the
-  // kicker × removes. Both mutate the grid's own entryPoints linksToMany.
+  // Pin management: the ghost tile pins a card from the card chooser through
+  // the same tool as the card menus; the kicker × removes a pin by position.
   pinCard = () => {
     this.pinCardTask.perform();
   };
 
   private pinCardTask = restartableTask(async () => {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
+      return;
+    }
     let chosenId = await chooseCard(
       {
         filter: {
@@ -2793,27 +2796,9 @@ class Isolated extends Component<typeof Workspace> {
     if (!chosenId) {
       return;
     }
-    let card = await this.args.context?.store.get(chosenId);
-    if (card && isCardInstance(card)) {
-      // The raw backing array keeps the links of pins whose cards are missing
-      // or not loaded yet, which reading the field directly would save as
-      // empty.
-      let existing = rawArrayValues(this.args.model.entryPoints ?? []);
-      let modelId = this.args.model.id;
-      let isChosenCard = (pin: unknown) =>
-        isCardInstance(pin)
-          ? pin.id === card.id
-          : isNonPresentLink(pin) &&
-            modelId !== undefined &&
-            trimJsonExtension(
-              resolveRRIReference(pin.reference, rri(modelId)),
-            ) === card.id;
-      if (existing.some(isChosenCard)) {
-        return; // already pinned
-      }
-      this.args.model.entryPoints = [...existing, card];
-      this.savePins();
-    }
+    await new SetWorkspacePinTool(toolContext).execute(
+      new SetWorkspacePinInput({ cardId: chosenId, pinned: true }),
+    );
   });
 
   unpinDoor = (index: number) => () => {
