@@ -3,9 +3,10 @@
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
 import { click, render, settled, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Sidebar, SidebarGroup, SidebarItem } from './sidebar';
+import { Sidebar, SidebarGroup, SidebarItem, SidebarTrigger } from './sidebar';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 // A boxel-icon stand-in: an svg that carries its own 24px size.
@@ -184,6 +185,30 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.notOk(rail.hasAttribute('data-measuring'), 'visible once measured, already in the icon rail');
   });
 
+  test("@railBreakpoint folds an offcanvas rail away, and @mobileBreakpoint={{0}} keeps it out of the drawer", async function (assert) {
+    await render(<template><div data-test-pane><Sidebar @label='Library' @collapsible='offcanvas' @mobileBreakpoint={{0}} @railBreakpoint={{640}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(400, () => state() === 'collapsed');
+    assert.strictEqual(mobile(), 'false', 'still a rail in a narrow pane, not a drawer');
+    await click('[data-test-pretui-sidebar-handle]');
+    assert.strictEqual(state(), 'expanded', 'a toggle opens it in the narrow band');
+    await resizeQuietly(900);
+    assert.strictEqual(state(), 'expanded', 'open in the wide band');
+    await resizeTo(400, () => state() === 'collapsed');
+    assert.strictEqual(state(), 'collapsed', 'crossing back folds it away again');
+  });
+
+  test('@railBreakpoint: a change the pane made lands at once, and a toggle slides', async function (assert) {
+    const slides = () => shells()[0]?.dataset['slides'];
+    await render(<template><div data-test-pane><Sidebar @label='Library' @collapsible='offcanvas' @mobileBreakpoint={{0}} @railBreakpoint={{640}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(400, () => state() === 'collapsed');
+    assert.strictEqual(slides(), 'false', 'the first measurement folds without the slide');
+    await click('[data-test-pretui-sidebar-handle]');
+    assert.strictEqual(slides(), 'true', 'a toggle slides');
+    await resizeQuietly(900);
+    await resizeTo(400, () => state() === 'collapsed');
+    assert.strictEqual(slides(), 'false', 'a band crossing lands at once');
+  });
+
   test('without @railBreakpoint a mid-width pane keeps the full rail', async function (assert) {
     await render(<template><div data-test-pane><Sidebar @label='Library'><:nav>Lots</:nav></Sidebar></div></template>);
     pane().style.inlineSize = '800px';
@@ -345,6 +370,19 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '300', 'announces the width it renders');
     await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'ArrowRight');
     assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '300', 'held at the floored max');
+  });
+
+  test('@resizable: the max stays 3rem inside a narrow pane, and never below the min', async function (assert) {
+    const seam = () => document.querySelector('[data-test-pretui-sidebar-resize]');
+    await render(<template><div data-test-pane><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px' @minWidth={{150}} @maxWidth={{400}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(300, () => seam()?.getAttribute('aria-valuemax') === String(300 - 48));
+    assert.dom(seam()!).hasAttribute('aria-valuemax', '252', 'the pane less 3rem');
+    assert.dom(seam()!).hasAttribute('aria-valuenow', '200', 'a width inside it is untouched');
+    await resizeTo(220, () => seam()?.getAttribute('aria-valuemax') === '172');
+    assert.dom(seam()!).hasAttribute('aria-valuenow', '172', 'the rail gives way to keep its seam in the pane');
+    assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), '172px', 'and renders the width it announces');
+    await resizeTo(180, () => seam()?.getAttribute('aria-valuemax') === '150');
+    assert.dom(seam()!).hasAttribute('aria-valuenow', '150', 'floored at the min');
   });
 
   test('without @resizable the seam is the plain toggle', async function (assert) {
@@ -549,5 +587,51 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.dom('[data-test-pretui-sidebar-item-icon] > svg').exists();
     assert.dom('[data-test-pretui-sidebar-item] svg').hasAttribute('aria-hidden', 'true');
     assert.dom('[data-test-pretui-sidebar-item]').hasAttribute('aria-label', 'Lots');
+  });
+
+  test('SidebarTrigger takes the attributes it is given', async function (assert) {
+    await render(<template><SidebarTrigger @open={{true}} @onToggle={{noop}} @controls='rail' class='t-trigger' data-test-mine /></template>);
+    assert.dom('[data-test-pretui-sidebar-trigger]').hasClass('t-trigger').hasAttribute('data-test-mine');
+  });
+
+  test('SidebarItem <:action> sits beside the row control, not inside it, and the row carries the active state', async function (assert) {
+    let picked: string[] = [];
+    let pick = () => picked.push('row');
+    let add = () => picked.push('add');
+    await render(<template>
+      <SidebarItem @label='Notes' @badge={{3}} @active={{true}} @onClick={{pick}}>
+        <:action><button type='button' class='t-add' {{on 'click' add}}>New Note</button></:action>
+      </SidebarItem>
+    </template>);
+    let item = document.querySelector('[data-test-pretui-sidebar-item]')!;
+    let action = document.querySelector('[data-test-pretui-sidebar-item-action]')!;
+    assert.notOk(item.contains(action), 'the action is not nested in the row control');
+    assert.strictEqual(action.parentElement, item.parentElement, 'they share the row');
+    assert.dom('[data-test-pretui-sidebar-item-row]').hasAttribute('data-action', 'true').hasAttribute('data-active', 'true');
+    await click('.t-add');
+    await click('[data-test-pretui-sidebar-item]');
+    assert.deepEqual(picked, ['add', 'row'], 'each control acts on its own');
+  });
+
+  test('SidebarItem: the icon rail drops the action, and a row without one has none', async function (assert) {
+    await render(<template>
+      <SidebarItem @label='Notes' @collapsed={{true}} @onClick={{noop}}><:action><button type='button'>New Note</button></:action></SidebarItem>
+      <SidebarItem @label='Files' @onClick={{noop}} />
+    </template>);
+    assert.dom('[data-test-pretui-sidebar-item-action]').doesNotExist();
+    assert.dom('[data-test-pretui-sidebar-item-row]').hasAttribute('data-action', 'false');
+  });
+
+  test('SidebarItem: a numeric badge shows, a count of 0 included', async function (assert) {
+    await render(<template>
+      <SidebarItem @label='Notes' @badge={{0}} @onClick={{noop}} />
+      <SidebarItem @label='Files' @onClick={{noop}} />
+    </template>);
+    assert.dom('[data-test-pretui-sidebar-item-badge]').exists({ count: 1 }).hasText('0');
+    assert.strictEqual(
+      document.querySelector('[data-test-pretui-sidebar-item]')?.getAttribute('aria-describedby'),
+      document.querySelector('[data-test-pretui-sidebar-item-badge]')?.id,
+      'the count describes its row',
+    );
   });
 });
