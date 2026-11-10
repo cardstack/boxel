@@ -1484,7 +1484,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
       });
 
-      test("rejects a change to the realm owner's permissions", async function (assert) {
+      test("changes the realm owner's write and keeps their read and owner flag", async function (assert) {
         let user = '@op-test-owner:localhost';
         await insertPermissions(context.dbAdapter, testRealmURL, {
           [user]: ['read', 'write', 'realm-owner'],
@@ -1494,19 +1494,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             `/_grafana-upsert-realm-user-permission` +
               `?realm=${encodeURIComponent(testRealmURL.href)}` +
               `&user=${encodeURIComponent(user)}` +
-              `&read=true&write=true`,
+              `&read=true&write=false`,
           )
           .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let perms = await fetchRealmPermissions(
           context.dbAdapter,
           testRealmURL,
         );
         assert.deepEqual(
           perms[user].sort(),
-          ['read', 'realm-owner', 'write'],
-          'owner keeps realm-owner',
+          ['read', 'realm-owner'],
+          'the owner loses write and stays the owner',
         );
       });
 

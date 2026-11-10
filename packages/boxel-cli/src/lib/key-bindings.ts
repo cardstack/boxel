@@ -36,9 +36,9 @@ export interface BindingSnapshot {
 }
 
 // Why a slot needs approving: never approved (`new`), its request changed
-// (`changed`), or approved for pipelines only, in a batch asked for with
-// `interactive` (`pipelines-only`).
-export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
+// (`changed`), or approved for automations only, in a batch asked for with
+// `interactive` (`automations-only`).
+export type BatchSlotStatus = 'new' | 'changed' | 'automations-only';
 
 export interface BatchSlot {
   slot: string;
@@ -110,9 +110,9 @@ export interface ApprovalBatch {
   review: boolean;
   groups: BatchGroup[];
   remaining: number;
-  // Operations approved for pipelines only that didn't fit either, in a batch
+  // Operations approved for automations only that didn't fit either, in a batch
   // asked with `interactive`.
-  remainingPipelinesOnly?: number;
+  remainingAutomationsOnly?: number;
   keys: BatchKey[];
   shares: BatchShare[];
   // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
@@ -126,10 +126,10 @@ export interface ApprovalBatch {
 }
 
 // Where the requests a batch approves run: from any card a reader opens, or
-// only from pipelines. For `pipelines`, an operation approved for pipelines
+// only from automations. For `automations`, an operation approved for automations
 // only is left out of the batch's `fillers`, as the window leaves it out of
-// what it approves for pipelines.
-export type BatchUse = 'interactive' | 'pipelines';
+// what it approves for automations.
+export type BatchUse = 'interactive' | 'automations';
 
 // What the batch is asked for: a card type in a realm, or one card.
 export type BatchTarget =

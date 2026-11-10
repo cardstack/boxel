@@ -2,15 +2,14 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import sinon from 'sinon';
 import jwt from 'jsonwebtoken';
 import {
+  getOrCreateUser,
   SupportedMimeType,
   upsertSessionRoom,
   type TokenClaims,
 } from '@cardstack/runtime-common';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   aiBotDelegationSecret,
@@ -411,11 +410,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     });
   });
 
-  // A realm whose read access comes from the `users` grant (any Matrix user
-  // with a profile) rather than an exact per-user row. The endpoint must mint
+  // A realm whose read access comes from the `users` grant (any user with a
+  // Boxel account) rather than an exact per-user row. The endpoint must mint
   // for such a user, matching what the realm authorizer would accept.
   module('POST /_delegate-session — users grant', function (hooks) {
     let request: SuperTest<Test>;
+    let dbAdapter: PgAdapter;
+    // Holds no permission row on the realm, and no `users` row unless a test
+    // gives them one.
     const karl = '@karl:localhost';
 
     setupPermissionedRealmCached(hooks, {
@@ -430,17 +432,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         dbAdapter: PgAdapter;
       }) => {
         request = args.request;
+        dbAdapter = args.dbAdapter;
       },
     });
 
-    hooks.afterEach(function () {
-      sinon.restore();
-    });
-
     test('mints for a user who can read via a `users` grant (no exact row)', async function (assert) {
-      sinon
-        .stub(MatrixClient.prototype, 'getProfile')
-        .resolves({ displayname: 'Karl' });
+      await getOrCreateUser(dbAdapter, karl);
 
       let response = await signedPost(
         request,
@@ -455,9 +452,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.deepEqual(claims.permissions, ['read'], 'token carries only read');
     });
 
-    test('denies a `users`-grant realm when the user has no Matrix profile', async function (assert) {
-      sinon.stub(MatrixClient.prototype, 'getProfile').resolves(undefined);
-
+    test('denies a `users`-grant realm when the user has no Boxel account', async function (assert) {
       let response = await signedPost(
         request,
         JSON.stringify({ onBehalfOf: karl, realm: testRealmHref }),

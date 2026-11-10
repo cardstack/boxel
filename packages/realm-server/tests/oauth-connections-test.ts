@@ -35,7 +35,7 @@ import {
 // OAuth clients and connections end to end, against a stub OAuth vendor that
 // is the authorization server and the API both: a person connects through a
 // client from the secure window, approves an operation for the connection,
-// and a pipeline calls the API with an access token the realm server mints
+// and an automation calls the API with an access token the realm server mints
 // and refreshes.
 //
 // The vendor's URL is written into the card module before anything starts,
@@ -312,7 +312,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function call(user: string, operation = 'me') {
-    let response = (await realm.handlePipeline(
+    let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {

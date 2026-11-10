@@ -11,6 +11,7 @@ import {
   ensureTrailingSlash,
   type DBAdapter,
   fetchRealmPermissions,
+  isRealmAdministrator,
   uuidv4,
   userInitiatedPriority,
   deriveRealmName,
@@ -563,7 +564,9 @@ export default function handlePublishRealm({
         dbAdapter,
         new URL(sourceRealmURL),
       );
-      if (!permissions[ownerUserId]?.includes('realm-owner')) {
+      if (
+        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+      ) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to publish this realm`,

@@ -9,7 +9,7 @@ node_modules
 .eslintcache
 schema_tmp.sql
 test-results/.last-run.json
-.claude/settings.local.json
+**/.claude/settings.local.json
 .claude/*.lock
 .claude/worktrees/
 traefik/dynamic/*.yml
