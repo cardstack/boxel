@@ -419,6 +419,16 @@ interface IndexActions {
 }
 
 const MAX_INVALIDATE_PATHS = 100;
+// The index calls a run may make. Each call starts an index job on the realm
+// server, so a loop must not start many. A reindex or a full reindex covers
+// the whole realm, so a second one in the same run does no more work; a full
+// reindex is the most costly of them.
+const MAX_INDEX_CALLS = {
+  'index.invalidate': 10,
+  'index.reindex': 1,
+  'index.fullReindex': 1,
+} as const;
+type LimitedIndexCall = keyof typeof MAX_INDEX_CALLS;
 
 // Calls that cannot be undone, that spend the user's credit, that change
 // the state of a whole realm for a long time, or that fetch any URL with the
@@ -608,6 +618,11 @@ class RealmFsSession {
   private webCalls = 0;
   private reportedActivities = 0;
   private resolveCalls = 0;
+  private indexCalls: Record<LimitedIndexCall, number> = {
+    'index.invalidate': 0,
+    'index.reindex': 0,
+    'index.fullReindex': 0,
+  };
   private researchBytes = 0;
   private researchSlots = MAX_PARALLEL_RESEARCH;
   private researchWaiters: (() => void)[] = [];
@@ -959,6 +974,18 @@ class RealmFsSession {
       );
       throw error;
     }
+  }
+
+  // Counts an index call toward its limit, before the call starts, so calls
+  // made at the same time cannot pass it.
+  private countIndexCall(method: LimitedIndexCall) {
+    let max = MAX_INDEX_CALLS[method];
+    if (this.indexCalls[method] >= max) {
+      throw new Error(
+        `Realm code may call realm.${method} at most ${max === 1 ? 'once' : `${max} times`} per run`,
+      );
+    }
+    this.indexCalls[method] += 1;
   }
 
   private async resolveData(raw: unknown) {
@@ -1523,12 +1550,14 @@ class RealmFsSession {
           );
         }
         let urls = paths.map((path) => this.resolve(method, path));
+        this.countIndexCall(method);
         await this.index.invalidate(urls);
         let invalidated = urls.map((url) => this.relative(url));
         this.indexActions.push(`invalidate ${invalidated.join(', ')}`);
         return { invalidated };
       }
       case 'index.reindex':
+        this.countIndexCall(method);
         await this.index.reindex();
         this.indexActions.push('reindex');
         return { reindex: 'started' };
@@ -1536,6 +1565,7 @@ class RealmFsSession {
         if (!this.namedCalls.has('realm.index.fullReindex')) {
           throw notNamedError('realm.index.fullReindex');
         }
+        this.countIndexCall(method);
         await this.index.fullReindex();
         this.indexActions.push('fullReindex');
         return { fullReindex: 'started' };
