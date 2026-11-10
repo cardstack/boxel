@@ -32,6 +32,7 @@
 /* eslint-disable n/no-process-exit */
 import { writeFileSync } from 'node:fs';
 
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 import { chromium } from 'playwright';
 
 const args = process.argv.slice(2);
@@ -96,11 +97,9 @@ const allDemoCount = paths.filter((p) => /^demos\/[^/]+\.json$/.test(p)).length;
 const browser = await chromium.launch({
   headless: true,
   channel: process.env.BROWSER_CHANNEL ?? 'chrome',
-  // Playwright starts Chromium with its sandbox off unless asked. On macOS and
-  // Windows the sandbox needs no privileges, so it is on. On Linux whether it
-  // starts depends on the browser build and the host's user-namespace policy,
-  // so the sweep keeps it off there rather than fail on a host that blocks it.
-  chromiumSandbox: process.platform !== 'linux',
+  // The sandbox is off only on Linux, for the reasons
+  // `chromeSandboxEnabled` gives.
+  chromiumSandbox: chromeSandboxEnabled(),
   args: [
     '--mute-audio',
     '--autoplay-policy=no-user-gesture-required',

@@ -2,6 +2,10 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
 import puppeteer, { type Browser } from 'puppeteer';
 
 import { logger } from './logger.ts';
@@ -188,16 +192,6 @@ const STANDBY_LAUNCH_ATTEMPT_TIMEOUT_MS = 45_000;
 const STANDBY_LAUNCH_MAX_ATTEMPTS = 3;
 const STANDBY_LAUNCH_RETRY_BACKOFF_MS = 2_000;
 
-// The standby page runs the host app, so Chrome keeps its sandbox wherever it
-// starts it without privileges: macOS and Windows. On Linux the harness runs in
-// CI and in containers, and some of those run as root, where Chrome refuses to
-// start sandboxed. The sandbox is off there so the support bring-up doesn't
-// depend on the host's privileges.
-const STANDBY_SANDBOX_ARGS =
-  process.platform === 'linux'
-    ? ['--no-sandbox', '--disable-setuid-sandbox']
-    : [];
-
 async function launchStandbyBrowser(deadline: number): Promise<Browser> {
   let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   let verbose = process.env.TEST_HARNESS_STANDBY_VERBOSE === '1';
@@ -224,7 +218,9 @@ async function launchStandbyBrowser(deadline: number): Promise<Browser> {
         timeout,
         dumpio,
         args: [
-          ...STANDBY_SANDBOX_ARGS,
+          // The standby page runs the host app. The sandbox is off only on
+          // Linux, for the reasons `chromeSandboxEnabled` gives.
+          ...(chromeSandboxEnabled() ? [] : CHROME_NO_SANDBOX_ARGS),
           '--disable-dev-shm-usage',
           '--disable-gpu',
         ],

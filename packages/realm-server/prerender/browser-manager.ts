@@ -1,4 +1,8 @@
 import { logger } from '@cardstack/runtime-common';
+import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -30,23 +34,14 @@ export class BrowserManager {
 
     let launchArgs: string[] = [];
     // The renderer runs card code from any realm, so the sandbox stays on
-    // wherever Chrome starts it without privileges: macOS and Windows, which
-    // only ever run the prerenderer for local development.
-    //
-    // It is off in two cases:
-    // - On Linux. The deployed prerenderer is a Linux ECS task, where
-    //   Chrome's sandbox has not been shown to start, and a prerenderer that
-    //   cannot launch Chrome renders nothing. There the boundary is the task
-    //   itself: a separate ECS task, isolated from the realm-server. Linux CI
-    //   and dev machines launch the way the deployed task does, so CI tests
-    //   the configuration that ships.
+    // except in two cases:
+    // - On Linux, for the reasons `chromeSandboxEnabled` gives. The deployed
+    //   prerenderer is a Linux ECS task, and there the boundary is the task
+    //   itself: a separate ECS task, isolated from the realm-server.
     // - Whenever the V8 `--prof` diagnostic is on. The renderer has to write its
     //   log to disk, which the sandbox blocks.
-    //
-    // The gate is the platform, not an env var, so a missing variable can't
-    // break the deployed launch.
-    if (process.platform === 'linux' || v8ProfEnabled()) {
-      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    if (!chromeSandboxEnabled() || v8ProfEnabled()) {
+      launchArgs.push(...CHROME_NO_SANDBOX_ARGS);
     }
 
     // When the realm-server speaks HTTPS (local dev with a mkcert leaf

@@ -16,6 +16,8 @@ import { mkdir, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
+
 import { logger } from './logger.ts';
 
 const log = logger('screenshot-execution');
@@ -96,14 +98,10 @@ export async function captureHtmlScreenshot(
 
   let { chromium } = await import('@playwright/test');
   // The HTML is agent-written, so it may load script the agent was steered
-  // into adding. Playwright starts Chromium with its sandbox off unless
-  // `chromiumSandbox` asks for it. On macOS and Windows the sandbox needs no
-  // privileges, so it is on. On Linux the bundled Chromium has no setuid
-  // sandbox helper, so it needs unprivileged user namespaces, which Ubuntu
-  // 23.10+ blocks for it by default. There the launch keeps the sandbox off
-  // rather than fail on a default install.
+  // into adding. The sandbox is off only on Linux, for the reasons
+  // `chromeSandboxEnabled` gives.
   let browser = await chromium.launch({
-    chromiumSandbox: process.platform !== 'linux',
+    chromiumSandbox: chromeSandboxEnabled(),
   });
   try {
     let page = await browser.newPage({ viewport: { width, height } });

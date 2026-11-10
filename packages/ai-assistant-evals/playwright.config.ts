@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { join } from 'node:path';
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 
 // run-eval.ts points this at a per-session directory; a plain `pnpm eval:models`
 // writes to eval-results/.
@@ -49,14 +50,9 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 1600, height: 1000 },
         launchOptions: {
-          // The browser runs model-written card code. Playwright starts
-          // Chromium with its sandbox off unless asked. On macOS and Windows
-          // the sandbox needs no privileges, so it is on. On Linux the bundled
-          // Chromium has no setuid sandbox helper, so it needs unprivileged
-          // user namespaces, which Ubuntu 23.10+ blocks for it by default.
-          // There the suite keeps the sandbox off rather than depend on the
-          // host's settings.
-          chromiumSandbox: process.platform !== 'linux',
+          // The browser runs model-written card code. The sandbox is off only
+          // on Linux, for the reasons `chromeSandboxEnabled` gives.
+          chromiumSandbox: chromeSandboxEnabled(),
           args: ['--ignore-certificate-errors', '--allow-insecure-localhost'],
         },
       },
