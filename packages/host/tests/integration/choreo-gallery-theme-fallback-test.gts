@@ -149,22 +149,6 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
       'the theme sets the contract tokens, the gallery’s own and its eyebrow role',
     );
 
-    // and the fallback declares nothing the theme doesn't: a value theme.json
-    // drops must leave the fallback too
-    let declared = fallbackDeclarations();
-    assert.true(declared.light.size > 0, 'the shell’s fallback rules are read');
-    for (let [scheme, selector] of [
-      ['light', ':root'],
-      ['dark', '.dark'],
-    ] as const) {
-      let set = [...(groups?.get(selector)?.keys() ?? [])];
-      assert.deepEqual(
-        [...declared[scheme]].filter((name) => !set.includes(name)),
-        [],
-        `${scheme}: every name the fallback declares, the theme sets`,
-      );
-    }
-
     let themed: Record<string, Record<string, string>> = {};
     await renderDemo(theme);
     for (let scheme of SCHEMES) {
@@ -179,6 +163,23 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
         resolved(names),
         themed[scheme],
         `${scheme}: the same values as under the theme card`,
+      );
+    }
+
+    // and the fallback declares nothing the theme doesn't: a value theme.json
+    // drops must leave the fallback too. The shell's stylesheet is on the
+    // page once the shell has rendered.
+    let declared = fallbackDeclarations();
+    assert.true(declared.light.size > 0, 'the shell’s fallback rules are read');
+    for (let [scheme, selector] of [
+      ['light', ':root'],
+      ['dark', '.dark'],
+    ] as const) {
+      let set = [...(groups?.get(selector)?.keys() ?? [])];
+      assert.deepEqual(
+        [...declared[scheme]].filter((name) => !set.includes(name)),
+        [],
+        `${scheme}: every name the fallback declares, the theme sets`,
       );
     }
   });
