@@ -198,17 +198,43 @@ module(basename(import.meta.filename), function () {
 
   // Every front door that changes a realm file, each making a write of its
   // own each time it runs (`n` keeps the bytes and paths distinct, so no
-  // write is a no-op that records nothing). `prepare` lays down what the write
-  // needs, outside the events the test reads.
+  // write is a no-op that records nothing). `send` answers the path its write
+  // changed. `prepare` lays down what the write needs, outside the events the
+  // test reads.
   const WRITES: {
     kind: string;
-    path: (n: number) => string;
     prepare?: (n: number) => Promise<void>;
-    send: (headers: Record<string, string>, n: number) => Promise<void>;
+    send: (headers: Record<string, string>, n: number) => Promise<string>;
   }[] = [
     {
+      kind: 'a card create',
+      send: async (headers, n) => {
+        let response = await withHeaders(
+          request
+            .post('/')
+            .set('Accept', SupportedMimeType.CardJson)
+            .set('Authorization', auth()),
+          headers,
+        ).send({
+          data: {
+            type: 'card',
+            attributes: { firstName: `Created ${n}` },
+            meta: {
+              adoptsFrom: { module: rri(`${realmHref}person`), name: 'Person' },
+            },
+          },
+        });
+        if (response.status !== 201) {
+          throw new Error(
+            `create answered ${response.status}: ${response.text}`,
+          );
+        }
+        let id = new URL(response.body.data.id).pathname;
+        return `${id.replace(realmURL.pathname, '')}.json`;
+      },
+    },
+    {
       kind: 'a card PATCH',
-      path: () => 'person-1.json',
       send: async (headers, n) => {
         let response = await withHeaders(
           request
@@ -228,17 +254,49 @@ module(basename(import.meta.filename), function () {
             `PATCH answered ${response.status}: ${response.text}`,
           );
         }
+        return 'person-1.json';
+      },
+    },
+    {
+      kind: 'a card delete',
+      prepare: (n) =>
+        writeSource(
+          `doomed-card-${n}.json`,
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { firstName: `Doomed ${n}` },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          }),
+        ),
+      send: async (headers, n) => {
+        let response = await withHeaders(
+          request
+            .delete(`/doomed-card-${n}`)
+            .set('Accept', SupportedMimeType.CardJson)
+            .set('Authorization', auth()),
+          headers,
+        );
+        if (response.status !== 204) {
+          throw new Error(
+            `card delete answered ${response.status}: ${response.text}`,
+          );
+        }
+        return `doomed-card-${n}.json`;
       },
     },
     {
       kind: 'a source write',
-      path: (n) => `notes/source-${n}.md`,
-      send: (headers, n) =>
-        writeSource(`notes/source-${n}.md`, `# source ${n}`, headers),
+      send: async (headers, n) => {
+        await writeSource(`notes/source-${n}.md`, `# source ${n}`, headers);
+        return `notes/source-${n}.md`;
+      },
     },
     {
       kind: 'an /_atomic batch',
-      path: (n) => `notes/atomic-${n}.md`,
       send: async (headers, n) => {
         let response = await withHeaders(
           request
@@ -266,11 +324,11 @@ module(basename(import.meta.filename), function () {
             `/_atomic answered ${response.status}: ${response.text}`,
           );
         }
+        return `notes/atomic-${n}.md`;
       },
     },
     {
       kind: 'an /_operations batch',
-      path: () => 'telemetry.log',
       send: async (headers, n) => {
         let response = await withHeaders(
           request
@@ -296,11 +354,11 @@ module(basename(import.meta.filename), function () {
             `/_operations answered ${response.status}: ${response.text}`,
           );
         }
+        return 'telemetry.log';
       },
     },
     {
       kind: 'an upload',
-      path: (n) => `uploads/bytes-${n}.bin`,
       send: async (headers, n) => {
         let response = await withHeaders(
           request
@@ -314,11 +372,11 @@ module(basename(import.meta.filename), function () {
             `upload answered ${response.status}: ${response.text}`,
           );
         }
+        return `uploads/bytes-${n}.bin`;
       },
     },
     {
       kind: 'a source delete',
-      path: (n) => `doomed-${n}.txt`,
       prepare: (n) => writeSource(`doomed-${n}.txt`, 'bye'),
       send: async (headers, n) => {
         let response = await withHeaders(
@@ -333,6 +391,7 @@ module(basename(import.meta.filename), function () {
             `delete answered ${response.status}: ${response.text}`,
           );
         }
+        return `doomed-${n}.txt`;
       },
     },
   ];
@@ -363,13 +422,16 @@ module(basename(import.meta.filename), function () {
       await startRecording();
     });
 
-    for (let { kind, path, prepare, send } of WRITES) {
+    for (let { kind, prepare, send } of WRITES) {
       test(`${kind} records an AI write's channel, agent, room and tool call`, async function (assert) {
         await prepare?.(1);
-        let recorded = await eventsOf(() => send(AI_WRITE, 1));
+        let path = '';
+        let recorded = await eventsOf(async () => {
+          path = await send(AI_WRITE, 1);
+        });
         assert.true(recorded.length > 0, 'the write left an event');
         for (let event of recorded) {
-          assert.deepEqual(event.paths, [path(1)]);
+          assert.deepEqual(event.paths, [path]);
           assert.deepEqual(contextOf(event), AI_CONTEXT);
           assert.strictEqual(event.author, writer, 'the authenticated user');
         }
@@ -377,10 +439,13 @@ module(basename(import.meta.filename), function () {
 
       test(`${kind} records a push's id and its final request`, async function (assert) {
         await prepare?.(2);
-        let recorded = await eventsOf(() => send(FINAL_PUSH, 2));
+        let path = '';
+        let recorded = await eventsOf(async () => {
+          path = await send(FINAL_PUSH, 2);
+        });
         assert.true(recorded.length > 0, 'the write left an event');
         for (let event of recorded) {
-          assert.deepEqual(event.paths, [path(2)]);
+          assert.deepEqual(event.paths, [path]);
           assert.deepEqual(contextOf(event), FINAL_PUSH_CONTEXT);
         }
       });
@@ -524,6 +589,22 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(event.agent, null);
       assert.strictEqual(event.room, '!ai-room:localhost');
+    });
+
+    test('a header value holding anything but printable ASCII is dropped', async function (assert) {
+      // HTTP lets a header value carry a tab and Latin-1 bytes, and neither
+      // belongs in a git trailer.
+      let [event] = await eventsOf(() =>
+        writeSource('unprintable.txt', 'unprintable', {
+          [WRITE_CHANNEL_HEADER]: 'ai-assistant',
+          [WRITE_AGENT_HEADER]: 'claude\tsonnet',
+          [WRITE_ROOM_HEADER]: '!café:localhost',
+          [WRITE_TOOL_CALL_HEADER]: 'toolu_01AbCdEf',
+        }),
+      );
+      assert.strictEqual(event.agent, null, 'a tab');
+      assert.strictEqual(event.room, null, 'a Latin-1 character');
+      assert.strictEqual(event.correlationId, 'toolu_01AbCdEf');
     });
 
     test('the author is the authenticated user whatever the headers say', async function (assert) {
