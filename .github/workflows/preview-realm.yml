@@ -261,8 +261,32 @@ jobs:
           if [ "${PUBLISH_TIMEOUT_MS}" -gt 0 ]; then
             TIMEOUT_ARGS=(--timeout "${PUBLISH_TIMEOUT_MS}")
           fi
-          boxel realm publish "${SOURCE_REALM_URL}" "${PUBLISHED_REALM_URL}" \
-            "${TIMEOUT_ARGS[@]}"
+          # A card the indexer failed on only because it ran out of memory or
+          # time under load indexes fine on a second try, so a publish refused
+          # for error documents touches those cards and tries again, as does
+          # one that timed out waiting for the published copy to index.
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if boxel realm publish "${SOURCE_REALM_URL}" "${PUBLISHED_REALM_URL}" \
+              "${TIMEOUT_ARGS[@]}" 2>&1 | tee publish.log; then
+              exit 0
+            fi
+            [ "$attempt" = 3 ] && exit 1
+            affected=$(sed -n 's/.*Affected: //p' publish.log | tr ',' '\n' | sed 's/^ *//')
+            if [ -n "$affected" ]; then
+              paths=()
+              while IFS= read -r url; do
+                [ -n "$url" ] && paths+=("${url#"$SOURCE_REALM_URL"}")
+              done <<< "$affected"
+              echo "Reindexing ${#paths[@]} card(s) the source realm failed to index, then publishing again"
+              boxel file touch "${paths[@]}" --realm "${SOURCE_REALM_URL}" || true
+              boxel realm wait-for-ready --realm "${SOURCE_REALM_URL}" --timeout 600000 || true
+            elif grep -q 'readiness check' publish.log; then
+              echo "The published copy didn't finish indexing in time; publishing again"
+            else
+              exit 1
+            fi
+          done
 
       - name: Comment on PR with preview URL
         if: steps.publish.outcome == 'success'
