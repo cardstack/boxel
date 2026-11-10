@@ -3713,7 +3713,10 @@ export const attachedCardsToMessage = (
 // path gives the model nothing reliable to resolve it against. Resolving
 // every relative markdown link against the skill's own URL up front hands the
 // model a copy-ready absolute URL, so one relative-authored document works
-// for both agents.
+// for both agents. A `[x](y)` inside a fenced block or an inline code span is
+// code, not a link (`super[getMenuItems](params)`, or a doc teaching the link
+// syntax), so it is left as written. A link whose text is code, such as
+// [`boxel/`](boxel/SKILL.md), starts outside the span and is still resolved.
 export function absolutizeSkillLinks(
   markdown: string,
   baseUrl: string | undefined,
@@ -3729,9 +3732,15 @@ export function absolutizeSkillLinks(
     // anchor resolution; leave the body untouched.
     return markdown;
   }
+  let code = [...markdown.matchAll(MARKDOWN_CODE_RE)].map(
+    (m) => [m.index!, m.index! + m[0].length] as const,
+  );
   return markdown.replace(
     /\[([^\]]*)\]\(([^)]+)\)/g,
-    (whole, text, destination) => {
+    (whole, text, destination, offset: number) => {
+      if (code.some(([start, end]) => offset >= start && offset < end)) {
+        return whole;
+      }
       let trimmed = destination.trim();
       let spaceIndex = trimmed.search(/\s/);
       let target = spaceIndex === -1 ? trimmed : trimmed.slice(0, spaceIndex);
@@ -3750,6 +3759,13 @@ export function absolutizeSkillLinks(
     },
   );
 }
+
+// The code in a markdown document: a fenced block (``` or ~~~, closed by the
+// same fence, or running to the end of the document when it isn't closed),
+// or an inline code span (a run of backticks closed by a run of the same
+// length on the same line).
+const MARKDOWN_CODE_RE =
+  /^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\1[`~]*[ \t]*$|(?![\s\S]))|(?<!`)(`+)(?!`)[^\n]*?(?<!`)\2(?!`)/gm;
 
 // A markdown link destination we resolve — document-relative paths only.
 // Absolute URLs, protocol- and root-relative refs, bare fragments, and
