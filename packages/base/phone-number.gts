@@ -22,7 +22,7 @@ import {
   not,
   type NormalizePhoneFormatResult,
 } from '@cardstack/boxel-ui/helpers';
-import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import { fieldSerializer, PhoneSerializer } from '@cardstack/runtime-common';
 import { markdownLink } from './markdown-helpers';
 

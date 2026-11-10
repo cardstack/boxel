@@ -5,7 +5,7 @@ import { action } from '@ember/object';
 import { debounce } from 'lodash-es';
 import { eq, or, not } from '@cardstack/boxel-ui/helpers';
 import { ColorPicker } from '@cardstack/boxel-ui/components';
-import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+import { ignoredByPasswordManagers } from '../../components/password-managers';
 
 import type {
   ColorFieldBaseOptions,

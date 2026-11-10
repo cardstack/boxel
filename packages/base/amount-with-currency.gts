@@ -5,7 +5,7 @@ import { TextInputValidator } from './text-input-validator';
 import CurrencyField from './currency';
 import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
-import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import { guidFor } from '@ember/object/internals';
 
 class View extends Component<typeof AmountWithCurrency> {

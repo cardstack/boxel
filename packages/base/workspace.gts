@@ -18,7 +18,7 @@ import {
   Tooltip,
 } from '@cardstack/boxel-ui/components';
 import { and, bool, cn, eq } from '@cardstack/boxel-ui/helpers';
-import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
 // (tools/index.ts shims them onto the loader's virtual network, so these

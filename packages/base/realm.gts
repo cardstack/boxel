@@ -10,7 +10,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
-import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import World from '@cardstack/boxel-icons/world';
 import { action } from '@ember/object';
 import { commandData } from './resources/command-data';

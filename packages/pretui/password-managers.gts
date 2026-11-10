@@ -12,6 +12,10 @@
 // The secure origin's sign-in, sign-up and password fields must never carry
 // these hints, so this is something a caller adds, never a default of an
 // input component.
+//
+// Base's field templates set the same hints with base's own copy
+// (`packages/base/components/password-managers.ts`), because card-api must
+// load without Pret UI. Keep the attributes the same in both.
 import { modifier } from 'ember-modifier';
 
 // Each password manager's own attribute for skipping a field.

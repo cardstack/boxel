@@ -14,7 +14,7 @@ import {
   type MenuItemOptions,
   not,
 } from '@cardstack/boxel-ui/helpers';
-import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import {
   getBoxComponent,
   type BoxComponent,

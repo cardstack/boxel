@@ -70,7 +70,7 @@ import {
   IconPlus,
   IconTrash,
 } from '@cardstack/boxel-ui/icons';
-import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import CircleCheckIcon from '@cardstack/boxel-icons/circle-check';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';

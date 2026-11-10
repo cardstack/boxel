@@ -16,7 +16,6 @@ import * as glimmerTracking from '@glimmer/tracking';
 // @ts-ignore - no types for @glimmer/validator
 import * as glimmerValidator from '@glimmer/validator';
 
-import * as pretuiPasswordManagers from '@cardstack/pretui/password-managers';
 import * as viewTransitions from '@cardstack/view-transitions';
 import * as floatingUiDom from '@floating-ui/dom';
 import * as awesomePhoneNumber from 'awesome-phonenumber';
@@ -96,13 +95,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
-  // Base's field templates import this modifier, card-api's among them, so
-  // every loader that can load card-api serves it from this bundle, including
-  // one that fetches base from its realm and maps no pretui realm.
-  virtualNetwork.shimModule(
-    '@cardstack/pretui/password-managers',
-    pretuiPasswordManagers,
-  );
   // Spec cards published for boxel-ui components use the bare specifier
   // `@cardstack/boxel-ui/components` in their `ref.module`. The
   // VirtualNetwork needs a prefix mapping to translate that into the
