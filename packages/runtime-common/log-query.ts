@@ -40,7 +40,23 @@ export interface LogQuery {
     total?: 'exact' | 'capped' | 'none';
   };
   facets?: { by: string; size?: number }[];
+  // The paths each row carries, instead of its whole entry: `at`, `actor`,
+  // `line`, or a path into the entry. A row is then `{ line, <path>: value }`.
+  select?: string[];
+  // One row per distinct value of `by` (a path, or several), with
+  // aggregates over each group's lines. A row is
+  // `{ group: { <path>: value }, <name>: value }`.
+  group?: { by: string | string[]; aggregates?: Record<string, LogAggregate> };
 }
+
+export type LogAggregate =
+  | { count: true | string }
+  | { min: string }
+  | { max: string }
+  | { sum: string }
+  | { avg: string }
+  | { distinct: string }
+  | { latest: string };
 
 export type LogFilter =
   | { eq: Record<string, Json> }
@@ -53,12 +69,7 @@ export type LogFilter =
   | { not: LogFilter };
 
 export interface LogQueryResult {
-  data: {
-    line: number;
-    at: string | null;
-    actor: string | null;
-    entry: Record<string, unknown>;
-  }[];
+  data: Record<string, unknown>[];
   meta: {
     page: { total: number; totalIsEstimate?: boolean; hasMore: boolean };
     facets?: Record<string, { value: Json; count: number }[]>;
@@ -333,6 +344,172 @@ export function resolveLogURL(log: string, realmURL: string): string {
   return url.href;
 }
 
+const QUERY_KEYS = new Set([
+  'from',
+  'filter',
+  'sort',
+  'page',
+  'facets',
+  'select',
+  'group',
+]);
+const AGGREGATE_OPS = new Set([
+  'count',
+  'min',
+  'max',
+  'sum',
+  'avg',
+  'distinct',
+  'latest',
+]);
+
+// Refused rather than ignored: a key this grammar doesn't read would leave
+// its caller believing it applied.
+function assertKnownKeys(q: LogQuery) {
+  for (let key of Object.keys(q)) {
+    if (!QUERY_KEYS.has(key)) {
+      throw new LogQueryError(
+        `unknown member "${key}" in a log query (it takes ${[...QUERY_KEYS].join(', ')})`,
+      );
+    }
+  }
+  for (let key of Object.keys(q.from)) {
+    if (key !== 'log') {
+      throw new LogQueryError(`unknown member "from.${key}" (it takes log)`);
+    }
+  }
+  if (q.select !== undefined && !Array.isArray(q.select)) {
+    throw new LogQueryError('select is a list of paths');
+  }
+  if (q.select !== undefined && q.group !== undefined) {
+    throw new LogQueryError(
+      'select and group are separate shapes: a grouped row is its group and aggregates',
+    );
+  }
+}
+
+// A time as the ISO string a row's `at` is answered with.
+function isoTime(sql: string): string {
+  return `to_char(${sql} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+}
+
+// A path's value as jsonb, for a projection or a group key.
+function valueOf(path: string): Expression {
+  if (path === 'at') {
+    // The same ISO form a full row's `at` takes.
+    return [`to_jsonb(${isoTime('l.at')})`];
+  }
+  if (path === 'actor') {
+    return ['to_jsonb(l.actor)'];
+  }
+  if (path === 'line') {
+    return ['to_jsonb(l.line_no)'];
+  }
+  return jsonPath(path);
+}
+
+function numericOf(path: string): Expression {
+  if (path === 'line') {
+    return ['l.line_no::numeric'];
+  }
+  return [
+    'CASE WHEN jsonb_typeof(',
+    ...jsonPath(path),
+    ") = 'number' THEN (",
+    ...textPath(path),
+    ')::numeric END',
+  ];
+}
+
+function aggregateSql(name: string, spec: LogAggregate): Expression {
+  if (!/^[A-Za-z_]\w*$/.test(name)) {
+    throw new LogQueryError(`Invalid aggregate name: ${JSON.stringify(name)}`);
+  }
+  let entries = Object.entries(spec ?? {});
+  if (entries.length !== 1 || !AGGREGATE_OPS.has(entries[0][0])) {
+    throw new LogQueryError(
+      `aggregate "${name}" is one of ${[...AGGREGATE_OPS].join(', ')}`,
+    );
+  }
+  let [op, path] = entries[0] as [string, string | true];
+  let alias = `AS "a_${name}"`;
+  if (op === 'count') {
+    return path === true
+      ? ['to_jsonb(COUNT(*))', alias]
+      : ['to_jsonb(COUNT(', ...valueOf(path as string), '))', alias];
+  }
+  if (typeof path !== 'string') {
+    throw new LogQueryError(`aggregate "${name}" takes a path`);
+  }
+  if (op === 'latest') {
+    return [
+      '(array_agg(',
+      ...valueOf(path),
+      'ORDER BY l.at DESC NULLS LAST, l.line_no DESC))[1]',
+      alias,
+    ];
+  }
+  if (op === 'distinct') {
+    return [
+      'COALESCE(to_jsonb(array_agg(DISTINCT',
+      ...valueOf(path),
+      ') FILTER (WHERE',
+      ...valueOf(path),
+      "IS NOT NULL)), '[]'::jsonb)",
+      alias,
+    ];
+  }
+  if (path === 'at' && (op === 'min' || op === 'max')) {
+    return [`to_jsonb(${isoTime(`${op.toUpperCase()}(l.at)`)})`, alias];
+  }
+  if (op === 'sum' || op === 'avg') {
+    return [`to_jsonb(${op.toUpperCase()}(`, ...numericOf(path), '))', alias];
+  }
+  // min / max: numerically over numbers, else by text.
+  let fn = op.toUpperCase();
+  return [
+    `COALESCE(to_jsonb(${fn}(`,
+    ...numericOf(path),
+    `)), to_jsonb(${fn}(`,
+    ...(path === 'actor'
+      ? ['l.actor']
+      : path === 'line'
+        ? ['l.line_no::text']
+        : textPath(path)),
+    ')))',
+    alias,
+  ];
+}
+
+function pageTotal(
+  mode: 'exact' | 'capped' | 'none',
+  number: number,
+  size: number,
+  shown: number,
+  hasMore: boolean,
+  count: (cap?: number) => Promise<number>,
+): Promise<{ total: number; totalIsEstimate: boolean }> {
+  if (mode === 'none') {
+    return Promise.resolve({
+      total: number * size + shown,
+      totalIsEstimate: hasMore,
+    });
+  }
+  if (!hasMore && size > 0) {
+    return Promise.resolve({
+      total: number * size + shown,
+      totalIsEstimate: false,
+    });
+  }
+  if (mode === 'capped') {
+    return count(SEARCH_TOTAL_CAP + 1).then((counted) => ({
+      total: Math.min(counted, SEARCH_TOTAL_CAP),
+      totalIsEstimate: counted > SEARCH_TOTAL_CAP,
+    }));
+  }
+  return count().then((total) => ({ total, totalIsEstimate: false }));
+}
+
 export async function runLogQuery(
   dbAdapter: DBAdapter,
   realmURL: string,
@@ -341,6 +518,7 @@ export async function runLogQuery(
   if (dbAdapter.kind !== 'pg') {
     throw new LogQueryError('Log queries need Postgres');
   }
+  assertKnownKeys(q);
   let url = resolveLogURL(q.from.log, realmURL);
   let size = Math.min(
     MAX_PAGE,
@@ -355,57 +533,145 @@ export async function runLogQuery(
     ...(q.filter ? compileFilter(q.filter) : ['TRUE']),
   ];
   let run = (e: Expression) => runQuery(dbAdapter, e);
+  let limit = `LIMIT ${size + 1} OFFSET ${number * size}`;
 
-  let rows = size
-    ? ((await run([
-        'SELECT l.line_no, l.at, l.actor, l.entry FROM boxel_log_lines AS l',
+  let data: Record<string, unknown>[] = [];
+  let hasMore = false;
+  let count: (cap?: number) => Promise<number>;
+
+  if (q.group) {
+    let by = Array.isArray(q.group.by) ? q.group.by : [q.group.by];
+    if (by.length === 0) {
+      throw new LogQueryError('group.by names at least one path');
+    }
+    let keys: Expression = [];
+    by.forEach((path, i) => {
+      if (i > 0) keys.push(',');
+      keys.push(...valueOf(path), `AS "g${i}"`);
+    });
+    let aggregates = Object.entries(q.group.aggregates ?? {});
+    let aggSql: Expression = [];
+    for (let [name, spec] of aggregates) {
+      aggSql.push(',', ...aggregateSql(name, spec));
+    }
+    let groupBy = `GROUP BY ${by.map((_, i) => i + 1).join(', ')}`;
+    let names = new Set(aggregates.map(([name]) => name));
+    let order = (q.sort ?? []).map(({ by: key, direction }) => {
+      let dir = direction === 'desc' ? 'DESC' : 'ASC';
+      let gi = by.indexOf(key);
+      if (gi >= 0) return `"g${gi}" ${dir} NULLS LAST`;
+      if (names.has(key)) return `"a_${key}" ${dir} NULLS LAST`;
+      throw new LogQueryError(
+        `a grouped query sorts by a group path or an aggregate, not ${JSON.stringify(key)}`,
+      );
+    });
+    order.push(...by.map((_, i) => `"g${i}" ASC NULLS LAST`));
+    let rows = size
+      ? ((await run([
+          'SELECT',
+          ...keys,
+          ...aggSql,
+          'FROM boxel_log_lines AS l',
+          ...where,
+          groupBy,
+          `ORDER BY ${order.join(', ')}`,
+          limit,
+        ])) as Record<string, unknown>[])
+      : [];
+    hasMore = rows.length > size;
+    data = rows.slice(0, size).map((r) => {
+      let group: Record<string, unknown> = {};
+      by.forEach((path, i) => (group[path] = r[`g${i}`] ?? null));
+      let out: Record<string, unknown> = { group };
+      for (let [name] of aggregates) out[name] = r[`a_${name}`] ?? null;
+      return out;
+    });
+    count = async (cap) => {
+      let [row] = (await run([
+        'SELECT COUNT(*) AS total FROM (SELECT 1 FROM boxel_log_lines AS l',
         ...where,
-        orderBy(q.sort),
-        `LIMIT ${size + 1} OFFSET ${number * size}`,
-      ])) as {
-        line_no: number;
-        at: unknown;
-        actor: string | null;
-        entry: Record<string, unknown>;
-      }[])
-    : [];
-  let hasMore = rows.length > size;
-  rows = rows.slice(0, size);
-
-  let total: number;
-  let totalIsEstimate = false;
-  if (totalMode === 'none') {
-    total = number * size + rows.length;
-    totalIsEstimate = hasMore;
-  } else if (!hasMore && size > 0) {
-    total = number * size + rows.length;
-  } else if (totalMode === 'capped') {
-    let [row] = (await run([
-      'SELECT COUNT(*) AS total FROM (SELECT 1 FROM boxel_log_lines AS l',
-      ...where,
-      `LIMIT ${SEARCH_TOTAL_CAP + 1}) AS capped`,
-    ])) as { total: unknown }[];
-    let counted = Number(row?.total ?? 0);
-    total = Math.min(counted, SEARCH_TOTAL_CAP);
-    totalIsEstimate = counted > SEARCH_TOTAL_CAP;
+        // Grouped by the key expressions themselves: this subquery has no
+        // SELECT list for ordinals to name.
+        'GROUP BY',
+        ...by.flatMap((path, i) =>
+          i > 0 ? [',', ...valueOf(path)] : valueOf(path),
+        ),
+        ...(cap ? [`LIMIT ${cap}`] : []),
+        ') AS g',
+      ])) as { total: unknown }[];
+      return Number(row?.total ?? 0);
+    };
   } else {
-    let [row] = (await run([
-      'SELECT COUNT(*) AS total FROM boxel_log_lines AS l',
-      ...where,
-    ])) as { total: unknown }[];
-    total = Number(row?.total ?? 0);
+    let columns: Expression =
+      q.select && q.select.length
+        ? [
+            'l.line_no, jsonb_build_object(',
+            ...q.select.flatMap((path, i) => [
+              ...(i > 0 ? [','] : []),
+              param(path),
+              '::text,',
+              ...valueOf(path),
+            ]),
+            ') AS projected',
+          ]
+        : ['l.line_no, l.at, l.actor, l.entry'];
+    let rows = size
+      ? ((await run([
+          'SELECT',
+          ...columns,
+          'FROM boxel_log_lines AS l',
+          ...where,
+          orderBy(q.sort),
+          limit,
+        ])) as Record<string, unknown>[])
+      : [];
+    hasMore = rows.length > size;
+    data = rows.slice(0, size).map((r) => {
+      if ('projected' in r) {
+        let projected =
+          typeof r.projected === 'string'
+            ? JSON.parse(r.projected)
+            : (r.projected as Record<string, unknown>);
+        return { line: Number(r.line_no), ...projected };
+      }
+      return {
+        line: Number(r.line_no),
+        at: r.at == null ? null : new Date(r.at as string).toISOString(),
+        actor: r.actor,
+        entry: typeof r.entry === 'string' ? JSON.parse(r.entry) : r.entry,
+      };
+    });
+    count = async (cap) => {
+      let [row] = (await run(
+        cap
+          ? [
+              'SELECT COUNT(*) AS total FROM (SELECT 1 FROM boxel_log_lines AS l',
+              ...where,
+              `LIMIT ${cap}) AS capped`,
+            ]
+          : ['SELECT COUNT(*) AS total FROM boxel_log_lines AS l', ...where],
+      )) as { total: unknown }[];
+      return Number(row?.total ?? 0);
+    };
   }
+
+  let { total, totalIsEstimate } = await pageTotal(
+    totalMode,
+    number,
+    size,
+    data.length,
+    hasMore,
+    count,
+  );
 
   let facets: Record<string, { value: Json; count: number }[]> | undefined;
   if (q.facets?.length) {
     facets = {};
     for (let facet of q.facets) {
       let value: Expression =
-        facet.by === 'actor'
-          ? ['to_jsonb(l.actor)']
-          : facet.by === 'at'
-            ? ["to_jsonb(date_trunc('day', l.at))"]
-            : jsonPath(facet.by);
+        facet.by === 'at'
+          ? [`to_jsonb(${isoTime("date_trunc('day', l.at)")})`]
+          : valueOf(facet.by);
       let facetSize = Math.min(
         200,
         Math.max(1, Number(facet.size ?? DEFAULT_FACET_SIZE)),
@@ -425,12 +691,7 @@ export async function runLogQuery(
   }
 
   return {
-    data: rows.map((r) => ({
-      line: Number(r.line_no),
-      at: r.at == null ? null : new Date(r.at as string).toISOString(),
-      actor: r.actor,
-      entry: typeof r.entry === 'string' ? JSON.parse(r.entry) : r.entry,
-    })),
+    data,
     meta: {
       page: { total, ...(totalIsEstimate ? { totalIsEstimate } : {}), hasMore },
       ...(facets ? { facets } : {}),

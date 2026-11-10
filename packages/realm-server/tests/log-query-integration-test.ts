@@ -139,7 +139,7 @@ module(basename(import.meta.filename), function () {
       let actions = ['like', 'skip', 'skip', 'save', 'like', 'skip'];
       write(actions.map((a, i) => event(i + 1, a, { dwellMs: (i + 1) * 100 })));
       await syncLogFile(host, logURL);
-      let now = Date.parse('2026-11-10T06:07:00Z');
+      let now = Date.parse('2026-11-10T06:07:00.000Z');
       let base = { from: { log: logURL } };
 
       let likes = await runLogQuery(dbAdapter, realmURL, {
@@ -226,6 +226,97 @@ module(basename(import.meta.filename), function () {
         [6],
         'contains',
       );
+    });
+
+    test('select projects paths, and an unknown member is refused', async function (assert) {
+      write([event(1, 'like', { dwellMs: 900 }), event(2, 'skip')]);
+      await syncLogFile(host, logURL);
+      let page = await runLogQuery(dbAdapter, realmURL, {
+        from: { log: logURL },
+        select: ['what.action', 'what.dwellMs', 'at'],
+      });
+      assert.deepEqual(page.data, [
+        {
+          line: 1,
+          'what.action': 'like',
+          'what.dwellMs': 900,
+          at: '2026-11-10T06:01:00.000Z',
+        },
+        {
+          line: 2,
+          'what.action': 'skip',
+          'what.dwellMs': null,
+          at: '2026-11-10T06:02:00.000Z',
+        },
+      ]);
+      await assert.rejects(
+        runLogQuery(dbAdapter, realmURL, {
+          from: { log: logURL },
+          fields: ['what'],
+        } as any),
+        /unknown member "fields"/,
+      );
+    });
+
+    test('group by a path, with aggregates, sorted by one', async function (assert) {
+      // post 1: like then hide; post 2: skip, skip; post 3: save.
+      write([
+        event(1, 'like', { postUri: 'p1' }),
+        event(2, 'skip', { postUri: 'p2' }),
+        event(3, 'hide', { postUri: 'p1' }),
+        event(4, 'skip', { postUri: 'p2' }),
+        event(5, 'save', { postUri: 'p3' }),
+      ]);
+      await syncLogFile(host, logURL);
+      let page = await runLogQuery(dbAdapter, realmURL, {
+        from: { log: logURL },
+        group: {
+          by: 'what.postUri',
+          aggregates: {
+            n: { count: true },
+            lastAt: { max: 'at' },
+            actions: { distinct: 'what.action' },
+            latest: { latest: 'what.action' },
+          },
+        },
+        sort: [{ by: 'lastAt', direction: 'desc' }],
+        page: { total: 'exact' },
+      });
+      assert.deepEqual(page.data, [
+        {
+          group: { 'what.postUri': 'p3' },
+          n: 1,
+          lastAt: '2026-11-10T06:05:00.000Z',
+          actions: ['save'],
+          latest: 'save',
+        },
+        {
+          group: { 'what.postUri': 'p2' },
+          n: 2,
+          lastAt: '2026-11-10T06:04:00.000Z',
+          actions: ['skip'],
+          latest: 'skip',
+        },
+        {
+          group: { 'what.postUri': 'p1' },
+          n: 2,
+          lastAt: '2026-11-10T06:03:00.000Z',
+          actions: ['hide', 'like'],
+          latest: 'hide',
+        },
+      ]);
+      assert.strictEqual(page.meta.page.total, 3, 'three groups');
+      let filtered = await runLogQuery(dbAdapter, realmURL, {
+        from: { log: logURL },
+        filter: { in: { 'what.action': ['like', 'hide', 'save'] } },
+        group: { by: ['what.postUri', 'what.action'] },
+        page: { size: 1, total: 'capped' },
+      });
+      assert.deepEqual(filtered.data, [
+        { group: { 'what.postUri': 'p1', 'what.action': 'hide' } },
+      ]);
+      assert.strictEqual(filtered.meta.page.total, 3, 'groups over two paths');
+      assert.true(filtered.meta.page.hasMore);
     });
 
     test('a log outside the realm, or a file that is not a log, is refused', async function (assert) {
