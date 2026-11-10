@@ -1240,7 +1240,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           /* DataShell, which holds the table body, sets its own size; 1em
              hands it the size resolved here */
           --pretui-data-font-size: 1em;
-          letter-spacing: 0.01em;
+          letter-spacing: var(--boxel-body-letter-spacing);
           color: var(--foreground);
           /* The control columns' effective widths. A pin offset computed in
              JS cannot know whether the expander or actions column exists —
@@ -1317,7 +1317,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-filter-label {
           font-family: var(--font-mono);
           font-size: 0.82em;
-          letter-spacing: 0.08em;
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
@@ -1377,7 +1377,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           font-family: var(--font-mono);
           font-size: 0.82em;
           font-weight: 500;
-          letter-spacing: 0.08em;
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
           background: var(--inset, var(--boxel-100));
@@ -1443,16 +1443,16 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt[data-flush] .pretui-dt-table th {
           background: var(--card);
         }
-        /* 0.25rem, not 0: room for an edge control's 2px focus outline + 2px offset, which the scroller clips */
+        /* 4px, not 0: room for an edge control's 2px focus outline + 2px offset, which the scroller clips. In px like the ring it clears, so it holds at any root font size */
         /* the caption lines up with the first column's flush edge */
         .pretui-dt[data-flush] .pretui-dt-caption {
-          padding-inline: 0.25rem;
+          padding-inline: 4px;
         }
         .pretui-dt[data-flush] .pretui-dt-table :is(th, td):first-child {
-          padding-inline-start: 0.25rem;
+          padding-inline-start: 4px;
         }
         .pretui-dt[data-flush] .pretui-dt-table :is(th, td):last-child {
-          padding-inline-end: 0.25rem;
+          padding-inline-end: 4px;
         }
         .pretui-dt-table td {
           height: 2.56em;

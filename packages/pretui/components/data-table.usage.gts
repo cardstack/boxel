@@ -328,7 +328,7 @@ class DataTableUsage extends Component {
         flex-wrap: wrap;
         gap: var(--boxel-sp-sm);
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .dt-readout strong {
