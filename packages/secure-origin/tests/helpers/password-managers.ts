@@ -1,13 +1,6 @@
 import { find } from '@ember/test-helpers';
 
-// The attributes 1Password, LastPass, Dashlane and Bitwarden each read to
-// leave a field alone, as Pret UI's `ignoredByPasswordManagers` sets them.
-export const PASSWORD_MANAGER_HINTS: [name: string, value: string][] = [
-  ['data-1p-ignore', ''],
-  ['data-lpignore', 'true'],
-  ['data-form-type', 'other'],
-  ['data-bwignore', ''],
-];
+import { HINTS } from '@cardstack/pretui/password-managers';
 
 // Every control a person types into, leaving out checkboxes, radio buttons
 // and file pickers, which no password manager fills.
@@ -46,7 +39,7 @@ export function assertNoLoginForm(
   );
   for (let control of controls) {
     let name = control.getAttribute('name') ?? control.id;
-    for (let [hint, value] of PASSWORD_MANAGER_HINTS) {
+    for (let [hint, value] of HINTS) {
       assert.dom(control).hasAttribute(hint, value, `${name} has ${hint}`);
     }
   }
