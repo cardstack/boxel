@@ -231,10 +231,9 @@ function slotHosts(
 // A key or share fills a slot only where the batch's `fillers` offer it for
 // `use`, as the secure window's approve page offers only those. `batch` is
 // asked for `operation` alone when one is named, so its `fillers` weigh only
-// where that operation sends. One
-// that would fill a slot of its type but isn't offered there is refused,
-// naming the slot and why, rather than approved to send where its credential
-// can't be used.
+// where that operation sends. One that would fill a slot of its type but
+// isn't offered there is refused, naming the slot and why, rather than
+// approved to send where its credential can't be used.
 export function plan(
   batch: ApprovalBatch,
   name: string,
