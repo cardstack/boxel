@@ -4428,6 +4428,32 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
+    test('text fields in edit format tell password managers to skip them', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field age = contains(NumberField);
+        @field email = contains(EmailField);
+        @field nicknames = containsMany(StringField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        firstName: 'Mango',
+        age: 3,
+        email: 'mango@example.com',
+        nicknames: ['Mangy'],
+      });
+
+      await renderCard(loader, mango, 'edit');
+
+      for (let field of ['firstName', 'age', 'email', 'nicknames']) {
+        let input = `[data-test-field="${field}"] input`;
+        assert.dom(input).hasAttribute('data-1p-ignore', '', field);
+        assert.dom(input).hasAttribute('data-lpignore', 'true', field);
+        assert.dom(input).hasAttribute('data-form-type', 'other', field);
+        assert.dom(input).hasAttribute('data-bwignore', '', field);
+      }
+    });
+
     test('renders boolean edit view', async function (assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);

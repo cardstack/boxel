@@ -1,6 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import {
   Component,
   NumberField as BaseNumberField,
@@ -229,6 +230,7 @@ export default class NumberField extends BaseNumberField {
         @max={{numberOption @configuration 'max'}}
         @disabled={{not @canEdit}}
         data-test-number-input
+        {{ignoredByPasswordManagers}}
       />
     </template>
 
