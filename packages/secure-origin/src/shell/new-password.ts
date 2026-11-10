@@ -66,7 +66,7 @@ export class NewPassword {
   }
 
   get passwordValid(): boolean {
-    return Boolean(this.password) && !newPasswordError(this.password);
+    return !newPasswordError(this.password);
   }
 
   get confirmValid(): boolean {

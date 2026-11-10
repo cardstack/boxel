@@ -2071,7 +2071,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 573301,
+      "bytes": 573276,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2744,7 +2744,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/new-password.ts",
-          "size": 1344
+          "size": 1318
         },
         {
           "package": "@cardstack/secure-origin",
