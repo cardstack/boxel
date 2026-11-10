@@ -1,5 +1,8 @@
 // Pretui — Alert: an inline message with a tone, a title and an optional action.
 import Component from '@glimmer/component';
+import type Owner from '@ember/owner';
+import { tracked } from '@glimmer/tracking';
+import { next } from '@ember/runloop';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import CheckIcon from '@cardstack/boxel-icons/check';
 import InfoIcon from '@cardstack/boxel-icons/info-small';
@@ -80,6 +83,17 @@ export interface AlertSignature {
 }
 
 export class Alert extends Component<AlertSignature> {
+  // A live region is only reliably announced when its text changes after it
+  // is already in the page, so the region mounts empty and fills one run-loop turn later.
+  @tracked filled = false;
+  constructor(owner: Owner, args: AlertSignature['Args']) {
+    super(owner, args);
+    next(() => {
+      if (!this.isDestroying) {
+        this.filled = true;
+      }
+    });
+  }
   get tone(): AlertTone {
     let fromVariant = this.args.variant
       ? ALERT_VARIANTS[this.args.variant]
@@ -111,12 +125,14 @@ export class Alert extends Component<AlertSignature> {
       <span class='pretui-alert-glyph' aria-hidden='true'>
         <this.Glyph width='12' height='12' />
       </span>
-      <VisuallyHidden>{{this.spokenTone}}</VisuallyHidden>
-      <div class='pretui-alert-body'>
-        {{#if @title}}<p class='pretui-alert-title'>{{@title}}</p>{{/if}}
-        {{#if (has-block)}}<div>{{yield}}</div>{{/if}}
-        {{#if (has-block 'action')}}<div class='pretui-alert-action'>{{yield to='action'}}</div>{{/if}}
-      </div>
+      {{#if this.filled}}
+        <VisuallyHidden>{{this.spokenTone}}</VisuallyHidden>
+        <div class='pretui-alert-body'>
+          {{#if @title}}<p class='pretui-alert-title'>{{@title}}</p>{{/if}}
+          {{#if (has-block)}}<div>{{yield}}</div>{{/if}}
+          {{#if (has-block 'action')}}<div class='pretui-alert-action'>{{yield to='action'}}</div>{{/if}}
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       @layer PretComponent {

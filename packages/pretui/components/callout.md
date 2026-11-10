@@ -23,7 +23,7 @@ Identical to Alert. Tones outside the four fall back to `info` rather than emitt
 
 ## Accessibility
 
-Governing pattern: APG **Alert**. `role="alert"` for `danger`, `role="status"` otherwise, both with implicit `aria-atomic`. The tone glyph is `aria-hidden`, and since the role only singles out `danger`, a visually hidden tone word is read in its place, so a warning is announced as "Warning: Credit is running low". `@toneLabel` replaces the word. The live region mounts together with its content, so a banner that appears complete is announced less reliably than one written into an existing region — render it from first paint and toggle the content when the announcement matters. No dismiss control, so nothing to make keyboard-reachable.
+Governing pattern: APG **Alert**. `role="alert"` for `danger`, `role="status"` otherwise, both with implicit `aria-atomic`. The tone glyph is `aria-hidden`, and since the role only singles out `danger`, a visually hidden tone word is read in its place, so a warning is announced as "Warning: Credit is running low". `@toneLabel` replaces the word. The live region mounts empty and fills on the next run-loop turn, so a banner rendered conditionally is still announced; to show a different message, change the text of the one already showing. No dismiss control, so nothing to make keyboard-reachable.
 
 ## Theming
 

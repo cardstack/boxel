@@ -35,7 +35,7 @@ class AlertUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='Alert'
-      @description='A component that displays error or warning messages with an optional action.'
+      @description='A component that displays error or warning messages with an optional action. Render it when the message appears: it mounts its live region empty and fills it a moment later, so screen readers announce it. To show a different message, change the text of the Alert already showing.'
       @source={{this.usage}}
     >
       <:example>

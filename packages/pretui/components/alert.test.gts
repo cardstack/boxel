@@ -4,7 +4,8 @@
 //
 // Run with `boxel test`.
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { render, settled } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Alert } from './alert';
@@ -146,5 +147,37 @@ module('Pretui | components/alert', function (hooks) {
       alerts().map((el) => el.style.getPropertyValue('--pretui-alert-hue')),
       ['var(--success)', 'var(--destructive)'],
     );
+  });
+
+  test('a conditionally rendered alert mounts its live region empty, then fills it', async function (assert) {
+    class State {
+      @tracked error = false;
+    }
+    let state = new State();
+    await render(
+      <template>
+        <div data-test-alert-host>
+          {{#if state.error}}<Alert @tone='warning' @title='Low credit' />{{/if}}
+        </div>
+      </template>,
+    );
+    let host = document.querySelector<HTMLElement>('[data-test-alert-host]')!;
+    let textAtMount: string[] = [];
+    let observer = new MutationObserver((records) => {
+      for (let record of records) {
+        for (let node of record.addedNodes) {
+          if (node instanceof HTMLElement && node.matches('[role]')) {
+            textAtMount.push(node.textContent?.trim() ?? '');
+          }
+        }
+      }
+    });
+    observer.observe(host, { childList: true });
+    state.error = true;
+    await settled();
+    observer.disconnect();
+
+    assert.deepEqual(textAtMount, [''], 'the live region enters the page empty');
+    assert.strictEqual(accessibleText(alerts()[0]), 'Warning: Low credit', 'its text arrives after');
   });
 });
