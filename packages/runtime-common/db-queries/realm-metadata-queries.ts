@@ -93,13 +93,12 @@ export interface ArchivedRealm {
   archivedAt: string;
 }
 
-// List the archived realms owned by a user, most-recently-archived first.
-// Joins archived realm_metadata rows to realm_user_permissions where the
-// user holds the realm-owner permission. Published snapshots are excluded:
-// publishing grants the owner realm-owner on the published URL too, so
-// without this filter an archived snapshot would surface as one of the
-// user's workspaces.
-export async function fetchArchivedRealmsForOwner(
+// List the archived realms a user administers, most-recently-archived first.
+// Joins archived realm_metadata rows to the user's own realm_user_permissions
+// row where it grants write (see `isRealmAdministrator`). Published snapshots
+// are excluded: they are never archived on their own, so an archived snapshot
+// is not one of the user's workspaces.
+export async function fetchArchivedRealmsForAdministrator(
   dbAdapter: DBAdapter,
   username: string,
 ): Promise<ArchivedRealm[]> {
@@ -108,7 +107,7 @@ export async function fetchArchivedRealmsForOwner(
      FROM realm_metadata rm
      INNER JOIN realm_user_permissions rup ON rup.realm_url = rm.url
      WHERE rm.archived_at IS NOT NULL
-       AND rup.realm_owner = true
+       AND rup.write = true
        AND rm.url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
        AND rup.username =`,
     param(username),

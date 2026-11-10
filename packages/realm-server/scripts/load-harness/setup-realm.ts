@@ -236,8 +236,8 @@ if (args.grantsOnly) {
 // came from one identity, and "did this write wait on somebody else's
 // indexing" had no way to be asked.
 //
-// `realm-owner` is neither granted nor modifiable through that endpoint — the
-// realm refuses both — so this can hand out access but never the realm.
+// A write grant makes its grantee one of the realm's administrators
+// (ADR 024 §1.3). The owner, the user the realm is indexed as, doesn't change.
 async function grantAccess(): Promise<void> {
   let others = creds.slice(1);
   if (others.length === 0) {

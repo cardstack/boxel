@@ -827,13 +827,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     );
   });
 
-  test('DELETE /_delete-realm rejects deleting a realm outside the current user namespace', async function (assert) {
-    let ownerUserId = `@mango-${uuidv4()}:localhost`;
-    let foreignOwnerUserId = `@papaya-${uuidv4()}:localhost`;
-    let foreignRealmURL = await createRealmFor(foreignOwnerUserId);
-    await insertPermissions(context.dbAdapter, new URL(foreignRealmURL), {
-      [foreignOwnerUserId]: ['read', 'write', 'realm-owner'],
-      [ownerUserId]: ['read', 'write', 'realm-owner'],
+  test('DELETE /_delete-realm lets an administrator delete a realm another user created', async function (assert) {
+    let creatorUserId = `@papaya-${uuidv4()}:localhost`;
+    let administratorUserId = `@mango-${uuidv4()}:localhost`;
+    let realmURL = await createRealmFor(creatorUserId);
+    await insertPermissions(context.dbAdapter, new URL(realmURL), {
+      [administratorUserId]: ['read', 'write'],
     });
 
     let response = await context.request
@@ -843,36 +842,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       .set(
         'Authorization',
         `Bearer ${createRealmServerJWT(
-          { user: ownerUserId, sessionRoom: 'session-room-test' },
+          { user: administratorUserId, sessionRoom: 'session-room-test' },
           realmSecretSeed,
         )}`,
       )
-      .send(
-        JSON.stringify({
-          data: {
-            type: 'realm',
-            id: foreignRealmURL,
-          },
-        }),
-      );
+      .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
 
-    assert.strictEqual(response.status, 403, 'deletion is forbidden');
-    assert.ok(
-      response.body.errors?.[0]?.includes(
-        'You can only delete realms that you created',
-      ),
-      'returns a namespace ownership error',
-    );
+    assert.strictEqual(response.status, 204, 'realm deleted');
+    let registryRows = (await context.dbAdapter.execute(
+      `SELECT url FROM realm_registry WHERE url = $1`,
+      { bind: [realmURL] },
+    )) as { url: string }[];
+    assert.strictEqual(registryRows.length, 0, 'the realm is gone');
   });
 
-  test('DELETE /_delete-realm rejects a user of another homeserver whose localpart matches the realm namespace', async function (assert) {
-    let localpart = `mango-${uuidv4()}`;
-    let ownerUserId = `@${localpart}:localhost`;
-    let otherServerUserId = `@${localpart}:other.example`;
-    let realmURL = await createRealmFor(ownerUserId);
+  test('DELETE /_delete-realm refuses a user who may only read the realm', async function (assert) {
+    let creatorUserId = `@papaya-${uuidv4()}:localhost`;
+    let readerUserId = `@mango-${uuidv4()}:localhost`;
+    let realmURL = await createRealmFor(creatorUserId);
     await insertPermissions(context.dbAdapter, new URL(realmURL), {
-      [ownerUserId]: ['read', 'write', 'realm-owner'],
-      [otherServerUserId]: ['read', 'write', 'realm-owner'],
+      [readerUserId]: ['read'],
     });
 
     let response = await context.request
@@ -882,26 +871,41 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       .set(
         'Authorization',
         `Bearer ${createRealmServerJWT(
-          { user: otherServerUserId, sessionRoom: 'session-room-test' },
+          { user: readerUserId, sessionRoom: 'session-room-test' },
           realmSecretSeed,
         )}`,
       )
-      .send(
-        JSON.stringify({
-          data: {
-            type: 'realm',
-            id: realmURL,
-          },
-        }),
-      );
+      .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
 
     assert.strictEqual(response.status, 403, 'deletion is forbidden');
-    assert.ok(
-      response.body.errors?.[0]?.includes(
-        'You can only delete realms that you created',
-      ),
-      'returns a namespace ownership error',
-    );
+    let registryRows = (await context.dbAdapter.execute(
+      `SELECT url FROM realm_registry WHERE url = $1`,
+      { bind: [realmURL] },
+    )) as { url: string }[];
+    assert.strictEqual(registryRows.length, 1, 'the realm remains');
+  });
+
+  test('DELETE /_delete-realm refuses the owner once their write is removed', async function (assert) {
+    let creatorUserId = `@papaya-${uuidv4()}:localhost`;
+    let realmURL = await createRealmFor(creatorUserId);
+    await insertPermissions(context.dbAdapter, new URL(realmURL), {
+      [creatorUserId]: ['read', 'realm-owner'],
+    });
+
+    let response = await context.request
+      .delete('/_delete-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: creatorUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      )
+      .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+    assert.strictEqual(response.status, 403, 'deletion is forbidden');
   });
 
   test('DELETE /_delete-realm rejects an invalid realm URL', async function (assert) {

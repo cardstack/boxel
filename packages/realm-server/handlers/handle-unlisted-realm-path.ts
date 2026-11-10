@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   ensureTrailingSlash,
   fetchRealmPermissions,
+  isRealmAdministrator,
   generateObscureSlug,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -60,7 +61,7 @@ export default function handleUnlistedRealmPathRequest({
         dbAdapter,
         new URL(sourceRealmURL),
       );
-      if (!permissions[ownerUserId]?.includes('realm-owner')) {
+      if (!isRealmAdministrator(permissions, ownerUserId)) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to allocate an unlisted link for this realm`,

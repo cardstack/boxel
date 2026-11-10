@@ -2753,8 +2753,8 @@ module(basename(import.meta.filename), function () {
     test('reads the permissions the realm put in the session token', function (assert) {
       // `_realm-auth` states each user's permissions in the JWT it mints, so
       // the answer is in hand before the run starts and costs no round trip —
-      // which matters, because the endpoint that would answer it directly is
-      // owner-only and a writer is not the owner.
+      // which matters, because the endpoint that would answer it directly
+      // admits only the realm's administrators.
       assert.deepEqual(
         realmPermissionsFor(sessionWith({ permissions: ['read'] }), realm),
         ['read'],

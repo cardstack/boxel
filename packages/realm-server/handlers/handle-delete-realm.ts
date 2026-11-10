@@ -3,6 +3,7 @@ import {
   asExpressions,
   dbAdapterQuerier,
   fetchRealmPermissions,
+  isRealmAdministrator,
   notifyAllFileChanges,
   param,
   PUBLISHED_DIRECTORY_NAME,
@@ -126,24 +127,10 @@ export default function handleDeleteRealm({
 
       let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
       let { user: ownerUserId } = token;
-      if (!permissions[ownerUserId]?.includes('realm-owner')) {
+      if (!isRealmAdministrator(permissions, ownerUserId)) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to delete this realm`,
-        );
-        return;
-      }
-
-      // A realm's namespace is the localpart of an account on this realm
-      // server's Matrix server, so only that account's full id matches it.
-      let ownerNamespace = getRealmNamespace(parsedRealmURL);
-      if (
-        !ownerNamespace ||
-        ownerUserId !== `@${ownerNamespace}:${matrixClient.serverName}`
-      ) {
-        await sendResponseForForbiddenRequest(
-          ctxt,
-          'You can only delete realms that you created',
         );
         return;
       }
@@ -328,12 +315,4 @@ function assertIsDeleteRealmJSON(
   if (!('id' in data) || typeof data.id !== 'string') {
     throw new Error('json.data.id is required and must be a string');
   }
-}
-
-function getRealmNamespace(realmURL: URL): string | null {
-  let segments = realmURL.pathname.split('/').filter(Boolean);
-  if (segments.length < 2) {
-    return null;
-  }
-  return segments[segments.length - 2] ?? null;
 }

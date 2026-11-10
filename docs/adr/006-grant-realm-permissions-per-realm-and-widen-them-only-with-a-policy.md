@@ -20,15 +20,22 @@ scope:
   - packages/realm-server/handlers/handle-unpublish-realm.ts
   - packages/realm-server/handlers/handle-unlisted-realm-path.ts
   - packages/realm-server/handlers/archive-realm-utils.ts
+  - packages/realm-server/handlers/handle-archived-realms.ts
+  - packages/realm-server/handlers/handle-publish-progress.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
+  - packages/runtime-common/db-queries/realm-metadata-queries.ts
+  - packages/host/app/services/realm.ts
+  - packages/host/app/lib/workspace*.ts
 ---
 
 # 006. Grant realm permissions per realm, and widen them only with a realm policy
 
 A user's permission applies to a whole realm, never to a folder, file, or card
-inside it. There are three levels: `read`, `write`, and `realm-owner`. Access
-finer than a whole realm is a grant in the realm's policy card, and a policy
-only widens what the permissions allow. To keep content from some of a realm's
+inside it. There are two levels, `read` and `write`, and the users whose own
+row grants `write` administer the realm. The realm owner is the one user the
+realm is indexed as, and owning a realm grants nothing. Access finer than a
+whole realm is a grant in the realm's policy card, and a policy only widens
+what the permissions allow. To keep content from some of a realm's
 members, put it in another realm. The `realm-auth` skill covers tokens and
 checks, and the `realm-policy-authoring` skill in boxel-skills covers writing
 a policy.
@@ -46,21 +53,32 @@ it names.
 A permission's subject MUST be one user, `users` (any signed-in user), or `*`
 (everyone). Roles and groups MUST NOT be added as subjects.
 
-### 1.2. Three levels
+### 1.2. Two levels, and an owner who holds no authority
 
-The levels MUST be exactly `read`, `write`, and `realm-owner`. `read` admits
-reading the realm. `write` admits changing its contents. `realm-owner` admits
-administering the realm, such as granting and revoking other users' `read` and
-`write`, archiving or deleting it, and publishing or unpublishing it.
+The levels MUST be exactly `read` and `write`. `read` admits reading the
+realm. `write` admits changing its contents.
+
+A user whose own permission row grants `write` administers the realm
+(ADR 024 §1.3). Administering covers granting and revoking other users' `read`
+and `write`, archiving, restoring or deleting the realm, and publishing or
+unpublishing it. A published realm is administered by the administrators of
+the realm it was published from. A `*` or `users` row names no one, so the
+`write` it grants MUST NOT admit administering.
 
 The permission check MUST test each level on its own and MUST NOT infer one
 level from another. A grant of `write` MUST include `read`, and every endpoint
 that grants permissions MUST refuse `write` without `read`.
 
+`realm-owner` is not a level. It marks the one user the realm is indexed as.
+An authorization decision MUST NOT rest on it: the permission check, the realm
+server's endpoints and the host MUST NOT admit or refuse a request because its
+caller is, or is not, the realm owner.
+
 `realm-owner` MUST be assigned only when a realm is created or published, and
 always with `read`. A migration that seeds a system realm's owner counts as
 creating that realm. Every endpoint that grants permissions MUST refuse to
-grant `realm-owner` and MUST refuse to change an owner's permissions.
+grant `realm-owner`, and MUST keep the owner's `read` and `realm-owner`. It
+MAY change the owner's `write` like anyone else's.
 
 `assume-user` is not a grantable level. Only the realm's own Matrix user
 holds it, and it MUST NOT be stored or granted.
@@ -70,8 +88,8 @@ holds it, and it MUST NOT be stored or granted.
 Access finer than a whole realm MUST be a grant in the `RealmPolicy` card that
 the realm's `realm.json` names. A policy MUST only widen access. The realm
 MUST consult its policy only for a caller its permissions would refuse. A policy
-MUST NOT refuse anything the permissions allow. A policy MUST NOT grant
-`realm-owner` authority.
+MUST NOT refuse anything the permissions allow. A policy MUST NOT admit
+administering (§1.2), and MUST NOT make a user the realm owner.
 
 ### 1.4. Restriction is a separate realm
 
@@ -106,6 +124,14 @@ rule over the data says that, and a change to the roster is a change to the
 data. Per-user permission rows would need an update each time the roster
 changed. The policy layer was added for this purpose [6][7].
 
+The realm owner holds no authority because a realm is shared [9]. A shared
+realm's administrators are the users it gives direct write, and ADR 024 §1.3
+already makes them the users who can rewrite its policy. Administration tied
+to the user who created the realm would leave co-administrators unable to
+manage it, and would leave the creator in charge after handing it over. The
+owner keeps one job that needs a single user: indexing renders the realm as
+them, so a realm's index is the same whoever triggered it.
+
 A policy only widens for two reasons [8]. A caller the permissions allow never
 loads the policy or evaluates a predicate, so a writer editing their own realm
 pays nothing for it [7]. And the permissions stay truthful: if they say a user
@@ -124,6 +150,10 @@ may read a realm, nothing elsewhere takes that away.
 - **Policies that restrict.** Every allowed caller would pay for a policy
   load, and the realm permissions would no longer say what a user can reach
   [8].
+- **The realm owner as administrator.** A shared realm could be managed only
+  by the one user who created it, whatever the other administrators' direct
+  write says, and a permission level that separates administering a realm from
+  writing it is the kind of level ADR 024 §1.3 rules out [9].
 - **Roles or groups as subjects.** Membership already lives in the data. A
   policy predicate over a card's fields, such as
   `.teacherIds | any(. == actor())`, expresses it with nothing separate to
@@ -149,6 +179,9 @@ may read a realm, nothing elsewhere takes that away.
    a caller the ACL declined, so a policy never narrows access and an allowed
    caller pays nothing for it.
 8. Luke Melia, 2026-10-19: the reasons in §2 and the rejected options in §3.
+9. Hassan Abdel-Rahman, 2026-11-10: `realm-owner` keeps its function, but no
+   permission decision rests on it; a realm owner who administers the realm
+   "flies in the face of shared realms".
 
 ## 5. Remediation
 

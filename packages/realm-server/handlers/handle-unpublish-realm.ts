@@ -8,6 +8,7 @@ import {
   param,
   removeRealmPermissions,
   fetchRealmPermissions,
+  isRealmAdministrator,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import { join } from 'path';
@@ -95,7 +96,7 @@ export default function handleUnpublishRealm({
         dbAdapter,
         new URL(publishedRealmInfo.source_url),
       );
-      if (!permissions[ownerUserId]?.includes('realm-owner')) {
+      if (!isRealmAdministrator(permissions, ownerUserId)) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to unpublish this realm`,

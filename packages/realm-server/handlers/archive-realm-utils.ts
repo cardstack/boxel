@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   fetchRealmPermissions,
+  isRealmAdministrator,
   param,
   query,
   type DBAdapter,
@@ -20,8 +21,9 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 export interface ArchiveTarget {
   realmURL: string;
   permissions: RealmPermissions;
-  // The authorized requester (realm owner). Handlers use it to notify the
-  // owner's other sessions that their realm list changed.
+  // The authorized requester, one of the realm's administrators. Handlers
+  // use it to notify the requester's other sessions that their realm list
+  // changed.
   ownerUserId: string;
 }
 
@@ -32,10 +34,10 @@ export interface ArchiveTarget {
 // Rules (shared by both endpoints):
 //   - body id must be a valid realm URL, else 400;
 //   - a source realm_registry row must exist for it, else 404 (a permission
-//     row alone is not proof the realm exists — a stale/manual realm-owner
-//     grant must not let an arbitrary URL be archived);
+//     row alone is not proof the realm exists — a stale/manual grant must
+//     not let an arbitrary URL be archived);
 //   - published/bootstrap realms are not archivable, else 422;
-//   - requester must be a realm-owner of the target realm, else 403;
+//   - requester must administer the target realm, else 403;
 //   - public/catalog realms (world-readable) are not archivable, else 422.
 export async function resolveAndAuthorizeArchiveTarget(
   ctxt: Koa.Context,
@@ -113,7 +115,7 @@ export async function resolveAndAuthorizeArchiveTarget(
   let { user: ownerUserId } = token;
   let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
 
-  if (!permissions[ownerUserId]?.includes('realm-owner')) {
+  if (!isRealmAdministrator(permissions, ownerUserId)) {
     await sendResponseForForbiddenRequest(
       ctxt,
       `${ownerUserId} does not have enough permission to ${action} realm ${realmURL}`,

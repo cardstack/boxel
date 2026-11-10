@@ -2904,9 +2904,9 @@ await realm.workspaces.create({ name: 'Side Project' });`,
       calls.push(realmURL);
     };
     let realmService = getService('realm');
-    let isRealmOwner = realmService.isRealmOwner.bind(realmService);
-    realmService.isRealmOwner = (url) =>
-      url === ownedRealmURL || isRealmOwner(url);
+    let canAdminister = realmService.canAdminister.bind(realmService);
+    realmService.canAdminister = (url) =>
+      url === ownedRealmURL || canAdminister(url);
     return calls;
   }
 
@@ -2929,7 +2929,7 @@ await realm.workspaces.create({ name: 'Side Project' });`,
     );
   });
 
-  test('realm.workspaces.delete deletes a workspace the user owns', async function (assert) {
+  test('realm.workspaces.delete deletes a workspace the user administers', async function (assert) {
     let oldWorkspace = 'http://test-realm/testuser/old/';
     let deleteRealmCalls = stubWorkspaceDeletion(oldWorkspace);
     let command = new RunRealmCodeTool(getService('tool-service').toolContext);
@@ -2997,7 +2997,7 @@ await realm.workspaces.create({ name: 'Old' });`,
     );
   });
 
-  test('realm.workspaces.delete refuses a workspace the user does not own', async function (assert) {
+  test('realm.workspaces.delete refuses a workspace the user does not administer', async function (assert) {
     let deleteRealmCalls = stubWorkspaceDeletion(
       'http://test-realm/testuser/old/',
     );
@@ -3009,7 +3009,7 @@ await realm.workspaces.create({ name: 'Old' });`,
         roomId: '!room:example.com',
         code: `await realm.workspaces.delete('http://test-realm/someone-else/theirs/');`,
       }),
-      /the current user is not its owner/,
+      /the current user does not administer it/,
     );
     assert.deepEqual(deleteRealmCalls, [], 'no realm is deleted');
   });

@@ -2,6 +2,8 @@ import type Koa from 'koa';
 import {
   ensureTrailingSlash,
   fetchRealmPermissions,
+  isRealmAdministrator,
+  param,
   query,
   SupportedMimeType,
   type DBAdapter,
@@ -51,8 +53,8 @@ interface PublishProgressRow {
 // Served from the realm server rather than the published realm: a published
 // realm is world-readable, so a route there would expose a realm's file counts
 // to any visitor, whereas here the realm-server session the caller already used
-// to POST `_publish-realm` authorizes the read against the same `realm-owner`
-// permission.
+// to POST `_publish-realm` authorizes the read the same way the publish was
+// authorized: the caller administers the source realm.
 //
 // Every field is read from Postgres — `jobs` / `job_progress`, written through
 // by whichever worker holds the job (see IndexingEventSink) — so any replica
@@ -95,16 +97,18 @@ export default function handlePublishProgress({
         return;
       }
 
-      // Publishing grants the publisher `realm-owner` on the published realm,
-      // so this is the same authority that produced the work being reported on.
-      // An unknown realm has no permissions rows and so is indistinguishable
-      // from one the caller may not read — both answer 403, which keeps this
-      // from confirming whether a given published URL exists.
-      let permissions = await fetchRealmPermissions(
-        dbAdapter,
-        new URL(publishedRealmURL),
-      );
-      if (!permissions[ownerUserId]?.includes('realm-owner')) {
+      // The administrators of the source realm publish it, so they are the
+      // ones who may read its progress. An unknown published realm has no
+      // source and answers the same 403 as one the caller may not read, which
+      // keeps this from confirming whether a given published URL exists.
+      let [published] = (await query(dbAdapter, [
+        `SELECT source_url FROM realm_registry WHERE kind = 'published' AND url =`,
+        param(publishedRealmURL),
+      ])) as { source_url: string | null }[];
+      let permissions = published?.source_url
+        ? await fetchRealmPermissions(dbAdapter, new URL(published.source_url))
+        : {};
+      if (!isRealmAdministrator(permissions, ownerUserId)) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to read publish progress for this realm`,

@@ -236,6 +236,7 @@ import {
   logger,
   fetchRealmPermissions,
   fetchRealmOwnerUserId,
+  isRealmAdministrator,
   isSessionRevoked,
   isRealmArchived,
   baseRealm,
@@ -1677,6 +1678,11 @@ export const FILE_META_RESERVED_KEYS = new Set([
   'lastModified',
   'createdAt',
 ]);
+
+// What a request must hold to reach a route. `administer` is the realm's
+// administration: write through the caller's own permission row (see
+// `isRealmAdministrator`). No public row and no policy grant confers it.
+type RequiredPermission = 'read' | 'write' | 'administer';
 
 type CachedSourceFileEntry = {
   type: 'file';
@@ -8966,9 +8972,9 @@ export class Realm {
     }
 
     let localPath = this.paths.local(new URL(request.url));
-    let requiredPermission: RealmAction = 'read';
+    let requiredPermission: RequiredPermission = 'read';
     if (localPath === '_permissions') {
-      requiredPermission = 'realm-owner';
+      requiredPermission = 'administer';
     } else if (localPath === CAPABILITIES_PATH) {
       // A `POST` because it carries a body, and the body is a list of
       // questions. It writes nothing, so deriving its permission from the
@@ -9059,12 +9065,12 @@ export class Realm {
       // The terminal assertion: nothing reaches a handler with the ACL's
       // refusal on it unless its route consumes that outcome, so a route that
       // says nothing is refused exactly as the ACL would have refused it. A
-      // refusal of realm-owner authority is never consumed, whichever route
-      // the request lands on: owner authority is the ACL's alone to grant.
+      // refusal of administration is never consumed, whichever route the
+      // request lands on: administration is the ACL's alone to grant.
       if (requestContext.coarseAllowed === false) {
         if (
           !dispatch.consumesCoarseOutcome ||
-          requiredPermission === 'realm-owner' ||
+          requiredPermission === 'administer' ||
           !(await this.#admitsDespiteCoarseRefusal(
             request,
             requestContext,
@@ -9407,7 +9413,7 @@ export class Realm {
   async #recordCoarsePermission(
     request: Request,
     requestContext: RequestContext,
-    requiredPermission: 'read' | 'write' | 'realm-owner',
+    requiredPermission: RequiredPermission,
     dispatch: RequestDispatch,
   ): Promise<void> {
     try {
@@ -9566,7 +9572,7 @@ export class Realm {
   async #refusalUnderPolicy(
     request: Request,
     dispatch: RequestDispatch,
-    requiredPermission: RealmAction,
+    requiredPermission: RequiredPermission,
     requestContext: RequestContext,
   ): Promise<Response | undefined> {
     let refusal = requestContext.coarseRefusal;
@@ -9578,7 +9584,7 @@ export class Realm {
       dispatch.coarseReadOnly === true &&
       requiredPermission === 'read';
     if (
-      requiredPermission === 'realm-owner' ||
+      requiredPermission === 'administer' ||
       !(unauthenticated || unreadable) ||
       (await this.getRealmPolicy()) === undefined
     ) {
@@ -12171,7 +12177,7 @@ export class Realm {
   private async checkPermission(
     request: Request,
     requestContext: RequestContext,
-    requiredPermission: 'read' | 'write' | 'realm-owner',
+    requiredPermission: RequiredPermission,
     {
       probe = false,
       answersWithoutCredentials = false,
@@ -12187,7 +12193,7 @@ export class Realm {
       }
     };
     if (
-      requiredPermission !== 'realm-owner' &&
+      requiredPermission !== 'administer' &&
       (answersWithoutCredentials ||
         (request.method === 'HEAD' && !probe) ||
         // If the realm is public readable or writable, do not require a JWT
@@ -12395,7 +12401,11 @@ export class Realm {
         );
       }
 
-      if (!(await realmPermissionChecker.can(user, requiredPermission))) {
+      if (
+        !(requiredPermission === 'administer'
+          ? isRealmAdministrator(realmPermissions, user)
+          : await realmPermissionChecker.can(user, requiredPermission))
+      ) {
         warnRefusal(
           `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
@@ -17321,13 +17331,20 @@ export class Realm {
       new URL(this.url),
     );
     for (let [user, permissions] of Object.entries(patch)) {
+      // The realm owner is the user the realm is indexed as (ADR 006 §1.2),
+      // so their row keeps `read` and the owner flag. Their `write`, like
+      // anyone's, is the administrators' to change.
       if (currentPermissions[user]?.includes('realm-owner')) {
-        return badRequest({
-          message: `cannot modify permissions of the realm owner ${user}`,
-          requestContext,
-        });
-      }
-      if (permissions?.includes('realm-owner')) {
+        if (!permissions?.includes('read')) {
+          return badRequest({
+            message: `cannot remove read permission from the realm owner ${user}`,
+            requestContext,
+          });
+        }
+        if (!permissions.includes('realm-owner')) {
+          patch[user] = [...permissions, 'realm-owner'];
+        }
+      } else if (permissions?.includes('realm-owner')) {
         return badRequest({
           message: `cannot create new realm owner ${user}`,
           requestContext,
@@ -18730,7 +18747,7 @@ export class Realm {
   // the same single fetch rather than calling this helper plus a
   // second fetch.
   private async createRequestContext(
-    requiredPermission: RealmAction,
+    requiredPermission: RequiredPermission,
     // Whether this request will go on to ask the ACL about a permission other
     // than the one it is judged by. The world-readable shortcut below answers a
     // read from `*` alone and leaves the realm's own map out, which is

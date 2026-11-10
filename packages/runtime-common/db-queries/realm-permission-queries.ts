@@ -105,6 +105,18 @@ export async function permissionsExist(dbAdapter: DBAdapter, realmURL: URL) {
   )[0].has_rows;
 }
 
+// Whether `userId` administers the realm whose permissions these are: their
+// own row grants `write` (ADR 024 §1.3). The `*` and `users` rows name no one,
+// so the `write` they grant makes no one an administrator. `realm-owner`
+// plays no part: it names the user the realm is indexed as, not an authority
+// (ADR 006 §1.2).
+export function isRealmAdministrator(
+  permissions: RealmPermissions,
+  userId: string,
+): boolean {
+  return permissions[userId]?.includes('write') ?? false;
+}
+
 export async function fetchRealmPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
@@ -386,7 +398,7 @@ export async function fetchUserPermissions(
     // enumeration so _realm-auth, multi-realm authorization, the indexer
     // sweep, etc. see only active realms. Set true to include them.
     // The archive-management endpoints reach archived realms by URL via
-    // fetchRealmPermissions / fetchArchivedRealmsForOwner instead, so
+    // fetchRealmPermissions / fetchArchivedRealmsForAdministrator instead, so
     // they bypass this filter and don't need the opt-in.
     includeArchived?: boolean;
     // Realms readable by everyone (a `'*'` read row) are reachable by every
