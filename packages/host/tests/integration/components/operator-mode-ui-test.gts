@@ -300,6 +300,26 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert.dom('[data-test-card-url-bar-error]').doesNotExist();
   });
 
+  test(`card url bar tells password managers to skip it`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-submode-switcher]');
+    await click('[data-test-submode-switcher-button]');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor('[data-test-card-url-bar-input]');
+
+    let input = '[data-test-card-url-bar-input]';
+    assert.dom(input).hasAttribute('autocomplete', 'off');
+    assert.dom(input).hasAttribute('data-1p-ignore', '');
+    assert.dom(input).hasAttribute('data-lpignore', 'true');
+    assert.dom(input).hasAttribute('data-form-type', 'other');
+    assert.dom(input).hasAttribute('data-bwignore', '');
+  });
+
   test(`card url bar shows error message when URL is invalid`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(

@@ -337,6 +337,8 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/components/expiration-warning'),
   'components/icon-button': () =>
     import('@cardstack/base/components/icon-button'),
+  'components/password-managers': () =>
+    import('@cardstack/base/components/password-managers'),
   'components/sidebar': () => import('@cardstack/base/components/sidebar'),
   'components/time-ago': () => import('@cardstack/base/components/time-ago'),
   'components/timeline': () => import('@cardstack/base/components/timeline'),

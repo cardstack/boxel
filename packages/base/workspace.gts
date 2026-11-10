@@ -17,6 +17,7 @@ import {
   Tooltip,
 } from '@cardstack/boxel-ui/components';
 import { and, bool, cn, eq } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
 // (tools/index.ts shims them onto the loader's virtual network, so these
@@ -710,6 +711,7 @@ class Isolated extends Component<typeof Workspace> {
               aria-label='Search this space'
               aria-keyshortcuts='Meta+K Control+K'
               {{on 'keydown' this.onSearchKeydown}}
+              {{ignoredByPasswordManagers}}
               data-test-workspace-search
             />
             {{! the visible hint is decorative — aria-keyshortcuts above carries
@@ -4325,6 +4327,7 @@ export class Workspace extends CardDef {
                   @value={{this.description}}
                   @onInput={{this.setDescription}}
                   @placeholder='One line about this space'
+                  {{ignoredByPasswordManagers}}
                 />
               </div>
             </div>
@@ -4343,6 +4346,7 @@ export class Workspace extends CardDef {
                   @value={{@model.signage}}
                   @onInput={{this.setSignage}}
                   @placeholder='e.g. DESIGN LAB'
+                  {{ignoredByPasswordManagers}}
                 />
               </div>
             </div>
@@ -4361,6 +4365,7 @@ export class Workspace extends CardDef {
                   @value={{@model.purpose}}
                   @onInput={{this.setPurpose}}
                   @placeholder='What this space is for'
+                  {{ignoredByPasswordManagers}}
                 />
               </div>
             </div>
@@ -4391,6 +4396,7 @@ export class Workspace extends CardDef {
                     @value={{this.workspaceName}}
                     @onInput={{this.setWorkspaceName}}
                     @placeholder='Workspace name'
+                    {{ignoredByPasswordManagers}}
                   />
                 </div>
               </div>
@@ -4408,6 +4414,7 @@ export class Workspace extends CardDef {
                     @value={{this.workspaceIcon}}
                     @onInput={{this.setWorkspaceIcon}}
                     @placeholder='https://…'
+                    {{ignoredByPasswordManagers}}
                   />
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { primitive, Component, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import Number99SmallIcon from '@cardstack/boxel-icons/number-99-small';
 import {
   fieldSerializer,
@@ -42,6 +43,7 @@ class Edit extends Component<typeof BigIntegerField> {
       @errorMessage={{this.textInputValidator.errorMessage}}
       @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
       @disabled={{not @canEdit}}
+      {{ignoredByPasswordManagers}}
     />
   </template>
 
