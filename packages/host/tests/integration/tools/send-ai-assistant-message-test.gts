@@ -1,6 +1,8 @@
 import { getOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -48,10 +50,16 @@ module('Integration | tools | send-ai-assistant-message', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
+    class Pet extends CardDef {
+      @field name = contains(StringField);
+    }
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
-        contents: {},
+        contents: {
+          'pet.gts': { Pet },
+          'Pet/mango.json': new Pet({ name: 'Mango' }),
+        },
       }),
     );
   });
@@ -74,5 +82,30 @@ module('Integration | tools | send-ai-assistant-message', function (hooks) {
     assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 0);
+  });
+
+  test('adds no patch tool for an attached card the user can write', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
+    let toolService = getService('tool-service');
+    let mango = (await getService('store').get(
+      `${testRealmURL}Pet/mango`,
+    )) as CardDef;
+    assert.true(
+      getService('realm').canWrite(mango.id!),
+      'the attached card is writable',
+    );
+
+    await new SendAiAssistantMessageTool(toolService.toolContext).execute({
+      roomId,
+      prompt: 'Rename the pet',
+      attachedCards: [mango],
+    });
+    let message = getRoomEvents(roomId).pop()!;
+    let boxelMessageData = JSON.parse(message.content.data);
+    assert.strictEqual(boxelMessageData.attachedCards.length, 1);
+    assert.deepEqual(boxelMessageData.context.tools, []);
   });
 });
