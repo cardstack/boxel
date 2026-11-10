@@ -3882,6 +3882,9 @@ importers:
       ember-template-recast:
         specifier: ^6.1.5
         version: 6.1.5(supports-color@8.1.1)
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.24.2
       eslint:
         specifier: 'catalog:'
         version: 8.57.1(supports-color@8.1.1)

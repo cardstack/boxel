@@ -39,6 +39,7 @@ import {
   type ServedBuild,
 } from '../scripts/load-harness/lib/deploy-pin.ts';
 import { LINK_SHAPE_LOAD_HALF_LIFE_MS } from '@cardstack/runtime-common';
+import { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
 import {
   DEFAULT_LOAD_HALF_LIFE_MS,
   describeInFlight,
@@ -805,6 +806,12 @@ module(basename(import.meta.filename), function () {
 
   module('derived workload', function () {
     const realm = 'https://example.test/owner/experiments/';
+    // The server's prefix map: the base and catalog realms are served on
+    // their own, so their prefix-form types are not in this realm.
+    const network = new PrefixRealmNetwork({
+      '@cardstack/base/': 'https://example.test/base/',
+      '@cardstack/catalog/': 'https://example.test/catalog/',
+    });
 
     // Shaped like a real GET <realm>/_types payload: a flat `data` array of
     // card-type-summary entries discriminated by `kind`, ids in both the
@@ -839,6 +846,7 @@ module(basename(import.meta.filename), function () {
     test('ranks instance types by count and keeps the top N', function (assert) {
       let raw = workloadFromCardTypeSummary(sample, {
         realmUrl: realm,
+        network,
         top: 3,
         pageSize: 20,
       });
@@ -853,6 +861,7 @@ module(basename(import.meta.filename), function () {
     test('a file entry is never queried, whatever its count', function (assert) {
       let raw = workloadFromCardTypeSummary(sample, {
         realmUrl: realm,
+        network,
         top: 99,
         pageSize: 0,
       });
@@ -865,6 +874,7 @@ module(basename(import.meta.filename), function () {
     test('splits a type id at the last separator, in both spellings', function (assert) {
       let raw = workloadFromCardTypeSummary(sample, {
         realmUrl: realm,
+        network,
         top: 4,
         pageSize: 0,
       });
@@ -891,6 +901,7 @@ module(basename(import.meta.filename), function () {
       let bounded = parseWorkload(
         workloadFromCardTypeSummary(sample, {
           realmUrl: realm,
+          network,
           top: 1,
           pageSize: 20,
         }),
@@ -902,6 +913,7 @@ module(basename(import.meta.filename), function () {
       let unbounded = parseWorkload(
         workloadFromCardTypeSummary(sample, {
           realmUrl: realm,
+          network,
           top: 1,
           pageSize: 0,
         }),
@@ -914,11 +926,13 @@ module(basename(import.meta.filename), function () {
     test('a tied count still yields one stable ordering', function (assert) {
       let forwards = workloadFromCardTypeSummary(sample, {
         realmUrl: realm,
+        network,
         top: 3,
         pageSize: 0,
       });
       let backwards = workloadFromCardTypeSummary([...sample].reverse(), {
         realmUrl: realm,
+        network,
         top: 3,
         pageSize: 0,
       });
@@ -935,7 +949,7 @@ module(basename(import.meta.filename), function () {
           entry(`${realm}a/Thing`, 10, 'instance', 'Thing'),
           entry(`${realm}b/Thing`, 9, 'instance', 'Thing'),
         ],
-        { realmUrl: realm, top: 2, pageSize: 0 },
+        { realmUrl: realm, network, top: 2, pageSize: 0 },
       );
       let workload = parseWorkload(raw, realm, '_types');
       assert.deepEqual(
@@ -948,6 +962,7 @@ module(basename(import.meta.filename), function () {
     test('the write targets a realm-local type that the readers query', function (assert) {
       let raw = workloadFromCardTypeSummary(sample, {
         realmUrl: realm,
+        network,
         top: 8,
         pageSize: 0,
       });
@@ -977,6 +992,7 @@ module(basename(import.meta.filename), function () {
       ];
       let raw = workloadFromCardTypeSummary(external, {
         realmUrl: realm,
+        network,
         top: 8,
         pageSize: 20,
       });
@@ -999,12 +1015,40 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a prefix-form type of a realm served under a prefix is realm-local', function (assert) {
+      let prefixServed = new PrefixRealmNetwork({
+        '@cardstack/base/': 'https://example.test/base/',
+        '@cardstack/experiments/': realm,
+      });
+      let raw = workloadFromCardTypeSummary(
+        [
+          entry('@cardstack/base/spec/Spec', 117),
+          entry('@cardstack/experiments/author/Author', 30),
+        ],
+        { realmUrl: realm, network: prefixServed, top: 8, pageSize: 0 },
+      );
+      let workload = parseWorkload(raw, realm, '_types');
+      assert.deepEqual(
+        workload.writes[0]?.adoptsFrom,
+        { module: `${realm}author`, name: 'Author' },
+        'the prefix resolves to this realm on the server map, so the type is writable here',
+      );
+    });
+
+    test('a type whose prefix the server does not serve is not realm-local', function (assert) {
+      let raw = workloadFromCardTypeSummary(
+        [entry('@cardstack/experiments/author/Author', 30)],
+        { realmUrl: realm, network, top: 8, pageSize: 0 },
+      );
+      assert.strictEqual(raw.write, undefined);
+    });
+
     test('refuses a realm with nothing queryable rather than inventing one', function (assert) {
       assert.throws(
         () =>
           workloadFromCardTypeSummary(
             [entry(`${realm}some/markdown/Markdown`, 5, 'file')],
-            { realmUrl: realm, top: 8, pageSize: 0 },
+            { realmUrl: realm, network, top: 8, pageSize: 0 },
           ),
         /No instance types found/,
       );
@@ -1012,6 +1056,7 @@ module(basename(import.meta.filename), function () {
         () =>
           workloadFromCardTypeSummary([entry('NoSeparator', 5)], {
             realmUrl: realm,
+            network,
             top: 8,
             pageSize: 0,
           }),
