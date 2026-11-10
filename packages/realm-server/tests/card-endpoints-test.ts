@@ -4194,33 +4194,45 @@ module(basename(import.meta.filename), function () {
             'friends.1': { links: { self: './hassan' } },
           };
 
-          let relationships = await patchRelationships(storedFriends);
-          assert.deepEqual(
-            [relationships['friends.0'], relationships['friends.1']],
-            [storedFriends['friends.0'], storedFriends['friends.1']],
-            'the links are stored',
-          );
+          for (let [form, emptied] of [
+            ['{ links: { self: null } }', { links: { self: null } }],
+            ['an empty array', []],
+            ['{ data: [] }', { data: [] }],
+          ] as const) {
+            let relationships = await patchRelationships(storedFriends);
+            assert.deepEqual(
+              [
+                relationships.friends,
+                relationships['friends.0'],
+                relationships['friends.1'],
+              ],
+              [
+                undefined,
+                storedFriends['friends.0'],
+                storedFriends['friends.1'],
+              ],
+              `${form}: the links are stored`,
+            );
 
-          relationships = await patchRelationships({
-            friends: { links: { self: null } },
-          });
-          assert.deepEqual(
-            relationships.friends,
-            { links: { self: null } },
-            'the field is stored as empty',
-          );
-          assert.deepEqual(
-            Object.keys(relationships).filter((key) =>
-              key.startsWith('friends.'),
-            ),
-            [],
-            'no stored links remain',
-          );
-          assert.deepEqual(
-            relationships.friend,
-            { links: { self: './jade' } },
-            'a relationship the patch leaves out is kept',
-          );
+            relationships = await patchRelationships({ friends: emptied });
+            assert.deepEqual(
+              relationships.friends,
+              { links: { self: null } },
+              `${form}: the field is stored as empty`,
+            );
+            assert.deepEqual(
+              Object.keys(relationships).filter((key) =>
+                key.startsWith('friends.'),
+              ),
+              [],
+              `${form}: no stored links remain`,
+            );
+            assert.deepEqual(
+              relationships.friend,
+              { links: { self: './jade' } },
+              `${form}: a relationship the patch leaves out is kept`,
+            );
+          }
         });
 
         test('no-op patch returns existing lastModified and does not rewrite file', async function (assert) {

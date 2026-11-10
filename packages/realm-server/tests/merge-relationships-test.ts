@@ -10,6 +10,14 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(mergeRelationshipsTests, assert, {});
     });
 
+    test('an indexed member or a query-backed relationship is left as it is', async function (assert) {
+      await runSharedTest(mergeRelationshipsTests, assert, {});
+    });
+
+    test('a cleared linksTo replaces the stored link whole', async function (assert) {
+      await runSharedTest(mergeRelationshipsTests, assert, {});
+    });
+
     test('a list replaces a stored linksToMany', async function (assert) {
       await runSharedTest(mergeRelationshipsTests, assert, {});
     });

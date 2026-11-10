@@ -17,8 +17,48 @@ const tests = Object.freeze({
     );
     assert.deepEqual(
       mergeRelationships(storedFriends, { friends: { data: [] } }),
-      { friends: { data: [] } },
+      { friends: { links: { self: null } } },
       '{ data: [] }',
+    );
+    assert.deepEqual(
+      mergeRelationships(storedFriends, { friends: [] }),
+      { friends: { links: { self: null } } },
+      'an empty array',
+    );
+  },
+
+  'an indexed member or a query-backed relationship is left as it is': async (
+    assert,
+  ) => {
+    assert.deepEqual(
+      mergeRelationships(storedFriends, { 'friends.0': { data: [] } }),
+      { 'friends.0': { data: [] } },
+      'an indexed member',
+    );
+    let matches = {
+      links: { self: null, search: 'http://test-realm/_search?q=x' },
+      data: [],
+      meta: { total: 0 },
+    };
+    assert.deepEqual(
+      mergeRelationships({}, { matches }),
+      { matches },
+      'a query-backed relationship',
+    );
+  },
+
+  'a cleared linksTo replaces the stored link whole': async (assert) => {
+    assert.deepEqual(
+      mergeRelationships(
+        {
+          friend: {
+            links: { self: './jade' },
+            data: { type: 'card', id: 'http://test-realm/jade' },
+          },
+        },
+        { friend: { links: { self: null } } },
+      ),
+      { friend: { links: { self: null } } },
     );
   },
 
