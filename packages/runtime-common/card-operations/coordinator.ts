@@ -266,10 +266,13 @@ export interface CommitBatchOptions {
   actor?: string;
   // How the batch was made, recorded on its one change event: the channel
   // the request's headers name, the AI agent, room and tool call, the push it
-  // belongs to. An operation that writes on its own account sets it here
-  // too: a revert names its `revert` intent, so realm-historian records the
-  // batch as its own revision. It never decides the author, which is the
-  // actor (see `WriteOptions.history`).
+  // belongs to. A caller that commits a batch of its own names the batch's
+  // intent here: a revert passes its `revert` intent, so realm-historian
+  // records the batch as its own revision. Such a caller makes its own
+  // `commitBatch` call. An entry in an `/_operations` envelope cannot name an
+  // intent: the envelope's one batch carries only what its request's headers
+  // say. It never decides the author, which is the actor (see
+  // `WriteOptions.history`).
   history?: WriteContext;
   // Who a batch by a caller who isn't signed in is made as, once its entries
   // are admitted: the acting user the first admitted write's grant names
