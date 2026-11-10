@@ -1701,7 +1701,7 @@ export class IndexQueryEngine {
       // "not errored" spans both error channels (index + current render error),
       // matching the single-kind branches below — so a file row with a current
       // render error is excluded from the mixed scope too.
-      let notErrored: CardExpression = [`NOT ${effectiveHasError()}`];
+      let notErrored: CardExpression = [notEffectivelyErrored(opts)];
       if (entryType === 'all') {
         // Mixed scope. Instance rows follow `includeErrors` (their error
         // markup is rendered through the html branch); file rows are only
@@ -7845,6 +7845,20 @@ export function prerenderedJoin(opts?: WIPOptions) {
 const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation)`;
 
 const INDEX_HAS_ERROR = `COALESCE(i.has_error, FALSE)`;
+
+// `NOT effectiveHasError()` for a search's WHERE clause. Same meaning (the
+// join to prerendered_html is on its primary key, so at most one row decides
+// the render half), but the render half is a NOT EXISTS against
+// `prerendered_html_render_error_index`, a partial index holding only the rows
+// with a render error. A search that has to test thousands of candidates
+// (a type-ahead term matching 7,500 OnTube rows) then probes a tiny, cached
+// index per candidate instead of reading each candidate's prerendered row:
+// 1.6 s -> 0.18 s for that query.
+function notEffectivelyErrored(opts?: WIPOptions): string {
+  return `(NOT ${INDEX_HAS_ERROR} AND NOT EXISTS (SELECT 1 FROM ${prerenderedTableFromOpts(
+    opts,
+  )} AS phe WHERE phe.url = i.url AND phe.realm_url = i.realm_url AND phe.type = i.type AND phe.error_doc IS NOT NULL AND phe.generation >= i.generation))`;
+}
 
 export function effectiveHasError(): string {
   return `(${INDEX_HAS_ERROR} OR ${RENDER_ERROR_IS_CURRENT})`;
