@@ -2066,7 +2066,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 573833,
+      "bytes": 573845,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2383,8 +2383,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "password-managers.gts",
-          "sha256": "c9956df43d91bd0c39858675d31f33c93a98484b7cfafc97edd2ef8976a1fa15",
-          "size": 451
+          "sha256": "59ac7f12a376b8d48829f181381bc8939b4ac398ac27d4fa8b77f152ad3e3d49",
+          "size": 463
         },
         {
           "package": "@cardstack/pretui@0.0.0",
