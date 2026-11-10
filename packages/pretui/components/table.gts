@@ -146,13 +146,15 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
       /* on the cells, so a caller that repaints a cell replaces the stripe
          or hover instead of stacking a second one over the row's; the
          striped check sits in :where() so it adds no specificity and hover
-         still wins over the stripe */
+         still wins over the stripe. Child combinators keep a wrapper's
+         check to its own rows, so a plain table nested in a striped one
+         stays plain. */
       :where(.pretui-tablewrap:not([data-striped='false']))
-        .pretui-table
-        :deep(tbody tr:nth-child(even) td),
+        > .pretui-table
+        > :deep(tbody > tr:nth-child(even) > td),
       :where(.pretui-tablewrap:not([data-striped='false']))
-        .pretui-table
-        :deep(tbody tr:nth-child(even) th) {
+        > .pretui-table
+        > :deep(tbody > tr:nth-child(even) > th) {
         background-color: var(--stripe);
         color: var(--foreground);
       }
