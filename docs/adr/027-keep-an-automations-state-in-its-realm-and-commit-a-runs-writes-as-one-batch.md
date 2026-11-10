@@ -9,7 +9,7 @@ scope:
   - packages/postgres/migrations/*run-overlay*
   - packages/runtime-common/card-operations/coordinator.ts
   - packages/runtime-common/card-operations/executors.ts
-  - packages/host/app/commands/*automation*
+  - packages/host/app/tools/*automation*
 ---
 
 # 027. Keep an automation's state in its realm, and commit a run's writes as one batch
