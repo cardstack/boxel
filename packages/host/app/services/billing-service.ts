@@ -157,9 +157,11 @@ export default class BillingService extends Service {
   // fresh; if you need a boot-time "load once" guard, that belongs in
   // initializeSubscriptionData(), not here.
   //
-  // Answers whether it loaded: on a failed fetch `subscriptionData` keeps what
-  // it held before, which a caller that must report current numbers can't use.
-  async loadSubscriptionData(): Promise<boolean> {
+  // Answers with the data it loaded, or undefined when the server refused: on
+  // a failed fetch `subscriptionData` keeps what it held before, which a
+  // caller that must report current numbers can't use. A fetch that throws
+  // rejects.
+  async loadSubscriptionData(): Promise<SubscriptionData | undefined> {
     this._loadingSubscriptionData = true;
     try {
       let response = await this.fetchSubscriptionData();
@@ -168,7 +170,7 @@ export default class BillingService extends Service {
         console.error(
           `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
         );
-        return false;
+        return undefined;
       }
       let json = await response.json();
       let plan =
@@ -192,7 +194,7 @@ export default class BillingService extends Service {
       let dailyCreditGrantCount =
         json.data?.attributes?.dailyCreditGrantCount ?? 0;
 
-      this._subscriptionData = {
+      let loaded: SubscriptionData = {
         plan,
         creditsAvailableInPlanAllowance,
         creditsIncludedInPlanAllowance,
@@ -204,7 +206,8 @@ export default class BillingService extends Service {
         nextDailyCreditGrantAt,
         dailyCreditGrantCount,
       };
-      return true;
+      this._subscriptionData = loaded;
+      return loaded;
     } finally {
       this._loadingSubscriptionData = false;
     }

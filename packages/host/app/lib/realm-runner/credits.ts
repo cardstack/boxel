@@ -1,15 +1,15 @@
 // What `room.credits()` answers: the signed-in user's plan and credit
-// balance, as the profile popover shows them, and what the room's session has
-// cost so far, as the answer footers add it up. Plan prices are not here:
-// they change, and they belong with the Upgrade page.
+// balance, as the profile popover shows them, and the credits the room's model
+// replies reported, as the answer footers add them up. Plan prices are not
+// here: they change, and they belong with the Upgrade page.
 
-import { creditsForCost, sessionCost } from '../format-token-usage';
+import { creditsForCost, sessionUsage } from '../format-token-usage';
 
 import type { SubscriptionData } from '../../services/billing-service';
 import type { TokenUsage } from '@cardstack/base/matrix-event';
 
 export interface RoomCredits {
-  // The plan's name, or null when the user has none.
+  // The plan's name, or null when the server names none.
   plan: string | null;
   // Everything the user can spend now: the monthly credits left plus the
   // extra credits.
@@ -21,11 +21,15 @@ export interface RoomCredits {
   // The next daily grant, only while the balance is below what the grant
   // tops it up to, which is when the profile popover shows it too.
   nextDailyGrant: { at: string; topsUpTo: number } | null;
-  // The answers in this room that reported their usage, and the credits they
-  // cost. `credits` is null when one of them reported no cost: a partial sum
-  // would read as the whole bill. The answer being written when the call is
-  // made has not reported its cost yet, so it is not in the sum.
-  session: { answers: number; credits: number | null };
+  // The model replies in this room that reported their usage (one per tool
+  // round, so an answer that calls tools is several), and the credits they
+  // reported. The reply that called `room.credits` is among them: a reply
+  // finishes, with its usage, before its tool calls run. `replyCredits` is
+  // null when a counted reply reported no cost, since a partial sum would read
+  // as the whole bill. It is not everything the session spent: image
+  // generation, history compaction and stopped replies are charged to the
+  // balance without appearing in any reply's usage.
+  session: { replies: number; replyCredits: number | null };
 }
 
 export function roomCredits(
@@ -44,7 +48,7 @@ export function roomCredits(
     (subscription.creditsAvailableInPlanAllowance ?? 0) +
     (subscription.extraCreditsAvailableInBalance ?? 0);
   let { lowCreditThreshold, nextDailyCreditGrantAt } = subscription;
-  let session = sessionCost(usages);
+  let session = sessionUsage(usages);
   return {
     plan: subscription.plan,
     creditsLeft,
@@ -62,8 +66,9 @@ export function roomCredits(
           }
         : null,
     session: {
-      answers: session.turns,
-      credits: session.costUsd != null ? creditsForCost(session.costUsd) : null,
+      replies: session.turns,
+      replyCredits:
+        session.costUsd != null ? creditsForCost(session.costUsd) : null,
     },
   };
 }

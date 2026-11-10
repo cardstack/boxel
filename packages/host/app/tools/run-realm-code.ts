@@ -140,7 +140,10 @@ import type {
   RealmScriptErrorInfo,
 } from '../lib/realm-runner/types';
 
-import type BillingService from '../services/billing-service';
+import type {
+  default as BillingService,
+  SubscriptionData,
+} from '../services/billing-service';
 import type CardService from '../services/card-service';
 import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
@@ -3311,22 +3314,32 @@ export default class RunRealmCodeTool extends HostBaseTool<
   }
 
   // `room.credits()`: the balance is read fresh, since every answer spends
-  // from it, and a failed read is an error rather than an older balance.
+  // from it, and a balance that can't be read is an error rather than an
+  // older one.
   private async roomCredits(roomId: string): Promise<RoomCredits> {
-    if (!(await this.billingService.loadSubscriptionData())) {
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource) {
+      throw new Error(
+        `room.credits cannot read the messages of room ${roomId}`,
+      );
+    }
+    let subscription: SubscriptionData | undefined;
+    try {
+      subscription = await this.billingService.loadSubscriptionData();
+    } catch (error) {
+      console.error('room.credits: loading the subscription failed', error);
+    }
+    if (!subscription) {
       throw new Error(
         "room.credits could not read the account's credits from the server. Try again, or see Profile → Membership Tier",
       );
     }
-    let subscription = this.billingService.subscriptionData;
-    if (!subscription) {
-      throw new Error("room.credits could not read the account's credits");
-    }
-    let roomResource = this.matrixService.roomResources.get(roomId);
-    await roomResource?.processing;
+    // The room's processing restarts when a new event arrives, which cancels
+    // the run being awaited; the messages read after it are current either way.
+    await Promise.allSettled([roomResource.processing]);
     return roomCredits(
       subscription,
-      (roomResource?.messages ?? []).map((message) => message.usage),
+      roomResource.messages.map((message) => message.usage),
     );
   }
 

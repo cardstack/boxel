@@ -34,27 +34,49 @@ export function isCountedTurn(
   );
 }
 
-// What a session has cost so far: the counted turns, and their summed cost
-// when every one of them reported a cost. A partial sum would read as the
-// whole bill, so a counted turn without a cost leaves `costUsd` out.
-export function sessionCost(usages: Iterable<TokenUsage | undefined>): {
+// A session's usage so far: how many turns counted, and their summed token
+// counts. Input is summed rather than read off the last turn because each
+// turn re-sends the whole conversation, so the sum is what the provider
+// billed. The cached and cost figures are totals only when every counted turn
+// reported them: a partial sum would read as the whole bill, so they are left
+// out otherwise.
+export function sessionUsage(usages: Iterable<TokenUsage | undefined>): {
   turns: number;
+  promptTokens: number;
+  completionTokens: number;
+  cachedTokens?: number;
   costUsd?: number;
 } {
   let turns = 0;
-  let turnsWithCost = 0;
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let cachedTokens = 0;
+  let turnsWithCached = 0;
   let costUsd = 0;
+  let turnsWithCost = 0;
   for (let usage of usages) {
     if (!isCountedTurn(usage)) {
       continue;
     }
     turns++;
+    promptTokens += usage.promptTokens ?? 0;
+    completionTokens += usage.completionTokens ?? 0;
+    if (usage.cachedTokens != null) {
+      cachedTokens += usage.cachedTokens;
+      turnsWithCached++;
+    }
     if (usage.costUsd != null) {
       costUsd += usage.costUsd;
       turnsWithCost++;
     }
   }
-  return turnsWithCost === turns ? { turns, costUsd } : { turns };
+  return {
+    turns,
+    promptTokens,
+    completionTokens,
+    ...(turnsWithCached === turns ? { cachedTokens } : {}),
+    ...(turnsWithCost === turns ? { costUsd } : {}),
+  };
 }
 
 // "12 credits", "1,204 credits", "<1 credit": what a turn or a session

@@ -1,4 +1,4 @@
-import { settled } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -52,6 +52,10 @@ module('Integration | tools | run-realm-code | room.credits', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-credits',
     });
+    // A run always comes from a room the client has synced.
+    await waitUntil(() =>
+      getService('matrix-service').roomResources.has(roomId),
+    );
   });
 
   function userWith(attributes: Record<string, unknown>, plan?: string) {
@@ -79,11 +83,11 @@ module('Integration | tools | run-realm-code | room.credits', function (hooks) {
     });
   }
 
-  async function runCredits() {
+  async function runCredits(inRoom = roomId) {
     let command = new RunRealmCodeTool(getService('tool-service').toolContext);
     return await command.execute({
       realm: testRealmURL,
-      roomId,
+      roomId: inRoom,
       code: `return await room.credits();`,
     });
   }
@@ -112,19 +116,22 @@ module('Integration | tools | run-realm-code | room.credits', function (hooks) {
       monthlyCreditsIncluded: 2500,
       extraCredits: 300,
       nextDailyGrant: { at: '2026-01-01T00:00:00.000Z', topsUpTo: 2000 },
-      session: { answers: 2, credits: 42 },
+      session: { replies: 2, replyCredits: 42 },
     });
     assert.deepEqual(result.roomChanges, [], 'the room is unchanged');
   });
 
-  test('gives no session total when an answer reported no cost', async function (assert) {
-    userWith({
-      creditsAvailableInPlanAllowance: null,
-      creditsIncludedInPlanAllowance: null,
-      extraCreditsAvailableInBalance: 5000,
-      lowCreditThreshold: 2000,
-      nextDailyCreditGrantAt: 1767225600,
-    });
+  test('gives no session total when a reply reported no cost', async function (assert) {
+    userWith(
+      {
+        creditsAvailableInPlanAllowance: null,
+        creditsIncludedInPlanAllowance: null,
+        extraCreditsAvailableInBalance: 5000,
+        lowCreditThreshold: 2000,
+        nextDailyCreditGrantAt: 1767225600,
+      },
+      'Free',
+    );
     answer({ promptTokens: 1000, completionTokens: 100, costUsd: 0.012 });
     answer({ promptTokens: 1000, completionTokens: 100 });
     await settled();
@@ -132,20 +139,41 @@ module('Integration | tools | run-realm-code | room.credits', function (hooks) {
     let result = await runCredits();
 
     assert.deepEqual(JSON.parse(result.scriptResult!), {
-      plan: null,
+      plan: 'Free',
       creditsLeft: 5000,
       monthlyCreditsLeft: null,
       monthlyCreditsIncluded: null,
       extraCredits: 5000,
       nextDailyGrant: null,
-      session: { answers: 2, credits: null },
+      session: { replies: 2, replyCredits: null },
     });
   });
 
-  test('fails rather than report a balance it could not read', async function (assert) {
+  test('fails rather than report an older balance when the read fails', async function (assert) {
+    userWith({
+      creditsAvailableInPlanAllowance: 1200,
+      creditsIncludedInPlanAllowance: 2500,
+      extraCreditsAvailableInBalance: 300,
+    });
+    let first = await runCredits();
+    assert.strictEqual(
+      JSON.parse(first.scriptResult!).creditsLeft,
+      1500,
+      'the first read answers',
+    );
+
+    userResponse = () => new Response('', { status: 500 });
     await assert.rejects(
       runCredits(),
       /room\.credits could not read the account's credits/,
+    );
+  });
+
+  test('fails for a room it has no messages for', async function (assert) {
+    userWith({ extraCreditsAvailableInBalance: 300 });
+    await assert.rejects(
+      runCredits('!no-such-room:localhost'),
+      /room\.credits cannot read the messages of room !no-such-room:localhost/,
     );
   });
 });
