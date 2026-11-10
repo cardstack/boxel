@@ -1,11 +1,15 @@
 ---
-status: accepted
+status: proposed
 date: 2026-11-10
 scope:
   - packages/host/app/lib/realm-runner/research.ts
   - packages/realm-server/handlers/handle-request-forward.ts
   - packages/realm-server/lib/allowed-proxy-destinations.ts
   - packages/realm-server/**/*ai-batch*
+  - packages/realm-server/**/*openrouter-batch*
+  - packages/realm-server/**/*batch-settle*
+  - packages/realm-server/lib/credit-strategies.ts
+  - packages/billing/ai-billing.ts
   - packages/runtime-common/**/*ai-batch*
   - packages/postgres/migrations/*ai-batch*
 ---
@@ -54,10 +58,11 @@ cancel a batch.
 
 A submitted batch MUST be billed whether or not its results are used. A
 settle job MUST bill each batch once, when it reaches a final state, at the
-cost OpenRouter reports. A batch that ends with no reported cost MUST be
-billed at the estimate taken at submit. For an automation that opts in, its
-caps, the minimum balance and its estimate MUST count its AI at 1.5 times the
-normal price.
+cost OpenRouter reports times the margin that metered charges use. A batch
+that ends with no reported cost MUST be billed at the batch price of its
+requests, estimated at submit, times the same margin. For an automation that
+opts in, its caps, the minimum balance and its estimate MUST count its AI at
+twice the normal price. That factor bounds spending and MUST NOT be charged.
 
 ## 2. Rationale
 
@@ -75,8 +80,11 @@ batch waits. The realm is the state, so the follow-up picks up where the
 first run left off.
 
 A missed deadline pays for the batch and for the same requests at the normal
-price, about 1.5 times the normal price. Counting opted-in AI at 1.5 times in
-caps and the minimum balance means a missed deadline can't overspend.
+price. A batch costs at most the normal price: the discount is typically
+half, but it varies by model, and web-search calls in a batch bill at the
+standard rate. So counting opted-in AI at twice the normal price in caps and
+the minimum balance means a missed deadline can't overspend. It only reserves
+headroom; each charge is still the price actually paid.
 OpenRouter's docs report the cost of a completed batch. They don't say
 whether an expired one is charged. Billing it at the submit estimate means we
 never pay for work we didn't bill.
@@ -101,7 +109,8 @@ run that the platform will bill and follow up.
 
 - OpenRouter, [Batch API guide](https://openrouter.ai/docs/guides/features/batch-api):
   batch requests are typically billed at 50% of the standard per-token price,
-  and `usage.cost` reports the cost of a completed batch.
+  each model page shows its batch price, web-search calls in a batch bill at
+  standard rates, and `usage.cost` reports the cost of a completed batch.
 - OpenRouter, [Batch quickstart](https://openrouter.ai/docs/batch-quickstart):
   there is no cancel endpoint, and a running batch returns `409` to a delete.
   `completion_window` accepts only `24h`. With a `callback_url`, OpenRouter
@@ -111,3 +120,7 @@ run that the platform will bill and follow up.
   event holds only the batch's id.
 - OpenRouter, [Batch API announcement](https://openrouter.ai/blog/announcements/batch-api):
   the median batch in the beta finished in 7 minutes.
+
+## 5. Remediation
+
+Known gaps are listed in [remediation/030.md](remediation/030.md).
