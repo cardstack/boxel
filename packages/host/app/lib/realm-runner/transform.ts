@@ -1,10 +1,14 @@
+import { isPlainObject } from '@cardstack/runtime-common/is-plain-object';
+
 import { jsonBytes } from './research';
 import { makeRealmWorker, resolveAssetURL } from './runner';
 import {
   MAX_TRANSFORM_INPUT_BYTES,
   MAX_TRANSFORM_OUTPUT_BYTES,
   MAX_TRANSFORM_SOURCE_BYTES,
+  MAX_TRANSFORM_BYTES_PER_RUN,
   MAX_TRANSFORMS_PER_RUN,
+  TRANSFORM_STALL_GRACE_MS,
   TRANSFORM_TIMEOUT_MS,
   TRANSFORM_WORKER_START_TIMEOUT_MS,
 } from './transform-limits';
@@ -31,14 +35,14 @@ export interface TransformWorkerRequest {
 export type TransformWorkerResponse =
   | { ready: true }
   | { id: number; started: true }
-  | { id: number; value: string }
+  | { id: number; value: string; bytes: number }
   | { id: number; outputTooLarge: true }
   | { id: number; error: string; phase?: 'parse' | 'profile' | 'evaluate' };
 
-export type TransformRequest = Omit<TransformWorkerRequest, 'id'>;
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+export interface TransformRequest {
+  message: Omit<TransformWorkerRequest, 'id'>;
+  // The input's and params' bytes, counted toward the run's budget.
+  bytes: number;
 }
 
 // Checks a realm.transform call's arguments before any work is done.
@@ -87,16 +91,19 @@ export function transformRequest(
       `realm.transform takes at most ${MAX_TRANSFORM_INPUT_BYTES} bytes of input and params; this call has ${inputBytes}`,
     );
   }
-  if (typeof spelling !== 'string' || !(spelling in SPELLINGS)) {
+  if (typeof spelling !== 'string' || !Object.hasOwn(SPELLINGS, spelling)) {
     throw new TypeError(
       `realm.transform spelling is "jq" (the default) or "readable", not ${JSON.stringify(spelling)}`,
     );
   }
   return {
-    input: input ?? null,
-    source,
-    ...(params ? { params } : {}),
-    syntax: SPELLINGS[spelling as Spelling],
+    message: {
+      input: input ?? null,
+      source,
+      ...(params ? { params } : {}),
+      syntax: SPELLINGS[spelling as Spelling],
+    },
+    bytes: inputBytes,
   };
 }
 
@@ -136,6 +143,7 @@ export class RealmTransformer {
   private nextId = 1;
   private closed = false;
   private count = 0;
+  private bytes = 0;
 
   run(request: TransformRequest): Promise<unknown> {
     if (this.closed) {
@@ -150,12 +158,33 @@ export class RealmTransformer {
         ),
       );
     }
-    this.count += 1;
+    if (this.bytes + request.bytes > MAX_TRANSFORM_BYTES_PER_RUN) {
+      return Promise.reject(
+        new RangeError(
+          `realm.transform may move at most ${MAX_TRANSFORM_BYTES_PER_RUN} bytes in and out per run; this call's ${request.bytes} bytes of input were not sent`,
+        ),
+      );
+    }
     let worker = this.start();
     let id = this.nextId++;
+    try {
+      worker.postMessage({
+        id,
+        ...request.message,
+      } satisfies TransformWorkerRequest);
+    } catch (error) {
+      return Promise.reject(
+        new Error(
+          `realm.transform could not send its input to the worker: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+    }
+    // Counted once the call is sent, so a call that never reached the worker
+    // costs the run nothing.
+    this.count += 1;
+    this.bytes += request.bytes;
     return new Promise((resolve, reject) => {
       this.waiting.set(id, { resolve, reject });
-      worker.postMessage({ id, ...request } satisfies TransformWorkerRequest);
     });
   }
 
@@ -189,15 +218,17 @@ export class RealmTransformer {
         return;
       }
       if ('started' in message) {
+        // BXL stops a program at TRANSFORM_TIMEOUT_MS by itself. This timer is
+        // for an evaluator that stalls outside its own metering: such a
+        // program cannot be interrupted inside the worker, so the worker
+        // ends, and every call waiting on it with it.
         waiting.timer = window.setTimeout(() => {
-          // A program past its time cannot be interrupted inside the worker,
-          // so the worker ends, and every call waiting on it with it.
           this.stop(
             new Error(
               `realm.transform took longer than ${TRANSFORM_TIMEOUT_MS / 1000} s and was stopped`,
             ),
           );
-        }, TRANSFORM_TIMEOUT_MS);
+        }, TRANSFORM_TIMEOUT_MS + TRANSFORM_STALL_GRACE_MS);
         return;
       }
       this.waiting.delete(message.id);
@@ -214,7 +245,23 @@ export class RealmTransformer {
         );
         return;
       }
+      this.bytes += message.bytes;
+      if (this.bytes > MAX_TRANSFORM_BYTES_PER_RUN) {
+        waiting.reject(
+          new RangeError(
+            `realm.transform may move at most ${MAX_TRANSFORM_BYTES_PER_RUN} bytes in and out per run; this program's ${message.bytes} bytes of output were dropped`,
+          ),
+        );
+        return;
+      }
       waiting.resolve(JSON.parse(message.value));
+    };
+    // A reply that cannot be read would leave its call waiting for a timer
+    // that then blames the program, so the worker ends with the real reason.
+    worker.onmessageerror = () => {
+      this.stop(
+        new Error("realm.transform could not read the worker's answer"),
+      );
     };
     worker.onerror = (event) => {
       this.stop(

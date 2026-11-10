@@ -5453,6 +5453,7 @@ for (const [input, source, options] of [
   [{}, '.', { spelling: 'yaml' }],
   [{}, '.', { schema: {} }],
   [{}, '.[] '],
+  [{}, '.', { spelling: 'toString' }],
 ]) {
   try {
     await realm.transform(input, source, options);
@@ -5463,7 +5464,7 @@ for (const [input, source, options] of [
 }
 return reasons;`);
 
-    let [loop, parse, spelling, option, many] = JSON.parse(
+    let [loop, parse, spelling, option, many, inherited] = JSON.parse(
       result.scriptResult!,
     ) as string[];
     assert.true(
@@ -5486,6 +5487,10 @@ return reasons;`);
       many.includes('produces one value'),
       `a program with several values is refused: ${many}`,
     );
+    assert.true(
+      inherited.includes('"jq" (the default) or "readable"'),
+      `a name every object inherits is not a spelling: ${inherited}`,
+    );
   });
 
   test('realm.transform refuses input and params over its size limit', async function (assert) {
@@ -5499,6 +5504,15 @@ return reasons;`);
       ),
       /realm.transform takes at most 1000000 bytes of input and params/,
     );
+  });
+
+  test('realm.transform maps over thousands of objects and loads the formula families a program names', async function (assert) {
+    let result = await run(`
+const rows = Array.from({ length: 40000 }, (_, a) => ({ a }));
+const out = await realm.transform(rows, 'map({b: .a + 1})');
+const gauss = await realm.transform({}, 'ROUND(GAUSS(1); 4)');
+return [out.length, out[39999].b, gauss];`);
+    assert.deepEqual(JSON.parse(result.scriptResult!), [40000, 40000, 0.3413]);
   });
 
   test('realm.transform refuses output over its size limit', async function (assert) {

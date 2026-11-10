@@ -616,9 +616,9 @@ class RealmFsSession {
   private researchBytes = 0;
   private researchSlots = MAX_PARALLEL_RESEARCH;
   private researchWaiters: (() => void)[] = [];
-  // Research calls run outside the queue: they touch no file, so they cannot
-  // race one. `idle` still waits for them.
-  private researchInFlight = new Set<Promise<unknown>>();
+  // Research calls and transforms run outside the queue: they touch no file,
+  // so they cannot race one. `idle` still waits for them.
+  private unqueuedInFlight = new Set<Promise<unknown>>();
   // Each file this run changed: its text before the first change and after
   // the last, in the order of the first change. The transcript shows them
   // as diffs and Undo puts them back.
@@ -718,11 +718,18 @@ class RealmFsSession {
       }
     }
     this.callsMade += 1;
-    if (RESEARCH_METHODS.has(method)) {
-      let result = this.researchCall(method, args);
+    if (RESEARCH_METHODS.has(method) || method === 'transform') {
+      // Research and transforms touch no realm file, so they neither wait
+      // behind file calls nor hold file calls up.
+      let result =
+        method === 'transform'
+          ? Promise.resolve().then(() =>
+              this.transformer.run(transformRequest(args[0], args[1], args[2])),
+            )
+          : this.researchCall(method, args);
       let tracked = result.catch(() => undefined);
-      this.researchInFlight.add(tracked);
-      tracked.finally(() => this.researchInFlight.delete(tracked));
+      this.unqueuedInFlight.add(tracked);
+      tracked.finally(() => this.unqueuedInFlight.delete(tracked));
       return result;
     }
     let result = this.queue.then(() => {
@@ -755,11 +762,11 @@ class RealmFsSession {
 
   // Settles once every call already made has finished or been refused.
   idle(): Promise<unknown> {
-    return Promise.all([this.queue, ...this.researchInFlight]);
+    return Promise.all([this.queue, ...this.unqueuedInFlight]);
   }
 
   // Settles once every queued call (each save and delete among them) has
-  // finished or been refused. Research calls are not waited on.
+  // finished or been refused. Research calls and transforms are not waited on.
   queueSettled(): Promise<unknown> {
     return this.queue;
   }
@@ -1559,10 +1566,6 @@ class RealmFsSession {
       case 'web.read':
       case 'resolve':
         return await this.researchCall(method, args);
-      case 'transform':
-        return await this.transformer.run(
-          transformRequest(args[0], args[1], args[2]),
-        );
       case 'activity':
         return this.reportActivity(args[0]);
       case 'plan':
