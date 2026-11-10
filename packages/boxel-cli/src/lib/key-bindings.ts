@@ -1,7 +1,4 @@
-import {
-  realmServerRequest,
-  SecureSessionRequestError,
-} from './secure-session.ts';
+import { realmServerRequest } from './secure-session.ts';
 import { canonicalRealmUrl } from './user-keys.ts';
 
 // A realm as the CLI names it to the realm server: a prefix-form id
@@ -124,12 +121,11 @@ export interface ApprovalBatch {
   // credential good where each of those sends. One choice fills a slot token
   // for the whole batch, so these are the only ones the secure window's
   // approve page offers for it. Asked with `operations`, only those
-  // operations count. A realm server that doesn't name them leaves the choice
-  // to approval, which holds a key to the slot's declared kind.
-  fillers?: Record<BatchUse, Record<string, string[]>>;
-  // The operations `fillers` weigh, when the realm server weighed only the
-  // ones `approvalBatch` was asked for; absent, they weigh every operation of
-  // the batch. Set here, not by the realm server.
+  // operations count.
+  fillers: Record<BatchUse, Record<string, string[]>>;
+  // The operations `fillers` weigh, when `approvalBatch` was asked for only
+  // some; absent, they weigh every operation of the batch. Set here, not by
+  // the realm server.
   fillersFor?: string[];
 }
 
@@ -146,9 +142,7 @@ export type BatchTarget =
 
 // `operations` names the operations an approval covers when it covers only
 // some of the batch's, so the keys offered for each slot (`fillers`) weigh
-// only where those send. A realm server that doesn't take `operations`
-// refuses it as an attribute it doesn't know; the batch is then asked without
-// it, and its `fillers` weigh every operation.
+// only where those send.
 export async function approvalBatch(
   realmServerUrl: string,
   token: string,
@@ -165,8 +159,10 @@ export async function approvalBatch(
   },
   fetchFn: FetchFn = fetch,
 ): Promise<ApprovalBatch> {
-  let ask = (scoped: boolean) =>
-    realmServerRequest(realmServerUrl, '_key-bindings/batch', {
+  let response = await realmServerRequest(
+    realmServerUrl,
+    '_key-bindings/batch',
+    {
       method: 'POST',
       token,
       fetchFn,
@@ -180,29 +176,16 @@ export async function approvalBatch(
                 : target,
             review,
             ...(interactive ? { interactive: true } : {}),
-            ...(scoped ? { operations } : {}),
+            ...(operations !== undefined ? { operations } : {}),
           },
         },
       },
-    });
-  if (operations === undefined) {
-    return (await ask(false)).data.attributes as ApprovalBatch;
-  }
-  try {
-    return {
-      ...((await ask(true)).data.attributes as ApprovalBatch),
-      fillersFor: operations,
-    };
-  } catch (e) {
-    if (
-      e instanceof SecureSessionRequestError &&
-      e.status === 400 &&
-      e.message.includes("'operations' can't be asked about here")
-    ) {
-      return (await ask(false)).data.attributes as ApprovalBatch;
-    }
-    throw e;
-  }
+    },
+  );
+  let batch = response.data.attributes as ApprovalBatch;
+  return operations === undefined
+    ? batch
+    : { ...batch, fillersFor: operations };
 }
 
 export interface OperationApproval {

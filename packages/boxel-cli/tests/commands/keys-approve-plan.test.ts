@@ -104,7 +104,7 @@ function batchOf(
         dailyBudget: 100,
       },
     ],
-    ...(fillers ? { fillers } : {}),
+    fillers,
   };
 }
 
@@ -198,12 +198,6 @@ describe('boxel keys approve: which slots a named key fills', () => {
     ).toThrow(
       "elsewhere can't fill the slot userKey of Service: it isn't a kind of key that slot takes, or its credential isn't good at other.vendor.test, where the operations approved send it. Name another key or share",
     );
-    // Weighed by every operation, though only one is approved.
-    expect(() =>
-      plan(batch, 'elsewhere', { use: 'pipelines', operation: 'remove' }),
-    ).toThrow(
-      'where the batch sends it. This realm server offers a key for a slot by every operation of Service that sends it, not only remove. Name another key or share',
-    );
   });
 
   it('reads the fillers of the use it approves for', () => {
@@ -241,13 +235,6 @@ describe('boxel keys approve: which slots a named key fills', () => {
       /isn't good at every one of api\.vendor\.test, other\.vendor\.test, where/,
     );
   });
-
-  it("fills by type alone from a batch that doesn't name its fillers", () => {
-    let planned = plan(batchOf(undefined), 'elsewhere', { use: 'pipelines' });
-    expect(planned[0]!.fills.map((f) => [f.slot, f.id])).toEqual([
-      ['userKey', OTHER_KEY],
-    ]);
-  });
 });
 
 describe('boxel keys approve: asking for the batch an approval covers', () => {
@@ -278,25 +265,7 @@ describe('boxel keys approve: asking for the batch an approval covers', () => {
     expect(batch.fillersFor).toEqual(['list']);
   });
 
-  it("asks again without them of a realm server that doesn't take them", async () => {
-    let { asked, fetchFn } = answering([
-      {
-        status: 400,
-        body: { errors: ["'operations' can't be asked about here"] },
-      },
-      answer,
-    ]);
-    let batch = await approvalBatch(
-      'https://realms.example.test/',
-      'token',
-      { target, operations: ['list'] },
-      fetchFn,
-    );
-    expect(asked.map((a) => a.operations)).toEqual([['list'], undefined]);
-    expect(batch.fillersFor).toBeUndefined();
-  });
-
-  it('passes on any other refusal', async () => {
+  it("passes on the realm server's refusal", async () => {
     let { fetchFn } = answering([
       {
         status: 400,

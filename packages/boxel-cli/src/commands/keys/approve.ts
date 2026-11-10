@@ -243,7 +243,7 @@ export function plan(
   let key = batch.keys.find((k) => k.name === name);
   let share = batch.shares.find((s) => s.label === name);
   let offered = (token: string, id: string) =>
-    !batch.fillers || (batch.fillers[use]?.[token] ?? []).includes(id);
+    (batch.fillers[use][token] ?? []).includes(id);
   let refused = new Set<string>();
   let planned: Planned[] = [];
   for (let { operation: op, group } of chosenOperations(batch, operation)) {
@@ -294,12 +294,6 @@ export function plan(
       ...new Set(planned.flatMap((p) => p.fills.map((f) => f.slot))),
     ];
     let it = tokens.length === 1 ? 'it' : 'them';
-    // A slot the realm server weighed by every operation of the card, though
-    // the approval covers only one.
-    let batchWide =
-      operation !== undefined && !batch.fillersFor
-        ? ` This realm server offers a key for a slot by every operation of ${batch.card.name} that sends it, not only ${operation}.`
-        : '';
     // `--slot` helps only where what it fills needs no new grant: the secure
     // window approves every slot of an operation.
     let next =
@@ -307,7 +301,7 @@ export function plan(
         ? `Pass --slot ${filled.join(' or --slot ')} to approve only what it fills, or name another key or share`
         : 'Name another key or share';
     throw new Error(
-      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.length === 1 ? hosts[0] : `every one of ${hosts.join(', ')}`}, where ${batch.fillersFor ? 'the operations approved send' : 'the batch sends'} ${it}.${batchWide} ${next}`,
+      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.length === 1 ? hosts[0] : `every one of ${hosts.join(', ')}`}, where ${batch.fillersFor ? 'the operations approved send' : 'the batch sends'} ${it}. ${next}`,
     );
   }
   return planned;
