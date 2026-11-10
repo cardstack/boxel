@@ -183,8 +183,9 @@ export class LeaseManager {
   }
 
   // Claims up to `count` shards that no one holds or whose lease has expired,
-  // lowest first, in one statement. Two tasks that pick the same shard at
-  // once both reach the conflict clause, which gives it to the first to
+  // lowest first, in one statement. A shard this task holds has an unexpired
+  // row, so the same test passes over it. Two tasks that pick the same shard
+  // at once both reach the conflict clause, which gives it to the first to
   // commit; the other claims what remains on a later tick.
   async #claim(count: number): Promise<number[]> {
     let rows = await this.#db.execute(
@@ -192,12 +193,11 @@ export class LeaseManager {
        SELECT candidate.shard::text, $2,
               now() + ($3::int * interval '1 millisecond')
        FROM generate_series(0, $4::int - 1) AS candidate(shard)
-       WHERE candidate.shard <> ALL($5::int[])
-         AND NOT EXISTS (
-           SELECT 1 FROM realm_historian_leases lease
-           WHERE lease.shard = candidate.shard::text
-             AND lease.expires_at >= now()
-         )
+       WHERE NOT EXISTS (
+         SELECT 1 FROM realm_historian_leases lease
+         WHERE lease.shard = candidate.shard::text
+           AND lease.expires_at >= now()
+       )
        ORDER BY candidate.shard
        LIMIT $1
        ON CONFLICT (shard) DO UPDATE
@@ -210,7 +210,6 @@ export class LeaseManager {
           this.#options.holder,
           this.#options.expiryMs,
           this.#options.shardCount,
-          this.held,
         ],
       },
     );
