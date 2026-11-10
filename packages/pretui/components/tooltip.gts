@@ -304,8 +304,13 @@ export class Tooltip extends Component<TooltipSignature> {
           padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
           border-radius: var(--boxel-border-radius-sm);
           box-shadow: var(--shadow-lg);
-          white-space: nowrap;
+          /* one line at its natural width; a caller that sets
+             --pretui-tooltip-measure caps the width there, and a longer tip
+             wraps into balanced lines instead of running off its trigger */
+          white-space: normal;
+          text-wrap: balance;
           width: max-content;
+          max-inline-size: var(--pretui-tooltip-measure, none);
           opacity: 0;
           --_tip-fade: 120ms;
           transition: opacity var(--_tip-fade) ease;
