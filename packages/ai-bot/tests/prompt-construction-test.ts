@@ -417,6 +417,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
         ),
         'the assistant is told to offer the granted operations',
       );
+      assert.true(
+        context.includes(
+          'where the workspace holds no card of that type yet, neither tool can run it',
+        ),
+        'and that a create needs an existing card of its type to run through',
+      );
     });
 
     test('says its policy may grant operations when the user cannot read the policy', async () => {

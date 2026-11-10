@@ -3609,7 +3609,9 @@ function readOnlyWorkspaceNote(
   return note;
 }
 
-const OFFER_GRANTED_OPERATIONS = `When the user asks what they can do here, or for a change one of these operations makes, offer the operation and run it with invoke-card-operation, or realm.operations in run-realm-code, instead of telling them they need write access.`;
+// Both tools invoke an operation through a card that exists: a create is
+// reached through a card of the type it creates.
+const OFFER_GRANTED_OPERATIONS = `When the user asks what they can do here, or for a change one of these operations makes, offer the operation and run it with invoke-card-operation, or realm.operations in run-realm-code, instead of telling them they need write access. An operation that creates a card runs through an existing card of the type it creates, so where the workspace holds no card of that type yet, neither tool can run it: say so rather than offering it.`;
 
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
