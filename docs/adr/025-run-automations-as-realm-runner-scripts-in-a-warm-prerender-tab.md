@@ -41,8 +41,9 @@ token.
 ### 1.2. Runs share warm tabs
 
 A run MUST run as a QuickJS worker in a prerender tab that is already open.
-A run MUST NOT start a tab or hold a tab for itself. Each run MUST get its own
-QuickJS worker (ADR 022 §1.2). The number of runs that one tab and one server
+A run MUST NOT start a tab or hold a tab for itself. A tab MUST serve runs of
+only one realm and one identity at a time. Each run MUST get its own QuickJS
+worker (ADR 022 §1.2). The number of runs that one tab and one server
 take at a time SHOULD come from measured capacity.
 
 ### 1.3. An automation runs a script or a reviewed platform command
@@ -103,6 +104,9 @@ megabytes. A run
 that started its own tab would spend most of its cost on start-up, and a
 burst of due automations would exhaust the pool. `run-command`'s queue
 spreads a burst over warm tabs instead.
+Runs share a tab only with runs of the same realm and identity, because the
+modules a run's cards load run as page code in the tab, and can reach
+whatever the tab holds for any run in it.
 
 The assistant already writes Realm Runner scripts, so a description of an
 automation produces code that the platform already runs. The script is an
