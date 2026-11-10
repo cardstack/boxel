@@ -11,6 +11,7 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 import Settings from '@cardstack/boxel-icons/settings';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { formatDistanceToNow } from 'date-fns';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -1421,6 +1422,7 @@ export default class PublishRealmModal extends Component<Signature> {
                       class='custom-subdomain-input'
                       spellcheck='false'
                       data-test-custom-subdomain-input
+                      {{ignoredByPasswordManagers}}
                     >
                       <:after as |Accessories|>
                         <Accessories.Text
