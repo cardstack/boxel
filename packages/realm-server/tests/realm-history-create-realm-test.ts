@@ -3,40 +3,20 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
-import { PostgresChangeJournal, type PgAdapter } from '@cardstack/postgres';
-import {
-  param,
-  query,
-  type ChangeEventInput,
-  type ChangeJournal,
-  type Querier,
-} from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
+import { param, query } from '@cardstack/runtime-common';
 import {
   realmSecretSeed,
   setupPermissionedRealmCached,
   testRealmURLFor,
 } from './helpers/index.ts';
+import { FailableChangeJournal } from './helpers/failable-change-journal.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 // Creating a realm writes its seed files straight to disk, outside the realm,
 // so it appends one `scan` event by the realm's creator, which realm-historian
 // records as the realm's first revision. The event obeys the journal's rule
 // for which realms record, and a journal failure never fails the creation.
-
-// The Postgres journal behind a switch a test can throw, so a test can make
-// one append fail without reaching into the realm server.
-class FailableJournal implements ChangeJournal {
-  #inner = new PostgresChangeJournal();
-  failNext = false;
-
-  async append(querier: Querier, event: ChangeEventInput): Promise<boolean> {
-    if (this.failNext) {
-      this.failNext = false;
-      throw new Error('the change journal is unavailable');
-    }
-    return await this.#inner.append(querier, event);
-  }
-}
 
 interface JournalRow {
   realmId: string;
@@ -47,7 +27,7 @@ interface JournalRow {
 }
 
 module(basename(import.meta.filename), function (hooks) {
-  let journal = new FailableJournal();
+  let journal = new FailableChangeJournal();
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
 
