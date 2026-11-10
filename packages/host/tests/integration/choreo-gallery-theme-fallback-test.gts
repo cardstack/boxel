@@ -32,7 +32,7 @@ function roleVariable(themeVariable: string): string {
 }
 
 function site(): HTMLElement {
-  return document.querySelector<HTMLElement>('[data-choreo-site]')!;
+  return document.querySelector<HTMLElement>('[data-test-choreo-site]')!;
 }
 
 /**
