@@ -38,3 +38,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [021](021-run-boxels-oauth-provider-in-the-realm-server-with-opaque-resource-bound-tokens.md)                | Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource        | proposed   |
 | [022](022-do-the-assistants-workspace-work-in-one-sandboxed-script.md)                                       | Do the assistant's workspace work in one sandboxed script                                       | proposed   |
 | [024](024-build-realm-access-on-one-policy-that-only-widens-and-give-direct-write-only-to-administrators.md) | Build realm access on one policy that only widens, and give direct write only to administrators | accepted   |
+| [030](030-batch-ai-only-when-an-automation-opts-in-end-the-run-while-it-waits-and-bill-every-batch.md)       | Batch AI only when an automation opts in, end the run while it waits, and bill every batch      | proposed   |
