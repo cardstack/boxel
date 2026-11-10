@@ -66,12 +66,25 @@ export const ChoreoRoot: TOC<Signature> = <template>
       /* The eyebrow role. The card container derives --boxel-eyebrow-*
          from the theme's --theme-eyebrow-* on its own element, above this
          one, so they are derived again here, where the fallback below
-         declares the gallery's eyebrow when no theme sets one. */
-      --boxel-eyebrow-font-family: var(--theme-eyebrow-font-family);
-      --boxel-eyebrow-font-size: var(--theme-eyebrow-font-size);
-      --boxel-eyebrow-line-height: var(--theme-eyebrow-line-height);
-      --boxel-eyebrow-font-weight: var(--theme-eyebrow-font-weight);
-      --boxel-eyebrow-letter-spacing: var(--theme-eyebrow-letter-spacing);
+         declares the gallery's eyebrow when no theme sets one. The
+         defaults are the container's own, for a value nothing declares. */
+      --boxel-eyebrow-font-family: var(
+        --theme-eyebrow-font-family,
+        var(--boxel-ui-label-font-family)
+      );
+      --boxel-eyebrow-font-size: var(
+        --theme-eyebrow-font-size,
+        var(--boxel-font-size-2xs)
+      );
+      --boxel-eyebrow-line-height: var(
+        --theme-eyebrow-line-height,
+        var(--boxel-line-height-xs)
+      );
+      --boxel-eyebrow-font-weight: var(--theme-eyebrow-font-weight, 600);
+      --boxel-eyebrow-letter-spacing: var(
+        --theme-eyebrow-letter-spacing,
+        0.08em
+      );
 
       position: relative;
       min-height: 100%;
