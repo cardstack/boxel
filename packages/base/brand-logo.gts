@@ -27,7 +27,7 @@ import {
   getFieldDescription,
 } from './card-api';
 import { buildCssVariableName } from '@cardstack/boxel-ui/helpers';
-import { ignoredByPasswordManagers } from './components/password-managers';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { markdownLink } from './markdown-helpers';
 import type {
   CssVariableField,

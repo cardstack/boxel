@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { ignoredByPasswordManagers } from './components/password-managers';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import {
   Component,
   NumberField as BaseNumberField,

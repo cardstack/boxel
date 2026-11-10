@@ -22,7 +22,7 @@ import {
   rgbaToHsv,
   rgbaToRgbaString,
 } from '@cardstack/boxel-ui/helpers';
-import { ignoredByPasswordManagers } from '../../components/password-managers';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import { setupElement } from '../modifiers/setup-element-modifier';
 

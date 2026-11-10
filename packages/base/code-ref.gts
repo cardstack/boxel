@@ -14,7 +14,7 @@ import {
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
-import { ignoredByPasswordManagers } from './components/password-managers';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import CodeIcon from '@cardstack/boxel-icons/code';
 
 class BaseView extends Component<typeof CodeRefField> {

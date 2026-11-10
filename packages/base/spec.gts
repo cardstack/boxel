@@ -50,7 +50,7 @@ import BookOpenText from '@cardstack/boxel-icons/book-open-text';
 import LayersSubtract from '@cardstack/boxel-icons/layers-subtract';
 import GitBranch from '@cardstack/boxel-icons/git-branch';
 import { DiagonalArrowLeftUp as ExportArrow } from '@cardstack/boxel-ui/icons';
-import { ignoredByPasswordManagers } from './components/password-managers';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import StackIcon from '@cardstack/boxel-icons/stack';
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';

@@ -8,7 +8,7 @@ import {
   not,
   type EmailFormatValidationError,
 } from '@cardstack/boxel-ui/helpers';
-import { ignoredByPasswordManagers } from './components/password-managers';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { fieldSerializer } from '@cardstack/runtime-common';
 import { markdownLink } from './markdown-helpers';
 

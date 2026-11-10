@@ -2,7 +2,7 @@ import { primitive, Component, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
-import { ignoredByPasswordManagers } from './components/password-managers';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import Number99SmallIcon from '@cardstack/boxel-icons/number-99-small';
 import {
   fieldSerializer,
