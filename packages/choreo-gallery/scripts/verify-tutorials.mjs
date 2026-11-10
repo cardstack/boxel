@@ -1,11 +1,15 @@
 /* global document */
 import assert from 'node:assert/strict';
 
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 import { chromium } from 'playwright';
 
 const base = process.argv[2] ?? 'http://localhost:4600';
 const browser = await chromium.launch({
   headless: true,
+  // The sandbox is off only on Linux, for the reasons
+  // `chromeSandboxEnabled` gives.
+  chromiumSandbox: chromeSandboxEnabled(),
   ...(process.env.BROWSER_CHANNEL
     ? { channel: process.env.BROWSER_CHANNEL }
     : {}),

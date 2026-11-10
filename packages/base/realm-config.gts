@@ -70,6 +70,7 @@ import {
   IconPlus,
   IconTrash,
 } from '@cardstack/boxel-ui/icons';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import CircleCheckIcon from '@cardstack/boxel-icons/circle-check';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
@@ -274,6 +275,7 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
           <BoxelInputGroup
             @value={{this.pathInputValue}}
             @onInput={{this.setPathFromInput}}
+            {{ignoredByPasswordManagers}}
             data-test-path-input
           >
             <:before as |Accessories|>
@@ -288,6 +290,7 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
               @value={{this.redirectToValue}}
               @onInput={{this.setRedirectTo}}
               @placeholder='/path or https://example.com/page'
+              {{ignoredByPasswordManagers}}
               data-test-redirect-input
             />
             <div class='status-code-cell'>
@@ -652,6 +655,7 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
                     @onChange={{this.commitKeys}}
                     @disabled={{not @canEdit}}
                     @placeholder='approver'
+                    {{ignoredByPasswordManagers}}
                     data-test-setting-key={{row.index}}
                   />
                 </td>
@@ -661,6 +665,7 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
                     @onInput={{fn this.setText row.index}}
                     @disabled={{not @canEdit}}
                     @placeholder={{this.valuePlaceholder}}
+                    {{ignoredByPasswordManagers}}
                     data-test-setting-value={{row.index}}
                   />
                   {{#if row.typeNote}}

@@ -94,7 +94,6 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
   dbAdapter,
   prerenderer,
   createPrerenderAuth,
-  matrixURL,
   matrixServerName,
   mediaCacheAdapter,
 }) =>
@@ -203,7 +202,6 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
             dbAdapter,
             new URL(normalizedRealmURL),
             renderedAs,
-            matrixURL,
             matrixServerName,
           );
       if (userPermissions.length === 0) {
@@ -251,7 +249,6 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
             dbAdapter,
             new URL(realm),
             renderedAs,
-            matrixURL,
             matrixServerName,
           );
         }

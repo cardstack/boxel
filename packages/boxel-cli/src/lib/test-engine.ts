@@ -3,6 +3,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { dirname, join, normalize, resolve } from 'node:path';
 
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import {
@@ -516,7 +517,12 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     setHtml(html);
 
     let chromium = await loadChromium();
-    browser = await chromium.launch({ headless: true });
+    // The QUnit page runs card code from a realm. The sandbox is off only on
+    // Linux, for the reasons `chromeSandboxEnabled` gives.
+    browser = await chromium.launch({
+      headless: true,
+      chromiumSandbox: chromeSandboxEnabled(),
+    });
     let page = await browser.newPage();
 
     if (options.debug) {
