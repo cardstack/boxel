@@ -35,9 +35,9 @@ class Stage extends Component<{ Args: { seize: (self: Stage) => void } }> {
     <Choreo class='stage' style='position:relative' @idle={{this.idle}} as |c|>
       <div style={{this.aboveStyle}}></div>
       <div
-        data-box
         style='height:40px;background:#0af'
         {{motion id='box'}}
+        data-test-box
       ></div>
       <c.Move @of={{c.all}} @duration={{0.4}} @ease='linear' />
     </Choreo>
@@ -73,7 +73,7 @@ class List extends Component {
 
 /** a move FLIPs: the box carries a transform while it travels */
 function moving(): boolean {
-  let el = document.querySelector('[data-box]') as HTMLElement;
+  let el = document.querySelector('[data-test-box]') as HTMLElement;
   let transform = getComputedStyle(el).transform;
   return transform !== 'none' && transform !== '';
 }

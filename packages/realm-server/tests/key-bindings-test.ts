@@ -34,14 +34,14 @@ import {
   fillSlots,
   fingerprintOf,
   listOwnBindings,
-  pipelineAdmission,
+  automationAdmission,
 } from '../lib/key-bindings.ts';
 import { bindingNames } from '../lib/key-binding-batch.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
 
 // ============================================================================
 // Bindings end to end: an owner approves a card's `callApi` operations in a
-// realm from the secure origin, and a pipeline the realm server runs invokes
+// realm from the secure origin, and an automation the realm server runs invokes
 // them against the stub vendor, each slot filled from its binding's grant.
 //
 // The vendor's URL is written into the card module before anything starts,
@@ -311,9 +311,9 @@ module(basename(import.meta.filename), function (hooks) {
     return envelope(name, { data: { meta: { adoptsFrom: INBOX } } });
   }
 
-  // Invokes as a pipeline the realm server runs as `user`.
-  async function runAsPipeline(user: string, body: string) {
-    let response = (await realm.handlePipeline(
+  // Invokes as an automation the realm server runs as `user`.
+  async function runAsAutomation(user: string, body: string) {
+    let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {
@@ -331,7 +331,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function invokeList(user = OWNER) {
-    return await runAsPipeline(user, envelope('list', { href: '/general' }));
+    return await runAsAutomation(user, envelope('list', { href: '/general' }));
   }
 
   function lastVendorRequest() {
@@ -343,7 +343,7 @@ module(basename(import.meta.filename), function (hooks) {
     await realm.indexing();
   }
 
-  test('approving then invoking from a pipeline sends the key in the place the operation declares', async function (assert) {
+  test('approving then invoking from an automation sends the key in the place the operation declares', async function (assert) {
     let key = await addKey();
     let approved = await approve(OWNER, [
       approval('list', { userKey: { keyId: key.id } }),
@@ -352,7 +352,7 @@ module(basename(import.meta.filename), function (hooks) {
     let [binding] = approved.body.data;
     assert.strictEqual(binding.attributes.slot, 'userKey');
     assert.strictEqual(binding.attributes.state, 'active');
-    assert.false(binding.attributes.interactive, 'pipelines only');
+    assert.false(binding.attributes.interactive, 'automations only');
     assert.strictEqual(binding.meta.request.placement, 'header');
     assert.strictEqual(binding.meta.request.placementName, 'authorization');
     assert.true(binding.meta.grant.created, 'the approval made a grant');
@@ -386,7 +386,7 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
     assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
 
-    let response = await runAsPipeline(WRITER, onType('shared'));
+    let response = await runAsAutomation(WRITER, onType('shared'));
     assert.strictEqual(response.status, 200, JSON.stringify(response.body));
     assert.strictEqual(
       lastVendorRequest().headers.authorization,
@@ -420,7 +420,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(rows.length, 1, 'one confirmation is one batch');
     assert.strictEqual(rows[0].batch_id, batch.body.meta.batchId);
 
-    let sent = await runAsPipeline(
+    let sent = await runAsAutomation(
       OWNER,
       envelope('elsewhere', { href: '/general' }),
     );
@@ -441,7 +441,7 @@ module(basename(import.meta.filename), function (hooks) {
       type: { module: String(INBOX.module), name: INBOX.name },
       operation: 'list',
       caller: OWNER,
-      mode: 'pipeline' as const,
+      mode: 'automation' as const,
       request: definition.callApi!,
     };
     let filled = await fillSlots(dbAdapter, () => keyring, {
@@ -479,7 +479,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('an interactive invocation of a binding approved for pipelines only is refused, and nothing is sent', async function (assert) {
+  test('an interactive invocation of a binding approved for automations only is refused, and nothing is sent', async function (assert) {
     let key = await addKey();
     await approve(OWNER, [approval('list', { userKey: { keyId: key.id } })]);
     let response = await request
@@ -552,7 +552,7 @@ module(basename(import.meta.filename), function (hooks) {
       await edit(declarations);
       let name = what === 'its body' ? 'note' : 'list';
       vendor.requests.length = 0;
-      let response = await runAsPipeline(
+      let response = await runAsAutomation(
         OWNER,
         envelope(name, { href: '/general', data: { note: 'hi' } }),
       );
@@ -619,7 +619,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(vendor.requests.length, 0, 'nothing reached any host');
 
-    let admission = await pipelineAdmission(dbAdapter, {
+    let admission = await automationAdmission(dbAdapter, {
       core: realm.operationCore,
       realmURL,
       codeRef: INBOX,
@@ -629,7 +629,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(
       admission?.error.code,
       'binding-needs-reapproval',
-      'a pipeline is stopped at admission too',
+      'an automation is stopped at admission too',
     );
   });
 
@@ -782,7 +782,7 @@ module(basename(import.meta.filename), function (hooks) {
       `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
       { bind: [realmURL.href, OWNER] },
     );
-    let suspended = await runAsPipeline(WRITER, onType('shared'));
+    let suspended = await runAsAutomation(WRITER, onType('shared'));
     assert.strictEqual(suspended.status, 409);
     assert.strictEqual(suspended.body.errors[0].code, 'share-suspended');
     let [{ state }] = await dbAdapter.execute(
@@ -831,7 +831,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(last, { action: 're-approved', actor: WRITER });
 
-    let response = await runAsPipeline(WRITER, onType('shared'));
+    let response = await runAsAutomation(WRITER, onType('shared'));
     assert.strictEqual(response.status, 200, JSON.stringify(response.body));
     assert.strictEqual(
       lastVendorRequest().headers.authorization,
@@ -1031,14 +1031,14 @@ module(basename(import.meta.filename), function (hooks) {
       'the card is recorded as invocations address it',
     );
 
-    let general = await runAsPipeline(
+    let general = await runAsAutomation(
       WRITER,
       envelope('post', { href: '/general' }),
     );
     assert.strictEqual(general.status, 200, JSON.stringify(general.body));
     assert.strictEqual(lastVendorRequest().path, `/echo/post?token=${VALUE}`);
 
-    let alerts = await runAsPipeline(
+    let alerts = await runAsAutomation(
       WRITER,
       envelope('post', { href: '/alerts' }),
     );
@@ -1112,7 +1112,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(n, 0);
   });
 
-  test('a keyless operation is sent from an interactive and a pipeline invocation alike, with no binding', async function (assert) {
+  test('a keyless operation is sent from an interactive and an automation invocation alike, with no binding', async function (assert) {
     let interactive = await request
       .post(`/key-bindings-test/_operations`)
       .set('Accept', OPERATIONS)
@@ -1127,11 +1127,11 @@ module(basename(import.meta.filename), function (hooks) {
       200,
       JSON.stringify(interactive.body),
     );
-    let pipeline = await runAsPipeline(
+    let automation = await runAsAutomation(
       OWNER,
       envelope('ping', { href: '/general' }),
     );
-    assert.strictEqual(pipeline.status, 200, JSON.stringify(pipeline.body));
+    assert.strictEqual(automation.status, 200, JSON.stringify(automation.body));
     assert.deepEqual(
       vendor.requests.map((r) => r.path),
       ['/echo/ping', '/echo/ping'],

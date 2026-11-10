@@ -369,7 +369,7 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
     await approve(connection.id);
 
     // The CLI's own session invokes interactively, and a binding is
-    // approved for pipelines only.
+    // approved for automations only.
     let interactive = await fetch(`${realm}_operations`, {
       method: 'POST',
       headers: {
@@ -382,7 +382,7 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
     expect(await interactive.text()).toContain('interactive-use-not-approved');
     expect(provider.apiCalls).toEqual([]);
 
-    let piped = (await testRealm.handlePipeline(
+    let piped = (await testRealm.handleAutomation(
       new Request(`${realm}_operations`, {
         method: 'POST',
         headers: {

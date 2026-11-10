@@ -4,6 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { restartableTask } from 'ember-concurrency';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
@@ -40,6 +41,7 @@ export default class RenameSession extends Component<Signature> {
             @errorMessage={{this.roomNameError}}
             @onInput={{this.setName}}
             aria-label='Session Name'
+            {{ignoredByPasswordManagers}}
             data-test-name-field
           />
         </div>

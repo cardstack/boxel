@@ -17,10 +17,12 @@ import {
   setupPermissionedRealmCached,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
+import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
+import { v4 as uuidv4 } from 'uuid';
 
 // `_publish-progress` is what turns a publish's multi-minute wait into
 // something a client can render. These cover the two things it has to get
-// right: only the realm's owner may read it, and the phase it reports tracks
+// right: only the source realm's administrators may read it, and the phase it reports tracks
 // the same two waits readiness gates on, in the same order.
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Realm Server Endpoints (not specific to one realm)', function () {
@@ -44,8 +46,32 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       // Each test owns a distinct realm URL so the jobs, index rows and
       // rendered rows it seeds can't be read by another test in this module.
       let realmCounter = 0;
-      async function ownedRealm(): Promise<string> {
-        let realmURL = `http://progress.localhost:4445/published-${++realmCounter}/`;
+      // A published realm, and the source realm it was published from. Its
+      // progress is for the source realm's administrators to read, whoever
+      // owns either realm.
+      async function ownedRealm(
+        sourcePermissions: Record<
+          string,
+          ('read' | 'write' | 'realm-owner')[]
+        > = {
+          [ownerUserId]: ['read', 'write', 'realm-owner'],
+        },
+      ): Promise<string> {
+        let n = ++realmCounter;
+        let realmURL = `http://progress.localhost:4445/published-${n}/`;
+        let sourceRealmURL = `http://localhost:4445/mango/source-${n}/`;
+        await insertPermissions(
+          dbAdapter,
+          new URL(sourceRealmURL),
+          sourcePermissions,
+        );
+        await upsertPublishedRealmInRegistry(dbAdapter, {
+          publishedRealmURL: realmURL,
+          publishedRealmId: uuidv4(),
+          ownerUsername: 'mango',
+          sourceRealmURL,
+          lastPublishedAt: Date.now(),
+        });
         await insertPermissions(dbAdapter, new URL(realmURL), {
           [ownerUserId]: ['read', 'realm-owner'],
           '*': ['read'],
@@ -140,11 +166,32 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
-      // Progress exposes a realm's file counts, so it is owner-only even though
-      // the published realm it describes is world-readable.
-      test('rejects a caller who does not own the realm', async function (assert) {
-        let realmURL = await ownedRealm();
+      // Progress exposes a realm's file counts, so only the source realm's
+      // administrators may read it, even though the published realm it
+      // describes is world-readable.
+      test('rejects a caller who does not administer the source realm', async function (assert) {
+        let realmURL = await ownedRealm({
+          [ownerUserId]: ['read', 'write', 'realm-owner'],
+          [strangerUserId]: ['read'],
+        });
         let response = await getProgress(realmURL, { as: strangerUserId });
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      });
+
+      test('lets an administrator of the source realm who owns neither realm read it', async function (assert) {
+        let realmURL = await ownedRealm({
+          [ownerUserId]: ['read', 'write', 'realm-owner'],
+          [strangerUserId]: ['read', 'write'],
+        });
+        let response = await getProgress(realmURL, { as: strangerUserId });
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      });
+
+      test('rejects an unknown published realm', async function (assert) {
+        let response = await getProgress(
+          'http://progress.localhost:4445/never-published/',
+          { as: ownerUserId },
+        );
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
 

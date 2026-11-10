@@ -61,9 +61,9 @@ class Stage extends Component<{
       {{grab c}}
       <div style={{this.aboveStyle}}></div>
       <div
-        data-box
         style='height:40px;background:#0af'
         {{motion id='box'}}
+        data-test-box
       ></div>
       <c.Move @of={{c.all}} @duration={{1}} @ease='linear' />
     </Choreo>
@@ -110,7 +110,7 @@ class Flight extends Component<{
 
 /** how far the box still has to travel: its translate, in px */
 function offset(): number {
-  let el = document.querySelector('[data-box]') as HTMLElement;
+  let el = document.querySelector('[data-test-box]') as HTMLElement;
   let transform = getComputedStyle(el).transform;
   if (!transform || transform === 'none') {
     return 0;
@@ -132,7 +132,7 @@ function busy(ms: number) {
 /** where the box is drawn, in px from the viewport's top */
 function drawnTop(): number {
   return (
-    document.querySelector('[data-box]') as HTMLElement
+    document.querySelector('[data-test-box]') as HTMLElement
   ).getBoundingClientRect().top;
 }
 

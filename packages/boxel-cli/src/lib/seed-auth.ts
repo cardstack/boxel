@@ -62,8 +62,9 @@ export function deriveRealmServerUrl(realmUrl: string): string {
  * Matrix server paired with the realm server. A realm path is
  * `/<owner localpart>/<realm>/` only for an owner on the paired homeserver
  * (ADR 004 §1.5), so the first path segment is that owner's localpart on
- * `matrixServerName`. Used to mint an owner-scoped realm-server token for
- * owner-gated admin endpoints (e.g. realm publish).
+ * `matrixServerName`. Used as the default user to mint a realm-server token
+ * for on admin endpoints (e.g. realm publish), which admit a user who
+ * administers the realm.
  */
 export function deriveOwnerUserId(
   realmUrl: string,

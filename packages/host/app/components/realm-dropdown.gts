@@ -6,6 +6,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { modifier } from 'ember-modifier';
 import { trackedFunction } from 'reactiveweb/function';
 
@@ -108,6 +109,7 @@ export default class RealmDropdown extends Component<Signature> {
               data-test-realm-dropdown-search
               {{focusAfterDropdownOpens}}
               {{on 'keydown' (fn this.selectFirstMatchOnEnter dd.close)}}
+              {{ignoredByPasswordManagers}}
             />
           </div>
         {{/if}}

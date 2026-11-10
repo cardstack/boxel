@@ -263,7 +263,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function invoke(operation: string, user = OWNER) {
-    let response = (await realm.handlePipeline(
+    let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {

@@ -37,6 +37,10 @@
 // runs piped through run-p + tee, so retry-attempt output otherwise hides
 // behind buffering until teardown).
 import '../lib/unbuffer-stdio.ts';
+import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
 import puppeteer, { type Browser } from 'puppeteer';
 
 const PER_ATTEMPT_TIMEOUT_MS = 30_000;
@@ -131,11 +135,11 @@ async function main() {
   let standbyUrl = `${hostUrl}/_standby`;
 
   let launchArgs: string[] = [];
-  if (
-    process.env.CI === 'true' ||
-    process.env.PUPPETEER_DISABLE_SANDBOX === 'true'
-  ) {
-    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+  // The probe stands in for the prerenderer's first navigation, so it
+  // launches the way the prerenderer does: the sandbox is off only on Linux,
+  // for the reasons `chromeSandboxEnabled` gives.
+  if (!chromeSandboxEnabled()) {
+    launchArgs.push(...CHROME_NO_SANDBOX_ARGS);
   }
   // Match the prerender server's BrowserManager: relax cert checks for
   // the local mkcert leaf. Chrome 144+ silently demotes

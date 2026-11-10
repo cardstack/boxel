@@ -8,6 +8,7 @@ import {
   param,
   removeRealmPermissions,
   fetchRealmPermissions,
+  isRealmAdministrator,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import { join } from 'path';
@@ -33,6 +34,7 @@ const log = logger('handle-unpublish');
 
 export default function handleUnpublishRealm({
   dbAdapter,
+  matrixClient,
   realmsRootPath,
   reconciler,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -95,7 +97,9 @@ export default function handleUnpublishRealm({
         dbAdapter,
         new URL(publishedRealmInfo.source_url),
       );
-      if (!permissions[ownerUserId]?.includes('realm-owner')) {
+      if (
+        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+      ) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to unpublish this realm`,

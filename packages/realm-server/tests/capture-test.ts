@@ -16,6 +16,7 @@ import {
   query,
   setCapturePerfSink,
 } from '@cardstack/runtime-common';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   chooseCaptureCoalesceDecision,
   estimateCaptureQueueWait,
@@ -32,7 +33,6 @@ import type {
   CaptureRequestPerfEvent,
 } from '@cardstack/runtime-common';
 import type { QueueJobSpec } from '@cardstack/runtime-common/queue';
-import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 
 import handleCapture from '../handlers/handle-capture.ts';
@@ -1194,14 +1194,9 @@ module(basename(import.meta.filename), function () {
 
     let dbAdapter: PgAdapter;
     let adapter: FakeMediaCacheAdapter;
-    // The permission checker consults the matrix profile only for realms
-    // with a `users` grant; these tests seed exact-user rows, so the stub
-    // is never called.
-    let matrixClient = {
-      async getProfile() {
-        return null;
-      },
-    } as unknown as MatrixClient;
+    // The permission checker reads only the paired homeserver's name off the
+    // client; the account lookup behind a `users` grant goes to the database.
+    let matrixClient = { serverName: 'localhost' } as unknown as MatrixClient;
 
     setupDB(hooks, {
       beforeEach: async (_dbAdapter: PgAdapter): Promise<void> => {

@@ -25,7 +25,7 @@ import { addUserKey, mintKeyWriteTicket } from '../lib/user-keys.ts';
 // ============================================================================
 // Google service-account keys end to end: an owner adds a service account's
 // key file, approves a card's `callApi` operations for it in a realm, and a
-// pipeline the realm server runs invokes them. The realm server mints an
+// automation the realm server runs invokes them. The realm server mints an
 // access token at a stub token endpoint and sends that, never the key.
 //
 // The vendor's URL is written into the card module before anything starts,
@@ -220,7 +220,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function invoke(operation: string) {
-    let response = (await realm.handlePipeline(
+    let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {
