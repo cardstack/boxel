@@ -17,6 +17,7 @@ import {
   PUSH_FINAL_HEADER,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type ChangeIntent,
+  type WriteChannel,
   type Realm,
 } from '@cardstack/runtime-common';
 import { commitBatch } from '@cardstack/runtime-common/card-operations';
@@ -624,6 +625,63 @@ module(basename(import.meta.filename), function () {
         writer,
         'the user the connector acts for',
       );
+    });
+
+    test('a context set in code keeps only what a trailer can carry', async function (assert) {
+      let [event] = await eventsOf(async () => {
+        await commitBatch(
+          testRealm.batchCore,
+          [
+            {
+              op: 'update',
+              href: `${realmHref}notes/forged.md`,
+              content: '# forged',
+              rawSource: true,
+            },
+          ],
+          {
+            clientRequestId: 'mcp-2',
+            actor: writer,
+            history: {
+              channel: 'mcp',
+              // A client names itself, so its name can carry a line break
+              // that would forge a trailer of its own.
+              agent: 'claude\nBoxel-Author: @mallory:localhost',
+              room: 'r'.repeat(300),
+              correlationId: 'write-8',
+              pushFinal: true,
+            },
+          },
+        );
+      });
+      assert.deepEqual(contextOf(event), {
+        channel: 'mcp',
+        agent: null,
+        room: null,
+        correlationId: 'write-8',
+        pushId: null,
+        pushFinal: false,
+      });
+
+      let [unnamed] = await eventsOf(async () => {
+        await commitBatch(
+          testRealm.batchCore,
+          [
+            {
+              op: 'update',
+              href: `${realmHref}notes/unnamed.md`,
+              content: '# unnamed',
+              rawSource: true,
+            },
+          ],
+          {
+            clientRequestId: 'mcp-3',
+            actor: writer,
+            history: { channel: 'robot' as WriteChannel },
+          },
+        );
+      });
+      assert.strictEqual(unnamed.channel, 'api', 'a channel no event names');
     });
   });
 });

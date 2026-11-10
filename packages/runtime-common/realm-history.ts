@@ -134,13 +134,13 @@ export interface WriteContext {
   intent?: ChangeIntent;
 }
 
-// The longest header value a write's context keeps. Values become git
-// trailers, so a value is also refused when it holds anything but printable
-// ASCII: a newline in one would forge a trailer of its own.
+// The longest value a write's context keeps. Values become git trailers, so
+// a value is also refused when it holds anything but printable ASCII: a
+// newline in one would forge a trailer of its own.
 const MAX_CONTEXT_VALUE_LENGTH = 256;
 const CONTEXT_VALUE_PATTERN = /^[\x20-\x7E]+$/;
 
-function contextValue(raw: string | null): string | undefined {
+function contextValue(raw: string | null | undefined): string | undefined {
   let trimmed = raw?.trim();
   if (
     !trimmed ||
@@ -210,6 +210,34 @@ export function writeContextFromHeaders(headers: {
     ...(correlationId ? { correlationId } : {}),
     ...(pushId ? { pushId } : {}),
     ...(pushFinal ? { pushFinal: true } : {}),
+  };
+}
+
+// The context a change event records, from whatever its writer set. A
+// writer with no request sets its context in code, sometimes from values it
+// doesn't control (the OAuth client a connector acts for names itself), so
+// every free-text field passes the same check a header value does, and a
+// field that fails it is dropped. A channel the event can't name is `api`.
+// The intent is kept as set: it names a revision and a realm path, which its
+// writer resolved itself.
+export function writeContextForEvent(context: WriteContext): WriteContext {
+  let channel: WriteChannel = WRITE_CHANNELS.includes(context.channel)
+    ? context.channel
+    : 'api';
+  let agent = contextValue(context.agent);
+  let room = contextValue(context.room);
+  let operationId = contextValue(context.operationId);
+  let correlationId = contextValue(context.correlationId);
+  let pushId = contextValue(context.pushId);
+  return {
+    channel,
+    ...(agent ? { agent } : {}),
+    ...(room ? { room } : {}),
+    ...(operationId ? { operationId } : {}),
+    ...(correlationId ? { correlationId } : {}),
+    ...(pushId ? { pushId } : {}),
+    ...(pushId && context.pushFinal ? { pushFinal: true } : {}),
+    ...(context.intent ? { intent: context.intent } : {}),
   };
 }
 

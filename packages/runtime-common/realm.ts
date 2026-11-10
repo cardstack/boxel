@@ -206,6 +206,7 @@ import {
   getFileMetaForPaths,
 } from './file-meta.ts';
 import {
+  writeContextForEvent,
   writeContextFromHeaders,
   type ChangeEventChange,
   type ChangeEventInput,
@@ -6509,17 +6510,19 @@ export class Realm {
       await this.removeFileMeta(removedFiles);
       return createdMap;
     }
+    // How the write was made, checked here whoever set it.
+    let context = history ? writeContextForEvent(history) : undefined;
     let event: ChangeEventInput | undefined =
       changes.length > 0
         ? {
-            // How the write was made. Spread first, so nothing in it can
-            // stand in for the fields below.
-            ...history,
+            // Spread first, so nothing in it can stand in for the fields
+            // below.
+            ...context,
             realmURL: this.url,
             // The effective authenticated user, never a client-supplied
             // header. A write with no user is the realm's own Matrix user's.
             author: initiatingUser ?? this.#matrixClientUserId,
-            channel: history?.channel ?? 'api',
+            channel: context?.channel ?? 'api',
             ...(partial ? { partial: true } : {}),
             changes,
           }
