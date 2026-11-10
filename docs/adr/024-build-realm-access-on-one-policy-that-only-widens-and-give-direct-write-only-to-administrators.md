@@ -3,11 +3,13 @@ status: accepted
 date: 2026-11-10
 scope:
   - packages/base/realm-config.gts
+  - packages/runtime-common/realm.ts
   - packages/runtime-common/card-operations/gate.ts
   - packages/runtime-common/card-operations/policy*.ts
   - packages/runtime-common/card-operations/grant-expressions.ts
   - packages/runtime-common/serializers/policy-predicate.ts
   - packages/realm-server/lib/realm-policy-pointer.ts
+  - packages/bxl/src/bxl/profiles/function-safety.ts
 ---
 
 # 024. Build realm access on one policy that only widens, and give direct write only to administrators
@@ -15,11 +17,14 @@ scope:
 A realm's permissions and its one `RealmPolicy` card together decide who may
 do what in it. The policy only widens what the permissions allow
 (ADR 006 §1.3). This ADR records what follows from that for anyone designing
-roles on a realm. To give a role less access, give it fewer direct
+roles on a realm, and the rules the policy engine keeps so that a grant admits
+only what its author wrote. To give a role less access, give it fewer direct
 permissions and grant back what it needs. Put every role in the realm's one
 policy. Give direct write only to the realm's administrators, because direct
-write controls the policy. Narrow a grant by the operation it names, never by
-the operation's params. The `realm-policy-authoring` skill in boxel-skills
+write controls the policy. Let the predicate decide whether a caller may
+invoke, and the operation decide what is written. Keep authorization cards out
+of every grant's reach, refuse on every failure, and scope search with filters
+compiled from the policy. The `realm-policy-authoring` skill in boxel-skills
 covers writing a policy.
 
 ## 1. Decision
@@ -52,12 +57,49 @@ MUST get write access through policy grants. The platform MUST NOT add a
 permission level or a grant that separates writing the realm's settings or
 its policy from writing the rest of its contents.
 
-### 1.4. Narrow a grant by its operation, not its params
+### 1.4. The predicate decides whether, and the operation decides what
 
-A policy predicate MUST NOT read an operation's params. A grant that must
-admit only some writes SHOULD name a narrower operation that the card type
-declares, such as one per kind of entry, instead of a general operation that
-writes whatever its caller sends.
+A predicate MUST read only the caller (`actor()`), the target card's values,
+the governed realm's settings (`realmConfig()`), and the policy card's own
+fields (`policy()`). A predicate MUST NOT read an operation's params. A
+predicate MUST NOT call a volatile function, such as the current time or a
+random value, or a builtin that can hold for a value it matches only in part.
+A write MUST be judged on the target as it stands before the write. A grant
+MUST admit only the operation name it names, so a grant on a named operation
+MUST NOT admit that operation's base.
+
+A grant that must admit only some writes SHOULD name a narrower operation that
+the card type declares, such as one per kind of entry, instead of a general
+operation that writes whatever its caller sends.
+
+### 1.5. Authorization infrastructure is outside every grant
+
+A grant MUST NOT admit any operation on the realm's config card, on the card
+its `policy` names, or on any `RealmPolicy` card or card of a subtype. A grant
+MUST NOT admit an operation declared `nonGrantable` on the target's type or on
+any type it descends from, or an `explain` or a `validate`. A search that a
+policy scopes MUST leave out the config card and every policy card. A card
+type SHOULD declare `nonGrantable` any operation that can write a field a
+grant's predicate reads.
+
+### 1.6. Every failure refuses
+
+Every way the policy engine can fail MUST refuse, never admit. A policy that
+the realm names but cannot load, a predicate that throws or answers anything
+but `true`, and a target whose type the index cannot vouch for MUST each be a
+refusal. A grant the realm cannot apply MUST be left out with a recorded
+issue, and the rest of the policy MUST still apply.
+
+### 1.7. Scope search with filters compiled from the policy
+
+A `query` grant's predicate MUST be compiled to a search filter when the
+policy compiles. A search MUST NOT judge its rows one at a time against a
+predicate. A `query` grant whose predicate does not compile to a filter MUST
+add nothing to a search. A compiled filter MUST NOT admit a row its predicate
+would refuse, except through a value that only a writer of the card can store.
+A `read` grant MUST NOT put a card in search results, a `query` grant MUST NOT
+admit a direct read, and a grant on a named query MUST NOT admit an ad-hoc
+search.
 
 ## 2. Rationale
 
@@ -78,19 +120,40 @@ restrict, which §1.1 rules out.
 Direct write already reaches the policy. Any direct writer can repoint
 `realm.json` at another policy or edit the policy card, and so can grant
 themselves or anyone else any grantable access. No grant reaches either card
-(`gate.ts`), so direct writers are the only users who can change them. A
-separate "administer"
-permission would not stop that unless direct write lost the power to change
-`realm.json`, which would create a second write level. The simpler and
-truthful model is that direct writers are the realm's administrators, and
+(§1.5), so direct writers are the only users who can change them. A separate
+"administer" permission would not stop that unless direct write lost the power
+to change `realm.json`, which would create a second write level. The simpler
+and truthful model is that direct writers are the realm's administrators, and
 everyone else writes through grants.
 
-A predicate decides on the caller, the target card, the governed realm's
-settings, and the policy card's own fields. It does not read params, because
-a caller-supplied value must not decide its own authorization
-(`packages/runtime-common/card-operations/policy.ts`, `PREDICATE_CALLS`). A
-named operation is declared by the card type's author, so granting it grants
-exactly what that author wrote.
+A grant has to admit what its author meant and nothing more. A caller-supplied
+value must not decide its own authorization, so a predicate never reads params.
+A volatile call would give two answers for one caller and one card, and a
+partial match holds for callers the author never named: `.teacherIds |
+contains([actor()])` holds for `@bob:server` when the list holds
+`@bob:server.org`. A predicate judged after the write would let a caller write
+their way into the grant. What a caller may change is the job of the
+operation: a named operation is declared by the card type's author, so granting
+it grants exactly what that author wrote, and granting its base would undo
+that.
+
+If any grant could write the config card or a policy card, one grant could
+become every grant. If any grant could read one, a caller the realm admits
+only through grants could read every rule that judges them. So these cards are
+outside the grant model, however a policy is written.
+
+A policy only widens, so a fault in it must never widen. Refusing on every
+failure means a broken policy costs access, which someone notices, and never
+grants access, which nobody does. A grant with an issue is left out alone, so
+one mistake doesn't take the rest of the policy down with it.
+
+The search engine pages through the index in SQL. Judging each row against a
+predicate would mean reading every candidate and dropping the ones refused,
+which paging can't survive. So a `query` grant is a filter compiled with the
+policy, and a grant that can't compile to one adds nothing rather than rows it
+can't judge. Finding a card by its id and listing every card of a type are
+different powers, so `read` and `query` are separate grants, and granting a
+saved search doesn't grant the freedom to write any filter over its type.
 
 ## 3. Considered options
 
@@ -107,6 +170,12 @@ exactly what that author wrote.
   removing the need to trust direct writers.
 - **Predicates over params.** The caller would choose the value that
   authorizes the call.
+- **Grants on authorization cards, guarded by careful authoring.** One
+  mistaken grant would hand over every grant, and nothing would report it.
+- **Treating a policy that fails as no policy.** A realm that names a policy
+  it can't load would serve on its permissions alone, and the callers it
+  was meant to admit would be refused with no sign that anything was wrong.
+- **Judging search rows one at a time.** Paging could not survive it.
 
 ## 4. Sources
 
@@ -115,9 +184,18 @@ exactly what that author wrote.
    can read; a realm has one policy whose rules are OR'ed; direct writers are
    administrators, and non-administrators write through grants; no new
    permission for administering a realm.
-2. ADR 006 §1.3 and `packages/runtime-common/card-operations/gate.ts`: the
-   policy runs only for a caller the permissions declined.
-3. `packages/base/realm-config.gts`: `policy` is one string field.
-4. `packages/runtime-common/card-operations/policy.ts`, `PREDICATE_CALLS`:
-   a predicate reads `actor()`, `instance()`, `realmConfig()`, and `policy()`,
-   and not `params()`.
+2. ADR 006 §1.3 and the header of
+   `packages/runtime-common/card-operations/gate.ts`: the policy runs only for
+   a caller the permissions declined, authorization infrastructure is outside
+   the grant model, and every way the gate can fail denies.
+3. `packages/base/realm-config.gts` and `packages/runtime-common/realm.ts`
+   (`assignRealmPolicy`, `getRealmPolicy`): `policy` is one string field.
+4. `packages/runtime-common/card-operations/policy.ts`: `PREDICATE_CALLS`
+   leaves out `params()`, and `PARTIAL_MATCH_BUILTINS` refuses partial
+   matches. `packages/bxl/src/bxl/profiles/function-safety.ts` refuses
+   volatile calls in a predicate.
+5. The headers of `packages/runtime-common/card-operations/policy-filter.ts`
+   and `packages/runtime-common/card-operations/policy-query.ts`: a `query`
+   grant compiles to a filter, a filter is never wider than its predicate
+   except through a value only a writer can store, and only a grant on the
+   invoked name contributes.
