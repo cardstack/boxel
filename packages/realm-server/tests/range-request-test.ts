@@ -130,6 +130,83 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // A path stat on a network filesystem can also say a file is there after
+    // another host has deleted it; only opening the file finds it gone, and
+    // the adapter's `openContent` then reports nothing to open. The request's
+    // file ref is opened as the stat describes, and its open reports the file
+    // gone, as the adapter's does on that filesystem.
+    async function withFileGoneAfterStat<T>(
+      path: string,
+      run: () => Promise<T>,
+    ): Promise<T> {
+      let openFile = adapter.openFile.bind(adapter);
+      let opened = false;
+      adapter.openFile = async (openedPath) => {
+        let ref: FileRef | undefined = await openFile(openedPath);
+        if (ref?.openContent && openedPath === path) {
+          Object.defineProperty(ref, 'openContent', {
+            value: () => {
+              opened = true;
+              return undefined;
+            },
+          });
+        }
+        return ref;
+      };
+      try {
+        return await run();
+      } finally {
+        adapter.openFile = openFile;
+        QUnit.assert.true(opened, 'the response opened the file it served');
+      }
+    }
+
+    function assertRealmNotFound(
+      assert: Assert,
+      response: {
+        status: number;
+        headers: Record<string, string>;
+        body: Buffer;
+      },
+    ) {
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      // A body stream that fails before anything is sent is answered by the
+      // HTTP layer as a plain-text 404 instead.
+      assert.true(
+        response.headers['content-type']?.startsWith('application/json'),
+        `the realm's own not-found answers (${response.headers['content-type']})`,
+      );
+      let doc = JSON.parse(response.body.toString('utf8'));
+      assert.strictEqual(doc.errors?.[0]?.status, 404);
+    }
+
+    test('a GET of a file deleted after its stat answers not-found', async function (assert) {
+      await uploadSample('/gone-after-stat.png');
+      let response = await withFileGoneAfterStat('gone-after-stat.png', () =>
+        getSample('/gone-after-stat.png').timeout(5000),
+      );
+      assertRealmNotFound(assert, response);
+    });
+
+    test('the card+source read of a file deleted after its stat answers not-found', async function (assert) {
+      await uploadSample('/gone-after-stat-source.png');
+      let response = await withFileGoneAfterStat(
+        'gone-after-stat-source.png',
+        () => getSource('/gone-after-stat-source.png').timeout(5000),
+      );
+      assertRealmNotFound(assert, response);
+    });
+
+    test('the cached card+source read of a file deleted after its stat answers not-found', async function (assert) {
+      // A .json is read through the source cache rather than streamed. Written
+      // straight to the adapter, so no indexing reads it.
+      await adapter.write('gone-after-stat.json', jsonText);
+      let response = await withFileGoneAfterStat('gone-after-stat.json', () =>
+        getSource('/gone-after-stat.json').timeout(5000),
+      );
+      assertRealmNotFound(assert, response);
+    });
+
     test('the card+source read declares the length of the bytes it sends, not a stale stat', async function (assert) {
       await uploadSample('/stale-stat-source.png');
       let response = await withStaleStatSize(5, () =>

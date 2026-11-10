@@ -110,23 +110,140 @@ const GH_VALUE_FLAGS = new Set([
   '-R',
   '--repo',
 ]);
+// A review or comment endpoint, matched against gh api's arguments and not
+// its field values, so a path quoted in a body doesn't count. The comment a
+// reply answers can be a shell variable, as in a helper that answers several
+// threads; the hook trusts the variable to hold a comment ID.
 const GH_API_REVIEW =
-  /\bgh\s+api\b.*?\brepos\/([^/\s'"]+\/[^/\s'"]+)\/pulls\/(\d+)\/(reviews|comments)\b(?:\/(\d+)(\/replies|\/events)?)?/;
-// A field flag makes gh api POST unless the method says otherwise. PUT and
-// PATCH rewrite a review or comment that is already posted.
-const GH_API_METHOD = /(?:^|\s)(?:-X|--method)(?:=|\s*)['"]?(\w+)/i;
-const GH_API_FIELDS = /(?:^|\s)(?:-f|-F|--field|--raw-field|--input)(?:=|\s)/;
-function isWrite(apiCommand) {
-  let method = GH_API_METHOD.exec(apiCommand)?.[1];
+  /\brepos\/([^/]+\/[^/]+)\/pulls\/(\d+)\/(reviews|comments)\b(?:\/((?<=comments\/)(?:\d|\$\w+|\$\{[^}/]+\})+(?=\/replies\b)|\d+)(\/(?:replies|events)\b)?)?/;
+// gh api flags that take a value: the long ones, and the short ones by letter.
+const GH_API_VALUE_FLAGS = new Set([
+  '--cache',
+  '--field',
+  '--header',
+  '--hostname',
+  '--input',
+  '--jq',
+  '--method',
+  '--preview',
+  '--raw-field',
+  '--template',
+]);
+const GH_API_SHORT_VALUE_FLAG = /[FHqXpft]/;
+const GH_API_FIELD_FLAGS = new Set(['-f', '-F', '--field', '--raw-field']);
+// A `gh api` command read from its words: its arguments, the method, the
+// field values and the --input file. gh api takes one argument, the endpoint;
+// any other is an expansion like $GH_FLAGS that the hook can't read. A short
+// flag, or a cluster like `-iX`, takes the next word as its value when the
+// first letter in it that takes a value is its last, and the rest of the word
+// otherwise, as in `-XPOST` or `-fbody=x`.
+function apiCall(words) {
+  let call = { args: [], method: undefined, fields: [], input: undefined };
+  for (let i = 2; i < words.length; i++) {
+    let word = words[i];
+    if (!word.startsWith('-')) {
+      call.args.push(word);
+      continue;
+    }
+    let flag;
+    let value;
+    let long = /^(--[^=]+)(?:=([^]*))?$/.exec(word);
+    if (long) {
+      flag = long[1];
+      value =
+        long[2] ?? (GH_API_VALUE_FLAGS.has(flag) ? words[++i] : undefined);
+    } else {
+      let letters = word.slice(1);
+      let at = letters.search(GH_API_SHORT_VALUE_FLAG);
+      if (at < 0) {
+        continue;
+      }
+      flag = `-${letters[at]}`;
+      value =
+        at === letters.length - 1
+          ? words[++i]
+          : letters.slice(at + 1).replace(/^=/, '');
+    }
+    if (flag === '-X' || flag === '--method') {
+      call.method = value;
+    } else if (GH_API_FIELD_FLAGS.has(flag)) {
+      call.fields.push(value ?? '');
+    } else if (flag === '--input') {
+      call.input = value;
+    }
+  }
+  return call;
+}
+// A field or an --input file makes gh api POST unless the method says
+// otherwise. PUT and PATCH rewrite a review or comment that is already posted.
+function isWrite({ method, fields, input }) {
   return method
     ? /^(?:POST|PUT|PATCH)$/i.test(method)
-    : GH_API_FIELDS.test(apiCommand);
+    : fields.length > 0 || input !== undefined;
+}
+// The value of a `name=value` field in a gh api call.
+function fieldValue(call, name) {
+  return call.fields
+    .find((field) => field.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+}
+// Where the pipeline holding the command at `index` starts, in the unquoted
+// text: just past the separator or newline before it. A pipe doesn't end it,
+// so a heredoc piped into the command is in range.
+function pipelineStart(code, index) {
+  for (let i = index - 1; i >= 0; i--) {
+    if (
+      (/[;&\n]/.test(code[i]) && !ampersandJoins(code, i)) ||
+      (code[i] === '|' && code[i - 1] === '|')
+    ) {
+      return i + 1;
+    }
+  }
+  return 0;
+}
+// Whether the `&` at `i` joins rather than separates: it belongs to a
+// redirect like `2>&1`, `<&0` or `&>`, or to a `|&` pipe.
+function ampersandJoins(code, i) {
+  return (
+    code[i] === '&' && (/[<>|]/.test(code[i - 1] ?? '') || code[i + 1] === '>')
+  );
 }
 // Where the command starting at `index` ends, in the unquoted text: the next
-// separator, pipe or newline.
+// separator, pipe or newline outside a command substitution.
 function commandEnd(code, index) {
-  let end = code.slice(index).search(/[;&|\n]/);
-  return end < 0 ? code.length : index + end;
+  for (let i = index; i < code.length; i++) {
+    if (code.startsWith('$(', i)) {
+      i = substitutionEnd(code, i) - 1;
+    } else if (/[;&|\n]/.test(code[i]) && !ampersandJoins(code, i)) {
+      return i;
+    }
+  }
+  return code.length;
+}
+// Just past the `)` that closes the `$(` at `index`, skipping quotes and
+// nested substitutions, or the end of the text.
+function substitutionEnd(text, index) {
+  let depth = 0;
+  for (let i = index + 1; i < text.length; i++) {
+    let c = text[i];
+    if (c === "'") {
+      let end = text.indexOf("'", i + 1);
+      i = end < 0 ? text.length : end;
+    } else if (c === '"') {
+      for (i++; i < text.length && text[i] !== '"'; i++) {
+        if (text[i] === '\\') {
+          i++;
+        }
+      }
+    } else if (c === '\\') {
+      i++;
+    } else if (c === '(') {
+      depth++;
+    } else if (c === ')' && --depth === 0) {
+      return i + 1;
+    }
+  }
+  return text.length;
 }
 const GH_GRAPHQL = /\bgh\s+api\s+graphql\b/;
 const GRAPHQL_REVIEW =
@@ -150,6 +267,17 @@ const TEST_FILE = /(^|\/)tests?\/|[.-]test\.gts$/;
 function shellWords(text) {
   let words = [];
   let word = null;
+  // The next word is a redirect's target, not an argument.
+  let target = false;
+  let push = () => {
+    if (word !== null) {
+      if (!target) {
+        words.push(word);
+      }
+      target = false;
+      word = null;
+    }
+  };
   for (let i = 0; i < text.length; i++) {
     let c = text[i];
     if (c === "'") {
@@ -168,26 +296,33 @@ function shellWords(text) {
       }
       word = (word ?? '') + quoted;
       i = j;
+    } else if (text.startsWith('$(', i)) {
+      // A command substitution stays part of its word, spaces and all.
+      let end = substitutionEnd(text, i);
+      word = (word ?? '') + text.slice(i, end);
+      i = end - 1;
     } else if (c === '\\' && i + 1 < text.length) {
       word = (word ?? '') + text[++i];
-    } else if (/[;&|\n<>]/.test(c)) {
-      // A redirect ends the arguments too; the `2` of `2>&1` isn't one.
-      if (/[<>]/.test(c) && word !== null && /^\d+$/.test(word)) {
+    } else if (/[<>]/.test(c) || text.startsWith('&>', i)) {
+      // A redirect and its target aren't arguments, and neither is the `2`
+      // of `2>&1`. The arguments go on after them.
+      if (word !== null && /^\d+$/.test(word)) {
         word = null;
       }
+      push();
+      let op = /^(?:&>>?|<<<|<<-?|<>|[<>][>&|]?)/.exec(text.slice(i))[0];
+      let fd = op.endsWith('&') && /^(?:\d+|-)/.exec(text.slice(i + op.length));
+      i += op.length + (fd ? fd[0].length : 0) - 1;
+      target = !fd;
+    } else if (/[;&|\n]/.test(c)) {
       break;
     } else if (/\s/.test(c)) {
-      if (word !== null) {
-        words.push(word);
-        word = null;
-      }
+      push();
     } else {
       word = (word ?? '') + c;
     }
   }
-  if (word !== null) {
-    words.push(word);
-  }
+  push();
   return words;
 }
 
@@ -325,9 +460,15 @@ function reviewTarget(input) {
   for (let ghApi of code.matchAll(/\bgh\s+api\b/g)) {
     let end = commandEnd(code, ghApi.index);
     let apiCommand = command.slice(ghApi.index, end);
-    let api = GH_API_REVIEW.exec(apiCommand);
-    if (api && isWrite(apiCommand)) {
-      if (api[5] === '/replies' || /\bin_reply_to\b/.test(apiCommand)) {
+    let call = apiCall(shellWords(apiCommand));
+    let api = call.args.map((arg) => GH_API_REVIEW.exec(arg)).find(Boolean);
+    if (api && isWrite(call)) {
+      // A new comment with an in_reply_to field is a reply too.
+      let replyField =
+        api[3] === 'comments' &&
+        !api[4] &&
+        fieldValue(call, 'in_reply_to') !== undefined;
+      if (api[5] === '/replies' || replyField) {
         continue;
       }
       let context = shellContext(command, ghApi.index, cwd);
@@ -341,6 +482,8 @@ function reviewTarget(input) {
         cwd: context.cwd,
         selector: api[2],
         repo: literalRepo(api[1]) ?? context.repo,
+        call,
+        start: ghApi.index,
       };
     }
     let query = command.slice(ghApi.index, end);
@@ -359,6 +502,8 @@ function reviewTarget(input) {
               /\bevent\s*:/.test(query),
           cwd: shellContext(command, ghApi.index, cwd).cwd,
           nodeId,
+          call,
+          start: ghApi.index,
         };
       }
     }
@@ -530,25 +675,21 @@ function canLoad(input, skill) {
   return listed.size ? listed.has(skill) : undefined;
 }
 
-// The value of a `name=value` field flag in a gh api command.
-function fieldValue(words, name) {
-  for (let i = 0; i < words.length; i++) {
-    let word = words[i];
-    let value = /^(?:-f|-F|--field|--raw-field)$/.test(word)
-      ? words[i + 1]
-      : /^(?:--field|--raw-field)=/.exec(word) && word.replace(/^[^=]*=/, '');
-    if (value?.startsWith(`${name}=`)) {
-      return value.slice(name.length + 1);
-    }
-  }
-  return undefined;
+// The body of the first heredoc opened between `start` and `end`.
+const HEREDOC = /<<-?\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/;
+function heredocBody(command, start, end) {
+  let heredoc = HEREDOC.exec(command.slice(start));
+  return heredoc && heredoc.index < end - start ? heredoc[3] : undefined;
 }
-
-// The first heredoc body in a command, for input read from stdin.
-function heredocBody(command) {
-  return /<<-?\s*(['"]?)(\w+)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/.exec(
-    command,
-  )?.[3];
+// The heredoc the call at `index` reads as stdin: one opened in its pipeline,
+// piped in included, or else the first opened after it, as when it feeds a
+// group or loop the call is in (`{ …; } <<'B'`). Never one opened before the
+// call's pipeline, such as a reply's.
+function callStdin(command, code, index) {
+  return (
+    heredocBody(command, pipelineStart(code, index), commandEnd(code, index)) ??
+    heredocBody(command, index, command.length)
+  );
 }
 
 // What a call that publishes a review or comment shows: the body it writes,
@@ -633,8 +774,10 @@ function readBody(input, target) {
   }
   let command = commandText(input);
   let code = unquoted(command);
-  let review = GH_PR_REVIEW.exec(code);
+  // A gh api target carries its parsed call; a gh pr review target doesn't.
+  let review = !target.call && GH_PR_REVIEW.exec(code);
   if (review) {
+    let stdin = callStdin(command, code, review.index);
     let words = shellWords(command.slice(review.index + review[0].length));
     for (let i = 0; i < words.length; i++) {
       let [flag, inline] = words[i].split(/=(.*)/s);
@@ -642,32 +785,26 @@ function readBody(input, target) {
       if (flag === '-b' || flag === '--body') {
         body += value ?? '';
       } else if (flag === '-F' || flag === '--body-file') {
-        body +=
-          value === '-'
-            ? (heredocBody(command) ?? '')
-            : fileText(value, target.cwd);
+        body += value === '-' ? (stdin ?? '') : fileText(value, target.cwd);
       }
     }
     return;
   }
   // gh api: a `body` field, or a JSON payload with a top-level body. An
-  // inline comment's `comments[][body]` isn't the review's body.
-  let start = /\bgh\s+api\b/.exec(code)?.index ?? 0;
-  let words = shellWords(command.slice(start, commandEnd(code, start)));
+  // inline comment's `comments[][body]` isn't the review's body. Everything
+  // is read from the call reviewTarget picked, not a reply before it.
+  let { call } = target;
+  let stdin = callStdin(command, code, target.start);
   // `-F body=@file` reads the body from a file.
-  let field = fieldValue(words, 'body') ?? '';
+  let field = fieldValue(call, 'body') ?? '';
   body = field.startsWith('@')
     ? field === '@-'
-      ? (heredocBody(command) ?? '')
+      ? (stdin ?? '')
       : fileText(field.slice(1), target.cwd)
     : field;
-  event = Boolean(fieldValue(words, 'event'));
-  let inputAt = words.findIndex((word) => /^--input(=|$)/.test(word));
-  if (inputAt >= 0) {
-    let file = words[inputAt].includes('=')
-      ? words[inputAt].slice('--input='.length)
-      : words[inputAt + 1];
-    let json = file === '-' ? heredocBody(command) : fileText(file, target.cwd);
+  event = Boolean(fieldValue(call, 'event'));
+  if (call.input !== undefined) {
+    let json = call.input === '-' ? stdin : fileText(call.input, target.cwd);
     try {
       let payload = JSON.parse(json ?? '');
       body += typeof payload?.body === 'string' ? payload.body : '';
@@ -678,7 +815,10 @@ function readBody(input, target) {
   }
   if (target.nodeId) {
     // A GraphQL review mutation: the body argument of its input.
-    body += /\bbody\s*:\s*\\?"((?:[^"\\]|\\.)*?)\\?"/.exec(command)?.[1] ?? '';
+    body +=
+      /\bbody\s*:\s*\\?"((?:[^"\\]|\\.)*?)\\?"/.exec(
+        command.slice(target.start, commandEnd(code, target.start)),
+      )?.[1] ?? '';
   }
 }
 

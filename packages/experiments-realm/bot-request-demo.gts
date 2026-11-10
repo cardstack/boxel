@@ -1,4 +1,9 @@
-import { CardDef, Component } from '@cardstack/base/card-api';
+import {
+  CardDef,
+  Component,
+  instanceRealmId,
+} from '@cardstack/base/card-api';
+import { CATALOG_REALM_PREFIX, RealmPaths } from '@cardstack/runtime-common';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
@@ -38,21 +43,19 @@ class Isolated extends Component<typeof BotRequestDemo> {
     return this.activeTab === 'patch-card-instance';
   }
 
-  get experimentsRealmURL() {
-    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
-    return new URL('./', import.meta.url).href;
-  }
-
-  get catalogRealmURL() {
-    return new URL('../catalog/', this.experimentsRealmURL).href;
+  // The realm this card is in. The requests target it, and the Author card
+  // the show-card and patch requests name is stored beside this card there.
+  get ownRealm() {
+    return instanceRealmId(this.args.model as CardDef);
   }
 
   get showCardId() {
-    return new URL('./Author/jane-doe', this.experimentsRealmURL).href;
+    let realm = this.ownRealm;
+    return realm ? new RealmPaths(realm).fileRRI('Author/jane-doe') : undefined;
   }
 
   get showCardTargetRealm() {
-    return this.experimentsRealmURL;
+    return this.ownRealm;
   }
 
   get showCardFormat() {
@@ -60,12 +63,11 @@ class Isolated extends Component<typeof BotRequestDemo> {
   }
 
   get listingId() {
-    return new URL(`./AppListing/${DEFAULT_LISTING_ID}`, this.catalogRealmURL)
-      .href;
+    return `${CATALOG_REALM_PREFIX}AppListing/${DEFAULT_LISTING_ID}`;
   }
 
   get createListingPRTargetRealm() {
-    return this.experimentsRealmURL;
+    return this.ownRealm;
   }
 
   get patchCardPatch() {

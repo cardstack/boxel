@@ -35,4 +35,5 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [018](018-build-realm-historian-as-erasable-typescript-node-runs-unbuilt.md)                    | Build realm-historian as erasable TypeScript that Node runs unbuilt                       | proposed   |
 | [019](019-build-the-secure-origins-pages-as-their-own-ember-app-on-pret-ui.md)                  | Build the secure origin's pages as their own Ember app, on Pret UI                        | proposed   |
 | [020](020-run-every-launched-browser-with-its-sandbox-on-and-a-current-chrome.md)               | Run every launched browser with its sandbox on, on a current Chrome                       | proposed   |
-| [021](021-search-by-vector-and-rank-fusion-in-the-realms-own-index.md)                          | Search by vector and rank fusion in the realm's own index                                 | proposed   |
+| [021](021-run-boxels-oauth-provider-in-the-realm-server-with-opaque-resource-bound-tokens.md)   | Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource  | proposed   |
+| [022](022-search-by-vector-and-rank-fusion-in-the-realms-own-index.md)                          | Search by vector and rank fusion in the realm's own index                                 | proposed   |

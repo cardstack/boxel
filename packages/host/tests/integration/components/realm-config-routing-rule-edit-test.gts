@@ -245,8 +245,10 @@ module(
         .dom('[data-test-card-chooser-modal] [data-test-search-label]')
         .containsText('0 results', 'the summary does not count the card');
       assert
-        .dom('[data-test-card-chooser-modal] [data-test-item-button]')
-        .doesNotExist('there is no tile to select');
+        .dom(
+          '[data-test-card-chooser-modal] [data-test-item-button]:not([data-test-recent-card-result])',
+        )
+        .doesNotExist('there is no tile to select besides Recents');
       assert
         .dom('[data-test-card-chooser-go-button]')
         .isDisabled('a cross-realm card cannot be returned by the chooser');

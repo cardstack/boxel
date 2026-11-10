@@ -2,17 +2,22 @@ import type * as Babel from '@babel/core';
 import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 
+// Whether a module specifier is resolved against the importing module's URL
+// (a relative path or an absolute URL) rather than looked up as written (a
+// bare specifier). The `import()` rewrite below and the Loader's
+// `import.meta.resolve` both decide with this, so the two resolve a specifier
+// the same way.
+export function isPathLike(value: string): boolean {
+  return (
+    value.startsWith('./') ||
+    value.startsWith('../') ||
+    value.startsWith('/') ||
+    value.includes('://')
+  );
+}
+
 export function loaderPlugin(babel: typeof Babel) {
   let t = babel.types;
-
-  function isPathLike(value: string): boolean {
-    return (
-      value.startsWith('./') ||
-      value.startsWith('../') ||
-      value.startsWith('/') ||
-      value.includes('://')
-    ); // Also handle absolute URLs
-  }
 
   function createLoaderImportCall(
     args: (t.Expression | t.SpreadElement | t.ArgumentPlaceholder)[],

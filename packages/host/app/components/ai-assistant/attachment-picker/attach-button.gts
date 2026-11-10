@@ -84,7 +84,7 @@ export default class AttachButton extends Component<Signature> {
       }
       .attach-button:not(:disabled):hover,
       .attach-button:not(:disabled):focus:not(:focus-visible) {
-        color: #e0e0e0;
+        color: var(--boxel-dark);
       }
       .attach-button
         + :deep(

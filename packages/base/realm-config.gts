@@ -36,8 +36,10 @@ import {
   findRedirectCycles,
   getField,
   getFieldIcon,
+  isAbsoluteIdentifier,
   isCardInstance,
   isLocalId,
+  isPrefixForm,
   RealmPaths,
   REDIRECT_STATUS_CODES,
   realmPolicyRef,
@@ -907,16 +909,18 @@ export class RealmSettingsField extends JsonField {
   static edit = RealmSettingsEdit;
 }
 
-// A pointer written as an absolute http(s) URL, as the realm resolves one.
-function httpURL(pointer: string): string | undefined {
-  try {
-    let url = new URL(pointer);
-    return url.protocol === 'http:' || url.protocol === 'https:'
-      ? url.href
-      : undefined;
-  } catch {
-    return undefined;
-  }
+// A pointer written as a URL-form id, returned as written. The realm answers
+// with the URL it resolves the pointer to, in the spelling a URL parser
+// prints, so the two are equal when the pointer is spelled that way, as the
+// policy chooser writes it. A pointer edited by hand into another spelling of
+// the same URL (an uppercase host, an explicit default port) matches no
+// answer. A link can navigate to it either way. A prefix-form pointer is
+// absolute too, but which URL it stands for is known only to the realm's
+// mappings, so it is neither matched against an answer nor linked.
+function urlFormPointer(pointer: string): string | undefined {
+  return isAbsoluteIdentifier(pointer) && !isPrefixForm(pointer)
+    ? pointer
+    : undefined;
 }
 
 // The realm a config card configures: its own realm, when the card is that
@@ -993,8 +997,8 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   // hold an edit the save has not reached, so an answer about another
   // pointer is kept back until one about this pointer arrives.
   //
-  // An answer that names a card by its URL is about a field that resolves to
-  // that URL, whenever the field came to hold it. Every other answer is about
+  // An answer that names a card by its URL is about a field spelled as that
+  // URL, whenever the field came to hold it. Every other answer is about
   // the field as it stood when the answer landed: a pointer written as a
   // realm-prefixed id cannot be resolved here, and a refusal names no card.
   // An answer that the realm names no policy is also about an empty field.
@@ -1005,7 +1009,7 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     }
     let shown = this.pointer;
     let card = answer.validation?.card;
-    let shownURL = httpURL(shown);
+    let shownURL = urlFormPointer(shown);
     let about: boolean;
     if (answer.validation && !card && !shown) {
       about = true;
@@ -1358,7 +1362,7 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
   }
 
   private get href(): string | undefined {
-    return httpURL(this.pointer);
+    return urlFormPointer(this.pointer);
   }
 
   <template>

@@ -3,18 +3,18 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { guidFor } from '@ember/object/internals';
-import { Switch } from '@cardstack/boxel-ui/components';
-import { themeScope, themeScopedCss } from '@cardstack/boxel-ui/helpers';
 import Moon from '@cardstack/boxel-icons/moon';
 import Sun from '@cardstack/boxel-icons/sun';
 import { realmURL } from '@cardstack/base/card-api';
+import { themeScope, themeScopedCss } from '../theme-scoped-css';
 import { Select } from './select';
+import { Switch } from './switch';
 
 // Wraps a page in a theme island with a dark mode switch, built the
 // way the monorepo's own theme cards preview themselves (see
 // base/default-templates/theme-dashboard.gts). No custom theming code: the
 // outer div stamps data-theme, which theme.css translates into the
-// inherited --boxel-color-scheme signal; inside it, boxel-ui's `themeScope`
+// inherited --boxel-color-scheme signal; inside it, Pret UI's `themeScope`
 // and `themeScopedCss` helpers re-declare the theme's variables under a
 // content-hashed scope, and their `.dark` block follows the signal through
 // the style container query those helpers emit.
@@ -61,8 +61,10 @@ export interface ThemeFrameSignature {
   Element: HTMLDivElement;
 }
 
-// The same switch the base ThemeDashboard's ModeToggle renders, so a theme
-// previews light and dark the way it does everywhere else in Boxel.
+// The dark mode control is Pret UI's Switch, named "Dark mode" for assistive
+// tech, between a sun and a moon: the glyph for the scheme in force reads in
+// the foreground color and the other one recedes. The glyphs are decorative,
+// since the switch's own state already says which scheme is on.
 interface ThemeControlsSignature {
   Args: { frame: ThemeFrame };
   Element: HTMLSpanElement;
@@ -76,15 +78,28 @@ const ThemeControls: TemplateOnlyComponent<ThemeControlsSignature> = <template>
     data-test-pretui-theme-bar
     ...attributes
   >
-    <Switch
-      @isEnabled={{@frame.isDarkMode}}
-      @onChange={{@frame.toggleDarkMode}}
-      @size='touch'
-      @checkedIcon={{Moon}}
-      @uncheckedIcon={{Sun}}
-      @label='Dark mode'
-      data-test-pretui-theme-mode
-    />
+    <span class='pretui-theme-mode'>
+      <Sun
+        class='pretui-theme-mode-icon'
+        data-active={{unless @frame.isDarkMode 'true'}}
+        width='14'
+        height='14'
+        aria-hidden='true'
+      />
+      <Switch
+        @checked={{@frame.isDarkMode}}
+        @onCheckedChange={{@frame.setDarkMode}}
+        aria-label='Dark mode'
+        data-test-pretui-theme-mode
+      />
+      <Moon
+        class='pretui-theme-mode-icon'
+        data-active={{if @frame.isDarkMode 'true'}}
+        width='14'
+        height='14'
+        aria-hidden='true'
+      />
+    </span>
     {{#if @frame.showThemeSelect}}
       <span class='pretui-theme-pick' data-test-pretui-theme-pick>
         <Select
@@ -110,6 +125,18 @@ const ThemeControls: TemplateOnlyComponent<ThemeControlsSignature> = <template>
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
+      .pretui-theme-mode {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        color: var(--muted-foreground);
+      }
+      .pretui-theme-mode-icon {
+        flex: none;
+      }
+      .pretui-theme-mode-icon[data-active] {
+        color: var(--foreground);
+      }
       .pretui-theme-pick {
         min-width: var(--pretui-theme-pick-min-w);
       }
@@ -127,9 +154,7 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
   // has fixed colors, so the switch previews dark rather than following the OS.
   @tracked isDarkMode = false;
   @tracked selectedThemeId: string | undefined;
-  // a toggle, not a setter: the Switch in the CLI test harness passes its
-  // click event to @onChange, not a boolean
-  toggleDarkMode = () => (this.isDarkMode = !this.isDarkMode);
+  setDarkMode = (on: boolean) => (this.isDarkMode = on);
   pickTheme = (v: string) => (this.selectedThemeId = v);
 
   // All Theme instances in the linked theme's realm. Absent context
@@ -190,11 +215,13 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
   get themeCss() {
     return this.activeTheme?.cssVariables ?? undefined;
   }
-  // boxel-ui's own scope helper: theme id plus a content hash of the CSS.
-  // The hash matters because the emitted rules are page-global — two cached
-  // renders sharing a scope but carrying different theme CSS would restyle
-  // each other. A hand-rolled `${id}-frame` string could not tell two
-  // versions of one theme apart.
+  // Theme id plus a content hash of the CSS, from Pret UI's copy of the scope
+  // helper. It stays equal to boxel-ui's copy, which mints the enclosing
+  // card's scope (theme-scoped-css.gts says why that matters). The hash
+  // matters because the emitted rules are page-global — two cached renders
+  // sharing a scope but carrying different theme CSS would restyle each
+  // other. A hand-rolled `${id}-frame` string could not tell two versions of
+  // one theme apart.
   get themeScopeId() {
     return themeScope(this.activeThemeId, this.themeCss) ?? guidFor(this);
   }

@@ -2,7 +2,14 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { PassThrough, Readable } from 'node:stream';
+import { createReadStream } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import Koa from 'koa';
+import supertest from 'supertest';
+import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
+import { isVanishedFileBody, setContextResponse } from '../middleware/index.ts';
 
 function fakeResponse() {
   let destroyedWith: Error[] = [];
@@ -149,5 +156,62 @@ module(basename(import.meta.filename), function () {
       [],
       'a client that left needs no response torn down',
     );
+  });
+
+  module('a file body that is gone when it is read', function () {
+    // A Koa app that serves `body` the way the realm server sets a file
+    // response, and records the errors Koa hands its error listener.
+    async function serve(
+      handle: (ctxt: Koa.Context) => Promise<void>,
+    ): Promise<{ status: number; errors: Error[] }> {
+      let errors: Error[] = [];
+      let app = new Koa().use(handle);
+      app.on('error', (error: Error) => errors.push(error));
+      let { status } = await supertest(app.callback()).get('/file.png');
+      return { status, errors };
+    }
+
+    function fileResponse(
+      headers: Record<string, string> = {},
+    ): ResponseWithNodeStream {
+      let response = new Response(null, {
+        headers,
+      }) as ResponseWithNodeStream;
+      response.nodeStream = createReadStream(
+        join(tmpdir(), `no-such-file-${process.pid}-${Date.now()}.png`),
+      );
+      return response;
+    }
+
+    test('a file body whose read finds the file gone is marked as vanished', async function (assert) {
+      let { status, errors } = await serve((ctxt) =>
+        setContextResponse(ctxt, fileResponse()),
+      );
+      assert.strictEqual(status, 404, 'answered as nothing there');
+      assert.strictEqual(errors.length, 1, 'Koa reports the read failure');
+      assert.true(isVanishedFileBody(errors[0]), 'marked as a vanished file');
+    });
+
+    test('a file body with a declared length is marked as vanished too', async function (assert) {
+      let { errors } = await serve((ctxt) =>
+        setContextResponse(ctxt, fileResponse({ 'content-length': '10' })),
+      );
+      assert.strictEqual(errors.length, 1, 'Koa reports the read failure');
+      assert.true(isVanishedFileBody(errors[0]), 'marked as a vanished file');
+    });
+
+    test('the same error raised anywhere else is not marked', async function (assert) {
+      let { status, errors } = await serve(async () => {
+        let error = new Error('ENOENT: no such file or directory');
+        (error as NodeJS.ErrnoException).code = 'ENOENT';
+        throw error;
+      });
+      assert.strictEqual(status, 404);
+      assert.strictEqual(errors.length, 1, 'Koa reports the error');
+      assert.false(
+        isVanishedFileBody(errors[0]),
+        'an error a handler raised is reported as it always was',
+      );
+    });
   });
 });
