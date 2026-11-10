@@ -39,6 +39,21 @@ module('Integration | color field configuration', function (hooks) {
       .exists('swatches-picker variant renders color palette');
   });
 
+  test('swatches-picker variant tells password managers to skip its text input', async function (assert) {
+    await renderConfiguredField(
+      ColorField,
+      '#3b82f6',
+      { variant: 'swatches-picker' },
+      'edit',
+    );
+
+    let input = '[data-test-field-container] [data-test-color-text-input]';
+    assert.dom(input).hasAttribute('data-1p-ignore', '');
+    assert.dom(input).hasAttribute('data-lpignore', 'true');
+    assert.dom(input).hasAttribute('data-form-type', 'other');
+    assert.dom(input).hasAttribute('data-bwignore', '');
+  });
+
   test('slider variant renders slider controls', async function (assert) {
     await renderConfiguredField(
       ColorField,
