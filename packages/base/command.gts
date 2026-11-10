@@ -1161,7 +1161,6 @@ export class UseAiAssistantInput extends CardDef {
   @field prompt = contains(StringField);
   @field clientGeneratedId = contains(StringField);
   @field openCardIds = containsMany(StringField);
-  @field requireCommandCall = contains(BooleanField); // optional: require AI to execute commands
 }
 
 export class SendAiAssistantMessageInput extends CardDef {
@@ -1172,7 +1171,6 @@ export class SendAiAssistantMessageInput extends CardDef {
   @field attachedFileIdentifiers = containsMany(StringField);
   @field realmIdentifier = contains(StringField);
   @field openCardIds = containsMany(StringField);
-  @field requireCommandCall = contains(BooleanField);
 }
 
 export class SendAiAssistantMessageResult extends CardDef {
