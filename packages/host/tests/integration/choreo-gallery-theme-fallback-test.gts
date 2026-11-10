@@ -10,7 +10,6 @@ import { module, test } from 'qunit';
 import { parseCssGroups } from '@cardstack/boxel-ui/helpers';
 
 import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
-import { renderCard } from '../helpers/render-component';
 
 import type * as ThemeModule from '../../../choreo-gallery/realm/lib/theme';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -118,12 +117,7 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
 
   /** render the demo's page with `theme` linked, or with no theme */
   async function renderDemo(theme: CardAPI.CardDef | null) {
-    let { CardInfoField } = await gallery.loader.import<typeof CardAPI>(
-      '@cardstack/base/card-api',
-    );
-    let [demo] = await gallery.demos([DEMO]);
-    demo!.cardInfo = new CardInfoField(theme ? { theme } : {});
-    await renderCard(gallery.loader, demo!, 'isolated');
+    await gallery.renderDemo(DEMO, { theme });
   }
 
   test('a demo with no theme linked resolves every value the gallery theme sets, in each scheme', async function (assert) {

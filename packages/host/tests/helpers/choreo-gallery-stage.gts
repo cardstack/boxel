@@ -51,6 +51,14 @@ export interface GalleryThemeAttributes {
   typography: Record<string, Record<string, string>>;
 }
 
+/**
+ * The theme a card the helpers build links: the gallery's own when `theme`
+ * is left out, the given theme card, or none for `null`.
+ */
+export interface DemoThemeOptions {
+  theme?: CardAPI.CardDef | null;
+}
+
 const CONTENTS = choreoGalleryContents();
 
 /** an instance document of the gallery realm, by its path: `demos/fold.json` */
@@ -147,12 +155,18 @@ export function setupChoreoGalleryTest(
       );
     },
 
-    /** the `cardInfo` of a gallery card: its link to the gallery's theme */
-    async cardInfo(): Promise<CardAPI.CardInfoField> {
+    /**
+     * The `cardInfo` of a gallery card: its link to the gallery's theme, or
+     * to the theme `opts` names.
+     */
+    async cardInfo(
+      opts: DemoThemeOptions = {},
+    ): Promise<CardAPI.CardInfoField> {
       let { CardInfoField } = await gallery.loader.import<typeof CardAPI>(
         '@cardstack/base/card-api',
       );
-      return new CardInfoField({ theme: await gallery.theme() });
+      let theme = opts.theme === undefined ? await gallery.theme() : opts.theme;
+      return new CardInfoField(theme ? { theme } : {});
     },
 
     /** a module of the gallery realm, by its path there: `stages/fold` */
@@ -199,8 +213,8 @@ export function setupChoreoGalleryTest(
     },
 
     /** Render one demo the index links as its card's page, isolated. */
-    async renderDemo(slug: string) {
-      let demo = (await gallery.demos([slug]))[0]!;
+    async renderDemo(slug: string, opts: DemoThemeOptions = {}) {
+      let demo = (await gallery.demos([slug], opts))[0]!;
       await renderCard(gallery.loader, demo, 'isolated');
     },
 
@@ -210,6 +224,7 @@ export function setupChoreoGalleryTest(
      */
     async demos(
       slugs: string[] = GALLERY_DEMOS,
+      opts: DemoThemeOptions = {},
     ): Promise<DemoModule.GalleryDemo[]> {
       let { DemoLesson, WalkthroughStep } =
         await gallery.import<typeof DemoModule>('demo');
@@ -224,7 +239,7 @@ export function setupChoreoGalleryTest(
           return new classes[name]!({
             id: `${testRealmURL}demos/${slug}`,
             ...attributes,
-            cardInfo: await gallery.cardInfo(),
+            cardInfo: await gallery.cardInfo(opts),
             lesson: lesson ? new DemoLesson(lesson) : undefined,
             walkthrough: (walkthrough ?? []).map(
               (step) => new WalkthroughStep(step),
