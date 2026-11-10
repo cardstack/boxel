@@ -78,7 +78,7 @@ export class SelectUsage extends Component {
         <Args.Object
           @name='options'
           @required={{true}}
-          @description='The options to list, as {value, label} pairs. An option may add meta, a muted part after its label, and glyph, a character such as a flag drawn before it; search and typeahead read the label alone.'
+          @description='The options to list, as {value, label, meta?, glyph?} objects.'
           @value={{this.countryOptions}}
         />
         <Args.Action
