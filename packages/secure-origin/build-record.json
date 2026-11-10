@@ -2066,7 +2066,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 573473,
+      "bytes": 573481,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2311,8 +2311,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/select.gts",
-          "sha256": "87d1e0ae429944cab3c994fd07050dd1fe55ad3a0c002070ba4e0c99e314c84f",
-          "size": 9542
+          "sha256": "6c16bee4101000e75c2af0db402798fec4cf1fbb5cc647ed16c2eae1c1617921",
+          "size": 9549
         },
         {
           "package": "@cardstack/pretui@0.0.0",

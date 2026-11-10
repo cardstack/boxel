@@ -210,7 +210,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
     if (!list) {
       return;
     }
-    for (let { name } of [...marker.attributes]) {
+    for (let { name } of Array.from(marker.attributes)) {
       if (name.startsWith('data-scopedcss-')) {
         list.setAttribute(name, '');
       }
