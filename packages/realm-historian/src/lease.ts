@@ -60,7 +60,12 @@ export function shardOf(realmId: string, shardCount: number): number {
 export class LeaseManager {
   #db: DBAdapter;
   #options: LeaseOptions;
-  #held = new Set<number>();
+  // The shards this task has claimed and not released. After a loss the task
+  // holds none of them, but they stay claimed so that a stop releases their
+  // rows.
+  #claimed = new Set<number>();
+  // Set by a loss.
+  #lostLease = false;
   #timer: ReturnType<typeof setInterval> | undefined;
   #deadline: ReturnType<typeof setTimeout> | undefined;
   #ticking: Promise<void> | undefined;
@@ -74,9 +79,9 @@ export class LeaseManager {
     this.#options = options;
   }
 
-  // The shards this task holds, in order.
+  // The shards this task holds, in order. None after a loss.
   get held(): number[] {
-    return [...this.#held].sort((a, b) => a - b);
+    return this.#lostLease ? [] : sorted(this.#claimed);
   }
 
   // The shards one task of the service claims at most.
@@ -85,13 +90,14 @@ export class LeaseManager {
   }
 
   holds(shard: number): boolean {
-    return this.#held.has(shard);
+    return !this.#lostLease && this.#claimed.has(shard);
   }
 
   // Runs the first tick, then one every `renewMs`. `onLost` is called with the
   // error of a renewal that finds a held shard taken, fails, or misses its
-  // deadline; the manager then holds nothing and renews nothing further.
-  // `onGain` is called after a tick that claimed a shard.
+  // deadline; the manager then holds nothing and renews nothing further, and
+  // a stop still releases its rows. `onGain` is called after a tick that
+  // claimed a shard.
   async start(
     onLost: (error: LeaseLostError) => void,
     onGain?: () => void,
@@ -117,15 +123,15 @@ export class LeaseManager {
     }, this.#options.renewMs);
   }
 
-  // Stops renewing and releases the held shards, so the next task takes them
-  // without waiting for the expiry.
+  // Stops renewing and releases the claimed shards, after a loss as well, so
+  // the next task takes them without waiting for the expiry.
   async stop(): Promise<void> {
     this.#stopTimer();
     await this.#ticking;
     await this.release();
   }
 
-  // Forgets the held shards without releasing them: what a task that dies
+  // Forgets the claimed shards without releasing them: what a task that dies
   // leaves behind. The shards free when their leases expire.
   async abandon(): Promise<void> {
     this.#stopTimer();
@@ -134,33 +140,33 @@ export class LeaseManager {
     } catch {
       // A tick cut short by the abandon has nothing to report.
     }
-    this.#held.clear();
+    this.#claimed.clear();
   }
 
   // Renews every held shard, then claims free shards up to the share. Throws
   // `LeaseLostError` when a held shard's renewal returns no row.
   async tick(): Promise<void> {
     let startedAt = performance.now();
-    if (this.#held.size > 0) {
+    if (this.#claimed.size > 0) {
       await this.#renew();
     }
     if (this.#stopped) {
       return;
     }
     let gained: number[] = [];
-    if (this.#held.size < this.share) {
-      // Shards claimed as the manager stops are still held, so that a stop
-      // releases them.
-      gained = await this.#claim(this.share - this.#held.size);
+    if (this.#claimed.size < this.share) {
+      // Shards claimed as the manager stops are kept, so that a stop releases
+      // them.
+      gained = await this.#claim(this.share - this.#claimed.size);
       for (let shard of gained) {
-        this.#held.add(shard);
+        this.#claimed.add(shard);
         log.info(`${this.#options.holder} holds shard ${shard}`);
       }
       if (this.#stopped) {
         return;
       }
     }
-    if (this.#held.size > 0) {
+    if (this.#claimed.size > 0) {
       this.#armDeadline(startedAt);
     }
     if (gained.length > 0) {
@@ -168,18 +174,26 @@ export class LeaseManager {
     }
   }
 
+  // Deletes this holder's rows for the claimed shards. After a loss, a row
+  // another task has taken since has another holder and is left alone.
   async release(): Promise<void> {
-    if (this.#held.size === 0) {
+    if (this.#claimed.size === 0) {
       return;
     }
-    let shards = this.held;
-    this.#held.clear();
-    await this.#db.execute(
+    let shards = sorted(this.#claimed);
+    this.#claimed.clear();
+    let rows = await this.#db.execute(
       `DELETE FROM realm_historian_leases
-       WHERE shard = ANY($1::text[]) AND holder = $2`,
+       WHERE shard = ANY($1::text[]) AND holder = $2
+       RETURNING shard`,
       { bind: [shards.map(String), this.#options.holder] },
     );
-    log.info(`${this.#options.holder} released shard(s) ${shards.join(', ')}`);
+    let released = sorted(rows.map((row) => Number(row.shard)));
+    if (released.length > 0) {
+      log.info(
+        `${this.#options.holder} released shard(s) ${released.join(', ')}`,
+      );
+    }
   }
 
   // Claims up to `count` shards that no one holds or whose lease has expired,
@@ -264,14 +278,15 @@ export class LeaseManager {
 
   // A renewal that found a shard taken, failed outright or missed its
   // deadline ends this task's hold on every shard: it can't tell which it
-  // still owns.
+  // still owns. The rows of a deadline or a failed renewal are often still
+  // this holder's, and the shards stay claimed so that a stop releases them.
   #lost(error: unknown): void {
     this.#stopTimer();
     let lost =
       error instanceof LeaseLostError
         ? error
         : new LeaseLostError(this.held, { cause: error });
-    this.#held.clear();
+    this.#lostLease = true;
     log.error(lost.message);
     this.#onLost?.(lost);
   }
@@ -285,4 +300,8 @@ export class LeaseManager {
       this.#timer = undefined;
     }
   }
+}
+
+function sorted(shards: Iterable<number>): number[] {
+  return [...shards].sort((a, b) => a - b);
 }

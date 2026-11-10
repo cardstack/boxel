@@ -109,6 +109,33 @@ module('lease', (hooks) => {
     );
   });
 
+  test("a stop after a loss releases the rows still the holder's, and only those", async (assert) => {
+    let first = manager('first', { shardCount: 2 });
+    let lost: LeaseLostError | undefined;
+    await first.start((error) => (lost = error));
+    assert.deepEqual(first.held, [0, 1]);
+    await database.db.execute(
+      `UPDATE realm_historian_leases
+       SET holder = 'intruder', expires_at = now() + interval '1 hour'
+       WHERE shard = '0'`,
+    );
+    await waitUntil(() => lost !== undefined, { what: 'the loss report' });
+    assert.deepEqual(lost!.shards, [0]);
+    assert.deepEqual(first.held, [], 'the task holds nothing after the loss');
+    assert.strictEqual(await holderOf(1), 'first');
+    await first.stop();
+    assert.strictEqual(
+      await holderOf(0),
+      'intruder',
+      'the taken row is left to its new holder',
+    );
+    assert.strictEqual(
+      await holderOf(1),
+      undefined,
+      "the row still the task's is released",
+    );
+  });
+
   test('a renewal still pending at its deadline is reported lost', async (assert) => {
     let first = manager('first');
     let lost: LeaseLostError | undefined;
@@ -150,6 +177,12 @@ module('lease', (hooks) => {
       first.held,
       [],
       'the renewal that finishes late claims nothing',
+    );
+    await first.stop();
+    assert.strictEqual(
+      await holderOf(0),
+      undefined,
+      'a stop releases the row the late renewal kept',
     );
   });
 
