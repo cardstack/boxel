@@ -8,6 +8,10 @@ import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import puppeteer, { type Browser, type Frame, type Page } from 'puppeteer';
 import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
+import {
   createSecureOrigin,
   secureOriginGate,
   secureOriginHeaders,
@@ -414,8 +418,9 @@ module(basename(import.meta.filename), function (hooks) {
     browser = await puppeteer.launch({
       headless: true,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
+        // The sandbox is off only on Linux, for the reasons
+        // `chromeSandboxEnabled` gives.
+        ...(chromeSandboxEnabled() ? [] : CHROME_NO_SANDBOX_ARGS),
         // Keeps the framed credential fields in the page's own process, so
         // the violation listener is installed in that frame too.
         '--disable-features=IsolateOrigins,site-per-process',

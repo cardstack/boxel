@@ -114,26 +114,22 @@ export default function handleUpsertRealmUserPermission({
       return;
     }
 
-    // The upsert writes every permission column, so granting read/write to the
-    // realm owner would clear their `realm_owner` flag (ADR 006 §1.2).
-    let currentPermissions = await fetchRealmPermissions(
-      dbAdapter,
-      new URL(normalizedRealmHref),
-    );
-    if (currentPermissions[user]?.includes('realm-owner')) {
-      await sendResponseForBadRequest(
-        ctxt,
-        `cannot modify permissions of the realm owner ${user}`,
-      );
-      return;
-    }
-
     let actions: RealmAction[] = [];
     if (read) {
       actions.push('read');
     }
     if (write) {
       actions.push('write');
+    }
+    // The upsert writes every permission column, so the realm owner's flag is
+    // carried over: it names the user the realm is indexed as (ADR 006 §1.2).
+    // Every upsert grants `read`, which the owner keeps.
+    let currentPermissions = await fetchRealmPermissions(
+      dbAdapter,
+      new URL(normalizedRealmHref),
+    );
+    if (currentPermissions[user]?.includes('realm-owner')) {
+      actions.push('realm-owner');
     }
     await insertPermissions(dbAdapter, new URL(normalizedRealmHref), {
       [user]: actions,

@@ -171,16 +171,27 @@ export async function fetchEffectiveRealmPermissions(
 // Boxel account).
 const wildcardUsernames = new Set(['*', 'users']);
 
-// The platform's service accounts, by matrix localpart.
-const botLocalparts = new Set([aiBotUsername, submissionBotUsername]);
+// The platform's service accounts, by matrix localpart. `realm_server` is the
+// account a deployed realm server signs in as.
+const botLocalparts = new Set([
+  aiBotUsername,
+  submissionBotUsername,
+  'realm_server',
+]);
 
 // A realm's own matrix user is `@realm/…` for a published realm and
 // `@<name>_realm` for a bootstrap realm; the shared accounts that sync content
-// into bootstrap realms are `@<name>_writer`. Matching the naming convention,
-// rather than listing the accounts, keeps a newly added bootstrap realm from
-// counting as a person. Registration doesn't reserve the suffixes, so a person
-// who picks one is treated as a bot, which only ever withholds something.
-const botLocalpartSuffixes = ['_realm', '_writer'];
+// into bootstrap realms are `@<name>_writer`; a test stack's realm server is
+// `@<name>_realm-server`. Matching the naming convention, rather than listing
+// the accounts, keeps a newly added bootstrap realm from counting as a person.
+// Registration doesn't reserve the suffixes, so a person can pick one and be
+// treated as a bot. That withholds what a person would get, such as counting
+// as a direct writer. It also lets them invite, or be invited by, an end user
+// they share no realm with (`/_invite-check` and the homeserver's invite
+// module). The invite module judges an invite to an end user by every end
+// user the room already holds, so the name can't put two end users who share
+// no realm into one room (ADR 011 §1.5).
+const botLocalpartSuffixes = ['_realm', '_writer', '_realm-server'];
 
 // The localpart of `userId` when it is the full Matrix id of an account on
 // `matrixServerName`. Undefined for an account on any other server, and for
@@ -206,8 +217,10 @@ export function isPublishedRealmAccount(
   return localpartOn(userId, matrixServerName)?.startsWith('realm/') ?? false;
 }
 
-// Whether `userId` is one of the platform's service accounts: an account on
-// the paired homeserver named by one of the conventions above.
+// Whether `userId` is one of the platform's service accounts rather than a
+// person: an account on the paired homeserver named by one of the conventions
+// above. ADR 011 calls these service users; a room may hold any number of
+// them beside one end user.
 export function isBotAccount(
   userId: string,
   matrixServerName: string,
@@ -236,10 +249,39 @@ function isDirectWriterRow(
 }
 
 /**
+ * Whether `userId` administers the realm whose permissions these are: they
+ * are a direct writer of it, as `isDirectWriter` answers it (ADR 024 §1.3).
+ * `realm-owner` plays no part: it names the user the realm is indexed as, not
+ * an authority (ADR 006 §1.2).
+ */
+export function isRealmAdministrator(
+  permissions: RealmPermissions,
+  userId: string,
+  matrixServerName: string,
+): boolean {
+  return isDirectWriterRow(
+    userId,
+    permissions[userId]?.includes('write') ?? false,
+    matrixServerName,
+  );
+}
+
+/**
+ * The users a realm's permission rows name: every row but `*` and `users`.
+ * These are the users whose realm lists change when the realm is archived,
+ * restored or deleted.
+ */
+export function namedRealmUsers(permissions: RealmPermissions): string[] {
+  return Object.keys(permissions).filter(
+    (username) => !wildcardUsernames.has(username),
+  );
+}
+
+/**
  * Whether `userId` is a direct writer of the realm: a person whose own
  * permission row grants `write`. It is the narrower question asked before a
- * realm takes something on in a person's name, such as a shared key or a
- * scheduled pipeline they pay for, so it answers for that person alone. A
+ * realm takes something on in a person's name, such as a shared key or an
+ * automation they pay for, so it answers for that person alone. A
  * `*` or `users` row grants write to everyone it matches without naming
  * anyone, a bot account acts for the platform rather than a person, and a
  * policy grant admits a write without making its caller a writer of the
@@ -262,6 +304,36 @@ export async function isDirectWriter(
     param(userId),
   ])) as { write: boolean }[];
   return !!row && isDirectWriterRow(userId, row.write, matrixServerName);
+}
+
+/**
+ * Whether two users each hold a permission row that names them in the same
+ * realm and grants them something: the condition under which ADR 011 §1.2
+ * lets Boxel reveal each one's Matrix id to the other. Both arguments are
+ * full Matrix ids, so the `*` and `users` rows, which name no one, can't
+ * match either side; a policy grant is not a row at all. Read fresh on each
+ * call, like every permission check, so a removed row stops counting at once.
+ */
+export async function shareARealmGrant(
+  dbAdapter: DBAdapter,
+  userIdA: string,
+  userIdB: string,
+): Promise<boolean> {
+  if (wildcardUsernames.has(userIdA) || wildcardUsernames.has(userIdB)) {
+    return false;
+  }
+  let rows = await query(dbAdapter, [
+    `SELECT 1 FROM realm_user_permissions a`,
+    `JOIN realm_user_permissions b ON a.realm_url = b.realm_url`,
+    `WHERE a.username =`,
+    param(userIdA),
+    `AND b.username =`,
+    param(userIdB),
+    `AND (a.read OR a.write OR a.realm_owner)`,
+    `AND (b.read OR b.write OR b.realm_owner)`,
+    `LIMIT 1`,
+  ]);
+  return rows.length > 0;
 }
 
 /**
@@ -388,7 +460,7 @@ export async function fetchUserPermissions(
     // enumeration so _realm-auth, multi-realm authorization, the indexer
     // sweep, etc. see only active realms. Set true to include them.
     // The archive-management endpoints reach archived realms by URL via
-    // fetchRealmPermissions / fetchArchivedRealmsForOwner instead, so
+    // fetchRealmPermissions / fetchArchivedRealmsForAdministrator instead, so
     // they bypass this filter and don't need the opt-in.
     includeArchived?: boolean;
     // Realms readable by everyone (a `'*'` read row) are reachable by every

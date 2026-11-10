@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { join } from 'node:path';
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 
 // run-eval.ts points this at a per-session directory; a plain `pnpm eval:models`
 // writes to eval-results/.
@@ -49,6 +50,9 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 1600, height: 1000 },
         launchOptions: {
+          // The browser runs model-written card code. The sandbox is off only
+          // on Linux, for the reasons `chromeSandboxEnabled` gives.
+          chromiumSandbox: chromeSandboxEnabled(),
           args: ['--ignore-certificate-errors', '--allow-insecure-localhost'],
         },
       },

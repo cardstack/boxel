@@ -62,6 +62,14 @@ async function renderForm(formName: keyof typeof FORMS): Promise<Rendered> {
   };
 }
 
+// The attribute each password manager reads to skip a field.
+const HINTS = [
+  'data-1p-ignore',
+  'data-lpignore',
+  'data-form-type',
+  'data-bwignore',
+];
+
 function inputs() {
   return [
     ...document.querySelectorAll<HTMLInputElement>(
@@ -114,6 +122,28 @@ module('Integration | credential fields', function (hooks) {
         .hasAttribute('autocomplete', 'current-password')
         .hasAttribute('data-test-boxel-input-validation-state', 'none');
     });
+  });
+
+  module('password managers', function () {
+    for (let form of ['change-password', 'confirm-password'] as const) {
+      test(`${form}: carries no hint that keeps a password manager out of its fields`, async function (assert) {
+        await renderForm(form);
+        let fields = [
+          ...document.querySelectorAll<HTMLInputElement>(
+            '#credential-fields input',
+          ),
+        ];
+        assert.ok(fields.length > 0, 'the form draws its fields');
+        for (let field of fields) {
+          for (let hint of HINTS) {
+            assert.false(
+              field.hasAttribute(hint),
+              `${field.autocomplete} has no ${hint}`,
+            );
+          }
+        }
+      });
+    }
   });
 
   module('validity', function () {

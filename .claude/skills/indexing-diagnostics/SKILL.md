@@ -2661,7 +2661,7 @@ If step 4 returns `null` (no `[data-prerender]` element) and the body shows a JS
 
 Each session reads as the realm owner with realm authority, exactly as the indexer's render does, so searches find what the realm ACL grants the owner and policy doesn't scope them. Beyond that it is narrow (`packages/runtime-common/diagnostic-session.ts`; the `realm-auth` skill has the verification detail):
 
-- **Read-only.** A realm refuses any request needing write or realm-owner (403), including on a world-writable realm, where a write presented with an expired diagnostic session is refused too.
+- **Read-only.** A realm refuses any request needing write or administration (403), including on a world-writable realm, where a write presented with an expired diagnostic session is refused too.
 - **Captures are drawn as no one.** A `_capture/` request with the session is served what an anonymous reader would be, and `_sign-capture-urls` hands its URLs back unsigned, so nothing outlives the session carrying the owner's identity.
 - **Only its realms.** A session minted with `--realm-only` is accepted by the card's realm alone, and by the federated read endpoints (`_federated-search`, `_federated-info`, `_federated-types`, `_federated-index-counts`) only for a request naming that realm alone. A default session is accepted wherever the owner may read at the time it is used. The file's `scope` says which.
 - **Nowhere else.** It is signed under its own key, so every other realm-server route (`_user`, `_user-keys`, `_request-forward`, `_realm-auth`, the operator endpoints, …) refuses it on its signature.
@@ -2814,7 +2814,7 @@ curl -X POST \
   "<realm-url>_full-reindex"
 ```
 
-Both return `204 No Content` and enqueue `userInitiatedPriority` jobs. The caller must have realm-owner or similar write permission on that realm — the server checks the JWT against the realm's permission table. This is the path the in-browser "reindex" / "full reindex" commands take.
+Both return `204 No Content` and enqueue `userInitiatedPriority` jobs. The caller must have write permission on that realm — the server checks the JWT against the realm's permission table. This is the path the in-browser "reindex" / "full reindex" commands take.
 
 **Gotcha**: the realm router matches routes by MIME, not just path — these endpoints are registered with `SupportedMimeType.JSON`, so omitting `Accept: application/json` makes the request fall through to the card-GET/POST handler and you get a confusing `404 not found` against a phantom card at `/_full-reindex`. Always send the Accept header and a JSON body (even `{}`).
 

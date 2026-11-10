@@ -490,7 +490,7 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
       body: { method: 'GET', path: '/echo' },
     });
 
-    // The CLI is interactive, and `list` is approved for pipelines only.
+    // The CLI is interactive, and `list` is approved for automations only.
     let refused = await invokeOperation(`${realm}the-service`, 'list', {
       profileManager: pm,
     });
@@ -618,7 +618,7 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     ]);
 
     // Its request changes. Approving it again without --interactive would
-    // quietly return it to pipelines only, so that is refused, naming what
+    // quietly return it to automations only, so that is refused, naming what
     // to do instead, and --interactive approves it in the terminal.
     await testRealm.write(
       'service.gts',

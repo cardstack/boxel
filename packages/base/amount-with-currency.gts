@@ -5,6 +5,7 @@ import { TextInputValidator } from './text-input-validator';
 import CurrencyField from './currency';
 import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import { guidFor } from '@ember/object/internals';
 
 class View extends Component<typeof AmountWithCurrency> {
@@ -64,6 +65,7 @@ class Edit extends Component<typeof AmountWithCurrency> {
       @autocomplete='off'
       @inputmode='decimal'
       class='input-selectable-currency-amount'
+      {{ignoredByPasswordManagers}}
     >
       <:before as |Accessories|>
         <Accessories.Text>{{@model.currency.symbol}}</Accessories.Text>

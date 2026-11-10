@@ -2,8 +2,12 @@ import { RoomMemberEvent, createClient } from 'matrix-js-sdk';
 import type { MatrixClient } from 'matrix-js-sdk';
 
 import { expect, test } from './fixtures.ts';
-import { createUser } from '../helpers/index.ts';
-import { getJoinedRooms } from '../support/synapse/index.ts';
+import { createUser, getMatrixTestContext } from '../helpers/index.ts';
+import {
+  getJoinedRooms,
+  loginUser,
+  registerUser,
+} from '../support/synapse/index.ts';
 import type { Credentials } from '../support/synapse/index.ts';
 import { getSynapseURL } from '../support/environment-config.ts';
 import { onMembershipEvent } from '../../bot-runner/lib/membership-handler.ts';
@@ -18,7 +22,7 @@ test.describe('submission bot invites', () => {
   let botClient: MatrixClient | undefined;
 
   test.beforeEach(async () => {
-    bot = (await createUser('submissionbot')).credentials;
+    bot = await submissionBotCredentials();
     submitter = (await createUser('submitter')).credentials;
   });
 
@@ -45,6 +49,20 @@ test.describe('submission bot invites', () => {
       .toContain(roomId);
   });
 });
+
+// The homeserver lets an end user invite the submission bot because its
+// invite check knows the bot by its localpart, `submissionbot`. The test signs
+// in as that account, not a uniquely named one, whose invite the check would
+// refuse as one between two end users who share no realm.
+async function submissionBotCredentials(): Promise<Credentials> {
+  let { synapse } = getMatrixTestContext();
+  try {
+    await registerUser(synapse, 'submissionbot', 'password');
+  } catch {
+    // An earlier test registered it.
+  }
+  return await loginUser('submissionbot', 'password');
+}
 
 async function startBot(credentials: Credentials) {
   let client = createClient({
