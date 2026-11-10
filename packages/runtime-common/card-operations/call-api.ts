@@ -892,10 +892,10 @@ export interface CallApiGrantUse {
 }
 
 // How an invocation arrived. An interactive one carries a user's session: a
-// card in the browser, the AI assistant, the CLI. A pipeline one is a run the
-// realm server makes on its own, as a schedule's payer or whoever started it,
+// card in the browser, the AI assistant, the CLI. An automation's is a run
+// the realm server makes on its own, as a schedule's payer or whoever started it,
 // and is never reached from a request off the network.
-export type CallApiMode = 'interactive' | 'pipeline';
+export type CallApiMode = 'interactive' | 'automation';
 
 // What names the binding that fills a request's slots.
 export interface CallApiSlotLookup {
@@ -906,7 +906,7 @@ export interface CallApiSlotLookup {
   operation: string;
   // The card the operation was invoked on; absent for one invoked on the type.
   instance?: string;
-  // Who the invocation acts for: the signed-in caller, or a pipeline's payer.
+  // Who the invocation acts for: the signed-in caller, or an automation's payer.
   // A `{{userKey}}` slot is filled only from this user's own binding. For a
   // caller who isn't signed in, it is `"anonymous"` (`ANONYMOUS_ACTOR`), and
   // `anonymous` says where they called from.

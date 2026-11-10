@@ -14,7 +14,7 @@
 //
 // What it serves follows when the calls run (`@use`). Approved for open cards
 // too, a key also serves the card's scheduled calls (any active binding serves
-// a pipeline): the user's own key serves their scheduled calls and their use of
+// an automation): the user's own key serves their scheduled calls and their use of
 // the card, and a share serves everyone who uses the card in the workspace,
 // their calls counting against the share's limits; where the realm's policy and
 // the share's key let people who aren't signed in make the calls
@@ -34,7 +34,7 @@ import { Card } from '@cardstack/pretui/components/card';
 interface Signature {
   Args: {
     kind: 'userKey' | 'apiKey';
-    use?: 'interactive' | 'pipelines';
+    use?: 'interactive' | 'automations';
     anonymous?: boolean;
     // The workspace's name, for a shared key.
     workspace?: string | null;
@@ -176,12 +176,12 @@ export default class KeyAudience extends Component<Signature> {
     return this.args.kind === 'apiKey';
   }
 
-  private get pipelines() {
-    return this.args.use === 'pipelines';
+  private get automations() {
+    return this.args.use === 'automations';
   }
 
   private get visitors() {
-    return this.shared && !this.pipelines && this.args.anonymous === true;
+    return this.shared && !this.automations && this.args.anonymous === true;
   }
 
   get tone(): 'neutral' | 'info' | 'warning' {
@@ -199,7 +199,7 @@ export default class KeyAudience extends Component<Signature> {
     if (!this.shared) {
       return 'Only you';
     }
-    if (this.pipelines) {
+    if (this.automations) {
       return `The card’s schedule in ${this.where}`;
     }
     if (this.visitors) {
@@ -213,7 +213,7 @@ export default class KeyAudience extends Component<Signature> {
       return this.args.line;
     }
     if (!this.shared) {
-      if (this.pipelines) {
+      if (this.automations) {
         return 'Boxel uses this key only for the card’s scheduled calls you approve here. Opening the card doesn’t use it, and everyone else who uses the card chooses a key of their own.';
       }
       if (this.args.use === 'interactive') {
@@ -221,7 +221,7 @@ export default class KeyAudience extends Component<Signature> {
       }
       return 'Boxel uses this key only for your calls. Everyone else who uses the card chooses a key of their own.';
     }
-    if (this.pipelines) {
+    if (this.automations) {
       return 'Boxel uses this key only for the card’s scheduled calls in this workspace. Opening the card doesn’t use it, and scheduled calls don’t count against the share’s limits. Approving replaces any key chosen for these calls before.';
     }
     if (this.visitors) {

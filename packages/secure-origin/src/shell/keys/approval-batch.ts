@@ -120,7 +120,7 @@ export function withTickedFillers(
         ...batch.fillers.interactive,
         ...weighed.interactive,
       },
-      pipelines: { ...batch.fillers.pipelines, ...weighed.pipelines },
+      automations: { ...batch.fillers.automations, ...weighed.automations },
     },
   };
 }
@@ -353,9 +353,9 @@ export function approvalOf(
   );
 }
 
-// Where approved requests may run: only in the card's scheduled pipelines, or
+// Where approved requests may run: only in the card's automations, or
 // also when a card is opened (in the browser, the AI assistant or the CLI).
-export type ApprovalUse = 'pipelines' | 'interactive';
+export type ApprovalUse = 'automations' | 'interactive';
 
 // What the user confirms, once for the batch, when they allow interactive
 // use: one line for their own keys, and one for a workspace's share, whose
@@ -368,9 +368,9 @@ export const INTERACTIVE_CONFIRMATION = {
 } as const;
 
 // The batch as the page shows it for `use`. An operation approved for
-// pipelines only needs approving only for interactive use, so for pipelines
+// automations only needs approving only for interactive use, so for automations
 // it is left out. The realm server leaves out the same operations when it
-// names what fills each slot for pipelines (`fillers.pipelines`).
+// names what fills each slot for automations (`fillers.automations`).
 export function batchFor(
   batch: ApprovalBatch,
   use: ApprovalUse,
@@ -384,7 +384,7 @@ export function batchFor(
       .map((group) => ({
         ...group,
         operations: group.operations.filter(
-          (o) => o.status !== 'pipelines-only',
+          (o) => o.status !== 'automations-only',
         ),
       }))
       .filter((group) => group.operations.length > 0),
@@ -393,10 +393,10 @@ export function batchFor(
 
 // Where the choice starts. Opened in the browser, it starts on interactive
 // use, unless every slot that needs approving was last approved for
-// pipelines only, so approving it again keeps that. Opened by `boxel keys
-// approve`, it follows the CLI's own default: pipelines only, unless the CLI
+// automations only, so approving it again keeps that. Opened by `boxel keys
+// approve`, it follows the CLI's own default: automations only, unless the CLI
 // asked for interactive use, or the batch holds nothing to approve for
-// pipelines (only operations approved for pipelines already), or every slot
+// automations (only operations approved for automations already), or every slot
 // that needs approving was last approved for interactive use. Either way it
 // is only where the choice starts: the confirmation says what interactive use
 // allows before anything is approved.
@@ -407,23 +407,23 @@ export function initialUse(
     cliInteractive = false,
   }: { cli?: boolean; cliInteractive?: boolean } = {},
 ): ApprovalUse {
-  let needed = allSlots(batchFor(batch, 'pipelines'));
+  let needed = allSlots(batchFor(batch, 'automations'));
   let lastApprovedFor = (interactive: boolean) =>
     needed.length > 0 &&
     needed.every(
       (s) => s.approved !== undefined && s.approved.interactive === interactive,
     );
   if (!cli) {
-    return lastApprovedFor(false) ? 'pipelines' : 'interactive';
+    return lastApprovedFor(false) ? 'automations' : 'interactive';
   }
   if (cliInteractive || needed.length === 0 || lastApprovedFor(true)) {
     return 'interactive';
   }
-  return 'pipelines';
+  return 'automations';
 }
 
 // Whether an operation was last approved for interactive use: approving it
-// again for pipelines only stops it running when a card is opened.
+// again for automations only stops it running when a card is opened.
 export function approvedForOpenCards(operation: BatchOperation): boolean {
   return operation.slots.some((s) => s.approved?.interactive);
 }
@@ -442,11 +442,11 @@ export function approvalScope(
 }
 
 // How many more requests need approving after these, for the choice made:
-// those approved for pipelines only count only for interactive use.
+// those approved for automations only count only for interactive use.
 export function remainingFor(batch: ApprovalBatch, use: ApprovalUse): number {
   return (
     batch.remaining +
-    (use === 'interactive' ? (batch.remainingPipelinesOnly ?? 0) : 0)
+    (use === 'interactive' ? (batch.remainingAutomationsOnly ?? 0) : 0)
   );
 }
 

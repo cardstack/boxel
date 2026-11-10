@@ -25,7 +25,7 @@ import {
 } from '../lib/user-keys.ts';
 import { listOwnSharedRealms, shareKey } from '../lib/key-shares.ts';
 import { addOAuthClient } from '../lib/oauth.ts';
-import { pipelineAdmission } from '../lib/key-bindings.ts';
+import { automationAdmission } from '../lib/key-bindings.ts';
 import { withinSlotLimit, type BatchGroup } from '../lib/key-binding-batch.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
 
@@ -33,7 +33,7 @@ import { removeGrant } from '../lib/user-key-grants.ts';
 // The batch the secure window approves in one confirmation: every `callApi`
 // operation on a card definition, in a realm, that needs the caller's
 // approval, read through `POST /_key-bindings/batch`, approved through
-// `POST /_key-bindings` as the window does, and checked at a pipeline's
+// `POST /_key-bindings` as the window does, and checked at an automation's
 // admission. Nothing here is sent anywhere, so the destinations name a port
 // nothing listens on.
 // ============================================================================
@@ -152,7 +152,7 @@ const AUTH = { authorization: 'Bearer {{userKey}}' };
 export class PRInbox extends CardDef {
   static displayName = 'PR Inbox';
   @field login = contains(StringField);
-  // Written by the pipeline, read by everyone who opens the inbox.
+  // Written by the automation, read by everyone who opens the inbox.
   @field pullRequests = linksToMany(PullRequest);
 
   @operation static listPRs = {
@@ -301,7 +301,7 @@ module(basename(import.meta.filename), function (hooks) {
     }[];
     keys: { id: string; name: string; covers: string[] }[];
     shares: { id: string; label: string; covers: string[] }[];
-    fillers: Record<'interactive' | 'pipelines', Record<string, string[]>>;
+    fillers: Record<'interactive' | 'automations', Record<string, string[]>>;
   }
 
   async function batch(
@@ -381,7 +381,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function admission(operation: string, payer = OWNER, codeRef = INBOX) {
     return (
-      await pipelineAdmission(dbAdapter, {
+      await automationAdmission(dbAdapter, {
         core: realm.operationCore,
         realmURL,
         codeRef,
@@ -679,7 +679,7 @@ module(basename(import.meta.filename), function (hooks) {
     let vendor = destinationOf('listPRs');
     let other = destinationOf('elsewhere');
     // The names of the keys that fill the user's-key slot for `use`.
-    let names = (batch: Batch, use: 'interactive' | 'pipelines') =>
+    let names = (batch: Batch, use: 'interactive' | 'automations') =>
       (batch.fillers[use]['userKey'] ?? [])
         .map((id) => batch.keys.find((k) => k.id === id)!.name)
         .sort();
@@ -693,9 +693,9 @@ module(basename(import.meta.filename), function (hooks) {
       'a client people only sign in through is never offered',
     );
     assert.deepEqual(
-      found.fillers.pipelines,
+      found.fillers.automations,
       found.fillers.interactive,
-      'with nothing approved for pipelines only, both uses offer the same keys',
+      'with nothing approved for automations only, both uses offer the same keys',
     );
 
     // Asked for the operations an approval covers, only where those send
@@ -717,8 +717,8 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.strictEqual(malformed.status, 400, JSON.stringify(malformed.body));
 
-    // Approved for pipelines only, the call to the other host is left out of
-    // what pipelines approve, so the slot is then sent only to the vendor.
+    // Approved for automations only, the call to the other host is left out of
+    // what automations approve, so the slot is then sent only to the vendor.
     let approved = await approveFrom(OWNER, found, ['elsewhere'], () => ({
       keyId: pasted.id,
     }));
@@ -726,7 +726,7 @@ module(basename(import.meta.filename), function (hooks) {
     let both = await batchOf(OWNER, onType(INBOX), { interactive: true });
     assert.strictEqual(
       operationsIn(both).find((o) => o.name === 'elsewhere')!.status,
-      'pipelines-only',
+      'automations-only',
     );
     assert.deepEqual(
       names(both, 'interactive'),
@@ -734,9 +734,9 @@ module(basename(import.meta.filename), function (hooks) {
       'for interactive use every operation sending the slot counts',
     );
     assert.deepEqual(
-      names(both, 'pipelines'),
+      names(both, 'automations'),
       ['hostless robot', 'pasted', 'vendor robot'],
-      "for pipelines only, an OAuth client fills it where its API hosts reach the vendor alone; a connection whose client reaches only the other host doesn't",
+      "for automations only, an OAuth client fills it where its API hosts reach the vendor alone; a connection whose client reaches only the other host doesn't",
     );
   });
 
@@ -951,7 +951,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("the card-author skill's PR Inbox is one batch, approved once and admitted as a pipeline", async function (assert) {
+  test("the card-author skill's PR Inbox is one batch, approved once and admitted as an automation", async function (assert) {
     let key = await addKey();
     let found = await batchOf(OWNER, onType(PR_INBOX));
     assert.deepEqual(
@@ -1043,28 +1043,28 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(withinSlotLimit(groups, 100).remaining, 0);
 
-    let pipelinesOnly = (name: string, slots: number) => ({
+    let automationsOnly = (name: string, slots: number) => ({
       ...operation(name, slots),
-      status: 'pipelines-only' as const,
+      status: 'automations-only' as const,
     });
     let mixed: BatchGroup[] = [
       {
         destination: destination('a.example'),
-        operations: [pipelinesOnly('approved', 4), operation('pending', 2)],
+        operations: [automationsOnly('approved', 4), operation('pending', 2)],
       },
       {
         destination: destination('b.example'),
-        operations: [pipelinesOnly('alsoApproved', 1)],
+        operations: [automationsOnly('alsoApproved', 1)],
       },
     ];
     let capped = withinSlotLimit(mixed, 5);
     assert.deepEqual(
       capped.kept.map((g) => g.operations.map((o) => o.name)),
       [['pending']],
-      'the one that needs approving comes first; ones approved for pipelines only fill what is left, in order',
+      'the one that needs approving comes first; ones approved for automations only fill what is left, in order',
     );
     assert.strictEqual(capped.remaining, 0);
-    assert.strictEqual(capped.remainingPipelinesOnly, 2);
+    assert.strictEqual(capped.remainingAutomationsOnly, 2);
     assert.deepEqual(
       withinSlotLimit(mixed, 7).kept.map((g) =>
         g.operations.map((o) => o.name),
