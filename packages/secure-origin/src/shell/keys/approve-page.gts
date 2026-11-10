@@ -597,8 +597,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     @describedBy='budget-note-{{share.id}}'
                     inputmode='numeric'
                     aria-labelledby={{labelId}}
-                    data-test-approve-budget-input
                     {{ignoredByPasswordManagers}}
+                    data-test-approve-budget-input
                   />
                   <span
                     id='budget-note-{{share.id}}'

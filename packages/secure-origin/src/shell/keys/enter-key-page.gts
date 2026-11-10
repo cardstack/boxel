@@ -284,8 +284,8 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                           @onInput={{this.setClientId}}
                           name='client-id'
                           spellcheck='false'
-                          data-test-oauth-client-id-input
                           {{ignoredByPasswordManagers}}
+                          data-test-oauth-client-id-input
                         />
                       </Field>
                     {{/if}}

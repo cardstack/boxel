@@ -154,8 +154,8 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
                     @value={{this.form.name}}
                     @onInput={{this.setName}}
                     name='connection-name'
-                    data-test-connect-name
                     {{ignoredByPasswordManagers}}
+                    data-test-connect-name
                   />
                 </Field>
               {{/unless}}

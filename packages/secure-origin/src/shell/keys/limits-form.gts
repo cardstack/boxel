@@ -180,8 +180,8 @@ export default class LimitsForm extends Component<Signature> {
                 placeholder={{field.placeholder}}
                 @describedBy='{{field.hintId}} {{field.noteId}}'
                 inputmode={{if field.whole 'numeric' 'decimal'}}
-                data-test-key-limit-input={{field.name}}
                 {{ignoredByPasswordManagers}}
+                data-test-key-limit-input={{field.name}}
               />
               <span class='hint' id={{field.hintId}}>{{field.hint}}</span>
               <span

@@ -133,8 +133,8 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         @describedBy='anonymous-cap-note'
         inputmode='numeric'
         aria-labelledby={{labelId}}
-        data-test-anonymous-cap-input
         {{ignoredByPasswordManagers}}
+        data-test-anonymous-cap-input
       />
       <span id='anonymous-cap-note' class='note cap-note'>How many calls people
         who aren’t signed in can make with this key each day (UTC), all
@@ -161,8 +161,8 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         @describedBy='anonymous-monthly-cap-note'
         inputmode='numeric'
         aria-labelledby={{labelId}}
-        data-test-anonymous-monthly-cap-input
         {{ignoredByPasswordManagers}}
+        data-test-anonymous-monthly-cap-input
       />
       <span id='anonymous-monthly-cap-note' class='note cap-note'>How many calls
         people who aren’t signed in can make with this key each calendar month

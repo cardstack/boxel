@@ -50,8 +50,8 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         @value={{@name}}
         @onInput={{@onName}}
         name='key-name'
-        data-test-key-name
         {{ignoredByPasswordManagers}}
+        data-test-key-name
         {{focusWhen true}}
       />
     </Field>
@@ -75,8 +75,8 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         @onInput={{@onValue}}
         name='key-value'
         spellcheck='false'
-        data-test-key-value
         {{ignoredByPasswordManagers}}
+        data-test-key-value
         {{focusWhen (if @onName false true)}}
       />
     </Field>

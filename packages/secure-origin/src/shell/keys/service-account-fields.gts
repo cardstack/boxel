@@ -120,8 +120,8 @@ export default class ServiceAccountFields extends Component<Signature> {
           @value={{@entry.subject}}
           @onInput={{this.setSubject}}
           name='service-account-subject'
-          data-test-service-account-subject
           {{ignoredByPasswordManagers}}
+          data-test-service-account-subject
         />
         <p class='hint'>Only for a service account with domain-wide delegation.
           Leave it empty to act as the service account itself.</p>
@@ -144,8 +144,8 @@ export default class ServiceAccountFields extends Component<Signature> {
           @onInput={{this.setScopes}}
           name='service-account-scopes'
           spellcheck='false'
-          data-test-service-account-scopes
           {{ignoredByPasswordManagers}}
+          data-test-service-account-scopes
           {{fitContent @entry.scopes}}
         />
         <p class='hint'>What its tokens may do, one per line, or separated by

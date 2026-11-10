@@ -235,8 +235,8 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                   @value={{this.form.label}}
                   @onInput={{this.setLabel}}
                   name='share-label'
-                  data-test-share-label
                   {{ignoredByPasswordManagers}}
+                  data-test-share-label
                 />
               </Field>
             </KeyAudience>
