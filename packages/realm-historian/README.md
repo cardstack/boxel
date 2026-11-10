@@ -20,11 +20,13 @@ The database comes from the `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` and
 one task by default). `--leaseRenewMs` and `--leaseExpiryMs` set the lease's
 renewal interval and expiry (10 s and 30 s by default).
 
-`GET /health` on the port answers 200 while the main loop has run within the
-last 30 s, whether the task holds a lease or is waiting for one, and 503 once
-the loop has stalled. The process exits rather than run degraded: a lost lease,
-a query failure or an unhandled error logs the reason and exits non-zero, and
-SIGTERM finishes the step in progress, releases the lease and exits 0.
+`GET /health` on the port answers 200 while the main loop has made progress
+within the last 30 s, whether the task holds a lease or is waiting for one, and
+503 once the loop has stalled. A recorder reports progress within a long event,
+so one large event doesn't read as a stall. The process exits rather than run
+degraded: a lost lease, a query failure or an unhandled error logs the reason
+and exits non-zero, and SIGTERM finishes the step in progress, releases the
+lease and exits 0.
 
 ## Tests
 

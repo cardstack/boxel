@@ -55,19 +55,21 @@ module('historian', (hooks) => {
       shardCount = 1,
       taskCount = 1,
       db = database.another(),
+      heartbeat = new Heartbeat(),
       record = async (event: ChangeEvent) => void recorded.push(event),
     }: {
       shardCount?: number;
       taskCount?: number;
       db?: PgAdapter;
-      record?: (event: ChangeEvent) => Promise<void>;
+      heartbeat?: Heartbeat;
+      record?: (event: ChangeEvent, beat: () => void) => Promise<void>;
     } = {},
   ): Historian {
     let created = new Historian({
       db,
       historyRoot: join(root, holder, 'history'),
       realmsRoot: join(root, 'realms'),
-      heartbeat: new Heartbeat(),
+      heartbeat,
       pollMs: POLL_MS,
       lease: {
         shardCount,
@@ -76,7 +78,9 @@ module('historian', (hooks) => {
         expiryMs: EXPIRY_MS,
         holder,
       },
-      recorderFor: () => ({ record }),
+      recorderFor: (_realm, beat) => ({
+        record: (event) => record(event, beat),
+      }),
     });
     historians.push(created);
     created.run().catch(() => {});
@@ -321,6 +325,52 @@ module('historian', (hooks) => {
     assert.deepEqual(
       recorded.map((event) => event.seq),
       [last],
+    );
+  });
+
+  test('a realm load and a recorder reporting progress beat the heartbeat', async (assert) => {
+    let now = 1_000_000;
+    let heartbeat = new Heartbeat(() => now);
+    let db = database.another();
+    let execute = db.execute.bind(db);
+    // Once the task is running, each load of the realms takes a minute.
+    let slowLoads = false;
+    db.execute = async (sql, options) => {
+      let rows = await execute(sql, options);
+      if (slowLoads && sql.includes('FROM realm_history_state state')) {
+        now += 60_000;
+      }
+      return rows;
+    };
+    let ages: number[] = [];
+    let task = historian('task', {
+      db,
+      heartbeat,
+      record: async (_event, beat) => {
+        ages.push(heartbeat.ageMs());
+        // A step of recording that takes a minute.
+        now += 60_000;
+        beat();
+        ages.push(heartbeat.ageMs());
+      },
+    });
+    await waitUntil(() => task.held.length > 0, { what: 'the lease' });
+    slowLoads = true;
+    // A realm enabled after startup is loaded for its first event, between
+    // the poll's beat for that event and the recorder.
+    let realm = await insertRealm(database.db, {
+      url: 'http://localhost:4201/test-user/late-realm/',
+    });
+    await insertEvent(dbAdapterQuerier(database.db), realm);
+    await notify(realm);
+    await waitUntil(() => ages.length === 2, {
+      timeoutMs: 1000,
+      what: 'the event to be recorded',
+    });
+    assert.deepEqual(
+      ages,
+      [0, 0],
+      'the load beat after its query, and the recorder beat after its step',
     );
   });
 

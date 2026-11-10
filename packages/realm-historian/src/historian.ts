@@ -1,8 +1,10 @@
 // The main loop. A task waits for a shard lease, listens for journal wakeups,
 // loads the realms of the shards it holds, and consumes their events on each
-// wakeup or every second, beating the heartbeat on every turn and between
-// events so the health endpoint reports it alive while it waits as well as
-// while it catches up.
+// wakeup or every second. It beats the heartbeat on every turn, between
+// events, after each query of a realm load, and whenever a recorder reports
+// progress, so the health endpoint reports it alive while it waits, while it
+// catches up and while it records one large event, and reports it stalled
+// only when no step finishes.
 //
 // The loop exits rather than run degraded: a lost lease or a query that fails
 // ends `run()` with the error, and the process exits non-zero. A lost
@@ -40,8 +42,12 @@ export interface HistorianOptions {
   // How long the loop waits for a wakeup before polling anyway.
   pollMs?: number;
   // The recorder for a realm this task records. The default records nothing
-  // and logs each event.
-  recorderFor?: (realm: RecordedRealm) => RealmRecorder;
+  // and logs each event. `beat` beats the heartbeat: a recorder whose
+  // `record()` can outlast the health endpoint's stale threshold calls it as
+  // it makes progress, such as after each object it writes, so the endpoint
+  // tells a large event from a stall without a threshold long enough to hide
+  // a real one.
+  recorderFor?: (realm: RecordedRealm, beat: () => void) => RealmRecorder;
 }
 
 const DEFAULT_POLL_MS = 1000;
@@ -179,15 +185,17 @@ export class Historian {
   // recorded. A realm enabled in a shard the task already held starts from
   // the events after the position; its earlier history is the backfill's.
   async #loadRealms(): Promise<void> {
-    let { db, realmsRoot, lease } = this.#options;
+    let { db, realmsRoot, lease, heartbeat } = this.#options;
     let held = new Set(this.#lease.held);
     let horizon = await currentHorizon(db);
+    heartbeat.beat();
     this.#realms = await loadRecordedRealms({
       db,
       realmsRoot,
       shardCount: lease.shardCount,
       holds: (shard) => held.has(shard),
     });
+    heartbeat.beat();
     this.#loadedBelow = BigInt(horizon);
     for (let id of this.#recorders.keys()) {
       if (!this.#realms.has(id)) {
@@ -240,7 +248,7 @@ export class Historian {
     let recorder = this.#recorders.get(realmId);
     if (!recorder) {
       recorder = this.#options.recorderFor
-        ? this.#options.recorderFor(realm)
+        ? this.#options.recorderFor(realm, () => this.#options.heartbeat.beat())
         : loggingRecorder(realm);
       this.#recorders.set(realmId, recorder);
     }
