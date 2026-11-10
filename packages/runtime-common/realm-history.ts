@@ -167,9 +167,9 @@ function contextValue(raw: string | null): string | undefined {
 // - `pushFinal` marks the last request of a push, so it is kept only beside a
 //   push id.
 //
-// Writes the realm server makes without a request set their context
-// themselves. `/mcp` sets `channel: 'mcp'`, with the OAuth client as `agent`
-// and the connector's `writeId` as `correlationId`.
+// A writer with no request sets its context itself. `mcp` is the channel for
+// writes made through the MCP connector, with the OAuth client as `agent` and
+// the connector's write id as `correlationId`.
 export function writeContextFromHeaders(headers: {
   get(name: string): string | null;
 }): WriteContext {

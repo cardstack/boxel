@@ -2426,10 +2426,11 @@ export interface WriteOptions {
   // its channel and, where they apply, the AI agent and room, the correlation
   // id, the push it belongs to and an intent that names its own revision. A
   // request handler fills it from the request's headers
-  // (`writeContextFromHeaders`). A writer with no request sets it itself:
-  // `/mcp` names the `mcp` channel, and an operation that reverts names its
-  // `revert` intent. Absent, the write is recorded as `api`. It never
-  // decides the author, which is `initiatingUser`.
+  // (`writeContextFromHeaders`). A writer with no request sets it itself,
+  // naming one of the realm server's own channels, such as `mcp` for a write
+  // made through the MCP connector, or an intent, such as `revert` for a
+  // write that restores an earlier revision. Absent, the write is recorded
+  // as `api`. It never decides the author, which is `initiatingUser`.
   history?: WriteContext;
   // Where a caller reporting where its write's time went wants this commit's
   // stages stamped. The commit drains prior indexing, makes the bytes
