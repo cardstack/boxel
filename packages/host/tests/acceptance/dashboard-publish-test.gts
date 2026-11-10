@@ -2,7 +2,11 @@ import { click, find, settled, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { visitOperatorMode } from '../helpers';
+import {
+  realmConfigCardJSON,
+  setupAcceptanceTestRealm,
+  visitOperatorMode,
+} from '../helpers';
 import {
   realmURL,
   markPublishable,
@@ -92,7 +96,40 @@ module('Acceptance | dashboard publish', function (hooks) {
     assert.dom('[data-test-boxel-menu-item-text="Publish"]').doesNotExist();
   });
 
-  test('a publishable workspace the user does not own has no Publish', async function (assert) {
+  test('a publishable workspace shared with the user with write offers Publish, though someone else owns it', async function (assert) {
+    const sharedWriteRealmURL = 'http://test-realm/otheruser/workspace-d/';
+    await setupAcceptanceTestRealm({
+      realmURL: sharedWriteRealmURL,
+      mockMatrixUtils,
+      permissions: {
+        '@testuser:localhost': ['read', 'write'],
+        '@otheruser:localhost': ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({ name: 'Workspace D' }),
+      },
+    });
+    mockMatrixUtils.setRealmSessionPermissions(sharedWriteRealmURL, [
+      'read',
+      'write',
+    ]);
+    mockMatrixUtils.setActiveRealms([
+      realmURL,
+      ownedRealmURL,
+      sharedRealmURL,
+      sharedWriteRealmURL,
+    ]);
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await waitFor(tile('Workspace D'));
+    markPublishable(sharedWriteRealmURL);
+    await settled();
+
+    await openMenu('Workspace D');
+
+    assert.dom('[data-test-boxel-menu-item-text="Publish"]').exists();
+  });
+
+  test('a publishable workspace the user may only read has no Publish', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
     await waitFor(tile('Workspace C'));
     markPublishable(sharedRealmURL);

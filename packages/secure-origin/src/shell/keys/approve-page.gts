@@ -29,20 +29,20 @@
 // done page name the same.
 //
 // The user chooses, once for the batch, where the approved requests may run:
-// in the card's scheduled pipelines and also when a card is opened, in the
+// in the card's automations and also when a card is opened, in the
 // browser, the AI assistant or the CLI (offered first), or only in the
-// pipelines. Interactive use shows what it allows, once, for the user's own
+// automations. Interactive use shows what it allows, once, for the user's own
 // keys and for a workspace's share, and asks for the daily budget of a share approved
 // for interactive use for the first time, linking to the share's
 // `share-limits` page, in a new tab, for its other limits: each person's rate
 // and the share's monthly budget. That page changes the daily budget too, so
 // coming back to this window re-reads the budget in force for a field the
-// user hasn't typed in. An operation approved for pipelines
+// user hasn't typed in. An operation approved for automations
 // only is in the batch only for interactive use. Where the choice starts is
 // `initialUse`'s: on interactive use, unless the batch was last approved for
-// pipelines only, or the CLI opened the page without `--interactive`. An
+// automations only, or the CLI opened the page without `--interactive`. An
 // operation last approved for interactive use is marked, and
-// approving it for pipelines only says that it then stops running when a card
+// approving it for automations only says that it then stops running when a card
 // is opened.
 //
 // Who may make the calls is not chosen here. Where the realm's policy opens an
@@ -481,15 +481,15 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             class='changed'
                             data-test-approve-changed
                           >Changed</span>
-                        {{else if (eq operation.status 'pipelines-only')}}
+                        {{else if (eq operation.status 'automations-only')}}
                           <span
-                            class='pipelines-only'
-                            data-test-approve-pipelines-only
+                            class='automations-only'
+                            data-test-approve-automations-only
                           >Approved for the schedule</span>
                         {{/if}}
                         {{#if (approvedForOpenCards operation)}}
                           <span
-                            class='pipelines-only'
+                            class='automations-only'
                             data-test-approve-open-cards
                           >Approved for open cards</span>
                         {{/if}}
@@ -753,7 +753,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       /* A badge keeps its words on one line; the label beside it wraps. */
       .changed,
-      .pipelines-only {
+      .automations-only {
         flex-shrink: 0;
         white-space: nowrap;
       }
@@ -765,7 +765,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
-      .pipelines-only {
+      .automations-only {
         padding: 0 var(--boxel-sp-4xs);
         border-radius: var(--boxel-border-radius-xs);
         background-color: var(--muted);
@@ -929,12 +929,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     {
       value: 'interactive',
       label: 'On a schedule and when the card is opened',
-      hint: 'The card’s pipelines make these calls, and so does the card itself whenever it’s opened: in your browser, from the AI assistant, or from the CLI.',
+      hint: 'The card’s automations make these calls, and so does the card itself whenever it’s opened: in your browser, from the AI assistant, or from the CLI.',
     },
     {
-      value: 'pipelines',
+      value: 'automations',
       label: 'On a schedule only',
-      hint: 'The card’s scheduled pipelines make these calls and save the results to the card. Opening the card makes no calls.',
+      hint: 'The card’s automations make these calls and save the results to the card. Opening the card makes no calls.',
     },
   ];
 
@@ -996,7 +996,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return approvalScope(this.batch);
   }
 
-  // Whether approving for pipelines only takes ticked calls last approved for
+  // Whether approving for automations only takes ticked calls last approved for
   // interactive use back to the schedule.
   private get demoted() {
     return (

@@ -7,3 +7,6 @@
 workload*.json
 !workload.example.json
 !workload.experiments.json
+
+# The bundle `pnpm load-harness:bundle` builds from the source here.
+dist/

@@ -384,7 +384,7 @@ async function main() {
   let client = new RealmClient(credentials.accessToken, credentials.userId);
   let evaluation = await loadEvaluationBundle(client, args.evalCardUrl);
   if (
-    evaluation.pipelineApprovals.some(({ keyFrom }) => keyFrom === 'share') &&
+    evaluation.automationApprovals.some(({ keyFrom }) => keyFrom === 'share') &&
     !(await canLogIn(SHARE_OWNER, evalPassword))
   ) {
     throw new Error(

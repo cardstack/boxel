@@ -180,7 +180,6 @@ cd "$REPO_ROOT"
 . "$REPO_ROOT/mise-tasks/lib/env-vars.sh"
 export NODE_EXTRA_CA_CERTS="$CERT_DIR/combined-ca.pem"
 export NODE_NO_WARNINGS=1
-export PUPPETEER_DISABLE_SANDBOX=true
 export SKIP_CATALOG=true
 export SKIP_BOXEL_HOMEPAGE=true
 export SKIP_EXPERIMENTS=true

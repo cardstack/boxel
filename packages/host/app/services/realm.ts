@@ -286,8 +286,12 @@ class RealmResource {
     return !!this.claims?.permissions?.includes('write');
   }
 
-  get isRealmOwner() {
-    return !!this.claims?.permissions?.includes('realm-owner');
+  // Whether the user administers the realm: they hold direct write on it
+  // (ADR 024 §1.3). The server checks the user's own permission row, which the
+  // claims don't separate from a public `write`, so this is the closest the
+  // host can tell.
+  get canAdminister() {
+    return this.canWrite;
   }
 
   private loggingIn: Promise<void> | undefined;
@@ -593,7 +597,7 @@ class RealmResource {
     );
 
     if (response.status === 403) {
-      // the user is not an owner of this realm which is a legit scenario
+      // the user doesn't administer this realm, which is a legit scenario
       this.realmPermissions = null;
       return;
     } else if (response.status !== 200) {
@@ -1264,15 +1268,14 @@ export default class RealmService extends Service {
     return this.knownRealm(url)?.canWrite ?? false;
   };
 
-  isRealmOwner = (url: string): boolean => {
-    return this.knownRealm(url)?.isRealmOwner ?? false;
+  canAdminister = (url: string): boolean => {
+    return this.knownRealm(url)?.canAdminister ?? false;
   };
 
-  // Whether the user can publish the realm: they own it, and it's marked
-  // publishable (a published copy isn't). A writer can also publish to the
-  // realm's domain override, which this leaves out.
+  // Whether the user can publish the realm: they administer it, and it's
+  // marked publishable (a published copy isn't).
   canPublish = (url: string): boolean => {
-    return this.isRealmOwner(url) && this.info(url).publishable === true;
+    return this.canAdminister(url) && this.info(url).publishable === true;
   };
 
   // Whether the realm's info has loaded. Until it has, `info()` answers a

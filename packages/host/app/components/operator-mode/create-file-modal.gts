@@ -6,6 +6,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import camelCase from 'camelcase';
 import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -246,6 +247,7 @@ export default class CreateFileModal extends Component<Signature> {
                       @state={{this.fileNameInputState}}
                       @errorMessage={{this.fileNameError}}
                       @onInput={{this.setDisplayName}}
+                      {{ignoredByPasswordManagers}}
                     />
                   </FieldContainer>
                   {{#if this.skillFilePath}}
@@ -265,6 +267,7 @@ export default class CreateFileModal extends Component<Signature> {
                       @state={{this.fileNameInputState}}
                       @errorMessage={{this.fileNameError}}
                       @onInput={{this.setFileName}}
+                      {{ignoredByPasswordManagers}}
                     />
                   </FieldContainer>
                   <FieldContainer @label='Extension' @tag='label' class='field'>
@@ -309,6 +312,7 @@ export default class CreateFileModal extends Component<Signature> {
                       }}
                       @value={{this.displayName}}
                       @onInput={{this.setDisplayName}}
+                      {{ignoredByPasswordManagers}}
                     />
                   </FieldContainer>
                   <FieldContainer
@@ -331,6 +335,7 @@ export default class CreateFileModal extends Component<Signature> {
                       @state={{this.fileNameInputState}}
                       @errorMessage={{this.fileNameError}}
                       @onInput={{this.setFileName}}
+                      {{ignoredByPasswordManagers}}
                     />
                   </FieldContainer>
                 {{/if}}

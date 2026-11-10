@@ -299,7 +299,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(
       await readiness(OWNER, 'list'),
       'needs-approval',
-      'approved for pipelines only',
+      'approved for automations only',
     );
     assert.strictEqual(
       await readiness(OWNER, 'note'),

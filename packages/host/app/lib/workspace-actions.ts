@@ -279,7 +279,7 @@ export class WorkspaceActions {
         }),
       );
     }
-    if (this.isRealmOwner) {
+    if (this.canAdminister) {
       items.push(
         new MenuItem({
           label: 'Re-index',
@@ -382,8 +382,8 @@ export class WorkspaceActions {
     return this.tileStatsWith([]);
   }
 
-  private get isRealmOwner() {
-    return this.realm.isRealmOwner(this.realmIdentifier);
+  private get canAdminister() {
+    return this.realm.canAdminister(this.realmIdentifier);
   }
 
   private get canPublish() {
@@ -424,7 +424,7 @@ export class WorkspaceActions {
   }
 
   @action private openDeleteModal() {
-    if (!this.isRealmOwner) {
+    if (!this.canAdminister) {
       return;
     }
     this.deleteSummary = undefined;
@@ -443,7 +443,7 @@ export class WorkspaceActions {
   }
 
   @action private openArchiveModal() {
-    if (!this.isRealmOwner) {
+    if (!this.canAdminister) {
       return;
     }
     this.archiveError = undefined;
