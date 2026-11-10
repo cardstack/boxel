@@ -4160,6 +4160,69 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('a PATCH that empties a linksToMany clears its stored links', async function (assert) {
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'hassan.json',
+          );
+          let patchRelationships = async (
+            relationships: Record<string, unknown>,
+          ) => {
+            let response = await request
+              .patch('/hassan')
+              .send({
+                data: {
+                  type: 'card',
+                  relationships,
+                  meta: {
+                    adoptsFrom: { module: rri('./friend.gts'), name: 'Friend' },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+            assert.strictEqual(
+              response.status,
+              200,
+              `HTTP 200 status: ${response.text}`,
+            );
+            return readJSONSync(cardFile).data.relationships;
+          };
+          let storedFriends = {
+            'friends.0': { links: { self: './jade' } },
+            'friends.1': { links: { self: './hassan' } },
+          };
+
+          let relationships = await patchRelationships(storedFriends);
+          assert.deepEqual(
+            [relationships['friends.0'], relationships['friends.1']],
+            [storedFriends['friends.0'], storedFriends['friends.1']],
+            'the links are stored',
+          );
+
+          relationships = await patchRelationships({
+            friends: { links: { self: null } },
+          });
+          assert.deepEqual(
+            relationships.friends,
+            { links: { self: null } },
+            'the field is stored as empty',
+          );
+          assert.deepEqual(
+            Object.keys(relationships).filter((key) =>
+              key.startsWith('friends.'),
+            ),
+            [],
+            'no stored links remain',
+          );
+          assert.deepEqual(
+            relationships.friend,
+            { links: { self: './jade' } },
+            'a relationship the patch leaves out is kept',
+          );
+        });
+
         test('no-op patch returns existing lastModified and does not rewrite file', async function (assert) {
           let cardFile = join(
             dir.name,

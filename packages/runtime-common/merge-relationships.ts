@@ -10,8 +10,10 @@ export function mergeRelationships(
     _formatForMerge(relData),
     _formatForMerge(otherRelData),
     (objectValue: any, sourceValue: any) => {
-      // An emptied linksToMany arrives as `{ links: { self: null } }`, not a
-      // list. Merged into the stored list, it would keep the list's links.
+      // A list on either side is replaced by the patch's value, not merged
+      // into: an emptied linksToMany arrives as `{ links: { self: null } }`,
+      // and a field that changed between linksTo and linksToMany arrives in
+      // its new shape.
       return Array.isArray(sourceValue) || Array.isArray(objectValue)
         ? sourceValue
         : undefined;

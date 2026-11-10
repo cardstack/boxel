@@ -811,10 +811,17 @@ export async function stageUpdate(
   // win cleanly.
   let merged = cloneDeep(original);
   clearReplacedArrayFieldMeta(merged.meta, patch.attributes);
-  let primary = mergeWith(merged, patch, (_target, source: unknown) =>
-    // A patched array replaces the original rather than merging into it —
-    // merging would make removing an item impossible.
-    Array.isArray(source) ? source : undefined,
+  // Relationships are merged on their own below, so the result doesn't depend
+  // on whether a patch's `<field>` key lands before or after the stored
+  // `<field>.0`, `<field>.1`, ….
+  let { relationships: _relationships, ...patchWithoutRelationships } = patch;
+  let primary = mergeWith(
+    merged,
+    patchWithoutRelationships,
+    (_target, source: unknown) =>
+      // A patched array replaces the original rather than merging into it —
+      // merging would make removing an item impossible.
+      Array.isArray(source) ? source : undefined,
   );
   if (patch.attributes && primary.attributes) {
     await replacePrimitiveValues(
