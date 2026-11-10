@@ -395,7 +395,7 @@ export class SidebarUsage extends Component {
       .shell-stage {
         block-size: 340px;
         max-inline-size: 100%;
-        overflow: hidden;
+        overflow: auto;
         resize: horizontal;
         border-radius: var(--radius-surface, 10px);
         background: var(--card);
