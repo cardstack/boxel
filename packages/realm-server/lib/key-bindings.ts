@@ -95,11 +95,11 @@ import { recordFillRefusal } from './key-uses.ts';
 //   definition cache lowers the operation to now. A binding whose request has
 //   changed goes to `needs-reapproval`, its owner gets one notice, and nothing
 //   is sent until they approve the new request.
-// - **Pipelines, and interactive use when approved for it.** A pipeline the
-//   realm server runs as its payer (`Realm.handlePipeline`) is served by any
+// - **Automations, and interactive use when approved for it.** An automation the
+//   realm server runs as its payer (`Realm.handleAutomation`) is served by any
 //   active binding. An interactive invocation — a card in the browser, the AI
 //   assistant, the CLI — is served only by a binding approved `interactive`,
-//   and refused `interactive-use-not-approved` by one approved for pipelines
+//   and refused `interactive-use-not-approved` by one approved for automations
 //   only. Approving interactive use is the owner's choice for the whole
 //   confirmation; a share's first interactive approval also sets the share's
 //   daily budget, since every reader of its realm can then spend it.
@@ -115,7 +115,7 @@ import { recordFillRefusal } from './key-uses.ts';
 // - **Within the owner's limits.** An interactive call counts against the
 //   limits of the share or key filling each slot, and is refused
 //   `rate-limited`, `over-budget` or `rate-limit-unavailable` before anything
-//   is opened (`key-limits.ts`). A pipeline's call doesn't count.
+//   is opened (`key-limits.ts`). An automation's call doesn't count.
 // - **Approved only on the secure origin.** Approving and revoking take a
 //   session signed in on the secure origin, from the secure window or the CLI
 //   (`handle-key-bindings.ts`), never the app page's session, which card code
@@ -404,7 +404,7 @@ export async function approveBindings(
     approver: string;
     via: SecureSessionClient;
     operations: OperationApproval[];
-    // Approves interactive use as well as pipelines, for every slot.
+    // Approves interactive use as well as automations, for every slot.
     interactive?: boolean;
     anonymous?: boolean;
     // A daily budget for a share this approval fills, by share id. Required
@@ -1247,8 +1247,8 @@ export type SlotCheck =
 // grant's key not a service-account key Google refused, unless the key's
 // probe is due. The first check a slot fails is its answer.
 //
-// This is the one place a call (`fillSlots`), a pipeline's admission
-// (`pipelineAdmission`) and readiness (`keyReadiness`) learn what a call
+// This is the one place a call (`fillSlots`), an automation's admission
+// (`automationAdmission`) and readiness (`keyReadiness`) learn what a call
 // would do, so a check added for one is a check for all three. It writes
 // nothing: what a refusal changes (moving a binding to `needs-reapproval`,
 // claiming a probe) is the call's to do.
@@ -1437,8 +1437,8 @@ async function checkedBindings(
             // use, since the AI assistant sees only the message and answers a
             // caller's own key and a realm's shared key differently.
             slot.key === 'userKey'
-              ? `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
-              : `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
+              ? `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
+              : `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
             slot,
           ),
         );
@@ -1945,14 +1945,14 @@ async function mintedToken(
   }
 }
 
-// Whether a pipeline may invoke an operation, asked before the run starts: the
+// Whether an automation may invoke an operation, asked before the run starts: the
 // same checks a call makes, without opening any key. A Scheduling System run
 // asks this at admission for each operation it declares, as its payer, so a
 // missing or changed approval stops the run before anything is sent. Answers
 // with the refusal the call would get, or nothing when it would be served. A
 // grant the vendor rejected admits the run only while its probe is due, since
 // only then would the call be sent.
-export async function pipelineAdmission(
+export async function automationAdmission(
   dbAdapter: DBAdapter,
   {
     core,
@@ -2013,7 +2013,7 @@ export async function pipelineAdmission(
           ? { instance: canonicalInstance(realmURL, instance) }
           : {}),
         caller: payer,
-        mode: 'pipeline',
+        mode: 'automation',
         request: definition.callApi,
       },
       { probeIntervalMs, claimProbe: false },

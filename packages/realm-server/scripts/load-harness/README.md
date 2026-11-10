@@ -67,9 +67,9 @@ permission belongs to its owner, so without it every write in a run comes from
 one identity and the question in [Two writers on one
 realm](#two-writers-on-one-realm-and-the-fairness-reading) has no way to be
 asked. Granting is not a `boxel realm` subcommand, but the realm answers
-`PATCH /_permissions` to its owner, which is what the setup script calls.
-`realm-owner` can neither be granted nor modified there, so this hands out
-access and never the realm.
+`PATCH /_permissions` to its administrators (its direct writers), which is what
+the setup script calls. A write grant makes its grantee an administrator too.
+The realm owner, the user the realm is indexed as, doesn't change.
 
 ## Choosing a path: which document the searches ask for
 

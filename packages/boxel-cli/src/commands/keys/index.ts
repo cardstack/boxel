@@ -299,7 +299,7 @@ export function registerKeysCommand(program: Command): void {
     keys
       .command('approve')
       .description(
-        "Approve a card's operations to send one of your keys, or your share in the realm, from its pipelines, and with --interactive also when a card is opened. Without .<operation>, every operation on the class that needs your approval is approved as one batch. Every request is printed before you confirm; one that sends a key somewhere it has never been sent is confirmed in the secure window",
+        "Approve a card's operations to send one of your keys, or your share in the realm, from its automations, and with --interactive also when a card is opened. Without .<operation>, every operation on the class that needs your approval is approved as one batch. Every request is printed before you confirm; one that sends a key somewhere it has never been sent is confirmed in the secure window",
       )
       .argument(
         '<name>',
@@ -308,7 +308,7 @@ export function registerKeysCommand(program: Command): void {
   )
     .option(
       '--interactive',
-      'Also approve use when a card is opened (in the browser, the AI assistant or the CLI), not only in pipelines. Calls count against the key’s limits',
+      'Also approve use when a card is opened (in the browser, the AI assistant or the CLI), not only in automations. Calls count against the key’s limits',
     )
     .option(
       '--daily-budget <calls>',
