@@ -12,6 +12,8 @@ scope:
   - packages/runtime-common/card-operations/call-api.ts
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
+  - packages/realm-server/prerender/render-runner.ts
+  - packages/realm-server/prerender/affinity.ts
 ---
 
 # 026. Give an automation run a token for its realm alone, and act as a person through `Realm.handleAutomation`
@@ -38,14 +40,25 @@ the direct writer who switched the automation on.
 
 Each run MUST get a token minted for that run, for the run's identity, that
 names the run. The token MUST admit read and write in the automation's realm,
-and read in the public realms that its cards' modules load from, and nothing
-else. Every call the script makes MUST carry that token. A run MUST NOT use
-the run identity's ordinary realm session, or the prerender auth that
-`prepareRunCommand` mints for every realm its `runAs` user can reach.
+and read in the base and catalog realms, and nothing else. Every call the
+script makes MUST carry that token. The host MUST keep the token outside
+QuickJS and add it to the run's requests. It MUST NOT write the token
+anywhere the tab keeps state, such as `localStorage` or a cookie.
 
-Switching on an automation whose cards load modules from a realm that is
-neither its own nor public MUST be refused, and the refusal MUST name that
-realm.
+Other code in the tab can still reach the token, so these rules bound what a
+leaked token gives away:
+
+- A tab that runs a run MUST NOT hold any session or token except the tokens
+  of runs with the same realm and the same identity. It MUST NOT hold the run
+  identity's ordinary realm session, or the prerender auth that
+  `prepareRunCommand` mints for every realm its `runAs` user can reach.
+- A run's cards MUST load modules only from the automation's realm, the base
+  realm and the catalog realm. A run MUST NOT start while a policy grant
+  gives write to a module that it loads from its own realm, directly or
+  through an import.
+
+Switching on an automation whose cards load a module from any other realm
+MUST be refused, and the refusal MUST name that realm.
 
 ### 1.3. Every call goes through `Realm.handleAutomation`
 
@@ -54,6 +67,11 @@ The realm server MUST handle each request that carries a run token through
 `Realm.handleAutomation` MUST refuse a call unless the run's row says the run
 is still running, its time limit has not passed, and its caps are not spent.
 A cancel or a pause MUST stop the run's next call.
+
+Only a run token MUST reach automation mode. The server MUST treat a request
+as an automation call because it carries a run token, and for no other
+reason. A binding approved only for automations MUST NOT admit a request
+without one.
 
 ### 1.4. The server enforces the declaration
 
@@ -88,6 +106,30 @@ tab. So the token is the boundary. It reaches one realm, it names one run, so
 the server can tie each call to that run's row and declaration, and the
 server counts what costs money next to the work.
 
+The script's sandbox doesn't cover the rest of the tab. A run's cards load
+their modules as ordinary page JavaScript, in the same page as the host code
+that holds the token, and nothing inside one page stops a module from reading
+what the host can read or from wrapping `fetch`. So the token's secrecy
+inside the tab is not the boundary. A leak is bounded by what else the tab
+holds and by whose code runs there. A tab that held another run's token, or
+the identity's wider session, would hand it to any module loaded beside it.
+The prerender pool already keeps each affinity's tabs to one session for the
+same reason.
+
+Module code runs with the payer's direct write and credit. A policy grant can
+give write to module source, and the owner of a public realm needs no
+permission in this realm at all. Either could then act with more authority
+than they hold. So a run loads modules only from its own realm, which only
+direct writers can change while it runs, and from the base and catalog
+realms, which the platform deploys from reviewed source. An author who wants
+a card from another realm copies it into their own.
+
+Calls from the tab reach the server over the network, like any other
+request, so the token is the only thing that can mark one as an
+automation's. If anything else could mark it, an ordinary session (the
+identity's own browser, or a tab's prerender auth) could use the bindings
+approved for automations with no run, caps or declaration behind it.
+
 A person's permissions are the rule every other write in a realm already
 follows, so a run's writes need no second permission model. The realm's own
 user can write anything in the realm, and a service identity would be a new
@@ -108,8 +150,8 @@ and so can a run that acts as one. A run is unattended and handles
 third-party data and webhook payloads, so it must not be able to change who
 can reach its realm, or widen the declaration that bounds its next run.
 ADR 021 §1.6 sets the same limit for OAuth tokens, which also act as a
-person. A card whose modules load from a private realm would fail on every
-run, so it is refused once, when it is switched on.
+person. A card that loads a module from another realm would be refused on
+every run, so it is refused once, when it is switched on.
 
 ## 3. Considered options
 
@@ -119,6 +161,13 @@ run, so it is refused once, when it is switched on.
   can, and nothing ties a call to the run, its caps or its declaration.
 - **Prerender auth for every realm `runAs` can reach.** It has the same reach,
   and it is held by the tab, which the script runs in.
+- **Keep the token secret inside the tab.** Card modules run as page code
+  beside the host, so nothing in one page can hide the token from them.
+- **Several identities' or realms' runs in one tab.** Module code loaded for
+  one run could use another run's token, for another payer or realm.
+- **Load modules from any public realm.** Their owners need no permission in
+  the automation's realm, yet their code would run with the payer's
+  authority.
 - **Enforcement in the tab.** The tab runs code that the realm doesn't
   trust, and its counts would be reported by the party they bound.
 - **A run with its identity's full direct write.** The run could rewrite the
