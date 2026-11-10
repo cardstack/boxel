@@ -159,16 +159,18 @@ export function playwrightHeadlessShellDirName(): string | undefined {
  * presence of the installed Playwright's headless-shell revision in the browser
  * cache — rather than an actual browser launch. `npx playwright install
  * chromium` also downloads the headless shell, so this covers both install
- * commands. When the revision can't be read, any downloaded
- * `chromium_headless_shell-*` build counts. When the browser path can't be
- * determined (PLAYWRIGHT_BROWSERS_PATH set to '0'), assume present so we don't
- * block on a false negative.
+ * commands. `expected` is the directory `playwrightHeadlessShellDirName()`
+ * returns; when it is undefined, any downloaded `chromium_headless_shell-*`
+ * build counts. When the browser path can't be determined
+ * (PLAYWRIGHT_BROWSERS_PATH set to '0'), assume present so we don't block on a
+ * false negative.
  */
-export function playwrightHeadlessShellPresent(): boolean {
+export function playwrightHeadlessShellPresent(
+  expected: string | undefined,
+): boolean {
   let root = playwrightBrowsersRoot();
   if (!root) return true;
   if (!existsSync(root)) return false;
-  let expected = playwrightHeadlessShellDirName();
   if (expected) {
     return existsSync(join(root, expected));
   }
@@ -182,6 +184,7 @@ export function playwrightHeadlessShellPresent(): boolean {
 }
 
 export function checkPrerequisites(): Prerequisite[] {
+  let headlessShellDirName = playwrightHeadlessShellDirName();
   return [
     {
       id: 'node',
@@ -211,9 +214,9 @@ export function checkPrerequisites(): Prerequisite[] {
     {
       id: 'playwright-chromium',
       label: `Playwright Chromium headless-shell binary (${
-        playwrightHeadlessShellDirName() ?? 'chromium_headless_shell-*'
+        headlessShellDirName ?? 'chromium_headless_shell-*'
       })`,
-      satisfied: playwrightHeadlessShellPresent(),
+      satisfied: playwrightHeadlessShellPresent(headlessShellDirName),
       // This package's own Playwright, so the install fetches the revision
       // the check looks for.
       fix: 'pnpm --filter @cardstack/software-factory exec playwright install chromium-headless-shell',

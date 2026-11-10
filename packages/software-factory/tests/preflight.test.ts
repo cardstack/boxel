@@ -42,12 +42,13 @@ module('preflight > Playwright headless shell', function (hooks) {
     let revision = Number(expected.split('-').pop());
     mkdirSync(join(browsersPath, `chromium_headless_shell-${revision - 1}`));
 
-    assert.false(playwrightHeadlessShellPresent());
+    assert.false(playwrightHeadlessShellPresent(expected));
   });
 
   test('the installed revision satisfies it', function (assert) {
-    mkdirSync(join(browsersPath, playwrightHeadlessShellDirName()!));
+    let expected = playwrightHeadlessShellDirName()!;
+    mkdirSync(join(browsersPath, expected));
 
-    assert.true(playwrightHeadlessShellPresent());
+    assert.true(playwrightHeadlessShellPresent(expected));
   });
 });
