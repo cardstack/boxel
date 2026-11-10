@@ -312,6 +312,25 @@ module('Integration | color field configuration', function (hooks) {
       .exists('RGB input section is visible');
   });
 
+  test('advanced variant tells password managers to skip its text input in every format', async function (assert) {
+    for (let defaultFormat of ['hex', 'rgb', 'hsl', 'hsb', 'css'] as const) {
+      await renderConfiguredField(
+        ColorField,
+        '#3b82f6',
+        { variant: 'advanced', options: { defaultFormat } },
+        'edit',
+      );
+      await settled();
+
+      let input =
+        '[data-test-field-container] :is(.color-hex-input, .color-value-input, .color-css-input)';
+      assert.dom(input).hasAttribute('data-1p-ignore', '', defaultFormat);
+      assert.dom(input).hasAttribute('data-lpignore', 'true', defaultFormat);
+      assert.dom(input).hasAttribute('data-form-type', 'other', defaultFormat);
+      assert.dom(input).hasAttribute('data-bwignore', '', defaultFormat);
+    }
+  });
+
   test('advanced variant parses CSS color names', async function (assert) {
     await renderConfiguredField(
       ColorField,
