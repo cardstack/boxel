@@ -31,7 +31,9 @@ const CONTROLS = 'input, textarea, select';
  * puts a caller's modifiers on, it marks each form control inside it as it
  * is drawn. */
 export const ignoredByPasswordManagers = modifier((el: Element) => {
-  let controls = el.matches(CONTROLS) ? [el] : el.querySelectorAll(CONTROLS);
+  let controls = el.matches(CONTROLS)
+    ? [el]
+    : Array.from(el.querySelectorAll(CONTROLS));
   for (let control of controls) {
     for (let [name, value] of HINTS) {
       control.setAttribute(name, value);
