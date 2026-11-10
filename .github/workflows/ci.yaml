@@ -108,6 +108,9 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/bxl/**'
               - 'packages/host/**'
+              # The realm server, the worker and realm-historian run this
+              # package's code, and the deploy migrates its schema.
+              - 'packages/postgres/**'
               - 'packages/realm-historian/**'
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
