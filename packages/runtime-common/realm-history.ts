@@ -164,7 +164,11 @@ function contextValue(raw: string | null): string | undefined {
 // - The correlation id is the tool call on an AI write, so each tool call
 //   is its own revision. Otherwise, and on an AI write that names no tool
 //   call, it is the request's logging correlation id.
-// - `pushFinal` marks the last request of a push, so it is kept only beside a
+// - The push id and its final mark group the requests of one
+//   `boxel realm push`, so they are kept only on `boxel-cli`. A push group
+//   stays open past realm-historian's quiet period and maximum age, so a
+//   stray push id on another channel would hold that writer's revision open.
+//   `pushFinal` marks the push's last request, so it is kept only beside a
 //   push id.
 //
 // A writer with no request sets its context itself. `mcp` is the channel for
@@ -191,10 +195,14 @@ export function writeContextFromHeaders(headers: {
     correlationId =
       contextValue(headers.get(WRITE_TOOL_CALL_HEADER)) ?? loggingCorrelationId;
   }
-  let pushId = contextValue(headers.get(PUSH_ID_HEADER));
-  let pushFinal =
-    pushId !== undefined &&
-    headers.get(PUSH_FINAL_HEADER)?.trim().toLowerCase() === 'true';
+  let pushId: string | undefined;
+  let pushFinal = false;
+  if (channel === 'boxel-cli') {
+    pushId = contextValue(headers.get(PUSH_ID_HEADER));
+    pushFinal =
+      pushId !== undefined &&
+      headers.get(PUSH_FINAL_HEADER)?.trim().toLowerCase() === 'true';
+  }
   return {
     channel,
     ...(agent ? { agent } : {}),

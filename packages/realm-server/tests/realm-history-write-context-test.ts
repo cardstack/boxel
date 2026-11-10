@@ -498,6 +498,21 @@ module(basename(import.meta.filename), function () {
       assert.false(orphan.pushFinal, 'no push to be the last request of');
     });
 
+    test("the push headers on a write that isn't boxel-cli's are dropped", async function (assert) {
+      for (let channel of ['host', 'ai-assistant']) {
+        let [event] = await eventsOf(() =>
+          writeSource(`push-${channel}.txt`, channel, {
+            [WRITE_CHANNEL_HEADER]: channel,
+            [PUSH_ID_HEADER]: 'push-7f3a',
+            [PUSH_FINAL_HEADER]: 'true',
+          }),
+        );
+        assert.strictEqual(event.channel, channel);
+        assert.strictEqual(event.pushId, null, `no push id on ${channel}`);
+        assert.false(event.pushFinal, `no final mark on ${channel}`);
+      }
+    });
+
     test('a header value too long to keep is dropped', async function (assert) {
       let [event] = await eventsOf(() =>
         writeSource('long.txt', 'long', {
