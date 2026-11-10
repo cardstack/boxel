@@ -204,4 +204,42 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
       'light: the same',
     );
   });
+
+  test('under a theme that leaves values out, a contract token keeps Boxel’s default and a gallery variable keeps the fallback', async function (assert) {
+    let theme = await gallery.buildTheme((attributes) => {
+      delete attributes.rootVariables['mutedForeground'];
+      delete attributes.darkModeVariables['mutedForeground'];
+      attributes.customCssVariables = attributes.customCssVariables.filter(
+        ({ name }) => name !== 'iris-ink',
+      );
+    });
+    let fallback = {
+      dark: { muted: '#d2c9bf', iris: '#af8bf9' },
+      light: { muted: '#5e564b', iris: '#7334f5' },
+    };
+    await renderDemo(theme);
+
+    for (let scheme of SCHEMES) {
+      await setScheme(scheme);
+      // a bare scheme island in the same card: what any card's tokens
+      // resolve to there, under this theme
+      let probe = document.createElement('div');
+      probe.dataset['theme'] = scheme;
+      site().closest('[data-boxel-theme-scope]')!.append(probe);
+      let boxel = getComputedStyle(probe)
+        .getPropertyValue('--muted-foreground')
+        .trim();
+      probe.remove();
+      assert.notStrictEqual(
+        boxel,
+        fallback[scheme].muted,
+        `${scheme}: Boxel's default differs from the gallery's`,
+      );
+      assert.deepEqual(
+        resolved(['--muted-foreground', '--iris-ink']),
+        { '--muted-foreground': boxel, '--iris-ink': fallback[scheme].iris },
+        `${scheme}: the contract token is Boxel's, the gallery variable the fallback's`,
+      );
+    }
+  });
 });

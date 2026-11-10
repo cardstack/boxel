@@ -29,7 +29,8 @@ interface Signature {
  * Where no theme card reaches the shell (a gallery card whose theme link is
  * missing, or a context that applies no card themes), the shell declares the
  * theme's values itself, ranked below any theme, so it renders in the
- * gallery's palette and type either way.
+ * gallery's palette and type either way. Its own variables, which no other
+ * theme sets, it also declares under any other theme.
  */
 export const ChoreoRoot: TOC<Signature> = <template>
   <div
@@ -107,13 +108,21 @@ export const ChoreoRoot: TOC<Signature> = <template>
        the theme's stylesheet applies them. They must match theme.json; the
        host's gallery theme-fallback test fails when the two differ.
 
+       The values come in two reaches. The theme contract's tokens and the
+       eyebrow role (theme.json's rootVariables, darkModeVariables and
+       typography) apply only where no themed card container is above the
+       shell, so under any theme a token the theme leaves out keeps Boxel's
+       default, as in any card. The gallery's own variables (its brand
+       palette and custom variables) apply under any theme: the gallery's
+       rules read them, and no other theme sets them.
+
        A theme still wins. This element's data-theme makes it a scheme
        island, and a theme card's stylesheet re-declares the theme's values
        on islands at (0,2,0), while Boxel's [data-theme] defaults are
-       (0,1,0). With the scope attribute these two rules are (0,1,1), so
-       they outrank the defaults and give way to any theme. The div keeps
-       that one notch; the :where() keeps the rest at zero. */
-    div:where(.choreo-site) {
+       (0,1,0). With the scope attribute these rules are (0,1,1), so they
+       outrank the defaults and give way to any theme. The div keeps that
+       one notch; the :where() and the :not() keep the rest at zero. */
+    div:where(.choreo-site):not(:where([data-boxel-theme-scope]) *) {
       --background: #f2ece1;
       --foreground: #211d18;
       --card: #f7f3ec;
@@ -131,6 +140,33 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --font-sans: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
       --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
+      --theme-eyebrow-font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      --theme-eyebrow-font-size: 0.6875rem;
+      --theme-eyebrow-line-height: 1.5;
+      --theme-eyebrow-font-weight: 400;
+      --theme-eyebrow-letter-spacing: 0.18em;
+    }
+
+    div:where(.choreo-site[data-theme='dark']):not(
+        :where([data-boxel-theme-scope]) *
+      ) {
+      --background: #2e2924;
+      --foreground: #f3ece3;
+      --card: #3a342e;
+      --card-foreground: #f3ece3;
+      --canvas: #2a2521;
+      --inset: #221e1a;
+      --muted-foreground: #d2c9bf;
+      --subtle-foreground: #b8aea3;
+      --primary: #ff3b1f;
+      --primary-foreground: #ffffff;
+      --primary-ink: #ff7a4e;
+      --border: color-mix(in srgb, var(--foreground) 9%, transparent);
+      --border-strong: color-mix(in srgb, var(--foreground) 16%, transparent);
+      --ring: var(--ember-hot);
+    }
+
+    div:where(.choreo-site) {
       --ember-hot: #ff6a3a;
       --copper: #e4a35a;
       --iris: #9667f7;
@@ -140,12 +176,6 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --glow: rgba(255, 59, 31, 0.38);
       --mark-tail-dark: rgba(255, 59, 31, 0.35);
       --mark-orbit-dark: rgba(139, 150, 156, 0.75);
-
-      --theme-eyebrow-font-family: 'IBM Plex Mono', ui-monospace, monospace;
-      --theme-eyebrow-font-size: 0.6875rem;
-      --theme-eyebrow-line-height: 1.5;
-      --theme-eyebrow-font-weight: 400;
-      --theme-eyebrow-letter-spacing: 0.18em;
 
       --ink-soft: #47423a;
       --copper-ink: #905824;
@@ -175,21 +205,6 @@ export const ChoreoRoot: TOC<Signature> = <template>
     }
 
     div:where(.choreo-site[data-theme='dark']) {
-      --background: #2e2924;
-      --foreground: #f3ece3;
-      --card: #3a342e;
-      --card-foreground: #f3ece3;
-      --canvas: #2a2521;
-      --inset: #221e1a;
-      --muted-foreground: #d2c9bf;
-      --subtle-foreground: #b8aea3;
-      --primary: #ff3b1f;
-      --primary-foreground: #ffffff;
-      --primary-ink: #ff7a4e;
-      --border: color-mix(in srgb, var(--foreground) 9%, transparent);
-      --border-strong: color-mix(in srgb, var(--foreground) 16%, transparent);
-      --ring: var(--ember-hot);
-
       --ink-soft: #e6dfd6;
       --copper-ink: var(--copper);
       --iris-ink: #af8bf9;
