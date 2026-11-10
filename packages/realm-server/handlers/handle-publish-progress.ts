@@ -61,6 +61,7 @@ interface PublishProgressRow {
 // answers identically, including one that had no part in the publish.
 export default function handlePublishProgress({
   dbAdapter,
+  matrixClient,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
@@ -108,7 +109,9 @@ export default function handlePublishProgress({
       let permissions = published?.source_url
         ? await fetchRealmPermissions(dbAdapter, new URL(published.source_url))
         : {};
-      if (!isRealmAdministrator(permissions, ownerUserId)) {
+      if (
+        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+      ) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to read publish progress for this realm`,

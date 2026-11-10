@@ -34,6 +34,7 @@ const log = logger('handle-unpublish');
 
 export default function handleUnpublishRealm({
   dbAdapter,
+  matrixClient,
   realmsRootPath,
   reconciler,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -96,7 +97,9 @@ export default function handleUnpublishRealm({
         dbAdapter,
         new URL(publishedRealmInfo.source_url),
       );
-      if (!isRealmAdministrator(permissions, ownerUserId)) {
+      if (
+        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+      ) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to unpublish this realm`,

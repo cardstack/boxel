@@ -865,6 +865,38 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           });
         });
 
+        test('refuses a PATCH that would leave the realm with no administrator', async function (assert) {
+          let response = await request
+            .patch('/_permissions')
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'bob', ['read', 'write'])}`,
+            )
+            .send({
+              data: {
+                id: testRealmHref,
+                type: 'permissions',
+                attributes: { permissions: { mary: ['read'], bob: ['read'] } },
+              },
+            });
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          let permissions = await fetchRealmPermissions(
+            dbAdapter,
+            testRealmURL,
+          );
+          assert.deepEqual(
+            permissions,
+            {
+              mary: ['read', 'write', 'realm-owner'],
+              bob: ['read', 'write'],
+              carol: ['read'],
+            },
+            'permissions did not change',
+          );
+        });
+
         test("an owner whose write was removed can't manage permissions", async function (assert) {
           await insertPermissions(dbAdapter, testRealmURL, {
             mary: ['read', 'realm-owner'],

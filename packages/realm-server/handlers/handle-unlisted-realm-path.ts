@@ -27,6 +27,7 @@ import {
 // can't be undermined by a hand-crafted request.
 export default function handleUnlistedRealmPathRequest({
   dbAdapter,
+  matrixClient,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
@@ -61,7 +62,9 @@ export default function handleUnlistedRealmPathRequest({
         dbAdapter,
         new URL(sourceRealmURL),
       );
-      if (!isRealmAdministrator(permissions, ownerUserId)) {
+      if (
+        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+      ) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to allocate an unlisted link for this realm`,

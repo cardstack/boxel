@@ -564,7 +564,9 @@ export default function handlePublishRealm({
         dbAdapter,
         new URL(sourceRealmURL),
       );
-      if (!isRealmAdministrator(permissions, ownerUserId)) {
+      if (
+        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+      ) {
         await sendResponseForForbiddenRequest(
           ctxt,
           `${ownerUserId} does not have enough permission to publish this realm`,

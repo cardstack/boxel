@@ -12403,7 +12403,11 @@ export class Realm {
 
       if (
         !(requiredPermission === 'administer'
-          ? isRealmAdministrator(realmPermissions, user)
+          ? isRealmAdministrator(
+              realmPermissions,
+              user,
+              this.#matrixClient.serverName,
+            )
           : await realmPermissionChecker.can(user, requiredPermission))
       ) {
         warnRefusal(
@@ -17356,6 +17360,27 @@ export class Realm {
           requestContext,
         });
       }
+    }
+
+    // Only an administrator can change permissions here, so a change that
+    // leaves the realm with none would leave no one able to change them back.
+    let administers = (permissions: RealmPermissions) =>
+      Object.keys(permissions).some((user) =>
+        isRealmAdministrator(permissions, user, this.#matrixClient.serverName),
+      );
+    let patched: RealmPermissions = { ...currentPermissions };
+    for (let [user, permissions] of Object.entries(patch)) {
+      if (permissions && permissions.length > 0) {
+        patched[user] = permissions;
+      } else {
+        delete patched[user];
+      }
+    }
+    if (administers(currentPermissions) && !administers(patched)) {
+      return badRequest({
+        message: `the realm must keep at least one administrator: a user whose own permissions include write`,
+        requestContext,
+      });
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);

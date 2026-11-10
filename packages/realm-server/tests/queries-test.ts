@@ -640,8 +640,10 @@ module(basename(import.meta.filename), function () {
         sourceRealmURL,
         lastPublishedAt: Date.now(),
       });
+      // A write row on the published URL, so only its registry kind keeps
+      // it out of the list.
       await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-        [owner]: ['read', 'realm-owner'],
+        [owner]: ['read', 'write', 'realm-owner'],
         '*': ['read'],
       });
 

@@ -596,7 +596,7 @@ class RealmResource {
     );
 
     if (response.status === 403) {
-      // the user is not an owner of this realm which is a legit scenario
+      // the user doesn't administer this realm, which is a legit scenario
       this.realmPermissions = null;
       return;
     } else if (response.status !== 200) {

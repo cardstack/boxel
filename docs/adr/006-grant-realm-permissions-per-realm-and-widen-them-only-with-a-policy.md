@@ -61,8 +61,9 @@ realm. `write` admits changing its contents.
 A user whose own permission row grants `write` administers the realm
 (ADR 024 §1.3). Administering covers granting and revoking other users' `read`
 and `write`, archiving, restoring or deleting the realm, and publishing or
-unpublishing it. A published realm is administered by the administrators of
-the realm it was published from. A `*` or `users` row names no one, so the
+unpublishing it. Publishing, unpublishing and
+reading a published realm's publish progress MUST be authorized against
+administering the realm it was published from. A `*` or `users` row names no one, so the
 `write` it grants MUST NOT admit administering.
 
 The permission check MUST test each level on its own and MUST NOT infer one

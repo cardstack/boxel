@@ -95,9 +95,9 @@ export interface ArchivedRealm {
 
 // List the archived realms a user administers, most-recently-archived first.
 // Joins archived realm_metadata rows to the user's own realm_user_permissions
-// row where it grants write (see `isRealmAdministrator`). Published snapshots
-// are excluded: they are never archived on their own, so an archived snapshot
-// is not one of the user's workspaces.
+// row where it grants write. Published snapshots are left out by their
+// registry kind rather than by their permission rows: a workspace is a source
+// realm, whatever rows a published URL carries.
 export async function fetchArchivedRealmsForAdministrator(
   dbAdapter: DBAdapter,
   username: string,

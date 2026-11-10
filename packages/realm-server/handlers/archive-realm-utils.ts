@@ -1,4 +1,6 @@
 import type Koa from 'koa';
+import * as Sentry from '@sentry/node';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   fetchRealmPermissions,
   isRealmAdministrator,
@@ -17,14 +19,11 @@ import {
 } from '../middleware/index.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export interface ArchiveTarget {
   realmURL: string;
   permissions: RealmPermissions;
-  // The authorized requester, one of the realm's administrators. Handlers
-  // use it to notify the requester's other sessions that their realm list
-  // changed.
-  ownerUserId: string;
 }
 
 // Parse the JSON:API body, resolve the target realm URL, and authorize the
@@ -43,6 +42,7 @@ export async function resolveAndAuthorizeArchiveTarget(
   ctxt: Koa.Context,
   dbAdapter: DBAdapter,
   action: 'archive' | 'unarchive',
+  matrixServerName: string,
 ): Promise<ArchiveTarget | null> {
   let token = ctxt.state.token as RealmServerTokenClaim;
   if (!token) {
@@ -112,13 +112,13 @@ export async function resolveAndAuthorizeArchiveTarget(
     return null;
   }
 
-  let { user: ownerUserId } = token;
+  let { user: requesterUserId } = token;
   let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
 
-  if (!isRealmAdministrator(permissions, ownerUserId)) {
+  if (!isRealmAdministrator(permissions, requesterUserId, matrixServerName)) {
     await sendResponseForForbiddenRequest(
       ctxt,
-      `${ownerUserId} does not have enough permission to ${action} realm ${realmURL}`,
+      `${requesterUserId} does not have enough permission to ${action} realm ${realmURL}`,
     );
     return null;
   }
@@ -133,5 +133,25 @@ export async function resolveAndAuthorizeArchiveTarget(
     return null;
   }
 
-  return { realmURL, permissions, ownerUserId };
+  return { realmURL, permissions };
+}
+
+// Tells each of `users` that their realm list changed, so a session showing
+// the workspace chooser picks up an archive, restore or delete without a
+// reload. An administrator who isn't the realm's owner can make the change,
+// so it goes to every user the realm's permission rows name, not only the
+// caller. Best-effort per user: one failed send doesn't stop the rest.
+export async function notifyRealmsListUpdated(
+  sendEvent: CreateRoutesArgs['sendEvent'],
+  users: string[],
+): Promise<void> {
+  await Promise.all(
+    users.map(async (user) => {
+      try {
+        await sendEvent(user, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (error) {
+        Sentry.captureException(error);
+      }
+    }),
+  );
 }
