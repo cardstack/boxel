@@ -428,10 +428,12 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('nested eq through an INTERIOR plural field stays on json_tree (no `@>`)', async function (assert) {
+    test('nested eq through an INTERIOR plural field binds per element (no `@>`)', async function (assert) {
       // `contacts` is plural, so `contacts.email` crosses an array at an
       // interior segment. `@>` with a nested object would lose the
-      // per-element positional binding, so the walk must divert to json_tree.
+      // per-element positional binding. A JSON-path match
+      // (`$."contacts"[*] ? (@."email" == …)`) keeps it, and the search_doc GIN
+      // index answers it, so no jsonb_tree walk of the list is joined in.
       let { cards, meta } = await engine.searchCards(new URL(testRealmURL), {
         filter: { on: policyRef, eq: { 'contacts.email': 'shared@x.com' } },
       });
@@ -449,8 +451,12 @@ module(basename(import.meta.filename), function () {
         'an interior plural segment forces json_tree, never `@>`',
       );
       assert.ok(
-        lastFilterSql().includes('fullkey'),
-        'the json_tree `fullkey LIKE` path-anchor is used instead',
+        /search_doc\s*@\?/.test(lastFilterSql()),
+        'a JSON-path match on search_doc is used instead',
+      );
+      assert.notOk(
+        /jsonb?_tree/.test(lastFilterSql()),
+        'and no tree walk of the list is joined in',
       );
     });
 
