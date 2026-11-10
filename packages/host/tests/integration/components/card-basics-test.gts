@@ -38,6 +38,7 @@ import {
 } from '@cardstack/base/card-api';
 import CodeRefField from '@cardstack/base/code-ref';
 import ColorField from '@cardstack/base/color';
+import CountryField from '@cardstack/base/country';
 import DateField from '@cardstack/base/date';
 import DateTimeField from '@cardstack/base/datetime';
 import EmailField from '@cardstack/base/email';
@@ -4461,6 +4462,39 @@ module('Integration | card-basics', function (hooks) {
         assert.dom(input).hasAttribute('data-form-type', 'other', input);
         assert.dom(input).hasAttribute('data-bwignore', '', input);
       }
+    });
+
+    test("the country picker's search field tells password managers to skip it", async function (assert) {
+      class Person extends CardDef {
+        @field home = contains(CountryField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        home: new CountryField({ name: 'Japan', code: 'JP' }),
+      });
+
+      await renderCard(loader, mango, 'edit');
+      assert
+        .dom('[data-test-field="home"] [data-test-pretui-select-trigger]')
+        .hasText('🇯🇵 Japan', "the trigger shows the country's flag and name");
+
+      await click('[data-test-field="home"] [data-test-pretui-select-trigger]');
+      let search = '[data-test-pretui-select-search-input]';
+      assert.dom(search).hasAttribute('data-1p-ignore', '');
+      assert.dom(search).hasAttribute('data-lpignore', 'true');
+      assert.dom(search).hasAttribute('data-form-type', 'other');
+      assert.dom(search).hasAttribute('data-bwignore', '');
+
+      await fillIn(search, 'Portugal');
+      let portugal = Array.from(
+        document.querySelectorAll(
+          "[role='listbox'] [data-test-pretui-select-option]",
+        ),
+      ).find((option) => option.textContent?.trim() === 'Portugal');
+      assert.ok(portugal, 'the search finds the country by name');
+      await click(portugal!);
+      assert.strictEqual(mango.home.code, 'PT', 'choosing sets the code');
+      assert.strictEqual(mango.home.name, 'Portugal', 'and the name');
     });
 
     test('renders boolean edit view', async function (assert) {

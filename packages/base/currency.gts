@@ -1,7 +1,8 @@
 import { contains, field, Component, CardDef, FieldDef } from './card-api';
 import StringField from './string';
 import CurrencyDollarIcon from '@cardstack/boxel-icons/currency-dollar';
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { Select } from '@cardstack/pretui/components/select';
+import type { SelectOption } from '@cardstack/pretui/components/select';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
@@ -19,18 +20,8 @@ export class Currency extends CardDef {
   };
 }
 
-interface CurrencyData {
-  code: string;
-}
-
 class CurrencyFieldEdit extends Component<typeof CurrencyField> {
-  // TODO: this is a temporary fix to show the default symbol until the field allows for a default value
-  @tracked currency: CurrencyData | undefined = this.args.model.code
-    ? {
-        code: this.args.model.code,
-      }
-    : { code: 'USD' };
-  @tracked currencies: CurrencyData[] = [];
+  @tracked currencies: SelectOption[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -38,41 +29,41 @@ class CurrencyFieldEdit extends Component<typeof CurrencyField> {
   }
 
   private loadCurrencies = restartableTask(async () => {
-    this.currencies = Object.entries(currencyCodeSymbolMapping).map(
-      ([code, symbol]) => {
-        return {
-          code,
-          symbol,
-        } as CurrencyData;
-      },
-    );
+    this.currencies = Object.keys(currencyCodeSymbolMapping).map((code) => ({
+      value: code,
+      label: code,
+    }));
   });
 
-  @action onSelectCurrency(currency: CurrencyData | null) {
-    if (!currency) {
-      return;
-    }
-    this.currency = { code: currency.code };
-    this.args.model.code = currency.code;
+  // TODO: this is a temporary fix to show the default symbol until the field allows for a default value
+  get code() {
+    return this.args.model.code || 'USD';
+  }
+
+  @action onSelectCurrency(code: string) {
+    this.args.model.code = code;
   }
 
   <template>
     {{#if this.loadCurrencies.isRunning}}
       Loading currencies...
     {{else}}
-      <BoxelSelect
+      <Select
         @placeholder='Choose a currency'
         @options={{this.currencies}}
-        @selected={{this.currency}}
-        @onChange={{this.onSelectCurrency}}
+        @value={{this.code}}
+        @onValueChange={{this.onSelectCurrency}}
         @searchEnabled={{true}}
-        @searchField='code'
         class='currency-field-edit'
-        as |currency|
-      >
-        {{currency.code}}
-      </BoxelSelect>
+      />
     {{/if}}
+    <style scoped>
+      /* the app's full control size, beside the edit form's other inputs */
+      .currency-field-edit {
+        --pretui-field-h: var(--boxel-form-control-height);
+        --pretui-field-font-size: var(--boxel-font-size-sm);
+      }
+    </style>
   </template>
 }
 
