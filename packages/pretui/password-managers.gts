@@ -10,8 +10,10 @@
 // regardless.
 //
 // The secure origin's sign-in, sign-up and password fields must never carry
-// these hints, so this is something a caller adds, never a default of an
-// input component.
+// these hints, so a component whose field could take a login, such as
+// Input, never sets them by default; a caller adds them. A component's own
+// filter box, which never takes a login and which no caller can reach, sets
+// them itself, as Select's search box does.
 //
 // Two copies of this list set the same hints where this module can't be
 // imported. Base's field templates use base's own copy
