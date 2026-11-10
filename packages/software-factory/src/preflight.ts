@@ -123,12 +123,37 @@ export function playwrightBrowsersRoot(): string | undefined {
   }
 }
 
+interface PlaywrightBrowserEntry {
+  name: string;
+  revision: string;
+  revisionOverrides?: Record<string, string>;
+}
+
 /**
- * The browser-cache directory of the headless shell that the installed
- * Playwright launches, such as `chromium_headless_shell-1254`. Each Playwright
- * release names one revision in playwright-core's `browsers.json`, and the
- * launch looks only for that revision, so a build left in the cache by another
- * Playwright release doesn't count. Undefined when the file can't be read.
+ * The browser-cache directory of the headless shell that a playwright-core
+ * `browsers.json` names, such as `chromium_headless_shell-1254`. Each
+ * Playwright release names one revision there, and the launch looks only for
+ * that revision, so a build left in the cache by another Playwright release
+ * doesn't count.
+ *
+ * An entry may also carry `revisionOverrides`, keyed by Playwright's host
+ * platform (such as `mac14-arm64`). On a host it names, Playwright launches
+ * the override's build from `chromium_headless_shell_<platform>_special-<rev>`.
+ * Telling which key this host matches would mean repeating Playwright's
+ * platform detection, so an entry with overrides gives undefined, and the
+ * check falls back to accepting any headless-shell build.
+ */
+export function headlessShellDirNameFrom(
+  browsers: PlaywrightBrowserEntry[],
+): string | undefined {
+  let shell = browsers.find((b) => b.name === 'chromium-headless-shell');
+  if (!shell || shell.revisionOverrides) return undefined;
+  return `chromium_headless_shell-${shell.revision}`;
+}
+
+/**
+ * `headlessShellDirNameFrom` applied to the `browsers.json` of the Playwright
+ * this package installs. Undefined when the file can't be read.
  */
 export function playwrightHeadlessShellDirName(): string | undefined {
   try {
@@ -145,9 +170,8 @@ export function playwrightHeadlessShellDirName(): string | undefined {
     );
     let { browsers } = JSON.parse(
       readFileSync(join(dirname(corePackageJson), 'browsers.json'), 'utf8'),
-    ) as { browsers: { name: string; revision: string }[] };
-    let shell = browsers.find((b) => b.name === 'chromium-headless-shell');
-    return shell ? `chromium_headless_shell-${shell.revision}` : undefined;
+    ) as { browsers: PlaywrightBrowserEntry[] };
+    return headlessShellDirNameFrom(browsers);
   } catch {
     return undefined;
   }
@@ -160,10 +184,10 @@ export function playwrightHeadlessShellDirName(): string | undefined {
  * cache — rather than an actual browser launch. `npx playwright install
  * chromium` also downloads the headless shell, so this covers both install
  * commands. `expected` is the directory `playwrightHeadlessShellDirName()`
- * returns; when it is undefined, any downloaded `chromium_headless_shell-*`
- * build counts. When the browser path can't be determined
- * (PLAYWRIGHT_BROWSERS_PATH set to '0'), assume present so we don't block on a
- * false negative.
+ * returns; when it is undefined, any downloaded headless-shell build counts,
+ * including a platform override's `_special` one. When the browser path can't
+ * be determined (PLAYWRIGHT_BROWSERS_PATH set to '0'), assume present so we
+ * don't block on a false negative.
  */
 export function playwrightHeadlessShellPresent(
   expected: string | undefined,
@@ -176,7 +200,7 @@ export function playwrightHeadlessShellPresent(
   }
   try {
     return readdirSync(root).some((name) =>
-      name.startsWith('chromium_headless_shell-'),
+      /^chromium_headless_shell(_.+_special)?-/.test(name),
     );
   } catch {
     return false;
