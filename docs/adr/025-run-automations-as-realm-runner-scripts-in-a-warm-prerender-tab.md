@@ -48,9 +48,10 @@ take at a time SHOULD come from measured capacity.
 
 ### 1.3. An automation runs only a script
 
-An automation MUST run only a Realm Runner script. It MUST NOT run a host
-command, whoever names it: an author, a card, a realm, a request or the
-platform. A platform job MUST run as a system cron, not as an automation.
+An automation (an instance of the `Automation` card, ADR 028 §1.1) MUST run
+only a Realm Runner script. A run MUST NOT execute a host command other than
+the platform command that hosts its script, whoever names it: an author, a
+card, a realm or a request.
 
 ### 1.4. The automation surface is an allowlist
 
@@ -92,13 +93,14 @@ controls: no request interception, no proxy and no `connect-src`. A
 `run-command` job also mints prerender auth for every realm its `runAs` user
 can reach (`prepareRunCommand`), because a card can link across realms. A
 host command would run with that network and that reach, whoever chose it.
-QuickJS confines a script to the `realm` object, and nothing confines a host
-command, so an automation runs only scripts. Platform jobs that need host
-code, such as the OpenRouter model sync and the daily credit grant, are
-system crons (`packages/realm-server/lib/cron-scheduler.ts`), which run no
-code that a customer wrote. Each method on the surface widens what a script
-can reach, so the list is pinned by a test, and each change to it is
-reviewed.
+A script acts only through the automation surface (§1.4): a pinned allowlist,
+writes held back to land together, and caps (§1.5). So an automation runs
+only a script, and the one host command its run executes is the platform
+command that hosts that script. Platform jobs, such as the OpenRouter model
+sync and the daily credit grant, run as system crons
+(`packages/realm-server/lib/cron-scheduler.ts`), not as automations. Each
+method on the surface widens what a script can reach, so the list is pinned
+by a test, and each change to it is reviewed.
 
 A tab is expensive. Each one holds about 836 MB, so an 8 GB prerender task
 holds about five (`docs/aws-operations.md`). A QuickJS worker costs
@@ -125,11 +127,10 @@ ordinary file in the realm, which people can read, diff and edit.
   capacity and auth, to get what Chrome and QuickJS already give.
 - **Arbitrary host commands.** The tab has no egress controls and holds
   auth for other realms, so an author's command could send anything anywhere.
-- **A reviewed list of platform commands.** A listed command still runs
-  outside QuickJS, in a tab with no egress controls and with auth for every
-  realm its `runAs` user can reach. Review limits which commands run, not
-  what each one can do, and every addition widens what an automation can do.
-  The platform jobs such a list would serve already run as system crons.
+- **A reviewed list of platform commands.** A listed command acts outside
+  the automation surface, so the §1.4 allowlist test, the held-back writes
+  and the §1.5 caps don't bound it. The platform jobs such a list would serve
+  already run as system crons.
 - **One tab per run.** Start-up would cost more than most runs, and a
   server holds only about five tabs.
 
