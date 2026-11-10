@@ -154,4 +154,49 @@ module('Pretui | components/layout-control | folding', function (hooks) {
     assert.notOk(input(), 'Escape collapses back to the square');
     assert.strictEqual(document.activeElement, toggle(), 'focus returns to the square');
   });
+
+  test('a slot folded by a measurement taken mid-resize unfolds when the bar is back at its width', async function (assert) {
+    const WIDE = [
+      { name: 'wide', minWidth: 30 },
+      { name: 'menu', minWidth: 0 },
+    ];
+    const HOST = 'inline-size: 40rem';
+    const CONTENT = 'display: inline-block; flex: none; inline-size: 30rem';
+    await render(
+      <template>
+        <div style={{HOST}} data-test-host>
+          <LayoutControl as |lc|>
+            <lc.Slot @id='wide' @forms={{WIDE}}>
+              <span style={{CONTENT}} data-test-wide>wide</span>
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+      </template>,
+    );
+    let host = document.querySelector<HTMLElement>('[data-test-host]')!;
+    let frames = async (n: number) => {
+      for (let i = 0; i < n; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+    };
+    await waitUntil(() => document.querySelector('[data-test-wide]'));
+    await frames(3);
+    // The bar reports 39rem, then narrows within the same observer delivery.
+    // An observer only hears of a deeper element's resize in that frame, so
+    // the bar's next measuring frame sees the narrow layout before its own
+    // observer reports it, as in a host resize or stack animation.
+    let shrink = new ResizeObserver(() => {
+      shrink.disconnect();
+      host.style.inlineSize = '20rem';
+    });
+    host.style.inlineSize = '39rem';
+    shrink.observe(document.querySelector('[data-test-wide]')!);
+    await waitUntil(() => document.querySelector('[data-test-pretui-layout-control-more]'));
+    await frames(3);
+    // back to the width it was measured at, less than HYSTERESIS_PX above it
+    host.style.inlineSize = '39rem';
+    await frames(10);
+    assert.dom('[data-test-wide]').exists('back at its width, the slot is in the row again');
+    assert.dom('[data-test-pretui-layout-control-more]').doesNotExist();
+  });
 });
