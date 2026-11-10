@@ -92,15 +92,15 @@ method and path pattern, and in the realm by MIME type too. A controller MUST
 match the route its router selected for the request, after any method
 override, and never the request's URL against an entry. An entry MUST NOT
 name a method or path pattern that no route is registered with. The realm
-can't read the registry, so the realm server hands each realm the part of the
-map that names realm routes. The check against the map MUST be one shared
-function, which each controller calls right after the lookup, and it MUST take
-only the verified caller and the route its router selected, never the
-request. A route that checks its caller another way, by an
+server MUST hand each realm the part of the map that names realm routes,
+since the realm can't read the registry. The check against the map MUST be
+one shared function, which each controller calls right after the lookup, and
+besides the map it MUST take only the verified caller and the route its
+router selected, never the request. A route that checks its caller another way, by an
 operator token, a shared secret, or a session token it verifies itself, never
-reaches a controller, and so refuses OAuth tokens. `/mcp`'s entry maps its one
-route to each scope, so `/mcp`'s controller MUST admit a tool call only when
-the tool, where it is defined, names a scope the token holds. A tool that
+reaches a controller, and so refuses OAuth tokens. `/mcp` is one route for
+every tool, so `/mcp`'s controller MUST admit a tool call only when the tool,
+where it is defined, names a scope the token holds. A tool that
 names no scope MUST NOT be served.
 
 A resource that needs more than its scopes describe MUST be a new entry, not a
@@ -152,7 +152,8 @@ once per request. `/mcp`'s controller is its entry point. The Boxel API's
 controllers are `Realm.#verifySession`, `multiRealmAuthorization` and
 `jwtMiddleware`. A route that checks a session token itself, such as
 `/_download-realm`, MUST refuse an OAuth token. The lookup MUST be called from
-the controller itself, not from a helper such a route shares with it. A
+the controller itself, not from a helper that such a route and the controller
+share. A
 controller MUST read an OAuth token only from the
 `Authorization: Bearer` header, and MUST answer one sent anywhere else with
 `400` without looking it up. The token MUST NOT leave the controller: it MUST
@@ -168,7 +169,7 @@ A verified caller MUST hold exactly the user, the OAuth grant, the OAuth
 client, the token's scopes and the time the grant was created, and nothing
 taken from the request. The Boxel API's controllers MUST come out of an OAuth
 token with the same user a session token gives, so every permission check after them is unchanged. A
-token's scopes MUST act only as a ceiling on what its caller may do: the
+token's scopes MUST only narrow what its caller may do: the
 user's current realm permissions MUST still decide each call, and a scope MUST
 NOT grant what they don't (ADR 006). An OAuth token MUST NOT be exchanged for a
 realm-server session, a realm session, a delegated session or a Matrix login.
@@ -178,8 +179,8 @@ realm-server session, a realm session, a delegated session or a Matrix login.
 A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). An entry
 MUST NOT map a scope to key management, reads included, to a route that needs a
 secure session, to a route that mints a token or a signed URL, or to a route
-that changes a realm's permissions. Each of these refusals MUST be tested, on
-the realm server and in the realm.
+that changes a realm's permissions. Each of these refusals MUST be tested on
+the realm server, and each that names a realm route in the realm too.
 
 An OAuth token MUST NOT change what a realm's policy admits (ADR 006 §1.3): a
 write that changes `realm.json`'s `policy` or `config`, or the `RealmPolicy`
@@ -280,9 +281,9 @@ a signed URL. An entry names the route its router selected, not a pattern
 over URLs, because realm routes share paths: every card document is read
 through one pattern, and a URL pattern broad enough for card paths would also
 match `_sign-capture-urls`. The check reads only who is calling and which
-route was selected, never how the credential arrived, so it can move whole
-into an access decision that never sees the request, and one shared function
-leaves that move a single call site.
+route was selected, never how the credential arrived, so how a token reached
+the server can't change what it admits, and one shared function keeps the
+check in one place.
 
 The library builds the URLs it publishes, and sets its cookies, from whatever
 host a request names. The realm server also answers for published sites,
@@ -378,13 +379,12 @@ more.
   on the realm server and in the realm, with no one place to review it, and
   the ceiling alone admits a realm route that needs only `read` but mints a
   signed URL.
-- **Admitting a token by HTTP method, with a list of refused routes.**
-  `_capabilities` is a `POST` that reads, a `QUERY` may arrive as a `POST`
-  with a method override, `_sign-capture-urls` is a `QUERY` that mints, and a
-  route added later accepts OAuth tokens until it is listed.
-- **A list of routes that refuse a resource's tokens.** It fails open: a route
-  added later accepts OAuth tokens until someone lists it, and a scope can't
-  narrow a route that checks nothing a scope describes.
+- **A list of routes that refuse a resource's tokens, or admitting a token by
+  HTTP method.** A refusal list fails open: a route added later accepts OAuth
+  tokens until someone lists it, and a scope can't narrow a route that checks
+  nothing a scope describes. The method fails both ways: `_capabilities` is a
+  `POST` that reads, a `QUERY` may arrive as a `POST` with a method override,
+  and `_sign-capture-urls` is a `QUERY` that mints.
 - **Grants that share the session-revocation cutoff.** The follow-up
   revocation after a password change would end grants made in the hour after
   it, though nothing it covers can create one.

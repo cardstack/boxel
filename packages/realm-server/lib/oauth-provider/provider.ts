@@ -10,7 +10,7 @@ import { buildRegistry, oauthIssuer, registryScopes } from './registry.ts';
 
 export const log = logger('boxel:oauth-provider');
 
-// Every route of the provider is beneath this prefix, which request telemetry
+// Every endpoint of the provider is beneath this prefix, which request telemetry
 // strips of its query strings and bodies.
 export const OAUTH_PROVIDER_PATH_PREFIX = OAUTH_PROVIDER_PATH;
 export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
@@ -23,8 +23,8 @@ export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 //
 // An endpoint's field is never copied from the library: it builds endpoint
 // URLs from the request's host and path, not from the issuer, so a request
-// with another `Host` would publish endpoints on that host. A change that
-// serves an endpoint sets its field from the issuer and the route instead.
+// with another `Host` would publish endpoints on that host. An endpoint's
+// field is set from the issuer and its registered route instead.
 //
 // `grant_types_supported` is listed because a client that finds it missing
 // assumes the implicit grant is supported (RFC 8414 §2). The library derives
@@ -107,7 +107,7 @@ export function createOAuthProvider({
     },
     // Every feature is set here, including those whose default is the
     // setting wanted, so a library upgrade that changes a default changes
-    // nothing. Features a later change turns on say so.
+    // nothing.
     features: {
       // The library's quick-start login and consent pages, which sign in any
       // account ID typed into them. On by default.
@@ -140,7 +140,7 @@ export function createOAuthProvider({
           };
         },
       },
-      // Off until the changes that serve them.
+      // Off: nothing serves them.
       registration: { enabled: false },
       clientIdMetadataDocument: { enabled: false },
       deviceFlow: { enabled: false },

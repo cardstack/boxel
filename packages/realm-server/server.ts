@@ -984,8 +984,9 @@ export class RealmServer {
           // operation cross-origin at all.
           //
           // MCP-Protocol-Version is the header an MCP client sends on every
-          // request after initialization; a browser-based client (MCP
-          // Inspector) needs it allowed to reach `/mcp` at all.
+          // request after initialization, discovery included; a browser-based
+          // client (MCP Inspector) needs it allowed to reach the server at
+          // all.
           allowHeaders:
             'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Policy-Audit-Confirmation, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Realm-Events, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action, MCP-Protocol-Version',
           // Without an explicit expose list, @koa/cors only emits the

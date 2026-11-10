@@ -9,8 +9,8 @@ import { OAUTH_DISCOVERY_PATH } from './provider.ts';
 // own discovery under the OpenID name, each endpoint of a feature turned on),
 // so it is reached only through the exact routes registered here; any other
 // path never touches it. The router runs ahead of realm routing, so a realm
-// mounted at the server's root can't shadow these. Each change that serves an
-// endpoint registers it here.
+// mounted at the server's root can't shadow these. An endpoint is served only
+// once it is registered here.
 //
 // The routes answer only on the issuer's host. The realm server also serves
 // published sites on other hosts, whose pages users write, and the library

@@ -69,11 +69,6 @@ export interface OAuthResource extends Omit<OAuthResourceDefinition, 'path'> {
   id: string;
 }
 
-// `/mcp` is one route for every tool, so both scopes map it. Each tool names
-// the scope it needs where it is defined, and `/mcp`'s controller checks that
-// too.
-const MCP_ROUTE: OAuthRoute = { on: 'server', method: 'POST', path: '/mcp' };
-
 const MCP: OAuthResourceDefinition = {
   path: '/mcp',
   name: 'Boxel workspaces',
@@ -87,7 +82,10 @@ const MCP: OAuthResourceDefinition = {
       description: 'See the cards and files in your workspaces.',
       label: 'Read',
       caution: false,
-      routes: [MCP_ROUTE],
+      // `/mcp` is one route for every tool, and each tool names the scope it
+      // needs where it is defined. An entry names only a registered route,
+      // and nothing serves `/mcp`, so no scope maps it.
+      routes: [],
     },
     {
       name: 'boxel:write',
@@ -95,7 +93,7 @@ const MCP: OAuthResourceDefinition = {
         'Create and change cards and files, create workspaces, and archive the ones you own.',
       label: 'Change',
       caution: true,
-      routes: [MCP_ROUTE],
+      routes: [],
     },
   ],
   clients: 'open',

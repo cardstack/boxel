@@ -478,14 +478,11 @@ module(basename(import.meta.filename), function () {
 
     test("answers only on the issuer's host", async function (assert) {
       // Published sites are served on other hosts, from pages users write.
-      for (let path of [DISCOVERY, '/_oauth-provider/auth']) {
-        let response = await request.get(path, 'site.published.example.test');
-        assert.strictEqual(
-          response.status,
-          404,
-          `${path} on another host is not found`,
-        );
-      }
+      let response = await request.get(
+        DISCOVERY,
+        'site.published.example.test',
+      );
+      assert.strictEqual(response.status, 404, 'not found on another host');
     });
 
     test('serves no OpenID discovery, signing keys, or endpoint not yet built', async function (assert) {
