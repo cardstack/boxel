@@ -4497,6 +4497,29 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(mango.home.name, 'Portugal', 'and the name');
     });
 
+    test("the country picker's search box takes its options' type size", async function (assert) {
+      class Person extends CardDef {
+        @field home = contains(CountryField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        home: new CountryField({ name: 'Japan', code: 'JP' }),
+      });
+
+      await renderCard(loader, mango, 'edit');
+      await click('[data-test-field="home"] [data-test-pretui-select-trigger]');
+      let search = document.querySelector(
+        '[data-test-pretui-select-search-input]',
+      ) as HTMLElement;
+      let option = document.querySelector(
+        "[role='listbox'] [data-test-pretui-select-option]",
+      ) as HTMLElement;
+      assert.strictEqual(
+        getComputedStyle(search).fontSize,
+        getComputedStyle(option).fontSize,
+      );
+    });
+
     test('renders boolean edit view', async function (assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
