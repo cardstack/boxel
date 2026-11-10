@@ -39,6 +39,7 @@ module('Integration | tools | send-ai-assistant-message', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
+    autostart: true,
   });
 
   let { createAndJoinRoom, getRoomEvents } = mockMatrixUtils;
