@@ -196,15 +196,33 @@ export function currentPricing(): Pricing | undefined {
 // runs once. A passing check logs every value and the pricing version. A
 // failing one logs every problem at error level and sends it to Sentry, which
 // is what pricing alerts fire on, and leaves the process without prices.
+export interface PricingReporter {
+  info(message: string): void;
+  error(message: string): void;
+  alert(
+    message: string,
+    context: { level: 'error'; tags: Record<string, string> },
+  ): void;
+}
+
+const defaultReporter: PricingReporter = {
+  info: (message) => log.info(message),
+  error: (message) => log.error(message),
+  alert: (message, context) => {
+    Sentry.captureMessage(message, context);
+  },
+};
+
 export function checkPricingAtStartup(
   processName: string,
   env: Record<string, string | undefined> = process.env,
+  reporter: PricingReporter = defaultReporter,
 ): PricingCheck {
   let check = readPricing(env);
   if (check.ok) {
     current = check.pricing;
     let { values, version } = check.pricing;
-    log.info(
+    reporter.info(
       `pricing check passed in ${processName}: pricing version ${version}; ${(
         Object.keys(PRICING_VARIABLES) as PricingValueName[]
       )
@@ -216,8 +234,8 @@ export function checkPricingAtStartup(
     let message = `pricing check failed in ${processName}: this process has no prices, so it must not admit automation runs or submit batches until its pricing variables are fixed and it restarts. ${check.problems
       .map(({ variable, problem }) => `${variable} ${problem}`)
       .join('; ')}`;
-    log.error(message);
-    Sentry.captureMessage(message, {
+    reporter.error(message);
+    reporter.alert(message, {
       level: 'error',
       tags: { pricingCheck: 'failed', process: processName },
     });

@@ -193,6 +193,32 @@ module(basename(import.meta.filename), function () {
           `${variable}=2.5 is refused`,
         );
       }
+      for (let variable of [
+        'PRICING_WORKER_TASK_PROCESSES',
+        'PRICING_MINIMUM_BALANCE_FLOOR_CREDITS',
+      ]) {
+        for (let raw of [
+          '-1',
+          '-1000',
+          '+1',
+          '1e3',
+          ' 2',
+          '2 ',
+          '0x10',
+          '1,000',
+        ]) {
+          assert.deepEqual(
+            problemsOf(readPricing({ ...validEnv(), [variable]: raw })),
+            [
+              {
+                variable,
+                problem: `must be a whole number, got ${JSON.stringify(raw)}`,
+              },
+            ],
+            `${variable}=${JSON.stringify(raw)} is refused`,
+          );
+        }
+      }
       assert.deepEqual(
         problemsOf(
           readPricing({ ...validEnv(), PRICING_PRERENDER_TASK_TABS: '0' }),
@@ -270,11 +296,84 @@ module(basename(import.meta.filename), function () {
   });
 
   module('checkPricingAtStartup', function () {
+    function recordingReporter() {
+      let calls = {
+        info: [] as string[],
+        error: [] as string[],
+        alert: [] as { message: string; context: unknown }[],
+      };
+      return {
+        calls,
+        reporter: {
+          info: (message: string) => calls.info.push(message),
+          error: (message: string) => calls.error.push(message),
+          alert: (message: string, context: unknown) =>
+            calls.alert.push({ message, context }),
+        },
+      };
+    }
+
+    test('a passing check logs the pricing version and every value, and raises no alert', function (assert) {
+      let { calls, reporter } = recordingReporter();
+      let pricing = pricingOf(
+        checkPricingAtStartup('worker', validEnv(), reporter),
+      );
+      assert.strictEqual(calls.info.length, 1, 'one info line');
+      let [line] = calls.info;
+      assert.true(
+        line.startsWith(
+          `pricing check passed in worker: pricing version ${pricing.version}; `,
+        ),
+        line,
+      );
+      for (let [variable, raw] of Object.entries(validEnv())) {
+        assert.true(
+          line.includes(`${variable}=${Number(raw)}`),
+          `the line carries ${variable}`,
+        );
+      }
+      assert.deepEqual(calls.error, [], 'no error line');
+      assert.deepEqual(calls.alert, [], 'no alert');
+    });
+
+    test('a failing check logs every problem and raises an alert tagged for the pricing alert', function (assert) {
+      let { calls, reporter } = recordingReporter();
+      checkPricingAtStartup(
+        'prerender',
+        {
+          ...validEnv(),
+          PRICING_MARGIN: '0.5',
+          PRICING_PRERENDER_TASK_TABS: '0',
+        },
+        reporter,
+      );
+      let expected =
+        'pricing check failed in prerender: this process has no prices, so it must not admit automation runs or submit batches until its pricing variables are fixed and it restarts. PRICING_PRERENDER_TASK_TABS must be above 0, got 0; PRICING_MARGIN must be at least 1, got 0.5';
+      assert.deepEqual(calls.error, [expected]);
+      assert.deepEqual(calls.alert, [
+        {
+          message: expected,
+          context: {
+            level: 'error',
+            tags: { pricingCheck: 'failed', process: 'prerender' },
+          },
+        },
+      ]);
+      assert.deepEqual(calls.info, [], 'no passing line');
+    });
+
     test('a passing check sets the current prices, and a failing check clears them', function (assert) {
-      let passed = pricingOf(checkPricingAtStartup('test', validEnv()));
+      let { reporter } = recordingReporter();
+      let passed = pricingOf(
+        checkPricingAtStartup('test', validEnv(), reporter),
+      );
       assert.strictEqual(currentPricing()?.version, passed.version);
 
-      checkPricingAtStartup('test', { ...validEnv(), PRICING_MARGIN: '0.9' });
+      checkPricingAtStartup(
+        'test',
+        { ...validEnv(), PRICING_MARGIN: '0.9' },
+        reporter,
+      );
       assert.strictEqual(
         currentPricing(),
         undefined,
