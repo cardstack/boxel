@@ -43,16 +43,16 @@ class Scene extends Component<{ Args: { seize: (self: Scene) => void } }> {
     <Choreo style='position:relative;width:600px;height:400px' as |c|>
       {{#if this.showA}}
         <div
-          data-box='a'
           style='position:absolute;left:20px;top:20px;width:200px;height:120px;background:#0af'
           {{motion id='a' role='box'}}
+          data-test-box='a'
         ></div>
       {{/if}}
       {{#if this.showB}}
         <div
-          data-box='b'
           style='position:absolute;left:320px;top:20px;width:200px;height:120px;background:#fa0'
           {{motion id='b' role='box'}}
+          data-test-box='b'
         ></div>
       {{/if}}
       <c.Parallel>
@@ -83,16 +83,16 @@ class Slide extends Component<{ Args: { seize: (self: Slide) => void } }> {
   <template>
     <Choreo style='position:relative;width:600px;height:400px' as |c|>
       <div
-        data-box='a'
         data-go={{this.go}}
         style='position:absolute;left:0;top:20px;width:100px;height:100px;background:#0af'
         {{motion id='a' role='box'}}
+        data-test-box='a'
       ></div>
       {{#if this.showB}}
         <div
-          data-box='b'
           style='position:absolute;left:320px;top:200px;width:100px;height:100px;background:#fa0'
           {{motion id='b' role='box'}}
+          data-test-box='b'
         ></div>
       {{/if}}
       {{#if this.go}}
@@ -114,13 +114,13 @@ class HeldMove extends Component<{
   <template>
     <Choreo style='position:relative;width:600px;height:400px' as |c|>
       <div
-        data-box='a'
         style={{if
           this.moved
           'position:absolute;left:300px;top:200px;width:100px;height:100px;background:#0af'
           'position:absolute;left:0;top:0;width:100px;height:100px;background:#0af'
         }}
         {{motion id='a' role='box'}}
+        data-test-box='a'
       ></div>
       {{#if this.held}}
         <c.Hold @of={{c.id 'a'}} @y={{-30}} @fill={{true}} />
@@ -158,15 +158,15 @@ class Swap extends Component<{ Args: { seize: (self: Swap) => void } }> {
       {{grab c}}
       {{#if this.swapped}}
         <div
-          data-box='a'
           style='position:absolute;left:20px;top:20px;width:200px;height:120px;background:#0af'
           {{motion id='a' role='box'}}
+          data-test-box='a'
         ></div>
       {{else}}
         <div
-          data-box='old'
           style='position:absolute;left:320px;top:20px;width:200px;height:120px;background:#fa0'
           {{motion id='old' role='leaver'}}
+          data-test-box='old'
         ></div>
       {{/if}}
       <div style='position:absolute;top:300px'>{{this.noise}}</div>
@@ -198,7 +198,7 @@ module('Integration | choreo | rested transform', function (hooks) {
 
     scene!.showA = true;
     await frames(6);
-    const a = document.querySelector('[data-box="a"]')!;
+    const a = document.querySelector('[data-test-box="a"]')!;
     const midway = scaleOf(a);
     assert.true(
       midway > 0.5 && midway < 1,
@@ -233,7 +233,7 @@ module('Integration | choreo | rested transform', function (hooks) {
 
     scene!.swapped = true;
     await frames(6);
-    const a = document.querySelector('[data-box="a"]')!;
+    const a = document.querySelector('[data-test-box="a"]')!;
     const run = ctx!.run!;
     run.pause();
     await frames(1);
@@ -267,7 +267,7 @@ module('Integration | choreo | rested transform', function (hooks) {
     const seize = (self: Slide) => (scene = self);
     await render(<template><Slide @seize={{seize}} /></template>);
     await animationsSettled();
-    const a = document.querySelector('[data-box="a"]')!;
+    const a = document.querySelector('[data-test-box="a"]')!;
 
     scene!.go = true;
     await frames(12);
@@ -290,7 +290,7 @@ module('Integration | choreo | rested transform', function (hooks) {
     const seize = (self: HeldMove) => (scene = self);
     await render(<template><HeldMove @seize={{seize}} /></template>);
     await animationsSettled();
-    const a = document.querySelector('[data-box="a"]')!;
+    const a = document.querySelector('[data-test-box="a"]')!;
 
     scene!.moved = true;
     await frames(12);
