@@ -1271,6 +1271,12 @@ export default class MatrixService extends Service {
   // write order, so the account-data listener can tell a stale echo of an
   // earlier write from another tab's write.
   private dashboardEchoesPending: string[] = [];
+  // Whether login's read of the dashboard state has applied, so a write that
+  // depends on what's stored doesn't go out on the empty state before it.
+  private dashboardStateLoaded = false;
+  get isDashboardStateLoaded() {
+    return this.dashboardStateLoaded;
+  }
 
   // A failed read must not keep the user from logging in: the state starts
   // empty and the next sync echo or write fills it.
@@ -1497,6 +1503,7 @@ export default class MatrixService extends Service {
         if (this.dashboardState === dashboardStateBeforeRead) {
           this.dashboardState = parseDashboardContent(dashboardData);
         }
+        this.dashboardStateLoaded = true;
 
         // Boot assembles the realm list from trusted servers via
         // `_realm-auth`. The transition fallback below reads the legacy
@@ -2758,6 +2765,7 @@ export default class MatrixService extends Service {
     this.timelineLoadingState.clear();
     this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
     this.dashboardState = {};
+    this.dashboardStateLoaded = false;
     this.pendingDashboardAgentPick = undefined;
     this.dashboardSession++;
     this.dashboardWrites = Promise.resolve();
