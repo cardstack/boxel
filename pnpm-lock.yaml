@@ -2104,6 +2104,9 @@ importers:
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
+      content-tag:
+        specifier: 'catalog:'
+        version: 4.2.0
       ember-concurrency:
         specifier: 'catalog:'
         version: 5.2.0(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
@@ -2155,6 +2158,9 @@ importers:
       tracked-built-ins:
         specifier: ^4.1.2
         version: 4.1.2(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/choreo:
     dependencies:
