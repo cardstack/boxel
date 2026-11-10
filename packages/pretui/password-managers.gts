@@ -22,7 +22,7 @@ const HINTS: [name: string, value: string][] = [
   ['data-lpignore', 'true'],
   // Dashlane
   ['data-form-type', 'other'],
-  // Bitwarden, which honours it once its user turns that setting on.
+  // Bitwarden, which honors it once its user turns that setting on.
   ['data-bwignore', ''],
 ];
 
