@@ -1490,6 +1490,18 @@ async function checkedBindings(
           ),
         );
       case 'credential-rejected':
+        // A call through a key that can't mint is a refused mint, as one the
+        // token endpoint refuses is; admission and readiness record nothing.
+        if (check.reason && rejection.claimProbe) {
+          emitKeyGrantEvent({
+            event: 'mint-failed',
+            key: check.binding.grant_key_id!,
+            kind: check.binding.key_kind!,
+            host: hostOf(check.binding.grant_destination!),
+            realm: lookup.realmURL,
+            reason: check.reason,
+          });
+        }
         throw refusedFrom(
           limitSubjectOf(check.binding),
           check.reason
@@ -2007,8 +2019,8 @@ async function mintedToken(
 // `checkSlots` checks them for every call and for readiness: an OAuth
 // connection its vendor refused or whose access-only token has expired is
 // refused `credential-rejected` (`reason: 'rejected'`), and one whose client
-// is broken, deleted, unshared or suspended, or a `client_credentials` client
-// in that state, `credential-rejected` (`reason: 'needs-admin'`). A grant the
+// is broken, deleted, unshared or suspended, or a broken `client_credentials`
+// client, `credential-rejected` (`reason: 'needs-admin'`). A grant the
 // vendor rejected, or a service-account key Google refused, admits the run
 // only while its probe is due, since only then would the call be sent. A
 // token endpoint failing at the moment (`reason: 'unavailable'`) is found by

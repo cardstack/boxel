@@ -32,6 +32,10 @@ import {
   resetOAuth,
 } from '../lib/oauth.ts';
 import { automationAdmission } from '../lib/key-bindings.ts';
+import {
+  setKeyGrantSink,
+  type KeyGrantEvent,
+} from '../lib/key-grant-rejection.ts';
 
 // ============================================================================
 // OAuth clients and connections end to end, against a stub OAuth vendor that
@@ -362,6 +366,60 @@ module(basename(import.meta.filename), function (hooks) {
       : undefined;
   }
 
+  // What readiness tells `user`'s card about the operation `operation`.
+  async function readiness(user = OWNER, operation = 'me') {
+    let response = await request
+      .post(`${realmURL.pathname}_capabilities`)
+      .set('Accept', SupportedMimeType.JSON)
+      .set('Content-Type', SupportedMimeType.JSON)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+      )
+      .send({
+        checks: [
+          {
+            target: `${realmURL.href}the-service`,
+            operation,
+            readiness: true,
+          },
+        ],
+      });
+    return response.body.checks?.[0]?.readiness;
+  }
+
+  // Allows interactive use of every binding `user` approved, as choosing "On
+  // a schedule and when the card is opened" in the approve window does.
+  async function allowInteractive(user = OWNER) {
+    await dbAdapter.execute(
+      `UPDATE key_bindings SET interactive = true WHERE approved_by = $1`,
+      { bind: [user] },
+    );
+  }
+
+  // Invokes `operation` as a card opened by `user` would: interactively.
+  async function callInteractive(user: string, operation = 'me') {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}_operations`, {
+        method: 'POST',
+        headers: {
+          Accept: OPERATIONS,
+          'Content-Type': OPERATIONS,
+          Authorization: `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+        },
+        body: JSON.stringify({
+          'boxel:operations': [
+            { op: 'invoke', 'boxel:name': operation, href: '/the-service' },
+          ],
+        }),
+      }),
+    ))!;
+    return {
+      status: response.status,
+      body: JSON.parse(await response.text()),
+    };
+  }
+
   async function keyState(keyId: string) {
     let [row] = await dbAdapter.execute(
       `SELECT state FROM user_keys WHERE id = $1`,
@@ -645,7 +703,9 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('an automation is admitted for a connection that can mint, and refused at admission once its vendor refuses it', async function (assert) {
     let { keyId } = await connectAndApprove();
+    await allowInteractive();
     assert.strictEqual(await admission(), undefined, 'a working connection');
+    assert.strictEqual(await readiness(), 'ready');
 
     provider.revokeRefreshTokens();
     clock += 3600 * 1000;
@@ -662,19 +722,27 @@ module(basename(import.meta.filename), function (hooks) {
       asked,
       'admission asks the vendor nothing',
     );
+    assert.strictEqual(
+      await readiness(),
+      'credential-rejected',
+      'its owner signs in again',
+    );
   });
 
   test('an automation is refused at admission once an access-only token has expired', async function (assert) {
     provider.issueRefreshTokens = false;
     provider.expiresIn = 600;
     await connectAndApprove();
+    await allowInteractive();
     assert.strictEqual(await admission(), undefined, 'a token still in date');
+    assert.strictEqual(await readiness(), 'ready');
 
     clock += 601 * 1000;
     assert.deepEqual(await admission(), {
       code: 'credential-rejected',
       reason: 'rejected',
     });
+    assert.strictEqual(await readiness(), 'credential-rejected');
     assert.strictEqual(
       (await call(OWNER)).body.errors[0].meta.reason,
       'rejected',
@@ -683,7 +751,8 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('an automation is refused at admission with needs-admin while the client a connection signs in through is broken', async function (assert) {
-    let { client } = await connectAndApprove();
+    let { client, keyId } = await connectAndApprove();
+    await allowInteractive();
     provider.clients = [{ clientId: CLIENT_ID, clientSecret: ROTATED_SECRET }];
     clock += 3600 * 1000;
     assert.strictEqual(
@@ -691,10 +760,48 @@ module(basename(import.meta.filename), function (hooks) {
       'needs-admin',
       'the vendor refused the client, which breaks it',
     );
-    assert.deepEqual(await admission(), {
-      code: 'credential-rejected',
-      reason: 'needs-admin',
-    });
+
+    let events: KeyGrantEvent[] = [];
+    setKeyGrantSink((event) => events.push(event));
+    try {
+      assert.deepEqual(await admission(), {
+        code: 'credential-rejected',
+        reason: 'needs-admin',
+      });
+      assert.strictEqual(
+        await readiness(),
+        'needs-admin',
+        'the connection is fine; the client needs its administrator',
+      );
+      assert.deepEqual(events, [], 'admission and readiness record nothing');
+
+      let asked = provider.tokenRequests.length;
+      assert.strictEqual(
+        (await call(OWNER)).body.errors[0].meta.reason,
+        'needs-admin',
+      );
+      assert.strictEqual(
+        provider.tokenRequests.length,
+        asked,
+        'the next call is refused without asking the vendor',
+      );
+      assert.deepEqual(
+        events,
+        [
+          {
+            event: 'mint-failed',
+            key: keyId,
+            kind: 'oauth-connection',
+            host: `127.0.0.1:${PROVIDER_PORT}`,
+            realm: realmURL.href,
+            reason: 'needs-admin',
+          },
+        ],
+        'and is recorded as a refused mint',
+      );
+    } finally {
+      setKeyGrantSink(undefined);
+    }
     await replaceUserKeyValue(dbAdapter, keyring, {
       owner: OWNER,
       id: client.id,
@@ -706,6 +813,7 @@ module(basename(import.meta.filename), function (hooks) {
       undefined,
       'a client whose secret is replaced is admitted again',
     );
+    assert.strictEqual(await readiness(), 'ready');
   });
 
   test('an automation is refused at admission with needs-admin while the share of the client a connection signs in through is suspended', async function (assert) {
@@ -731,6 +839,8 @@ module(basename(import.meta.filename), function (hooks) {
       code: 'credential-rejected',
       reason: 'needs-admin',
     });
+    await allowInteractive(TEAMMATE);
+    assert.strictEqual(await readiness(TEAMMATE), 'needs-admin');
   });
 
   test('an automation is admitted for a client_credentials client that can mint, and refused at admission once it is broken or deleted', async function (assert) {
@@ -740,7 +850,9 @@ module(basename(import.meta.filename), function (hooks) {
       'machine',
     );
     assert.strictEqual((await approve(OWNER, machine.id)).status, 201);
+    await allowInteractive();
     assert.strictEqual(await admission(), undefined, 'a working client');
+    assert.strictEqual(await readiness(), 'ready');
 
     // What the vendor refusing the client's credentials leaves behind.
     await dbAdapter.execute(
@@ -751,6 +863,7 @@ module(basename(import.meta.filename), function (hooks) {
       code: 'credential-rejected',
       reason: 'needs-admin',
     });
+    assert.strictEqual(await readiness(), 'needs-admin');
     assert.strictEqual(
       (await call(OWNER)).body.errors[0].meta.reason,
       'needs-admin',
@@ -766,6 +879,45 @@ module(basename(import.meta.filename), function (hooks) {
       await admission(),
       { code: 'binding-not-approved', reason: undefined },
       'a deleted client takes its grant with it',
+    );
+  });
+
+  test("an interactive call through a connection that can't mint is refused before it counts against the key", async function (assert) {
+    let { client, keyId } = await connectAndApprove();
+    await allowInteractive();
+    await dbAdapter.execute(
+      `UPDATE user_keys SET daily_budget = 1 WHERE id = $1`,
+      { bind: [keyId] },
+    );
+    provider.clients = [{ clientId: CLIENT_ID, clientSecret: ROTATED_SECRET }];
+    clock += 3600 * 1000;
+    // An automation's call breaks the client and counts against nothing.
+    assert.strictEqual(
+      (await call(OWNER)).body.errors[0].meta.reason,
+      'needs-admin',
+    );
+
+    let refused = await callInteractive(OWNER);
+    assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+    assert.strictEqual(refused.body.errors[0].meta.reason, 'needs-admin');
+
+    await replaceUserKeyValue(dbAdapter, keyring, {
+      owner: OWNER,
+      id: client.id,
+      value: ROTATED_SECRET,
+      ticket: await ticket(OWNER, 'replace', { keyId: client.id }),
+    });
+    let served = await callInteractive(OWNER);
+    assert.strictEqual(
+      served.status,
+      200,
+      `the refused call left the budget of one unspent: ${JSON.stringify(served.body)}`,
+    );
+    let over = await callInteractive(OWNER);
+    assert.strictEqual(
+      over.body.errors?.[0]?.code,
+      'over-budget',
+      'the budget is one call',
     );
   });
 

@@ -174,8 +174,11 @@ vendor. It refuses the slot `credential-rejected` when:
   suspended, or a `client_credentials` client isn't `active`.
 
 So an unattended run whose connection or client can't mint ends at admission
-and never starts its script, and readiness answers `credential-rejected` to
-the card. A token endpoint that is failing at the moment (`unavailable`) can't
+and never starts its script. Readiness answers `credential-rejected` to the
+card for `rejected`, and `needs-admin` for `needs-admin`, since the connection
+itself is fine and reconnecting goes through the same client. A call refused
+here logs `mint-failed` with its reason, as a refusal at the token endpoint
+does; admission and readiness log nothing. A token endpoint that is failing at the moment (`unavailable`) can't
 be known in advance, so only the call that asks it finds out. A call refused
 here is refused before it counts against the key's limits.
 

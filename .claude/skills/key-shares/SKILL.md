@@ -55,11 +55,11 @@ the run:
 - the share's grant at the destination is gone: `binding-not-approved`;
 - the vendor rejected the share's key at that destination, or Google refused
   its service-account key, and no probe is due: `credential-rejected`;
-- the share's key is an OAuth connection or client that can't mint a token:
-  `credential-rejected` with `reason` `rejected` (a connection its vendor
-  refused, or an access-only token past its expiry) or `needs-admin` (a
-  broken, deleted, unshared or suspended client). See the `oauth-connections`
-  skill.
+- the share's key is a `client_credentials` client whose token endpoint
+  refused its secret (`oauth_clients.state = 'broken'`): `credential-rejected`
+  with `reason: 'needs-admin'`. A connection is never shared, so the
+  connection-only reasons don't arise for a share slot. See the
+  `oauth-connections` skill.
 
 The run opens no key at admission and asks no vendor. A run doesn't need the
 share's binding approved for interactive use, and it isn't counted against
