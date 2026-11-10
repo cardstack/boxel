@@ -136,6 +136,27 @@ module('Integration | credential fields', function (hooks) {
       assert.notOk(JSON.stringify(sent).includes('a-long-password'));
     });
 
+    test('the new password fields state the password rule, and the form posts', async function (assert) {
+      await renderForm('change-password');
+      for (let field of [
+        '[data-test-new-password-field]',
+        '[data-test-confirm-password-field]',
+      ]) {
+        assert
+          .dom(field)
+          .hasAttribute('autocomplete', 'new-password')
+          .hasAttribute('minlength', '8')
+          .hasAttribute('maxlength', '512')
+          .hasAttribute('passwordrules', 'minlength: 8; maxlength: 512;');
+      }
+      assert
+        .dom('[data-test-current-password-field]')
+        .doesNotHaveAttribute('minlength')
+        .doesNotHaveAttribute('maxlength')
+        .doesNotHaveAttribute('passwordrules');
+      assert.dom('form#credential-fields').hasAttribute('method', 'post');
+    });
+
     test('shows an invalid field as Pret UI Input does, and clears it on typing', async function (assert) {
       await renderForm('change-password');
       await fillIn('[data-test-new-password-field]', 'short');
