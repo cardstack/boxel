@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
+import { sep } from 'node:path';
 import { test } from 'node:test';
 
 // Which pages tell password managers to leave their fields alone, read from
@@ -10,9 +11,12 @@ import { test } from 'node:test';
 const SRC = new URL('../src/', import.meta.url);
 const KEYS = new URL('shell/keys/', SRC);
 
+// Each module beneath `dir`, named by its path from there with `/` between
+// directories on every platform.
 function sources(dir: URL): [name: string, source: string][] {
   return readdirSync(dir, { recursive: true, encoding: 'utf8' })
     .filter((name) => /\.(gts|ts|js)$/.test(name))
+    .map((name) => name.split(sep).join('/'))
     .map((name) => [name, readFileSync(new URL(name, dir), 'utf8')]);
 }
 
