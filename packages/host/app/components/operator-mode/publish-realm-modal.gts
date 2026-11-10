@@ -11,7 +11,7 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 import Settings from '@cardstack/boxel-icons/settings';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistance } from 'date-fns';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -30,6 +30,7 @@ import {
   ensureTrailingSlash,
   isCardErrorJSONAPI,
   isCardInstance,
+  nowDate,
   publishedSpaceHost,
   resolvePublishedRealmUrl,
 } from '@cardstack/runtime-common';
@@ -272,7 +273,7 @@ export default class PublishRealmModal extends Component<Signature> {
     }
 
     try {
-      return formatDistanceToNow(publishedAt, { addSuffix: true });
+      return formatDistance(publishedAt, nowDate(), { addSuffix: true });
     } catch (error) {
       console.warn(
         `Failed to parse published date for ${publishedRealmURL}:`,

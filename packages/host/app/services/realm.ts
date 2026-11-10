@@ -41,6 +41,7 @@ import {
   ensureTrailingSlash,
   fetchPublishabilityReport,
   logger,
+  nowDate,
   ReadinessTimeoutError,
   ri,
   rri,
@@ -373,7 +374,7 @@ class RealmResource {
               // writes, and only source realms actually move (a non-source realm
               // would self-correct on that next load).
               if (data.indexType === 'incremental' && this.info) {
-                this.info.updatedAt = new Date().toISOString();
+                this.info.updatedAt = nowDate().toISOString();
               }
               // Tile counts derive from the index, so any completed index makes
               // them stale — no need to narrow to the config card as above, and

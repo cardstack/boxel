@@ -10,7 +10,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistance } from 'date-fns';
 import { keepLatestTask, task, didCancel, timeout } from 'ember-concurrency';
 
 import { cloneDeep } from 'lodash-es';
@@ -95,6 +95,8 @@ import {
   type PrerenderedHtmlFormat,
   type ResolvedCodeRef,
   humanReadable,
+  now,
+  nowDate,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
@@ -4466,7 +4468,7 @@ export default class StoreService extends Service implements StoreInterface {
       autoSaveState.hasUnsavedChanges = this.#pendingAutoSaves.has(
         instance[localIdSymbol],
       );
-      autoSaveState.lastSaved = Date.now();
+      autoSaveState.lastSaved = now();
       autoSaveState.lastSavedErrorMsg = undefined;
       autoSaveState.lastSaveError =
         maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
@@ -4601,9 +4603,13 @@ export default class StoreService extends Service implements StoreInterface {
     } else if (opts?.hasPendingSave) {
       savedMessage = 'Unsaved changes';
     } else if (autoSaveState.lastSaved) {
-      savedMessage = `Saved ${formatDistanceToNow(autoSaveState.lastSaved, {
-        addSuffix: true,
-      })}`;
+      savedMessage = `Saved ${formatDistance(
+        autoSaveState.lastSaved,
+        nowDate(),
+        {
+          addSuffix: true,
+        },
+      )}`;
     }
     if (autoSaveState.lastSavedErrorMsg != savedMessage) {
       autoSaveState.lastSavedErrorMsg = savedMessage;
