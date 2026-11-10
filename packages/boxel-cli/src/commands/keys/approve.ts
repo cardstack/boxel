@@ -197,11 +197,14 @@ function chosenOperations(
 }
 
 // The hosts the batch sends a slot token to, for `use`: every operation the
-// realm server weighed in naming the token's fillers that sends it.
+// realm server weighed in naming the token's fillers that sends it. The batch
+// was asked for `operation` alone when one is named, so its fillers weigh
+// only that operation.
 function slotHosts(
   batch: ApprovalBatch,
   token: string,
   use: BatchUse,
+  operation: string | undefined,
 ): string[] {
   let hosts = new Set<string>();
   for (let group of batch.groups) {
@@ -209,7 +212,7 @@ function slotHosts(
       if (use === 'pipelines' && op.status === 'pipelines-only') {
         continue;
       }
-      if (batch.fillersFor && !batch.fillersFor.includes(op.name)) {
+      if (operation !== undefined && op.name !== operation) {
         continue;
       }
       if (op.slots.some((s) => s.slot === token)) {
@@ -226,8 +229,9 @@ function slotHosts(
 // slot.
 //
 // A key or share fills a slot only where the batch's `fillers` offer it for
-// `use`, as the secure window's approve page offers only those. Asked for the
-// operations `--operation` names, `fillers` weigh only where those send. One
+// `use`, as the secure window's approve page offers only those. `batch` is
+// asked for `operation` alone when one is named, so its `fillers` weigh only
+// where that operation sends. One
 // that would fill a slot of its type but isn't offered there is refused,
 // naming the slot and why, rather than approved to send where its credential
 // can't be used.
@@ -288,7 +292,9 @@ export function plan(
   if (refused.size > 0) {
     let tokens = [...refused];
     let hosts = [
-      ...new Set(tokens.flatMap((token) => slotHosts(batch, token, use))),
+      ...new Set(
+        tokens.flatMap((token) => slotHosts(batch, token, use, operation)),
+      ),
     ];
     let filled = [
       ...new Set(planned.flatMap((p) => p.fills.map((f) => f.slot))),
@@ -301,7 +307,7 @@ export function plan(
         ? `Pass --slot ${filled.join(' or --slot ')} to approve only what it fills, or name another key or share`
         : 'Name another key or share';
     throw new Error(
-      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.length === 1 ? hosts[0] : `every one of ${hosts.join(', ')}`}, where ${batch.fillersFor ? 'the operations approved send' : 'the batch sends'} ${it}. ${next}`,
+      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.length === 1 ? hosts[0] : `every one of ${hosts.join(', ')}`}, where ${operation !== undefined ? 'the operations approved send' : 'the batch sends'} ${it}. ${next}`,
     );
   }
   return planned;

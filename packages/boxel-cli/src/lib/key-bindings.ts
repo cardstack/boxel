@@ -123,10 +123,6 @@ export interface ApprovalBatch {
   // approve page offers for it. Asked with `operations`, only those
   // operations count.
   fillers: Record<BatchUse, Record<string, string[]>>;
-  // The operations `fillers` weigh, when `approvalBatch` was asked for only
-  // some; absent, they weigh every operation of the batch. Set here, not by
-  // the realm server.
-  fillersFor?: string[];
 }
 
 // Where the requests a batch approves run: from any card a reader opens, or
@@ -182,10 +178,7 @@ export async function approvalBatch(
       },
     },
   );
-  let batch = response.data.attributes as ApprovalBatch;
-  return operations === undefined
-    ? batch
-    : { ...batch, fillersFor: operations };
+  return response.data.attributes as ApprovalBatch;
 }
 
 export interface OperationApproval {

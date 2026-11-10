@@ -191,7 +191,7 @@ describe('boxel keys approve: which slots a named key fills', () => {
     );
     // Weighed by only the operation approved.
     expect(() =>
-      plan({ ...batch, fillersFor: ['remove'] }, 'elsewhere', {
+      plan(batch, 'elsewhere', {
         use: 'pipelines',
         operation: 'remove',
       }),
@@ -253,16 +253,15 @@ describe('boxel keys approve: asking for the batch an approval covers', () => {
     body: { data: { attributes: { groups: [], keys: [], shares: [] } } },
   };
 
-  it('asks with the operations it covers, and records that its fillers weigh only those', async () => {
+  it('asks with the operations it covers', async () => {
     let { asked, fetchFn } = answering([answer]);
-    let batch = await approvalBatch(
+    await approvalBatch(
       'https://realms.example.test/',
       'token',
       { target, operations: ['list'] },
       fetchFn,
     );
     expect(asked).toEqual([{ target, review: false, operations: ['list'] }]);
-    expect(batch.fillersFor).toEqual(['list']);
   });
 
   it("passes on the realm server's refusal", async () => {
