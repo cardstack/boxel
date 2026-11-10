@@ -71,6 +71,7 @@ import {
   proposeFix,
 } from '../lib/realm-runner/auto-fix';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
+import { roomCredits, type RoomCredits } from '../lib/realm-runner/credits';
 import {
   compactDiff,
   CARD_CHANGES_IN_DETAIL,
@@ -139,6 +140,7 @@ import type {
   RealmScriptErrorInfo,
 } from '../lib/realm-runner/types';
 
+import type BillingService from '../services/billing-service';
 import type CardService from '../services/card-service';
 import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
@@ -486,6 +488,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'room.enableSkills': false,
   'room.disableSkills': false,
   'room.setModel': false,
+  'room.credits': false,
   'ui.switchSubmode': false,
   'ui.openFile': false,
   'ui.previewFormat': false,
@@ -1447,6 +1450,8 @@ class RealmFsSession {
         return this.room.disableSkills(args[0]);
       case 'room.setModel':
         return await this.room.setModel(args[0]);
+      case 'room.credits':
+        return await this.room.credits();
       case 'ui.switchSubmode': {
         let submode = args[0];
         if (submode !== 'interact' && submode !== 'code') {
@@ -2764,6 +2769,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeInput,
   typeof BaseToolModule.RunRealmCodeResult
 > {
+  @service declare private billingService: BillingService;
   @service declare private cardService: CardService;
   @service declare private clientTelemetry: ClientTelemetryService;
   @service declare private environmentService: EnvironmentService;
@@ -3049,6 +3055,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         new RoomActions({
           checkSkill: (id) => this.checkSkill(id),
           knownModels: () => this.matrixService.pickableModelIds(roomId),
+          credits: () => this.roomCredits(roomId),
         }),
         this.research(roomId),
         (search) =>
@@ -3301,6 +3308,26 @@ export default class RunRealmCodeTool extends HostBaseTool<
       }
     }
     return changes;
+  }
+
+  // `room.credits()`: the balance is read fresh, since every answer spends
+  // from it, and a failed read is an error rather than an older balance.
+  private async roomCredits(roomId: string): Promise<RoomCredits> {
+    if (!(await this.billingService.loadSubscriptionData())) {
+      throw new Error(
+        "room.credits could not read the account's credits from the server. Try again, or see Profile → Membership Tier",
+      );
+    }
+    let subscription = this.billingService.subscriptionData;
+    if (!subscription) {
+      throw new Error("room.credits could not read the account's credits");
+    }
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    await roomResource?.processing;
+    return roomCredits(
+      subscription,
+      (roomResource?.messages ?? []).map((message) => message.usage),
+    );
   }
 
   private async checkSkill(id: string): Promise<void> {

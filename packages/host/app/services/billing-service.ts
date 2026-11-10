@@ -15,7 +15,7 @@ import type NetworkService from './network';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 
-interface SubscriptionData {
+export interface SubscriptionData {
   plan: string | null;
   creditsAvailableInPlanAllowance: number | null;
   creditsIncludedInPlanAllowance: number | null;
@@ -39,10 +39,9 @@ export default class BillingService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.realmServer.subscribeEvent(
-      'billing-notification',
-      this.loadSubscriptionData.bind(this),
-    );
+    this.realmServer.subscribeEvent('billing-notification', async () => {
+      await this.loadSubscriptionData();
+    });
     this.session.register(this);
   }
 
@@ -157,7 +156,10 @@ export default class BillingService extends Service {
   // outdated credits after a billing-notification push. Keep this fetching
   // fresh; if you need a boot-time "load once" guard, that belongs in
   // initializeSubscriptionData(), not here.
-  async loadSubscriptionData() {
+  //
+  // Answers whether it loaded: on a failed fetch `subscriptionData` keeps what
+  // it held before, which a caller that must report current numbers can't use.
+  async loadSubscriptionData(): Promise<boolean> {
     this._loadingSubscriptionData = true;
     try {
       let response = await this.fetchSubscriptionData();
@@ -166,7 +168,7 @@ export default class BillingService extends Service {
         console.error(
           `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
         );
-        return;
+        return false;
       }
       let json = await response.json();
       let plan =
@@ -202,6 +204,7 @@ export default class BillingService extends Service {
         nextDailyCreditGrantAt,
         dailyCreditGrantCount,
       };
+      return true;
     } finally {
       this._loadingSubscriptionData = false;
     }

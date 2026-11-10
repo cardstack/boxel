@@ -73,6 +73,8 @@ import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import {
   formatCredits,
   formatTokenUsage,
+  isCountedTurn,
+  sessionCost,
 } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import {
@@ -1427,12 +1429,7 @@ export default class Room extends Component<Signature> {
     if (!this.conversationTokenUsage) {
       return false;
     }
-    let turns = this.messages.filter(
-      (message) =>
-        message.usage &&
-        (message.usage.promptTokens != null ||
-          message.usage.completionTokens != null),
-    );
+    let turns = this.messages.filter((message) => isCountedTurn(message.usage));
     return turns.length > 1;
   }
 
@@ -1440,25 +1437,12 @@ export default class Room extends Component<Signature> {
     if (!this.conversationTokenUsage) {
       return undefined;
     }
-    let costUsd = 0;
-    let turnsWithCost = 0;
-    let turnsWithUsage = 0;
-    for (let message of this.messages) {
-      let usage = message.usage;
-      if (
-        !usage ||
-        (usage.promptTokens == null && usage.completionTokens == null)
-      ) {
-        continue;
-      }
-      turnsWithUsage++;
-      if (usage.costUsd != null) {
-        costUsd += usage.costUsd;
-        turnsWithCost++;
-      }
-    }
-    // A partial sum would read as the whole bill: fall back to the tokens.
-    return turnsWithCost === turnsWithUsage
+    let { costUsd } = sessionCost(
+      this.messages.map((message) => message.usage),
+    );
+    // Without a cost for every turn there is no bill to give: fall back to
+    // the tokens.
+    return costUsd != null
       ? formatCredits(costUsd)
       : this.conversationTokenUsage;
   }
@@ -1481,12 +1465,7 @@ export default class Room extends Component<Signature> {
     let turnsWithUsage = 0;
     for (let message of this.messages) {
       let usage = message.usage;
-      // Same gate as the per-message line: a usage object without token
-      // counts must not add a turn to the total that line never shows.
-      if (
-        !usage ||
-        (usage.promptTokens == null && usage.completionTokens == null)
-      ) {
+      if (!isCountedTurn(usage)) {
         continue;
       }
       turnsWithUsage++;
