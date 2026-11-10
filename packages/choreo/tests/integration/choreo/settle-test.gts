@@ -48,9 +48,9 @@ class Stage extends Component<{
         {{#if @grab}}{{@grab c}}{{/if}}
         <div style={{this.aboveStyle}}></div>
         <div
-          data-box
           style='height:40px;background:#0af'
           {{motion id='box'}}
+          data-test-box
         ></div>
         <div style='height:400px'>{{this.noise}}</div>
         <c.Move @of={{c.all}} @duration={{0.4}} @ease='linear' />
@@ -80,7 +80,7 @@ const Nested: TOC<{ Args: { seize: (self: Stage) => void } }> = <template>
 </template>;
 
 function box(): HTMLElement {
-  return document.querySelector('[data-box]') as HTMLElement;
+  return document.querySelector('[data-test-box]') as HTMLElement;
 }
 function scroller(): HTMLElement {
   return document.querySelector('[data-scroller]') as HTMLElement;

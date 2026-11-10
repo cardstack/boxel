@@ -25,6 +25,12 @@ interface Signature {
  * stylesheet reapplies the theme's light or dark set to any `data-theme`
  * element inside the card, above the Boxel defaults that the attribute also
  * selects, so the gallery's values hold in both schemes.
+ *
+ * Where no theme card reaches the shell (a gallery card whose theme link is
+ * missing, or a context that applies no card themes), the shell declares the
+ * theme's values itself, ranked below any theme, so it renders in the
+ * gallery's palette and type either way. Its own variables, which no other
+ * theme sets, it also declares under any other theme.
  */
 export const ChoreoRoot: TOC<Signature> = <template>
   <div
@@ -58,6 +64,29 @@ export const ChoreoRoot: TOC<Signature> = <template>
         ),
         var(--background);
 
+      /* The eyebrow role. The card container derives --boxel-eyebrow-*
+         from the theme's --theme-eyebrow-* on its own element, above this
+         one, so they are derived again here, where the fallback below
+         declares the gallery's eyebrow when no theme sets one. The
+         defaults are the container's own, for a value nothing declares. */
+      --boxel-eyebrow-font-family: var(
+        --theme-eyebrow-font-family,
+        var(--boxel-ui-label-font-family)
+      );
+      --boxel-eyebrow-font-size: var(
+        --theme-eyebrow-font-size,
+        var(--boxel-font-size-2xs)
+      );
+      --boxel-eyebrow-line-height: var(
+        --theme-eyebrow-line-height,
+        var(--boxel-line-height-xs)
+      );
+      --boxel-eyebrow-font-weight: var(--theme-eyebrow-font-weight, 600);
+      --boxel-eyebrow-letter-spacing: var(
+        --theme-eyebrow-letter-spacing,
+        0.08em
+      );
+
       position: relative;
       min-height: 100%;
       color: var(--foreground);
@@ -72,6 +101,134 @@ export const ChoreoRoot: TOC<Signature> = <template>
 
     .choreo-site[data-theme='light'] {
       color-scheme: light;
+    }
+
+    /* The gallery's palette and type where no theme card reaches the shell:
+       theme.json's values, the light set and then the dark set over it, as
+       the theme's stylesheet applies them. They must match theme.json; the
+       host's gallery theme-fallback test fails when a value differs, or when
+       either declares a name the other doesn't.
+
+       The values come in two reaches. The theme contract's tokens and the
+       eyebrow role (theme.json's rootVariables, darkModeVariables and
+       typography) apply only where no themed card container is above the
+       shell, so under any theme a token the theme leaves out keeps Boxel's
+       default, as in any card. The gallery's own variables (its brand
+       palette and custom variables) apply under any theme: the gallery's
+       rules read them, and no other theme sets them.
+
+       A theme still wins. This element's data-theme makes it a scheme
+       island, and a theme card's stylesheet re-declares the theme's values
+       on islands at (0,2,0), while Boxel's [data-theme] defaults are
+       (0,1,0). With the scope attribute these rules are (0,1,1), so they
+       outrank the defaults and give way to any theme. The div keeps that
+       one notch; the :where() and the :not() keep the rest at zero. */
+    div:where(.choreo-site):not(:where([data-boxel-theme-scope]) *) {
+      --background: #f2ece1;
+      --foreground: #211d18;
+      --card: #f7f3ec;
+      --card-foreground: #211d18;
+      --canvas: #efe9df;
+      --inset: #e2dccf;
+      --muted-foreground: #5e564b;
+      --subtle-foreground: #6d6458;
+      --primary: #ff3b1f;
+      --primary-foreground: #ffffff;
+      --primary-ink: #bf2e00;
+      --border: color-mix(in srgb, var(--foreground) 10%, transparent);
+      --border-strong: color-mix(in srgb, var(--foreground) 18%, transparent);
+      --ring: var(--primary-ink);
+      --font-sans: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
+      --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+      --theme-eyebrow-font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      --theme-eyebrow-font-size: 0.6875rem;
+      --theme-eyebrow-line-height: 1.5;
+      --theme-eyebrow-font-weight: 400;
+      --theme-eyebrow-letter-spacing: 0.18em;
+    }
+
+    div:where(.choreo-site[data-theme='dark']):not(
+        :where([data-boxel-theme-scope]) *
+      ) {
+      --background: #2e2924;
+      --foreground: #f3ece3;
+      --card: #3a342e;
+      --card-foreground: #f3ece3;
+      --canvas: #2a2521;
+      --inset: #221e1a;
+      --muted-foreground: #d2c9bf;
+      --subtle-foreground: #b8aea3;
+      --primary: #ff3b1f;
+      --primary-foreground: #ffffff;
+      --primary-ink: #ff7a4e;
+      --border: color-mix(in srgb, var(--foreground) 9%, transparent);
+      --border-strong: color-mix(in srgb, var(--foreground) 16%, transparent);
+      --ring: var(--ember-hot);
+    }
+
+    div:where(.choreo-site) {
+      --ember-hot: #ff6a3a;
+      --copper: #e4a35a;
+      --iris: #9667f7;
+      --steel: #8b969c;
+      --teal: #4fb8a6;
+      --azure: #6ea8f0;
+      --glow: rgba(255, 59, 31, 0.38);
+      --mark-tail-dark: rgba(255, 59, 31, 0.35);
+      --mark-orbit-dark: rgba(139, 150, 156, 0.75);
+
+      --ink-soft: #47423a;
+      --copper-ink: #905824;
+      --iris-ink: #7334f5;
+      --steel-ink: #5e686e;
+      --hot-ink: #a02600;
+      --syn-string: #a24f00;
+      --bg-spot: #fbf8f3;
+      --ph-card-top: var(--bg-spot);
+      --ph-card-bot: var(--inset);
+      --ph-go-top: var(--bg-spot);
+      --ph-go-bot: var(--inset);
+      --ph-receipt-top: var(--bg-spot);
+      --ph-receipt-bot: var(--inset);
+      --ph-row: var(--inset);
+      --ph-groove: var(--inset);
+      --ph-btn: var(--inset);
+      --shadow-ink: #48382c;
+      --shadow-a: 0.3;
+      --surface-tint: #211d18;
+      --mark-tail: rgba(255, 59, 31, 0.5);
+      --mark-orbit: rgba(94, 104, 110, 0.85);
+      --gradient-tail: var(--copper);
+      --lightbox-ring: rgba(33, 29, 24, 0.12);
+      --font-display: 'Syne', 'Avenir Next', sans-serif;
+      --font-display-alt: 'Archivo', 'Avenir Next Condensed', sans-serif;
+    }
+
+    div:where(.choreo-site[data-theme='dark']) {
+      --ink-soft: #e6dfd6;
+      --copper-ink: var(--copper);
+      --iris-ink: #af8bf9;
+      --steel-ink: #96a0a5;
+      --hot-ink: #ff9370;
+      --syn-string: #ffb36a;
+      --bg-spot: #443c35;
+      --ph-card-top: #3d362f;
+      --ph-card-bot: #322c27;
+      --ph-go-top: #4a4139;
+      --ph-go-bot: #2c2722;
+      --ph-receipt-top: #403830;
+      --ph-receipt-bot: #2e2924;
+      --ph-row: rgba(0, 0, 0, 0.16);
+      --ph-groove: rgba(0, 0, 0, 0.22);
+      --ph-btn: rgba(0, 0, 0, 0.26);
+      --shadow-ink: #000000;
+      --shadow-a: 1;
+      --surface-tint: #ffffff;
+      --mark-tail: var(--mark-tail-dark);
+      --mark-orbit: var(--mark-orbit-dark);
+      --gradient-tail: var(--foreground);
+      --lightbox-ring: rgba(0, 0, 0, 0.5);
     }
 
     /* The element defaults the demos were designed against. :where() gives

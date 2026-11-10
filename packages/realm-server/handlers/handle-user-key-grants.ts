@@ -140,7 +140,8 @@ export function handleCreateUserKeyGrant(args: CreateRoutesArgs): Handler {
       !target ||
       !(await new RealmPermissionChecker(
         await fetchRealmPermissions(args.dbAdapter, realmURL),
-        args.matrixClient,
+        args.dbAdapter,
+        args.matrixClient.serverName,
       ).can(owner, 'read'))
     ) {
       throw new UserKeyError(404, 'no such realm');

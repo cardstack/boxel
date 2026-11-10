@@ -1,0 +1,34 @@
+{
+  "name": "@cardstack/realm-historian",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The service that records realm revision history: it reads the change journal and commits what changed to one git repo per realm.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./src/*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*"
+  },
+  "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
+    "@types/node": "catalog:",
+    "@types/qunit": "catalog:",
+    "concurrently": "catalog:",
+    "qunit": "catalog:",
+    "typescript": "catalog:"
+  },
+  "scripts": {
+    "start": "NODE_NO_WARNINGS=1 node main.ts",
+    "test": "NODE_NO_WARNINGS=1 node tests/index.ts",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "lint:types": "ember-tsc --noEmit"
+  }
+}

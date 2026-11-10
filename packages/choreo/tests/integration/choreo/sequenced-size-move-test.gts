@@ -35,14 +35,14 @@ class Row extends Component<{ Args: { seize: (self: Row) => void } }> {
       as |c|
     >
       <div
-        data-box='a'
         style='height:100px;background:#0af;flex:none'
         {{motion id='a' role='box' style=(styleFor this.grownWidth)}}
+        data-test-box='a'
       ></div>
       <div
-        data-box='b'
         style='width:100px;height:100px;background:#fa0;flex:none'
         {{motion id='b' role='box'}}
+        data-test-box='b'
       ></div>
       <c.Sequence>
         <c.Move @of={{c.id 'a'}} @duration={{0.3}} />
@@ -63,7 +63,7 @@ module('Integration | choreo | sequenced size move', function (hooks) {
     await render(<template><Row @seize={{seize}} /></template>);
     await animationsSettled();
 
-    const b = document.querySelector('[data-box="b"]')!;
+    const b = document.querySelector('[data-test-box="b"]')!;
     // seeded with where it stands before the change, so the run's first
     // frame is compared too
     const xs: number[] = [b.getBoundingClientRect().x];
