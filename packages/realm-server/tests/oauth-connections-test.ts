@@ -20,6 +20,7 @@ import {
 } from '../lib/secrets-at-rest/index.ts';
 import {
   mintKeyWriteTicket,
+  deleteUserKey,
   replaceUserKeyValue,
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
@@ -30,6 +31,7 @@ import {
   configureOAuth,
   resetOAuth,
 } from '../lib/oauth.ts';
+import { automationAdmission } from '../lib/key-bindings.ts';
 
 // ============================================================================
 // OAuth clients and connections end to end, against a stub OAuth vendor that
@@ -345,6 +347,21 @@ module(basename(import.meta.filename), function (hooks) {
       .length;
   }
 
+  // What an automation run as `payer` is told before it starts, about the
+  // operation `operation`: nothing when it would be served, or the refusal.
+  async function admission(payer = OWNER, operation = 'me') {
+    let refused = await automationAdmission(dbAdapter, {
+      core: realm.operationCore,
+      realmURL,
+      codeRef: SERVICE,
+      operation,
+      payer,
+    });
+    return refused
+      ? { code: refused.error.code, reason: refused.error.meta?.reason }
+      : undefined;
+  }
+
   async function keyState(keyId: string) {
     let [row] = await dbAdapter.execute(
       `SELECT state FROM user_keys WHERE id = $1`,
@@ -624,6 +641,130 @@ module(basename(import.meta.filename), function (hooks) {
     let refused = await call(OWNER);
     assert.strictEqual(refused.status, 424);
     assert.strictEqual(refused.body.errors[0].meta.reason, 'unavailable');
+  });
+
+  test('an automation is admitted for a connection that can mint, and refused at admission once its vendor refuses it', async function (assert) {
+    let { keyId } = await connectAndApprove();
+    assert.strictEqual(await admission(), undefined, 'a working connection');
+
+    provider.revokeRefreshTokens();
+    clock += 3600 * 1000;
+    assert.strictEqual((await call(OWNER)).status, 424);
+    assert.strictEqual(await keyState(keyId), 'rejected');
+
+    let asked = provider.tokenRequests.length;
+    assert.deepEqual(await admission(), {
+      code: 'credential-rejected',
+      reason: 'rejected',
+    });
+    assert.strictEqual(
+      provider.tokenRequests.length,
+      asked,
+      'admission asks the vendor nothing',
+    );
+  });
+
+  test('an automation is refused at admission once an access-only token has expired', async function (assert) {
+    provider.issueRefreshTokens = false;
+    provider.expiresIn = 600;
+    await connectAndApprove();
+    assert.strictEqual(await admission(), undefined, 'a token still in date');
+
+    clock += 601 * 1000;
+    assert.deepEqual(await admission(), {
+      code: 'credential-rejected',
+      reason: 'rejected',
+    });
+    assert.strictEqual(
+      (await call(OWNER)).body.errors[0].meta.reason,
+      'rejected',
+      'the call is refused for the same reason',
+    );
+  });
+
+  test('an automation is refused at admission with needs-admin while the client a connection signs in through is broken or its share suspended', async function (assert) {
+    let { client } = await connectAndApprove();
+    provider.clients = [{ clientId: CLIENT_ID, clientSecret: ROTATED_SECRET }];
+    clock += 3600 * 1000;
+    assert.strictEqual(
+      (await call(OWNER)).body.errors[0].meta.reason,
+      'needs-admin',
+      'the vendor refused the client, which breaks it',
+    );
+    assert.deepEqual(await admission(), {
+      code: 'credential-rejected',
+      reason: 'needs-admin',
+    });
+    await replaceUserKeyValue(dbAdapter, keyring, {
+      owner: OWNER,
+      id: client.id,
+      value: ROTATED_SECRET,
+      ticket: await ticket(OWNER, 'replace', { keyId: client.id }),
+    });
+    assert.strictEqual(
+      await admission(),
+      undefined,
+      'a client whose secret is replaced is admitted again',
+    );
+
+    let shared = await addClient(OWNER, {}, 'team app');
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: shared.id,
+      label: 'Team app',
+      ticket: await ticket(OWNER, 'share', {
+        keyId: shared.id,
+        realm: realmURL,
+      }),
+    });
+    let { keyId } = await connect(TEAMMATE, {
+      kind: 'share',
+      shareId: share.id,
+    });
+    await approve(TEAMMATE, keyId!);
+    assert.strictEqual(await admission(TEAMMATE), undefined);
+    await suspendShare(dbAdapter, { user: OWNER, shareId: share.id });
+    assert.deepEqual(await admission(TEAMMATE), {
+      code: 'credential-rejected',
+      reason: 'needs-admin',
+    });
+  });
+
+  test('an automation is admitted for a client_credentials client that can mint, and refused at admission once it is broken or deleted', async function (assert) {
+    let machine = await addClient(
+      OWNER,
+      { grantType: 'client_credentials', authorizeUrl: undefined },
+      'machine',
+    );
+    assert.strictEqual((await approve(OWNER, machine.id)).status, 201);
+    assert.strictEqual(await admission(), undefined, 'a working client');
+
+    // What the vendor refusing the client's credentials leaves behind.
+    await dbAdapter.execute(
+      `UPDATE oauth_clients SET state = 'broken', broken_at = NOW() WHERE key_id = $1`,
+      { bind: [machine.id] },
+    );
+    assert.deepEqual(await admission(), {
+      code: 'credential-rejected',
+      reason: 'needs-admin',
+    });
+    assert.strictEqual(
+      (await call(OWNER)).body.errors[0].meta.reason,
+      'needs-admin',
+      'the call is refused for the same reason',
+    );
+
+    await deleteUserKey(dbAdapter, {
+      owner: OWNER,
+      id: machine.id,
+      ticket: await ticket(OWNER, 'delete', { keyId: machine.id }),
+    });
+    assert.deepEqual(
+      await admission(),
+      { code: 'binding-not-approved', reason: undefined },
+      'a deleted client takes its grant with it',
+    );
   });
 
   test('a client shared into a realm gives each teammate their own connection, and follows the share', async function (assert) {

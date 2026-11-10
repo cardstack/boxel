@@ -34,7 +34,12 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // `credential-rejected` until its next probe is due, and then as the call
 // would treat it: sent, as that probe. A rejected key, such as a
 // service-account key Google refused, reads as `credential-rejected` whether
-// or not its probe is due: what brings it back is its owner replacing it.
+// or not its probe is due: what brings it back is its owner replacing it. So
+// does an OAuth connection or `client_credentials` client that can't mint a
+// token: one its vendor refused, an access-only token past its expiry, or a
+// client that is broken, deleted, unshared or suspended. An automation's
+// admission (`automationAdmission`) refuses the same slots, since it checks
+// them with the same `checkSlots`.
 //
 // Slots that would be filled are then asked about the limits of the share or
 // key filling them, without counting anything: `over-budget` when a budget is
