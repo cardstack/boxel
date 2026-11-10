@@ -1421,8 +1421,8 @@ export default class PublishRealmModal extends Component<Signature> {
                       {{on 'input' this.handleCustomSubdomainInput}}
                       class='custom-subdomain-input'
                       spellcheck='false'
-                      data-test-custom-subdomain-input
                       {{ignoredByPasswordManagers}}
+                      data-test-custom-subdomain-input
                     >
                       <:after as |Accessories|>
                         <Accessories.Text

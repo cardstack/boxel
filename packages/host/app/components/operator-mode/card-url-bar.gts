@@ -66,8 +66,8 @@ export default class CardURLBar extends Component<Signature> {
           @onBlur={{this.urlBar.onBlur}}
           @onFocus={{this.urlBar.onFocus}}
           @autocomplete='off'
-          data-test-card-url-bar-input
           {{ignoredByPasswordManagers}}
+          data-test-card-url-bar-input
         />
       </div>
       {{#if (and (not @userHasDismissedError) (bool this.urlBar.errorMessage))}}

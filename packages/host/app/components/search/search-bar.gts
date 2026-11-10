@@ -108,8 +108,8 @@ export default class SearchBar extends Component<Signature> {
           {{elementCallback @onInputInsertion}}
           {{autoFocus}}
           data-search-field
-          data-test-search-field
           {{ignoredByPasswordManagers}}
+          data-test-search-field
         />
       </div>
     </div>

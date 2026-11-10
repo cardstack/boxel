@@ -41,8 +41,8 @@ export default class RenameSession extends Component<Signature> {
             @errorMessage={{this.roomNameError}}
             @onInput={{this.setName}}
             aria-label='Session Name'
-            data-test-name-field
             {{ignoredByPasswordManagers}}
+            data-test-name-field
           />
         </div>
         <footer class='footer'>

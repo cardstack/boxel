@@ -390,8 +390,8 @@ export default class EditFieldModal extends Component<Signature> {
             @onInput={{this.onFieldNameInput}}
             @errorMessage={{this.fieldNameErrorMessage}}
             @state={{if (bool this.fieldNameErrorMessage) 'invalid' 'none'}}
-            data-test-field-name-input
             {{ignoredByPasswordManagers}}
+            data-test-field-name-input
           />
         </FieldContainer>
         <FieldContainer class='field' @tag='fieldset'>

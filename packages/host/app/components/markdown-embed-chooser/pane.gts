@@ -211,8 +211,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
               @value={{@selection.widthInput}}
               @onInput={{this.setWidth}}
               aria-label='Width'
-              data-test-markdown-embed-preview-width
               {{ignoredByPasswordManagers}}
+              data-test-markdown-embed-preview-width
             />
             <IconX
               class='markdown-embed-preview-pane__size-x'
@@ -223,8 +223,8 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
               @value={{@selection.heightInput}}
               @onInput={{this.setHeight}}
               aria-label='Height'
-              data-test-markdown-embed-preview-height
               {{ignoredByPasswordManagers}}
+              data-test-markdown-embed-preview-height
             />
           </div>
         {{/if}}
