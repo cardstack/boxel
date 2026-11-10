@@ -1015,19 +1015,25 @@ export class RealmIndexQueryEngine {
     }
     let refs: CodeRef[] = [];
     collectFilterRefs(filter, refs);
-    let fileMatch = false;
-    let instanceMatch = false;
+    // A filter targets file meta when some ref matches a file row and none
+    // matches an instance. Ask about instances first and stop at the first
+    // hit: an instance probe that finds a row returns at once, while a probe
+    // that finds nothing reads every row in the realm (the planner expects a
+    // LIMIT 1 over a type key to stop early and scans). A card-type search
+    // then never runs the file probe it can't use.
     for (let ref of refs) {
-      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
-        fileMatch = true;
-      }
       if (
         await this.#indexQueryEngine.hasInstanceType(this.realmURL, ref, opts)
       ) {
-        instanceMatch = true;
+        return false;
       }
     }
-    return fileMatch && !instanceMatch;
+    for (let ref of refs) {
+      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Every `boxel_index.types` membership key this ref can legitimately match:
