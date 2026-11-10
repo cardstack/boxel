@@ -96,12 +96,10 @@ module(basename(import.meta.filename), function () {
         'attempt-1',
       );
       assert.strictEqual(start.kind, 'run');
-      if (start.kind !== 'run') {
-        return;
-      }
-      assert.strictEqual(start.run.state, 'running');
-      assert.strictEqual(start.run.attempt, 'attempt-1');
-      assert.ok(start.run.startedAt, 'the start is timestamped');
+      let started = 'run' in start ? start.run : undefined;
+      assert.strictEqual(started?.state, 'running');
+      assert.strictEqual(started?.attempt, 'attempt-1');
+      assert.ok(started?.startedAt, 'the start is timestamped');
     });
 
     test('the owning attempt records the script it ran', async function (assert) {
