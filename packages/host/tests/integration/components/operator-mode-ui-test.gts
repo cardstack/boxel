@@ -308,9 +308,7 @@ module('Integration | operator-mode | ui', function (hooks) {
       },
     );
     await waitFor('[data-test-submode-switcher]');
-    await click(
-      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
-    );
+    await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitFor('[data-test-card-url-bar-input]');
 
