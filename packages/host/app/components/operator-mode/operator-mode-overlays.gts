@@ -37,7 +37,6 @@ import {
 import {
   CardCrudFunctionsContextName,
   CommandContextName,
-  getMenuItems,
 } from '@cardstack/runtime-common';
 
 import AdornContext from '@cardstack/host/components/adorn/adorn-context';
@@ -59,6 +58,7 @@ import Overlays from './overlays';
 
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RealmExtensionsService from '../../services/realm-extensions';
 import type StoreService from '../../services/store';
 import type WorkspacePinsService from '../../services/workspace-pins';
 import type { CardDefOrId } from './stack-item';
@@ -82,6 +82,7 @@ export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realmExtensions: RealmExtensionsService;
   @service declare private store: StoreService;
   @service declare private workspacePins: WorkspacePinsService;
 
@@ -643,8 +644,9 @@ export default class OperatorModeOverlays extends Overlays {
       return toMenuItems(menuItems);
     }
 
-    const cardMenuItems =
-      (cardDefOrId as CardDef)[getMenuItems]?.({
+    const cardMenuItems = this.realmExtensions.cardMenuItems(
+      cardDefOrId as CardDef,
+      {
         canEdit: this.realm.canWrite(cardId),
         // A field overlay offers no Delete, so it asks the realm nothing.
         canDelete:
@@ -656,7 +658,8 @@ export default class OperatorModeOverlays extends Overlays {
           isField || isFile
             ? undefined
             : this.workspacePins.pinStateFor(rri(cardId)),
-      }) ?? [];
+      },
+    );
 
     // Delete and New Card of This Type don't make sense from an embedded field
     // overlay — suppress them by context, not by misreporting canEdit
