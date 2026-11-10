@@ -30,11 +30,10 @@ import { setupDB } from './helpers/index.ts';
 // `on` anchor and one operator), so this file is also the standing check that
 // such a query returns what it always did.
 //
-// One shape is left out of the generated filters: a `not` over a list field
-// (`not: { eq: { tags: 'red' } }`). The engine has always answered it with
-// every card of the type, which is not what it says, and correcting it would
-// change what saved queries return. It is not generated here until that is
-// decided.
+// A predicate on a list field holds when some element satisfies it, so its
+// `not` selects the cards with no such element, a card with an empty list
+// among them. Lists of text and lists of numbers are both generated, under
+// `not`, `any` and `every` alike: the two are answered by different SQL.
 
 function ref(module: string, name: string): ResolvedCodeRef {
   return { module: module as ResolvedCodeRef['module'], name };
@@ -45,7 +44,7 @@ const stringRef = ref('@cardstack/base/string', 'default');
 const numberRef = ref('@cardstack/base/number', 'default');
 const cardDefRef = ref('@cardstack/base/card-api', 'CardDef');
 
-type Kind = 'string' | 'number' | 'strings';
+type Kind = 'string' | 'number' | 'strings' | 'numbers';
 interface TypeSpec {
   name: string;
   ref: ResolvedCodeRef;
@@ -60,6 +59,7 @@ const Talk = typeSpec('Talk', {
   title: 'string',
   channel: 'string',
   speakers: 'strings',
+  chapters: 'numbers',
   hnScore: 'number',
   year: 'number',
 });
@@ -67,6 +67,7 @@ const Product = typeSpec('Product', {
   name: 'string',
   brand: 'string',
   tags: 'strings',
+  sizes: 'numbers',
   price: 'number',
   rating: 'number',
 });
@@ -74,10 +75,18 @@ const Post = typeSpec('Post', {
   author: 'string',
   body: 'string',
   topics: 'strings',
+  scores: 'numbers',
   likes: 'number',
   reposts: 'number',
 });
 const TYPES = [Talk, Product, Post];
+
+function isList(kind: Kind): boolean {
+  return kind === 'strings' || kind === 'numbers';
+}
+function isNumeric(kind: Kind): boolean {
+  return kind === 'number' || kind === 'numbers';
+}
 
 function definitionOf(spec: TypeSpec): Definition {
   let names = Object.keys(spec.fields);
@@ -90,11 +99,11 @@ function definitionOf(spec: TypeSpec): Definition {
       names.map((n, i) => [
         `f${i}`,
         {
-          type: spec.fields[n] === 'strings' ? 'containsMany' : 'contains',
+          type: isList(spec.fields[n]) ? 'containsMany' : 'contains',
           isPrimitive: true,
           isComputed: false,
-          fieldOrCard: spec.fields[n] === 'number' ? numberRef : stringRef,
-          ...(spec.fields[n] === 'number' ? { serializerName: 'number' } : {}),
+          fieldOrCard: isNumeric(spec.fields[n]) ? numberRef : stringRef,
+          ...(isNumeric(spec.fields[n]) ? { serializerName: 'number' } : {}),
         },
       ]),
     ),
@@ -174,7 +183,7 @@ const WORDS = {
   strings: ['red', 'green', 'blue', 'amber'],
 };
 
-type Doc = Record<string, string | number | string[] | null>;
+type Doc = Record<string, string | number | string[] | number[] | null>;
 interface Row {
   url: string;
   spec: TypeSpec;
@@ -185,7 +194,7 @@ interface Row {
 const ROWS_PER_TYPE = 40;
 
 // Few distinct values, so there are ties to order and groups to count; about
-// one value in eight is missing.
+// one value in eight is missing, and about one list in four is empty.
 function makeRows(): Row[] {
   let next = sequence(20261110);
   let pick = <T>(list: T[]): T => list[Math.floor(next() * list.length)];
@@ -195,9 +204,16 @@ function makeRows(): Row[] {
       let doc: Doc = {};
       for (let [field, kind] of Object.entries(spec.fields)) {
         if (kind === 'strings') {
-          let size = 1 + Math.floor(next() * 3);
+          let size = Math.floor(next() * 4);
           doc[field] = [
             ...new Set(Array.from({ length: size }, () => pick(WORDS.strings))),
+          ];
+        } else if (kind === 'numbers') {
+          let size = Math.floor(next() * 4);
+          doc[field] = [
+            ...new Set(
+              Array.from({ length: size }, () => Math.floor(next() * 6) * 5),
+            ),
           ];
         } else if (next() < 0.125) {
           doc[field] = null;
@@ -278,7 +294,7 @@ type Truth = true | false | null;
 function leafHolds(row: Row, node: Leaf): Truth {
   let raw = row.doc[node.field];
   if (raw == null) return null;
-  let values = Array.isArray(raw) ? raw : [raw];
+  let values: (string | number)[] = Array.isArray(raw) ? raw : [raw];
   switch (node.op) {
     case 'eq':
       return values.includes(node.value);
@@ -352,27 +368,20 @@ function generateNodes(spec: TypeSpec, count: number, seedValue: number) {
   let pick = <T>(list: T[]): T => list[Math.floor(next() * list.length)];
   let fieldsOf = (...kinds: Kind[]) =>
     Object.keys(spec.fields).filter((f) => kinds.includes(spec.fields[f]));
-  // A list field is left out under a `not`: see the note on the module.
-  let leaf = (negated: boolean): Leaf => {
-    let lists: Kind[] = negated ? [] : ['strings'];
+  let valueFor = (kind: Kind): string | number =>
+    isNumeric(kind)
+      ? Math.floor(next() * 6) * 5
+      : pick(kind === 'strings' ? WORDS.strings : WORDS.string);
+  let leaf = (): Leaf => {
     let r = next();
     if (r < 0.3) {
-      let field = pick(fieldsOf('string', 'number', ...lists));
-      let kind = spec.fields[field];
-      return {
-        op: 'eq',
-        field,
-        value:
-          kind === 'number'
-            ? Math.floor(next() * 6) * 5
-            : pick(kind === 'strings' ? WORDS.strings : WORDS.string),
-      };
+      let field = pick(fieldsOf('string', 'number', 'strings', 'numbers'));
+      return { op: 'eq', field, value: valueFor(spec.fields[field]) };
     }
     if (r < 0.5) {
-      let field = pick(fieldsOf('string', ...lists));
-      let words =
-        spec.fields[field] === 'strings' ? WORDS.strings : WORDS.string;
-      return { op: 'in', field, value: [pick(words), pick(words)] };
+      let field = pick(fieldsOf('string', 'strings', 'numbers'));
+      let kind = spec.fields[field];
+      return { op: 'in', field, value: [valueFor(kind), valueFor(kind)] };
     }
     if (r < 0.7) {
       return {
@@ -385,20 +394,24 @@ function generateNodes(spec: TypeSpec, count: number, seedValue: number) {
     bounds[pick(['gt', 'gte'])] = Math.floor(next() * 4) * 5;
     if (next() < 0.5)
       bounds[pick(['lt', 'lte'])] = 10 + Math.floor(next() * 4) * 5;
-    return { op: 'range', field: pick(fieldsOf('number')), bounds };
+    return {
+      op: 'range',
+      field: pick(fieldsOf('number', 'numbers')),
+      bounds,
+    };
   };
-  let node = (depth: number, negated: boolean): Node => {
+  let node = (depth: number): Node => {
     let r = next();
-    if (depth === 0 || r < 0.45) return leaf(negated);
-    if (r < 0.6) return { op: 'not', of: node(depth - 1, true) };
+    if (depth === 0 || r < 0.45) return leaf();
+    if (r < 0.6) return { op: 'not', of: node(depth - 1) };
     return {
       op: r < 0.8 ? 'any' : 'every',
       of: Array.from({ length: 2 + Math.floor(next() * 2) }, () =>
-        node(depth - 1, negated),
+        node(depth - 1),
       ),
     };
   };
-  return Array.from({ length: count }, () => node(2, false));
+  return Array.from({ length: count }, () => node(2));
 }
 
 function expectedUrls(spec: TypeSpec, node: Node): string[] {
@@ -446,6 +459,56 @@ module(basename(import.meta.filename), function () {
         }
       });
     }
+
+    test('a list field: some element matches, and `not` means none does', async function (assert) {
+      let products = ROWS.filter((row) => row.spec === Product);
+      let tags = (row: Row) => row.doc.tags as string[];
+      let sizes = (row: Row) => row.doc.sizes as number[];
+      let urlsWhere = (keep: (row: Row) => boolean) =>
+        products
+          .filter(keep)
+          .map((row) => row.url)
+          .sort();
+      let on = Product.ref;
+      let cases: [string, Record<string, any>, (row: Row) => boolean][] = [
+        [
+          'not tagged red, the untagged among them',
+          { on, not: { eq: { tags: 'red' } } },
+          (row) => !tags(row).includes('red'),
+        ],
+        [
+          'no size of 10',
+          { on, not: { eq: { sizes: 10 } } },
+          (row) => !sizes(row).includes(10),
+        ],
+        [
+          'no size above 15',
+          { on, not: { range: { sizes: { gt: 15 } } } },
+          (row) => !sizes(row).some((n) => n > 15),
+        ],
+        [
+          'two tests of one list are met by different elements',
+          { on, every: [{ eq: { sizes: 5 } }, { eq: { sizes: 20 } }] },
+          (row) => sizes(row).includes(5) && sizes(row).includes(20),
+        ],
+        [
+          'a branch on another field reaches a card whose list is empty',
+          { on, any: [{ eq: { sizes: 5 } }, { eq: { brand: 'Zed' } }] },
+          (row) => sizes(row).includes(5) || row.doc.brand === 'Zed',
+        ],
+      ];
+      for (let [label, filter, keep] of cases) {
+        let expected = urlsWhere(keep);
+        assert.notStrictEqual(expected.length, 0, `${label}: some rows match`);
+        assert.notStrictEqual(
+          expected.length,
+          products.length,
+          `${label}: some rows don't`,
+        );
+        let { urls } = await search({ filter, page: everything });
+        assert.deepEqual([...urls].sort(), expected, label);
+      }
+    });
 
     test('pages laid end to end are the whole result, each row once', async function (assert) {
       let sorts: (Record<string, any>[] | undefined)[] = [

@@ -20,6 +20,7 @@ import { isValidPrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import { verdictCoversRow } from './index-writer.ts';
 import {
   type Expression,
+  type TableValuedTree,
   type CardExpression,
   type FieldQuery,
   type FieldValue,
@@ -842,6 +843,57 @@ function foldSameKeyEqs(branches: Filter[]): Filter | undefined {
     values.push(v);
   }
   return { ...(on ? { on } : {}), in: { [key!]: values } } as Filter;
+}
+
+// A predicate on a path through a list holds for a card when some element of
+// the list satisfies it. The walk of the list stays inside the predicate, as
+// an EXISTS over the list's tree, so the predicate is one true-or-false test
+// of the card and composes the way any other does: `not` selects the cards
+// with no such element (a card with an empty list among them), two tests of
+// one list under `every` may be met by different elements, and a branch of an
+// `any` on another field still reaches a card whose list is empty. Joining
+// the tree into the query's FROM instead tests one element per joined row, so
+// a `not` passed any card with one element that differed.
+const LIST_ALIAS = 'le';
+function existsInList(resolved: Expression): Expression {
+  let tree: TableValuedTree | undefined;
+  let scoped = (elements: Expression): Expression =>
+    elements.map((element) => {
+      if (typeof element === 'string' || isParam(element)) {
+        return element;
+      }
+      if (isDbExpression(element)) {
+        return Object.fromEntries(
+          Object.entries(element).map(([adapter, value]) => [
+            adapter,
+            Array.isArray(value) ? scoped(value as Expression) : value,
+          ]),
+        ) as typeof element;
+      }
+      if (element.kind === 'table-valued-tree') {
+        if (
+          tree &&
+          (tree.column !== element.column || tree.rootPath !== element.rootPath)
+        ) {
+          throw new Error(
+            `a list predicate reads one list, not both ${tree.rootPath} and ${element.rootPath}`,
+          );
+        }
+        tree = element;
+        return `${LIST_ALIAS}.${element.treeColumn}`;
+      }
+      return element;
+    });
+  let predicate = scoped(resolved);
+  if (!tree) {
+    return resolved;
+  }
+  let root = tree.rootPath === '$' ? '$' : `$.${tree.rootPath}`;
+  return [
+    `EXISTS (SELECT 1 FROM jsonb_tree(${tree.column}, '${root}') AS ${LIST_ALIAS} WHERE`,
+    ...predicate,
+    ')',
+  ];
 }
 
 function flipPolarity(polarity: FilterPolarity): FilterPolarity {
@@ -6756,23 +6808,24 @@ export class IndexQueryEngine {
     onRef: CodeRef,
   ): CardExpression {
     let query = fieldQuery(key, onRef, false, 'filter');
-    let cardExpressions: CardExpression[] = [];
+    let bounds: CardExpression[] = [];
     Object.entries(filterValue).forEach(([operator, value]) => {
       if (value == null) {
         throw new Error(`'null' is not a permitted value in a 'range' filter`);
       }
       let v = fieldValue(key, [param(value)], onRef, 'filter');
-      cardExpressions.push([
-        fieldArity({
-          type: onRef,
-          path: key,
-          value: [query, RANGE_OPERATORS[operator as RangeOperator], v],
-          errorHint: 'filter',
-        }),
-      ]);
+      bounds.push([query, RANGE_OPERATORS[operator as RangeOperator], v]);
     });
-
-    return every(cardExpressions);
+    // One test of the field with every bound in it: on a list, the bounds
+    // are met by one element together, never by one element each.
+    return [
+      fieldArity({
+        type: onRef,
+        path: key,
+        value: every(bounds),
+        errorHint: 'filter',
+      }),
+    ];
   }
 
   private async makeExpression(query: CardExpression): Promise<Expression> {
@@ -6888,7 +6941,7 @@ export class IndexQueryEngine {
       // a hop into a non-searchable relationship is rejected as we cross it.
       seedSearchableRoutesFromDefinition(definition),
     );
-    return await this.makeExpression(exp);
+    return existsInList(await this.makeExpression(exp));
   }
 
   private async handleFieldQuery(fieldQuery: FieldQuery): Promise<Expression> {
@@ -6916,6 +6969,9 @@ export class IndexQueryEngine {
           pathTraveled,
           this.#definitionLookup,
         );
+        isNumericField =
+          field.serializerName === 'number' ||
+          field.serializerName === 'big-integer';
         if (isFieldPlural(field)) {
           rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
           return [
@@ -6928,9 +6984,6 @@ export class IndexQueryEngine {
           ];
         } else if (!rootPluralPath) {
           let fieldName = currentField(pathTraveled);
-          isNumericField =
-            field.serializerName === 'number' ||
-            field.serializerName === 'big-integer';
           readsSpill =
             this.#dbAdapter.kind === 'pg' &&
             !NEVER_SPILLED_SERIALIZERS.has(field.serializerName ?? '');
@@ -6997,6 +7050,25 @@ export class IndexQueryEngine {
       } else {
         exp = ['search_doc', ...exp];
       }
+    } else if (isNumericField && errorHint === 'filter' && !useJsonBValue) {
+      // A number inside a list is read from the list's tree as text, so it is
+      // cast as a singular number is: without the cast `gte: 10` compares
+      // "5" with "10" as text and passes it. The tree also yields the rows
+      // beside the one a predicate tests (the list itself, an element's other
+      // fields), and SQL may evaluate the cast on those first, so only text
+      // that reads as a number is cast. SQLite's tree keeps the JSON type.
+      exp = [
+        dbExpression({
+          pg: [
+            '(CASE WHEN',
+            ...exp,
+            `~ '^-?[0-9]+(\\.[0-9]+)?([eE][-+]?[0-9]+)?$' THEN (`,
+            ...exp,
+            ')::numeric END)',
+          ],
+          sqlite: exp,
+        }),
+      ];
     }
     return exp;
   }

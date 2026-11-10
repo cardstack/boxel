@@ -76,7 +76,13 @@ The Query object may have a `filter` property, which controls which cards are in
 
 Nested fields may be specified using a dot (`.`) notation.
 
-Boxel's ability to filter containsMany and linksToMany fields is quite limited currently. Say for instance we have a card Company with a Department field that is a linksToMany field. There would be no easy way to express a filter that returns all the companies that have more than 5 departments. Better support for plural field predicate filtering is something we would like to improve in the future.
+A filter on a list field (a containsMany or linksToMany, or a path through one) holds for a card when some element of the list satisfies it. `eq: { tags: 'red' }` finds the cards with a red tag, and a `range` with two bounds finds the cards with one element inside both. Each filter is its own test of the card, so:
+
+- `not: { eq: { tags: 'red' } }` finds the cards with no red tag, a card with no tags among them.
+- `every: [{ eq: { tags: 'red' } }, { eq: { tags: 'blue' } }]` finds the cards tagged both.
+- A number in a list compares as a number, so `range: { sizes: { gte: 10 } }` does not match a 5.
+
+Counting a list's elements is not expressible. Boxel's ability to filter containsMany and linksToMany fields is otherwise limited. Say for instance we have a card Company with a Department field that is a linksToMany field. There would be no easy way to express a filter that returns all the companies that have more than 5 departments. Better support for plural field predicate filtering is something we would like to improve in the future.
 
 A note about the efficiency around linked fields in search results: Currently, the search index doesn't cache linked fields. Those are, for the time being, considered volatile and will be loaded at the time the search request is made. When we build up the search doc for a card with nested fields we will accurately reflect that as well as the dependent cards. When the dependent cards are updated, we invalidate the all the cards that consume them and rebuild their search docs -- so searches will be correct. We don't, however, cache the JSON API documents for these cards in the index -- rather we cache just the JSON API resource (i.e. without the `included` part of the JSON API document). When serving the card search results from the realm, we reconstruct the included part of the JSON API document each time.
 
@@ -806,6 +812,8 @@ A query the grammar refuses gets a 400 whose body carries a code a caller can ac
 ### Upgrading from the old keys
 
 A query written before the newer spellings is read as it always was, with no rewrite: `{ by: '_matchRelevance' }` still sorts by text relevance, a member the grammar never read (`page.cursor`, for one) is still ignored, and a search that names no page still gets 100 rows from a card and 500 from the server. Only a query that uses a newer spelling is checked strictly.
+
+One answer did change, because the old one was wrong. A `not` over a list field used to return every card of the type, including the cards the inner filter matched; it now returns the cards with no matching element. A `range` over a list of numbers used to compare them as text. See the list-field rules under Filters.
 
 Drafts of the newer spellings used the engine's internal sort keys. A request or a query-backed field that uses one is refused (`unknown-key`), with a message naming the key and where it is. Rewrite it as:
 
