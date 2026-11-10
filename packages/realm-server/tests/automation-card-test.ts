@@ -132,7 +132,7 @@ module(basename(import.meta.filename), function (hooks) {
       )}`,
     );
     if (doc?.type !== 'doc') {
-      return;
+      throw new Error('the instance did not index');
     }
     let stored = doc.doc.data.attributes!;
     for (let name of [
@@ -163,9 +163,8 @@ module(basename(import.meta.filename), function (hooks) {
     let entry = await testRealm.realmIndexQueryEngine.instance(
       new URL(`${testRealm.url}automations/nightly`),
     );
-    assert.strictEqual(entry?.type, 'instance');
     if (entry?.type !== 'instance') {
-      return;
+      throw new Error(`no indexed instance: ${JSON.stringify(entry)}`);
     }
     let automationTypeKey = internalKeyFor(
       automationRef,
@@ -190,7 +189,7 @@ module(basename(import.meta.filename), function (hooks) {
       `the declaration reads: ${JSON.stringify(result.ok ? [] : result.problems)}`,
     );
     if (!result.ok) {
-      return;
+      throw new Error('the declaration did not read');
     }
     let { declaration } = result;
     assert.strictEqual(
@@ -225,8 +224,7 @@ module(basename(import.meta.filename), function (hooks) {
       new URL(`${testRealm.url}automations/too-often`),
     );
     if (entry?.type !== 'instance') {
-      assert.ok(false, 'the instance indexes');
-      return;
+      throw new Error(`no indexed instance: ${JSON.stringify(entry)}`);
     }
     let result = readAutomationDeclaration(
       {
