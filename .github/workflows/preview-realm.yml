@@ -272,14 +272,14 @@ jobs:
               exit 0
             fi
             [ "$attempt" = 3 ] && exit 1
-            affected=$(sed -n 's/.*Affected: //p' publish.log | tr ',' '\n' | sed 's/^ *//')
-            if [ -n "$affected" ]; then
-              paths=()
-              while IFS= read -r url; do
-                [ -n "$url" ] && paths+=("${url#"$SOURCE_REALM_URL"}")
-              done <<< "$affected"
+            if grep -q 'error-document violation' publish.log && ! grep -q 'private-dependency' publish.log; then
+              mapfile -t paths < <(boxel realm indexing-errors --realm "${SOURCE_REALM_URL}" --json \
+                | jq -r '.data[] | select(.type == "indexing-error") | .attributes.url' \
+                | sed "s|^${SOURCE_REALM_URL}||")
               echo "Reindexing ${#paths[@]} card(s) the source realm failed to index, then publishing again"
-              boxel file touch "${paths[@]}" --realm "${SOURCE_REALM_URL}" || true
+              if [ "${#paths[@]}" -gt 0 ]; then
+                boxel file touch "${paths[@]}" --realm "${SOURCE_REALM_URL}" || true
+              fi
               boxel realm wait-for-ready --realm "${SOURCE_REALM_URL}" --timeout 600000 || true
             elif grep -q 'readiness check' publish.log; then
               echo "The published copy didn't finish indexing in time; publishing again"
