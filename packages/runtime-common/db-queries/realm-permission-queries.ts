@@ -184,8 +184,13 @@ const botLocalparts = new Set([
 // into bootstrap realms are `@<name>_writer`; a test stack's realm server is
 // `@<name>_realm-server`. Matching the naming convention, rather than listing
 // the accounts, keeps a newly added bootstrap realm from counting as a person.
-// Registration doesn't reserve the suffixes, so a person who picks one is
-// treated as a bot, which only ever withholds something.
+// Registration doesn't reserve the suffixes, so a person can pick one and be
+// treated as a bot. That withholds what a person would get, such as counting
+// as a direct writer. It also lets them invite, or be invited by, an end user
+// they share no realm with (`/_invite-check` and the homeserver's invite
+// module). The invite module judges an invite to an end user by every end
+// user the room already holds, so the name can't put two end users who share
+// no realm into one room (ADR 011 §1.5).
 const botLocalpartSuffixes = ['_realm', '_writer', '_realm-server'];
 
 // The localpart of `userId` when it is the full Matrix id of an account on
