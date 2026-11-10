@@ -193,8 +193,6 @@ export function positionPopup(
           ? a.bottom - h
           : a.top + a.height / 2 - h / 2;
     top = Math.min(Math.max(top, GUTTER), Math.max(vh - h - GUTTER, GUTTER));
-    // neither side had room: shift it back on screen rather than off the edge
-    left = Math.min(Math.max(left, GUTTER), Math.max(vw - w - GUTTER, GUTTER));
   }
   // `side` is the one it placed on: the opposite of the placement's when
   // that side had no room.
