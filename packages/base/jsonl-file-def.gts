@@ -15,6 +15,8 @@ export class JSONLFile extends TextFileDef {
   static icon = FileJsonIcon;
   static acceptTypes = '.jsonl,application/jsonl';
   static textExtensions: readonly string[] = ['.jsonl'];
+  // A log's file meta keeps its recent lines, not the whole log.
+  static contentTailBytes = 16 * 1024;
   static fileKind = 'JSON Lines';
 
   // The caller says what happened. The realm says when, and who.

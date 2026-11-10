@@ -150,6 +150,17 @@ class Head extends Component<typeof TextFileDef> {
   </template>
 }
 
+// The last whole lines of `text` that fit in `maxBytes` (UTF-16 code units,
+// a close enough bound here), or all of it when it fits or there is no cap.
+function tailLines(text: string, maxBytes: number | undefined): string {
+  if (maxBytes === undefined || text.length <= maxBytes) {
+    return text;
+  }
+  let tail = text.slice(text.length - maxBytes);
+  let firstBreak = tail.indexOf('\n');
+  return firstBreak === -1 ? '' : tail.slice(firstBreak + 1);
+}
+
 export class TextFileDef extends FileDef {
   static displayName = 'Text File';
   static icon = TextFileIcon;
@@ -159,6 +170,11 @@ export class TextFileDef extends FileDef {
   // here, since a file whose extension is not listed is refused as a content
   // mismatch rather than read.
   static textExtensions: readonly string[] = ['.txt', '.text'];
+  // At most this many bytes of the text are kept as `content`: the last whole
+  // lines that fit. Undefined keeps it all. An append-only log sets it, since
+  // its file meta is re-read on every appended line and the whole log would
+  // travel each time; its lines are read from the file itself, by range.
+  static contentTailBytes: number | undefined = undefined;
 
   // A `.txt` served without (or with an uninformative) content type would route
   // to a generic profile by extension alone, so pin the document axes the four
@@ -234,7 +250,7 @@ export class TextFileDef extends FileDef {
       ...base,
       title: fallbackTitle || 'Untitled text file',
       excerpt: truncateExcerpt(text.trim()),
-      content: text,
+      content: tailLines(text, this.contentTailBytes),
       // A trailing newline shouldn't inflate the count, and empty content is
       // zero lines rather than one.
       lineCount: text ? text.replace(/\n$/, '').split('\n').length : 0,

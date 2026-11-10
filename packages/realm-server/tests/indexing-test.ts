@@ -469,6 +469,12 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'random-file.txt': 'hello',
+    'event-log.jsonl': Array.from(
+      { length: 2000 },
+      (_, i) =>
+        JSON.stringify({ at: `2026-11-10 00:00:${i}`, what: `event ${i}` }) +
+        '\n',
+    ).join(''),
     'random-file.mismatch': 'mismatch content',
     'random-image.png': 'i am an image',
     '🎉hello.txt': 'emoji filename content',
@@ -1380,6 +1386,33 @@ module(basename(import.meta.filename), function () {
         'instance entry keeps instance type',
       );
       assert.strictEqual(fileEntry?.type, 'file', 'file entry keeps file type');
+    });
+
+    test("a log's file meta keeps its recent lines, not the whole log", async function (assert) {
+      let rows = (await testDbAdapter.execute(
+        `SELECT pristine_doc FROM boxel_index WHERE url = '${testRealm}event-log.jsonl' AND type = 'file'`,
+      )) as { pristine_doc: Record<string, any> | string | null }[];
+      let raw = rows[0]?.pristine_doc;
+      let doc = typeof raw === 'string' ? JSON.parse(raw) : (raw ?? {});
+      let content: string = doc.attributes?.content ?? '';
+      assert.strictEqual(
+        doc.attributes?.lineCount,
+        2000,
+        'every line is counted',
+      );
+      assert.ok(content.length > 0, 'content keeps some lines');
+      assert.ok(
+        content.length <= 16 * 1024,
+        `content is a bounded tail (${content.length} characters)`,
+      );
+      assert.true(
+        content.startsWith('{"at"'),
+        'the tail starts at a whole line',
+      );
+      assert.true(
+        content.endsWith('"event 1999"}\n'),
+        'and ends with the newest entry',
+      );
     });
 
     test('file extractor populates search_doc', async function (assert) {
