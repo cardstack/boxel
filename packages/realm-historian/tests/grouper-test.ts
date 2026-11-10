@@ -29,17 +29,32 @@ interface ClosedGroup {
   reason: CloseReason;
 }
 
+interface RunOptions {
+  limits?: GroupingLimits;
+  // Live only: how long after its `occurred_at` an event reaches the
+  // recorder. An event never arrives before an earlier one.
+  delayMs?: (event: ChangeEvent) => number;
+  // Live only: how far the time the clock is checked at trails the wall
+  // clock.
+  graceMs?: number;
+}
+
 // Groups `events` the way a recorder does, and returns the groups in the
 // order they closed, each with the seqs of its events and why it closed.
 //
-// `live` hands each event over at its own `occurred_at`, with the clock
-// ticking every 100 ms from the first event and checked on every tick.
+// `live` hands each event over as it arrives, at its own `occurred_at` unless
+// `delayMs` says otherwise, with the wall clock ticking every 100 ms from the
+// first event and the clock checked on every tick, `graceMs` behind it.
 // `backlog` hands every event over at once, as a task catching up after an
 // outage does, and checks the clock only after the last, 20 minutes on.
 function runGrouper(
   events: ChangeEvent[],
   mode: 'live' | 'backlog',
-  limits: GroupingLimits = DEFAULT_GROUPING_LIMITS,
+  {
+    limits = DEFAULT_GROUPING_LIMITS,
+    delayMs = () => 0,
+    graceMs = 0,
+  }: RunOptions = {},
 ): ClosedGroup[] {
   let closed: ClosedGroup[] = [];
   let open: { group: OpenGroup; seqs: number[] } | undefined;
@@ -80,12 +95,21 @@ function runGrouper(
     events.forEach(hand);
     tick(end);
   } else {
+    let arrivals: number[] = [];
+    events.forEach((event, index) => {
+      arrivals.push(
+        Math.max(
+          arrivals[index - 1] ?? -Infinity,
+          times[index] + delayMs(event),
+        ),
+      );
+    });
     let next = 0;
-    for (let now = times[0]; now <= end; now += 100) {
-      while (next < events.length && times[next] <= now) {
+    for (let now = times[0]; now <= end + graceMs; now += 100) {
+      while (next < events.length && arrivals[next] <= now) {
         hand(events[next++]);
       }
-      tick(now);
+      tick(now - graceMs);
     }
   }
   if (open) {
@@ -452,7 +476,7 @@ module('grouper', (hooks) => {
         { closeAfter: 'push-limit' },
         '30 changes reach the limit of 25',
       );
-      assert.deepEqual(runGrouper(events, 'live', limits), [
+      assert.deepEqual(runGrouper(events, 'live', { limits }), [
         { seqs: [1, 2, 3], reason: 'push-limit' },
         { seqs: [4, 5], reason: 'push-final' },
       ]);
@@ -566,7 +590,9 @@ module('grouper', (hooks) => {
   });
 
   module('backlog', () => {
-    test('a backlog read after an outage groups exactly as it would have live', (assert) => {
+    // Every rule at work: an autosave burst, tool calls, an interrupted
+    // push, a revert, a long burst and an abandoned push.
+    function mixedWrites(): ChangeEvent[] {
       let revert = {
         kind: 'revert',
         revision: '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b',
@@ -578,7 +604,7 @@ module('grouper', (hooks) => {
         agent: 'model-a',
         room: '!room:localhost',
       } as const;
-      let events = [
+      return [
         // Alice's autosave burst, then the AI assistant's two tool calls in
         // her room, the first 300 ms after her last save.
         ...burst(0, 7),
@@ -603,6 +629,10 @@ module('grouper', (hooks) => {
         pushEvent(203, 'Q'),
         pushEvent(300, 'Q', { final: true }),
       ];
+    }
+
+    test('a backlog read after an outage groups exactly as it would have live', (assert) => {
+      let events = mixedWrites();
       let live = runGrouper(events, 'live');
       assert.deepEqual(runGrouper(events, 'backlog'), live);
       assert.deepEqual(seqsOf(live), [
@@ -622,6 +652,19 @@ module('grouper', (hooks) => {
         [140, 141],
         [142],
       ]);
+    });
+
+    test('events that reach the recorder late group as a backlog does when the clock trails them', (assert) => {
+      // Each event arrives 1.5 s after its transaction started, longer than
+      // the 1 s left of the quiet period between saves, and every tenth
+      // arrives 4 s after. The clock runs 4 s behind the wall clock, so every
+      // event with an earlier `occurred_at` is in hand by its time.
+      let events = mixedWrites();
+      let late = runGrouper(events, 'live', {
+        delayMs: (event) => (event.seq % 10 === 0 ? 4_000 : 1_500),
+        graceMs: 4_000,
+      });
+      assert.deepEqual(late, runGrouper(events, 'backlog'));
     });
   });
 });

@@ -21,10 +21,12 @@
 // An event at or after the deadline closes the group before it. That is
 // measured by the events' own `occurred_at`, not by when they are read, so a
 // backlog read after an outage groups as it would have live. The clock closes
-// a group only when no later event is in hand, and at the same deadline, so it
-// never closes a group that the next event would have extended. A group
-// therefore closes at the same event, and for the same reason, whether the
-// clock or the next event closes it.
+// a group only when no later event is in hand, and at the same deadline. The
+// time it is checked at must be one by which every event with an earlier
+// `occurred_at` is in hand (see `closedByClock`). Given such a time, the clock
+// never closes a group that the next event would have extended, so a group
+// closes at the same event, and for the same reason, whether the clock or the
+// next event closes it.
 //
 // Groups are contiguous in the realm's event order: each event either joins
 // the open group or opens the next one.
@@ -169,6 +171,15 @@ export function deadline(
 
 // Whether the clock closes the open group at `now`, with no later event in
 // hand: it does once `now` reaches the group's deadline.
+//
+// `now` must be a time by which every event of the realm with an earlier
+// `occurred_at` is in hand. The wall clock alone isn't one. `occurred_at` is
+// when an event's transaction started, and the event reaches the recorder
+// only once the transaction has committed and been read. An event that
+// arrives after the wall clock has passed its group's deadline would then open
+// a group of its own, where a backlog would have joined it to the group. A
+// recorder can pass the wall clock less a grace period that covers that
+// delay, or a time it derives from the visibility horizon.
 export function closedByClock(
   group: OpenGroup,
   now: number,
