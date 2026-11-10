@@ -369,12 +369,15 @@ module('Pretui | components/sidebar', function (hooks) {
       @tracked open = true;
     }
     let knobs = new Knobs();
-    await render(<template><Sidebar @label='Library' @mobile={{false}} @open={{knobs.open}} @resizable={{true}}><:nav>Lots</:nav><:default><button type='button' data-test-outside>Out</button></:default></Sidebar></template>);
+    // the parent moves focus and applies the fold in one call, so the swap's
+    // render still sees the hand-off pending
+    let onOpenChange = (v: boolean) => {
+      (document.querySelector('[data-test-outside]') as HTMLElement).focus();
+      knobs.open = v;
+    };
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @open={{knobs.open}} @onOpenChange={{onOpenChange}} @resizable={{true}}><:nav>Lots</:nav><:default><button type='button' data-test-outside>Out</button></:default></Sidebar></template>);
     seamEl().focus();
     await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'Home');
-    (document.querySelector('[data-test-outside]') as HTMLElement).focus();
-    knobs.open = false;
-    await settled();
     assert.strictEqual(state(), 'collapsed');
     assert.dom('[data-test-outside]').isFocused('focus stays where the user put it');
   });
@@ -447,6 +450,24 @@ module('Pretui | components/sidebar', function (hooks) {
     await render(<template><Sidebar @label='Library' @mobile={{false}} @width='200px' @persistKey='t-noresize'><:nav>Lots</:nav></Sidebar></template>);
     assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), '200px');
     localStorage.removeItem('pretui-sidebar:t-noresize:width');
+  });
+
+  test('turning @resizable on does not re-read the stored open state', async function (assert) {
+    class Knobs {
+      @tracked resizable = false;
+    }
+    let knobs = new Knobs();
+    localStorage.setItem('pretui-sidebar:t-flip', 'open');
+    localStorage.setItem('pretui-sidebar:t-flip:width', '250');
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @persistKey='t-flip' @resizable={{knobs.resizable}}><:nav>Lots</:nav></Sidebar></template>);
+    // a state the rail never applied, as another tab would leave it
+    localStorage.setItem('pretui-sidebar:t-flip', 'closed');
+    knobs.resizable = true;
+    await settled();
+    assert.strictEqual(state(), 'expanded', 'the open state is restored once, on insert');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '250', 'the stored width applies');
+    localStorage.removeItem('pretui-sidebar:t-flip');
+    localStorage.removeItem('pretui-sidebar:t-flip:width');
   });
 
   test('SidebarItem @icon renders the icon into the sized slot, decorative', async function (assert) {

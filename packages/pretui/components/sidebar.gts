@@ -213,7 +213,8 @@ export interface SidebarSignature {
      * and the accessibility tree; `none` pins it open and hides the handle.
      */
     collapsible?: SidebarCollapsible;
-    /** Expanded rail width. Any kit-valid CSS length. Default `16rem`. */
+    /** Expanded rail width. Any kit-valid CSS length; px or rem with
+     * `@resizable`. Default `16rem`. */
     width?: string;
     /** Collapsed rail width in `rail` mode. Default `3.25rem`. */
     railWidth?: string;
@@ -435,11 +436,17 @@ export class Sidebar extends Component<SidebarSignature> {
   get shortcutEnabled(): boolean {
     return (this.args.shortcut ?? true) && !this.args.mobile;
   }
+  /** The dragged or restored width, clamped into the current bounds. */
+  get seamSize(): number | undefined {
+    return this.dragWidth === undefined
+      ? undefined
+      : this.clampWidth(this.dragWidth);
+  }
   get width(): string | undefined {
-    if (this.dragWidth !== undefined) {
-      return this.dragWidth + 'px';
+    if (!this.args.resizable) {
+      return this.args.width;
     }
-    let px = this.args.resizable ? this.clampedWidth : undefined;
+    let px = this.seamSize ?? this.clampedWidth;
     return px === undefined ? this.args.width : px + 'px';
   }
   get style() {
@@ -473,7 +480,7 @@ export class Sidebar extends Component<SidebarSignature> {
     this.refocusSeam = false;
     let active = document.activeElement;
     if (!active || active === document.body) {
-      el.focus();
+      el.focus({ preventScroll: true });
     }
   });
 
@@ -512,10 +519,11 @@ export class Sidebar extends Component<SidebarSignature> {
   toggle = () => {
     this.setOpen(!this.open);
   };
+  // Reads no args, so the restore modifier doesn't re-run (and re-apply the
+  // stored open state) when `@resizable` or the bounds change; `seamSize`
+  // clamps and `width` gates on `@resizable` at render.
   restoreWidth = (width: number) => {
-    if (this.args.resizable) {
-      this.dragWidth = this.clampWidth(width);
-    }
+    this.dragWidth = width;
   };
   moveSeam = (event: Event) => {
     if ((event as PointerEvent).buttons !== 0) {
@@ -762,7 +770,7 @@ export class Sidebar extends Component<SidebarSignature> {
           {{! Clicks still toggle; a press that moved the seam does not. }}
           <ResizeHandle
             class='pretui-sidebar-resize'
-            @size={{this.dragWidth}}
+            @size={{this.seamSize}}
             @min={{this.seamMin}}
             @max={{this.maxPx}}
             @defaultSize={{this.clampedWidth}}
