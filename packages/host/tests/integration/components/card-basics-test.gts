@@ -4442,7 +4442,7 @@ module('Integration | card-basics', function (hooks) {
         firstName: 'Mango',
         age: 3,
         email: 'mango@example.com',
-        nicknames: ['Mangy'],
+        nicknames: ['Mangy', 'Mango Bear'],
         favoriteColor: '#ffaa00',
       });
 
@@ -4452,7 +4452,8 @@ module('Integration | card-basics', function (hooks) {
         '[data-test-field="firstName"] input',
         '[data-test-field="age"] input',
         '[data-test-field="email"] input',
-        '[data-test-field="nicknames"] input',
+        '[data-test-field="nicknames"] [data-test-item="0"] input',
+        '[data-test-field="nicknames"] [data-test-item="1"] input',
         '[data-test-field="favoriteColor"] [data-test-color-text-input]',
       ]) {
         assert.dom(input).hasAttribute('data-1p-ignore', '', input);
