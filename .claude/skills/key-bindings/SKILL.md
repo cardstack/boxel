@@ -204,9 +204,7 @@ grant.
   grant on its own. The window approves every slot of an operation, so a
   `--slot` approval that needs a new grant is refused in the terminal.
   `--operation <…>.<op>` asks the batch with `operations: [<op>]`, so
-  `fillers` weigh only where that operation sends; a realm server that
-  refuses `operations` is asked again without it, and its `fillers` weigh
-  every operation of the class.
+  `fillers` weigh only where that operation sends.
   `--interactive` also asks the batch for pipelines-only slots, prints what
   interactive use allows, and approves interactively. For the operations the
   policy opens to visitors (`openToAnonymous`) it prints the same lines the
