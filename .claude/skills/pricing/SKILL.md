@@ -1,11 +1,12 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, and how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, or when changing `packages/realm-server/lib/pricing.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge. Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when asking what a run, realm or automation was charged or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
 
-Read ADR 029 for the rules. This skill is the operating procedure.
+Read ADR 029 for the rules. This skill is the operating procedure, and how to
+read what each charge paid for.
 
 ## The cost model
 
@@ -154,3 +155,93 @@ Add the variable to `PRICING_VARIABLES` and its check to `VALUE_KINDS` in
 parameter and task wiring in the infra repo before the release that reads it
 reaches an environment, since a process without it fails its check. Name it
 for the resource and unit it prices, not a provider's product (ADR 029 §1.2).
+
+## Reading the ledger by kind and reference
+
+Every charge lands in `credits_ledger`, one row per credit bucket it draws
+on (`plan_allowance_used`, `daily_credit_used`, `extra_credit_used`), and
+each row says what it paid for (ADR 029 §1.6):
+
+| Column            | Holds                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| `charge_kind`     | `run`, `run_indexing`, `storage`, `ai`, `batched_ai`, `grant`, `purchase` or `expiry`                |
+| `realm`           | the realm's canonical identifier, on consumption rows (an `ai` row has one only when its caller did) |
+| `run_id`          | the `automation_runs` id, for `run`, `run_indexing`, `batched_ai`, and `ai` made by a run            |
+| `batch_id`        | the AI provider's batch id, for `batched_ai`                                                         |
+| `automation_id`   | the automation card's identifier, for `storage`                                                      |
+| `charge_day`      | the UTC day, for `storage`                                                                           |
+| `pricing_version` | the pricing version that priced it, on `run`, `run_indexing` and `storage`                           |
+
+The `credits_ledger_charge_reference_check` constraint holds each kind to
+the reference it needs, so a `run` row without a run or a pricing version,
+or a grant with a realm, is refused. A run's charges can outlive its
+`automation_runs` row (deleting a realm deletes its runs), so read them by
+`run_id` without joining the run.
+
+**Rows without a kind.** A row with a null `charge_kind` (written by a
+process that doesn't set it, as during a rolling deploy) reads the kind its
+credit type implies: a `*_used` row is `ai`, `plan_allowance`
+and `daily_credit` are `grant`, `extra_credit` is `purchase`, and
+`plan_allowance_expired` is `expiry`. Always read the kind through that
+mapping, never the raw column:
+
+```sql
+COALESCE(charge_kind, CASE credit_type
+  WHEN 'plan_allowance_used' THEN 'ai'
+  WHEN 'extra_credit_used' THEN 'ai'
+  WHEN 'daily_credit_used' THEN 'ai'
+  WHEN 'plan_allowance' THEN 'grant'
+  WHEN 'daily_credit' THEN 'grant'
+  WHEN 'extra_credit' THEN 'purchase'
+  WHEN 'plan_allowance_expired' THEN 'expiry'
+END) AS kind
+```
+
+In code, `getLedgerEntries` (`packages/billing/billing-queries.ts`) applies
+it and filters by user, kind, realm, run, batch, automation and day.
+`chargeKindForCreditType` (runtime-common) is the same mapping in
+TypeScript, and the two change together.
+
+Credits are negative on a spend, so a charge's cost in credits is
+`-SUM(credit_amount)`. For example, against the read-only database:
+
+```sql
+-- Everything one run cost, by kind.
+SELECT charge_kind, -SUM(credit_amount) AS credits, MAX(pricing_version) AS pricing_version
+FROM credits_ledger WHERE run_id = '<run id>' GROUP BY charge_kind;
+
+-- A realm's spend by kind over the last 30 days (created_at is epoch seconds).
+SELECT charge_kind, -SUM(credit_amount) AS credits
+FROM credits_ledger
+WHERE realm = '<realm identifier>'
+  AND created_at > EXTRACT(EPOCH FROM now() - interval '30 days')
+GROUP BY 1;
+
+-- An automation's storage charges, a day at a time.
+SELECT charge_day, -SUM(credit_amount) AS credits, MAX(pricing_version) AS pricing_version
+FROM credits_ledger
+WHERE charge_kind = 'storage' AND automation_id = '<automation identifier>'
+GROUP BY charge_day ORDER BY charge_day DESC;
+```
+
+**A charge writes once.** A `run`, `run_indexing`, `storage` or `batched_ai`
+charge is identified by its kind and reference: a run's compute is charged
+once per run, its indexing once, a batch once per batch, and storage once
+per automation per day. `spendCredits` writes a charge's rows in one
+transaction, holding an advisory lock on that identity, and writes nothing
+when the identity is already in the ledger, so a retried job can call it
+again safely; it returns `false` then. The unique index
+`credits_ledger_charge_once_idx` (identity plus credit type) backs that up in
+the database. An `ai` charge is one per call and a run makes many, so AI
+rows have no identity and every call writes.
+
+Two charges with the same reference but different amounts or pricing
+versions are the same charge: the first one written stands.
+
+**Where a kind comes from.** `spendCredits(dbAdapter, userId, credits,
+charge)` takes the kind and reference; it defaults to `{ kind: 'ai' }`.
+`spendUsageCost` charges an AI provider's cost as `ai` or `batched_ai`.
+`addToCreditsLedger` defaults a row's kind from its credit type, so the
+Stripe handlers record purchases, plan allowances and expiries without naming
+a kind. An operator's top-up (`handle-add-credit`) and the daily grant task
+are grants.

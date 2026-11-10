@@ -5,6 +5,7 @@ import {
 } from './billing-queries.ts';
 import {
   type DBAdapter,
+  type SpendCharge,
   CREDITS_PER_USD,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
   logger,
@@ -73,10 +74,13 @@ export async function validateAICredits(
   };
 }
 
+// Charges an AI provider's reported cost, in USD, to the user. `charge` says
+// what it paid for: an AI call, by default, or a batch billed when it ends.
 export async function spendUsageCost(
   dbAdapter: DBAdapter,
   matrixUserId: string,
   costInUsd: number,
+  charge: Extract<SpendCharge, { kind: 'ai' | 'batched_ai' }> = { kind: 'ai' },
 ) {
   try {
     if (
@@ -99,7 +103,7 @@ export async function spendUsageCost(
       );
     }
 
-    await spendCredits(dbAdapter, user.id, creditsConsumed);
+    await spendCredits(dbAdapter, user.id, creditsConsumed, charge);
   } catch (err) {
     log.error(
       `Failed to spend usage cost (matrixUserId: ${matrixUserId}, costInUsd: ${costInUsd}):`,
