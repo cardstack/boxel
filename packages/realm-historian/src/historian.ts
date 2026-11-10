@@ -4,11 +4,13 @@
 // events so the health endpoint reports it alive while it waits as well as
 // while it catches up.
 //
-// The loop exits rather than run degraded: a lost lease, a query that fails
-// or a loss of the listening connection the adapter can't re-establish ends
-// `run()` with the error, and the process exits non-zero. A stop request
-// finishes the event in progress, releases the lease and ends `run()` without
-// error.
+// The loop exits rather than run degraded: a lost lease or a query that fails
+// ends `run()` with the error, and the process exits non-zero. A lost
+// listening connection doesn't: the adapter reopens it with backoff, and
+// until then the loop still polls every `pollMs`, so events are read late
+// rather than missed. A database that stays unreachable ends `run()` through
+// the lease, whose renewals fail. A stop request finishes the event in
+// progress, releases the lease and ends `run()` without error.
 
 import { mkdir } from 'node:fs/promises';
 import {
