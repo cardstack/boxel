@@ -2399,7 +2399,10 @@ export class IndexQueryEngine {
         totalIsEstimate: false,
       };
     }
-    let mode: PageTotalMode = page.total ?? 'exact';
+    // Counting stops past the cap unless the caller asks for an exact total:
+    // a page needs its rows and whether more follow, and an exact count of
+    // a large match set costs a full pass for a number shown as "1,000+".
+    let mode: PageTotalMode = page.total ?? 'capped';
     if (mode === 'none') {
       return {
         keys,

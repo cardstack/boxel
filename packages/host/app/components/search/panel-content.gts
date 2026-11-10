@@ -261,9 +261,10 @@ export default class PanelContent extends Component<Signature> {
       // Cap each realm's results at the focused-section display limit — the
       // most the sheet ever shows in one section. The search applies
       // `page.size` per realm (so every realm section is still represented) and
-      // still reports the full match count in `meta.page.total` (which drives
-      // the result-count summary), so this only trims rows the sheet would
-      // never render — a large payload reduction on broad queries.
+      // still reports the match count in `meta.page.total` (which drives the
+      // result-count summary; past the server's cap a lower bound, flagged
+      // `totalIsEstimate`), so this only trims rows the sheet would never
+      // render — a large payload reduction on broad queries.
       page: { size: SECTION_DISPLAY_LIMIT_FOCUSED },
     });
   }

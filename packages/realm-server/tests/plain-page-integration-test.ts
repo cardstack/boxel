@@ -217,7 +217,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(countStatements(), 0, "total: 'none' counts nothing");
     });
 
-    test('the default total counts every match exactly', async function (assert) {
+    test('the default total is capped: exact under the cap, counted by a bounded pass', async function (assert) {
       let { cards, meta } = await search({
         filter: { type: noteRef },
         sort: newestFirst,
@@ -225,9 +225,25 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(cards.length, 2);
       assert.strictEqual(meta.page.total, 5, 'all five notes are counted');
-      assert.notOk(meta.page.totalIsEstimate, 'the default total is exact');
+      assert.notOk(
+        meta.page.totalIsEstimate,
+        'under the cap the total is exact',
+      );
       assert.true(meta.page.hasMore);
-      assert.strictEqual(countStatements(), 1, 'one count statement ran');
+      let counts = searchSql().filter((sql) => /SELECT COUNT\(\*\)/.test(sql));
+      assert.strictEqual(counts.length, 1, 'one count statement ran');
+      assert.true(/AS capped/.test(counts[0]), 'and it stops at the cap');
+    });
+
+    test('an exact total counts every match', async function (assert) {
+      let { meta } = await search({
+        filter: { type: noteRef },
+        sort: newestFirst,
+        page: { size: 2, total: 'exact' },
+      });
+      assert.strictEqual(meta.page.total, 5);
+      let counts = searchSql().filter((sql) => /SELECT COUNT\(\*\)/.test(sql));
+      assert.false(/AS capped/.test(counts[0]), 'no cap on an exact count');
     });
 
     test('a capped total under the cap is exact', async function (assert) {

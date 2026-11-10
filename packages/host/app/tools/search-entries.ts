@@ -178,6 +178,7 @@ export async function searchEntrySummaries(
 ): Promise<{
   rows: EntrySummary[];
   total: number;
+  totalIsEstimate?: true;
   incomplete: boolean;
   realmTotals: Record<string, number> | undefined;
 }> {
@@ -217,6 +218,9 @@ export async function searchEntrySummaries(
   return {
     rows,
     total: doc.meta.page.total,
+    // `total` stopped counting at the server's cap: there are at least this
+    // many matches.
+    ...(doc.meta.page.totalIsEstimate ? { totalIsEstimate: true } : {}),
     // A realm that fails (or never resolves) during the federated fan-out is
     // reported through this flag rather than a thrown error — the realms
     // that answered still return; the flag keeps their partiality visible.

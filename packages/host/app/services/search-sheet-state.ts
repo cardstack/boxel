@@ -118,8 +118,10 @@ export default class SearchSheetStateService extends Service {
       realms: this.selectedRealms.map((url) => url.href),
       // Cap each realm's results at the focused-section display limit — the
       // most the sheet ever shows in one section. The search still reports the
-      // full match count in `meta.page.total` (which drives the result-count
-      // summary), so this only trims rows the sheet would never render.
+      // match count in `meta.page.total` (which drives the result-count
+      // summary; past the server's cap it is a lower bound, flagged
+      // `totalIsEstimate` and shown as "1,000+"), so this only trims rows the
+      // sheet would never render.
       page: { size: SECTION_DISPLAY_LIMIT_FOCUSED },
     };
   }

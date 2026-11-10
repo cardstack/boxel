@@ -235,13 +235,17 @@ export default class SheetResults extends Component<Signature> {
       return this.urlSection ? '1 result from 1 realm' : '0 results';
     }
     const total = this.args.mainResults.meta.page?.total ?? 0;
+    // A total the search stopped counting at is a lower bound: "1,000+".
+    const results = this.args.mainResults.meta.page?.totalIsEstimate
+      ? `${total.toLocaleString('en-US')}+ results`
+      : pluralize('result', total, true);
     // The mini variant compresses the summary to "X results" — the design puts
     // it next to the Sort dropdown on a single row, with no room for the
     // across-realms qualifier.
     if (this.args.variant === 'mini') {
-      return pluralize('result', total, true);
+      return results;
     }
-    return `${pluralize('result', total, true)} across ${pluralize('realm', this.args.realms.length, true)}`;
+    return `${results} across ${pluralize('realm', this.args.realms.length, true)}`;
   }
 
   // Under @variant='mini' the section view id is forced to the internal 'mini'

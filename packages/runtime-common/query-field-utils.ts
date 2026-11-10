@@ -357,6 +357,10 @@ export function normalizeQueryDefinition({
     let page = queryAny.page ?? {};
     page.size = page.size ?? queryFieldDefaultPageSize();
     page.number = page.number ?? 0;
+    // `totalMatchCount` is the field's full count (a rollup reads it as
+    // one), so a field's search counts exactly unless the field says
+    // otherwise; a search's own default stops at a cap.
+    page.total = page.total ?? 'exact';
     queryAny.page = page;
   }
 
