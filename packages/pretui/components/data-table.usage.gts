@@ -138,8 +138,8 @@ class DataTableUsage extends Component {
               <strong>{{this.lastSort}}</strong></span>
             <span>selected
               <strong>{{this.lastSelection}}</strong></span>
-            <span>Activated:
-              <strong data-test-dt-activated>{{this.lastActivated}}</strong></span>
+            <span>activated
+              <strong>{{this.lastActivated}}</strong></span>
             <span>filters
               <strong>{{this.lastFilters}}</strong></span>
           </div>
@@ -248,7 +248,7 @@ class DataTableUsage extends Component {
         />
         <Args.Action
           @name='onActivate'
-          @description='(row, index). A click on the row (not on a control inside it) or Enter on the focused row. With selectionMode on, a click selects and only Enter activates. Omitted, rows are not focusable and have no pointer cursor.'
+          @description='(row, index). A click on the row (not on a control or widget inside it, and not the end of a text selection) or Enter on the focused row. With selectionMode on, a row click still activates; selection stays on the checkbox or radio. Omitted, rows are not focusable and have no pointer cursor.'
         />
         <Args.Bool
           @name='pinFirst (demo knob)'

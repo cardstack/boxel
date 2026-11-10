@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
 import { on } from '@ember/modifier';
-import { OWNS_PRESS, listen } from '../focus';
+import { clickIsContents, listen } from '../focus';
 import type {
   PretuiAppearance,
   PretuiSize,
@@ -71,27 +71,6 @@ import type {
 //      Button rather than a parallel table.
 //   7. **`className` is the styling API upstream.** Here it is tokens plus
 //      `...attributes`; `--pretui-card-pad` / `-radius` / `-gap` are the knobs.
-
-/** What keeps its own clicks inside a selectable card: every control the
- * kit treats as owning a press, plus native media, embeds and inline
- * overlays. The walk runs over the composed path, so the controls inside an
- * open shadow root (media-chrome's buttons) count too. */
-const KEEPS_ITS_CLICK = [
-  OWNS_PRESS,
-  '[tabindex]',
-  'video',
-  'audio',
-  'iframe',
-  'object',
-  'embed',
-  'dialog',
-  '[popover]',
-  '[role="dialog"]',
-  '[role="menu"]',
-  '[role="listbox"]',
-  '[role="tooltip"]',
-  '[role="slider"]',
-].join(', ');
 
 export type CardAppearance = Exclude<PretuiAppearance, 'accent'> | 'accent';
 
@@ -208,23 +187,7 @@ export class Card extends Component<CardSignature> {
     if (!onSelect) {
       return;
     }
-    let card = event.currentTarget as HTMLElement;
-    for (let node of event.composedPath()) {
-      if (node === card) {
-        break;
-      }
-      let el = node as Element;
-      if (typeof el.matches === 'function' && el.matches(KEEPS_ITS_CLICK)) {
-        return;
-      }
-    }
-    let selection = card.ownerDocument.getSelection();
-    if (
-      selection &&
-      !selection.isCollapsed &&
-      selection.anchorNode &&
-      card.contains(selection.anchorNode)
-    ) {
+    if (clickIsContents(event, event.currentTarget as HTMLElement)) {
       return;
     }
     onSelect();

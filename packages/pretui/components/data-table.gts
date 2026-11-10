@@ -23,7 +23,7 @@ import { EmptyState } from './empty-state';
 import { Pagination } from './pagination';
 import { Menu } from './menu';
 import type { MenuEntry } from '../internal/menu';
-import { OWNS_PRESS, rovingTabindex } from '../focus';
+import { clickIsContents, rovingTabindex } from '../focus';
 import {
   printValue,
   readField,
@@ -180,8 +180,9 @@ export interface DataTableSignature<T> {
     /** fires with the next selection on every change */
     onSelectionChange?: (keys: RowKey[], rows: T[]) => void;
     /** Opens a row: a click on the row (not on a control inside it) or Enter
-     * on the focused row, as in List. Selection stays on the row's checkbox or
-     * radio. Without it, rows are not focusable. */
+     * on the focused row, as in List. A press on a widget in a cell, or the end
+     * of a text selection, does not open it. Selection stays on the row's
+     * checkbox or radio. Without it, rows are not focusable. */
     onActivate?: (row: T, index: number) => void;
     /** controlled column visibility — the keys that are SHOWN */
     visibleColumns?: readonly string[];
@@ -871,7 +872,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
     if (!this.args.onActivate) {
       return;
     }
-    if ((event.target as Element).closest(OWNS_PRESS)) {
+    if (clickIsContents(event, event.currentTarget as HTMLElement)) {
       return;
     }
     this.args.onActivate(row, index);
@@ -1133,9 +1134,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                     data-selected={{line.selectedFlag}}
                     data-activatable={{this.activatable}}
                     tabindex={{if this.activatable '0'}}
-                    data-test-pretui-dt-row
                     {{on 'click' (fn this.onRowClick line.row line.index)}}
                     {{on 'keydown' (fn this.onRowKeydown line.row line.index)}}
+                    data-test-pretui-dt-row
                   >
                     {{#if this.selectable}}
                       <td class='pretui-dt-pick' data-pin={{this.leadPin}}>
