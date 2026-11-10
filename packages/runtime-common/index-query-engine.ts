@@ -5907,15 +5907,17 @@ export class IndexQueryEngine {
     ranges.forEach((range, index) => {
       let column =
         typeof (range.from ?? range.to) === 'number' ? 'fv.num' : 'fv.value';
+      let from = facetRangeBound(range.from);
+      let to = facetRangeBound(range.to);
       let bounds: CardExpression = [];
-      if (range.from !== undefined) {
-        bounds.push(`${column} >=`, param(range.from));
+      if (from !== undefined) {
+        bounds.push(`${column} >=`, param(from));
       }
-      if (range.to !== undefined) {
+      if (to !== undefined) {
         bounds.push(
           ...(bounds.length ? ['AND'] : []),
           `${column} <`,
-          param(range.to),
+          param(to),
         );
       }
       columns.push(
@@ -7858,6 +7860,19 @@ function notEffectivelyErrored(opts?: WIPOptions): string {
   return `(NOT ${INDEX_HAS_ERROR} AND NOT EXISTS (SELECT 1 FROM ${prerenderedTableFromOpts(
     opts,
   )} AS phe WHERE phe.url = i.url AND phe.realm_url = i.realm_url AND phe.type = i.type AND phe.error_doc IS NOT NULL AND phe.generation >= i.generation))`;
+}
+
+// A facet range bound, with a relative date (`now-1y/M`) resolved the way a
+// `range` filter resolves one. Facet values compare as their search-doc
+// strings, so a bound that falls on a UTC midnight (a `/d` or `/M` rounding)
+// is spelled as the day alone: a date field's `2025-11-01` must not sort
+// before the bound `2025-11-01T00:00:00.000Z` and drop its own first day.
+function facetRangeBound<T>(bound: T): T | string {
+  if (typeof bound !== 'string' || !isRelativeDate(bound)) {
+    return bound;
+  }
+  let iso = resolveRelativeDate(bound);
+  return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso;
 }
 
 export function effectiveHasError(): string {
