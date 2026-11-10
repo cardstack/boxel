@@ -7,25 +7,33 @@
 // daylight-saving changes. No dependencies beyond `Intl`, so the realm
 // server, the worker and the host (the card's view) all share it.
 //
-// Daylight-saving rules, matching Vixie cron for fixed-hour schedules and
-// RFC 5545 for times that don't exist:
+// Daylight-saving rules, which split expressions the way Vixie cron does and
+// place times that don't exist the way RFC 5545 does:
 //
-// * A fixed-hour expression (any hour field that doesn't start with `*`)
-//   names a wall-clock time. When the clocks go forward past it, it fires at
-//   the same distance past the change (02:30 in a 02:00→03:00 gap fires at
-//   03:30). When the clocks go back and the time happens twice, it fires
-//   once, at the first.
-// * An hourly-style expression (hour field `*` or `*/n`) follows elapsed
-//   time. A wall time inside a forward gap didn't happen and is skipped; a
-//   wall time that happens twice fires twice.
+// * A wall-clock expression (neither the minute nor the hour field starts
+//   with `*`) names a time of day. When the clocks go forward past it, it
+//   fires at the same distance past the change (02:30 in a 02:00→03:00 gap
+//   fires at 03:30). When the clocks go back and the time happens twice, it
+//   fires once, at the first.
+// * An elapsed-time expression (the minute or the hour field starts with
+//   `*`) follows elapsed time. A wall time inside a forward gap didn't happen
+//   and is skipped; a wall time that happens twice fires twice.
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
-// Feb 29 can be eight years from the next one (2096 → 2104), so any
-// satisfiable expression fires within nine years of any instant.
-const SEARCH_HORIZON_DAYS = 366 * 9;
+// The Gregorian calendar, weekdays included, repeats every 400 years. An
+// expression that matches no day in one cycle never fires, and parsing
+// rejects it, so any parsed expression fires within one cycle of any instant.
+const GREGORIAN_CYCLE_DAYS = 146_097;
+const SEARCH_HORIZON_DAYS = GREGORIAN_CYCLE_DAYS + 2;
+
+// Runs left is counted at most this far, and at most this far ahead, so a
+// distant `until` costs a bounded amount of work. A count that reaches
+// either bound is reported as a lower bound.
+export const REMAINING_RUNS_LIMIT = 10_000;
+const REMAINING_RUNS_HORIZON_SECONDS = 100 * 366 * 24 * 60 * 60;
 
 export class CronExpressionError extends Error {
   constructor(message: string) {
@@ -47,9 +55,10 @@ export interface CronSchedule {
   // doesn't start with `*`.
   readonly daysOfMonthRestricted: boolean;
   readonly daysOfWeekRestricted: boolean;
-  // Hour field starts with `*`: the schedule follows elapsed time across
-  // daylight-saving changes rather than a wall-clock time.
-  readonly hourly: boolean;
+  // The minute or the hour field starts with `*`: the schedule follows
+  // elapsed time across daylight-saving changes rather than naming a time of
+  // day.
+  readonly followsElapsedTime: boolean;
 }
 
 export interface CronTrigger {
@@ -83,12 +92,17 @@ export interface WebhookTrigger {
 export type AutomationTrigger = CronTrigger | OnceTrigger | WebhookTrigger;
 
 export interface TriggerRunState {
-  // Runs this trigger has started. A trigger that joined a run already
-  // pending didn't start one and isn't counted.
+  // Runs this trigger has started. A slot that joined a run already pending
+  // didn't start one and isn't counted.
   runs: number;
-  // Unix seconds: the scheduled instant (slot) of the last run this trigger
-  // started.
+  // Unix seconds: the last slot (scheduled instant) handled for this
+  // trigger, whether it started a run or joined one already pending. The
+  // trigger is never scheduled at or before it.
   lastSlot?: number;
+  // Unix seconds: when this trigger's timing (expression, time zone, `at`,
+  // `until`) last changed. The trigger is never scheduled at or before it,
+  // so an edit doesn't make a slot that already passed due.
+  since?: number;
 }
 
 export interface ScheduleInput {
@@ -96,6 +110,14 @@ export interface ScheduleInput {
   // Unix seconds. Only instants after this are scheduled: the moment the
   // automation was switched on (or resumed).
   since: number;
+  // Unix seconds: the current time. When given, a cron trigger with several
+  // slots already past its cursor collapses them into one make-up run at the
+  // latest of them, so an outage costs at most one late run per trigger.
+  // Without it every slot after the cursor is scheduled in turn.
+  now?: number;
+  // Count runs left for bounded triggers. It scans up to `until`, so callers
+  // that only need the next run leave it off.
+  includeRemainingRuns?: boolean;
   // Keyed by trigger label, so editing a trigger's other fields keeps its
   // count, and a renamed label starts a new one.
   runState?: Readonly<Record<string, TriggerRunState | undefined>>;
@@ -104,14 +126,23 @@ export interface ScheduleInput {
 export interface TriggerSchedule {
   label: string;
   kind: AutomationTrigger['kind'];
-  // A spent trigger never fires again. Webhook triggers are never spent.
+  // A spent trigger never fires again. Webhook triggers are never spent, and
+  // neither is a trigger with an `error`.
   spent: boolean;
-  // Unix seconds; absent for a spent trigger and for a webhook trigger.
+  // Why the trigger can't be scheduled: an invalid expression or time zone.
+  // The other triggers are scheduled regardless.
+  error?: string;
+  // Unix seconds; absent for a spent trigger, a webhook trigger and a
+  // trigger with an `error`. At or before `now` when the trigger is due (or
+  // owes a make-up run).
   nextRun?: number;
-  // Runs still to come, for a bounded trigger: a `once` trigger, or a cron
-  // trigger with `until` or `count`. Absent for an unbounded cron trigger
-  // and for a webhook trigger.
+  // With `includeRemainingRuns`, runs still to come for a bounded trigger: a
+  // `once` trigger, or a cron trigger with `until` or `count`, the next run
+  // included. Absent for an unbounded cron trigger and a webhook trigger.
   remainingRuns?: number;
+  // `remainingRuns` hit `REMAINING_RUNS_LIMIT` or the counting horizon, so
+  // there are at least that many.
+  remainingRunsAtLeast?: boolean;
   // A cron trigger's `until`, when it has one.
   until?: number;
 }
@@ -123,7 +154,8 @@ export interface AutomationSchedule {
   // Labels of the triggers that fire at `nextRun`. Each starts its own run.
   dueTriggers: string[];
   // Every trigger is spent. An automation with a webhook trigger is never
-  // done, because a delivery can always arrive.
+  // done, because a delivery can always arrive, and neither is one with a
+  // trigger in error.
   done: boolean;
   triggers: TriggerSchedule[];
 }
@@ -158,63 +190,111 @@ function scheduleTrigger(
   trigger: AutomationTrigger,
   input: ScheduleInput,
 ): TriggerSchedule {
-  let label = trigger.label;
+  let { label, kind } = trigger;
   let state = input.runState?.[label];
-  let runs = state?.runs ?? 0;
-  // A trigger never fires at or before its own last slot, so a slot that
-  // came due but wasn't enqueued yet stays due however late the next
-  // recompute happens.
-  let cursor = Math.max(input.since, state?.lastSlot ?? -Infinity);
+  // A trigger is scheduled strictly after its cursor, never after the
+  // current time, so a slot that came due but wasn't enqueued yet stays due
+  // however late the next recompute happens.
+  let cursor = Math.max(
+    input.since,
+    state?.since ?? -Infinity,
+    state?.lastSlot ?? -Infinity,
+  );
 
   switch (trigger.kind) {
     case 'webhook':
-      return { label, kind: 'webhook', spent: false };
+      return { label, kind, spent: false };
 
     case 'once': {
-      let spent = runs >= 1 || trigger.at <= cursor;
-      return spent
-        ? { label, kind: 'once', spent, remainingRuns: 0 }
-        : { label, kind: 'once', spent, nextRun: trigger.at, remainingRuns: 1 };
-    }
-
-    case 'cron': {
-      let { expression, timeZone, until, count } = trigger;
-      let bounded = until !== undefined || count !== undefined;
-      let left = count === undefined ? undefined : Math.max(0, count - runs);
-      let next =
-        left === 0 ? undefined : nextCronTime(expression, timeZone, cursor);
-      if (next !== undefined && until !== undefined && next > until) {
-        next = undefined;
+      // Spent once its time is behind the cursor: it ran (its slot is the
+      // last one handled), or it was set before the automation was switched
+      // on or the trigger was edited. Editing it to a later time re-arms it.
+      let spent = trigger.at <= cursor;
+      let result: TriggerSchedule = { label, kind, spent };
+      if (!spent) {
+        result.nextRun = trigger.at;
       }
-      let result: TriggerSchedule = {
-        label,
-        kind: 'cron',
-        spent: next === undefined,
-      };
-      if (next !== undefined) {
-        result.nextRun = next;
-      }
-      if (until !== undefined) {
-        result.until = until;
-      }
-      if (bounded) {
-        if (next === undefined) {
-          result.remainingRuns = 0;
-        } else if (until === undefined) {
-          result.remainingRuns = left;
-        } else {
-          result.remainingRuns = countCronTimes(
-            expression,
-            timeZone,
-            cursor,
-            until,
-            left,
-          );
-        }
+      if (input.includeRemainingRuns) {
+        result.remainingRuns = spent ? 0 : 1;
       }
       return result;
     }
+
+    case 'cron':
+      try {
+        return scheduleCronTrigger(trigger, state?.runs ?? 0, cursor, input);
+      } catch (e) {
+        if (e instanceof CronExpressionError || e instanceof RangeError) {
+          return { label, kind, spent: false, error: e.message };
+        }
+        throw e;
+      }
   }
+}
+
+function scheduleCronTrigger(
+  trigger: CronTrigger,
+  runs: number,
+  cursor: number,
+  input: ScheduleInput,
+): TriggerSchedule {
+  let { label, kind, timeZone, until, count } = trigger;
+  let schedule = parseCronExpression(trigger.expression);
+  if (!isValidTimeZone(timeZone)) {
+    throw new RangeError(`"${timeZone}" isn't a time zone this runtime knows`);
+  }
+  let left = count === undefined ? undefined : Math.max(0, count - runs);
+  let next = left === 0 ? undefined : nextCronTime(schedule, timeZone, cursor);
+  if (next !== undefined && until !== undefined && next > until) {
+    next = undefined;
+  }
+  if (next !== undefined && input.now !== undefined && next <= input.now) {
+    // Every slot that already passed collapses into one make-up run at the
+    // latest of them, counted as one run.
+    next =
+      lastCronTime(
+        schedule,
+        timeZone,
+        cursor,
+        Math.min(input.now, until ?? Infinity),
+      ) ?? next;
+  }
+  let result: TriggerSchedule = { label, kind, spent: next === undefined };
+  if (next !== undefined) {
+    result.nextRun = next;
+  }
+  if (until !== undefined) {
+    result.until = until;
+  }
+  if (
+    input.includeRemainingRuns &&
+    (until !== undefined || left !== undefined)
+  ) {
+    if (next === undefined) {
+      result.remainingRuns = 0;
+    } else if (until === undefined) {
+      result.remainingRuns = left;
+    } else {
+      // From the next run (inclusive) to `until`, within the bounds.
+      let limit = Math.min(left ?? Infinity, REMAINING_RUNS_LIMIT);
+      let horizon = next + REMAINING_RUNS_HORIZON_SECONDS;
+      let counted = countCronTimes(
+        schedule,
+        timeZone,
+        next - 1,
+        Math.min(until, horizon),
+        limit,
+      );
+      result.remainingRuns = counted;
+      if (
+        (counted >= REMAINING_RUNS_LIMIT && (left ?? Infinity) > counted) ||
+        (until > horizon && counted < (left ?? Infinity))
+      ) {
+        result.remainingRunsAtLeast = true;
+      }
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,9 +343,6 @@ const MACROS: Record<string, string> = {
   '@hourly': '0 * * * *',
 };
 
-// The longest each month can be, Feb 29 included.
-const MONTH_MAX_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
 // Expressions come from cards, so the cache is bounded.
 const PARSED_CACHE_LIMIT = 1000;
 const parsedCache = new Map<string, CronSchedule>();
@@ -273,7 +350,7 @@ const parsedCache = new Map<string, CronSchedule>();
 // Five fields (minute, hour, day of month, month, day of week) with `*`,
 // lists, ranges, steps, and month and day names, or one of the `@hourly` …
 // `@yearly` macros. Throws `CronExpressionError` for anything else, and for
-// an expression that names no day that exists (`0 0 30 2 *`).
+// an expression that names no day that ever happens (`0 0 30 2 *`).
 export function parseCronExpression(expression: string): CronSchedule {
   let cached = parsedCache.get(expression);
   if (cached) {
@@ -308,17 +385,18 @@ export function parseCronExpression(expression: string): CronSchedule {
     daysOfWeek,
     daysOfMonthRestricted: !parts[2].startsWith('*'),
     daysOfWeekRestricted: !parts[4].startsWith('*'),
-    hourly: parts[1].startsWith('*'),
+    followsElapsedTime: parts[0].startsWith('*') || parts[1].startsWith('*'),
   };
-  if (schedule.daysOfMonthRestricted && !schedule.daysOfWeekRestricted) {
-    let someDayExists = [...months].some((m) =>
-      [...daysOfMonth].some((d) => d <= MONTH_MAX_DAYS[m - 1]),
+  // Most expressions match within the first few days of the cycle, so this
+  // only scans far for one that matches rarely or never.
+  let someDayMatches = false;
+  for (let day = 0; day < GREGORIAN_CYCLE_DAYS && !someDayMatches; day++) {
+    someDayMatches = dayMatches(schedule, day);
+  }
+  if (!someDayMatches) {
+    throw new CronExpressionError(
+      `"${expression}" names no day that ever happens, so it never fires`,
     );
-    if (!someDayExists) {
-      throw new CronExpressionError(
-        `"${expression}" names no day that exists in its months, so it never fires`,
-      );
-    }
   }
   if (parsedCache.size >= PARSED_CACHE_LIMIT) {
     parsedCache.clear();
@@ -587,11 +665,11 @@ function firesOnDay(
       let wall = dayStart + hour * HOUR_MS + minute * MINUTE_MS;
       let named = instantsOf(timeZone, wall, before, after);
       if (named.length === 0) {
-        if (!schedule.hourly) {
+        if (!schedule.followsElapsedTime) {
           // Forward gap: the same distance past the change.
           instants.push(wall - before);
         }
-      } else if (named.length === 2 && !schedule.hourly) {
+      } else if (named.length === 2 && !schedule.followsElapsedTime) {
         instants.push(named[0]);
       } else {
         instants.push(...named);
@@ -620,33 +698,66 @@ export function nextCronTime(
 ): number | undefined {
   let schedule = resolveSchedule(expression);
   let afterMs = after * 1000;
-  // Start a day early: a fixed-hour time in a forward gap late on the
-  // previous local day can resolve past `after`.
-  let first = localDayOf(timeZone, afterMs) - 1;
   let boundaryOffsets = new Map<number, number>();
-  for (let day = first; day <= first + SEARCH_HORIZON_DAYS; day++) {
+  let earliest = (day: number) => {
     let found = firesOnDay(schedule, timeZone, day, boundaryOffsets).find(
       (t) => t > afterMs,
     );
-    if (found !== undefined) {
-      // A gap at midnight can push this day's last time past the next
-      // day's first.
-      let following = firesOnDay(
-        schedule,
-        timeZone,
-        day + 1,
-        boundaryOffsets,
-      ).find((t) => t > afterMs);
-      let next =
-        following !== undefined && following < found ? following : found;
-      return next / 1000;
+    return found ?? Infinity;
+  };
+  // A wall-clock time in a forward gap resolves past the gap, which can carry
+  // it past the start of the next local day (America/Nuuk's gap runs from
+  // 23:00 to midnight). So the scan starts a day before `after`'s local day,
+  // and the first day with a time is compared with the day after it.
+  let first = localDayOf(timeZone, afterMs) - 1;
+  for (let day = first; day <= first + SEARCH_HORIZON_DAYS; day++) {
+    let found = earliest(day);
+    if (found !== Infinity) {
+      return Math.min(found, earliest(day + 1)) / 1000;
+    }
+  }
+  return undefined;
+}
+
+// The latest instant in (after, atOrBefore] (unix seconds) the expression
+// names in the zone, as unix seconds.
+export function lastCronTime(
+  expression: string | CronSchedule,
+  timeZone: string,
+  after: number,
+  atOrBefore: number,
+): number | undefined {
+  let schedule = resolveSchedule(expression);
+  let afterMs = after * 1000;
+  let atOrBeforeMs = atOrBefore * 1000;
+  if (atOrBeforeMs <= afterMs) {
+    return undefined;
+  }
+  let boundaryOffsets = new Map<number, number>();
+  let latest = (day: number) => {
+    let inRange = firesOnDay(schedule, timeZone, day, boundaryOffsets).filter(
+      (t) => t > afterMs && t <= atOrBeforeMs,
+    );
+    return inRange.length ? inRange[inRange.length - 1] : -Infinity;
+  };
+  // Mirrors `nextCronTime`: a gap can carry the previous day's last time
+  // past this day's first.
+  let first = localDayOf(timeZone, atOrBeforeMs) + 1;
+  let last = Math.max(
+    localDayOf(timeZone, afterMs) - 1,
+    first - SEARCH_HORIZON_DAYS,
+  );
+  for (let day = first; day >= last; day--) {
+    let found = latest(day);
+    if (found !== -Infinity) {
+      return Math.max(found, latest(day - 1)) / 1000;
     }
   }
   return undefined;
 }
 
 // How many instants in (after, until] the expression names in the zone,
-// stopping early once `limit` is reached.
+// stopping early once `limit` is reached. It scans every day in the range.
 export function countCronTimes(
   expression: string | CronSchedule,
   timeZone: string,
@@ -664,15 +775,20 @@ export function countCronTimes(
   let last = localDayOf(timeZone, untilMs) + 1;
   let count = 0;
   let boundaryOffsets = new Map<number, number>();
+  // A time resolved past a gap at midnight can coincide with the next day's
+  // first time, so each day skips what the day before already counted.
+  let previous = new Set<number>();
   for (let day = first; day <= last; day++) {
-    for (let t of firesOnDay(schedule, timeZone, day, boundaryOffsets)) {
-      if (t > afterMs && t <= untilMs) {
+    let fires = firesOnDay(schedule, timeZone, day, boundaryOffsets);
+    for (let t of fires) {
+      if (t > afterMs && t <= untilMs && !previous.has(t)) {
         count++;
         if (count >= limit) {
           return count;
         }
       }
     }
+    previous = new Set(fires);
   }
   return count;
 }

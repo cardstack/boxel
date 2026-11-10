@@ -1,12 +1,14 @@
 import {
   computeAutomationSchedule,
   countCronTimes,
+  lastCronTime,
   cronExpressionError,
   isValidTimeZone,
   nextCronTime,
   nextCronTimes,
   parseCronExpression,
   zonedDateTimeToUnixSeconds,
+  REMAINING_RUNS_LIMIT,
   type AutomationTrigger,
 } from '../automation-schedule.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -14,6 +16,7 @@ import type { SharedTests } from '../helpers/index.ts';
 const NEW_YORK = 'America/New_York';
 const CHICAGO = 'America/Chicago';
 const SYDNEY = 'Australia/Sydney';
+const NUUK = 'America/Nuuk';
 
 // In 2026, New York springs forward at 02:00 local on Mar 8 (07:00Z) and
 // falls back at 02:00 local on Nov 1 (06:00Z). Sydney springs forward at
@@ -52,11 +55,18 @@ const tests = Object.freeze({
     );
     assert.true(s.daysOfMonthRestricted);
     assert.true(s.daysOfWeekRestricted);
-    assert.true(s.hourly, 'an hour field starting with * follows elapsed time');
+    assert.true(
+      s.followsElapsedTime,
+      'an hour field starting with * follows elapsed time',
+    );
 
     let fromStart = parseCronExpression('10/20 9 * * *');
     assert.deepEqual(fromStart.minutes, [10, 30, 50], 'n/step runs to the max');
-    assert.false(fromStart.hourly);
+    assert.false(fromStart.followsElapsedTime);
+    assert.true(
+      parseCronExpression('*/15 1 * * *').followsElapsedTime,
+      'so does a minute field starting with *',
+    );
     assert.false(fromStart.daysOfMonthRestricted);
   },
 
@@ -399,7 +409,11 @@ const tests = Object.freeze({
       },
     ];
     let since = local('2026-11-10T14:00', CHICAGO);
-    let before = computeAutomationSchedule({ triggers, since });
+    let before = computeAutomationSchedule({
+      triggers,
+      since,
+      includeRemainingRuns: true,
+    });
     assert.strictEqual(iso(before.nextRun), '2026-11-10T21:00:00Z');
     assert.deepEqual(before.dueTriggers, ['backfill']);
     assert.deepEqual(before.triggers[0], {
@@ -412,6 +426,7 @@ const tests = Object.freeze({
     assert.false(before.done);
 
     let after = computeAutomationSchedule({
+      includeRemainingRuns: true,
       triggers,
       since,
       runState: {
@@ -427,6 +442,7 @@ const tests = Object.freeze({
 
   'a once trigger in the past is spent': async (assert) => {
     let schedule = computeAutomationSchedule({
+      includeRemainingRuns: true,
       triggers: [
         {
           kind: 'once',
@@ -455,6 +471,7 @@ const tests = Object.freeze({
     // enqueued and nothing since: 13:00 is next for the cron trigger, and the
     // once trigger's 12:30 is still due.
     let schedule = computeAutomationSchedule({
+      includeRemainingRuns: true,
       triggers,
       since: at('2026-11-10T09:00:00Z'),
       runState: { hourly: { runs: 4, lastSlot: at('2026-11-10T12:00:00Z') } },
@@ -478,11 +495,16 @@ const tests = Object.freeze({
       },
     ];
     let since = at('2026-11-10T12:10:00Z');
-    let fresh = computeAutomationSchedule({ triggers, since });
+    let fresh = computeAutomationSchedule({
+      triggers,
+      since,
+      includeRemainingRuns: true,
+    });
     assert.strictEqual(iso(fresh.nextRun), '2026-11-10T13:00:00Z');
     assert.strictEqual(fresh.triggers[0].remainingRuns, 24);
 
     let partway = computeAutomationSchedule({
+      includeRemainingRuns: true,
       triggers,
       since,
       runState: {
@@ -493,6 +515,7 @@ const tests = Object.freeze({
     assert.strictEqual(partway.triggers[0].remainingRuns, 1);
 
     let spent = computeAutomationSchedule({
+      includeRemainingRuns: true,
       triggers,
       since,
       runState: {
@@ -517,6 +540,7 @@ const tests = Object.freeze({
       },
     ];
     let early = computeAutomationSchedule({
+      includeRemainingRuns: true,
       triggers,
       since: local('2026-11-10T05:30', CHICAGO),
     });
@@ -529,6 +553,7 @@ const tests = Object.freeze({
     assert.strictEqual(early.triggers[0].until, until);
 
     let last = computeAutomationSchedule({
+      includeRemainingRuns: true,
       triggers,
       since: local('2026-11-10T05:30', CHICAGO),
       runState: {
@@ -539,6 +564,7 @@ const tests = Object.freeze({
     assert.strictEqual(last.triggers[0].remainingRuns, 1);
 
     let spent = computeAutomationSchedule({
+      includeRemainingRuns: true,
       triggers,
       since: local('2026-11-10T05:30', CHICAGO),
       runState: { hourly: { runs: 3, lastSlot: until } },
@@ -551,6 +577,7 @@ const tests = Object.freeze({
   'until and count together: whichever comes first': async (assert) => {
     let since = at('2026-11-10T00:00:00Z');
     let countFirst = computeAutomationSchedule({
+      includeRemainingRuns: true,
       since,
       triggers: [
         {
@@ -567,6 +594,7 @@ const tests = Object.freeze({
     assert.true(countFirst.triggers[0].spent, 'count reached before until');
 
     let untilFirst = computeAutomationSchedule({
+      includeRemainingRuns: true,
       since,
       triggers: [
         {
@@ -583,6 +611,7 @@ const tests = Object.freeze({
     assert.true(untilFirst.triggers[0].spent, 'until passed before count');
 
     let both = computeAutomationSchedule({
+      includeRemainingRuns: true,
       since,
       triggers: [
         {
@@ -612,6 +641,7 @@ const tests = Object.freeze({
 
   'a count of zero is spent at once': async (assert) => {
     let schedule = computeAutomationSchedule({
+      includeRemainingRuns: true,
       since: at('2026-11-10T00:00:00Z'),
       triggers: [
         {
@@ -632,6 +662,7 @@ const tests = Object.freeze({
   ) => {
     let since = local('2026-11-10T11:00', CHICAGO);
     let schedule = computeAutomationSchedule({
+      includeRemainingRuns: true,
       since,
       triggers: [
         {
@@ -686,6 +717,7 @@ const tests = Object.freeze({
 
   'every trigger due at the next run is listed': async (assert) => {
     let schedule = computeAutomationSchedule({
+      includeRemainingRuns: true,
       since: at('2026-11-10T00:00:00Z'),
       triggers: [
         { kind: 'cron', label: 'a', expression: '0 6 * * *', timeZone: 'UTC' },
@@ -699,6 +731,7 @@ const tests = Object.freeze({
 
   'an automation with a webhook trigger is never done': async (assert) => {
     let schedule = computeAutomationSchedule({
+      includeRemainingRuns: true,
       since: at('2026-11-10T00:00:00Z'),
       triggers: [
         { kind: 'once', label: 'past', at: at('2026-11-09T00:00:00Z') },
@@ -710,8 +743,319 @@ const tests = Object.freeze({
     assert.false(schedule.triggers[1].spent);
   },
 
+  'an elapsed-time expression fires in both copies of a repeated hour and not in a skipped one':
+    async (assert) => {
+      assert.strictEqual(
+        countCronTimes(
+          '*/15 1 * * *',
+          NEW_YORK,
+          at('2026-11-01T04:00:00Z'),
+          at('2026-11-01T12:00:00Z'),
+        ),
+        8,
+        'a minute field starting with * follows elapsed time: 01:00–01:45 as EDT and again as EST',
+      );
+      assert.strictEqual(
+        countCronTimes(
+          '*/15 2 * * *',
+          NEW_YORK,
+          at('2026-03-08T05:00:00Z'),
+          at('2026-03-08T12:00:00Z'),
+        ),
+        0,
+        '02:00–02:45 never happen on the spring-forward day',
+      );
+    },
+
+  'a time pushed past a gap that ends at midnight lands on the next day':
+    async (assert) => {
+      // America/Nuuk springs forward at 23:00 local on Sat Mar 28 2026, straight
+      // to midnight (01:00Z).
+      assert.strictEqual(
+        iso(nextCronTime('30 23 * * *', NUUK, at('2026-03-29T01:10:00Z'))),
+        '2026-03-29T01:30:00Z',
+        "Saturday's 23:30 resolves to 00:30 Sunday, after Sunday's local day has begun",
+      );
+      assert.strictEqual(
+        countCronTimes(
+          '0 0,23 * * *',
+          NUUK,
+          at('2026-03-28T12:00:00Z'),
+          at('2026-03-29T12:00:00Z'),
+        ),
+        1,
+        "Saturday's 23:00 and Sunday's 00:00 are one instant, counted once",
+      );
+    },
+
+  'finds days that match rarely': async (assert) => {
+    assert.deepEqual(
+      nextCronTimes('0 0 */31 2 1', 'UTC', at('2026-01-01T00:00:00Z'), 2).map(
+        iso,
+      ),
+      ['2027-02-01T00:00:00Z', '2038-02-01T00:00:00Z'],
+      'Feb 1 on a Monday: eleven years apart',
+    );
+    let [first, second] = nextCronTimes(
+      '0 0 29 2 */7',
+      'UTC',
+      at('2026-01-01T00:00:00Z'),
+      2,
+    );
+    assert.strictEqual(iso(first), '2032-02-29T00:00:00Z');
+    assert.strictEqual(
+      iso(second),
+      '2060-02-29T00:00:00Z',
+      'Feb 29 on a Sunday: 28 years apart',
+    );
+  },
+
+  'finds the latest time in a range': async (assert) => {
+    assert.strictEqual(
+      iso(
+        lastCronTime(
+          '0 * * * *',
+          'UTC',
+          at('2026-11-10T00:00:00Z'),
+          at('2026-11-10T06:30:00Z'),
+        ),
+      ),
+      '2026-11-10T06:00:00Z',
+    );
+    assert.strictEqual(
+      lastCronTime(
+        '0 * * * *',
+        'UTC',
+        at('2026-11-10T00:00:00Z'),
+        at('2026-11-10T00:59:00Z'),
+      ),
+      undefined,
+      'after is exclusive',
+    );
+    assert.strictEqual(
+      iso(
+        lastCronTime(
+          '30 1 * * *',
+          NEW_YORK,
+          at('2026-10-31T12:00:00Z'),
+          at('2026-11-01T12:00:00Z'),
+        ),
+      ),
+      '2026-11-01T05:30:00Z',
+      'a wall-clock time that happens twice is only its first',
+    );
+  },
+
+  'with now, missed slots collapse into one make-up run at the latest': async (
+    assert,
+  ) => {
+    let triggers: AutomationTrigger[] = [
+      {
+        kind: 'cron',
+        label: 'hourly',
+        expression: '0 * * * *',
+        timeZone: 'UTC',
+        count: 10,
+      },
+    ];
+    // The 06:00 run was the last; the tick was down until 12:30.
+    let runState = {
+      hourly: { runs: 3, lastSlot: at('2026-11-10T06:00:00Z') },
+    };
+    let catchUp = computeAutomationSchedule({
+      triggers,
+      since: at('2026-11-10T00:00:00Z'),
+      now: at('2026-11-10T12:30:00Z'),
+      runState,
+      includeRemainingRuns: true,
+    });
+    assert.strictEqual(
+      iso(catchUp.nextRun),
+      '2026-11-10T12:00:00Z',
+      'one make-up run, for the latest missed slot',
+    );
+    assert.strictEqual(
+      catchUp.triggers[0].remainingRuns,
+      7,
+      'the make-up run counts as one of the runs left',
+    );
+
+    let withoutNow = computeAutomationSchedule({
+      triggers,
+      since: at('2026-11-10T00:00:00Z'),
+      runState,
+    });
+    assert.strictEqual(
+      iso(withoutNow.nextRun),
+      '2026-11-10T07:00:00Z',
+      'without now every slot after the cursor is scheduled in turn',
+    );
+
+    let onTime = computeAutomationSchedule({
+      triggers,
+      since: at('2026-11-10T00:00:00Z'),
+      now: at('2026-11-10T06:30:00Z'),
+      runState,
+    });
+    assert.strictEqual(
+      iso(onTime.nextRun),
+      '2026-11-10T07:00:00Z',
+      'nothing missed: the next slot',
+    );
+
+    let bounded = computeAutomationSchedule({
+      triggers: [
+        {
+          kind: 'cron',
+          label: 'hourly',
+          expression: '0 * * * *',
+          timeZone: 'UTC',
+          until: at('2026-11-10T09:00:00Z'),
+        },
+      ],
+      since: at('2026-11-10T00:00:00Z'),
+      now: at('2026-11-10T12:30:00Z'),
+      runState,
+    });
+    assert.strictEqual(
+      iso(bounded.nextRun),
+      '2026-11-10T09:00:00Z',
+      'the make-up run is never past until',
+    );
+  },
+
+  "a trigger's own since keeps an edit from making a passed slot due": async (
+    assert,
+  ) => {
+    // Edited at 08:30 from 09:00 daily to 08:00 daily; yesterday's 09:00 ran.
+    let schedule = computeAutomationSchedule({
+      triggers: [
+        {
+          kind: 'cron',
+          label: 'daily',
+          expression: '0 8 * * *',
+          timeZone: 'UTC',
+        },
+      ],
+      since: at('2026-11-01T00:00:00Z'),
+      now: at('2026-11-10T08:30:00Z'),
+      runState: {
+        daily: {
+          runs: 9,
+          lastSlot: at('2026-11-09T09:00:00Z'),
+          since: at('2026-11-10T08:30:00Z'),
+        },
+      },
+    });
+    assert.strictEqual(iso(schedule.nextRun), '2026-11-11T08:00:00Z');
+  },
+
+  'a once trigger edited to a later time fires again': async (assert) => {
+    let schedule = computeAutomationSchedule({
+      triggers: [
+        { kind: 'once', label: 'backfill', at: at('2026-11-12T15:00:00Z') },
+      ],
+      since: at('2026-11-01T00:00:00Z'),
+      runState: {
+        backfill: { runs: 1, lastSlot: at('2026-11-10T15:00:00Z') },
+      },
+    });
+    assert.false(schedule.triggers[0].spent);
+    assert.strictEqual(iso(schedule.nextRun), '2026-11-12T15:00:00Z');
+  },
+
+  'a trigger with a bad expression or time zone is reported and the rest are scheduled':
+    async (assert) => {
+      let schedule = computeAutomationSchedule({
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'bad-zone',
+            expression: '0 * * * *',
+            timeZone: 'Nowhere/Land',
+          },
+          {
+            kind: 'cron',
+            label: 'bad-cron',
+            expression: '0 25 * * *',
+            timeZone: 'UTC',
+          },
+          {
+            kind: 'cron',
+            label: 'good',
+            expression: '0 6 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+        since: at('2026-11-10T00:00:00Z'),
+      });
+      assert.strictEqual(iso(schedule.nextRun), '2026-11-10T06:00:00Z');
+      assert.deepEqual(schedule.dueTriggers, ['good']);
+      assert.ok(schedule.triggers[0].error?.includes('Nowhere/Land'));
+      assert.ok(schedule.triggers[1].error?.includes('hour'));
+      assert.false(schedule.triggers[0].spent);
+      assert.strictEqual(schedule.triggers[0].nextRun, undefined);
+
+      let onlyBad = computeAutomationSchedule({
+        triggers: [
+          { kind: 'cron', label: 'x', expression: 'nope', timeZone: 'UTC' },
+        ],
+        since: at('2026-11-10T00:00:00Z'),
+      });
+      assert.false(
+        onlyBad.done,
+        'a trigger in error keeps the automation from being done',
+      );
+    },
+
+  'runs left is counted only when asked, and bounded for a distant until':
+    async (assert) => {
+      let triggers: AutomationTrigger[] = [
+        {
+          kind: 'cron',
+          label: 'minutely',
+          expression: '* * * * *',
+          timeZone: 'UTC',
+          until: at('9999-12-31T00:00:00Z'),
+        },
+        {
+          kind: 'cron',
+          label: 'yearly',
+          expression: '0 0 1 1 *',
+          timeZone: 'UTC',
+          until: at('9999-12-31T00:00:00Z'),
+        },
+        {
+          kind: 'cron',
+          label: 'short',
+          expression: '0 0 1 1 *',
+          timeZone: 'UTC',
+          until: at('2030-12-31T00:00:00Z'),
+        },
+      ];
+      let since = at('2026-01-01T00:00:00Z');
+      let plain = computeAutomationSchedule({ triggers, since });
+      assert.strictEqual(plain.triggers[0].remainingRuns, undefined);
+
+      let counted = computeAutomationSchedule({
+        triggers,
+        since,
+        includeRemainingRuns: true,
+      });
+      assert.deepEqual(
+        counted.triggers.map((t) => [t.remainingRuns, t.remainingRunsAtLeast]),
+        [
+          [REMAINING_RUNS_LIMIT, true],
+          [101, true],
+          [4, undefined],
+        ],
+        'stops at the run limit or the hundred-year horizon, and says so',
+      );
+    },
+
   'an automation with no triggers is done': async (assert) => {
     let schedule = computeAutomationSchedule({
+      includeRemainingRuns: true,
       since: at('2026-11-10T00:00:00Z'),
       triggers: [],
     });
