@@ -1,9 +1,12 @@
 // The resources the OAuth provider issues tokens for. Each is an API named by
 // one URL, the audience of its tokens. The list is code, so adding a resource
 // is a reviewed change: every resource also needs a controller that checks
-// its tokens. What a scope admits is decided by each resource's controller,
-// not here (ADR 021 §1.3). Tests add a resource of their own through the
-// realm server's test-only option; nothing in production can.
+// its tokens. Each scope maps the routes it admits, and a controller refuses
+// an OAuth token on any route its scopes don't map (ADR 021 §1.3). Tests add
+// a resource of their own through the realm server's test-only option;
+// nothing in production can.
+
+import type { SupportedMimeType } from '@cardstack/runtime-common';
 
 export type OAuthClientKinds =
   // Any client: one identified by a client ID metadata document, or one that
@@ -11,6 +14,27 @@ export type OAuthClientKinds =
   | 'open'
   // Only the clients Boxel registers in code.
   | 'pre-registered';
+
+export type OAuthRouteMethod =
+  | 'GET'
+  | 'HEAD'
+  | 'QUERY'
+  | 'POST'
+  | 'PUT'
+  | 'PATCH'
+  | 'DELETE';
+
+// A route a scope admits, named as its router registers it: the path is the
+// registered pattern, never a pattern over URLs, and a controller matches the
+// route its router selected, after any method override (ADR 021 §1.3).
+export type OAuthRoute =
+  | { on: 'server'; method: OAuthRouteMethod; path: string }
+  | {
+      on: 'realm';
+      method: OAuthRouteMethod;
+      mimeType: SupportedMimeType;
+      path: string;
+    };
 
 export interface OAuthScope {
   name: string;
@@ -20,6 +44,9 @@ export interface OAuthScope {
   label: string;
   // Whether consent marks it as one to think twice about.
   caution: boolean;
+  // The routes a token holding this scope may reach. The provider never
+  // reads these; the resource's controllers do.
+  routes: readonly OAuthRoute[];
 }
 
 // A resource as declared, before the server's URL is known.
@@ -42,6 +69,11 @@ export interface OAuthResource extends Omit<OAuthResourceDefinition, 'path'> {
   id: string;
 }
 
+// `/mcp` is one route for every tool, so both scopes map it. Each tool names
+// the scope it needs where it is defined, and `/mcp`'s controller checks that
+// too.
+const MCP_ROUTE: OAuthRoute = { on: 'server', method: 'POST', path: '/mcp' };
+
 const MCP: OAuthResourceDefinition = {
   path: '/mcp',
   name: 'Boxel workspaces',
@@ -55,6 +87,7 @@ const MCP: OAuthResourceDefinition = {
       description: 'See the cards and files in your workspaces.',
       label: 'Read',
       caution: false,
+      routes: [MCP_ROUTE],
     },
     {
       name: 'boxel:write',
@@ -62,6 +95,7 @@ const MCP: OAuthResourceDefinition = {
         'Create and change cards and files, create workspaces, and archive the ones you own.',
       label: 'Change',
       caution: true,
+      routes: [MCP_ROUTE],
     },
   ],
   clients: 'open',
@@ -87,7 +121,14 @@ export function buildRegistry(
       Object.freeze({
         ...resource,
         scopes: Object.freeze(
-          scopes.map((scope) => Object.freeze({ ...scope })),
+          scopes.map(({ routes, ...scope }) =>
+            Object.freeze({
+              ...scope,
+              routes: Object.freeze(
+                routes.map((route) => Object.freeze({ ...route })),
+              ),
+            }),
+          ),
         ),
         id: oauthIssuer(`${base}${path}`),
       }),

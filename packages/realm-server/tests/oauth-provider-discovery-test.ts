@@ -33,6 +33,7 @@ import {
   oauthIssuer,
   registryScopes,
   type OAuthResourceDefinition,
+  type OAuthRoute,
   type OAuthScope,
 } from '../lib/oauth-provider/registry.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
@@ -59,12 +60,14 @@ const testResource: OAuthResourceDefinition = {
       description: 'Read.',
       label: 'Read',
       caution: false,
+      routes: [{ on: 'server', method: 'GET', path: '/_test-resource' }],
     },
     {
       name: 'test:probe',
       description: 'Probe.',
       label: 'Probe',
       caution: false,
+      routes: [{ on: 'server', method: 'POST', path: '/_test-resource' }],
     },
   ],
   clients: 'pre-registered',
@@ -366,14 +369,35 @@ module(basename(import.meta.filename), function () {
         assert.true(Object.isFrozen(resource.scopes), `${resource.id} scopes`);
         for (let scope of resource.scopes) {
           assert.true(Object.isFrozen(scope), `${resource.id} ${scope.name}`);
+          assert.true(
+            Object.isFrozen(scope.routes),
+            `${resource.id} ${scope.name} routes`,
+          );
+          for (let route of scope.routes) {
+            assert.true(
+              Object.isFrozen(route),
+              `${resource.id} ${scope.name} ${route.method} ${route.path}`,
+            );
+          }
         }
       }
       assert.throws(() => {
         (registry[0].scopes as OAuthScope[]).push(testResource.scopes[1]);
       }, TypeError);
+      assert.throws(() => {
+        (registry[0].scopes[0].routes as OAuthRoute[]).push({
+          on: 'server',
+          method: 'DELETE',
+          path: '/_delete-realm',
+        });
+      }, TypeError);
       assert.false(
         Object.isFrozen(testResource.scopes),
         "the caller's definition is left as it was",
+      );
+      assert.false(
+        Object.isFrozen(testResource.scopes[0].routes),
+        "the caller's routes are left as they were",
       );
     });
 
