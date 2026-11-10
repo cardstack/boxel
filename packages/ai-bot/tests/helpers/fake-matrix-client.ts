@@ -6,8 +6,31 @@ import type {
   StateEvents,
   Method,
 } from 'matrix-js-sdk';
-import { MatrixClient } from 'matrix-js-sdk';
+import { getHttpUriForMxc, MatrixClient } from 'matrix-js-sdk';
 import { recursiveMapToObject } from 'matrix-js-sdk/lib/utils.js';
+
+export const FAKE_HOMESERVER_URL = 'https://example.com';
+
+// The homeserver download URL for a Matrix media item, as the host stores it
+// on an attachment: the URL `FakeMatrixClient.mxcUrlToHttp` builds for the
+// item on the authenticated media endpoint, which is the only URL the bot
+// downloads the item from.
+export function matrixMediaUrl(mxcUrl: string): string {
+  let url = getHttpUriForMxc(
+    FAKE_HOMESERVER_URL,
+    mxcUrl,
+    undefined,
+    undefined,
+    undefined,
+    false,
+    undefined,
+    true,
+  );
+  if (!url) {
+    throw new Error(`Not a valid mxc:// URL: ${mxcUrl}`);
+  }
+  return url;
+}
 
 export class FakeMatrixClient extends MatrixClient {
   private eventId = 0;
@@ -22,7 +45,7 @@ export class FakeMatrixClient extends MatrixClient {
     contentMap: Record<string, Record<string, IContent>>;
   }[] = [];
 
-  baseUrl = 'https://example.com';
+  baseUrl = FAKE_HOMESERVER_URL;
 
   constructor() {
     super({ baseUrl: 'test' });

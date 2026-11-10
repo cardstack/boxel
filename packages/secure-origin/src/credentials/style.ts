@@ -2,7 +2,7 @@
 // frame sits, every custom property the fields' styles read and the text
 // styles they inherit, and sends them over; these write them onto the frame's
 // document through the CSSOM, which the secure origin's policy allows where it
-// refuses a `style` attribute (ADR 008 §1.5).
+// refuses a `style` attribute (ADR 019 §1.5).
 
 export interface StyleMessage {
   properties?: Record<string, unknown>;
@@ -36,9 +36,12 @@ const LOCAL_PROPERTIES = new Set([
   '--icon-space',
   '--_icon-full-length',
   '--icon-color',
-  '--boxel-field-label-align',
-  '--boxel-field-label-padding-top',
-  '--boxel-label-letter-spacing',
+  '--boxel-ui-label-font-size',
+  '--boxel-ui-label-font-weight',
+  '--boxel-ui-label-line-height',
+  '--boxel-ui-label-letter-spacing',
+  '--pretui-field-label-size',
+  '--pretui-field-column-gap',
 ]);
 
 export function applyStyle(

@@ -17,6 +17,7 @@ import type {
   Subscription,
   Plan,
   RealmAdapter,
+  RealmHistory,
   DefinitionLookup,
   Query,
   CardResource,
@@ -28,6 +29,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   Realm,
+  ri,
   searchEntryWireQueryFromQuery,
   parseSearchEntryQueryFromPayload,
   baseRealm,
@@ -582,6 +584,9 @@ export function makeTestReconciler(
       let reconciledRealm = new Realm(
         {
           url: row.url,
+          canonicalName: ri(
+            dynamicMountDeps.virtualNetwork.unresolveURL(row.url),
+          ),
           adapter,
           secretSeed: realmSecretSeed,
           virtualNetwork: dynamicMountDeps.virtualNetwork,
@@ -1588,6 +1593,7 @@ export async function createRealm({
   realmFor,
   policyPointerOf,
   published,
+  history,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1626,6 +1632,9 @@ export async function createRealm({
   // Forwarded to the Realm constructor's `published` option. Production sets
   // it from the realm's registry row; a test realm has none to read it from.
   published?: true;
+  // Forwarded to the Realm constructor's `history` option: the change journal
+  // the realm's writes append to. Absent, the realm records no history.
+  history?: RealmHistory;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1704,6 +1713,7 @@ export async function createRealm({
   let realm = new Realm(
     {
       url: realmURL,
+      canonicalName: ri(virtualNetwork.unresolveURL(realmURL)),
       adapter,
       secretSeed: realmSecretSeed,
       virtualNetwork,
@@ -1735,6 +1745,7 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      ...(history ? { history } : {}),
       ...(realmFor
         ? {
             realmFor,
@@ -1812,6 +1823,7 @@ export async function runTestRealmServer({
   googleSignIn,
   cardDocumentCache,
   published,
+  history,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1847,6 +1859,8 @@ export async function runTestRealmServer({
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
   published?: true;
+  // The change journal the realm's writes append to; absent, no history.
+  history?: RealmHistory;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1893,6 +1907,7 @@ export async function runTestRealmServer({
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(cardDocumentCache ? { cardDocumentCache } : {}),
     ...(published ? { published: true as const } : {}),
+    ...(history ? { history } : {}),
   });
 
   await testRealm.logInToMatrix();
@@ -2645,6 +2660,7 @@ type InternalPermissionedRealmSetupOptions = {
   subscribeToRealmEvents?: boolean;
   prerenderer?: Prerenderer;
   published?: boolean;
+  history?: RealmHistory;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -2668,6 +2684,7 @@ async function startPermissionedRealmFixture(
     subscribeToRealmEvents = false,
     prerenderer,
     published = false,
+    history,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -2752,6 +2769,7 @@ async function startPermissionedRealmFixture(
     secureOriginURL,
     cardDocumentCache,
     ...(published ? { published: true as const } : {}),
+    ...(history ? { history } : {}),
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2816,6 +2834,7 @@ export function setupPermissionedRealm(
     prerenderer,
     dbTemplateDatabase,
     published = false,
+    history,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -2864,6 +2883,9 @@ export function setupPermissionedRealm(
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
     cardDocumentCache?: CardDocumentCache;
+    // The change journal the realm's writes append to. Omit for a realm that
+    // records no history.
+    history?: RealmHistory;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2898,6 +2920,7 @@ export function setupPermissionedRealm(
         linkShapePolicy,
         secureOriginURL,
         cardDocumentCache,
+        history,
       });
       testRealmServer = server;
 
@@ -3000,6 +3023,7 @@ async function buildPermissionedRealmTemplate(
         subscribeToRealmEvents: options.subscribeToRealmEvents,
         prerenderer: options.prerenderer,
         published: options.published,
+        history: options.history,
         cardSizeLimitBytes: options.cardSizeLimitBytes,
         fileSizeLimitBytes: options.fileSizeLimitBytes,
       },

@@ -54,23 +54,43 @@ module(basename(import.meta.filename), function () {
       });
 
       assert.true(
-        await isDirectWriter(dbAdapter, realmURL, '@owner:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@owner:localhost',
+          'localhost',
+        ),
       );
       assert.true(
-        await isDirectWriter(dbAdapter, realmURL, '@writer:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@writer:localhost',
+          'localhost',
+        ),
       );
       assert.false(
-        await isDirectWriter(dbAdapter, realmURL, '@reader:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@reader:localhost',
+          'localhost',
+        ),
         'a read-only row does not count',
       );
       assert.false(
-        await isDirectWriter(dbAdapter, realmURL, '@stranger:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@stranger:localhost',
+          'localhost',
+        ),
         'a user with no row does not count',
       );
-      assert.deepEqual(await fetchDirectWriters(dbAdapter, realmURL), [
-        '@owner:localhost',
-        '@writer:localhost',
-      ]);
+      assert.deepEqual(
+        await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
+        ['@owner:localhost', '@writer:localhost'],
+      );
     });
 
     test('`*` and `users` rows that grant write make no one a direct writer', async function (assert) {
@@ -81,14 +101,22 @@ module(basename(import.meta.filename), function () {
       });
 
       assert.false(
-        await isDirectWriter(dbAdapter, realmURL, '@anyone:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@anyone:localhost',
+          'localhost',
+        ),
         'a user the wildcard rows grant write is not a direct writer',
       );
-      assert.false(await isDirectWriter(dbAdapter, realmURL, '*'));
-      assert.false(await isDirectWriter(dbAdapter, realmURL, 'users'));
-      assert.deepEqual(await fetchDirectWriters(dbAdapter, realmURL), [
-        '@owner:localhost',
-      ]);
+      assert.false(await isDirectWriter(dbAdapter, realmURL, '*', 'localhost'));
+      assert.false(
+        await isDirectWriter(dbAdapter, realmURL, 'users', 'localhost'),
+      );
+      assert.deepEqual(
+        await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
+        ['@owner:localhost'],
+      );
     });
 
     test('a bot account with a write row is not a direct writer', async function (assert) {
@@ -109,13 +137,54 @@ module(basename(import.meta.filename), function () {
         '@skills_writer:localhost',
       ]) {
         assert.false(
-          await isDirectWriter(dbAdapter, realmURL, bot),
+          await isDirectWriter(dbAdapter, realmURL, bot, 'localhost'),
           `${bot} is not a direct writer`,
         );
       }
-      assert.deepEqual(await fetchDirectWriters(dbAdapter, realmURL), [
-        '@owner:localhost',
-      ]);
+      assert.deepEqual(
+        await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
+        ['@owner:localhost'],
+      );
+    });
+
+    test('an account on another homeserver named like a bot is a direct writer', async function (assert) {
+      // The platform's service accounts all live on the paired homeserver, so
+      // a user elsewhere is a person whatever they are called.
+      await insertPermissions(dbAdapter, realmURL, {
+        '@skills_realm:other.example': ['read', 'write'],
+        '@aibot:other.example': ['read', 'write'],
+        '@skills_realm:localhost': ['read', 'write'],
+      });
+
+      assert.true(
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@skills_realm:other.example',
+          'localhost',
+        ),
+      );
+      assert.true(
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@aibot:other.example',
+          'localhost',
+        ),
+      );
+      assert.false(
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@skills_realm:localhost',
+          'localhost',
+        ),
+        'the same name on the paired homeserver is the bot',
+      );
+      assert.deepEqual(
+        await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
+        ['@aibot:other.example', '@skills_realm:other.example'],
+      );
     });
 
     test('a removed row stops counting', async function (assert) {
@@ -124,7 +193,12 @@ module(basename(import.meta.filename), function () {
         '@writer:localhost': ['read', 'write'],
       });
       assert.true(
-        await isDirectWriter(dbAdapter, realmURL, '@writer:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@writer:localhost',
+          'localhost',
+        ),
       );
 
       await insertPermissions(dbAdapter, realmURL, {
@@ -132,11 +206,17 @@ module(basename(import.meta.filename), function () {
       });
 
       assert.false(
-        await isDirectWriter(dbAdapter, realmURL, '@writer:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@writer:localhost',
+          'localhost',
+        ),
       );
-      assert.deepEqual(await fetchDirectWriters(dbAdapter, realmURL), [
-        '@owner:localhost',
-      ]);
+      assert.deepEqual(
+        await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
+        ['@owner:localhost'],
+      );
     });
 
     test('a row that drops write stops counting', async function (assert) {
@@ -149,9 +229,17 @@ module(basename(import.meta.filename), function () {
       });
 
       assert.false(
-        await isDirectWriter(dbAdapter, realmURL, '@writer:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@writer:localhost',
+          'localhost',
+        ),
       );
-      assert.deepEqual(await fetchDirectWriters(dbAdapter, realmURL), []);
+      assert.deepEqual(
+        await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
+        [],
+      );
     });
 
     test('a write row in another realm does not count', async function (assert) {
@@ -163,11 +251,17 @@ module(basename(import.meta.filename), function () {
       });
 
       assert.false(
-        await isDirectWriter(dbAdapter, realmURL, '@writer:localhost'),
+        await isDirectWriter(
+          dbAdapter,
+          realmURL,
+          '@writer:localhost',
+          'localhost',
+        ),
       );
-      assert.deepEqual(await fetchDirectWriters(dbAdapter, realmURL), [
-        '@owner:localhost',
-      ]);
+      assert.deepEqual(
+        await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
+        ['@owner:localhost'],
+      );
     });
   });
 
@@ -298,8 +392,13 @@ module(basename(import.meta.filename), function () {
         );
       assert.strictEqual(patched.status, 200, 'the policy admits the write');
 
-      assert.false(await isDirectWriter(db, new URL(OPEN), EDITOR));
-      assert.deepEqual(await fetchDirectWriters(db, new URL(OPEN)), [ADMIN]);
+      assert.false(
+        await isDirectWriter(db, new URL(OPEN), EDITOR, 'localhost'),
+      );
+      assert.deepEqual(
+        await fetchDirectWriters(db, new URL(OPEN), 'localhost'),
+        [ADMIN],
+      );
     });
   });
 });

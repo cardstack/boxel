@@ -43,15 +43,17 @@ import {
   writableRealms,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import Tag from '../../components/icons/tag.gts';
-import Users from '../../components/icons/users.gts';
-import BoxelInput from '../../components/input.gts';
+import { Button } from '@cardstack/pretui/components/button';
+import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import Tag from '@cardstack/boxel-icons/tag';
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
+import { Input } from '@cardstack/pretui/components/input';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
   failureMessage,
@@ -64,6 +66,7 @@ import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import { servesVisitors } from './anonymous-use-fields.gts';
+import KeyAudience from './key-audience.gts';
 import KeyPicker from './key-picker.gts';
 import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
@@ -71,7 +74,8 @@ import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedForShare } from './opened-for.ts';
-import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
+import WorkspacePicker from './workspace-picker.gts';
+import { addressOf } from './workspaces.ts';
 import { anonymousCapsClause } from './anonymous-caps.ts';
 
 interface Realm {
@@ -114,7 +118,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Share a key'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -134,7 +138,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       </DonePage>
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
-        <EditPage @heading='Share a key' data-test-share-key>
+        <EditPage @heading={{this.title}} data-test-share-key>
           <:intro>
             {{#if this.forAnyone}}
               <span data-test-share-key-intro='anyone'>People who can access the
@@ -162,73 +166,95 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 @reason={{this.opened.reason}}
               />
             {{/if}}
-            {{#if this.choosing.key}}
-              <FieldContainer
-                @tag='div'
-                @label='Key'
-                @icon={{KeyRound}}
-                data-test-share-key-key
-              >
-                <KeyTile @key={{this.choosing.key}} />
-              </FieldContainer>
-            {{else}}
-              <KeyPicker
-                @keys={{this.form.keys}}
-                @selected={{this.form.key}}
-                @onSelect={{this.selectKey}}
-                @onGoToKeys={{this.goToKeys}}
-              />
-            {{/if}}
-            {{#unless this.choosing.context}}
-              <FieldContainer
-                @tag='div'
-                @label='Workspace'
-                @icon={{LayoutGrid}}
-                data-test-realm-picker
-                as |labelId|
-              >
-                <WorkspaceDropdown
-                  @workspaces={{this.form.realms}}
-                  @selected={{this.form.realm}}
-                  @onSelect={{this.selectRealm}}
-                  @labelId={{labelId}}
-                />
-              </FieldContainer>
-            {{/unless}}
-            <FieldContainer
-              @tag='label'
-              @label='Shared as'
-              @icon={{Tag}}
-              data-test-key-field='label'
+            <KeyAudience
+              @kind='apiKey'
+              @label='Sharing your key'
+              @workspace={{this.bannerWorkspace}}
+              @anonymous={{this.keyAllowsAnonymous}}
+              @line={{this.bannerLine}}
+              @headingId='share-key-audience'
+              data-test-share-key-audience
             >
-              <BoxelInput
-                @type='text'
-                @autocomplete='off'
-                @placeholder='What people with access to the workspace see it as'
-                @value={{this.form.label}}
-                @onInput={{this.setLabel}}
-                name='share-label'
-                data-test-share-label
-              />
-            </FieldContainer>
+              {{#if this.choosing.key}}
+                <Field
+                  @reserveMessage={{false}}
+                  @orientation='horizontal'
+                  @labelTag='span'
+                  @label='Key'
+                  @icon={{KeyRound}}
+                  data-test-share-key-key
+                >
+                  <KeyTile @key={{this.choosing.key}} />
+                </Field>
+              {{else}}
+                <KeyPicker
+                  @keys={{this.form.keys}}
+                  @selected={{this.form.key}}
+                  @onSelect={{this.selectKey}}
+                  @onGoToKeys={{this.goToKeys}}
+                />
+              {{/if}}
+              {{#unless this.choosing.context}}
+                <Field
+                  @reserveMessage={{false}}
+                  @orientation='horizontal'
+                  @labelTag='span'
+                  @label='Workspace'
+                  @icon={{LayoutGrid}}
+                  data-test-realm-picker
+                  as |_controlId _messageId labelId|
+                >
+                  <WorkspacePicker
+                    @workspaces={{this.form.realms}}
+                    @selected={{this.form.realm}}
+                    @onSelect={{this.selectRealm}}
+                    @labelId={{labelId}}
+                    @emptyMessage='You don’t edit any workspace you could share a key with.'
+                  />
+                </Field>
+              {{/unless}}
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @label='Shared as'
+                @icon={{Tag}}
+                data-test-key-field='label'
+                as |controlId|
+              >
+                <Input
+                  @controlId={{controlId}}
+                  @type='text'
+                  autocomplete='off'
+                  @placeholder='What people with access to the workspace see it as'
+                  @value={{this.form.label}}
+                  @onInput={{this.setLabel}}
+                  name='share-label'
+                  data-test-share-label
+                />
+              </Field>
+            </KeyAudience>
             {{#if this.policyUnknown}}
               {{! Asked of the workspace just chosen: which reading applies. }}
             {{else if this.keyAllowsAnonymous}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='People who aren’t signed in'
-                @icon={{Users}}
+                @icon={{HatGlasses}}
                 data-test-share-key-key-allows
               >
                 <p class='allows' data-test-share-key-key-allows-text>This key
                   allows it{{anonymousCapsClause this.chosenKey}}. Sharing it
                   here means they will use it.</p>
-              </FieldContainer>
+              </Field>
             {{else if this.keyRefusesAnonymous}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='People who aren’t signed in'
-                @icon={{Users}}
+                @icon={{HatGlasses}}
                 data-test-share-key-key-refuses
               >
                 <div class='refuses'>
@@ -238,32 +264,32 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                     your key page first.</p>
                   <Button
                     type='button'
-                    @kind='secondary'
-                    @size='small'
+                    @variant='secondary'
+                    @size='s'
                     data-test-share-key-go-to-key
                     {{on 'click' this.goToKeys}}
                   >Go to your keys</Button>
                 </div>
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
             {{#if this.fromKeyPage}}
               <Button
                 type='button'
-                @kind='secondary'
+                @variant='secondary'
                 data-test-share-key-cancel
                 {{on 'click' this.goToKeys}}
               >Cancel</Button>
             {{/if}}
             <Button
               type='submit'
-              @kind='primary'
+              @variant='primary'
               @disabled={{this.submitDisabled}}
               @loading={{this.form.saving}}
               data-test-share-key-save
@@ -292,12 +318,6 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
       }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
-      }
     </style>
   </template>
 
@@ -305,6 +325,8 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
   // Reached from the key page for one of its keys, rather than opened for a
   // realm by a page elsewhere.
   private fromKeyPage = Boolean(this.opened.key && !this.opened.realm);
+
+  private title = pageTitle('share-key');
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -424,6 +446,20 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     return this.opensToAnonymous && (!key || servesVisitors(key));
   }
 
+  // The shared-key banner names the workspace the key goes into, once it is
+  // known, and says whom sharing it serves.
+  private get bannerWorkspace() {
+    return this.form.realm || this.choosing?.context
+      ? this.realmName(this.form.realm)
+      : undefined;
+  }
+
+  private get bannerLine() {
+    return this.keyAllowsAnonymous
+      ? 'Once a card’s calls are approved with it, Boxel uses this key whenever anyone uses that card in the workspace, including people who aren’t signed in, and their calls count against the share’s limits.'
+      : 'Once a card’s calls are approved with it, Boxel uses this key whenever anyone with access uses that card in the workspace, and their calls count against the share’s limits.';
+  }
+
   private get chosenKey(): UserKey | undefined {
     return this.form.keys.find((k) => k.id === this.form.key);
   }
@@ -515,7 +551,12 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     this.form.error = undefined;
   };
 
-  private goToKeys = () => navigation.back(pageURL('keys'));
+  // From the key page, back to it; opened for a realm, on to the key page,
+  // whose trail leads back here.
+  private goToKeys = () =>
+    this.fromKeyPage
+      ? navigation.back(keyPageURL())
+      : navigation.assign(withWayBack(pageURL('keys')));
 
   // Done, a share started from the key page goes back to it; one opened for a
   // realm closes the window.

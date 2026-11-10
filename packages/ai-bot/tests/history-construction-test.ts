@@ -18,7 +18,10 @@ import type {
   CardMessageEvent,
   MatrixEvent as DiscreteMatrixEvent,
 } from '@cardstack/base/matrix-event';
-import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
+import {
+  FakeMatrixClient,
+  matrixMediaUrl,
+} from './helpers/fake-matrix-client.ts';
 
 module('constructHistory', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
@@ -425,7 +428,7 @@ module('constructHistory', (hooks) => {
 
   test('should download the card content from url', async () => {
     // Set up the mock response for this test
-    mockResponses.set('http://mock-server/Author/1', {
+    mockResponses.set(matrixMediaUrl('mxc://mock-server/author-1'), {
       ok: true,
       text: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
     });
@@ -447,7 +450,7 @@ module('constructHistory', (hooks) => {
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/1',
-                url: 'http://mock-server/Author/1',
+                url: matrixMediaUrl('mxc://mock-server/author-1'),
                 name: 'Author',
                 contentType: 'text/plain',
               },
@@ -481,7 +484,7 @@ module('constructHistory', (hooks) => {
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/1',
-                url: 'http://mock-server/Author/1',
+                url: matrixMediaUrl('mxc://mock-server/author-1'),
                 name: 'Author',
                 contentType: 'text/plain',
                 content: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
@@ -502,7 +505,7 @@ module('constructHistory', (hooks) => {
   test('should download the COMMAND_RESULT card content from url', async () => {
     // Set up the mock response for this test
     let contentText = `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`;
-    mockResponses.set('http://mock-server/Author/1', {
+    mockResponses.set(matrixMediaUrl('mxc://mock-server/author-1'), {
       ok: true,
       text: contentText,
     });
@@ -523,7 +526,7 @@ module('constructHistory', (hooks) => {
           data: JSON.stringify({
             card: {
               sourceUrl: 'http://localhost:4201/drafts/Author/1',
-              url: 'http://mock-server/Author/1',
+              url: matrixMediaUrl('mxc://mock-server/author-1'),
               contentType: 'text/plain',
               name: 'Author',
             },
@@ -555,7 +558,7 @@ module('constructHistory', (hooks) => {
           data: {
             card: {
               sourceUrl: 'http://localhost:4201/drafts/Author/1',
-              url: 'http://mock-server/Author/1',
+              url: matrixMediaUrl('mxc://mock-server/author-1'),
               contentType: 'text/plain',
               name: 'Author',
               content: contentText,
@@ -574,7 +577,7 @@ module('constructHistory', (hooks) => {
 
   test('should handle fetch card content errors', async () => {
     // Set up a mock response that will fail
-    mockResponses.set('http://mock-server/Author/2', {
+    mockResponses.set(matrixMediaUrl('mxc://mock-server/author-2'), {
       ok: false,
       text: 'Not Found',
     });
@@ -596,7 +599,7 @@ module('constructHistory', (hooks) => {
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/2',
-                url: 'http://mock-server/Author/2',
+                url: matrixMediaUrl('mxc://mock-server/author-2'),
                 name: 'Author',
                 contentType: 'text/plain',
               },
@@ -630,7 +633,7 @@ module('constructHistory', (hooks) => {
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/2',
-                url: 'http://mock-server/Author/2',
+                url: matrixMediaUrl('mxc://mock-server/author-2'),
                 name: 'Author',
                 contentType: 'text/plain',
                 error:

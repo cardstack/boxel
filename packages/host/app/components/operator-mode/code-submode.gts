@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import { hash } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -9,7 +10,7 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask, timeout } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -43,6 +44,7 @@ import {
   type getCard,
   type LocalPath,
   CardContextName,
+  hasExecutableExtension,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -59,6 +61,8 @@ import type {
 import type CardService from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 import type FileUploadService from '@cardstack/host/services/file-upload';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -66,6 +70,11 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import {
+  cardDefinitionsInModule,
+  cardsInEntries,
+  cardsUsingDefinitionsQuery,
+} from '@cardstack/host/utils/cards-using-module';
 import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 
 import {
@@ -136,6 +145,20 @@ const defaultPanelHeights: PanelHeights = {
 
 const waiter = buildWaiter('code-submode:waiter');
 
+const CARDS_USING_LIST_LENGTH = 5;
+const CARDS_USING_PAGE_SIZE = 100;
+
+type CardsUsingLookup =
+  | { file: URL; state: 'loading' | 'none' | 'failed' }
+  | { file: URL; state: 'found'; cards: CardsUsingDefinition };
+
+interface CardsUsingDefinition {
+  definitions: ResolvedCodeRef[];
+  realmURL: string;
+  total: number;
+  titles: string[];
+}
+
 function urlToFilename(url: URL) {
   if (url) {
     return decodeURIComponent(url.href?.split('/').pop() ?? '');
@@ -150,6 +173,8 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service('file-upload') declare private fileUpload: FileUploadService;
+  @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private recentFilesService: RecentFilesService;
@@ -163,6 +188,9 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private writeError: string | undefined;
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
+  @tracked private cardsUsingLookup: CardsUsingLookup | undefined;
+  @tracked private alsoDeleteCardsUsingItem = true;
+  @tracked private deleteError: string | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private defaultPanelWidths: PanelWidths;
@@ -486,6 +514,130 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private setItemToDelete(item: CardDef | URL | null | undefined) {
     this.itemToDelete = item;
+    this.cardsUsingLookup = undefined;
+    this.alsoDeleteCardsUsingItem = true;
+    this.deleteError = undefined;
+    if (item instanceof URL && hasExecutableExtension(item.href)) {
+      this.cardsUsingLookup = { file: item, state: 'loading' };
+      this.findCardsUsingItemToDelete.perform(item);
+    } else {
+      this.findCardsUsingItemToDelete.cancelAll();
+    }
+  }
+
+  private get cardsUsingItemToDelete() {
+    let lookup = this.cardsUsingLookup;
+    return lookup?.state === 'found' ? lookup.cards : undefined;
+  }
+
+  private get isFindingCardsUsingItemToDelete() {
+    return this.cardsUsingLookup?.state === 'loading';
+  }
+
+  private get couldNotFindCardsUsingItemToDelete() {
+    return this.cardsUsingLookup?.state === 'failed';
+  }
+
+  @action private toggleAlsoDeleteCardsUsingItem(event: Event) {
+    this.alsoDeleteCardsUsingItem = (event.target as HTMLInputElement).checked;
+  }
+
+  private findCardsUsingItemToDelete = restartableTask(async (file: URL) => {
+    let lookup = await this.withTestWaiters(() => this.findCardsUsing(file));
+    // A lookup for a file the dialog has since moved on from is dropped:
+    // cancelling the task does not stop the search it awaited.
+    if (this.cardsUsingLookup?.file === file) {
+      this.cardsUsingLookup = lookup;
+    }
+  });
+
+  private async findCardsUsing(file: URL): Promise<CardsUsingLookup> {
+    let realmURL = this.operatorModeStateService.realmURL;
+    let definitions;
+    try {
+      definitions = await cardDefinitionsInModule(
+        this.loaderService.loader,
+        file,
+        (identifier) => this.network.virtualNetwork.toURLHref(identifier),
+      );
+    } catch (error) {
+      // A module that doesn't load leaves no working cards to break.
+      console.warn(`Could not load ${file.href}`, error);
+      return { file, state: 'none' };
+    }
+    if (definitions.length === 0) {
+      return { file, state: 'none' };
+    }
+    try {
+      let doc = await this.store.searchEntries(
+        cardsUsingDefinitionsQuery(definitions, {
+          number: 0,
+          size: CARDS_USING_LIST_LENGTH,
+        }),
+        [realmURL],
+      );
+      let total = doc.meta.page.total;
+      return total > 0
+        ? {
+            file,
+            state: 'found',
+            cards: {
+              definitions,
+              realmURL,
+              total,
+              titles: cardsInEntries(doc).map((card) => card.title),
+            },
+          }
+        : { file, state: 'none' };
+    } catch (error) {
+      console.warn(`Could not find the cards that use ${file.href}`, error);
+      return { file, state: 'failed' };
+    }
+  }
+
+  // Every page is read before anything is deleted, so deleting never shifts
+  // the pages still to be read.
+  private async idsOfCardsUsing({
+    definitions,
+    realmURL,
+  }: CardsUsingDefinition) {
+    let ids: string[] = [];
+    for (let number = 0; ; number++) {
+      let doc = await this.store.searchEntries(
+        cardsUsingDefinitionsQuery(definitions, {
+          number,
+          size: CARDS_USING_PAGE_SIZE,
+        }),
+        [realmURL],
+      );
+      ids.push(...cardsInEntries(doc).map((card) => card.id));
+      if (
+        doc.data.length === 0 ||
+        (number + 1) * CARDS_USING_PAGE_SIZE >= doc.meta.page.total
+      ) {
+        return ids;
+      }
+    }
+  }
+
+  private get cardsUsingSummary() {
+    let total = this.cardsUsingItemToDelete?.total ?? 0;
+    return total === 1
+      ? '1 card uses this definition and will stop loading:'
+      : `${total} cards use this definition and will stop loading:`;
+  }
+
+  private get moreCardsUsingLabel() {
+    let using = this.cardsUsingItemToDelete;
+    let more = using ? using.total - using.titles.length : 0;
+    return more > 0 ? `and ${more} more` : undefined;
+  }
+
+  private get alsoDeleteCardsLabel() {
+    let total = this.cardsUsingItemToDelete?.total ?? 0;
+    return total === 1
+      ? 'Also delete this card'
+      : `Also delete these ${total} cards`;
   }
 
   @action private deleteFileInTree(entryPath: LocalPath) {
@@ -494,6 +646,8 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action private onCancelDelete() {
+    this.findCardsUsingItemToDelete.cancelAll();
+    this.cardsUsingLookup = undefined;
     this.itemToDelete = undefined;
   }
 
@@ -519,7 +673,26 @@ export default class CodeSubmode extends Component<Signature> {
       });
     } else {
       let file = item;
+      // Delete stays disabled until the lookup settles, so this is the
+      // answer the dialog showed. The cards are read again here: every card
+      // using the definition when Delete is pressed goes with it.
+      let cardsUsing = this.alsoDeleteCardsUsingItem
+        ? this.cardsUsingItemToDelete
+        : undefined;
+      let kept = false;
       await this.withTestWaiters(async () => {
+        if (cardsUsing) {
+          let failed = await this.deleteCardsUsing(cardsUsing);
+          if (failed > 0) {
+            // Keep the definition, so the cards that are left still load.
+            this.deleteError =
+              failed === 1
+                ? '1 card could not be deleted, so the definition was kept. Try again.'
+                : `${failed} cards could not be deleted, so the definition was kept. Try again.`;
+            kept = true;
+            return;
+          }
+        }
         // TODO: This is a side effect of the recent-file service making assumptions about
         // what realm we are in. we should refactor that so that callers have to tell
         // it the realm of the file in question
@@ -537,6 +710,12 @@ export default class CodeSubmode extends Component<Signature> {
           );
         }
       });
+      if (kept) {
+        // Leave the dialog open on the error; its lookup now counts only
+        // the cards that are left.
+        this.setItemToDeleteKeepingError(file);
+        return;
+      }
     }
 
     let recentFile = this.recentFilesService.recentFiles[0];
@@ -553,6 +732,39 @@ export default class CodeSubmode extends Component<Signature> {
     await timeout(500); // task running message can be displayed long enough for the user to read it
     this.itemToDelete = undefined;
   });
+
+  // Deletes every card it can, and answers how many it could not.
+  private async deleteCardsUsing(cardsUsing: CardsUsingDefinition) {
+    let realmPaths = new RealmPaths(new URL(cardsUsing.realmURL));
+    let failed = 0;
+    let ids: string[];
+    try {
+      ids = await this.idsOfCardsUsing(cardsUsing);
+    } catch (error) {
+      console.warn('Could not find the cards to delete', error);
+      return cardsUsing.total;
+    }
+    for (let id of ids) {
+      try {
+        await this.operatorModeStateService.deleteCard(id);
+      } catch (error) {
+        console.warn(`Could not delete ${id}`, error);
+        failed++;
+        continue;
+      }
+      this.recentFilesService.removeRecentFile(
+        realmPaths.local(new URL(`${id}.json`)),
+      );
+      this.playgroundPanelService.removeSelectionsByCardId(id);
+    }
+    return failed;
+  }
+
+  private setItemToDeleteKeepingError(file: URL) {
+    let error = this.deleteError;
+    this.setItemToDelete(file);
+    this.deleteError = error;
+  }
 
   // dropTask will ignore any subsequent create file requests until the one in progress is done
   private createFile = dropTask(
@@ -948,6 +1160,8 @@ export default class CodeSubmode extends Component<Signature> {
             @onConfirm={{perform this.delete}}
             @onCancel={{this.onCancelDelete}}
             @isDeleteRunning={{this.delete.isRunning}}
+            @isConfirmDisabled={{this.isFindingCardsUsingItemToDelete}}
+            @error={{this.deleteError}}
           >
             <:content>
               {{#if this.isCard}}
@@ -956,6 +1170,39 @@ export default class CodeSubmode extends Component<Signature> {
               {{else}}
                 Delete the file
                 <strong>{{urlToFilename this.itemToDeleteAsFile}}</strong>?
+                <div class='cards-using-status' role='status'>
+                  {{#if this.isFindingCardsUsingItemToDelete}}
+                    <p class='cards-using' data-test-cards-using-loading>
+                      Checking which cards use this definition…
+                    </p>
+                  {{else if this.couldNotFindCardsUsingItemToDelete}}
+                    <p class='cards-using' data-test-cards-using-failed>
+                      Could not check which cards use this definition. Any that
+                      do will stop loading.
+                    </p>
+                  {{else if this.cardsUsingItemToDelete}}
+                    <div class='cards-using' data-test-cards-using-definition>
+                      {{this.cardsUsingSummary}}
+                      <ul class='cards-using-list'>
+                        {{#each this.cardsUsingItemToDelete.titles as |title|}}
+                          <li data-test-card-using-definition>{{title}}</li>
+                        {{/each}}
+                        {{#if this.moreCardsUsingLabel}}
+                          <li>{{this.moreCardsUsingLabel}}</li>
+                        {{/if}}
+                      </ul>
+                      <label class='also-delete-cards'>
+                        <input
+                          type='checkbox'
+                          checked={{this.alsoDeleteCardsUsingItem}}
+                          {{on 'change' this.toggleAlsoDeleteCardsUsingItem}}
+                          data-test-also-delete-cards
+                        />
+                        {{this.alsoDeleteCardsLabel}}
+                      </label>
+                    </div>
+                  {{/if}}
+                </div>
               {{/if}}
             </:content>
           </DeleteModal>
@@ -1055,6 +1302,28 @@ export default class CodeSubmode extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: center;
+      }
+
+      .cards-using {
+        margin: var(--boxel-sp-sm) 0 0;
+        font-weight: 400;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+      .cards-using-list {
+        margin: var(--boxel-sp-xxs) 0 0;
+        padding: 0;
+        list-style: none;
+        font-weight: 600;
+        overflow-wrap: break-word;
+      }
+      .also-delete-cards {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-sm);
+        min-height: 1.5rem;
+        cursor: pointer;
       }
     </style>
   </template>

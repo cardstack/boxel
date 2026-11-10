@@ -81,12 +81,13 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   # 308-redirects to https. The host bundle is loaded over https, so an
   # `http://icons.<slug>.localhost/...` upstream would be mixed-content
   # blocked AND fail the CORS preflight on the redirect.
-  CONFIG_PATH="$CONFIG_PATH" node -e "
+  CONFIG_PATH="$CONFIG_PATH" TRAEFIK_ROUTE_JS="$SCRIPTS_DIR/../../../scripts/traefik-route.js" node -e "
     const fs = require('fs');
-    const { spawn } = require('child_process');
+    const { awaitTraefikRoute } = require(process.env.TRAEFIK_ROUTE_JS);
     const slug = '${ENV_SLUG}';
     const routerKey = 'icons-' + slug;
     const redirectMiddleware = routerKey + '-https-redirect';
+    const serverURL = 'http://host.docker.internal:${ICONS_PORT}';
     const configPath = process.env.CONFIG_PATH;
     const entry = [
       'http:',
@@ -113,22 +114,13 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
       '    ' + routerKey + ':',
       '      loadBalancer:',
       '        servers:',
-      '          - url: \"http://host.docker.internal:${ICONS_PORT}\"',
+      '          - url: \"' + serverURL + '\"',
       '',
     ].join('\\n');
     const tmp = configPath + '.tmp';
     fs.writeFileSync(tmp, entry, 'utf-8');
     fs.renameSync(tmp, configPath);
-    // Bounce Traefik on macOS — Docker Desktop's bind mounts don't
-    // propagate inotify, and Traefik v3 file provider has no polling
-    // option. See dev-service-registry.ts for the full rationale.
-    if (process.platform === 'darwin') {
-      const child = spawn('docker', ['restart', 'boxel-traefik'], {
-        stdio: 'ignore', detached: true,
-      });
-      child.on('error', () => {});
-      child.unref();
-    }
+    awaitTraefikRoute(routerKey, serverURL);
   "
   echo "Registered icons at icons.${ENV_SLUG}.localhost -> localhost:${ICONS_PORT}"
 

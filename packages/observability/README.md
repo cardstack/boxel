@@ -107,13 +107,13 @@ GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts   # loops, defaul
 
 It emits five event types, all on channel `boxel:actions-queue`:
 
-| `event_type`                             | one line per                   | carries                                                                                                                                                |
-| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step`                                                            |
-| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`                                                                         |
-| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `github_hosted_running_jobs`, `github_hosted_queued_jobs`, `active_runs`, `rate_limit_remaining`        |
-| `spill`                                  | spill decision                 | the pool count, `diverted_jobs`, `pool_complete`, `spill_before`, `spill`, `changed`, `reason`, `mode`, `written`; see [Host CI spill](#host-ci-spill) |
-| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                                                                               |
+| `event_type`                             | one line per                   | carries                                                                                                                                         |
+| ---------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step`                                                     |
+| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`                                                                  |
+| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `github_hosted_running_jobs`, `github_hosted_queued_jobs`, `active_runs`, `rate_limit_remaining` |
+| `spill`                                  | spill decision                 | the pool count, `diverted_jobs`, `pool_complete`, `spill_before`, `spill`, `changed`, `reason`, `mode`, `written`; see [CI spill](#ci-spill)    |
+| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                                                                        |
 
 GitHub reports a job as `pending` while a concurrency group holds it, and as
 `queued` while it waits for a runner. The two are counted apart, so a
@@ -129,24 +129,26 @@ Two constraints are load-bearing:
 - **It must not run as a scheduled GitHub Actions workflow.** It would queue
   behind the backlog it measures and go blind during the incident it exists
   for. Hosted, it belongs on a schedule outside Actions.
-- **A sample costs one request per active run, plus three.** The hourly spend
-  therefore scales with how busy the repository is, against a token's 5,000
-  requests an hour. At the observed peak of ~50 concurrent runs a 60-second
-  interval spends around 3,200 an hour, which is comfortable; 30 seconds
-  exceeds the budget above roughly forty concurrent runs, so higher resolution
-  needs the per-sample cost reduced rather than the interval shortened.
-  Sampling stops rather than reporting partial depth when the remaining budget
-  nears its reserve.
+- **A sample costs one request per active run whose jobs changed, plus three
+  per repository.** The collector sends each job-list request with the ETag of
+  the last answer, and GitHub does not count a `304 Not Modified` against the
+  token's 5,000 requests an hour. About 45% of the job lists are unchanged
+  between two samples, so a 60-second interval can keep up with about 120
+  active runs for an hour (the busiest hour seen had up to 114). A 30-second
+  interval doubles the cost. Sampling stops rather than reporting partial depth
+  when the remaining budget gets to its reserve.
 
 The dashboard reads `{service="actions-collector", env="$env"}`, so a hosted
 deployment needs to log under that service name.
 
-#### Host CI spill
+#### CI spill
 
 GitHub's hosted runners cost nothing for this public repository, and the
-RunsOn instances in our AWS account do not. So pull request host jobs in
-`ci-host.yaml` use GitHub's runners, and take RunsOn only while the repo
-variable `HOST_TEST_SPILL` is `true`. Pushes to `main` always take RunsOn. Each
+RunsOn instances in our AWS account do not. So the host test jobs in
+`ci-host.yaml` and the Realm Server and Matrix test jobs in `ci.yaml` use
+GitHub's runners, and take RunsOn only while the repo variable `RUNS_ON_SPILL`
+is `true`. The variable `RUNS_ON_SPEC` holds the RunsOn instance spec. CI
+Host's pushes to `main` always take RunsOn; CI's follow the spill. Each
 sample decides what the variable should hold (`collectors/spill.ts`):
 
 - It counts the jobs on GitHub's free pool: those whose label names a standard
@@ -156,7 +158,7 @@ sample decides what the variable should hold (`collectors/spill.ts`):
   The repositories in `SPILL_POOL_REPOS` share the pool and are counted too,
   but emit no lines, so the dashboard still describes `--repo` alone.
 - Demand is the jobs running on the pool plus the RunsOn jobs that the spill
-  moved off it: those not from a push to `main`. Without them, spilling would
+  moved off it: all of them except CI Host's pushes to `main`. Without them, spilling would
   make the pool look quiet, and turning the spill off would bring the same
   load back.
 - It turns the spill on when demand reaches `SPILL_ON_RUNNING`, or a job has
@@ -181,7 +183,7 @@ written.
 | `SPILL_APP_ID`               |                           | the App's ID                                                                 |
 | `SPILL_APP_INSTALLATION_ID`  |                           | its installation on the repository                                           |
 | `SPILL_APP_PRIVATE_KEY`      |                           | its private key (PEM)                                                        |
-| `SPILL_VARIABLE`             | `HOST_TEST_SPILL`         | the repo variable to write, on `--repo`                                      |
+| `SPILL_VARIABLE`             | `RUNS_ON_SPILL`           | the repo variable to write, on `--repo`                                      |
 | `SPILL_POOL_REPOS`           | `cardstack/boxel-catalog` | comma-separated repositories that share the pool                             |
 | `SPILL_ON_RUNNING`           | `48`                      | queue wait rises at about 50 running jobs; below that the median wait is 2 s |
 | `SPILL_ON_QUEUED_SECONDS`    | `60`                      |                                                                              |

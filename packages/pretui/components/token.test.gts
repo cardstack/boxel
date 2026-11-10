@@ -10,6 +10,7 @@ import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Token } from './token';
+import { styleAttributeWrites } from '../test-support/style-attribute-writes';
 
 // Writes each named argument onto the element's inline style as a custom
 // property, the way a sibling modifier sharing the style attribute would.
@@ -453,5 +454,13 @@ module('Pretui | components/token', function (hooks) {
     state.hue = undefined;
     await settled();
     assert.strictEqual(hue(el), 'var(--muted-foreground)', "neither @hue is mistaken for the caller's");
+  });
+
+  test('@hue is set through the CSSOM, with no style attribute', async function (assert) {
+    let writes = await styleAttributeWrites(() =>
+      render(<template><Token @value='POL-7' @hue='var(--chart-3)' /></template>),
+    );
+    assert.deepEqual(writes, [], 'no style attribute is written');
+    assert.strictEqual(q('[data-test-pretui-token]').style.getPropertyValue('--pretui-token-hue'), 'var(--chart-3)');
   });
 });

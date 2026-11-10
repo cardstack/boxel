@@ -11,11 +11,14 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import FieldContainer from '../../components/field-container.gts';
-import Globe from '../../components/icons/globe.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
+import { Field } from '@cardstack/pretui/components/field';
+import Globe from '@cardstack/boxel-icons/globe';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import Tag from '@cardstack/boxel-icons/tag';
+import { Input } from '@cardstack/pretui/components/input';
+import { Textarea } from '@cardstack/pretui/components/textarea';
+
+import { fitContent } from '../../modifiers/fit-content.ts';
 
 import type { ServiceAccountDetails } from './context.ts';
 import type { ServiceAccountEntry } from './service-account-entry.ts';
@@ -55,8 +58,10 @@ export default class ServiceAccountFields extends Component<Signature> {
           empty only if it should act as the service account itself.</p>
       {{/if}}
     {{/if}}
-    <FieldContainer
-      @tag='div'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
+      @labelTag='span'
       @label='Key file'
       @icon={{KeyRound}}
       data-test-key-field='key-file'
@@ -96,17 +101,20 @@ export default class ServiceAccountFields extends Component<Signature> {
             Service Accounts → Keys, add a key of type JSON.</p>
         {{/if}}
       </div>
-    </FieldContainer>
-    <FieldContainer
-      @tag='label'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Act as'
       @icon={{Tag}}
       data-test-key-field='subject'
+      as |controlId|
     >
       <div class='with-hint'>
-        <BoxelInput
+        <Input
+          @controlId={{controlId}}
           @type='email'
-          @autocomplete='off'
+          autocomplete='off'
           @placeholder='Optional: someone@your-domain.com'
           @value={{@entry.subject}}
           @onInput={{this.setSubject}}
@@ -116,28 +124,31 @@ export default class ServiceAccountFields extends Component<Signature> {
         <p class='hint'>Only for a service account with domain-wide delegation.
           Leave it empty to act as the service account itself.</p>
       </div>
-    </FieldContainer>
-    <FieldContainer
-      @tag='label'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Scopes'
       @icon={{Globe}}
       data-test-key-field='scopes'
+      as |controlId|
     >
       <div class='with-hint'>
-        <BoxelInput
-          @type='textarea'
-          @autocomplete='off'
+        <Textarea
+          @controlId={{controlId}}
+          autocomplete='off'
           @placeholder='https://www.googleapis.com/auth/spreadsheets'
           @value={{@entry.scopes}}
           @onInput={{this.setScopes}}
           name='service-account-scopes'
           spellcheck='false'
           data-test-service-account-scopes
+          {{fitContent @entry.scopes}}
         />
         <p class='hint'>What its tokens may do, one per line, or separated by
           spaces.</p>
       </div>
-    </FieldContainer>
+    </Field>
     {{#if this.accountChange}}
       <p
         class='replace-note'

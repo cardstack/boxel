@@ -2,7 +2,8 @@
 import Component from '@glimmer/component';
 import { VisuallyHidden } from './visually-hidden';
 import { guidFor } from '@ember/object/internals';
-import { cornerHueStyle, describesFocusable, resolveCorner, resolveCornerTone } from '../internal/corner-mark';
+import { cornerHue, describesFocusable, resolveCorner, resolveCornerTone } from '../internal/corner-mark';
+import { keepStyle } from '../internal/keep-style';
 import type { CornerPlacement } from '../internal/corner-mark';
 import type { PretuiTone, PretuiToneArg } from '../pretui-primitives';
 
@@ -88,8 +89,8 @@ export class Badge extends Component<BadgeSignature> {
     }
     return words.length ? words.join(' ') : undefined;
   }
-  get style() {
-    return cornerHueStyle(this.tone);
+  get keptStyle() {
+    return cornerHue(this.tone, this.args.tone !== undefined);
   }
 
   <template>
@@ -97,7 +98,7 @@ export class Badge extends Component<BadgeSignature> {
       class='pretui-badge'
       data-placement={{resolveCorner @placement}}
       data-circular={{if @circular 'true' 'false'}}
-      style={{this.style}}
+      {{keepStyle this.keptStyle}}
       data-test-pretui-badge
       ...attributes
       {{describesFocusable this.describedBy}}

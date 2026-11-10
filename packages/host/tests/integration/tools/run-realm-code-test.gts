@@ -371,19 +371,52 @@ boxel:
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
     let asked = false;
+    let startedAt = 0;
+    let askedAfterMs: number | undefined;
     // The reader never answers.
     command.onAsk = () => {
       asked = true;
+      askedAfterMs = Date.now() - startedAt;
       return new Promise(() => undefined);
     };
 
+    startedAt = Date.now();
     let run = command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
       code: `await realm.ask({ question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] });
 return 'answered';`,
     });
-    await waitUntil(() => asked);
+    // How the run ended if it ended before the script asked, for the
+    // failure message.
+    let endedBeforeAsk: string | undefined;
+    run.then(
+      () => {
+        if (!asked) {
+          endedBeforeAsk = 'it returned';
+        }
+      },
+      (error: unknown) => {
+        if (!asked) {
+          endedBeforeAsk = `it failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`;
+        }
+      },
+    );
+    // the sandbox starts before the script asks, slowly on a busy machine
+    await waitUntil(() => asked || endedBeforeAsk !== undefined, {
+      timeout: 10000,
+      timeoutMessage: 'the script did not ask within 10000ms',
+    });
+    assert.true(
+      asked,
+      asked
+        ? `the script asked ${askedAfterMs}ms after the run started`
+        : `the run ended ${
+            Date.now() - startedAt
+          }ms after it started, before the script asked: ${endedBeforeAsk}`,
+    );
     command.stop();
 
     await assert.rejects(run, /stopped/i, 'the run ends without an answer');
@@ -496,14 +529,24 @@ return 'answered';`,
     let deadlineMs = 500;
     toolService.__setWaitsForTesting({ toolExecuteTimeoutMs: deadlineMs });
     let results: { toolCallId: string; status: string }[] = [];
+    // Why a result was sent before the pick, for the failure message.
+    let earlyFailures: string[] = [];
     let originalSend = matrixService.sendToolResultEvent;
     let originalUpdate = matrixService.updateSkillsAndToolsIfNeeded;
-    // The script asks at once, so the wait for the pick is what runs into
-    // the deadline, not the sandbox starting.
+    // The deadline starts when the run claims the call, and only the ask
+    // extends it. Building the tool's input loads the tool module from the
+    // base realm, which can take longer than the deadline on a busy machine,
+    // so the tool here has no input type. Only in-memory steps then run
+    // before the script asks, at once, from `execute`.
+    let startedAt = 0;
+    let askedAfterMs: number | undefined;
+    let originalGetInputType = RunRealmCodeTool.prototype.getInputType;
     let originalExecute = RunRealmCodeTool.prototype.execute;
+    RunRealmCodeTool.prototype.getInputType = async () => undefined as never;
     RunRealmCodeTool.prototype.execute = async function (
       this: RunRealmCodeTool,
     ) {
+      askedAfterMs = Date.now() - startedAt;
       await this.onAsk!({
         question: 'Which one?',
         kind: 'options',
@@ -518,8 +561,12 @@ return 'answered';`,
     matrixService.sendToolResultEvent = (async (args: {
       toolCallId: string;
       status: string;
+      failureReason?: string;
     }) => {
       results.push({ toolCallId: args.toolCallId, status: args.status });
+      if (args.failureReason) {
+        earlyFailures.push(args.failureReason);
+      }
     }) as unknown as typeof matrixService.sendToolResultEvent;
     matrixService.updateSkillsAndToolsIfNeeded = async () => undefined;
     let running: PromiseLike<unknown> | undefined;
@@ -537,7 +584,7 @@ return 'answered';`,
         isResolving: false,
         resolve: async () => undefined,
       } as unknown as MessageTool;
-      let startedAt = Date.now();
+      startedAt = Date.now();
       running = toolService.run.perform(call, { auto: true });
       await waitUntil(() => toolService.scriptAsks.has('waiting-call'), {
         timeout: 10000,
@@ -546,19 +593,28 @@ return 'answered';`,
       await new Promise((resolve) =>
         setTimeout(resolve, startedAt + deadlineMs + 300 - Date.now()),
       );
-      assert.deepEqual(results, [], 'the run is still waiting on the pick');
+      assert.deepEqual(
+        results,
+        [],
+        `the run is still waiting on the pick (asked ${askedAfterMs}ms into a ${deadlineMs}ms deadline; early results: ${
+          earlyFailures.join('; ') || 'none'
+        })`,
+      );
       toolService.scriptAsks.get('waiting-call')!.answer('b');
       await running;
 
       assert.deepEqual(
         results,
         [{ toolCallId: 'waiting-call', status: 'applied' }],
-        'the run finishes with its answer instead of timing out',
+        `the run finishes with its answer instead of timing out (failures: ${
+          earlyFailures.join('; ') || 'none'
+        })`,
       );
     } finally {
       // A failed assertion leaves the ask and the run behind; end both.
       toolService.scriptAsks.get('waiting-call')?.cancel();
       await Promise.resolve(running).catch(() => undefined);
+      RunRealmCodeTool.prototype.getInputType = originalGetInputType;
       RunRealmCodeTool.prototype.execute = originalExecute;
       matrixService.sendToolResultEvent = originalSend;
       matrixService.updateSkillsAndToolsIfNeeded = originalUpdate;

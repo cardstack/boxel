@@ -384,12 +384,14 @@ export default class BoxelSelect<ItemT = any> extends Component<
         }
       }
     </style>
-    {{! template-lint-disable require-scoped-style }}
-    <style>
-      /* Unscoped because the dropdown renders in a wormhole outside this
-         component. See "CSS layers" in ../../../README.md. */
+    <style scoped>
+      /* The dropdown renders in a wormhole outside this component, so these
+         rules name it by its class through :global(). They stay in a scoped
+         block, so the component adds no unscoped <style> to the page, which a
+         Content Security Policy that refuses inline style blocks. See "CSS
+         layers" in ../../../README.md. */
       @layer boxelComponentL1 {
-        .boxel-select__dropdown.ember-power-select-dropdown {
+        :global(.boxel-select__dropdown.ember-power-select-dropdown) {
           --dropdown-background-color: var(
             --boxel-dropdown-background-color,
             var(--background)
@@ -463,12 +465,14 @@ export default class BoxelSelect<ItemT = any> extends Component<
           font-family: inherit;
         }
 
-        .boxel-select__dropdown:not(.ember-basic-dropdown-content--above) {
+        :global(
+          .boxel-select__dropdown:not(.ember-basic-dropdown-content--above)
+        ) {
           margin-top: 4px;
           margin-bottom: 0;
         }
 
-        .boxel-select__dropdown ul {
+        :global(.boxel-select__dropdown ul) {
           list-style: none;
           padding: var(--boxel-sp-xxxs);
           margin: 0;
@@ -477,7 +481,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
           font-family: inherit;
         }
 
-        .boxel-select__dropdown .ember-power-select-option {
+        :global(.boxel-select__dropdown .ember-power-select-option) {
           padding: var(--boxel-sp-xxs);
           background-color: var(--dropdown-background-color);
           color: var(--dropdown-text-color);
@@ -493,35 +497,39 @@ export default class BoxelSelect<ItemT = any> extends Component<
           margin-bottom: 2px;
         }
 
-        .boxel-select__dropdown
-          .ember-power-select-option[aria-selected='true'] {
+        :global(
+          .boxel-select__dropdown
+            .ember-power-select-option[aria-selected='true']
+        ) {
           background-color: var(--dropdown-highlight-color);
           color: var(--dropdown-selected-text-color);
         }
 
-        .boxel-select__dropdown
-          .ember-power-select-option[aria-selected='true']:hover {
+        :global(
+          .boxel-select__dropdown
+            .ember-power-select-option[aria-selected='true']:hover
+        ) {
           background-color: var(--dropdown-highlight-hover-color);
           color: var(--dropdown-selected-text-color);
         }
 
-        .boxel-select__dropdown .ember-power-select-option:hover {
+        :global(.boxel-select__dropdown .ember-power-select-option:hover) {
           background-color: var(--dropdown-hover-color);
           color: var(--dropdown-hover-text-color);
         }
 
-        .boxel-select__dropdown .ember-power-select-option:focus {
+        :global(.boxel-select__dropdown .ember-power-select-option:focus) {
           outline: none;
           background-color: var(--dropdown-highlight-color);
           color: var(--dropdown-selected-text-color);
         }
 
-        .boxel-select__dropdown .ember-power-select-search {
+        :global(.boxel-select__dropdown .ember-power-select-search) {
           padding: var(--boxel-sp-xs);
           border-bottom: 1px solid var(--dropdown-border-color);
         }
 
-        .boxel-select__dropdown .ember-power-select-search-input {
+        :global(.boxel-select__dropdown .ember-power-select-search-input) {
           background-color: var(--dropdown-background-color);
           color: var(--dropdown-text-color);
           border: 1px solid var(--dropdown-border-color);
@@ -534,20 +542,26 @@ export default class BoxelSelect<ItemT = any> extends Component<
           box-sizing: border-box;
         }
 
-        .boxel-select__dropdown .ember-power-select-search-input:focus {
+        :global(
+          .boxel-select__dropdown .ember-power-select-search-input:focus
+        ) {
           border: 1px solid var(--dropdown-focus-border-color);
           box-shadow: 0 0 0 1px var(--dropdown-focus-border-color);
           outline: none;
         }
 
-        .boxel-select__dropdown .ember-power-select-option--no-matches-message {
+        :global(
+          .boxel-select__dropdown .ember-power-select-option--no-matches-message
+        ) {
           padding: var(--boxel-sp-sm);
           color: var(--dropdown-text-color);
           font-style: italic;
           text-align: center;
         }
 
-        .boxel-select__dropdown .ember-power-select-option--loading-message {
+        :global(
+          .boxel-select__dropdown .ember-power-select-option--loading-message
+        ) {
           padding: var(--boxel-sp-sm);
           color: var(--dropdown-text-color);
           text-align: center;
@@ -565,7 +579,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
       }
 
       /* Accessibility: Status announcement region */
-      .ember-power-select-visually-hidden {
+      :global(.ember-power-select-visually-hidden) {
         position: absolute !important;
         width: 1px !important;
         height: 1px !important;

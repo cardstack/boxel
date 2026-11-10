@@ -1306,7 +1306,7 @@ module('Integration | sign-in', function (hooks) {
         .dom('[data-test-secure-signing-out]')
         .hasText('Signing you out…', 'says so as the app’s own page does');
       assert
-        .dom('[data-test-secure-signing-out] [data-test-loading-indicator]')
+        .dom('[data-test-secure-signing-out] [data-test-pretui-spinner]')
         .exists('with the same spinner');
       assert.deepEqual(
         navigations,

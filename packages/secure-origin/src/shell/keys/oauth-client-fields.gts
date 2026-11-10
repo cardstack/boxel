@@ -11,16 +11,17 @@
 // The API addresses decide only where connect mode offers the app: where a
 // connection's tokens may go is granted when an operation using it is
 // approved.
-import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
 
-import FieldContainer from '../../components/field-container.gts';
-import Globe from '../../components/icons/globe.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
-import BoxelInput from '../../components/input.gts';
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
+import { Field } from '@cardstack/pretui/components/field';
+import Globe from '@cardstack/boxel-icons/globe';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
+import { Input } from '@cardstack/pretui/components/input';
+import { Textarea } from '@cardstack/pretui/components/textarea';
 
 import { readConfig } from '../../security/session.js';
 
@@ -107,16 +108,19 @@ export default class OAuthClientFields extends Component<Signature> {
       @onSelect={{this.setGrant}}
     />
     {{#if this.peopleSignIn}}
-      <FieldContainer
-        @tag='label'
+      <Field
+        @reserveMessage={{false}}
+        @orientation='horizontal'
         @label='Sign-in page'
         @icon={{Globe}}
         data-test-key-field='authorize-url'
+        as |controlId|
       >
         <div class='with-hint'>
-          <BoxelInput
+          <Input
+            @controlId={{controlId}}
             @type='url'
-            @autocomplete='off'
+            autocomplete='off'
             @placeholder='https://example.com/oauth/authorize'
             @value={{@form.authorizeUrl}}
             @onInput={{this.setAuthorizeUrl}}
@@ -128,19 +132,22 @@ export default class OAuthClientFields extends Component<Signature> {
             in. The site’s developer documentation calls it the authorization
             URL.</span>
         </div>
-      </FieldContainer>
+      </Field>
       <CallbackAddress />
     {{/if}}
-    <FieldContainer
-      @tag='label'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Token address'
       @icon={{Globe}}
       data-test-key-field='token-url'
+      as |controlId|
     >
       <div class='with-hint'>
-        <BoxelInput
+        <Input
+          @controlId={{controlId}}
           @type='url'
-          @autocomplete='off'
+          autocomplete='off'
           @placeholder='https://example.com/oauth/token'
           @value={{@form.tokenUrl}}
           @onInput={{this.setTokenUrl}}
@@ -151,17 +158,20 @@ export default class OAuthClientFields extends Component<Signature> {
         <span class='hint'>Where Boxel collects access once someone signs in.
           The documentation calls it the token URL.</span>
       </div>
-    </FieldContainer>
-    <FieldContainer
-      @tag='label'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Permissions'
       @icon={{RectangleEllipsis}}
       data-test-key-field='scopes'
+      as |controlId|
     >
       <div class='with-hint'>
-        <BoxelInput
+        <Input
+          @controlId={{controlId}}
           @type='text'
-          @autocomplete='off'
+          autocomplete='off'
           @placeholder='For example: read:user'
           @value={{@form.scopes}}
           @onInput={{this.setScopes}}
@@ -173,43 +183,45 @@ export default class OAuthClientFields extends Component<Signature> {
           documentation calls them scopes), separated by spaces. Leave this
           empty if you chose the app’s permissions on the site.</span>
       </div>
-    </FieldContainer>
-    <FieldContainer
-      @tag='label'
+    </Field>
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Used for'
       @icon={{LayoutGrid}}
       data-test-key-field='api-hosts'
-      as |labelId|
+      as |controlId|
     >
       <div class='with-hint'>
-        <textarea
-          aria-labelledby={{labelId}}
-          class='api-hosts'
-          name='api-hosts'
-          rows='2'
-          autocomplete='off'
-          spellcheck='false'
-          placeholder='https://api.example.com/'
-          value={{@form.apiHosts}}
-          data-test-oauth-api-hosts
-          {{on 'input' this.setApiHosts}}
-        ></textarea>
+        <div class='api-hosts'>
+          <Textarea
+            @controlId={{controlId}}
+            @placeholder='https://api.example.com/'
+            @value={{@form.apiHosts}}
+            @onInput={{this.setApiHosts}}
+            name='api-hosts'
+            autocomplete='off'
+            spellcheck='false'
+            data-test-oauth-api-hosts
+          />
+        </div>
         <span class='hint'>The addresses of the site’s API this app is for, one
           per line. When a card needs to reach one of them, Boxel offers this
           app for signing in.</span>
       </div>
-    </FieldContainer>
-    <details class='advanced' data-test-oauth-advanced>
-      <summary>Advanced</summary>
-      <RadioChoices
-        @label='How Boxel sends the app’s secret'
-        @icon={{KeyRound}}
-        @name='token-auth'
-        @choices={{TOKEN_AUTHS}}
-        @selected={{@form.tokenAuth}}
-        @onSelect={{this.setTokenAuth}}
-      />
-    </details>
+    </Field>
+    <Disclosure @label='Advanced' data-test-oauth-advanced>
+      <div class='advanced'>
+        <RadioChoices
+          @label='How Boxel sends the app’s secret'
+          @icon={{KeyRound}}
+          @name='token-auth'
+          @choices={{TOKEN_AUTHS}}
+          @selected={{@form.tokenAuth}}
+          @onSelect={{this.setTokenAuth}}
+        />
+      </div>
+    </Disclosure>
 
     <style scoped>
       .with-hint {
@@ -217,10 +229,12 @@ export default class OAuthClientFields extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-5xs);
       }
-      .advanced summary {
-        cursor: pointer;
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
+      /* The section opens under its trigger with the rows' own gap. The gap
+         is the content's own padding, so a closed section adds no space, and
+         it leaves room inside the disclosure's clipped region for the
+         choices' focus rings. */
+      .advanced {
+        padding-block: var(--boxel-sp-xs) var(--boxel-sp-5xs);
       }
       .callback {
         display: flex;
@@ -234,33 +248,12 @@ export default class OAuthClientFields extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
       }
       .hint {
-        color: var(--muted-foreground, var(--boxel-450));
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
       }
-      /* BoxelInput's look, for the one field that takes several lines. */
+      /* The addresses read as code; the field takes the face it inherits. */
       .api-hosts {
-        box-sizing: border-box;
-        width: 100%;
-        min-width: 0;
-        min-height: var(--boxel-form-control-height);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--background, var(--boxel-light));
-        color: var(--foreground, var(--boxel-dark));
-        border: 1px solid var(--border, var(--boxel-form-control-border-color));
-        border-radius: var(--boxel-form-control-border-radius);
-        box-shadow: var(--boxel-form-control-box-shadow);
-        outline: 1px solid transparent;
         font-family: var(--boxel-monospace-font-family);
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        resize: vertical;
-      }
-      .api-hosts:focus-visible {
-        outline-color: var(--ring, var(--boxel-highlight));
-        border-color: var(--ring, var(--boxel-highlight));
-      }
-      .api-hosts::placeholder {
-        color: var(--muted-foreground);
       }
     </style>
   </template>
@@ -277,8 +270,8 @@ export default class OAuthClientFields extends Component<Signature> {
   private setScopes = (value: string) => this.args.onChange('scopes', value);
   private setTokenAuth = (value: string) =>
     this.args.onChange('tokenAuth', value);
-  private setApiHosts = (event: Event) =>
-    this.args.onChange('apiHosts', (event.target as HTMLTextAreaElement).value);
+  private setApiHosts = (value: string) =>
+    this.args.onChange('apiHosts', value);
 }
 
 // Where the site sends people back after they sign in: the realm server's own
@@ -292,7 +285,10 @@ function callbackAddress(): string {
 }
 
 const CallbackAddress: TemplateOnlyComponent<{ Args: {} }> = <template>
-  <FieldContainer
+  <Field
+    @reserveMessage={{false}}
+    @orientation='horizontal'
+    @labelTag='span'
     @label='Address to give the site'
     @icon={{Globe}}
     data-test-key-field='callback-url'
@@ -302,7 +298,7 @@ const CallbackAddress: TemplateOnlyComponent<{ Args: {} }> = <template>
       <span class='hint'>Paste this into the app’s settings on the site, where
         it asks for a callback URL (sometimes called a redirect URL).</span>
     </p>
-  </FieldContainer>
+  </Field>
   <style scoped>
     .callback {
       display: flex;
@@ -316,7 +312,7 @@ const CallbackAddress: TemplateOnlyComponent<{ Args: {} }> = <template>
       font-size: var(--boxel-font-size-sm);
     }
     .hint {
-      color: var(--muted-foreground, var(--boxel-450));
+      color: var(--muted-foreground);
       font-size: var(--boxel-font-size-xs);
     }
   </style>
@@ -372,7 +368,7 @@ export class OAuthProviderChoice extends Component<{
         padding-inline-start: var(--boxel-sp-lg);
       }
       .hint {
-        color: var(--muted-foreground, var(--boxel-450));
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
       }
     </style>

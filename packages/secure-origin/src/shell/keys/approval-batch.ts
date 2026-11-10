@@ -5,6 +5,7 @@
 
 import type {
   ApprovalBatch,
+  BatchFillers,
   BatchOperation,
   BatchSlot,
   OperationApproval,
@@ -37,28 +38,40 @@ export interface SlotOption {
   covers: string[];
 }
 
-// Each slot token the batch's operations use, in the order they first appear.
-export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
+// Each slot token the batch's operations use, in the order they first appear,
+// with what can fill it when the batch is approved for `use`.
+export function slotChoices(
+  batch: ApprovalBatch,
+  use: ApprovalUse,
+): SlotChoice[] {
   let choices: SlotChoice[] = [];
   for (let slot of allSlots(batch)) {
     if (choices.some((c) => c.slot === slot.slot)) {
       continue;
     }
     let kind = slot.key;
+    // One choice fills the slot in every ticked operation that sends it, so
+    // it offers only the keys the realm server names as filling each of them
+    // (`withTickedFillers`).
+    let fillers = new Set(batch.fillers?.[use]?.[slot.slot] ?? []);
     let options: SlotOption[] =
       kind === 'userKey'
-        ? batch.keys.map(({ id, name, covers, state }) => ({
-            id,
-            name,
-            covers,
-            ...(state === 'rejected' ? { rejected: true } : {}),
-          }))
-        : batch.shares.map(({ id, label, keyName, covers }) => ({
-            id,
-            name: label,
-            detail: keyName,
-            covers,
-          }));
+        ? batch.keys
+            .filter((key) => fillers.has(key.id))
+            .map(({ id, name, covers, state }) => ({
+              id,
+              name,
+              covers,
+              ...(state === 'rejected' ? { rejected: true } : {}),
+            }))
+        : batch.shares
+            .filter((share) => fillers.has(share.id))
+            .map(({ id, label, keyName, covers }) => ({
+              id,
+              name: label,
+              detail: keyName,
+              covers,
+            }));
     // Those already allowed where the batch sends come first.
     options = [...options].sort(
       (a, b) =>
@@ -67,6 +80,49 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
     choices.push({ slot: slot.slot, kind, options });
   }
   return choices;
+}
+
+// The names of the ticked operations, which the realm server weighs a slot's
+// fillers by when an approval covers only some of the batch. Undefined when
+// it covers every operation, or none, as the batch's own `fillers` already
+// answer for every operation. Operations are named, not told apart by card:
+// an operation approved per instance counts every instance in the batch, so
+// the keys offered fit at least what is ticked.
+export function tickedOperationNames(
+  batch: ApprovalBatch,
+  ticked: Set<string>,
+): string[] | undefined {
+  let operations = batch.groups.flatMap((g) => g.operations);
+  let names = new Set(
+    operations.filter((o) => ticked.has(operationKey(o))).map((o) => o.name),
+  );
+  if (names.size === 0 || operations.every((o) => names.has(o.name))) {
+    return undefined;
+  }
+  return [...names];
+}
+
+// The batch with each slot offered what fills it in the ticked operations
+// (`weighed`, the realm server's `fillers` for them), by use. A slot no
+// ticked operation sends keeps the batch's own fillers, which fit every
+// operation that sends it.
+export function withTickedFillers(
+  batch: ApprovalBatch,
+  weighed: BatchFillers | undefined,
+): ApprovalBatch {
+  if (!weighed) {
+    return batch;
+  }
+  return {
+    ...batch,
+    fillers: {
+      interactive: {
+        ...batch.fillers?.interactive,
+        ...weighed.interactive,
+      },
+      pipelines: { ...batch.fillers?.pipelines, ...weighed.pipelines },
+    },
+  };
 }
 
 function allSlots(batch: ApprovalBatch): BatchSlot[] {
@@ -313,7 +369,8 @@ export const INTERACTIVE_CONFIRMATION = {
 
 // The batch as the page shows it for `use`. An operation approved for
 // pipelines only needs approving only for interactive use, so for pipelines
-// it is left out.
+// it is left out. The realm server leaves out the same operations when it
+// names what fills each slot for pipelines (`fillers.pipelines`).
 export function batchFor(
   batch: ApprovalBatch,
   use: ApprovalUse,

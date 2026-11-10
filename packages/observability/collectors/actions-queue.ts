@@ -12,13 +12,14 @@
 // behind the very backlog it measures and go blind during the incident it
 // exists for.
 //
-// Each sample also decides whether host CI spills onto RunsOn (see spill.ts),
-// and sets the repo variable that the host workflow reads when the App
+// Each sample also decides whether CI spills onto RunsOn (see spill.ts), and
+// sets the repo variable that the workflows read when the App
 // credentials for it are configured (see github-app.ts).
 
 import {
   countJob,
   decideSpill,
+  isDivertible,
   stateAfterFailedWrite,
   thresholdsFromEnv,
   type PoolJob,
@@ -27,24 +28,21 @@ import {
   type SpillThresholds,
 } from './spill.ts';
 import { RepoVariable, githubAppFromEnv } from './github-app.ts';
-import { API, githubError, githubRequest } from './github-api.ts';
+import { API, ConditionalGets, githubRequest } from './github-api.ts';
 
 const CHANNEL = 'boxel:actions-queue';
 
-// One sample costs three run-list requests plus one per active run, so the
-// hourly spend scales with how busy the repository is, against the 5,000
-// requests an hour a token is allowed. Measured over this collector's own
-// history: 4 active runs at the median, 43 at p95, 51 at peak.
+// One sample costs three run-list requests per repository, plus one per active
+// run whose job list changed since the last sample: GitHub does not count the
+// 304 that answers an unchanged one (see ConditionalGets). A list changes when
+// any of its jobs or steps does. On 2026-10-30, 45% of the lists were unchanged
+// between two reads about 90 seconds apart.
 //
-//   active runs   at 60s      at 30s
-//             4    420/hr      840/hr
-//            43   2,760/hr   5,520/hr
-//            51   3,240/hr   6,480/hr
-//
-// A minute is comfortable across that range and doubles the resolution. Thirty
-// seconds exceeds the budget above roughly forty concurrent runs — which is
-// exactly when the queue is worth watching — so it needs the per-sample cost
-// reduced first, not the interval shortened.
+// Measured over this collector's own history: 4 active runs at the median, 43
+// at p95, 114 at the 2026-10-29 peak. Less the reserve below, a token has about
+// 70 requests a minute to spend. Paying for every list, a 60-second interval
+// spent more than that above about 65 active runs; paying for 55% of them
+// moves that to about 120. A 30-second interval doubles the cost.
 const DEFAULT_INTERVAL_SECONDS = 60;
 
 // Requests deliberately left unspent, so a burst of runs can never take the
@@ -77,6 +75,8 @@ interface Run {
   actor?: { login?: string } | null;
   triggering_actor?: { login?: string } | null;
   event?: string;
+  // The workflow file, such as `.github/workflows/ci.yaml`.
+  path?: string;
 }
 
 interface Options {
@@ -170,7 +170,7 @@ function parseArgs(argv: string[]): Options {
       process.exit(2);
     }
   }
-  const spillVariable = process.env.SPILL_VARIABLE || 'HOST_TEST_SPILL';
+  const spillVariable = process.env.SPILL_VARIABLE || 'RUNS_ON_SPILL';
 
   return {
     repo,
@@ -192,14 +192,17 @@ function emit(record: Record<string, unknown>): void {
 
 let rateLimitRemaining: number | null = null;
 
-async function gh<T>(url: string, token: string): Promise<T> {
-  const res = await githubRequest('GET', url, token);
+const gets = new ConditionalGets(async (...args) => {
+  const res = await githubRequest(...args);
   const remaining = res.headers.get('x-ratelimit-remaining');
   if (remaining !== null) {
     rateLimitRemaining = Number(remaining);
   }
-  if (!res.ok) throw await githubError('GET', url, res);
-  return (await res.json()) as T;
+  return res;
+});
+
+async function gh<T>(url: string, token: string): Promise<T> {
+  return (await gets.get(url, token)) as T;
 }
 
 // The REST list endpoints cap at 100 per page. Callers here are bounded by how
@@ -258,16 +261,28 @@ async function activeRuns(repo: string, token: string): Promise<Run[]> {
   return [...runs.values()];
 }
 
-// Fetching one job list per run is the expensive half of a sample, so it
-// starts only if the budget still holds the reserve after those requests.
-function withinBudget(requests: number): boolean {
-  return (
-    rateLimitRemaining === null ||
-    rateLimitRemaining - requests >= RATE_LIMIT_RESERVE
+// Fetching one job list per run is the expensive half of a sample. Which of
+// those lists changed, and so costs a request, is known only once each answers,
+// so the budget is checked before each one rather than once for the sample.
+function throttled(): (Error & { throttled: true }) | null {
+  if (rateLimitRemaining === null || rateLimitRemaining > RATE_LIMIT_RESERVE) {
+    return null;
+  }
+  return Object.assign(
+    new Error(
+      `the rate limit (${rateLimitRemaining} remaining) is at the reserve`,
+    ),
+    { throttled: true as const },
   );
 }
 
+function isThrottled(e: unknown): boolean {
+  return (e as { throttled?: boolean }).throttled === true;
+}
+
 function runJobs(repo: string, runId: number, token: string): Promise<Job[]> {
+  const stop = throttled();
+  if (stop) return Promise.reject(stop);
   return paginate<Job>(
     `${API}/repos/${repo}/actions/runs/${runId}/jobs`,
     token,
@@ -286,11 +301,11 @@ function poolJob(job: Job, run: Run | undefined, observedAt: number): PoolJob {
     status: job.status,
     labels: job.labels ?? [],
     waitedSeconds: seconds(job.created_at, observedAt),
-    // ci-host.yaml sends the jobs of a push to `main` to RunsOn whatever the
-    // spill says, so the spill did not move them.
-    divertible: !(
-      run?.event === 'push' && (job.head_branch ?? run?.head_branch) === 'main'
-    ),
+    divertible: isDivertible({
+      event: run?.event,
+      branch: job.head_branch ?? run?.head_branch,
+      workflowPath: run?.path,
+    }),
   };
 }
 
@@ -305,11 +320,6 @@ async function samplePool(
 ): Promise<PoolSample> {
   const pool = emptyPool();
   const runs = await activeRuns(repo, token);
-  if (!withinBudget(runs.length)) {
-    throw new Error(
-      `${runs.length} job listings would take the rate limit (${rateLimitRemaining} remaining) below the reserve`,
-    );
-  }
   for (const run of runs) {
     let jobs: Job[];
     try {
@@ -337,19 +347,6 @@ async function sample(
   const runs = await activeRuns(opts.repo, opts.token);
   const runById = new Map<number, Run>(runs.map((r) => [r.id, r]));
 
-  // Skipping the whole sample keeps the series honest: a partial sample would
-  // understate queue depth, which is worse than a visible gap.
-  if (!withinBudget(runs.length)) {
-    emit({
-      event_type: 'collector-throttled',
-      observed_at,
-      repo: opts.repo,
-      active_runs: runs.length,
-      rate_limit_remaining: rateLimitRemaining,
-    });
-    return null;
-  }
-
   const pool = emptyPool();
   let queuedJobs = 0;
   let runningJobs = 0;
@@ -369,12 +366,29 @@ async function sample(
     branch: new Map(),
     actor: new Map(),
   };
+  // Job lines are held until every run's jobs are read. The budget is checked
+  // before each job-list request, so a sample can be abandoned partway, and
+  // lines already emitted would put an arbitrary part of the active jobs on
+  // the dashboard.
+  const jobLines: Record<string, unknown>[] = [];
 
   for (const run of runs) {
     let jobs: Job[];
     try {
       jobs = await runJobs(opts.repo, run.id, opts.token);
     } catch (e) {
+      // Skipping the whole sample keeps the series honest: a partial sample
+      // would understate queue depth, which is worse than a visible gap.
+      if (isThrottled(e)) {
+        emit({
+          event_type: 'collector-throttled',
+          observed_at,
+          repo: opts.repo,
+          active_runs: runs.length,
+          rate_limit_remaining: rateLimitRemaining,
+        });
+        return null;
+      }
       const status = (e as { status?: number }).status;
       emit({
         event_type: 'collector-error',
@@ -449,7 +463,7 @@ async function sample(
       bump('branch', branch);
       bump('actor', actor);
 
-      emit({
+      jobLines.push({
         event_type: 'job',
         observed_at,
         repo: opts.repo,
@@ -473,6 +487,8 @@ async function sample(
       });
     }
   }
+
+  for (const line of jobLines) emit(line);
 
   for (const [dimension, m] of Object.entries(groups)) {
     for (const [key, counts] of m) {
@@ -651,8 +667,15 @@ async function main(): Promise<void> {
     const startedAt = Date.now();
     try {
       const pool = await sample(opts, spill.thresholds, startedAt);
-      if (pool && !(await steerSpill(opts, spill, pool, startedAt))) {
-        if (opts.once) process.exitCode = 1;
+      if (pool) {
+        if (!(await steerSpill(opts, spill, pool, startedAt)) && opts.once) {
+          process.exitCode = 1;
+        }
+        // Only a sample that read every job list may forget the lists it did
+        // not ask for. After an abandoned sample, those are the lists of runs
+        // that are still active, and the next sample would read them again
+        // without an ETag.
+        gets.sweep();
       }
     } catch (e) {
       // One failed sample should not end a long-running collector; the next tick

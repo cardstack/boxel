@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
+import { isWriteLockTimeout } from '@cardstack/runtime-common/card-operations';
 import {
   withConnectionOrdering,
   withConnectionTenant,
@@ -772,10 +773,30 @@ export async function sendResponseForUnauthorizedRequest(
   await sendResponseForError(ctxt, 401, 'Unauthorized Request', message);
 }
 
+// `cause` is the error being answered, when there is one. A write that gave
+// up waiting for its write locks is not a fault of the server's — another
+// write held them for longer than a writer waits — so it is answered as the
+// 503 with `Retry-After` that every other write surface gives it, rather than
+// as a 500.
 export async function sendResponseForSystemError(
   ctxt: Koa.Context,
   message: string,
+  cause?: unknown,
 ) {
+  if (isWriteLockTimeout(cause)) {
+    await setContextResponse(
+      ctxt,
+      new Response(JSON.stringify({ errors: [cause.error.detail] }), {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+          'Retry-After': String(cause.error.meta?.retryAfterSeconds),
+        },
+      }),
+    );
+    return;
+  }
   await sendResponseForError(ctxt, 500, 'System Error', message);
 }
 
@@ -800,6 +821,28 @@ export async function sendResponseForError(
   );
 }
 
+// A file body whose read fails because the file is no longer there: it was
+// deleted, by this host or another, after the response that streams it was
+// built. That is a file that is simply gone rather than a server fault, so the
+// error is marked where the stream becomes the response body, and the
+// server's error listener tells it apart from every other error by the mark.
+const VANISHED_FILE_BODY = Symbol('vanished-file-body');
+
+function markVanishedFileBody(error: unknown) {
+  let code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === 'ENOENT' || code === 'ENOTDIR') {
+    (error as { [VANISHED_FILE_BODY]?: true })[VANISHED_FILE_BODY] = true;
+  }
+}
+
+export function isVanishedFileBody(error: unknown): boolean {
+  return Boolean(
+    (error as { [VANISHED_FILE_BODY]?: true } | undefined)?.[
+      VANISHED_FILE_BODY
+    ],
+  );
+}
+
 export async function setContextResponse(
   ctxt: Koa.Context,
   response: ResponseWithNodeStream,
@@ -819,6 +862,9 @@ export async function setContextResponse(
   }
 
   if (nodeStream) {
+    // Attached before anything else listens, so the mark is on the error by
+    // the time any wrapping stream passes it on to Koa.
+    nodeStream.once('error', markVanishedFileBody);
     let declaredLength = headers.get('content-length');
     ctxt.body =
       declaredLength != null && ctxt.method !== 'HEAD'

@@ -35,7 +35,14 @@ export interface WindowContext {
     base: string;
     method?: string;
     destination?: DestinationDisplay;
-    slots: { name: string; key: string; bound?: SlotBound | null }[];
+    // `kinds`: the kinds of key that can fill the slot (`static`,
+    // `google-service-account`, `oauth`).
+    slots: {
+      name: string;
+      key: string;
+      kinds?: string[];
+      bound?: SlotBound | null;
+    }[];
   };
 }
 
@@ -166,10 +173,18 @@ export interface UserKey {
 // A realm that one of the user's keys is shared with, along with the key's
 // shares there. `name` is null when the user can no longer read the realm, or
 // before its name is indexed: the address is then all there is to show.
+// `approvedCalls` counts the bindings that send a share (one per slot an
+// approval fills, and per card for an operation approved per card); none
+// means no card there calls with it yet.
 export interface SharedWorkspace {
   url: string;
   name: string | null;
-  shares: { id: string; label: string; state: 'active' | 'suspended' }[];
+  shares: {
+    id: string;
+    label: string;
+    state: 'active' | 'suspended';
+    approvedCalls: number;
+  }[];
 }
 
 // A key as the key listing gives it, with where it is used: the services its
@@ -199,6 +214,9 @@ export interface KeyShare {
   keyId?: string | null;
   state: 'active' | 'suspended';
   suspensionReason: string | null;
+  // In a realm's listing: the operations the share is approved for there,
+  // one per approval.
+  operations?: { operation: string }[];
 }
 
 type Config = ReturnType<typeof import('./session.js').readConfig>;
@@ -798,6 +816,7 @@ export interface BatchShare {
   label: string;
   keyId: string;
   keyName: string;
+  keyKind: string;
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
@@ -825,7 +844,19 @@ export interface ApprovalBatch {
   remainingPipelinesOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
+  // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
+  // one) that can fill each slot token in every operation of the batch that
+  // sends it, as the realm server decides, by use: for `pipelines`, without
+  // the operations approved for pipelines only. Asked with `operations`, only
+  // those operations count, and a slot none of them sends isn't named. The
+  // page offers only these.
+  fillers: BatchFillers;
 }
+
+export type BatchFillers = Record<
+  'interactive' | 'pipelines',
+  Record<string, string[]>
+>;
 
 export async function approvalBatch(
   config: Config,
@@ -834,6 +865,10 @@ export async function approvalBatch(
     review: boolean;
     // Also answer operations approved for pipelines only.
     interactive?: boolean;
+    // The operations an approval covers, by name, when it covers only some
+    // of the batch's: `fillers` then weigh only these. The batch still holds
+    // every operation.
+    operations?: string[];
   },
 ): Promise<ApprovalBatch> {
   let json = await authorizedRequest(config, '_key-bindings/batch', {
@@ -950,13 +985,27 @@ export async function readableRealms(
   );
 }
 
-// The card definitions used in a realm that send a key in a request, by name.
+// The card definitions used in a realm that send the user's own key in a
+// request, by name, or with `slot: 'apiKey'` those that send the realm's key,
+// which a share there is approved for. With `key`, only those that key can
+// fill: of a kind the request takes, at a destination its credential is good
+// at.
 export async function realmCardsWithRequests(
   config: Config,
   realm: string,
+  { slot = 'userKey', key }: { slot?: 'userKey' | 'apiKey'; key?: string } = {},
 ): Promise<{ module: string; name: string; displayName: string }[]> {
   let json = await authorizedRequest(config, '_secure-window/cards', {
-    body: { data: { type: 'secure-window-cards', attributes: { realm } } },
+    body: {
+      data: {
+        type: 'secure-window-cards',
+        attributes: {
+          realm,
+          ...(slot === 'userKey' ? {} : { slot }),
+          ...(key === undefined ? {} : { key }),
+        },
+      },
+    },
   });
   return (json.data ?? []).map(
     ({

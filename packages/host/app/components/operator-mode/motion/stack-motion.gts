@@ -1,4 +1,3 @@
-import { array } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
@@ -72,28 +71,85 @@ const reducesMotion = () =>
   typeof matchMedia === 'function' &&
   matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// How small a card starts as it scales in. Text and card content should not
-// scale in motion (§1.5), so it starts near its full size and the fade
-// carries the entrance. The slight growth is what says the card arrives on
-// top of the stack, over the cards under it, where a rise would read as
-// arriving from below.
-const SCALE_FROM = 0.96;
+// Every positional value here is ONE transform string, never separate x, y
+// or scale values and never a size: a whole transform keyframe pair rides
+// the platform's own animation (WAAPI, off the main thread), where separate
+// values and sizes are written by script every frame and a size re-lays out
+// the card's content each time. That is what keeps the stack smooth while
+// the card under the motion is still rendering.
 
-const scaleInOnTop: PropSource = (sprite, changeset) =>
-  isTopCard(sprite, changeset) ? [SCALE_FROM, 1] : [1, 1];
+/** the translation a card is painted with right now, mid-flight or at rest */
+const paintedTranslation = (sprite: Sprite) => {
+  const matrix = new DOMMatrixReadOnly(
+    getComputedStyle(sprite.element).transform,
+  );
+  return { x: matrix.m41, y: matrix.m42 };
+};
+
+const STILL = ['none', 'none'];
+
+// An opened card lifts into place from just below it as it fades in. Text
+// and card content should not scale in motion (§1.5), so the entrance moves
+// it, a short distance, and the fade carries the arrival.
+const LIFT = 24;
+const liftInOnTop: PropSource = (sprite, changeset) =>
+  isTopCard(sprite, changeset) && !reducesMotion()
+    ? [`translate(0px, ${LIFT}px)`, 'none']
+    : STILL;
 const fadeInOnTop: PropSource = (sprite, changeset) =>
   isTopCard(sprite, changeset) ? [0, 1] : [1, 1];
-// A phone card slides up from below the viewport: its own height.
+// A phone card slides up from below the viewport: its own height. Under
+// reduced motion it fades in where it stands instead.
 const slideUpOnTop: PropSource = (sprite, changeset) =>
-  isTopCard(sprite, changeset) ? [sprite.final?.page.height ?? 0, 0] : [0, 0];
-// Under reduced motion the slide lands at once, so a phone card fades in
-// where it stands instead.
+  isTopCard(sprite, changeset) && !reducesMotion()
+    ? [`translate(0px, ${sprite.final?.page.height ?? 0}px)`, 'none']
+    : STILL;
 const fadeInOnTopWhenReduced: PropSource = (sprite, changeset) =>
   reducesMotion() ? fadeInOnTop(sprite, changeset) : [1, 1];
-// A leaving card sinks by its own height as it fades; under reduced motion
-// it fades where it stood.
-const sinkOut: PropSource = (sprite) =>
-  reducesMotion() ? [0, 0] : [0, sprite.initial?.page.height ?? 0];
+
+// A leaving card drops a little below where it is painted as it fades, so
+// a card closed mid-glide drops from where it is, not to a fixed place. It
+// eases in, as a leaving element should (ADR 007 §1.5). Under reduced
+// motion it fades where it stood.
+const DROP = 18;
+const dropOut: PropSource = (sprite) => {
+  const { x, y } = paintedTranslation(sprite);
+  const from = `translate(${x}px, ${y}px)`;
+  return reducesMotion()
+    ? [from, from]
+    : [from, `translate(${x}px, ${y + DROP}px)`];
+};
+
+/**
+ * A card whose place changed (covered, uncovered, expanded) glides from the
+ * center it was painted at to its new one, by transform alone. Its size
+ * lands at once: the card is laid out once at its new width, and only
+ * travels, so its content never re-lays out frame by frame. Center to
+ * center, because the stack centers its cards: a card that narrows stays
+ * under its own middle. Measured against the painted translation, so a
+ * card caught mid-flight (or measured with its transform still on) carries
+ * on from where it is seen.
+ *
+ * Under reduced motion it lands at once. The region's reduced motion lands
+ * only the separate positional values (x, y, scale, width, height); a whole
+ * transform string is not one of them, so this value has to stand still
+ * itself, as the entrance and the exit do.
+ */
+const reflow: PropSource = (sprite, changeset) => {
+  const from = sprite.initial?.page;
+  const to = sprite.final?.page;
+  if (!from || !to || reducesMotion()) {
+    return STILL;
+  }
+  const painted = paintedTranslation(sprite);
+  const zoom = changeset.measureZoom || 1;
+  const x =
+    painted.x + (from.x + from.width / 2 - (to.x + to.width / 2)) / zoom;
+  const y = painted.y + (from.y - to.y) / zoom;
+  return Math.abs(x) < 0.5 && Math.abs(y) < 0.5
+    ? STILL
+    : [`translate(${x}px, ${y}px)`, 'none'];
+};
 
 // How long a phone card stays in view under a card opening over it, read by
 // the stylesheet as a transition delay (see stack-item.gts). The slide runs
@@ -120,17 +176,19 @@ interface Signature {
  * 300–500 ms), and the cards under it move on the same clock, so the stack
  * reads as one change.
  *
- * - the inserted top card scales in and fades in, easing out; on a phone it
- *   slides up from below the viewport instead;
- * - a departing card fades and sinks, easing in over the exit duration;
- * - a card whose box changed (uncovered, covered, or expanded) moves by
- *   transform to its new place. Its width and height animate as layout, not
- *   by scale, so its text is never scaled (§1.5); the frame reflows under
- *   the card's content, the way a width transition does.
+ * - the inserted top card lifts into place and fades in, easing out; on a
+ *   phone it slides up from below the viewport instead;
+ * - a departing card fades and drops a little, over the exit duration;
+ * - a card whose box changed (uncovered, covered, or expanded) takes its
+ *   new size at once and glides by transform from the center it was painted
+ *   at to its new one, so its content is laid out once and only travels.
+ *   A fade the card was still playing (an entrance cut short) is carried on
+ *   by the region itself, so this step names only the transform.
  *
- * Under reduced motion the region's MotionConfig ('user') lands every move
- * at once, and a card fades in or out where it stands, on a phone as on a
- * wide screen (§1.5).
+ * Under reduced motion every move lands at once, and a card fades in or out
+ * where it stands, on a phone as on a wide screen (§1.5). Each transform
+ * value here checks for it itself: the region's MotionConfig ('user') lands
+ * separate positional values, never a whole transform string.
  */
 export default class StackMotion extends Component<Signature> {
   private enabled = motionEnabled('boxel-stack-motion');
@@ -148,7 +206,7 @@ export default class StackMotion extends Component<Signature> {
           {{#if @phone}}
             <c.Tween
               @of={{c.inserted STACK_ITEM_ROLE}}
-              @y={{slideUpOnTop}}
+              @transform={{slideUpOnTop}}
               @opacity={{fadeInOnTopWhenReduced}}
               @duration={{DURATION.space}}
               @ease={{EASE}}
@@ -156,7 +214,7 @@ export default class StackMotion extends Component<Signature> {
           {{else}}
             <c.Tween
               @of={{c.inserted STACK_ITEM_ROLE}}
-              @scale={{scaleInOnTop}}
+              @transform={{liftInOnTop}}
               @opacity={{fadeInOnTop}}
               @duration={{DURATION.space}}
               @ease={{EASE}}
@@ -164,13 +222,14 @@ export default class StackMotion extends Component<Signature> {
           {{/if}}
           <c.Tween
             @of={{DEPARTED}}
-            @opacity={{array 1 0}}
-            @y={{sinkOut}}
+            @opacity={{0}}
+            @transform={{dropOut}}
             @duration={{DURATION.exit}}
             @ease={{EASE_IN}}
           />
-          <c.Move
-            @of={{c.moved STACK_ITEM_ROLE}}
+          <c.Tween
+            @of={{c.kept STACK_ITEM_ROLE}}
+            @transform={{reflow}}
             @duration={{DURATION.space}}
             @ease={{EASE}}
           />

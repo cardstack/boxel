@@ -892,12 +892,22 @@ export function responseWithError(
   if (realmURL && responseBody.realm === undefined) {
     responseBody.realm = realmURL;
   }
+  // A refusal that says when to come back — a 429 or a 503 carrying
+  // `meta.retryAfterSeconds` — says it in the header a client reads, too.
+  let retryAfterSeconds = error.meta?.retryAfterSeconds;
+  let headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (
+    (error.status === 429 || error.status === 503) &&
+    typeof retryAfterSeconds === 'number'
+  ) {
+    headers['Retry-After'] = String(retryAfterSeconds);
+  }
   return createResponse({
     body: JSON.stringify({ errors: [responseBody] }),
     init: {
       status: error.status,
       statusText: error.title,
-      headers: { 'content-type': 'application/json' },
+      headers,
     },
     requestContext,
   });
@@ -1006,6 +1016,7 @@ export function systemError({
   id,
   lid,
   status: httpStatus = 500,
+  meta,
 }: {
   requestContext: RequestContext;
   message: string;
@@ -1013,6 +1024,9 @@ export function systemError({
   body?: Record<string, any>;
   id?: string;
   lid?: string;
+  // Carried onto the error, so a `retryAfterSeconds` in it becomes the
+  // response's `Retry-After` (see `responseWithError`).
+  meta?: Record<string, unknown>;
   // HTTP status for the response. Defaults to 500; callers serving an
   // index error row pass the underlying error's status so a card whose
   // recorded failure is, say, an auth or validation error returns that
@@ -1033,6 +1047,9 @@ export function systemError({
   });
   if (additionalError) {
     err.additionalErrors = [additionalError];
+  }
+  if (meta) {
+    err.meta = meta;
   }
   return responseWithError(body, err, requestContext);
 }

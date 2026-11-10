@@ -19,18 +19,25 @@ import {
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   parseRateLimitSpec,
   markRealmPublishable,
+  ri,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
 import * as Sentry from '@sentry/node';
-import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  SessionProbe,
+  startSessionSampling,
+} from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
+import { PostgresChangeJournal } from './lib/change-journal.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
@@ -666,8 +673,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // against whether the process's event loop was starved at the time, and heap
   // growth toward the OOM limit is visible (and alertable) on a calm process
   // before a search storm — not only inside saturation windows.
+  // The session table is read on a connection of its own, outside the pool,
+  // so a starved pool cannot silence the reading that explains it.
+  let sessionSampling = startSessionSampling(new SessionProbe());
   let stopHealthSampler = startHealthSampler({
     connectionStats: () => dbAdapter.connectionStats,
+    sessionStats: sessionSampling.latest,
   });
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
@@ -719,6 +730,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // One store shared by every realm this server mounts; the `_capture/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
+  // One journal shared by every realm this server mounts. Each write appends
+  // its change event through it, on the write's own transaction, for the
+  // realms whose recording is on. `REALM_HISTORY_JOURNAL=off` is the kill
+  // switch: no realm gets a journal, so no write touches it.
+  let changeJournal =
+    process.env.REALM_HISTORY_JOURNAL === 'off'
+      ? undefined
+      : new PostgresChangeJournal();
 
   // One card+json response cache for the whole process, shared across every
   // realm it mounts: entries are keyed on absolute card URLs, and the byte
@@ -848,6 +867,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       const reconciledRealm = new Realm(
         {
           url: row.url,
+          // The prefixes are registered from this process's configuration
+          // before any realm is mounted, so a realm's name in them is fixed.
+          canonicalName: ri(virtualNetwork.unresolveURL(row.url)),
           adapter: reconciledAdapter,
           secretSeed: REALM_SECRET_SEED,
           virtualNetwork,
@@ -891,6 +913,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
               : {}),
           }),
           policyWriteAuditor,
+          ...(changeJournal ? { history: { journal: changeJournal } } : {}),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -1040,6 +1063,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
           livenessResponder?.stop(),
+          sessionSampling.stop(),
         ]);
         // Stopped only once the responder is gone, never before: the loop is
         // still turning while the shutdown above runs, and a check arriving in

@@ -11,6 +11,7 @@ If the row represents a record with an avatar and a name, **EntityDisplay** is t
 @href?                      — makes the title a real <a>
 @size?                      — xs|s|m|l|xl; sm/md/lg accepted
 @alignStart?                — leading slot to the first line instead of the block centre
+@wrap?                      — title and description wrap onto more lines instead of ending in an ellipsis
 <:leading> <:title> <:description> <:trailing> <:actions>
 <:default>                  — free body content under the title and description
 ```
@@ -54,13 +55,13 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 
 ## React ecosystem
 
-| React | Pretui |
-| --- | --- |
-| `ItemMedia` / `ListItemAvatar` / `Meta.avatar` | `<:leading>` |
-| `ItemTitle` / `ListItemText.primary` / `Meta.title` | `@title` or `<:title>` |
+| React                                                             | Pretui                             |
+| ----------------------------------------------------------------- | ---------------------------------- |
+| `ItemMedia` / `ListItemAvatar` / `Meta.avatar`                    | `<:leading>`                       |
+| `ItemTitle` / `ListItemText.primary` / `Meta.title`               | `@title` or `<:title>`             |
 | `ItemDescription` / `ListItemText.secondary` / `Meta.description` | `@description` or `<:description>` |
-| `ItemActions` / `ListItemSecondaryAction` / Ant `actions` | `<:actions>` |
-| Ant `extra` | `<:trailing>` |
-| `asChild` + `href` | `@href` (the title is the link) |
-| `dense` | `@size='s'` |
-| `alignItems='flex-start'` | `@alignStart` |
+| `ItemActions` / `ListItemSecondaryAction` / Ant `actions`         | `<:actions>`                       |
+| Ant `extra`                                                       | `<:trailing>`                      |
+| `asChild` + `href`                                                | `@href` (the title is the link)    |
+| `dense`                                                           | `@size='s'`                        |
+| `alignItems='flex-start'`                                         | `@alignStart`                      |

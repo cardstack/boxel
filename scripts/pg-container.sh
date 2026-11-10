@@ -24,7 +24,8 @@ BOXEL_PG_IMAGE=postgres:16.3
 # max_connections is raised well above postgres's default of 100: a single
 # boxel-pg backs every service in a stack at once — realm servers plus their
 # worker pools, and the matrix suite adds a second isolated stack on top of the
-# base one — and each process opens its own pg pool (up to PG_POOL_MAX=40).
+# base one — and each process opens its own pg pool (up to PG_POOL_MAX=40,
+# plus PG_POOL_OVERFLOW=10 while a pool is wedged on its own holds).
 # That already clears half a dozen pools, and a burst that crosses the ceiling
 # fails callers with "sorry, too many clients already".
 #
