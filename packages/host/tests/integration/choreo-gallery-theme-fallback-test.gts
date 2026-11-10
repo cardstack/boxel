@@ -9,9 +9,7 @@ import { module, test } from 'qunit';
 
 import { parseCssGroups } from '@cardstack/boxel-ui/helpers';
 
-import { choreoGalleryContents } from '../helpers/choreo-gallery';
 import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
-import { testRealmURL } from '../helpers/index';
 import { renderCard } from '../helpers/render-component';
 
 import type * as ThemeModule from '../../../choreo-gallery/realm/lib/theme';
@@ -28,13 +26,6 @@ const EYEBROW = [
   '--boxel-eyebrow-font-weight',
   '--boxel-eyebrow-letter-spacing',
 ];
-
-interface ThemeAttributes {
-  rootVariables: Record<string, string>;
-  darkModeVariables: Record<string, string>;
-  customCssVariables: { name: string; value: string; darkValue?: string }[];
-  typography: { eyebrow: Record<string, string> };
-}
 
 function site(): HTMLElement {
   return document.querySelector<HTMLElement>('[data-choreo-site]')!;
@@ -62,22 +53,6 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
       await gallery.import<typeof ThemeModule>('lib/theme');
     setThemeMode(scheme);
     await settled();
-  }
-
-  /** the gallery's theme card, built from theme.json after `edit` */
-  async function galleryTheme(
-    edit: (attributes: ThemeAttributes) => void,
-  ): Promise<CardAPI.CardDef> {
-    let doc = JSON.parse(choreoGalleryContents()['theme.json'] as string);
-    edit(doc.data.attributes);
-    let { createFromSerialized } = await gallery.loader.import<typeof CardAPI>(
-      '@cardstack/base/card-api',
-    );
-    return await createFromSerialized<typeof CardAPI.CardDef>(
-      doc.data,
-      doc,
-      new URL(`${testRealmURL}theme`),
-    );
   }
 
   /** render the demo's page with `theme` linked, or with no theme */
@@ -153,7 +128,7 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
   });
 
   test('a theme card paints over the fallback, in each scheme', async function (assert) {
-    let theme = await galleryTheme((attributes) => {
+    let theme = await gallery.buildTheme((attributes) => {
       attributes.rootVariables.foreground = '#102030';
       attributes.darkModeVariables.foreground = '#e0f0ff';
       attributes.darkModeVariables.primaryInk = '#7fb4f0';
@@ -162,7 +137,7 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
       )!;
       iris.value = '#203040';
       iris.darkValue = '#c0d0e0';
-      attributes.typography.eyebrow.fontSize = '13px';
+      attributes.typography['eyebrow']!['fontSize'] = '13px';
     });
     await renderDemo(theme);
 

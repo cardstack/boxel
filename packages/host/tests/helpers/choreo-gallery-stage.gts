@@ -6,7 +6,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
-import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
+import { CardCrudFunctionsContextName, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { setupBaseRealm } from './base-realm';
@@ -41,6 +41,14 @@ export interface GalleryInstance {
     meta: { adoptsFrom: { module: string; name: string } };
     relationships?: Record<string, { links: { self: string } }>;
   };
+}
+
+/** the attributes of the gallery's theme card that a test edits */
+export interface GalleryThemeAttributes {
+  rootVariables: Record<string, string>;
+  darkModeVariables: Record<string, string>;
+  customCssVariables: { name: string; value: string; darkValue?: string }[];
+  typography: Record<string, Record<string, string>>;
 }
 
 const CONTENTS = choreoGalleryContents();
@@ -116,18 +124,27 @@ export function setupChoreoGalleryTest(
      * instance a test builds.
      */
     theme(): Promise<CardAPI.CardDef> {
-      theme ??= (async () => {
-        let doc = JSON.parse(CONTENTS['theme.json'] as string);
-        let { createFromSerialized } = await gallery.loader.import<
-          typeof CardAPI
-        >('@cardstack/base/card-api');
-        return await createFromSerialized<typeof CardAPI.CardDef>(
-          doc.data,
-          doc,
-          new URL(`${testRealmURL}theme`),
-        );
-      })();
+      theme ??= gallery.buildTheme();
       return theme;
+    },
+
+    /**
+     * A new theme card built from the realm's `theme.json`, after `edit`
+     * changes its attributes: a variation on the gallery's theme.
+     */
+    async buildTheme(
+      edit: (attributes: GalleryThemeAttributes) => void = () => {},
+    ): Promise<CardAPI.CardDef> {
+      let doc = JSON.parse(CONTENTS['theme.json'] as string);
+      edit(doc.data.attributes);
+      let { createFromSerialized } = await gallery.loader.import<
+        typeof CardAPI
+      >('@cardstack/base/card-api');
+      return await createFromSerialized<typeof CardAPI.CardDef>(
+        doc.data,
+        doc,
+        rri(`${testRealmURL}theme`),
+      );
     },
 
     /** the `cardInfo` of a gallery card: its link to the gallery's theme */
