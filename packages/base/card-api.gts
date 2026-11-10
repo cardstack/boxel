@@ -456,8 +456,31 @@ interface Options {
   configuration?: ConfigurationInput<any>;
 }
 
+type LineTypeInput = typeof BaseDef | (() => typeof BaseDef);
+
+// Set on a file instance read through a `linksTo` that declares `of`, so an
+// operation invoked on that instance knows the type of a line it appends.
+// A file linked through several such fields carries the type of the field
+// read last.
+export const lineTypeOf = Symbol.for('cardstack:line-type-of');
+
+function stampLineType(value: unknown, lineOf: () => typeof BaseDef) {
+  if (value && typeof value === 'object') {
+    Object.defineProperty(value, lineTypeOf, {
+      value: lineOf,
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
+  }
+}
+
 interface RelationshipOptions extends Options {
   query?: QueryWithInterpolations;
+  // The type of each line of a linked log (a `.jsonl` file): a FieldDef, or
+  // a thunk for one. `record` on the linked file then takes a line of that
+  // type, checked and normalized before it is sent (`log-lines.ts`).
+  of?: LineTypeInput;
   // Whether a query-backed relationship resolves as soon as its owner
   // deserializes, rather than waiting for something to read the field.
   // Defaults to true. Set it false for a field whose query is expensive or
@@ -875,6 +898,8 @@ export interface Field<
   configuration?: ConfigurationInput<any>;
   // Declarative relationship query definition, if provided
   queryDefinition?: QueryWithInterpolations;
+  // A linked log's line type (`linksTo(JSONLFile, { of })`).
+  lineOf?: () => typeof BaseDef;
   // Whether a query-backed relationship resolves when its owner deserializes.
   // Absent is the same as true; only an explicit false defers to first read.
   eager?: boolean;
@@ -1576,6 +1601,7 @@ function referenceRelationship(
 
 class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
+  lineOf?: () => typeof BaseDef;
   private cardThunk: () => CardT;
   private declaredCardThunk: () => CardT;
   readonly computeVia: undefined | (() => unknown);
@@ -1675,6 +1701,9 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     }
     let value = getter(instance, this);
     trackRuntimeRelationshipDependency(value, this.card);
+    if (this.lineOf && value) {
+      stampLineType(value, this.lineOf);
+    }
     // An unset linksTo falls through to LinksTo.emptyValue() which returns
     // `null`; the userland contract is that every non-present state — including
     // not-set — surfaces as `undefined`, so all four non-present discriminants
@@ -2878,6 +2907,12 @@ export function linksTo<CardT extends LinkableDefConstructor>(
       (instance as any).configuration = options?.configuration;
       assertFieldSearchOption(options?.search, `field "${fieldName}"`);
       instance.searchIntent = options?.search;
+      if (options?.of) {
+        instance.lineOf = cardThunk(
+          options.of as typeof BaseDef | (() => typeof BaseDef),
+          { fieldName, ownerPrototype },
+        ) as () => typeof BaseDef;
+      }
       return makeDescriptor(instance);
     },
     description: options?.description,

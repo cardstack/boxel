@@ -35,6 +35,9 @@ export interface FieldDefinition {
   // type's `searchDefaults`; omitted when neither says anything. The query
   // engine reads `rank`, `facet` and `patterns` from it.
   search?: FieldSearchOption;
+  // A linked log's line type (`linksTo(JSONLFile, { of })`), for readers
+  // that type a log's lines without loading the card's module.
+  lineOf?: CodeRef;
 }
 
 // Which of the three `BaseDef` families a definition describes. A card has its
@@ -160,6 +163,7 @@ export function getFieldDefinitions(
           : undefined,
       query: queryDefinition,
       searchable: field.searchable,
+      ...(field.lineOf ? { lineOf: identifyCard(field.lineOf())! } : {}),
       ...(() => {
         // A link's target is a card, whose `searchDefaults` are card-level
         // defaults, not a field intent.

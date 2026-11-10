@@ -30,6 +30,7 @@ import {
   type SearchInvokeOptions,
 } from '@cardstack/runtime-common';
 
+import { lineTypeFor, normalizeLine } from './log-lines';
 import {
   BaseDef,
   CardDef,
@@ -2884,12 +2885,38 @@ export function operations<Type extends CardDefConstructor>(
 // members it carries are decided at run time from what the def carries, so
 // there is no one return type the four scopes share.
 export function operations(target: unknown, opts?: OperationsOptions): any {
-  return buildOperations(subjectFor(target), {
+  let built = buildOperations(subjectFor(target), {
     transport: getOperationsTransport(),
     ...(opts ? { options: opts } : {}),
     subject: (other: unknown) => subjectFor(other),
     codeRef: (value: unknown) => identifyDef(value),
     resourceFor: (instance: unknown) => adoptedResource(instance),
+  });
+  // A log read through `linksTo(JSONLFile, { of: LineType })` appends lines
+  // of that type: `record` checks and normalizes `what` before it is sent.
+  let lineType = lineTypeFor(target);
+  if (!lineType) {
+    return built;
+  }
+  return new Proxy(built, {
+    get(inner, prop, receiver) {
+      let member = Reflect.get(inner, prop, receiver);
+      if (prop !== 'record' || typeof member !== 'function') {
+        return member;
+      }
+      return async (params: Record<string, unknown>, ...rest: unknown[]) =>
+        member.call(
+          inner,
+          {
+            ...params,
+            what: await normalizeLine(
+              lineType!,
+              params?.what as Record<string, unknown>,
+            ),
+          },
+          ...rest,
+        );
+    },
   });
 }
 
