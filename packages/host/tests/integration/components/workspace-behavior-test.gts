@@ -207,6 +207,30 @@ module('Integration | Card | workspace | Library rail', function (hooks) {
     assert.true(railOpen(), 'and so does Ctrl+B');
   });
 
+  test('every filter name is in full ink, and only its surface marks the selected one', async function (assert) {
+    await renderCard(loader, new Workspace({}), 'isolated');
+    await click(LIBRARY);
+
+    let style = (selector: string) => getComputedStyle(find(selector)!);
+    let selected = style('[data-test-library-filter="Everything"]');
+    let rest = style('[data-test-library-filter="Cards"]');
+    // the toggle's glyph is drawn in the card's foreground
+    let ink = style(TOGGLE).color;
+
+    assert.strictEqual(rest.color, ink, 'an unselected name is full ink');
+    assert.strictEqual(selected.color, ink, 'so is the selected one');
+    assert.strictEqual(
+      selected.fontWeight,
+      rest.fontWeight,
+      'at the same weight',
+    );
+    assert.notStrictEqual(
+      selected.backgroundColor,
+      rest.backgroundColor,
+      'the selected row sits on its own surface',
+    );
+  });
+
   test('dragging the seam resizes the rail within its bounds, Enter restores it, and a drag past the minimum folds it', async function (assert) {
     await renderCard(loader, new Workspace({}), 'isolated');
     await click(LIBRARY);

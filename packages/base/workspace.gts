@@ -569,6 +569,7 @@ class RailItem extends GlimmerComponent<{
         @active={{@active}}
         @onClick={{@onSelect}}
         @icon={{this.icon}}
+        class='rail-row'
         data-test-library-filter={{@option.displayName}}
       >
         <:icon><span class='rail-icon'>{{this.iconHtml}}</span></:icon>
@@ -593,6 +594,7 @@ class RailItem extends GlimmerComponent<{
         @active={{@active}}
         @onClick={{@onSelect}}
         @icon={{this.icon}}
+        class='rail-row'
         data-test-library-filter={{@option.displayName}}
       >
         <:icon><span class='rail-icon'>{{this.iconHtml}}</span></:icon>
@@ -610,6 +612,12 @@ class RailItem extends GlimmerComponent<{
         display: block;
         inline-size: 100%;
         block-size: 100%;
+      }
+      /* every name in full ink at the group's weight: the selected surface
+         alone marks the active filter */
+      .rail-row {
+        color: var(--foreground);
+        font-weight: inherit;
       }
       /* quiet ink at rest, full ink when pointed at or focused; always at full
          opacity so it clears the non-text contrast floor */
