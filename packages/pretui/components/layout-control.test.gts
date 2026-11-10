@@ -199,4 +199,66 @@ module('Pretui | components/layout-control | folding', function (hooks) {
     assert.dom('[data-test-wide]').exists('back at its width, the slot is in the row again');
     assert.dom('[data-test-pretui-layout-control-more]').doesNotExist();
   });
+
+  test('children with fractional widths that fit at the bar width stay in the row', async function (assert) {
+    const FORMS = [
+      { name: 'row', minWidth: 1 },
+      { name: 'menu', minWidth: 0 },
+    ];
+    // ten 30.6px children lay out at 306px; rounded one by one they'd sum to 310px
+    const HOST = 'inline-size: 307.5px; --pretui-lc-gap: 0';
+    const CHILD = 'display: inline-block; flex: none; inline-size: 30.6px';
+    const TEN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    await render(
+      <template>
+        <div style={{HOST}}>
+          <LayoutControl as |lc|>
+            <lc.Slot @id='row' @forms={{FORMS}}>
+              {{#each TEN}}<span style={{CHILD}} data-test-child>x</span>{{/each}}
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+      </template>,
+    );
+    await waitUntil(() => document.querySelector('[data-test-child]'));
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    assert.dom('[data-test-child]').exists({ count: 10 }, 'the slot fits, so it stays in the row');
+    assert.dom('[data-test-pretui-layout-control-more]').doesNotExist();
+  });
+
+  test('in a vertical writing mode the bar measures its room along its height', async function (assert) {
+    const FORMS = [
+      { name: 'row', minWidth: 6 },
+      { name: 'menu', minWidth: 0 },
+    ];
+    const PINNED = [{ name: 'label', minWidth: 1 }];
+    // The inline axis runs down: 40rem of room, against a bar 4rem across.
+    // The pinned slot keeps the bar 4rem across whether or not the row folds.
+    const HOST = 'writing-mode: vertical-rl; inline-size: 40rem';
+    const CHILD = 'display: inline-block; flex: none; inline-size: 2rem; block-size: 4rem';
+    const EDGE = 'display: inline-block; flex: none; inline-size: 1rem; block-size: 4rem';
+    const THREE = [0, 1, 2];
+    await render(
+      <template>
+        <div style={{HOST}}>
+          <LayoutControl as |lc|>
+            <lc.Slot @id='row' @forms={{FORMS}}>
+              {{#each THREE}}<span style={{CHILD}} data-test-child></span>{{/each}}
+            </lc.Slot>
+            <lc.Slot @id='edge' @forms={{PINNED}} @pinned={{true}}>
+              <span style={{EDGE}}></span>
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+      </template>,
+    );
+    await waitUntil(() => document.querySelector('[data-test-child]'));
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    assert.dom('[data-test-child]').exists({ count: 3 }, 'the row fits in 40rem, so it stays');
+    assert.dom('[data-test-pretui-layout-control-more]').doesNotExist();
+  });
 });

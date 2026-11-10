@@ -380,11 +380,19 @@ export class LayoutControl extends Component<LayoutControlSignature> {
     }
     // This frame runs before the ResizeObserver reports a resize made since
     // the last one, so a failure is pinned to the width it really failed at.
+    // Inline size, like the observer's: the bar's height in a vertical
+    // writing mode.
     let own = getComputedStyle(bar);
+    let vertical = !own.writingMode.startsWith('horizontal');
     this.widthPx =
-      bar.clientWidth -
+      (vertical ? bar.clientHeight : bar.clientWidth) -
       (parseFloat(own.paddingInlineStart) || 0) -
       (parseFloat(own.paddingInlineEnd) || 0);
+    // Client rects keep subpixels but shrink under an ancestor's transform
+    // (a card stack's opening scale); dividing by the bar's own scale undoes it.
+    let scale =
+      (bar.offsetWidth && bar.getBoundingClientRect().width / bar.offsetWidth) ||
+      1;
     let wrapLimit = this.controlPx * WRAP_RATIO;
     let changed = false;
     let record = (key: string, rem: number) => {
@@ -404,18 +412,13 @@ export class LayoutControl extends Component<LayoutControlSignature> {
         continue;
       }
       // the slot is display: contents, so its rendered children are the
-      // flex items; their boxes are its real width and height. Layout sizes,
-      // not client rects, so a transform on an ancestor (a card stack's
-      // opening scale) doesn't shrink them.
+      // flex items; their boxes are its real width and height
       let width = 0;
       let height = 0;
       for (let child of slot.el.children) {
-        let box =
-          child instanceof HTMLElement
-            ? { width: child.offsetWidth, height: child.offsetHeight }
-            : child.getBoundingClientRect();
-        width += box.width;
-        height = Math.max(height, box.height);
+        let rect = child.getBoundingClientRect();
+        width += rect.width / scale;
+        height = Math.max(height, rect.height / scale);
       }
       if (!width) {
         continue;
