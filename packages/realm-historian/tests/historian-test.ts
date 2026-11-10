@@ -11,7 +11,7 @@ import {
 import type { PgAdapter } from '@cardstack/postgres';
 import { Historian } from '../src/historian.ts';
 import { Heartbeat } from '../src/health.ts';
-import { LeaseManager, shardOf } from '../src/lease.ts';
+import { LeaseLostError, LeaseManager, shardOf } from '../src/lease.ts';
 import {
   insertEvent,
   insertRealm,
@@ -363,5 +363,39 @@ module('historian', (hooks) => {
       `SELECT holder FROM realm_historian_leases`,
     );
     assert.deepEqual(leases, [], 'the lease was released');
+  });
+
+  test('an unsubscribe that fails neither keeps the lease nor hides the failure', async (assert) => {
+    let db = database.another();
+    let subscribe = db.subscribe.bind(db);
+    db.subscribe = async (channel, handler, options) => {
+      let subscription = await subscribe(channel, handler, options);
+      return {
+        async unsubscribe() {
+          await subscription.unsubscribe();
+          throw new Error('the listening connection is gone');
+        },
+      };
+    };
+    let task = historian('task', { shardCount: 2, db });
+    await waitUntil(() => task.held.length === 2, { what: 'both shards' });
+    await database.db.execute(
+      `UPDATE realm_historian_leases
+       SET holder = 'intruder', expires_at = now() + interval '1 hour'
+       WHERE shard = '0'`,
+    );
+    await assert.rejects(
+      task.run(),
+      LeaseLostError,
+      'run() reports the lost lease',
+    );
+    let leases = await database.db.execute(
+      `SELECT shard, holder FROM realm_historian_leases ORDER BY shard`,
+    );
+    assert.deepEqual(
+      leases,
+      [{ shard: '0', holder: 'intruder' }],
+      "the shard still the task's was released",
+    );
   });
 });

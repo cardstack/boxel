@@ -144,7 +144,16 @@ export class Historian {
         throw this.#failure;
       }
     } finally {
-      await subscription?.unsubscribe();
+      // An unsubscribe that fails, as it can when the database is gone, is
+      // logged rather than thrown: the lease is released either way, and the
+      // failure that ended the loop stays the one `run()` reports.
+      try {
+        await subscription?.unsubscribe();
+      } catch (error) {
+        log.warn(
+          `unsubscribing from ${REALM_CHANGE_EVENTS_CHANNEL} failed: ${String(error)}`,
+        );
+      }
       await this.#lease.stop();
     }
   }
