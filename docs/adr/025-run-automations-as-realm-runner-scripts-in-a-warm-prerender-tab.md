@@ -1,0 +1,111 @@
+---
+status: accepted
+date: 2026-11-10
+scope:
+  - packages/host/app/lib/realm-runner/**
+  - packages/host/app/tools/run-realm-code.ts
+  - packages/host/app/commands/*automation*
+  - packages/runtime-common/tasks/run-command.ts
+  - packages/runtime-common/run-command-request.ts
+---
+
+# 025. Run automations as Realm Runner scripts in a warm prerender tab
+
+An automation runs code that a customer or the AI assistant wrote, with
+nobody watching. It runs that code as a Realm Runner script, in QuickJS,
+inside a prerender tab that is already open. Chrome keeps the script out of
+our Node processes and their secrets. QuickJS limits it to the `realm`
+object. ADR 022 sets the rules for the assistant's interactive runs. This ADR
+sets where an automation's script runs, what an automation may run, and how
+its surface of `realm` methods is kept narrow.
+
+## 1. Decision
+
+### 1.1. A script runs in QuickJS in a prerender tab
+
+An automation's script MUST run in QuickJS, in a tab of the host app on the
+prerender server. It MUST NOT run in a Node process of the realm server, the
+worker or the prerender server, in any form (`node:vm`, `isolated-vm`, a
+worker thread). The sandbox rules of ADR 022 §1.2 and §1.3 apply to it.
+
+A script MUST reach anything outside QuickJS only through the methods of the
+automation surface (§1.4) and `console`. It MUST NOT get `fetch`, a DOM,
+`import`, or a token.
+
+### 1.2. Runs share warm tabs
+
+A run MUST run as a QuickJS worker in a prerender tab that is already open.
+A run MUST NOT start a tab or hold a tab for itself. Each run MUST get its own
+QuickJS worker (ADR 022 §1.2). The number of runs that one tab and one server
+take at a time SHOULD come from measured capacity.
+
+### 1.3. An automation runs a script or a reviewed platform command
+
+An automation MUST run either a Realm Runner script or a command on a
+reviewed list of platform commands. It MUST NOT run an arbitrary host
+command, or a command that a card, a realm or a request names. A change to
+that list is a reviewed change.
+
+### 1.4. The automation surface is an allowlist
+
+Automation runs MUST use the automation surface: a list of `realm` methods
+separate from the interactive surface's, with the same engine and method
+names. A method that is not on the list MUST be refused. A method on the list
+MUST NOT write outside the run's final batch, reach the network other than
+through a `callApi` operation or a `resolve` model call, or touch the UI or a
+chat room. A test MUST pin the list, so that a method added to it, or moved
+between the two surfaces, fails the test until the test changes in review.
+
+### 1.5. No method waits for a click
+
+The automation surface MUST NOT include a method in `CLICK_REQUIRED_CALLS`
+(ADR 022 §1.5), because a run has no person to click. A run's spending is
+bounded by its automation's caps instead.
+
+## 2. Rationale
+
+The concern with user code is authority. Code in one of our Node processes
+can read that process's environment, files and network position, and with
+them the secrets the server holds: the key that decrypts stored credentials,
+the realm secret seed, and database credentials. A `vm` context is not a
+security boundary (ADR 015 §3).
+
+Two walls that already exist keep a script away from them. The prerender
+server runs the host app in headless Chrome tabs, apart from the realm
+server's secrets, and Realm Runner already runs inside the host app. Inside
+the tab, QuickJS gives the script the `realm` object and nothing else, and
+every call leaves the sandbox through one host function that checks it.
+
+The tab itself is not a safe place for arbitrary code. It has no egress
+controls: no request interception, no proxy and no `connect-src`. A
+`run-command` job also mints prerender auth for every realm its `runAs` user
+can reach (`prepareRunCommand`), because a card can link across realms. A
+host command that an author chose would run with that network and that
+reach. A script never touches either, so automations run scripts, plus a
+short list of commands we wrote and reviewed. Methods on the surface are the
+same kind of decision, so the list is pinned by a test, and each change to it
+is reviewed.
+
+A tab is expensive. Starting the host app takes 2–5 seconds and 400–500 MB,
+so an 8 GB server holds 10–20 tabs. A QuickJS worker costs megabytes. A run
+that started its own tab would spend most of its cost on start-up, and a
+burst of due automations would exhaust the pool. `run-command`'s queue
+spreads a burst over warm tabs instead.
+
+The assistant already writes Realm Runner scripts, so a description of an
+automation produces code that the platform already runs. The script is an
+ordinary file in the realm, which people can read, diff and edit.
+
+## 3. Considered options
+
+- **A Realm Runner script in QuickJS, in a warm prerender tab (chosen).**
+- **Run scripts in Node (`node:vm`, `isolated-vm`, worker threads).** These
+  put user code in a process that holds our secrets. `node:vm` is no
+  boundary, and the others give a smaller wall than a browser process with a
+  sandbox (ADR 020) around QuickJS.
+- **A new sandbox service.** It would need its own isolation, deployment,
+  capacity and auth, to get what Chrome and QuickJS already give.
+- **Arbitrary host commands.** The tab has no egress controls and holds
+  auth for other realms, so an author's command could send anything anywhere.
+- **One tab per run.** Start-up would cost more than most runs, and the pool
+  holds only 10–20 tabs per server.
