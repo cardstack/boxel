@@ -2,7 +2,7 @@
 //
 //   Sidebar         shadcn's most-copied layout block
 //   SidebarTrigger  the toolbar button that toggles it, wired for readers
-//   SidebarGroup    a labelled section of the rail
+//   SidebarGroup    a labeled section of the rail
 //   SidebarItem     a nav row that survives the collapse to icon width
 //
 // ── Realm laws in force ─────────────────────────────────────────────────
@@ -327,9 +327,13 @@ export class Sidebar extends Component<SidebarSignature> {
   @tracked private measured = false;
   /** Dragged width in px; unset leaves `@width` in charge. */
   @tracked private dragWidth: number | undefined;
-  /** Set when a pressed pointer moves on the seam, so the click that ends
-   * the drag doesn't toggle, even when the drag changed no size (at a bound). */
-  private dragged = false;
+  /** The seam a pressed pointer moved on, so the click that ends the drag
+   * doesn't toggle, even when the drag changed no size (at a bound). Tied to
+   * the element: a seam mounted again after a fold starts unmarked. */
+  private draggedSeam: EventTarget | null = null;
+  /** Set when the seam control held focus as the rail changed state, so the
+   * control swapped in for it takes focus instead of the body. */
+  private refocusSeam = false;
   /** With rail bands on, the rail stays invisible until the first
    * measurement, so a pane that opens in the rail band doesn't flash the
    * full rail for a frame first. */
@@ -397,11 +401,23 @@ export class Sidebar extends Component<SidebarSignature> {
       this.minPx,
     );
   }
+  /** The separator runs from 0 (folded), except on a pinned rail, which
+   * can't fold. */
+  get seamMin(): number {
+    return this.collapsible === 'none' ? this.minPx : 0;
+  }
   private clampWidth(width: number): number {
     return Math.min(this.maxPx, Math.max(width, this.minPx));
   }
   get defaultWidth(): string {
     return this.args.width ?? '16rem';
+  }
+  /** A resizable `@width` in px, clamped into the bounds, so the rail renders
+   * the width the separator announces. Unset for a length other than px or
+   * rem. */
+  get clampedWidth(): number | undefined {
+    let px = resolveLength(this.defaultWidth);
+    return px === undefined ? undefined : this.clampWidth(px);
   }
   get handleLabel(): string {
     return this.open ? 'Collapse ' + this.label : 'Expand ' + this.label;
@@ -418,23 +434,42 @@ export class Sidebar extends Component<SidebarSignature> {
   get shortcutEnabled(): boolean {
     return (this.args.shortcut ?? true) && !this.args.mobile;
   }
+  get width(): string | undefined {
+    if (this.dragWidth !== undefined) {
+      return this.dragWidth + 'px';
+    }
+    let px = this.args.resizable ? this.clampedWidth : undefined;
+    return px === undefined ? this.args.width : px + 'px';
+  }
   get style() {
     return cssStyleFrom([
-      cssDeclaration(
-        '--pretui-sidebar-width',
-        this.dragWidth === undefined ? this.args.width : this.dragWidth + 'px',
-      ),
+      cssDeclaration('--pretui-sidebar-width', this.width),
       cssDeclaration('--pretui-sidebar-rail-width', this.args.railWidth),
       cssDeclaration('--pretui-drawer-size', this.args.mobileWidth),
     ]);
   }
 
-  private setOpen = (next: boolean) => {
-    // A drag that folds the rail unmounts the seam before its click can
-    // clear the mark, so reopening clears it.
-    if (next) {
-      this.dragged = false;
+  /** The seam and the toggle button swap as the rail folds and opens; note
+   * whether this sidebar's seam control holds focus before the swap. */
+  private noteSeamFocus() {
+    let active = typeof document === 'undefined' ? null : document.activeElement;
+    this.refocusSeam = active?.getAttribute('data-sidebar-seam') === this.railId;
+  }
+  /** Takes focus only when the swap dropped it on the body; focus the user
+   * has since moved elsewhere stays there. */
+  refocus = modifier((el: HTMLElement) => {
+    if (!this.refocusSeam) {
+      return;
     }
+    this.refocusSeam = false;
+    let active = document.activeElement;
+    if (!active || active === document.body) {
+      el.focus();
+    }
+  });
+
+  private setOpen = (next: boolean) => {
+    this.noteSeamFocus();
     // Internal state moves only while UNcontrolled; the callback always fires.
     if (this.args.open === undefined && this.mobile) {
       this.drawerOpen = next;
@@ -469,18 +504,22 @@ export class Sidebar extends Component<SidebarSignature> {
     this.setOpen(!this.open);
   };
   restoreWidth = (width: number) => {
-    this.dragWidth = this.clampWidth(width);
+    if (this.args.resizable) {
+      this.dragWidth = this.clampWidth(width);
+    }
   };
   moveSeam = (event: Event) => {
     if ((event as PointerEvent).buttons !== 0) {
-      this.dragged = true;
+      this.draggedSeam = event.currentTarget;
     }
   };
-  clickSeam = () => {
-    if (!this.dragged) {
+  clickSeam = (event: Event) => {
+    let dragged = this.draggedSeam === event.currentTarget;
+    this.draggedSeam = null;
+    // a pinned rail has nothing to toggle
+    if (!dragged && this.collapsible !== 'none') {
       this.toggle();
     }
-    this.dragged = false;
   };
   /** The separator runs from 0 (folded) so a drag past `@minWidth` can fold
    * the rail; a width between 0 and the minimum folds rather than renders. */
@@ -520,6 +559,7 @@ export class Sidebar extends Component<SidebarSignature> {
    * to a modal drawer the moment the pane was hidden, so it changes nothing.
    */
   setWidth = (width: number) => {
+    this.noteSeamFocus();
     let narrow = width > 0 && width < this.mobileBreakpoint;
     if (narrow !== this.narrowPane) {
       this.drawerOpen = false;
@@ -712,13 +752,15 @@ export class Sidebar extends Component<SidebarSignature> {
           <ResizeHandle
             class='pretui-sidebar-resize'
             @size={{this.dragWidth}}
-            @min={{0}}
+            @min={{this.seamMin}}
             @max={{this.maxPx}}
-            @defaultSize={{this.defaultWidth}}
+            @defaultSize={{this.clampedWidth}}
             @onSizeChange={{this.resize}}
             @placement={{this.resizePlacement}}
             @label={{concat 'Resize ' this.label}}
             @controls={{this.railId}}
+            data-sidebar-seam={{this.railId}}
+            {{this.refocus}}
             data-test-pretui-sidebar-resize
             {{on 'pointermove' this.moveSeam}}
             {{on 'click' this.clickSeam}}
@@ -734,6 +776,8 @@ export class Sidebar extends Component<SidebarSignature> {
             aria-label={{this.handleLabel}}
             aria-expanded={{if this.open 'true' 'false'}}
             aria-controls={{this.railId}}
+            data-sidebar-seam={{this.railId}}
+            {{this.refocus}}
             data-test-pretui-sidebar-handle
             {{on 'click' this.toggle}}
           ><span class='pretui-sidebar-handle-line' aria-hidden='true'></span>
@@ -944,10 +988,19 @@ export class Sidebar extends Component<SidebarSignature> {
           inset-inline-start: auto;
           inset-inline-end: calc(var(--pretui-sidebar-track) - 0.5rem);
         }
-        /* While the seam is dragged the grid follows the pointer instead of
-           sliding behind it. Keyed off ResizeHandle's own drag state, so the
-           sidebar holds no animation-only state. */
-        .pretui-sidebar-shell:has(> .pretui-sidebar-resize[data-dragging='true']) {
+        /* At the end with the content scrolling, the content's scrollbar runs
+           along the seam. The seam gives way: no outset, so its hit area stays
+           inside the rail and the scrollbar keeps its own. */
+        .pretui-sidebar-shell[data-placement='end'][data-scroll='content']
+          .pretui-sidebar-resize {
+          --pretui-resize-handle-outset: 0rem;
+        }
+        /* While the seam is dragged, or resized from the keyboard, the grid
+           follows at once instead of sliding behind it (ADR 007 §1.5).
+           Keyed off ResizeHandle's own drag and focus state, so the sidebar
+           holds no animation-only state. */
+        .pretui-sidebar-shell:has(> .pretui-sidebar-resize[data-dragging='true']),
+        .pretui-sidebar-shell:has(> .pretui-sidebar-resize:focus-visible) {
           transition: none;
         }
         .pretui-sidebar-handle-line {
@@ -1105,7 +1158,7 @@ export interface SidebarGroupSignature {
 }
 
 /**
- * A labelled section of the rail.
+ * A labeled section of the rail.
  *
  * shadcn's `SidebarGroupLabel` collapses by moving itself off screen with
  * `-mt-8 opacity-0`, which leaves the label in the accessibility tree while it
@@ -1400,7 +1453,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           transition: background var(--pretui-dur-snap, 180ms)
             var(--pretui-ease-snap, ease);
         }
-        /* Icon rail: a square around the icon, centred in the rail. */
+        /* Icon rail: a square around the icon, centered in the rail. */
         .pretui-sbitem[data-collapsed='true'] {
           justify-content: center;
           padding: 0;

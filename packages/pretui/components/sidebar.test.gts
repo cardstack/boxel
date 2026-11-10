@@ -38,6 +38,9 @@ async function drag(from: number, to: number) {
     el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, pointerId: 1, clientX: x * scale }));
   fire('pointerdown', from);
   fire('pointermove', to);
+  // a real browser renders between the move and the release, so a fold has
+  // already unmounted the seam when its click arrives
+  await settled();
   fire('pointerup', to);
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   await settled();
@@ -246,7 +249,7 @@ module('Pretui | components/sidebar', function (hooks) {
       <Sidebar @label='B' @scroll='content'><:nav>Lots</:nav></Sidebar>
     </template>);
     let [a, b] = shells();
-    assert.strictEqual(a?.dataset['scroll'], 'page', 'default is page, today\'s behaviour');
+    assert.strictEqual(a?.dataset['scroll'], 'page', 'default is page');
     assert.strictEqual(b?.dataset['scroll'], 'content');
   });
 
@@ -337,6 +340,66 @@ module('Pretui | components/sidebar', function (hooks) {
     await render(<template><Sidebar @label='Library' @mobile={{false}}><:nav>Lots</:nav></Sidebar></template>);
     assert.dom('[data-test-pretui-sidebar-resize]').doesNotExist();
     assert.dom('[data-test-pretui-sidebar-handle]').exists();
+  });
+
+  test('@resizable: focus stays on the seam control across the swap', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px'><:nav>Lots</:nav></Sidebar></template>);
+    seamEl().focus();
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'Home');
+    assert.strictEqual(state(), 'collapsed', 'Home folds');
+    assert.strictEqual(document.activeElement, document.querySelector('[data-test-pretui-sidebar-handle]'), 'the toggle button takes focus');
+    await click('[data-test-pretui-sidebar-handle]');
+    assert.strictEqual(state(), 'expanded');
+    assert.strictEqual(document.activeElement, seamEl(), 'the separator takes focus back');
+  });
+
+  test('@resizable: focus the user moved elsewhere is not taken back', async function (assert) {
+    class Knobs {
+      @tracked open = true;
+    }
+    let knobs = new Knobs();
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @open={{knobs.open}} @resizable={{true}}><:nav>Lots</:nav><:default><button type='button' data-test-outside>Out</button></:default></Sidebar></template>);
+    seamEl().focus();
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'Home');
+    (document.querySelector('[data-test-outside]') as HTMLElement).focus();
+    knobs.open = false;
+    await settled();
+    assert.strictEqual(state(), 'collapsed');
+    assert.dom('[data-test-outside]').isFocused('focus stays where the user put it');
+  });
+
+  test('@resizable: the first seam click after a band reopen toggles', async function (assert) {
+    await render(<template><div data-test-pane><Sidebar @label='Library' @resizable={{true}} @width='200px' @minWidth={{150}} @railBreakpoint={{1024}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(1200, () => state() === 'expanded' && !!seamEl());
+    await drag(200, 100);
+    assert.strictEqual(state(), 'collapsed', 'the drag folds the rail');
+    await resizeTo(800, () => state() === 'collapsed');
+    await resizeTo(1200, () => state() === 'expanded');
+    await click('[data-test-pretui-sidebar-resize]');
+    assert.strictEqual(state(), 'collapsed', 'the click toggles');
+  });
+
+  test("@resizable with @collapsible='none': the seam only resizes", async function (assert) {
+    let calls: boolean[] = [];
+    let onOpenChange = (v: boolean) => calls.push(v);
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @collapsible='none' @onOpenChange={{onOpenChange}} @resizable={{true}} @width='200px' @minWidth={{150}}><:nav>Lots</:nav></Sidebar></template>);
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuemin', '150', 'a pinned rail cannot fold');
+    await click('[data-test-pretui-sidebar-resize]');
+    assert.deepEqual(calls, [], 'a click does not toggle');
+    assert.strictEqual(state(), 'expanded');
+  });
+
+  test('@resizable: @width is clamped into the bounds where it renders', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='500px' @maxWidth={{300}}><:nav>Lots</:nav></Sidebar></template>);
+    assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), '300px');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '300', 'the rail matches what is announced');
+  });
+
+  test('without @resizable a stored width is not restored', async function (assert) {
+    localStorage.setItem('pretui-sidebar:t-noresize:width', '250');
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @width='200px' @persistKey='t-noresize'><:nav>Lots</:nav></Sidebar></template>);
+    assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), '200px');
+    localStorage.removeItem('pretui-sidebar:t-noresize:width');
   });
 
   test('SidebarItem @icon renders the icon into the sized slot, decorative', async function (assert) {
