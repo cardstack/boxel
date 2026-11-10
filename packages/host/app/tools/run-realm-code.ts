@@ -618,11 +618,9 @@ class RealmFsSession {
   private webCalls = 0;
   private reportedActivities = 0;
   private resolveCalls = 0;
-  private indexCalls: Record<LimitedIndexCall, number> = {
-    'index.invalidate': 0,
-    'index.reindex': 0,
-    'index.fullReindex': 0,
-  };
+  private indexCalls = Object.fromEntries(
+    Object.keys(MAX_INDEX_CALLS).map((method) => [method, 0]),
+  ) as Record<LimitedIndexCall, number>;
   private researchBytes = 0;
   private researchSlots = MAX_PARALLEL_RESEARCH;
   private researchWaiters: (() => void)[] = [];
@@ -976,16 +974,30 @@ class RealmFsSession {
     }
   }
 
-  // Counts an index call toward its limit, before the call starts, so calls
-  // made at the same time cannot pass it.
-  private countIndexCall(method: LimitedIndexCall) {
+  // Runs an index call that counts toward its limit. The call is counted
+  // before it starts, so calls made at the same time cannot pass the limit.
+  // A call that fails did not start a job, so it gives its slot back and the
+  // script can try again.
+  private async runIndexCall(
+    method: LimitedIndexCall,
+    call: () => Promise<void>,
+  ) {
     let max = MAX_INDEX_CALLS[method];
     if (this.indexCalls[method] >= max) {
       throw new Error(
-        `Realm code may call realm.${method} at most ${max === 1 ? 'once' : `${max} times`} per run`,
+        `Realm code may call realm.${method} at most ${max === 1 ? 'once' : `${max} times`} per run` +
+          (method === 'index.invalidate'
+            ? `; pass up to ${MAX_INVALIDATE_PATHS} paths in one call`
+            : ''),
       );
     }
     this.indexCalls[method] += 1;
+    try {
+      await call();
+    } catch (e) {
+      this.indexCalls[method] -= 1;
+      throw e;
+    }
   }
 
   private async resolveData(raw: unknown) {
@@ -1550,23 +1562,20 @@ class RealmFsSession {
           );
         }
         let urls = paths.map((path) => this.resolve(method, path));
-        this.countIndexCall(method);
-        await this.index.invalidate(urls);
+        await this.runIndexCall(method, () => this.index.invalidate(urls));
         let invalidated = urls.map((url) => this.relative(url));
         this.indexActions.push(`invalidate ${invalidated.join(', ')}`);
         return { invalidated };
       }
       case 'index.reindex':
-        this.countIndexCall(method);
-        await this.index.reindex();
+        await this.runIndexCall(method, () => this.index.reindex());
         this.indexActions.push('reindex');
         return { reindex: 'started' };
       case 'index.fullReindex':
         if (!this.namedCalls.has('realm.index.fullReindex')) {
           throw notNamedError('realm.index.fullReindex');
         }
-        this.countIndexCall(method);
-        await this.index.fullReindex();
+        await this.runIndexCall(method, () => this.index.fullReindex());
         this.indexActions.push('fullReindex');
         return { fullReindex: 'started' };
       case 'index.cancelJob':
