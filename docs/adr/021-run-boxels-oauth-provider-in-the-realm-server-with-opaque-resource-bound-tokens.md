@@ -7,6 +7,8 @@ scope:
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
   - packages/realm-server/routes.ts
+  - packages/realm-server/lib/secure-session.ts
+  - packages/realm-server/handlers/handle-revoke-user-sessions.ts
   - packages/runtime-common/realm.ts
   - packages/postgres/migrations/*oauth-provider*
   - packages/secure-origin/src/shell/pages.js
@@ -146,14 +148,16 @@ realm-server session, a realm session, a delegated session or a Matrix login.
 
 ### 1.6. What an OAuth token never reaches
 
-A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). No entry
-MAY map a scope to key management, reads included, to a route that needs a
+A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). An entry
+MUST NOT map a scope to key management, reads included, to a route that needs a
 secure session, to a route that mints a token, or to a route that changes a
 realm's permissions. Each of these refusals MUST be tested.
 
-An OAuth token MUST NOT widen a realm's access through its policy (ADR 006
-§1.3): a write that changes `realm.json`'s `policy`, or the `RealmPolicy` card
-it names, MUST be refused.
+An OAuth token MUST NOT change what a realm's policy admits (ADR 006 §1.3): a
+write that changes `realm.json`'s `policy` or `config`, or the `RealmPolicy`
+card `policy` names, MUST be refused. A policy grant that reads the card it
+guards gives that part of the decision to anyone who can write the card, OAuth
+tokens included.
 
 ### 1.7. Consent
 
