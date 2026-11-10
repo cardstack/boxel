@@ -203,4 +203,21 @@ module('Pretui | components/table', function (hooks) {
     assert.notOk(q('[data-test-framed]').hasAttribute('data-framed'), 'the default carries no frameless marker');
     assert.strictEqual(q('[data-test-frameless]').getAttribute('data-framed'), 'false', 'a frameless table says so');
   });
+
+  test('a table is striped by default, and @striped=false marks it plain', async function (assert) {
+    await render(
+      <template>
+        <Table data-test-striped>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr><tr><td>Lapsang</td></tr></:body>
+        </Table>
+        <Table @striped={{false}} data-test-plain>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr><tr><td>Lapsang</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    assert.notOk(q('[data-test-striped]').hasAttribute('data-striped'), 'the default carries no plain-rows marker');
+    assert.strictEqual(q('[data-test-plain]').getAttribute('data-striped'), 'false', 'a plain table says so');
+  });
 });
