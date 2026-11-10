@@ -4,18 +4,21 @@ date: 2026-11-10
 scope:
   - packages/base/realm-config.gts
   - packages/runtime-common/realm.ts
+  - packages/runtime-common/search-entry.ts
   - packages/runtime-common/card-operations/gate.ts
   - packages/runtime-common/card-operations/policy*.ts
   - packages/runtime-common/card-operations/grant-expressions.ts
+  - packages/runtime-common/card-operations/find-targets.ts
   - packages/runtime-common/serializers/policy-predicate.ts
   - packages/realm-server/lib/realm-policy-pointer.ts
+  - packages/realm-server/handlers/handle-search.ts
   - packages/bxl/src/bxl/profiles/function-safety.ts
 ---
 
 # 024. Build realm access on one policy that only widens, and give direct write only to administrators
 
 A realm's permissions and its one `RealmPolicy` card together decide who may
-do what in it. The policy only widens what the permissions allow
+do what in it, and the policy only widens what the permissions allow
 (ADR 006 §1.3). This ADR records what follows from that for anyone designing
 roles on a realm, and the rules the policy engine keeps so that a grant admits
 only what its author wrote. To give a role less access, give it fewer direct
@@ -23,9 +26,9 @@ permissions and grant back what it needs. Put every role in the realm's one
 policy. Give direct write only to the realm's administrators, because direct
 write controls the policy. Let the predicate decide whether a caller may
 invoke, and the operation decide what is written. Keep authorization cards out
-of every grant's reach, refuse on every failure, and scope search with filters
-compiled from the policy. The `realm-policy-authoring` skill in boxel-skills
-covers writing a policy.
+of every grant's reach, fail closed, and scope search with filters compiled
+from the policy. The `realm-policy-authoring` skill in boxel-skills covers
+writing a policy.
 
 ## 1. Decision
 
@@ -33,10 +36,9 @@ covers writing a policy.
 
 A design that needs some callers to reach less than the realm's permissions
 give them MUST lower those permissions and grant the callers' access back
-through the policy. The platform MUST NOT add a way for a policy, a rule, or
-a grant to refuse what the permissions allow. A realm MAY give direct
-permission to no one but its administrators, including no direct `read`, so
-that the policy grants every other caller's access.
+through the policy, since a policy cannot refuse (ADR 006 §1.3). A realm MAY
+give direct permission to no one but its administrators, including no direct
+`read`, so that the policy grants every other caller's access.
 
 ### 1.2. One policy per realm
 
@@ -61,34 +63,54 @@ its policy from writing the rest of its contents.
 
 A predicate MUST read only the caller (`actor()`), the target card's values,
 the governed realm's settings (`realmConfig()`), and the policy card's own
-fields (`policy()`). A predicate MUST NOT read an operation's params. A
-predicate MUST NOT call a volatile function, such as the current time or a
-random value, or a builtin that can hold for a value it matches only in part.
-A write MUST be judged on the target as it stands before the write. A grant
-MUST admit only the operation name it names, so a grant on a named operation
-MUST NOT admit that operation's base.
+fields (`policy()`). The target's values are its stored source, or, for a
+predicate marked `snapshot: true`, its stored source with its index row laid
+under it. A predicate MUST NOT read an operation's params. A predicate MUST
+NOT call a volatile function, such as the current time or a random value. A
+predicate MUST NOT call a builtin that can hold for a value it matches only in
+part, such as `contains`, a pattern match, or a lookup that settles for the
+nearest value. An anchored test such as `startswith` MAY be used against fixed
+text.
+
+A write to a stored card MUST be judged on the card as it stands before the
+write. A create MUST be judged on the card it would mint, of the type the
+realm resolves, never the type the caller names. A grant MUST admit only the
+operation name it names, so a grant on a named operation MUST NOT admit that
+operation's base.
 
 A grant that must admit only some writes SHOULD name a narrower operation that
 the card type declares, such as one per kind of entry, instead of a general
 operation that writes whatever its caller sends.
 
-### 1.5. Authorization infrastructure is outside every grant
+### 1.5. No grant admits an operation on authorization infrastructure
 
-A grant MUST NOT admit any operation on the realm's config card, on the card
-its `policy` names, or on any `RealmPolicy` card or card of a subtype. A grant
-MUST NOT admit an operation declared `nonGrantable` on the target's type or on
-any type it descends from, or an `explain` or a `validate`. A search that a
-policy scopes MUST leave out the config card and every policy card. A card
-type SHOULD declare `nonGrantable` any operation that can write a field a
-grant's predicate reads.
+A grant MUST NOT admit an operation invoked on the realm's config card, on the
+card its `policy` names, or on any `RealmPolicy` card or card of a subtype. A
+grant MUST NOT admit an operation declared `nonGrantable` on the target's type
+or on any type it descends from, or an `explain` or a `validate`. A search
+that a policy scopes MUST leave out the rows of the config card and of every
+policy card. These rules govern what a grant admits, not what a granted
+answer carries: a card in a granted card's link closure is served with it. So
+a type a grant admits SHOULD NOT link to an authorization card. The realm
+records `grant-reaches-ungranted-type` when a `read` or `query` grant's links
+reach a type no grant admits. A card type SHOULD
+declare `nonGrantable` any operation that can write a field a grant's
+predicate reads.
 
-### 1.6. Every failure refuses
+### 1.6. Fail closed
 
-Every way the policy engine can fail MUST refuse, never admit. A policy that
-the realm names but cannot load, a predicate that throws or answers anything
-but `true`, and a target whose type the index cannot vouch for MUST each be a
-refusal. A grant the realm cannot apply MUST be left out with a recorded
-issue, and the rest of the policy MUST still apply.
+Deciding whether a grant admits a caller MUST fail closed. A policy the realm
+names but cannot load, a predicate that throws or answers anything but
+`true`, a target whose type the index cannot vouch for, a blocklist that
+fails to evaluate, and an acting-user expression that names no user MUST each
+refuse. A rate-limit expression that produces no limit MUST fall back to the
+platform's limit, never to no limit. A `policy` value that is not a well-formed
+card id names no policy, so the realm serves on its permissions alone, which
+never widens access.
+
+A grant the compiler can't apply MUST be left out with a recorded issue, and
+the rest of the policy MUST still apply. A policy card that can't be read as a
+card at all takes the whole policy out of force, and so refuses as above.
 
 ### 1.7. Scope search with filters compiled from the policy
 
@@ -97,84 +119,78 @@ policy compiles. A search MUST NOT judge its rows one at a time against a
 predicate. A `query` grant whose predicate does not compile to a filter MUST
 add nothing to a search. A compiled filter MUST NOT admit a row its predicate
 would refuse, except through a value that only a writer of the card can store.
-A `read` grant MUST NOT put a card in search results, a `query` grant MUST NOT
-admit a direct read, and a grant on a named query MUST NOT admit an ad-hoc
-search.
+A search answers from the index, so it MAY keep listing a card until the card
+is reindexed, after a direct read already refuses it. A `read` grant MUST NOT
+put a card in search results, a `query` grant MUST NOT admit a direct read,
+and a grant on a named query MUST NOT admit an ad-hoc search.
 
 ## 2. Rationale
 
-The permissions list says the least each user can reach, and the policy
-adds to it (ADR 006 §2). A policy that could also refuse would make that list
-wrong, and every caller the permissions allow would pay for a policy load. So
-when a design wants a role to reach less, the fault is that the role started
-with too much. A realm that no one but its administrators can read directly is
-a valid starting point. Its policy then states every other role's access
-explicitly.
+ADR 006 §2 gives the reasons a policy only widens. When a design wants a role
+to reach less, the fault is that the role started with too much. A realm that
+no one but its administrators can read directly is a valid starting point, and
+its policy then states every other role's access.
 
 One policy keeps the answer to "who can do this here?" in one place, and the
 grants union, so a role is just a group of rules. Several policies would
 need a rule for how they combine. If they only union, they add nothing that
 rules in one policy can't express. If they intersect or override, they
-restrict, which §1.1 rules out.
+restrict.
 
-Direct write already reaches the policy. Any direct writer can repoint
-`realm.json` at another policy or edit the policy card, and so can grant
-themselves or anyone else any grantable access. No grant reaches either card
-(§1.5), so direct writers are the only users who can change them. A separate
-"administer" permission would not stop that unless direct write lost the power
-to change `realm.json`, which would create a second write level. The simpler
-and truthful model is that direct writers are the realm's administrators, and
-everyone else writes through grants.
+Any direct writer can repoint `realm.json` at another policy or edit the
+policy card, and so can grant themselves or anyone else any grantable access.
+No grant reaches either card (§1.5), so direct writers are the only users who
+can change them. A separate "administer" permission would not stop that unless
+direct write lost the power to change `realm.json`, which would create a
+second write level. The simpler and truthful model is that direct writers are
+the realm's administrators, and everyone else writes through grants.
 
 A grant has to admit what its author meant and nothing more. A caller-supplied
 value must not decide its own authorization, so a predicate never reads params.
-A volatile call would give two answers for one caller and one card, and a
-partial match holds for callers the author never named: `.teacherIds |
+A volatile call would give two answers for one caller and one card. A partial
+match holds for callers the author never named: `.teacherIds |
 contains([actor()])` holds for `@bob:server` when the list holds
-`@bob:server.org`. A predicate judged after the write would let a caller write
-their way into the grant. What a caller may change is the job of the
-operation: a named operation is declared by the card type's author, so granting
-it grants exactly what that author wrote, and granting its base would undo
-that.
+`@bob:server.org`. A create is judged by the realm's resolution of its type,
+so a caller can't have one type's grants consulted while creating another.
+What a caller may change is the job of the operation. A named operation is
+declared by the card type's author, so granting it grants exactly what that
+author wrote, and granting its base would undo that.
 
 If any grant could write the config card or a policy card, one grant could
-become every grant. If any grant could read one, a caller the realm admits
-only through grants could read every rule that judges them. So these cards are
-outside the grant model, however a policy is written.
+become every grant. If any grant could read one directly, a caller the realm
+admits only through grants could read every rule that judges them. A granted
+answer's shape never depends on how its caller was authorized, so the link
+closure is an authoring constraint the realm warns about, not a boundary it
+enforces.
 
-A policy only widens, so a fault in it must never widen. Refusing on every
-failure means a broken policy costs access, which someone notices, and never
-grants access, which nobody does. A grant with an issue is left out alone, so
-one mistake doesn't take the rest of the policy down with it.
+A policy only widens, so a fault in deciding admission must never widen. A
+broken policy then costs access, which someone notices, and never grants it,
+which nobody does. A grant with an issue is left out alone, so one mistake
+doesn't take the rest of the policy down with it.
 
 The search engine pages through the index in SQL. Judging each row against a
 predicate would mean reading every candidate and dropping the ones refused,
 which paging can't survive. So a `query` grant is a filter compiled with the
 policy, and a grant that can't compile to one adds nothing rather than rows it
 can't judge. Finding a card by its id and listing every card of a type are
-different powers, so `read` and `query` are separate grants, and granting a
-saved search doesn't grant the freedom to write any filter over its type.
+different powers, so `read` and `query` are separate grants.
 
 ## 3. Considered options
 
 - **One widening policy, administrators as the only direct writers
   (chosen).**
-- **Deny rules or restricting policies.** A restriction breaks ADR 006 §1.3:
-  the permissions would no longer say what a user can reach, and every
-  allowed caller would pay for a policy evaluation.
-- **Several policies per realm, one per role.** If they union, rules in one
-  policy already do the same. If they combine any other way, they restrict.
+- **Several policies per realm, one per role.** They either add nothing or
+  restrict.
 - **A separate permission to administer the realm, or to write its
   settings.** It splits direct write into two levels while the policy card
-  stays an ordinary card that writers can change. It adds a concept without
-  removing the need to trust direct writers.
+  stays an ordinary card that writers can change.
 - **Predicates over params.** The caller would choose the value that
   authorizes the call.
 - **Grants on authorization cards, guarded by careful authoring.** One
   mistaken grant would hand over every grant, and nothing would report it.
-- **Treating a policy that fails as no policy.** A realm that names a policy
-  it can't load would serve on its permissions alone, and the callers it
-  was meant to admit would be refused with no sign that anything was wrong.
+- **Serving a realm whose policy won't load on its permissions alone.** The
+  callers the policy was meant to admit would be refused with no sign that
+  anything was wrong, and its author would see no fault to fix.
 - **Judging search rows one at a time.** Paging could not survive it.
 
 ## 4. Sources
@@ -184,17 +200,24 @@ saved search doesn't grant the freedom to write any filter over its type.
    can read; a realm has one policy whose rules are OR'ed; direct writers are
    administrators, and non-administrators write through grants; no new
    permission for administering a realm.
-2. ADR 006 §1.3 and the header of
-   `packages/runtime-common/card-operations/gate.ts`: the policy runs only for
-   a caller the permissions declined, authorization infrastructure is outside
-   the grant model, and every way the gate can fail denies.
+2. The header of `packages/runtime-common/card-operations/gate.ts`: the policy
+   runs only for a caller the permissions declined, authorization
+   infrastructure is outside the grant model but a link closure is not
+   narrowed, a create is judged by the realm's resolved type, and every way
+   the gate can fail denies.
 3. `packages/base/realm-config.gts` and `packages/runtime-common/realm.ts`
-   (`assignRealmPolicy`, `getRealmPolicy`): `policy` is one string field.
+   (`assignRealmPolicy`, `getRealmPolicy`): `policy` is one string field, and
+   a malformed value is dropped.
 4. `packages/runtime-common/card-operations/policy.ts`: `PREDICATE_CALLS`
-   leaves out `params()`, and `PARTIAL_MATCH_BUILTINS` refuses partial
-   matches. `packages/bxl/src/bxl/profiles/function-safety.ts` refuses
-   volatile calls in a predicate.
-5. The headers of `packages/runtime-common/card-operations/policy-filter.ts`
+   leaves out `params()`, and `PARTIAL_MATCH_BUILTINS` and
+   `ANCHORED_BUILTINS` refuse partial matches.
+   `packages/bxl/src/bxl/profiles/function-safety.ts` refuses volatile calls
+   in a predicate.
+5. `packages/runtime-common/card-operations/grant-expressions.ts`:
+   `blocklistCloses` refuses on a failed blocklist, and `settleTraffic` falls
+   back to the platform's limit. `policy-reach.ts` records
+   `grant-reaches-ungranted-type`.
+6. The headers of `packages/runtime-common/card-operations/policy-filter.ts`
    and `packages/runtime-common/card-operations/policy-query.ts`: a `query`
    grant compiles to a filter, a filter is never wider than its predicate
    except through a value only a writer can store, and only a grant on the
