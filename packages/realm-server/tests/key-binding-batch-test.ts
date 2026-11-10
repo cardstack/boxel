@@ -697,6 +697,11 @@ module(basename(import.meta.filename), function (hooks) {
       found.fillers.interactive,
       'with nothing approved for automations only, both uses offer the same keys',
     );
+    assert.deepEqual(
+      Object.keys(found.fillers).sort(),
+      ['automations', 'interactive'],
+      'the batch names fillers for exactly the uses an approval can be for',
+    );
 
     // Asked for the operations an approval covers, only where those send
     // counts, and the batch still holds every operation.
