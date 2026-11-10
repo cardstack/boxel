@@ -8,6 +8,7 @@ scope:
   - packages/realm-server/**/*automation*/**
   - packages/realm-server/lib/cron-scheduler.ts
   - packages/postgres/migrations/*automation*
+  - packages/catalog/test-subset.json
 ---
 
 # 028. Define an automation in a card, and keep its payer and status in a server row
@@ -28,13 +29,12 @@ milestones and `batchedAI`. The definition MUST NOT live in a non-card file or
 only in a server table.
 
 The `Automation` type MUST be a system card in the catalog realm, in the
-catalog test subset, as `RealmPolicy` is. It MUST NOT be defined in the base
-realm. Server code MUST name it by a catalog code ref, as `realmPolicyRef`
-names `RealmPolicy`.
+catalog test subset, as `RealmPolicy` is. Server code MUST name it by a
+catalog code ref, as `realmPolicyRef` names `RealmPolicy`.
 
 The server MUST read the definition from the index, as data. It MUST NOT run
-card code to learn what an automation says. It MUST accept only instances that
-adopt from the catalog `Automation` type.
+card code to learn what an automation says. It MUST accept only instances of the
+catalog `Automation` type or of a type that descends from it.
 
 ### 1.2. Only administrators edit what an automation does
 
@@ -141,9 +141,7 @@ make-up run catches up on everything it missed.
   someone else pay.
 - **The type in the base realm.** Base holds the card and field primitives
   that every realm is built from. `Automation` is a system card that platform
-  code reads, like the policy cards, which live in the catalog. A copy in base
-  beside the catalog's would be a second definition that drifts from the
-  deployed one.
+  code reads, like the policy cards, which live in the catalog.
 
 ## 4. Remediation
 
