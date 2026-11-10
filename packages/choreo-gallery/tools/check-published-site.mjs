@@ -32,6 +32,7 @@
 /* eslint-disable n/no-process-exit */
 import { writeFileSync } from 'node:fs';
 
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 import { chromium } from 'playwright';
 
 const args = process.argv.slice(2);
@@ -96,6 +97,9 @@ const allDemoCount = paths.filter((p) => /^demos\/[^/]+\.json$/.test(p)).length;
 const browser = await chromium.launch({
   headless: true,
   channel: process.env.BROWSER_CHANNEL ?? 'chrome',
+  // The sandbox is off only on Linux, for the reasons
+  // `chromeSandboxEnabled` gives.
+  chromiumSandbox: chromeSandboxEnabled(),
   args: [
     '--mute-audio',
     '--autoplay-policy=no-user-gesture-required',

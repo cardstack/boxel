@@ -137,9 +137,9 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
           <Choreo @onCamera3D={{watch}} as |c|>
             {{grab c}}
             <div
-              data-box
               style='width:{{take}}0px;height:20px'
               {{motion id='box'}}
+              data-test-box
             ></div>
             <c.Sequence>
               <c.Camera3D @yaw={{40}} @duration={{1}} @ease='linear' />
@@ -205,9 +205,9 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
           <Choreo @onCamera3D={{watch}} as |c|>
             {{grab c}}
             <div
-              data-box
               style='width:{{take}}0px;height:20px'
               {{motion id='box'}}
+              data-test-box
             ></div>
             <c.Sequence>
               <c.Camera3D
@@ -259,9 +259,9 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
           <Choreo @onCamera3D={{watch}} as |c|>
             {{grab c}}
             <div
-              data-box
               style='width:{{take}}0px;height:20px'
               {{motion id='box'}}
+              data-test-box
             ></div>
             <c.Sequence>
               <c.Camera3D
@@ -311,9 +311,9 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
           <Choreo @onCamera3D={{watch}} as |c|>
             {{grab c}}
             <div
-              data-box
               style='width:{{take}}0px;height:20px'
               {{motion id='box'}}
+              data-test-box
             ></div>
             <c.Sequence>
               <c.Camera3D @through={{PATH}} @duration={{3}} @ease='linear' />
@@ -378,9 +378,9 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
           <Choreo @onCamera3D={{watch}} as |c|>
             {{grab c}}
             <div
-              data-box
               style='width:{{take}}0px;height:20px'
               {{motion id='box'}}
+              data-test-box
             ></div>
             <c.Sequence>
               <c.Camera3D @through={{CORNER}} @duration={{4}} @ease='linear' />
@@ -405,9 +405,9 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
           <Choreo @onCamera3D={{watch}} as |c|>
             {{grab c}}
             <div
-              data-box
               style='width:{{take}}0px;height:20px'
               {{motion id='box'}}
+              data-test-box
             ></div>
             <c.Sequence>
               <c.Camera3D
@@ -467,9 +467,9 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
           <Choreo @onCamera3D={{watch}} as |c|>
             {{grab c}}
             <div
-              data-box
               style='width:{{take}}0px;height:20px'
               {{motion id='box'}}
+              data-test-box
             ></div>
             <c.Sequence>
               <c.Camera3D
@@ -512,9 +512,9 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
           <Choreo @onCamera3D={{watch}} as |c|>
             {{grab c}}
             <div
-              data-box
               style='width:{{take}}0px;height:20px'
               {{motion id='box'}}
+              data-test-box
             ></div>
             <c.Sequence>
               <c.Camera3D @yaw={{20}} @duration={{0.3}} @ease='linear' />

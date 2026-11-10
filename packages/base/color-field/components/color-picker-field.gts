@@ -5,6 +5,7 @@ import { action } from '@ember/object';
 import { debounce } from 'lodash-es';
 import { eq, or, not } from '@cardstack/boxel-ui/helpers';
 import { ColorPicker } from '@cardstack/boxel-ui/components';
+import { ignoredByPasswordManagers } from '../../components/password-managers';
 
 import type {
   ColorFieldBaseOptions,
@@ -176,6 +177,7 @@ export default class ColorPickerField extends Component<ColorFieldSignature> {
             @color={{@model}}
             @onChange={{this.handleColorChangeImmediate}}
             @disabled={{not @canEdit}}
+            {{ignoredByPasswordManagers}}
           />
         {{/if}}
       </div>

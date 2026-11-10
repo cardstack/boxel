@@ -249,18 +249,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         onRealmSetup,
       });
 
-      test('non-owner GET /_permissions', async function (assert) {
-        let response = await request
-          .get('/_permissions')
-          .set('Accept', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'bob', ['read', 'write'])}`,
-          );
-
-        assert.strictEqual(response.status, 403, 'HTTP 403 status');
-      });
-
       test('realm-owner GET /_permissions', async function (assert) {
         let response = await request
           .get('/_permissions')
@@ -291,38 +279,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             },
           },
           'permissions response is correct',
-        );
-      });
-
-      test('non-owner PATCH /_permissions', async function (assert) {
-        let response = await request
-          .patch('/_permissions')
-          .set('Accept', 'application/vnd.api+json')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'bob', ['read', 'write'])}`,
-          )
-          .send({
-            data: {
-              id: testRealmHref,
-              type: 'permissions',
-              attributes: {
-                permissions: {
-                  mango: ['read'],
-                },
-              },
-            },
-          });
-
-        assert.strictEqual(response.status, 403, 'HTTP 403 status');
-        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
-        assert.deepEqual(
-          permissions,
-          {
-            mary: ['read', 'write', 'realm-owner'],
-            bob: ['read', 'write'],
-          },
-          'permissions did not change',
         );
       });
 
@@ -483,7 +439,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('cannot remove realm-owner permissions from PATCH /_permissions', async function (assert) {
+      test("cannot remove the realm owner's read from PATCH /_permissions", async function (assert) {
         let response = await request
           .patch('/_permissions')
           .set('Accept', 'application/vnd.api+json')
@@ -773,6 +729,237 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           'permissions are correct',
         );
+      });
+    });
+
+    // Administration is direct write through the caller's own permission row.
+    // Owning the realm confers nothing on its own: the owner is the user the
+    // realm is indexed as.
+    module(
+      'permissions requests from administrators and readers',
+      function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'blank',
+          permissions: {
+            mary: ['read', 'write', 'realm-owner'],
+            bob: ['read', 'write'],
+            carol: ['read'],
+          },
+          onRealmSetup,
+        });
+
+        test('a reader is refused GET /_permissions', async function (assert) {
+          let response = await request
+            .get('/_permissions')
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'carol', ['read'])}`,
+            );
+
+          assert.strictEqual(response.status, 403, 'HTTP 403 status');
+        });
+
+        test('a reader is refused PATCH /_permissions', async function (assert) {
+          let response = await request
+            .patch('/_permissions')
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'carol', ['read'])}`,
+            )
+            .send({
+              data: {
+                id: testRealmHref,
+                type: 'permissions',
+                attributes: { permissions: { mango: ['read'] } },
+              },
+            });
+
+          assert.strictEqual(response.status, 403, 'HTTP 403 status');
+          let permissions = await fetchRealmPermissions(
+            dbAdapter,
+            testRealmURL,
+          );
+          assert.deepEqual(
+            permissions,
+            {
+              mary: ['read', 'write', 'realm-owner'],
+              bob: ['read', 'write'],
+              carol: ['read'],
+            },
+            'permissions did not change',
+          );
+        });
+
+        test('an administrator who does not own the realm may GET /_permissions', async function (assert) {
+          let response = await request
+            .get('/_permissions')
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'bob', ['read', 'write'])}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.deepEqual(response.body.data.attributes.permissions, {
+            mary: ['read', 'write', 'realm-owner'],
+            bob: ['read', 'write'],
+            carol: ['read'],
+          });
+        });
+
+        test('an administrator who does not own the realm may PATCH /_permissions', async function (assert) {
+          let response = await request
+            .patch('/_permissions')
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'bob', ['read', 'write'])}`,
+            )
+            .send({
+              data: {
+                id: testRealmHref,
+                type: 'permissions',
+                attributes: { permissions: { carol: ['read', 'write'] } },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let permissions = await fetchRealmPermissions(
+            dbAdapter,
+            testRealmURL,
+          );
+          assert.deepEqual(permissions, {
+            mary: ['read', 'write', 'realm-owner'],
+            bob: ['read', 'write'],
+            carol: ['read', 'write'],
+          });
+        });
+
+        test("an administrator may remove the owner's write, and the owner keeps read and stays the owner", async function (assert) {
+          let response = await request
+            .patch('/_permissions')
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'bob', ['read', 'write'])}`,
+            )
+            .send({
+              data: {
+                id: testRealmHref,
+                type: 'permissions',
+                attributes: { permissions: { mary: ['read'] } },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let permissions = await fetchRealmPermissions(
+            dbAdapter,
+            testRealmURL,
+          );
+          assert.deepEqual(permissions, {
+            mary: ['read', 'realm-owner'],
+            bob: ['read', 'write'],
+            carol: ['read'],
+          });
+        });
+
+        test('refuses a PATCH that would leave the realm with no administrator', async function (assert) {
+          let response = await request
+            .patch('/_permissions')
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'bob', ['read', 'write'])}`,
+            )
+            .send({
+              data: {
+                id: testRealmHref,
+                type: 'permissions',
+                attributes: { permissions: { mary: ['read'], bob: ['read'] } },
+              },
+            });
+
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          let permissions = await fetchRealmPermissions(
+            dbAdapter,
+            testRealmURL,
+          );
+          assert.deepEqual(
+            permissions,
+            {
+              mary: ['read', 'write', 'realm-owner'],
+              bob: ['read', 'write'],
+              carol: ['read'],
+            },
+            'permissions did not change',
+          );
+        });
+
+        test("an owner whose write was removed can't manage permissions", async function (assert) {
+          await insertPermissions(dbAdapter, testRealmURL, {
+            mary: ['read', 'realm-owner'],
+          });
+          let response = await request
+            .get('/_permissions')
+            .set('Accept', 'application/vnd.api+json')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'mary', ['read', 'realm-owner'])}`,
+            );
+
+          assert.strictEqual(response.status, 403, 'HTTP 403 status');
+        });
+      },
+    );
+
+    module('permissions requests on a world-writable realm', function (hooks) {
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        permissions: {
+          '*': ['read', 'write'],
+          mary: ['read', 'write', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
+
+      // A `*` row names no one, so the `write` it grants makes no one an
+      // administrator.
+      test('an anonymous caller is refused GET /_permissions', async function (assert) {
+        let response = await request
+          .get('/_permissions')
+          .set('Accept', 'application/vnd.api+json');
+
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('a signed-in user who writes only through the public row is refused GET /_permissions', async function (assert) {
+        let response = await request
+          .get('/_permissions')
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'dave', ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      });
+
+      test('a direct writer may GET /_permissions', async function (assert) {
+        let response = await request
+          .get('/_permissions')
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'mary', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
       });
     });
   });

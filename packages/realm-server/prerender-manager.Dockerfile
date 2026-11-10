@@ -19,6 +19,9 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.cjs ./
 COPY patches/ ./patches
 RUN CI=1 pnpm fetch
 
+# This image never launches a browser, so skip Puppeteer's Chrome download.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 COPY . ./
 RUN CI=1 pnpm install -r --offline
 

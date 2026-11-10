@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 import { chromium } from 'playwright';
 
 const url = process.argv[2] ?? 'http://localhost:4600/film';
@@ -20,6 +21,9 @@ const command = (name, args) => {
 };
 const browser = await chromium.launch({
   headless: true,
+  // The sandbox is off only on Linux, for the reasons
+  // `chromeSandboxEnabled` gives.
+  chromiumSandbox: chromeSandboxEnabled(),
   ...(process.env.BROWSER_CHANNEL
     ? { channel: process.env.BROWSER_CHANNEL }
     : {}),
