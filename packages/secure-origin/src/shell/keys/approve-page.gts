@@ -15,7 +15,10 @@
 // grant where a group sends makes that a new grant: the group says so by its
 // full host, and the Approve button, the one confirmation, says which hosts
 // each key is sent to for the first time. An operation's label never stands
-// in for a host. Unticking an operation leaves it unapproved.
+// in for a host. Unticking an operation leaves it unapproved. A slot offers
+// the keys that fill it in the ticked operations: while only some are
+// ticked, the page asks the realm server for the batch's fillers weighed by
+// those (`operations`), and Approve waits for the answer.
 //
 // A key of the user's own and a key they share with the workspace are never
 // drawn alike. Each slot is a tinted section of its own (`KeyAudience`),
@@ -77,12 +80,15 @@ import {
   shareUsage,
   windowContext,
   type ApprovalBatch,
+  type BatchFillers,
   type BatchOperation,
   type BatchSlot,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import { Button } from '@cardstack/pretui/components/button';
 import { Checkbox } from '@cardstack/pretui/components/checkbox';
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
+import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import Warning from '../../components/icons/warning.gts';
 import { Field } from '@cardstack/pretui/components/field';
@@ -116,6 +122,8 @@ import {
   requestFields,
   sharesForVisitors,
   slotChoices,
+  tickedOperationNames,
+  withTickedFillers,
   type ApprovalUse,
   type NewGrant,
   type SlotChoice,
@@ -486,44 +494,52 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                           >Approved for open cards</span>
                         {{/if}}
                       </Checkbox>
-                      <details class='request'>
-                        <summary class='summary' data-test-approve-summary>
-                          <span class='method'>{{operation.method}}</span>
-                          <span class='path'>{{operation.path}}</span>
+                      <Disclosure
+                        class='request'
+                        data-test-approve-request-toggle
+                      >
+                        <:trigger><span
+                            class='summary'
+                            data-test-approve-summary
+                          ><span class='method'>{{operation.method}}</span>
+                            <span class='path'>{{operation.path}}</span>
+                            {{#each operation.slots as |slot|}}
+                              <span class='placement'>· key
+                                {{placementPhrase slot.snapshot}}</span>
+                            {{/each}}</span><VisuallyHidden>
+                            for
+                            {{operation.label}}</VisuallyHidden></:trigger>
+                        <:default>
                           {{#each operation.slots as |slot|}}
-                            <span class='placement'>· key
-                              {{placementPhrase slot.snapshot}}</span>
-                          {{/each}}
-                        </summary>
-                        {{#each operation.slots as |slot|}}
-                          {{#if (this.showsDiff slot)}}
-                            <table class='diff' data-test-approve-diff>
-                              <thead>
-                                <tr><th>Changed</th><th>Approved</th><th
-                                  >Now</th></tr>
-                              </thead>
-                              <tbody>
-                                {{#each (requestChanges slot) as |change|}}
-                                  <tr
-                                    data-test-approve-diff-field={{change.field}}
-                                  >
-                                    <th scope='row'>{{change.field}}</th>
-                                    <td><pre>{{change.before}}</pre></td>
-                                    <td><pre>{{change.after}}</pre></td>
-                                  </tr>
+                            {{#if (this.showsDiff slot)}}
+                              <table class='diff' data-test-approve-diff>
+                                <thead>
+                                  <tr><th>Changed</th><th>Approved</th><th
+                                    >Now</th></tr>
+                                </thead>
+                                <tbody>
+                                  {{#each (requestChanges slot) as |change|}}
+                                    <tr
+                                      data-test-approve-diff-field={{change.field}}
+                                    >
+                                      <th scope='row'>{{change.field}}</th>
+                                      <td><pre>{{change.before}}</pre></td>
+                                      <td><pre>{{change.after}}</pre></td>
+                                    </tr>
+                                  {{/each}}
+                                </tbody>
+                              </table>
+                            {{else}}
+                              <dl class='full' data-test-approve-request>
+                                {{#each (requestFields slot.snapshot) as |row|}}
+                                  <dt>{{row.field}}</dt>
+                                  <dd><pre>{{row.value}}</pre></dd>
                                 {{/each}}
-                              </tbody>
-                            </table>
-                          {{else}}
-                            <dl class='full' data-test-approve-request>
-                              {{#each (requestFields slot.snapshot) as |row|}}
-                                <dt>{{row.field}}</dt>
-                                <dd><pre>{{row.value}}</pre></dd>
-                              {{/each}}
-                            </dl>
-                          {{/if}}
-                        {{/each}}
-                      </details>
+                              </dl>
+                            {{/if}}
+                          {{/each}}
+                        </:default>
+                      </Disclosure>
                     </li>
                   {{/each}}
                 </ul>
@@ -633,7 +649,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   type='submit'
                   @variant='primary'
                   @disabled={{this.submitDisabled}}
-                  @loading={{this.form.saving}}
+                  @loading={{this.approveBusy}}
                   data-test-approve-save
                 >{{this.saveLabel}}</Button>
               </div>
@@ -686,7 +702,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         display: block;
       }
       .budget-more {
-        margin-top: var(--boxel-sp-xxs);
+        margin-top: var(--boxel-sp-2xs);
       }
       .limits-link {
         display: inline;
@@ -760,10 +776,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       .request {
         margin-inline-start: var(--boxel-sp-lg);
       }
+      /* The line wraps rather than being cut short, in the page's own
+         weight rather than the bolder one the disclosure sets for its
+         trigger. */
       .summary {
-        cursor: pointer;
-        font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
+        font-weight: 400;
+        white-space: normal;
+        overflow-wrap: anywhere;
         color: var(--muted-foreground);
       }
       .method,
@@ -894,6 +914,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private form = trackedObject({
     chosen: {} as Record<string, string | undefined>,
     ticked: new Set<string>(),
+    // What fills each slot in the ticked operations, when only some are
+    // ticked (`withTickedFillers`), and whether that is still being asked.
+    weighed: undefined as BatchFillers | undefined,
+    weighing: false,
     use: 'interactive' as ApprovalUse,
     // A share's daily budget as typed, by share id.
     budgets: {} as Record<string, string>,
@@ -957,7 +981,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   // The batch as shown for the choice of where requests run.
   private get batch(): ApprovalBatch | undefined {
     return this.choosing
-      ? batchFor(this.choosing.batch, this.form.use)
+      ? batchFor(
+          withTickedFillers(this.choosing.batch, this.form.weighed),
+          this.form.use,
+        )
       : undefined;
   }
 
@@ -1172,10 +1199,18 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return `Approve ${count} ${count === 1 ? 'call' : 'calls'}`;
   }
 
+  // Approve shows its spinner while the approval saves and while the keys the
+  // ticked operations offer are still being read, so a press in that moment
+  // meets a cue rather than a dead button.
+  private get approveBusy() {
+    return this.form.saving || this.form.weighing;
+  }
+
   private get submitDisabled() {
     let ticked = this.tickedOperations;
     return (
       this.form.saving ||
+      this.form.weighing ||
       ticked.length === 0 ||
       ticked.some((o) => o.slots.some((s) => !this.form.chosen[s.slot])) ||
       this.budgetShares.some((share) => !this.budgetValid(share))
@@ -1235,6 +1270,62 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       ticked.add(key);
     }
     this.form.ticked = ticked;
+    this.weigh();
+  };
+
+  // Each request is numbered, so only the answer to the latest one counts;
+  // reading the batch again leaves every answer asked for before it stale.
+  private weighings = 0;
+
+  // What fills each slot in the ticked operations, when only some of the
+  // batch's are ticked (`tickedOperationNames`); undefined when the batch's
+  // own fillers answer.
+  private tickedFillers = async (
+    batch: ApprovalBatch,
+    ticked: Set<string>,
+  ): Promise<BatchFillers | undefined> => {
+    let operations = tickedOperationNames(batch, ticked);
+    if (!operations || !this.opened.target) {
+      return undefined;
+    }
+    let { fillers } = await approvalBatch(this.args.api.config, {
+      target: this.opened.target,
+      review: this.args.review,
+      interactive: true,
+      operations,
+    });
+    return fillers;
+  };
+
+  // Asks what fills each slot in the ticked operations alone, when only some
+  // are ticked, and keeps a chosen key while it is still offered. Without an
+  // answer the page offers the batch's own fillers, which fit every
+  // operation, ticked or not.
+  private weigh = async () => {
+    let state = this.choosing;
+    let attempt = ++this.weighings;
+    if (!state || !tickedOperationNames(state.batch, this.form.ticked)) {
+      this.form.weighed = undefined;
+      this.form.weighing = false;
+      this.keepOfferedChoices();
+      return;
+    }
+    this.form.weighing = true;
+    let weighed: BatchFillers | undefined;
+    try {
+      weighed = await this.tickedFillers(state.batch, this.form.ticked);
+    } catch (e) {
+      if (attempt === this.weighings && isSignedOut(e)) {
+        this.args.api.signedOut();
+        return;
+      }
+    }
+    if (attempt !== this.weighings) {
+      return;
+    }
+    this.form.weighed = weighed;
+    this.form.weighing = false;
+    this.keepOfferedChoices();
   };
 
   // Read again after a request changed while it was shown, the batch keeps
@@ -1245,6 +1336,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     ticked: Set<string>;
   }) => {
     this.page.state = { name: 'loading' };
+    this.weighings++;
+    this.form.weighed = undefined;
+    this.form.weighing = false;
     let { config } = this.args.api;
     try {
       let request = contextRequest(this.opened);
@@ -1284,24 +1378,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           cliInteractive: this.fromCli.interactive,
         });
       }
-      // Each slot starts on a key it offers for the use the choice starts
-      // on, or keeps the one the user chose while it still does.
-      let shown = batchFor(batch, this.form.use);
-      this.form.chosen = Object.fromEntries(
-        slotChoices(shown, this.form.use).map((c) => {
-          let kept = keep?.chosen[c.slot];
-          return [
-            c.slot,
-            kept && c.options.some((o) => o.id === kept)
-              ? kept
-              : initialChoice(
-                  shown,
-                  c,
-                  c.kind === 'userKey' ? this.opened.key : this.opened.share,
-                ),
-          ];
-        }),
-      );
       let keys = operations.map(operationKey);
       let named = this.fromCli.operations;
       // Opened for a share, only the operations that send the realm's key
@@ -1318,6 +1394,35 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           : forShare
             ? new Set(operations.filter(forShare).map(operationKey))
             : new Set(keys);
+      // Each slot starts on a key it offers, in the ticked operations, for
+      // the use the choice starts on, or keeps the one the user chose while
+      // it still does. Without an answer for the ticked operations, it offers
+      // the batch's own fillers, which fit every operation.
+      let weighed: BatchFillers | undefined;
+      try {
+        weighed = await this.tickedFillers(batch, this.form.ticked);
+      } catch (e) {
+        if (isSignedOut(e)) {
+          throw e;
+        }
+      }
+      this.form.weighed = weighed;
+      let shown = batchFor(withTickedFillers(batch, weighed), this.form.use);
+      this.form.chosen = Object.fromEntries(
+        slotChoices(shown, this.form.use).map((c) => {
+          let kept = keep?.chosen[c.slot];
+          return [
+            c.slot,
+            kept && c.options.some((o) => o.id === kept)
+              ? kept
+              : initialChoice(
+                  shown,
+                  c,
+                  c.kind === 'userKey' ? this.opened.key : this.opened.share,
+                ),
+          ];
+        }),
+      );
       this.page.state = { name: 'choosing', batch, context };
       this.args.api.visit.loaded();
     } catch (e) {

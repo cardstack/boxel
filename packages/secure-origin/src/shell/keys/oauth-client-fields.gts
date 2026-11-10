@@ -14,6 +14,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
 
+import { Disclosure } from '@cardstack/pretui/components/disclosure';
 import { Field } from '@cardstack/pretui/components/field';
 import Globe from '@cardstack/boxel-icons/globe';
 import KeyRound from '@cardstack/boxel-icons/key-round';
@@ -209,17 +210,18 @@ export default class OAuthClientFields extends Component<Signature> {
           app for signing in.</span>
       </div>
     </Field>
-    <details class='advanced' data-test-oauth-advanced>
-      <summary>Advanced</summary>
-      <RadioChoices
-        @label='How Boxel sends the app’s secret'
-        @icon={{KeyRound}}
-        @name='token-auth'
-        @choices={{TOKEN_AUTHS}}
-        @selected={{@form.tokenAuth}}
-        @onSelect={{this.setTokenAuth}}
-      />
-    </details>
+    <Disclosure @label='Advanced' data-test-oauth-advanced>
+      <div class='advanced'>
+        <RadioChoices
+          @label='How Boxel sends the app’s secret'
+          @icon={{KeyRound}}
+          @name='token-auth'
+          @choices={{TOKEN_AUTHS}}
+          @selected={{@form.tokenAuth}}
+          @onSelect={{this.setTokenAuth}}
+        />
+      </div>
+    </Disclosure>
 
     <style scoped>
       .with-hint {
@@ -227,10 +229,12 @@ export default class OAuthClientFields extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-5xs);
       }
-      .advanced summary {
-        cursor: pointer;
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
+      /* The section opens under its trigger with the rows' own gap. The gap
+         is the content's own padding, so a closed section adds no space, and
+         it leaves room inside the disclosure's clipped region for the
+         choices' focus rings. */
+      .advanced {
+        padding-block: var(--boxel-sp-xs) var(--boxel-sp-5xs);
       }
       .callback {
         display: flex;
@@ -244,7 +248,7 @@ export default class OAuthClientFields extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
       }
       .hint {
-        color: var(--muted-foreground, var(--boxel-450));
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
       }
       /* The addresses read as code; the field takes the face it inherits. */
@@ -308,7 +312,7 @@ const CallbackAddress: TemplateOnlyComponent<{ Args: {} }> = <template>
       font-size: var(--boxel-font-size-sm);
     }
     .hint {
-      color: var(--muted-foreground, var(--boxel-450));
+      color: var(--muted-foreground);
       font-size: var(--boxel-font-size-xs);
     }
   </style>
@@ -364,7 +368,7 @@ export class OAuthProviderChoice extends Component<{
         padding-inline-start: var(--boxel-sp-lg);
       }
       .hint {
-        color: var(--muted-foreground, var(--boxel-450));
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
       }
     </style>

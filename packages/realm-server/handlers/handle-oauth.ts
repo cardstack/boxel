@@ -52,7 +52,8 @@ async function readsRealm(
   }
   return await new RealmPermissionChecker(
     await fetchRealmPermissions(dbAdapter, url),
-    matrixClient,
+    dbAdapter,
+    matrixClient.serverName,
   ).can(user, 'read');
 }
 

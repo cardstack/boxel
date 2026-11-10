@@ -9,25 +9,15 @@ import {
   type ToolRequest,
 } from '@cardstack/runtime-common';
 
-import {
-  basicMappings,
-  generateJsonSchemaForCardType,
-  getPatchTool,
-} from '@cardstack/runtime-common/helpers/ai';
-
 import GetEventsFromRoomTool from './get-events-from-room';
 
-import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import type { CardDef } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
 import type {
   CardMessageEvent,
   ToolResultEvent,
   EncodedToolRequest,
   MatrixEvent,
   RealmEventContent,
-  Tool,
 } from '@cardstack/base/matrix-event';
 
 export async function waitForMatrixEvent(
@@ -116,27 +106,6 @@ export async function waitForCompletedCommandRequest(
     { timeoutMs: options.timeoutMs },
   );
   return result;
-}
-
-export async function addPatchTools(
-  toolContext: ToolContext,
-  patchableCards: CardDef[],
-  cardAPI: typeof CardAPI,
-): Promise<Tool[]> {
-  let results: Tool[] = [];
-  let loader = (
-    getOwner(toolContext)!.lookup('service:loader-service') as LoaderService
-  ).loader;
-  let mappings = await basicMappings(loader);
-  for (const patchableCard of patchableCards) {
-    let patchSpec = generateJsonSchemaForCardType(
-      patchableCard.constructor as typeof CardDef,
-      cardAPI,
-      mappings,
-    );
-    results.push(getPatchTool(patchableCard.id, patchSpec));
-  }
-  return results;
 }
 
 export async function waitForRealmState(

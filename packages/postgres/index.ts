@@ -1,6 +1,7 @@
 export * from './pg-adapter.ts';
 export * from './connection-scheduler.ts';
 export * from './pg-config.ts';
+export * from './session-probe.ts';
 export * from './job-concurrency-lock.ts';
 export * from './work-loop.ts';
 export * from './job-tables.ts';

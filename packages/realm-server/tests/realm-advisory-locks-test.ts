@@ -7,6 +7,7 @@ import {
   hashRealmUrlForAdvisoryLock,
   hashUserIdForCostLock,
 } from '@cardstack/postgres';
+import { isWriteLockTimeout } from '@cardstack/runtime-common/card-operations';
 import { setupDB } from './helpers/index.ts';
 
 // Records each event with a relative timestamp so a failed ordering assertion
@@ -1052,6 +1053,334 @@ module(basename(import.meta.filename), function () {
         ['write-start', 'cost-start', 'cost-end', 'write-end'],
         `realm-write and user-cost lock spaces are disjoint; timeline: ${timeline(events, startedAt, eventTimes)}`,
       );
+    });
+  });
+
+  module('bounded write-lock wait', function (hooks) {
+    let dbAdapter: PgAdapter;
+    let extraAdapters: PgAdapter[] = [];
+    setupDB(hooks, {
+      beforeEach: async (adapter) => {
+        dbAdapter = adapter;
+      },
+      afterEach: async () => {
+        // Detached before closing, so a test that hangs and is torn down
+        // twice does not close the same adapters again.
+        let adapters = extraAdapters;
+        extraAdapters = [];
+        for (let adapter of adapters) {
+          await adapter.close();
+        }
+      },
+    });
+
+    const REALM = 'http://localhost:4201/bounded/';
+    const WAIT_MS = 300;
+
+    // An adapter with a short write-lock budget, and optionally a small pool.
+    // The pool size is read from the environment when the adapter is built,
+    // which is the only knob it has.
+    function boundedAdapter(opts: { poolMax?: number } = {}): PgAdapter {
+      let previous = process.env.PG_POOL_MAX;
+      if (opts.poolMax !== undefined) {
+        process.env.PG_POOL_MAX = String(opts.poolMax);
+      }
+      try {
+        let adapter = new PgAdapter({ writeLockWaitMs: WAIT_MS });
+        extraAdapters.push(adapter);
+        return adapter;
+      } finally {
+        if (previous === undefined) {
+          delete process.env.PG_POOL_MAX;
+        } else {
+          process.env.PG_POOL_MAX = previous;
+        }
+      }
+    }
+
+    // Hold a lock section open on `adapter` until the returned `release` is
+    // called. Resolves once the section is inside its locks.
+    async function holdOpen(
+      take: (fn: () => Promise<void>) => Promise<unknown>,
+    ): Promise<{ release: () => void; done: Promise<unknown> }> {
+      let release!: () => void;
+      const released = new Promise<void>((r) => {
+        release = r;
+      });
+      let signalEntered!: () => void;
+      const entered = new Promise<void>((r) => {
+        signalEntered = r;
+      });
+      const done = take(async () => {
+        signalEntered();
+        await released;
+      });
+      await Promise.race([entered, done]);
+      return { release, done };
+    }
+
+    async function rejection(promise: Promise<unknown>): Promise<unknown> {
+      try {
+        await promise;
+      } catch (err: unknown) {
+        return err;
+      }
+      return undefined;
+    }
+
+    test('a file writer that waits out its budget is refused without running', async function (assert) {
+      const holder = await holdOpen((fn) =>
+        dbAdapter.withFileWriteLocks(REALM, ['Widget/one.json'], fn),
+      );
+      // A second adapter, as a second replica would be: it shares the lock
+      // space and none of the first one's in-process queue, so its writer
+      // waits in postgres.
+      const waiter = boundedAdapter();
+      let ran = false;
+      const startedAt = Date.now();
+      try {
+        const err = await rejection(
+          waiter.withFileWriteLocks(REALM, ['Widget/one.json'], async () => {
+            ran = true;
+          }),
+        );
+        const elapsed = Date.now() - startedAt;
+        assert.true(
+          isWriteLockTimeout(err),
+          `refused as a write-lock timeout (got ${String(err)})`,
+        );
+        assert.false(ran, 'the section never ran');
+        assert.true(
+          elapsed >= WAIT_MS - 50,
+          `waited out its budget before giving up (${elapsed} ms)`,
+        );
+        assert.true(
+          elapsed < WAIT_MS + 2000,
+          `gave up soon after its budget (${elapsed} ms)`,
+        );
+        assert.strictEqual(
+          waiter.connectionStats.inUse,
+          0,
+          'the refused writer gave its pooled connection back',
+        );
+      } finally {
+        holder.release();
+        await holder.done;
+      }
+      const after = await waiter.withFileWriteLocks(
+        REALM,
+        ['Widget/one.json'],
+        async () => 'written',
+      );
+      assert.strictEqual(after, 'written', 'the next writer gets the lock');
+    });
+
+    test('a realm-lifecycle caller that waits out its budget is refused without running', async function (assert) {
+      const holder = await holdOpen((fn) =>
+        dbAdapter.withFileWriteLocks(REALM, ['Widget/one.json'], fn),
+      );
+      const waiter = boundedAdapter();
+      let ran = false;
+      try {
+        const err = await rejection(
+          waiter.withWriteLock(REALM, async () => {
+            ran = true;
+          }),
+        );
+        assert.true(
+          isWriteLockTimeout(err),
+          `refused as a write-lock timeout (got ${String(err)})`,
+        );
+        assert.false(ran, 'the section never ran');
+      } finally {
+        holder.release();
+        await holder.done;
+      }
+    });
+
+    test('the budget lifts once the realm lock is held', async function (assert) {
+      // The bound is on queueing for the lock. Statements the section runs on
+      // its pinned querier afterwards wait on row locks as long as they need,
+      // so a section is not cut short by a budget it already spent waiting.
+      // The lock is contended, so the caller has to wait for it and sets the
+      // timeout before it does.
+      const holder = await holdOpen((fn) =>
+        dbAdapter.withFileWriteLocks(REALM, ['Widget/one.json'], fn),
+      );
+      const adapter = boundedAdapter();
+      const waited = adapter.withWriteLock(REALM, async (txQuerier) => {
+        const rows = await txQuerier!(['SHOW lock_timeout']);
+        return rows[0]?.lock_timeout;
+      });
+      await new Promise((r) => setTimeout(r, WAIT_MS / 3));
+      holder.release();
+      await holder.done;
+      const timeout = await waited;
+      const baseline = (await adapter.execute('SHOW lock_timeout'))[0]
+        ?.lock_timeout;
+      assert.strictEqual(
+        timeout,
+        baseline,
+        'the section runs under the session default lock_timeout',
+      );
+    });
+
+    test('a writer queued in memory behind a same-file writer is refused when its budget runs out', async function (assert) {
+      // Both writers on one adapter chain in its in-process queue, so the
+      // second never reaches postgres while the first holds the file. It is
+      // refused when its budget runs out there — while the holder still holds,
+      // not when the holder finishes — and never checks out a connection.
+      const adapter = boundedAdapter();
+      const holder = await holdOpen((fn) =>
+        adapter.withFileWriteLocks(REALM, ['Widget/one.json'], fn),
+      );
+      let guardTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const startedAt = Date.now();
+        let ran = false;
+        const queued = rejection(
+          adapter.withFileWriteLocks(REALM, ['Widget/one.json'], async () => {
+            ran = true;
+          }),
+        );
+        const guard = new Promise<'still waiting'>((resolve) => {
+          guardTimer = setTimeout(() => resolve('still waiting'), 5000);
+        });
+        const err = await Promise.race([queued, guard]);
+        assert.true(
+          isWriteLockTimeout(err),
+          `refused as a write-lock timeout while the holder still held (got ${String(err)})`,
+        );
+        assert.true(
+          Date.now() - startedAt < WAIT_MS + 2000,
+          `refused at its budget (${Date.now() - startedAt} ms)`,
+        );
+        assert.false(ran, 'the section never ran');
+        assert.strictEqual(
+          adapter.connectionStats.inUse,
+          1,
+          'only the holder ever had a connection',
+        );
+      } finally {
+        clearTimeout(guardTimer);
+        holder.release();
+        await holder.done;
+      }
+    });
+
+    test('a writer behind one that gave up in the queue still waits in memory', async function (assert) {
+      // The third writer of a file set chains on the second. If the second
+      // gives up in the queue while the first still holds, the third must not
+      // take that as the files coming free: it would go to postgres and wait
+      // there behind the holder with a connection checked out. It stays in
+      // memory until the holder is done, and then takes the lock.
+      const adapter = boundedAdapter();
+      const holder = await holdOpen((fn) =>
+        adapter.withFileWriteLocks(REALM, ['Widget/one.json'], fn),
+      );
+      try {
+        const second = rejection(
+          adapter.withFileWriteLocks(
+            REALM,
+            ['Widget/one.json'],
+            async () => {},
+          ),
+        );
+        // Queued after the second has used part of its budget, so the second
+        // gives up first and the third still has budget left when it does.
+        await new Promise((r) => setTimeout(r, WAIT_MS / 2));
+        const third = adapter.withFileWriteLocks(
+          REALM,
+          ['Widget/one.json'],
+          async () => 'wrote',
+        );
+        assert.true(
+          isWriteLockTimeout(await second),
+          'the second writer gave up in the queue',
+        );
+        assert.strictEqual(
+          adapter.connectionStats.inUse,
+          1,
+          'the third writer is still waiting in memory, not in postgres',
+        );
+        holder.release();
+        await holder.done;
+        const err = await rejection(third);
+        const settledCleanly = err === undefined || isWriteLockTimeout(err);
+        assert.true(
+          settledCleanly,
+          `the third writer either wrote or gave up at its own budget (got ${String(err)})`,
+        );
+      } finally {
+        holder.release();
+        await holder.done;
+      }
+    });
+
+    test('lock waiters that fill the pool cannot wedge a holder that needs one more connection', async function (assert) {
+      // The shape that hangs a replica: a realm-lifecycle caller holds the
+      // realm exclusively, every file writer that arrives queues behind it in
+      // postgres holding a pooled connection, and the holder then needs a
+      // connection of its own to finish. With every connection held by a
+      // waiter and no waiter able to proceed, nothing ever frees one. A
+      // bounded wait frees them: each waiter gives up and returns its
+      // connection, the holder gets one and commits, and the realm answers
+      // again.
+      const POOL_MAX = 4;
+      const WRITERS = 8;
+      const adapter = boundedAdapter({ poolMax: POOL_MAX });
+      let signalHolding!: () => void;
+      const holding = new Promise<void>((r) => {
+        signalHolding = r;
+      });
+      const holder = adapter.withWriteLock(REALM, async () => {
+        signalHolding();
+        // Let the writers queue up behind the realm lock and take the pool.
+        await new Promise((r) => setTimeout(r, 100));
+        // The read the holder needs through the shared adapter.
+        await adapter.execute('SELECT 1');
+        return 'committed';
+      });
+      await Promise.race([holding, holder]);
+      const writers = Array.from({ length: WRITERS }, (_, i) =>
+        adapter
+          .withFileWriteLocks(REALM, [`Widget/${i}.json`], async () => 'wrote')
+          .catch((err: unknown) => (isWriteLockTimeout(err) ? 'refused' : err)),
+      );
+
+      let guardTimer: ReturnType<typeof setTimeout> | undefined;
+      const guard = new Promise<'wedged'>((resolve) => {
+        guardTimer = setTimeout(() => resolve('wedged'), 10_000);
+      });
+      try {
+        const outcome = await Promise.race([
+          Promise.all([holder, ...writers]),
+          guard,
+        ]);
+        assert.notStrictEqual(
+          outcome,
+          'wedged',
+          `the holder and every writer settled (pool: ${JSON.stringify(adapter.connectionStats)})`,
+        );
+        if (outcome !== 'wedged') {
+          const [holderOutcome, ...writerOutcomes] = outcome;
+          assert.strictEqual(holderOutcome, 'committed', 'the holder commits');
+          for (const result of writerOutcomes) {
+            assert.true(
+              ['wrote', 'refused'].includes(result as string),
+              `each writer either wrote or was refused (got ${String(result)})`,
+            );
+          }
+          const later = await adapter.execute('SELECT 1 AS answered');
+          assert.strictEqual(
+            later[0]?.answered,
+            1,
+            'a later request still gets a connection',
+          );
+        }
+      } finally {
+        clearTimeout(guardTimer);
+      }
     });
   });
 });

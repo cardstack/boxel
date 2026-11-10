@@ -327,8 +327,13 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
 
   // ── shape ──────────────────────────────────────────────────────────────
 
-  get size(): PretuiSize {
-    return resolveSize(this.args.size);
+  // 'default' is the component's own default: no step, so the root's
+  // --pretui-data-table-font-size applies.
+  get size(): PretuiSize | undefined {
+    let { size } = this.args;
+    return size === undefined || size === 'default'
+      ? undefined
+      : resolveSize(size);
   }
   get placeholder(): string {
     return this.args.placeholder ?? '—';
@@ -1231,7 +1236,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           display: grid;
           gap: var(--space-3, 8px);
           min-width: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--pretui-data-table-font-size, var(--boxel-font-size-xs));
+          /* DataShell, which holds the table body, sets its own size; 1em
+             hands it the size resolved here */
+          --pretui-data-font-size: 1em;
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
           /* The control columns' effective widths. A pin offset computed in
@@ -1257,17 +1265,22 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt[data-actions='true'] {
           --pretui-dt-act-eff: var(--pretui-dt-act-w, 3em);
         }
+        /* size scale, the same steps as Token's and Autocomplete's; the
+           ladder has no step under 11px, so xs and s share it */
         .pretui-dt[data-size='xs'] {
-          font-size: 10.5px;
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-dt[data-size='s'] {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
+        }
+        .pretui-dt[data-size='m'] {
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
         }
         .pretui-dt[data-size='l'] {
-          font-size: 14px;
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-dt[data-size='xl'] {
-          font-size: 16px;
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         .pretui-dt[aria-busy='true'] .pretui-dt-scroll {
           opacity: 0.62;

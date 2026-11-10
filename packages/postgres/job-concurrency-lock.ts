@@ -1,5 +1,7 @@
 import { param, type Expression } from '@cardstack/runtime-common';
 
+import { waitingOnLock } from './connection-scheduler.ts';
+
 // The key that stands for "no concurrency group". A job with no group is a lane
 // of its own, and every place that keys a lane — these locks, and the claim
 // query's lane and family keys — spells that lane with this one value.
@@ -45,9 +47,13 @@ async function acquireLock(
   queryFn: (expression: Expression) => Promise<unknown>,
   key: string | null,
 ) {
-  await queryFn([
-    'SELECT pg_advisory_xact_lock(hashtext(',
-    param(key ?? NO_CONCURRENCY_GROUP_KEY),
-    '))',
-  ]);
+  // Counted as a wait while it blocks, so a holder of the lock that is itself
+  // waiting on a connection is not left behind a pool full of waiters.
+  await waitingOnLock(() =>
+    queryFn([
+      'SELECT pg_advisory_xact_lock(hashtext(',
+      param(key ?? NO_CONCURRENCY_GROUP_KEY),
+      '))',
+    ]),
+  );
 }

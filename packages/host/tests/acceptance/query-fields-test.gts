@@ -468,6 +468,9 @@ module(
           stacks: [[{ id: QUERY_CARD_2_URL, format: 'isolated' }]],
         });
         await settled();
+        // interact mode keeps the cards in Recents loaded for its New menu
+        getService('recent-cards-service').remove(QUERY_CARD_URL);
+        await settled();
 
         let store = getService('store') as StoreService;
         (store as any).store.sweep(cardAPI);

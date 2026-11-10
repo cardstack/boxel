@@ -5,6 +5,7 @@ scope:
   - packages/realm-server/**
   - packages/runtime-common/matrix-client.ts
   - packages/runtime-common/db-queries/realm-permission-queries.ts
+  - packages/runtime-common/realm-permission-checker.ts
   - packages/host/app/services/matrix-service.ts
   - packages/host/app/services/message-service.ts
   - packages/host/app/services/realm-server.ts

@@ -20,6 +20,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import TemplateLinter from 'ember-template-lint';
 
 import { PACKAGE_ROOT } from './module-package.ts';
+import { stylesAtRunTime } from './run-time-style.ts';
 
 export const PRETUI_ROOT = join(PACKAGE_ROOT, '..', 'pretui');
 const PRETUI = '@cardstack/pretui/';
@@ -27,32 +28,24 @@ const SOURCE_EXTENSIONS = ['.gts', '.ts', '.js'];
 
 const IMPORT_SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(?\s*)(['"])([^'"\n]+)\1/g;
 
-// What a module's source refuses that the template lint can't see.
-const RUN_TIME_STYLE: [RegExp, string][] = [
-  [
-    /<style\b(?![^>]*\bscoped\b)[^>]*>/,
-    'has a <style> element that is not scoped, which the policy refuses as inline style',
-  ],
-  [
-    /createElement\(\s*['"`]style['"`]\s*\)/,
-    'creates a <style> element at run time, which the policy refuses as inline style',
-  ],
-  [
-    /setAttribute\(\s*['"`]style['"`]/,
-    'sets a style attribute at run time, which the policy refuses; set properties through the CSSOM (`element.style.setProperty`)',
-  ],
-];
-
 // A comment that mentions a `<style>` element is not one, so comment lines
 // are left out.
-export function runTimeStyleRefusals(source: string): string[] {
-  let code = source
+function withoutCommentLines(source: string): string {
+  return source
     .split('\n')
     .filter((line) => !/^\s*(\/\/|\/\*|\*)/.test(line))
     .join('\n');
-  return RUN_TIME_STYLE.filter(([pattern]) => pattern.test(code)).map(
-    ([, reason]) => reason,
-  );
+}
+
+// What a module's source refuses that the template lint can't see.
+export function runTimeStyleRefusals(source: string): string[] {
+  let code = withoutCommentLines(source);
+  let unscoped = /<style\b(?![^>]*\bscoped\b)[^>]*>/.test(code)
+    ? [
+        'has a <style> element that is not scoped, which the policy refuses as inline style',
+      ]
+    : [];
+  return [...unscoped, ...stylesAtRunTime(code).map(({ refusal }) => refusal)];
 }
 
 function isFile(file: string): boolean {

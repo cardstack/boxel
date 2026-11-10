@@ -42,6 +42,7 @@ jobs:
       claude-hooks: ${{ steps.filter.outputs.claude-hooks }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
       bot-runner: ${{ steps.filter.outputs.bot-runner }}
+      realm-historian: ${{ steps.filter.outputs.realm-historian }}
       eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
       eslint-plugin-cardstack-host: ${{ steps.filter.outputs.eslint-plugin-cardstack-host }}
       postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
@@ -107,6 +108,7 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/bxl/**'
               - 'packages/host/**'
+              - 'packages/realm-historian/**'
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
@@ -120,6 +122,13 @@ jobs:
               - *shared
               - 'packages/bot-runner/**'
               - 'packages/postgres/**'
+            # The package imports only runtime-common (in the shared list) and
+            # postgres. A change that adds an import updates this list
+            # (ADR 018 §1.4).
+            realm-historian:
+              - *shared
+              - 'packages/postgres/**'
+              - 'packages/realm-historian/**'
             eslint-plugin-boxel:
               - *shared
               - 'packages/eslint-plugin-boxel/**'
@@ -186,6 +195,7 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/matrix/**'
+              - 'packages/realm-historian/**'
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
@@ -203,6 +213,7 @@ jobs:
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/pretui/**'
+              - 'packages/realm-historian/**'
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
@@ -339,6 +350,40 @@ jobs:
       - name: Bot Runner test suite
         run: pnpm test
         working-directory: packages/bot-runner
+
+  realm-historian-test:
+    name: Realm Historian Tests
+    needs: change-check
+    if: needs.change-check.outputs.realm-historian == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    concurrency:
+      group: realm-historian-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Realm Historian test suite
+        run: pnpm test
+        working-directory: packages/realm-historian
 
   bxl-test:
     name: BXL Tests
@@ -1774,6 +1819,7 @@ jobs:
       - ai-bot-test
       - bot-runner-test
       - boxel-ui-test
+      - realm-historian-test
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
     # A called workflow's jobs may ask for no more than these, so they cover

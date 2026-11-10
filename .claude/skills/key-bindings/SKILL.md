@@ -139,17 +139,22 @@ and so is an operation with nothing left; a per-instance operation is in the
 batch only when the target is a card. Operations come grouped by normalized
 destination, with the caller's keys a slot can take and their shares in the
 realm, each with the batch's destinations its grants already cover
-(`covers`) and those its credential is good at (`serves`): an OAuth
-connection's tokens, or an OAuth client's own, only at the API hosts its
-client names (`apiHostsOfKeySql` in `lib/oauth.ts`), any other key wherever
-it is sent, as is a client that names no hosts. A connection whose client is
-gone serves nothing. An OAuth client people only sign in through is never
+(`covers`). `fillers[use][slot]` names, for `interactive` and `pipelines`
+use, the keys and shares that can fill each slot token
+(`keyOfferedForSlot` in `lib/slot-fill.ts`): of a kind the slot takes
+(its declared `keyKind`, or `slotKeyKinds`) in every operation that sends
+it, with a credential good at every destination it is sent to. An OAuth
+connection's tokens, or an OAuth client's own, are good only at the API
+hosts its client names (`apiHostsOfKeySql` in `lib/oauth.ts`); any other
+key is good wherever it is sent, as is a client that names no hosts, and a
+connection whose client is gone is good nowhere. For `pipelines`, an
+operation approved for pipelines only doesn't count. Asked with
+`operations: [<name>, …]`, only those operations count, and the batch still
+holds every operation. An OAuth client people only sign in through is never
 offered, as a key or as a share (`sendableKeySql`), and a share of one
-doesn't count as the caller's share for readiness either. Each slot also
-says which kinds of key can fill it (`kinds`: its declared `keyKind`, or
-`slotKeyKinds`). The approve page offers a slot only the keys and shares
-that fit every operation's `kinds` and serve every destination the slot is
-sent to; only a declared kind is enforced when approving. A share
+doesn't count as the caller's share for readiness either. The approve page
+offers a slot only its `fillers`; only a declared kind is enforced when
+approving. A share
 also says whether any binding of it is `interactive` yet, its
 `dailyBudget` in force, and whether the key it holds allows people who aren't
 signed in to use it (`anonymous`, with its `anonymousDailyCap` and `anonymousMonthlyCap`, read from
@@ -182,7 +187,8 @@ grant.
 --realm <url> [--slot] [--instance] [--interactive [--anonymous]] [--yes]`
   asks for the batch with the CLI's secure session, keeps the operations
   named (all of the class without `.<op>`) and the slots the key or share
-  fills, prints each request (label, method, path, where the key goes, body)
+  fills where the batch's `fillers` for the use it approves for offer it,
+  refusing a key or share they don't offer for a slot its type fills, prints each request (label, method, path, where the key goes, body)
   and the hosts the key goes to for the first time, and asks y/N once
   (`--yes` without a terminal). An approval whose every slot a grant already
   covers (the batch's `covers`) is posted from the terminal (`via` `cli`).
@@ -197,6 +203,8 @@ grant.
   the server resolves from prefix form or a URL). The CLI never creates a
   grant on its own. The window approves every slot of an operation, so a
   `--slot` approval that needs a new grant is refused in the terminal.
+  `--operation <…>.<op>` asks the batch with `operations: [<op>]`, so
+  `fillers` weigh only where that operation sends.
   `--interactive` also asks the batch for pipelines-only slots, prints what
   interactive use allows, and approves interactively. For the operations the
   policy opens to visitors (`openToAnonymous`) it prints the same lines the

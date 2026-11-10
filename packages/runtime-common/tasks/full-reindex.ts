@@ -1,8 +1,14 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
 
-import { jobIdentity, fetchAllRealmsWithOwners } from '../index.ts';
+import {
+  jobIdentity,
+  fetchAllRealmsWithOwners,
+  getMatrixUsername,
+  isPublishedRealmAccount,
+} from '../index.ts';
 import { systemInitiatedIndexPriority } from '../jobs/indexing.ts';
+import { isUserOfMatrixServer } from '../matrix-server-name.ts';
 import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
@@ -106,6 +112,7 @@ const fullReindex: Task<FullReindexArgs, void> = ({
   log,
   dbAdapter,
   queuePublisher,
+  matrixServerName,
 }) =>
   async function (args) {
     let { jobInfo, realmUrls, realmEvents } = args;
@@ -114,29 +121,46 @@ const fullReindex: Task<FullReindexArgs, void> = ({
     );
     reportStatus(jobInfo, 'start');
 
-    const realmOwners = await fetchAllRealmsWithOwners(dbAdapter);
-
-    const ownerMap = new Map(
-      realmOwners.map((r) => [r.realm_url, r.owner_username]),
+    const realmOwners = await fetchAllRealmsWithOwners(
+      dbAdapter,
+      matrixServerName,
     );
 
-    // Only include realms with a non-bot owner
+    const ownerMap = new Map(
+      realmOwners.map((r) => [r.realm_url, r.owner_user_id]),
+    );
+
+    // A realm owned only by its own published-realm account is not swept.
     const realmsWithUsernames = realmUrls
       .map((realmUrl) => {
-        const username = ownerMap.get(realmUrl);
-        if (!username) {
+        const ownerUserId = ownerMap.get(realmUrl);
+        if (!ownerUserId) {
           log.warn(
             `${jobIdentity(jobInfo)} skipping realm without owner: ${realmUrl}`,
           );
           return null;
         }
+        if (isPublishedRealmAccount(ownerUserId, matrixServerName)) {
+          return null;
+        }
+        // An indexing job names the user it runs as by localpart, which the
+        // worker qualifies with its own server name. For an owner on another
+        // homeserver that would name a different account, so the realm is
+        // skipped.
+        if (!isUserOfMatrixServer(ownerUserId, matrixServerName)) {
+          log.warn(
+            `${jobIdentity(jobInfo)} skipping realm whose owner is on another homeserver: ${realmUrl}`,
+          );
+          return null;
+        }
         return {
           realmUrl,
-          realmUsername: username,
+          // The owner is on the worker's server, so the worker qualifies this
+          // localpart back to the owner's id.
+          realmUsername: getMatrixUsername(ownerUserId),
         };
       })
-      .filter((realm): realm is RealmReindexTarget => realm !== null)
-      .filter((realm) => !realm.realmUsername.startsWith('realm/'));
+      .filter((realm): realm is RealmReindexTarget => realm !== null);
 
     if (realmsWithUsernames.length === 0) {
       log.debug(

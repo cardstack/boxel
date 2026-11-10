@@ -2,6 +2,7 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
+import { readOAuthProviderConfig } from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -25,7 +26,12 @@ import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
 import * as Sentry from '@sentry/node';
-import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  SessionProbe,
+  startSessionSampling,
+} from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
@@ -463,6 +469,13 @@ const secureOriginURL =
       ? `${serviceURL(secureServiceName)}/secure`
       : `https://localhost:${secureListenerPort}/secure`);
 
+// Boxel's OAuth provider, on only where BOXEL_OAUTH_PROVIDER_ENABLED=true.
+// Read before anything starts, so a missing or malformed configuration stops
+// the server at boot instead of at the first OAuth request.
+const oauthProvider = readOAuthProviderConfig(process.env, {
+  secureOriginURL,
+});
+
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
 for (let realmURL of publishableRealms) {
@@ -668,8 +681,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // against whether the process's event loop was starved at the time, and heap
   // growth toward the OOM limit is visible (and alertable) on a calm process
   // before a search storm — not only inside saturation windows.
+  // The session table is read on a connection of its own, outside the pool,
+  // so a starved pool cannot silence the reading that explains it.
+  let sessionSampling = startSessionSampling(new SessionProbe());
   let stopHealthSampler = startHealthSampler({
     connectionStats: () => dbAdapter.connectionStats,
+    sessionStats: sessionSampling.latest,
   });
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
@@ -979,6 +996,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
+    ...(oauthProvider ? { oauthProvider } : {}),
   });
 
   const secureHttpServer =
@@ -1054,6 +1072,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
           livenessResponder?.stop(),
+          sessionSampling.stop(),
         ]);
         // Stopped only once the responder is gone, never before: the loop is
         // still turning while the shutdown above runs, and a check arriving in

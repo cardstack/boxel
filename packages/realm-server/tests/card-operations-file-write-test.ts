@@ -87,7 +87,9 @@ function stub(stored: Record<string, string> = {}): Stub {
       // ceiling. The shape `Realm.assertWriteSize` throws is exercised where
       // the ceiling is: the batch suite that stages an oversized card.
     },
-    async drainIndexing() {},
+    drainIndexing() {
+      return undefined;
+    },
     async isIgnored() {
       return false;
     },

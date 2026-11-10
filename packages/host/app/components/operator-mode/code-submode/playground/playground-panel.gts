@@ -738,6 +738,9 @@ export default class PlaygroundPanel extends Component<Signature> {
         return;
       }
     }
+    let wasPreviewingCard =
+      selection?.cardId === trimJsonExtension(selectedCardId) &&
+      selection.fieldIndex === undefined;
 
     this.playgroundPanelService.persistSelections(
       this.moduleId,
@@ -747,6 +750,14 @@ export default class PlaygroundPanel extends Component<Signature> {
       // based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
       // a spec instance on playground instead of the field,
     );
+
+    // a field's example belongs to its spec card, a file isn't a card, and a
+    // format change shows the same card again
+    if (index === undefined && !this.args.isFileDef && !wasPreviewingCard) {
+      this.operatorModeStateService.recordPlaygroundCard(
+        trimJsonExtension(selectedCardId),
+      );
+    }
   };
 
   @action private chooseInstance() {

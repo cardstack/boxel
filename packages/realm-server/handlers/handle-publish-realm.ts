@@ -1090,7 +1090,7 @@ export default function handlePublishRealm({
         return;
       }
       log.error('Error publishing realm:', error);
-      await sendResponseForSystemError(ctxt, error.message);
+      await sendResponseForSystemError(ctxt, error.message, error);
     }
   };
 }
