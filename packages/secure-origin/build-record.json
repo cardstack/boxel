@@ -1681,7 +1681,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 133893,
+      "bytes": 133839,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1737,7 +1737,7 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "components/3bb13a7822.css"
+          "module": "components/4087fc7283.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -2311,7 +2311,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/select.gts",
-          "sha256": "9cff4198faf344cff1ed3c350c81ce27cef30611bc8fb81966e62f550fdb3b6c",
+          "sha256": "3789ea21029ae6477aabc2fedaa41765a5f17dd5ea244763bb5888f5e7808aa9",
           "size": 9549
         },
         {

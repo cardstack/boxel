@@ -352,14 +352,8 @@ class SelectSearch extends Component<SelectSearchSignature> {
         /* the trigger's type, copied onto the list on each open as the
            options' is, its 1px edge, and its 2px focus ring laid over it */
         .ember-power-select-search-input {
-          font-size: var(
-            --pretui-select-list-font-size,
-            var(--boxel-font-size-xs)
-          );
-          line-height: var(
-            --pretui-select-list-line-height,
-            var(--boxel-line-height-xs)
-          );
+          font-size: var(--pretui-select-list-font-size);
+          line-height: var(--pretui-select-list-line-height);
           letter-spacing: var(--boxel-lsp-xs);
           min-height: var(--_select-h);
           padding-block: 0;
