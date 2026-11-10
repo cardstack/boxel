@@ -424,36 +424,13 @@ export class RealmIndexQueryEngine {
     return (this.#realmURL ??= new URL(this.#realm.url));
   }
 
-  // The entry engine. Runs the parsed entry query — the
-  // `item.` membership query against the SQL core, then the htmlQuery
-  // evaluated per candidate rendering in this mapper — and assembles a
-  // heterogeneous `entry` document: one entry per result, with the
-  // selected `html` renderings (+ deduped `css`) and/or `item` resources in
-  // `included` per the sparse fieldset.
-  //
-  // Branch emission per entry:
-  //   - `fieldset.html` → one `html` resource per rendering the htmlQuery
-  //     selects from the row's rendering set (formats × ancestor render
-  //     types; error rows flag their renderings `isError`). A pinned html
-  //     branch emits an empty `data: []` when nothing matches; the default
-  //     mode omits the relationship on fallback rows instead.
-  //   - a pinned `item` (`fieldset.item` full/sparse) rides on every row; the
-  //     default mode (`itemAsFallback`) emits it only where no rendering
-  //     matched. Sparse items carry `meta.sparseFields` and skip the link
-  //     expansion; full items go through `loadLinks` (same gating as the live
-  //     search path).
-  //
-  // When no renderType predicate appears anywhere in the htmlQuery, only each
-  // result's own native type (`types[0]`) is in play; an explicit predicate
-  // opens the full adoption-chain universe. The applied htmlQuery is echoed
-  // once as `meta.htmlQuery` whenever the html branch is in play.
-  // A `select` search: the query's rows as a table of values read off the
-  // search doc, `id` first. See `IndexQueryEngine.planColumns`.
   // Each vector field's state for a card read (see IndexQueryEngine).
   vectorStatus(url: URL) {
     return this.#indexQueryEngine.vectorStatus(url);
   }
 
+  // A `select` search: the query's rows as a table of values read off the
+  // search doc, `id` first. See `IndexQueryEngine.planColumns`.
   async searchColumns(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,
@@ -502,6 +479,29 @@ export class RealmIndexQueryEngine {
     };
   }
 
+  // The entry engine. Runs the parsed entry query — the
+  // `item.` membership query against the SQL core, then the htmlQuery
+  // evaluated per candidate rendering in this mapper — and assembles a
+  // heterogeneous `entry` document: one entry per result, with the
+  // selected `html` renderings (+ deduped `css`) and/or `item` resources in
+  // `included` per the sparse fieldset.
+  //
+  // Branch emission per entry:
+  //   - `fieldset.html` → one `html` resource per rendering the htmlQuery
+  //     selects from the row's rendering set (formats × ancestor render
+  //     types; error rows flag their renderings `isError`). A pinned html
+  //     branch emits an empty `data: []` when nothing matches; the default
+  //     mode omits the relationship on fallback rows instead.
+  //   - a pinned `item` (`fieldset.item` full/sparse) rides on every row; the
+  //     default mode (`itemAsFallback`) emits it only where no rendering
+  //     matched. Sparse items carry `meta.sparseFields` and skip the link
+  //     expansion; full items go through `loadLinks` (same gating as the live
+  //     search path).
+  //
+  // When no renderType predicate appears anywhere in the htmlQuery, only each
+  // result's own native type (`types[0]`) is in play; an explicit predicate
+  // opens the full adoption-chain universe. The applied htmlQuery is echoed
+  // once as `meta.htmlQuery` whenever the html branch is in play.
   async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,
@@ -623,8 +623,8 @@ export class RealmIndexQueryEngine {
       let explanation = (row as Record<string, unknown>)[EXPLAIN_KEY] as
         | ResultExplanation
         | undefined;
-      // And, under `rerank`, the row's formula value.
-      // And the query's formula value, wherever the formula ran.
+      // And the row's formula value, wherever the query's formula ran (under
+      // `rerank`, or as a placed expression).
       let formulaValue = (row as Record<string, unknown>)[FORMULA_KEY] as
         | number
         | null

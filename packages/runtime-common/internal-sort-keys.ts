@@ -1,6 +1,6 @@
 // The engine's internal sort keys. A query is lowered to them, so the engine
 // reads them, but they are not part of the grammar an author writes: a blend
-// is `{ blend }`, a formula `{ formula }`, a boost `{ boost }`, and the
+// is `{ blend }`, an expression `{ expression }`, a boost `{ boost }`, and the
 // relevance sorts are `{ relevance }` and `{ by: 'textRelevance' }`. Every
 // place an author's query comes in refuses them: the search request, and a
 // query-backed field's query, which the indexer runs in-process and the

@@ -204,9 +204,9 @@ export const SEARCH_TOTAL_CAP = parsePositiveInt(
 // matches more (a word nearly every card holds, like "card") ranks a capped
 // candidate set instead: its best field matches by rank, and that many of the
 // cards that hold it only on their rendered page. The search reports a lower
-// bound for its total with `meta.page.totalIsEstimate`; `page.exactTotal`
-// counts every match instead. See docs/search.md, "Bounds every query runs
-// under".
+// bound for its total with `meta.page.totalIsEstimate`; an exact total
+// (`page.total: 'exact'`, or `page.exactTotal`) counts every match instead.
+// See docs/search.md, "Bounds every query runs under".
 export const SEARCH_MATCH_CANDIDATE_CAP = parsePositiveInt(
   env.SEARCH_MATCH_CANDIDATE_CAP,
   1_000,
@@ -613,14 +613,14 @@ export function matchCandidateCap(): number {
   return matchCandidateCapValue;
 }
 
-// The effective assembled-resource budget. Read through a function rather than
-// imported as a const so the test seam above reaches it — a test exercises the
-// bound by lowering it to a handful of resources instead of authoring a
-// thousand-card graph.
 export function queryFieldDefaultPageSize(): number {
   return queryFieldPageSize;
 }
 
+// The effective assembled-resource budget. Read through a function rather than
+// imported as a const so the test seam above reaches it — a test exercises the
+// bound by lowering it to a handful of resources instead of authoring a
+// thousand-card graph.
 export function assembledLinkResourceBudget(): number {
   return maxAssembledLinkResources;
 }
@@ -838,12 +838,6 @@ export function applyServerSearchPageBound(query: Query): Query {
   );
 }
 
-// Run an item-leg search under the wall-clock budget. The runner receives an
-// AbortSignal it threads into `loadLinks` so the expensive async work stops
-// promptly on timeout; the Promise.race guarantees the 408 return even though
-// the federated fan-out swallows the abort (it treats an aborted realm as a
-// failed realm). The abandoned runner promise gets a no-op catch so its late
-// abort rejection isn't an unhandled rejection.
 // When each realm of a federated search must have answered, so one slow
 // realm is reported as a timeout (`meta.realms[url].status`) while the rest
 // answer, inside the request's own budget: the budget less a reserve for
@@ -855,6 +849,12 @@ export function realmDeadlineWithin(
   return now + budgetMs - Math.min(2_000, Math.floor(budgetMs / 10));
 }
 
+// Run an item-leg search under the wall-clock budget. The runner receives an
+// AbortSignal it threads into `loadLinks` so the expensive async work stops
+// promptly on timeout; the Promise.race guarantees the 408 return even though
+// the federated fan-out swallows the abort (it treats an aborted realm as a
+// failed realm). The abandoned runner promise gets a no-op catch so its late
+// abort rejection isn't an unhandled rejection.
 export async function runWithSearchTimeBudget<T>(
   run: (signal: AbortSignal) => Promise<T>,
   budgetMs: number = timeBudgetMs,

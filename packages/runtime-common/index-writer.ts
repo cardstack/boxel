@@ -3936,8 +3936,6 @@ export class Batch {
     ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'search_doc'>[];
   }
 
-  // Re-derives the stored vectors for every URL this pass staged (see
-  // vector-index-writer.ts). Runs inside the swap transaction.
   // Keeps `boxel_log_lines` in step with every log this pass staged: only
   // the appended lines when a log has only grown (`log-line-index.ts`).
   async #syncLogLineIndex() {
@@ -3952,6 +3950,8 @@ export class Batch {
     );
   }
 
+  // Re-derives the stored vectors for every URL this pass staged (see
+  // vector-index-writer.ts). Runs inside the swap transaction.
   async #syncVectorIndex() {
     await syncVectorIndex(
       {

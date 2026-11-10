@@ -570,6 +570,37 @@ Ask for `Accept: application/x-ndjson` (or `application/jsonl`, the same format)
 
 Under a realm policy, the rows are the ones the caller's grants admit, as for any search, and a value read through a link shows only where the linked card's own type's grants admit the caller as well: otherwise it reads null (or, in a list, is left out). A `select` value is never wider than what the caller could read card by card.
 
+### Searching a log (`from: { log }`)
+
+An append-only log (a `.jsonl` or `.log` file, written a line at a time with `record`) can be searched line by line without reading the file. Each line is indexed as a row when the file is indexed, and an append inserts only the new lines. Send the query to the realm's `_search`:
+
+```ts
+{
+  from: { log: 'TasteProfile/my-taste.history.jsonl' }, // realm-relative or absolute
+  filter: {
+    every: [
+      { eq: { 'what.action': 'like' } },
+      { range: { at: { gte: 'now-7d' } } },
+    ],
+  },
+  sort: [{ by: 'at', direction: 'desc' }],
+  page: { size: 50, total: 'capped' },
+}
+```
+
+The answer is `{ data: [{ line, at, actor, entry }], meta: { page, facets?, log } }`.
+
+- **Paths:** `at` (the line's time), `actor`, `line` (its number from 1), and any path into the entry (`what.action`). A `what` that `JSONLFile`'s `record` stored as a JSON string is decoded, so its fields are paths too. A `.log` line is `{ text }`, with its time and actor read from the line.
+- **Filters:** `eq`, `in`, `range` (`gt`, `gte`, `lt`, `lte`; `at` takes an ISO time or `now-<n><unit>` with `s`, `m`, `h`, `d`, `w`, `M` or `y`), `contains` (case-insensitive), `exists`, `every`, `any` and `not`. An `eq` or `in` on an entry path is answered by an index.
+- **Sort and page:** sort by `at`, `line`, `actor` or an entry path; ties keep file order. The page defaults to 50, up to 1,000, and takes `total` as a card search does.
+- **`facets`:** count the filtered lines by a path's values, largest first. `{ by: 'at' }` counts per day.
+- **`select`:** return only those paths per line, as `{ line, 'what.action': … }`.
+- **`group`:** one row per distinct value of `by` (a path, or a list of paths), with aggregates over each group's lines: `count` (`true`, or a path to count non-null values), `min`, `max`, `sum`, `avg`, `distinct` (the list of values) and `latest` (the value on the newest line). Rows are `{ group: { <path>: value }, <name>: value }`, sortable by a group path or an aggregate, and `page.total` counts groups. `select` and `group` don't combine.
+
+A log search needs the realm's own read; a policy grant scopes cards, and doesn't reach a log's lines. An unknown member is refused (code `invalid-log-query`), not ignored.
+
+A log's lines can be typed: `linksTo(JSONLFile, { of: ReactionField })` checks each `record`'s `what` against the FieldDef before it is sent.
+
 ### Relative dates
 
 A `range` bound on a date field may be relative: `now`, optionally moved by whole units (`now-30d`, `now+1w`), optionally rounded down to the start of a unit in UTC (`now-30d/d`, `now/M`). The units are `s`, `m`, `h`, `d`, `w`, `M` (months) and `y`. A week starts on Monday. The bound is read when the query runs, so a saved search for "added this month" stays current. On a `DateField` or `DateTimeField` the bound is compared in the field's own format. Any other string is a literal bound.
@@ -622,9 +653,17 @@ The `page` object has the following properties:
 - `number`: The page number (0-based indexing)
 - `size`: The number of results per page. A query that names none gets the first 50, whoever runs it: a card's `getCards`, a host search, or a `_search` or `_federated-search` request. Name a size for more: a card search takes up to 100, and a request to the server up to 2,000, clamped above that. A query-backed `linksToMany` field that names none takes 500, since it is read as the set it declares.
 
+- `total`: How much counting the total costs:
+  - `capped` (the default) counts up to 1,000 (`SEARCH_TOTAL_CAP`) and reports a lower bound past it.
+  - `exact` counts every match.
+  - `none` counts nothing; the total is the rows seen so far.
+
+  A page with no next page is always counted exactly, whatever the mode. A query-backed field's search counts exactly unless it says otherwise, since its `totalMatchCount` is read as the full count. `page.exactTotal: true` is an older spelling of `total: 'exact'`.
+
 The search response includes a `meta` object with pagination information:
 
-- `meta.page.total`: The total number of results across all pages. With `meta.page.totalIsEstimate: true` it is a lower bound (see "Bounds every query runs under"); `page.exactTotal: true` asks for an exact count.
+- `meta.page.total`: The total number of results across all pages. With `meta.page.totalIsEstimate: true` it is a lower bound: the count stopped at the cap, or a broad `matches` term was capped (see "Bounds every query runs under"). Show it as "1,000+".
+- `meta.page.hasMore`: Whether another page follows this one. A caller that only needs "more" (an infinite list, a "next" button) can send `page.total: 'none'` and read this, which costs no count at all.
 
 #### Examples
 
@@ -721,6 +760,7 @@ These hold for every search, whoever runs it (a card's `getCards`, a query-backe
 
 - **A search whose client leaves stops.** When the connection of a `_search` or `_federated-search` request closes before its response is written, the search is cancelled in every realm it was running in: its SQL is cancelled in Postgres (`pg_cancel_backend`), and nothing else is computed for it. A result shared by identical requests in flight together (the live-search cache) is stopped only once every request waiting for it has gone.
 - **A broad `matches` term ranks a capped candidate set.** A full-text term reads only the realm searched. Before a paged search runs, each positive `matches` term is probed: how many of the realm's cards it matches on its rendered page and in its fields, counting no further than the cap (`SEARCH_MATCH_CANDIDATE_CAP`, default 1,000). A term within the cap runs as written, so its rows and its total are exact. A term past it (a word nearly every card holds, like "card") takes at most the cap's worth of candidates from each side: its best field matches by rank vector (what a text-relevance sort ranks them by) and the first of the cards that hold it only on their page (which all rank at the same page-only floor). The rest of the query (other filters, the sort, facets, the page) runs over those candidates. Its `meta.page.total` is then the number of candidates that matched, a lower bound, and `meta.page.totalIsEstimate` is `true`; a federated total is flagged when any realm's is. The first page of a text-relevance sort is unchanged; a query sorted another way (say, newest first) orders the candidates rather than every match. A term under `not` is never capped. To count and order every match, ask for it: `page: { size: 20, exactTotal: true }`. Such a search is still held to the time budget.
+- **A total is counted up to a cap.** A page's `meta.page.total` counts up to 1,000 matches (`SEARCH_TOTAL_CAP`) unless the query asks for `page.total: 'exact'`; past the cap it is a lower bound, flagged `meta.page.totalIsEstimate`. Counting every match of a broad query costs a pass over all of them, for a number a list shows as "1,000+". Facet counts are unaffected.
 - **A `matches` term with no word in it matches nothing.** A term made only of stop words and single letters or digits ("a", "the of", "x y") matches no card, and runs no full-text scan to find that out. Beside a real word, a stop word is dropped as before ("the brass" matches "brass"); a single letter beside a real word stays part of the query.
 - **Short type-ahead and title substrings are bounded.** A `typeahead` word shorter than three letters already matches as a whole word unless a longer word narrows it, and its index lookup reads only the realm searched. A `contains` on `_title` or `cardTitle` of one or two characters has no trigram to narrow it, so it reads the realm's titles; when more of the realm's cards hold it than the candidate cap, it matches at most the cap's worth of them and the total is flagged as above (`page.exactTotal` counts them all).
 

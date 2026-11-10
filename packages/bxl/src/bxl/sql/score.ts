@@ -26,7 +26,7 @@
 //
 // The formula's value is NULL when it is blank or an error, so such a row
 // ranks last (or, in a blend, gets nothing from the signal).
-// `evaluateSpreadsheetFormula` (formula-eval.ts) computes the same values in
+// `prepareSpreadsheetFormula` (formula-eval.ts) computes the same values in
 // JavaScript, for the formulas a database cannot run.
 //
 // Numbers are inlined (they are checked finite), so the result needs no
