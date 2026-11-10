@@ -10,6 +10,7 @@ import SearchIcon from '@cardstack/boxel-icons/search';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import { POPUPS_IN_PLACE } from '../internal/overlay';
+import { ignoredByPasswordManagers } from '../password-managers';
 import type { ControlNotifyArgs } from '../pretui-primitives';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
@@ -189,6 +190,9 @@ interface SelectSearchSignature {
   Element: HTMLDivElement;
 }
 
+// The search box always tells password managers to leave it alone. It
+// filters a list, so no login belongs in it, the secure origin's included,
+// and it renders in the wormhole, where a caller's modifier can't reach it.
 class SelectSearch extends Component<SelectSearchSignature> {
   // Runs as the list opens, from a marker this template always renders
   // inside it. It gives the list the marker's scope attribute: the list
@@ -279,6 +283,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
           {{on 'focus' @onFocus}}
           {{on 'blur' @onBlur}}
           {{this.focusOnOpen}}
+          {{ignoredByPasswordManagers}}
           data-test-pretui-select-search-input
         />
       </div>

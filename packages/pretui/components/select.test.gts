@@ -156,6 +156,16 @@ module('Pretui | components/select', function (hooks) {
     assert.deepEqual(shown, ['Oolong'], 'typing filters the options by label');
   });
 
+  test('the search box tells password managers to leave it alone', async function (assert) {
+    await render(<template><Select @options={{OPTIONS}} @searchEnabled={{true}} /></template>);
+    await click(trigger());
+    let input = '[data-test-pretui-select-search-input]';
+    assert.dom(input).hasAttribute('data-1p-ignore', '');
+    assert.dom(input).hasAttribute('data-lpignore', 'true');
+    assert.dom(input).hasAttribute('data-form-type', 'other');
+    assert.dom(input).hasAttribute('data-bwignore', '');
+  });
+
   test('a label pointing at @controlId names the trigger, then the value', async function (assert) {
     await render(
       <template>

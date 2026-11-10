@@ -2066,7 +2066,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 572946,
+      "bytes": 573222,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2311,8 +2311,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/select.gts",
-          "sha256": "fe952350aee66f20b7293d09656a7fae5b104d1fc4f60d779780dfbd7819ebf0",
-          "size": 9202
+          "sha256": "496d635ece0ef0c294f8cfa6b2baa1dcaed8554d9220d14fe44f36c47b7ae1d1",
+          "size": 9267
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -2379,6 +2379,12 @@
           "module": "internal/structure-layout.gts",
           "sha256": "9b042e2ae5b950c146ff41e504094edbb6af1d111f3ee38eb038b2259957fdee",
           "size": 507
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "password-managers.gts",
+          "sha256": "45efb7baba7e89ec4068591fcae53b13775b58696fbc51065bca934496fb7dc6",
+          "size": 463
         },
         {
           "package": "@cardstack/pretui@0.0.0",

@@ -7,7 +7,7 @@ Choose one value from a known list. Use it when the options are enumerable and t
 ```
 @options: { value, label, meta? }[]   (required; meta is a muted second part after the label, such as an address that tells two same-named options apart; search matches the label alone)
 @value?, @defaultValue?, @placeholder? (default 'Select…'), @disabled?, @controlId?
-@searchEnabled?   (a search box above the list, focused on open)
+@searchEnabled?   (a search box above the list, focused on open, that password managers leave alone)
 @label?, @labelledBy?   (the trigger's accessible name)
 @onValueChange?(value: string)
 ```
@@ -17,6 +17,8 @@ Choose one value from a known list. Use it when the options are enumerable and t
 **Hybrid controlled/uncontrolled.** `@value ?? @internal`, and `@internal` is only written when `@value === undefined`. Pass `@value` and you own it; pass `@defaultValue` and the component does. This exact idiom is repeated across Switch, Checkbox, RadioGroup, SegmentedControl, Tabs, Slider and Pagination — learn it once.
 
 **Search is opt-in.** `@searchEnabled` adds a search box above the list, with a search icon, that takes focus when the list opens and filters by label. Off by default: typeahead on the trigger covers most lists, as in Radix and React Aria. BoxelSelect's own search box never takes focus, so from the trigger it is reachable by pointer only; Select supplies its own. A list the user types into to find a value that may not exist is a **Combobox**.
+
+**Password managers leave the search box alone.** It carries every password manager's hint to skip a field (`ignoredByPasswordManagers`), since a box that filters a list never takes a login. It renders in the wormhole, so a caller couldn't put the hint on it.
 
 ## Prior art
 
