@@ -171,8 +171,9 @@ export default class GetStarted extends Component<Signature> {
         id: 'open-card',
         title: 'Open a card in a workspace',
         hint: 'Cards hold your data, documents and apps.',
-        // The account records the first card opened in any browser; this
-        // browser's recent cards count until that write lands.
+        // The account records cards opened since login, in any browser. This
+        // browser's recent cards count too, so cards opened here before login
+        // still tick the step here.
         done:
           this.recentCardsService.recentCards.length > 0 ||
           Boolean(this.matrixService.dashboardState.openedCard),

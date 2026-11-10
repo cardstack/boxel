@@ -33,6 +33,7 @@ import {
   setupMoreWorkspaces,
   sharedRealmURL,
 } from '../helpers/dashboard';
+import { setRecentCards } from '../helpers/recent-files-cards';
 
 module('Acceptance | dashboard get started', function (hooks) {
   let mockMatrixUtils = setupDashboardTest(hooks);
@@ -562,6 +563,18 @@ module('Acceptance | dashboard get started', function (hooks) {
     assert.true(
       (mockMatrixUtils.getDashboardState() as any).openedCard,
       'other browsers read it from there',
+    );
+  });
+
+  test('cards this browser opened before login tick the step here but are not recorded on the account', async function (assert) {
+    setRecentCards([[`${realmURL}index`, Date.now()]]);
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await click(BUTTON);
+
+    assert.strictEqual(stepDone('open-card'), 'true');
+    assert.notOk(
+      (mockMatrixUtils.getDashboardState() as any)?.openedCard,
+      'the list may be another account’s',
     );
   });
 
