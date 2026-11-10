@@ -2743,7 +2743,11 @@ module('Integration | Store', function (hooks) {
       relationships: { bestFriend: { links: { self: null } } },
     })) as any;
 
-    assert.strictEqual(instance.bestFriend, null, 'the instance has no link');
+    assert.strictEqual(
+      instance.bestFriend,
+      undefined,
+      'the instance has no link',
+    );
     assert.deepEqual(
       instance.friends.map((friend: any) => friend.name),
       ['Germaine'],

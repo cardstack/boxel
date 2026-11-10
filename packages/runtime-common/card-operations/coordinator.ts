@@ -341,9 +341,9 @@ export interface CommitBatchOptions {
   // would describe a payload it did not send, and the remedy — name the card
   // by URL, or stop claiming a realm for it — is one only the caller can
   // apply. The card endpoints ask for `leave`, because a `POST` or `PATCH`
-  // carrying such a payload has always stored the card with the edge empty
-  // and answered success: serialization records a link it cannot resolve as
-  // an explicit null.
+  // carrying such a payload has always answered success: serialization
+  // records a link it cannot resolve as an explicit null, and a `PATCH` keeps
+  // a `linksTo` the card already stores there.
   foreignSideLoadLink?: 'refuse' | 'leave';
   // Whether the realm names the cards this batch mints. By default a card the
   // caller names with a `lid` is stored under that id, which is what lets a

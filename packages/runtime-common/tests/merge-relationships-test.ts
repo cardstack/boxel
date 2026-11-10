@@ -98,6 +98,30 @@ const tests = Object.freeze({
       );
     },
 
+  'a linksTo named only by a local id keeps the stored link': async (
+    assert,
+  ) => {
+    let localLink = { data: { type: 'card', lid: 'local-id-1' } };
+    assert.deepEqual(
+      mergeRelationships(
+        { friend: { links: { self: './jade' } } },
+        { friend: localLink },
+      ),
+      { friend: { links: { self: './jade' } } },
+      'a stored link',
+    );
+    assert.deepEqual(
+      mergeRelationships({}, { friend: localLink }),
+      { friend: localLink },
+      'no stored link',
+    );
+    assert.deepEqual(
+      mergeRelationships(storedFriends, { 'friends.0': localLink }),
+      { 'friends.0': localLink },
+      'a list is replaced whole',
+    );
+  },
+
   'a relationship the patch leaves out is kept': async (assert) => {
     assert.deepEqual(
       mergeRelationships(

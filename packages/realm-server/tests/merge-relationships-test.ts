@@ -26,6 +26,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(mergeRelationshipsTests, assert, {});
     });
 
+    test('a linksTo named only by a local id keeps the stored link', async function (assert) {
+      await runSharedTest(mergeRelationshipsTests, assert, {});
+    });
+
     test('a relationship the patch leaves out is kept', async function (assert) {
       await runSharedTest(mergeRelationshipsTests, assert, {});
     });

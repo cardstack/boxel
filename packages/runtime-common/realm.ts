@@ -14043,7 +14043,8 @@ export class Realm {
             // below.
             reportStoredContent: true,
             // The same reading a create takes of a side-load claiming another
-            // realm: the edge is stored empty and the patch succeeds.
+            // realm: the patch succeeds, keeping a `linksTo` the card already
+            // stores there and storing the edge empty otherwise.
             foreignSideLoadLink: 'leave',
             timings,
             ...(precondition ? { precondition } : {}),

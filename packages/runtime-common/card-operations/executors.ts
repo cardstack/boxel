@@ -2273,7 +2273,8 @@ function promoteStagedLinks(resource: CardResource, ctx: StagingContext): void {
       // realm, so the batch does not write it — and serialization records a
       // link it cannot resolve as an explicit null. The card is stored saying
       // the edge is empty, rather than saying it points at a URL nothing is
-      // stored under.
+      // stored under, unless a patch leaves a stored `linksTo` there (see
+      // `mergeRelationships`).
       return;
     }
     relationship.links = { self: stagedLid(lid, ctx).id };
