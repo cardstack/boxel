@@ -21,7 +21,6 @@ interface Row {
 const COLUMNS: DataColumn<Row>[] = [{ key: 'name', label: 'Name' }];
 const ROWS: Row[] = [{ id: 'a', name: 'Assam' }];
 const rowKey = (row: Row) => row.id;
-const noop = () => {};
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- a DEMOS registry is
    Record<string, unknown> by contract; mounting one requires the cast. */
@@ -142,7 +141,7 @@ module('Pretui | components/data-table', function (hooks) {
     assert.deepEqual(calls, ['a@0', 'a@0'], 'Enter activates');
   });
 
-  test('@onActivate with selectionMode: click selects, Enter activates', async function (assert) {
+  test('@onActivate with selectionMode: a row click activates, the checkbox selects', async function (assert) {
     let activated = 0;
     let onActivate = () => activated++;
     await render(
@@ -157,13 +156,22 @@ module('Pretui | components/data-table', function (hooks) {
       </template>,
     );
     await click('[data-test-pretui-dt-row]');
-    assert.dom('[data-test-pretui-dt-row]').hasAttribute('aria-selected', 'true');
-    assert.strictEqual(activated, 0, 'click does not activate');
+    assert.strictEqual(activated, 1, 'a click on the row activates');
+    assert
+      .dom('[data-test-pretui-dt-row]')
+      .hasAttribute('aria-selected', 'false', 'and does not select it');
+    await click('[data-test-pretui-dt-select]');
+    assert.strictEqual(activated, 1, 'the checkbox does not activate');
+    assert
+      .dom('[data-test-pretui-dt-row]')
+      .hasAttribute('aria-selected', 'true');
     await triggerKeyEvent('[data-test-pretui-dt-row]', 'keydown', 'Enter');
-    assert.strictEqual(activated, 1, 'Enter activates');
+    assert.strictEqual(activated, 2, 'Enter activates');
   });
 
-  test('@onActivate with single selection: a row click selects, a second deselects, and the radio follows', async function (assert) {
+  test('@onActivate with single selection: the radio selects, a row click activates', async function (assert) {
+    let activated = 0;
+    let onActivate = () => activated++;
     await render(
       <template>
         <DataTable
@@ -171,15 +179,18 @@ module('Pretui | components/data-table', function (hooks) {
           @rows={{ROWS}}
           @key={{rowKey}}
           @selectionMode='single'
-          @onActivate={{noop}}
+          @onActivate={{onActivate}}
         />
       </template>,
     );
-    await click('[data-test-pretui-dt-row]');
+    await click('[data-test-pretui-dt-select]');
     assert.dom('[data-test-pretui-dt-select]').isChecked();
+    assert.strictEqual(activated, 0, 'the radio does not activate');
     await click('[data-test-pretui-dt-row]');
-    assert.dom('[data-test-pretui-dt-select]').isNotChecked();
-    assert.dom('[data-test-pretui-dt-row]').hasAttribute('aria-selected', 'false');
+    assert.strictEqual(activated, 1, 'a row click activates');
+    assert
+      .dom('[data-test-pretui-dt-select]')
+      .isChecked('and leaves the selection');
   });
 
   test('without @onActivate rows are not focusable', async function (assert) {

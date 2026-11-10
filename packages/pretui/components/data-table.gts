@@ -180,8 +180,8 @@ export interface DataTableSignature<T> {
     /** fires with the next selection on every change */
     onSelectionChange?: (keys: RowKey[], rows: T[]) => void;
     /** Opens a row: a click on the row (not on a control inside it) or Enter
-     * on the focused row. With `selectionMode` on, a click selects instead and
-     * Enter still activates. Without it, rows are not focusable. */
+     * on the focused row, as in List. Selection stays on the row's checkbox or
+     * radio. Without it, rows are not focusable. */
     onActivate?: (row: T, index: number) => void;
     /** controlled column visibility — the keys that are SHOWN */
     visibleColumns?: readonly string[];
@@ -874,11 +874,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
     if ((event.target as Element).closest(OWNS_PRESS)) {
       return;
     }
-    if (this.selectable) {
-      this.table.toggleSelected(row, index);
-    } else {
-      this.args.onActivate(row, index);
-    }
+    this.args.onActivate(row, index);
   };
   onRowKeydown = (row: T, index: number, event: Event) => {
     if (
