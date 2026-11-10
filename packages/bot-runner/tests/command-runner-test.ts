@@ -1333,96 +1333,106 @@ module('command runner', () => {
     );
   });
 
-  test('a prCard link that does not save fails create-pr-card before the PR opens', async (assert) => {
-    let workflowCardUrl =
-      'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
-    let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
-    let publishedJobs: Array<{ args: Record<string, any> }> = [];
-    let queuePublisher: QueuePublisher = {
-      publish: async (job: any) => {
-        publishedJobs.push(job);
-        let command = (job.args.command as string | undefined) ?? '';
-        let result: RunCommandResponse = {
-          status: 'ready',
-          cardResultString: null,
-        };
-        if (command.endsWith('/collect-submission-files/default')) {
-          result = {
+  for (let { scenario, savesOnRead } of [
+    { scenario: 'never saves', savesOnRead: undefined },
+    { scenario: 'appears on the third read', savesOnRead: 3 },
+  ]) {
+    test(`a prCard link that ${scenario}`, async (assert) => {
+      let workflowCardUrl =
+        'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
+      let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
+      let publishedJobs: Array<{ args: Record<string, any> }> = [];
+      let workflowCardReads = 0;
+      let queuePublisher: QueuePublisher = {
+        publish: async (job: any) => {
+          publishedJobs.push(job);
+          let command = (job.args.command as string | undefined) ?? '';
+          let result: RunCommandResponse = {
             status: 'ready',
-            cardResultString: JSON.stringify({
-              data: {
-                attributes: {
-                  allFileContents: [
-                    {
-                      filename: 'catalog/MyListing/listing.json',
-                      contents: '{"data":{"type":"card"}}',
-                    },
-                  ],
+            cardResultString: null,
+          };
+          if (command.endsWith('/collect-submission-files/default')) {
+            result = {
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  attributes: {
+                    allFileContents: [
+                      {
+                        filename: 'catalog/MyListing/listing.json',
+                        contents: '{"data":{"type":"card"}}',
+                      },
+                    ],
+                  },
                 },
+              }),
+            };
+          } else if (command.endsWith('/create-pr-card/default')) {
+            result = {
+              status: 'ready',
+              cardResultString: JSON.stringify({ data: { id: prCardUrl } }),
+            };
+          } else if (command.endsWith('/fetch-card-json/default')) {
+            let cardId = job.args.commandInput.cardIdentifier as string;
+            // The patch reported ready, but the saved card has no link until
+            // (if ever) the read named by savesOnRead.
+            let linked =
+              cardId === workflowCardUrl &&
+              savesOnRead !== undefined &&
+              ++workflowCardReads >= savesOnRead;
+            if (cardId !== workflowCardUrl) {
+              result = fetchedCardResult(cardId);
+            } else {
+              result = fetchedCardResult(cardId, linked ? prCardUrl : null);
+            }
+          }
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve(result),
+          } as any;
+        },
+        destroy: async () => {},
+      };
+      let openedPRs: unknown[] = [];
+      let githubClient: GitHubClient = {
+        createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+        writeFileToBranch: async () => ({ commitSha: 'def456' }),
+        writeFilesToBranch: async () => ({ commitSha: 'def456' }),
+        openPullRequest: async (params) => {
+          openedPRs.push(params);
+          return { number: 1, html_url: 'https://example/pr/1' };
+        },
+      };
+      let dbAdapter = {
+        kind: 'pg',
+        notify: async () => {},
+        isClosed: false,
+        execute: async (sql: string) => {
+          if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+            return [
+              {
+                command_filter: {
+                  type: 'matrix-event',
+                  event_type: 'app.boxel.bot-trigger',
+                  content_type: 'pr-listing-create',
+                },
+                command:
+                  '@cardstack/catalog/commands/collect-submission-files/default',
               },
-            }),
-          };
-        } else if (command.endsWith('/create-pr-card/default')) {
-          result = {
-            status: 'ready',
-            cardResultString: JSON.stringify({ data: { id: prCardUrl } }),
-          };
-        } else if (command.endsWith('/fetch-card-json/default')) {
-          let cardId = job.args.commandInput.cardIdentifier as string;
-          // The patch reported ready, but the saved card has no link.
-          result = fetchedCardResult(
-            cardId,
-            cardId === workflowCardUrl ? null : undefined,
-          );
-        }
-        return {
-          id: publishedJobs.length,
-          done: Promise.resolve(result),
-        } as any;
-      },
-      destroy: async () => {},
-    };
-    let openedPRs: unknown[] = [];
-    let githubClient: GitHubClient = {
-      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
-      writeFileToBranch: async () => ({ commitSha: 'def456' }),
-      writeFilesToBranch: async () => ({ commitSha: 'def456' }),
-      openPullRequest: async (params) => {
-        openedPRs.push(params);
-        return { number: 1, html_url: 'https://example/pr/1' };
-      },
-    };
-    let dbAdapter = {
-      kind: 'pg',
-      notify: async () => {},
-      isClosed: false,
-      execute: async (sql: string) => {
-        if (sql.includes('FROM bot_commands WHERE bot_id =')) {
-          return [
-            {
-              command_filter: {
-                type: 'matrix-event',
-                event_type: 'app.boxel.bot-trigger',
-                content_type: 'pr-listing-create',
-              },
-              command:
-                '@cardstack/catalog/commands/collect-submission-files/default',
-            },
-          ];
-        }
-        return [];
-      },
-      close: async () => {},
-      getColumnNames: async () => [],
-      withWriteLock: async (_url, fn) => fn(undefined),
-      withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
-      withUserCostLock: async (_userId, fn) => fn(),
-      withTransaction: async (fn) => fn(async () => []),
-    } as DBAdapter;
+            ];
+          }
+          return [];
+        },
+        close: async () => {},
+        getColumnNames: async () => [],
+        withWriteLock: async (_url, fn) => fn(undefined),
+        withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
+        withUserCostLock: async (_userId, fn) => fn(),
+        withTransaction: async (fn) => fn(async () => []),
+      } as DBAdapter;
 
-    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
-    await assert.rejects(
-      commandRunner.maybeEnqueueCommand(
+      let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
+      let run = commandRunner.maybeEnqueueCommand(
         '@alice:localhost',
         {
           type: 'pr-listing-create',
@@ -1436,19 +1446,33 @@ module('command runner', () => {
           },
         },
         'bot-registration-link',
-      ),
-      /PR card link did not save/,
-    );
+      );
 
-    assert.strictEqual(openedPRs.length, 0, 'does not open the pull request');
-    let lastAttrs = publishedJobs[publishedJobs.length - 1].args.commandInput
-      .patch.attributes as Record<string, unknown>;
-    assert.strictEqual(
-      lastAttrs.failedStep,
-      'create-pr-card',
-      'records the failure against create-pr-card, so the card offers Retry',
-    );
-  });
+      if (savesOnRead === undefined) {
+        await assert.rejects(run, /PR card link did not save/);
+        assert.strictEqual(
+          openedPRs.length,
+          0,
+          'does not open the pull request',
+        );
+        let lastAttrs = publishedJobs[publishedJobs.length - 1].args
+          .commandInput.patch.attributes as Record<string, unknown>;
+        assert.strictEqual(
+          lastAttrs.failedStep,
+          'create-pr-card',
+          'records the failure against create-pr-card, so the card offers Retry',
+        );
+      } else {
+        await run;
+        assert.strictEqual(
+          workflowCardReads,
+          savesOnRead,
+          'keeps reading the workflow card until the link is there',
+        );
+        assert.strictEqual(openedPRs.length, 1, 'opens the pull request');
+      }
+    });
+  }
 
   test('lint failure blocks PR creation and records lint errors', async (assert) => {
     let workflowCardUrl =
