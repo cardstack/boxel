@@ -1867,11 +1867,18 @@ export default class OperatorModeStateService extends Service {
   }
 
   // The policy the realm's config names, with the rules the user can read on
-  // it. Both cards are read through the store, which keeps them current as the
-  // realm changes them, so asking on every message costs nothing once they
-  // have loaded. Whatever can't be read is left out rather than failing the
-  // message: an unreadable config leaves the realm's policy unknown, and an
-  // unreadable policy card leaves its rules unknown.
+  // it. Both cards are read through the store, and a read here takes no
+  // reference. So a repeat read within a few minutes is served from the store,
+  // while the store's sweep evicts the cards two to four minutes after they
+  // were read, and the next read fetches them again. Until then the store
+  // reloads a card on its realm's index event only while something else from
+  // that realm is referenced, which a policy card in another realm usually
+  // isn't. The rules the context carries can therefore lag an edit to the
+  // policy by those few minutes, which an advisory note can bear: the realm
+  // decides each invocation against the policy in force. Whatever can't be
+  // read is left out rather than failing the message: an unreadable config
+  // leaves the realm's policy unknown, and an unreadable policy card leaves
+  // its rules unknown.
   private async realmPolicyForAIBot(
     realmURL: string,
   ): Promise<RealmPolicyForContext | undefined> {
