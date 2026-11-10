@@ -53,11 +53,6 @@ MUST get write access through policy grants. The platform MUST NOT add a
 permission level or a grant that separates writing the realm's settings or
 its policy from writing the rest of its contents.
 
-`realm-owner` is a separate level that only some administrators hold. It
-admits granting and revoking permissions, archiving, and publishing
-(ADR 006 §1.2), and it is assigned only when a realm is created or published.
-A realm's administrators are its direct writers, whether or not they own it.
-
 ### 1.4. The predicate decides whether, and the operation decides what
 
 A predicate MUST read only the caller (`actor()`), the target card's values,
