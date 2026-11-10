@@ -1,6 +1,6 @@
 // Validates the charge-reference CHECK on `credits_ledger`, adds the index
-// that makes a charge write once (ADR 029 §1.6), and indexes `run_id` so a
-// run's charges read back together.
+// that makes a charge write once (ADR 029 §1.6), and indexes `run_id` and
+// `charge_id` so a run's charges, and a charge's usage, read back together.
 //
 // A charge whose reference names exactly one charge (run, run indexing,
 // storage, batched AI) is identified by its kind and reference. It writes one
@@ -40,10 +40,16 @@ exports.up = (pgm) => {
     CREATE INDEX CONCURRENTLY credits_ledger_run_id_idx
       ON credits_ledger (run_id) WHERE run_id IS NOT NULL
   `);
+  pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS credits_ledger_charge_id_idx`);
+  pgm.sql(`
+    CREATE INDEX CONCURRENTLY credits_ledger_charge_id_idx
+      ON credits_ledger (charge_id) WHERE charge_id IS NOT NULL
+  `);
 };
 
 exports.down = (pgm) => {
   pgm.noTransaction();
+  pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS credits_ledger_charge_id_idx`);
   pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS credits_ledger_run_id_idx`);
   pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS credits_ledger_charge_once_idx`);
 };

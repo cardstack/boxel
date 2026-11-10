@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge. Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when asking what a run, realm or automation was charged or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -266,3 +266,56 @@ charge)` takes the kind and reference; it defaults to `{ kind: 'ai' }`.
 Stripe handlers record purchases, plan allowances and expiries without naming
 a kind. An operator's top-up (`handle-add-credit`) and the daily grant task
 are grants.
+
+## Auditing usage, not only cost
+
+Every spend also records how much of each unit it priced, in
+`credit_charge_usage`, one row per unit (ADR 029 §1.6):
+
+| `unit`                       | Quantity                                   | Priced by                                   |
+| ---------------------------- | ------------------------------------------ | ------------------------------------------- |
+| `prerender_tab_seconds`      | seconds of a prerender tab                 | `prerenderTabUsdPerSecond`                  |
+| `worker_process_seconds`     | seconds of a worker process                | `workerProcessUsdPerSecond`                 |
+| `downloaded_gb`              | GB downloaded                              | `PRICING_USD_PER_DOWNLOADED_GB`             |
+| `file_storage_gb_months`     | GB-months of files                         | `PRICING_USD_PER_FILE_STORAGE_GB_MONTH`     |
+| `database_storage_gb_months` | GB-months of index rows                    | `PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH` |
+| `ai_provider_usd`            | the AI provider's reported cost, in USD    | itself, at `CREDITS_PER_USD`, no margin     |
+| `ai_input_tokens`            | input tokens, when the caller passes them  | not priced directly; recorded for audit     |
+| `ai_output_tokens`           | output tokens, when the caller passes them | not priced directly; recorded for audit     |
+
+A usage row is keyed by `charge_id`, the id every ledger row of one spend
+shares, and carries the `user_id`. A charge's rows and its usage are written
+in one statement, so usage exists exactly when the charge does: a charge that
+was `already-charged` or `nothing-to-charge` records none. Pass usage as the
+last argument of `spendCredits`; `spendUsageCost` records `ai_provider_usd`
+itself, plus any token counts it is given.
+
+`getLedgerUsage(dbAdapter, filter)` sums usage by charge kind and unit over
+the same filters as `getLedgerEntries`. In SQL, make the charges distinct
+before joining, since one charge spans several ledger rows:
+
+```sql
+-- A user's usage by kind and unit over the last 30 days.
+SELECT charges.charge_kind, u.unit, SUM(u.quantity) AS quantity
+FROM credit_charge_usage u
+JOIN (SELECT DISTINCT charge_id, charge_kind FROM credits_ledger
+      WHERE user_id = '<users.id>' AND charge_id IS NOT NULL) charges
+  ON charges.charge_id = u.charge_id
+WHERE u.created_at > EXTRACT(EPOCH FROM now() - interval '30 days')
+GROUP BY 1, 2 ORDER BY 1, 2;
+
+-- Check a metered charge: its credits beside its usage and pricing version.
+SELECT l.charge_id, l.charge_kind, l.pricing_version,
+       -SUM(l.credit_amount) AS credits,
+       (SELECT json_object_agg(unit, quantity) FROM credit_charge_usage u
+        WHERE u.charge_id = l.charge_id) AS usage
+FROM credits_ledger l WHERE l.run_id = '<run id>'
+GROUP BY l.charge_id, l.charge_kind, l.pricing_version;
+```
+
+To check a metered charge, find the process that logged its pricing version
+(`pricing check passed … pricing version <hash>` on the `pricing` channel),
+take the rate for each unit and the margin from that line, and compare
+Σ quantity × rate × margin × 1000 with its credits. A spend written without
+usage (any written before `credit_charge_usage` was added), and every grant,
+purchase and expiry, has no usage rows.

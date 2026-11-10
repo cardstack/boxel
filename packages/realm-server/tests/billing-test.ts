@@ -32,6 +32,7 @@ import {
   sumUpCreditsLedger,
   addToCreditsLedger,
   getLedgerEntries,
+  getLedgerUsage,
   insertSubscription,
   spendCredits,
 } from '@cardstack/billing/billing-queries';
@@ -1576,6 +1577,165 @@ module(basename(import.meta.filename), function () {
           await sumUpCreditsLedger(dbAdapter, { userId: broke.id }),
           40,
         );
+      });
+
+      test('a charge records the usage it priced, once', async function (assert) {
+        let charge = {
+          kind: 'run' as const,
+          realm,
+          runId,
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 30, charge, {
+            prerender_tab_seconds: 12.5,
+            downloaded_gb: 0.25,
+          }),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 30, charge, {
+            prerender_tab_seconds: 99,
+          }),
+          'already-charged',
+        );
+        assert.strictEqual(
+          await spendCredits(
+            dbAdapter,
+            user.id,
+            20,
+            { ...charge, kind: 'run_indexing' },
+            { worker_process_seconds: 3, prerender_tab_seconds: 1.5 },
+          ),
+          'charged',
+        );
+
+        assert.deepEqual(await getLedgerUsage(dbAdapter, { runId }), [
+          { chargeKind: 'run', unit: 'downloaded_gb', quantity: 0.25 },
+          { chargeKind: 'run', unit: 'prerender_tab_seconds', quantity: 12.5 },
+          {
+            chargeKind: 'run_indexing',
+            unit: 'prerender_tab_seconds',
+            quantity: 1.5,
+          },
+          {
+            chargeKind: 'run_indexing',
+            unit: 'worker_process_seconds',
+            quantity: 3,
+          },
+        ]);
+        let entries = await getLedgerEntries(dbAdapter, { runId });
+        assert.strictEqual(
+          new Set(entries.map((e) => e.chargeId)).size,
+          2,
+          'each charge has its own id',
+        );
+      });
+
+      test('AI charges record the provider cost as usage', async function (assert) {
+        await spendUsageCost(dbAdapter, user.matrixUserId, 0.002);
+        await spendUsageCost(
+          dbAdapter,
+          user.matrixUserId,
+          0.003,
+          { kind: 'ai', realm, runId },
+          { ai_input_tokens: 1200, ai_output_tokens: 300 },
+        );
+        assert.deepEqual(await getLedgerUsage(dbAdapter, { userId: user.id }), [
+          { chargeKind: 'ai', unit: 'ai_input_tokens', quantity: 1200 },
+          { chargeKind: 'ai', unit: 'ai_output_tokens', quantity: 300 },
+          { chargeKind: 'ai', unit: 'ai_provider_usd', quantity: 0.005 },
+        ]);
+      });
+
+      test('usage is counted once for a charge that spans several buckets, and not at all when nothing is charged', async function (assert) {
+        let broke = await insertUser(
+          dbAdapter,
+          '@ledger-usage-broke:localhost',
+          'cus_ledger_usage_broke',
+          'ledger-usage-broke@test.com',
+        );
+        assert.strictEqual(
+          await spendCredits(
+            dbAdapter,
+            broke.id,
+            10,
+            { kind: 'run', realm, runId: otherRunId, pricingVersion },
+            { prerender_tab_seconds: 4 },
+          ),
+          'nothing-to-charge',
+        );
+        assert.deepEqual(
+          await getLedgerUsage(dbAdapter, { userId: broke.id }),
+          [],
+        );
+
+        await addToCreditsLedger(dbAdapter, {
+          userId: broke.id,
+          creditAmount: 5,
+          creditType: 'daily_credit',
+          subscriptionCycleId: null,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: broke.id,
+          creditAmount: 5,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+        assert.strictEqual(
+          await spendCredits(
+            dbAdapter,
+            broke.id,
+            10,
+            { kind: 'run', realm, runId: otherRunId, pricingVersion },
+            { prerender_tab_seconds: 4 },
+          ),
+          'charged',
+        );
+        assert.strictEqual(
+          (await getLedgerEntries(dbAdapter, { runId: otherRunId })).length,
+          2,
+          'the charge drew on two buckets',
+        );
+        assert.deepEqual(
+          await getLedgerUsage(dbAdapter, { runId: otherRunId }),
+          [{ chargeKind: 'run', unit: 'prerender_tab_seconds', quantity: 4 }],
+        );
+      });
+
+      test('usage must be a finite quantity of a known unit', async function (assert) {
+        for (let bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+          await assert.rejects(
+            spendCredits(
+              dbAdapter,
+              user.id,
+              1,
+              { kind: 'ai' },
+              {
+                prerender_tab_seconds: bad,
+              },
+            ),
+            /must be a finite number/,
+          );
+        }
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
+          1000,
+          'a refused usage writes no charge',
+        );
+        try {
+          await query(dbAdapter, [
+            `INSERT INTO credit_charge_usage (charge_id, unit, quantity, user_id) VALUES (gen_random_uuid(), 'cpu_hours', 1, `,
+            param(user.id),
+            `)`,
+          ]);
+          assert.ok(false, 'an unknown unit was accepted');
+        } catch (e) {
+          assert.true(
+            /credit_charge_usage_unit_check/.test(String(e)),
+            `an unknown unit is refused: ${e}`,
+          );
+        }
       });
 
       test('a charge that draws on several buckets writes all its rows once', async function (assert) {

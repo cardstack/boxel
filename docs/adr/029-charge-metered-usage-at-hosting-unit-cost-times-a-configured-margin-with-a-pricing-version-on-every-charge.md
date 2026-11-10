@@ -97,6 +97,11 @@ charge writes, one per credit bucket it draws from, MUST share that identity
 and be written in one transaction. A retry that finds the identity already
 present MUST write nothing.
 
+A consumption charge MUST record how much of each unit it priced: the
+metered units the pricing variables price (§1.2), or for AI the cost the
+provider reported. The usage MUST be written with the charge's ledger rows,
+under an id they share, so it lands exactly when they do.
+
 ## 2. Rationale
 
 Cost times a margin keeps every price tied to what the usage costs the host.
@@ -148,6 +153,15 @@ charge can draw from several credit buckets, so a charge's identity is its
 kind and reference, shared by every row it writes. Grants, purchases and
 expiries belong to a user, not a realm, so only consumption entries carry
 one.
+
+Credits alone can't answer how much a user or realm used, only what it cost,
+and they can't be checked against the hosting bill they are meant to
+recover. Recording the quantities with the charge answers both, and with the
+pricing version a charge's credits can be recomputed from its usage. Usage
+is kept with the charge rather than on the run, because deleting a realm
+deletes its runs while their charges stay, and storage has no run. It is
+keyed by the charge, not by ledger row, because one charge spans several
+rows and some charges price two units.
 
 ## 3. Considered options
 

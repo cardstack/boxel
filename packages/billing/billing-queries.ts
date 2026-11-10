@@ -19,6 +19,7 @@ import {
 import type { StripeEvent } from './stripe-webhook-handlers/index.ts';
 import type {
   ChargedLedgerEntry,
+  ChargeUsage,
   CreditType,
   LedgerCharge,
   LedgerChargeKind,
@@ -27,6 +28,7 @@ import type {
   RealmIdentifier,
   SpendCharge,
   Subscription,
+  UsageUnit,
   SubscriptionCycle,
   User,
 } from '@cardstack/runtime-common';
@@ -260,6 +262,9 @@ type NewLedgerEntry = Omit<LedgerEntry, 'id'> & {
   // What the entry paid for, or where its credits came from. Defaults to the
   // kind its credit type implies, with no reference.
   charge?: LedgerCharge;
+  // Shared by every entry one spend writes, and the key its usage is
+  // recorded under.
+  chargeId?: string;
 };
 
 // A `DBAdapter`, or a `Querier` pinned to a transaction's connection.
@@ -286,17 +291,13 @@ function ledgerColumns(entry: NewLedgerEntry) {
     charge_day: 'day' in charge ? charge.day : null,
     pricing_version:
       'pricingVersion' in charge ? (charge.pricingVersion ?? null) : null,
+    charge_id: entry.chargeId ?? null,
   };
 }
 
-// Writes `entries` as one INSERT, so they land together or not at all.
-async function insertLedgerEntries(
-  db: Queryable,
-  entries: NewLedgerEntry[],
-): Promise<void> {
-  if (entries.length === 0) {
-    return;
-  }
+// The INSERT that writes `entries` as one statement, so they land together or
+// not at all.
+function ledgerInsert(entries: NewLedgerEntry[]): Expression {
   let nameExpressions: string[][] | undefined;
   let rows: Expression[] = [];
   for (let entry of entries) {
@@ -308,12 +309,22 @@ async function insertLedgerEntries(
       ) as Expression,
     );
   }
-  await querierFor(db)([
+  return [
     'INSERT INTO credits_ledger',
     ...addExplicitParens(separatedByCommas(nameExpressions!)),
     'VALUES',
     ...separatedByCommas(rows),
-  ] as Expression);
+  ] as Expression;
+}
+
+async function insertLedgerEntries(
+  db: Queryable,
+  entries: NewLedgerEntry[],
+): Promise<void> {
+  if (entries.length === 0) {
+    return;
+  }
+  await querierFor(db)(ledgerInsert(entries));
 }
 
 export async function addToCreditsLedger(
@@ -382,18 +393,19 @@ END)`;
 // given must match. An entry written without a charge kind reads the kind its
 // credit type implies, so filtering on `chargeKind: 'ai'` finds those spends
 // too.
-export async function getLedgerEntries(
-  dbAdapter: DBAdapter,
-  filter: {
-    userId?: string;
-    chargeKind?: LedgerChargeKind;
-    realm?: RealmIdentifier;
-    runId?: string;
-    batchId?: string;
-    automationId?: string;
-    chargeDay?: string;
-  },
-): Promise<ChargedLedgerEntry[]> {
+export interface LedgerFilter {
+  userId?: string;
+  chargeKind?: LedgerChargeKind;
+  realm?: RealmIdentifier;
+  runId?: string;
+  batchId?: string;
+  automationId?: string;
+  chargeDay?: string;
+}
+
+// The WHERE conditions over `credits_ledger` for `filter`; every filter given
+// must match.
+function ledgerConditions(filter: LedgerFilter): Expression[] {
   let conditions: Expression[] = [];
   let columnFilters: [string, string | undefined][] = [
     ['user_id', filter.userId],
@@ -414,6 +426,14 @@ export async function getLedgerEntries(
       param(filter.chargeKind),
     ]);
   }
+  return conditions;
+}
+
+export async function getLedgerEntries(
+  dbAdapter: DBAdapter,
+  filter: LedgerFilter,
+): Promise<ChargedLedgerEntry[]> {
+  let conditions = ledgerConditions(filter);
   let rows = await query(dbAdapter, [
     `SELECT *, ${CHARGE_KIND_FROM_CREDIT_TYPE_SQL} AS read_charge_kind,`,
     `to_char(charge_day, 'YYYY-MM-DD') AS read_charge_day`,
@@ -430,6 +450,7 @@ export async function getLedgerEntries(
     creditType: row.credit_type as CreditType,
     subscriptionCycleId: (row.subscription_cycle_id as string | null) ?? null,
     chargeKind: row.read_charge_kind as LedgerChargeKind,
+    chargeId: (row.charge_id as string | null) ?? null,
     realm: (row.realm as RealmIdentifier | null) ?? null,
     runId: (row.run_id as string | null) ?? null,
     batchId: (row.batch_id as string | null) ?? null,
@@ -437,6 +458,37 @@ export async function getLedgerEntries(
     chargeDay: (row.read_charge_day as string | null) ?? null,
     pricingVersion: (row.pricing_version as string | null) ?? null,
     createdAt: Number(row.created_at),
+  }));
+}
+
+// How much of each unit the charges matching `filter` priced, summed by charge
+// kind and unit. Only spends record usage, and only those given it, so a
+// charge without usage contributes nothing here even when it cost credits.
+export async function getLedgerUsage(
+  dbAdapter: DBAdapter,
+  filter: LedgerFilter,
+): Promise<
+  { chargeKind: LedgerChargeKind; unit: UsageUnit; quantity: number }[]
+> {
+  let conditions: Expression[] = [
+    [`charge_id IS NOT NULL`],
+    ...ledgerConditions(filter),
+  ];
+  // One charge spans several ledger entries, so the charges are made distinct
+  // before their usage is summed.
+  let rows = await query(dbAdapter, [
+    `SELECT charges.charge_kind, usage.unit, SUM(usage.quantity) AS quantity`,
+    `FROM credit_charge_usage usage JOIN (`,
+    `SELECT DISTINCT charge_id, charge_kind FROM credits_ledger WHERE`,
+    ...every(conditions),
+    `) charges ON charges.charge_id = usage.charge_id`,
+    `GROUP BY charges.charge_kind, usage.unit`,
+    `ORDER BY charges.charge_kind, usage.unit`,
+  ] as Expression);
+  return rows.map((row) => ({
+    chargeKind: row.charge_kind as LedgerChargeKind,
+    unit: row.unit as UsageUnit,
+    quantity: Number(row.quantity),
   }));
 }
 
@@ -701,6 +753,10 @@ export type SpendResult = 'charged' | 'already-charged' | 'nothing-to-charge';
 // only what those hold. It writes one ledger entry per bucket it draws from,
 // all carrying the charge, in one INSERT.
 //
+// `usage` is how much of each unit the charge priced. It is recorded with the
+// charge, under the id its entries share, so it is written exactly when they
+// are.
+//
 // A charge with an identity (see `chargeIdentity`) is written at most once:
 // in one transaction, holding a lock on the identity, it checks whether the
 // charge is already in the ledger and writes nothing if it is.
@@ -709,10 +765,11 @@ export async function spendCredits(
   userId: string,
   creditsToSpend: number,
   charge: SpendCharge = { kind: 'ai' },
+  usage: ChargeUsage = {},
 ): Promise<SpendResult> {
   let identity = chargeIdentity(charge);
   if (identity === undefined) {
-    return await writeSpend(dbAdapter, userId, creditsToSpend, charge);
+    return await writeSpend(dbAdapter, userId, creditsToSpend, charge, usage);
   }
   return await dbAdapter.withTransaction(
     async (tx) => {
@@ -724,26 +781,65 @@ export async function spendCredits(
       if (await isCharged(tx, charge)) {
         return 'already-charged';
       }
-      return await writeSpend(tx, userId, creditsToSpend, charge);
+      return await writeSpend(tx, userId, creditsToSpend, charge, usage);
     },
     { label: `ledger charge ${identity}` },
   );
 }
 
+// Writes a spend's ledger entries and its usage in one statement: a
+// data-modifying CTE inserts the usage beside the entries, so both land or
+// neither does, inside or outside a transaction.
 async function writeSpend(
   db: Queryable,
   userId: string,
   creditsToSpend: number,
   charge: SpendCharge,
+  usage: ChargeUsage,
 ): Promise<SpendResult> {
   let entries = await planSpend(db, userId, creditsToSpend);
   if (entries.length === 0) {
     return 'nothing-to-charge';
   }
-  await insertLedgerEntries(
-    db,
-    entries.map((entry) => ({ ...entry, charge })),
+  for (let [unit, quantity] of Object.entries(usage)) {
+    if (
+      quantity !== undefined &&
+      (typeof quantity !== 'number' ||
+        !Number.isFinite(quantity) ||
+        quantity < 0)
+    ) {
+      throw new Error(
+        `usage for ${unit} must be a finite number of 0 or more, got ${quantity}`,
+      );
+    }
+  }
+  let chargeId = globalThis.crypto.randomUUID();
+  let insertEntries = ledgerInsert(
+    entries.map((entry) => ({ ...entry, charge, chargeId })),
   );
+  let units = (Object.entries(usage) as [UsageUnit, number | undefined][])
+    .filter(([, quantity]) => quantity !== undefined)
+    .map(
+      ([unit, quantity]) =>
+        addExplicitParens(
+          separatedByCommas([
+            [param(chargeId)],
+            [param(unit)],
+            [param(String(quantity))],
+            [param(userId)],
+          ]),
+        ) as Expression,
+    );
+  if (units.length === 0) {
+    await querierFor(db)(insertEntries);
+  } else {
+    await querierFor(db)([
+      'WITH usage AS (INSERT INTO credit_charge_usage (charge_id, unit, quantity, user_id) VALUES',
+      ...separatedByCommas(units),
+      ')',
+      ...insertEntries,
+    ] as Expression);
+  }
   return 'charged';
 }
 

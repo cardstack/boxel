@@ -102,6 +102,23 @@ export type SpendCharge = Extract<
   { kind: 'ai' | 'batched_ai' | 'run' | 'run_indexing' | 'storage' }
 >;
 
+// A unit of usage a charge priced. The metered units match the units the
+// pricing variables price (ADR 029 §1.2); `ai_provider_usd` is the cost the AI
+// provider reported, which AI charges are billed at.
+export type UsageUnit =
+  | 'prerender_tab_seconds'
+  | 'worker_process_seconds'
+  | 'downloaded_gb'
+  | 'file_storage_gb_months'
+  | 'database_storage_gb_months'
+  | 'ai_provider_usd'
+  | 'ai_input_tokens'
+  | 'ai_output_tokens';
+
+// How much of each unit a charge priced. Recorded with the charge, so usage
+// can be audited apart from what it cost.
+export type ChargeUsage = Partial<Record<UsageUnit, number>>;
+
 export interface LedgerEntry {
   id: string;
   userId: string;
@@ -115,6 +132,9 @@ export interface LedgerEntry {
 // `chargeKindForCreditType`) and has no reference.
 export interface ChargedLedgerEntry extends LedgerEntry {
   chargeKind: LedgerChargeKind;
+  // Shared by every entry one spend wrote; null on entries that aren't spends
+  // or were written without it.
+  chargeId: string | null;
   realm: RealmIdentifier | null;
   runId: string | null;
   batchId: string | null;
