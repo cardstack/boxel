@@ -55,6 +55,15 @@ const noteDef: Definition = {
   },
 };
 
+const cardDefRef = ref('@cardstack/base/card-api', 'CardDef');
+const cardDef: Definition = {
+  type: 'card-def',
+  codeRef: cardDefRef,
+  displayName: 'Card',
+  fields: {},
+  fieldDefs: {},
+};
+
 function refsEqual(a: CodeRef, b: CodeRef): boolean {
   return (
     'module' in a && 'module' in b && a.module === b.module && a.name === b.name
@@ -66,6 +75,9 @@ function makeDefinitionLookup(): DefinitionLookup {
     async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
       if (refsEqual(codeRef, noteRef)) {
         return noteDef;
+      }
+      if (refsEqual(codeRef, cardDefRef)) {
+        return cardDef;
       }
       throw new Error(
         `unexpected definition lookup: ${codeRef.module}/${codeRef.name}`,
@@ -275,6 +287,35 @@ module(basename(import.meta.filename), function () {
         'the newest odd notes',
       );
       assert.strictEqual(meta.page.total, 3, 'three notes are odd');
+    });
+
+    test('a boost over a list of values scores each candidate on the row, not through a subquery', async function (assert) {
+      let { cards } = await search({
+        type: noteRef,
+        sort: [
+          {
+            blend: [
+              {
+                boost: { on: noteRef, in: { title: ['Note 2', 'Note 4'] } },
+                weight: 1,
+              },
+            ],
+          },
+        ],
+      } as unknown as Query);
+      assert.deepEqual(
+        cards
+          .slice(0, 2)
+          .map((c) => String(c.id))
+          .sort(),
+        [`${testRealmURL}Note/n2`, `${testRealmURL}Note/n4`],
+        'the boosted notes rank first',
+      );
+      assert.strictEqual(cards.length, 5, 'and the others still follow');
+      assert.notOk(
+        searchSql().some((sql) => /AS ti WHERE/.test(sql)),
+        'no per-value index subquery is built for the boost',
+      );
     });
 
     test('the query validator accepts the total modes and refuses others', async function (assert) {

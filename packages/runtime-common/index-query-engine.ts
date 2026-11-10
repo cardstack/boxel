@@ -634,6 +634,11 @@ interface FilterContext {
   realmURL?: URL;
   // The search's near plans, which a near signal records its plan in.
   near?: NearContext;
+  // The condition tests a row other clauses already selected (a blend
+  // boost scores each candidate), rather than finding rows. A list
+  // membership then extracts and compares on the row, which Postgres hashes
+  // for a long list, instead of a subquery of one index probe per value.
+  perRow?: boolean;
 }
 const DEFAULT_FILTER_CONTEXT: FilterContext = {
   inAny: false,
@@ -5156,7 +5161,7 @@ export class IndexQueryEngine {
         component.when,
         baseCardRef,
         'positive',
-        filterContext,
+        { ...filterContext, perRow: true },
       );
       return inverted
         ? ['NULLIF(MIN(CASE WHEN', ...condition, 'THEN 0 ELSE 1 END), 0)']
@@ -6662,8 +6667,9 @@ export class IndexQueryEngine {
       // `search_doc` in each containment binds to the subquery's own row.
       // Keyed on the index's primary key, so it selects exactly the rows the
       // inline form would.
-      let matched: CardExpression =
-        this.#dbAdapter.kind === 'pg'
+      let matched: CardExpression = context.perRow
+        ? ['(', query, 'IN', '(', ...inList, ')', ')']
+        : this.#dbAdapter.kind === 'pg'
           ? [
               `(i.url, i.realm_url, i.type) IN (SELECT ti.url, ti.realm_url, ti.type FROM ${context.indexTable} AS ti WHERE`,
               ...containments,
