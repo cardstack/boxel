@@ -438,3 +438,35 @@ export async function runLogQuery(
     },
   };
 }
+
+// A `_search` answer for a log query: the result, or the refusal of a query
+// this module can't run, as a status and a JSON body.
+export async function logSearchResponse(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  payload: LogQuery,
+): Promise<{ status: number; body: unknown }> {
+  try {
+    return {
+      status: 200,
+      body: await runLogQuery(dbAdapter, realmURL, payload),
+    };
+  } catch (e) {
+    if (e instanceof LogQueryError) {
+      return {
+        status: 400,
+        body: {
+          errors: [
+            {
+              status: '400',
+              title: 'Invalid Query',
+              message: `Invalid query: ${e.message}`,
+              code: 'invalid-log-query',
+            },
+          ],
+        },
+      };
+    }
+    throw e;
+  }
+}

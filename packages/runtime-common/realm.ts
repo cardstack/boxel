@@ -1,4 +1,5 @@
 import { Deferred } from './deferred.ts';
+import { isLogQuery, logSearchResponse } from './log-query.ts';
 import { vectorSidecarFor } from './vector-sidecar.ts';
 import {
   DEFAULT_ANONYMOUS_RATE_LIMIT,
@@ -16515,6 +16516,41 @@ export class Realm {
         ),
         init: {
           status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
+        requestContext,
+      });
+    }
+
+    // A search over one of this realm's logs (`from: { log }`) is answered
+    // from the log's line rows (`log-query.ts`). It takes the realm's own
+    // read: a policy grant scopes cards, and means nothing for a log's lines.
+    if (isLogQuery(payload)) {
+      if (this.#coarseDeclined(requestContext) === 'all') {
+        return requestContext.anonymousCaller
+          ? this.#authenticationRequired(requestContext)
+          : createResponse({
+              body: JSON.stringify(
+                buildSearchErrorBody(
+                  'a log search needs read access to the realm',
+                ),
+              ),
+              init: {
+                status: 403,
+                headers: { 'content-type': SupportedMimeType.CardJson },
+              },
+              requestContext,
+            });
+      }
+      let { status, body } = await logSearchResponse(
+        this.#dbAdapter,
+        this.url,
+        payload,
+      );
+      return createResponse({
+        body: JSON.stringify(body),
+        init: {
+          status,
           headers: { 'content-type': SupportedMimeType.CardJson },
         },
         requestContext,
