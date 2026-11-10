@@ -4,6 +4,7 @@ import {
 } from '../content-hash.ts';
 import { isCardError } from '../error.ts';
 import type { PolicyAuditOptions } from '../policy-share-audit.ts';
+import type { WriteContext } from '../realm-history.ts';
 import { isCardResource } from '../resource-types.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -185,6 +186,8 @@ export interface BatchCore {
       // See `CommitBatchOptions.broadcastRealmEvents`.
       broadcastRealmEvents?: boolean;
       initiatingUser?: string | null;
+      // See `CommitBatchOptions.history`.
+      history?: WriteContext;
       // See `CommitBatchOptions.policyAudit`.
       policyAudit?: PolicyAuditOptions;
       // Where the commit stamps the stages it owns. The durable write, the
@@ -261,6 +264,13 @@ export interface CommitBatchOptions {
   // The invoking actor, as the identity `actor()` resolves to. It comes from
   // the authenticated realm user the request's permission check verified.
   actor?: string;
+  // How the batch was made, recorded on its one change event: the channel
+  // the request's headers name, the AI agent, room and tool call, the push it
+  // belongs to. An operation that writes on its own account sets it here
+  // too: a revert names its `revert` intent, so realm-historian records the
+  // batch as its own revision. It never decides the author, which is the
+  // actor (see `WriteOptions.history`).
+  history?: WriteContext;
   // Who a batch by a caller who isn't signed in is made as, once its entries
   // are admitted: the acting user the first admitted write's grant names
   // (see `AnonymousRequest`). It is who the batch's index job is initiated
@@ -2461,6 +2471,7 @@ async function commitStaged(
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? opts.actingUser?.() ?? null,
+      ...(opts.history ? { history: opts.history } : {}),
       ...(opts.policyAudit ? { policyAudit: opts.policyAudit } : {}),
       ...(stageCursor ? { stageCursor } : {}),
       onDurable: releaseLocks,

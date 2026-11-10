@@ -12,6 +12,10 @@
 // its history operations answer `history-unavailable`.
 
 import type { Querier } from './expression.ts';
+import {
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
+  sanitizeLoggingCorrelationId,
+} from './prerender-headers.ts';
 
 // How a write was made. The realm server sets `operations`, `system`,
 // `deploy` and `mcp` itself. `host`, `ai-assistant` and `boxel-cli` are what
@@ -128,6 +132,77 @@ export interface WriteContext {
   pushId?: string;
   pushFinal?: boolean;
   intent?: ChangeIntent;
+}
+
+// The longest header value a write's context keeps. Values become git
+// trailers, so a value is also refused when it holds anything but printable
+// ASCII: a newline in one would forge a trailer of its own.
+const MAX_CONTEXT_VALUE_LENGTH = 256;
+const CONTEXT_VALUE_PATTERN = /^[\x20-\x7E]+$/;
+
+function contextValue(raw: string | null): string | undefined {
+  let trimmed = raw?.trim();
+  if (
+    !trimmed ||
+    trimmed.length > MAX_CONTEXT_VALUE_LENGTH ||
+    !CONTEXT_VALUE_PATTERN.test(trimmed)
+  ) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+// A write's context as its request states it. The headers are advisory, and
+// none of them can change who the author is.
+//
+// - The channel is the client's claim only when it is one a client may make
+//   (`CLIENT_WRITE_CHANNELS`). A request that claims one of the realm
+//   server's own channels, names an unknown one, or names none is `api`.
+// - `agent`, `room` and the tool call describe an AI write, so they are kept
+//   only on `ai-assistant`. A stray one on another channel would split
+//   realm-historian's grouping for nothing.
+// - The correlation id is the tool call on an AI write, so each tool call
+//   is its own revision. Otherwise, and on an AI write that names no tool
+//   call, it is the request's logging correlation id.
+// - `pushFinal` marks the last request of a push, so it is kept only beside a
+//   push id.
+//
+// Writes the realm server makes without a request set their context
+// themselves. `/mcp` sets `channel: 'mcp'`, with the OAuth client as `agent`
+// and the connector's `writeId` as `correlationId`.
+export function writeContextFromHeaders(headers: {
+  get(name: string): string | null;
+}): WriteContext {
+  let claimed = headers.get(WRITE_CHANNEL_HEADER)?.trim().toLowerCase();
+  let channel: WriteChannel =
+    claimed && (CLIENT_WRITE_CHANNELS as readonly string[]).includes(claimed)
+      ? (claimed as WriteChannel)
+      : 'api';
+  let loggingCorrelationId =
+    sanitizeLoggingCorrelationId(
+      headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    ) ?? undefined;
+  let agent: string | undefined;
+  let room: string | undefined;
+  let correlationId = loggingCorrelationId;
+  if (channel === 'ai-assistant') {
+    agent = contextValue(headers.get(WRITE_AGENT_HEADER));
+    room = contextValue(headers.get(WRITE_ROOM_HEADER));
+    correlationId =
+      contextValue(headers.get(WRITE_TOOL_CALL_HEADER)) ?? loggingCorrelationId;
+  }
+  let pushId = contextValue(headers.get(PUSH_ID_HEADER));
+  let pushFinal =
+    pushId !== undefined &&
+    headers.get(PUSH_FINAL_HEADER)?.trim().toLowerCase() === 'true';
+  return {
+    channel,
+    ...(agent ? { agent } : {}),
+    ...(room ? { room } : {}),
+    ...(correlationId ? { correlationId } : {}),
+    ...(pushId ? { pushId } : {}),
+    ...(pushFinal ? { pushFinal: true } : {}),
+  };
 }
 
 // What the write path hands the journal for one write. `author` is the
