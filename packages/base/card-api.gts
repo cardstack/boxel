@@ -2489,7 +2489,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    return new WatchedArray(
+    let watched = new WatchedArray(
       (oldValue, value) => {
         applySubscribersToInstanceValue(
           instance,
@@ -2505,6 +2505,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       rawArrayValues(values),
       { hideSlot: isNonPresentLink },
     );
+    // Assigning an empty list empties the field, so it serializes as
+    // `{ self: null }`. Untagged, serialization would drop it as never set,
+    // and the save would keep the old links.
+    markAuthoredEmptyLink(watched);
+    return watched;
   }
 
   captureQueryFieldSeedData(

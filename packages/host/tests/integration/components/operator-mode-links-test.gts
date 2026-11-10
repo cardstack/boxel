@@ -10,6 +10,7 @@ import {
 
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -464,6 +465,20 @@ module('Integration | operator-mode | links', function (hooks) {
         `[data-test-plural-view-field="friends"] [data-test-plural-view-item]`,
       )
       .doesNotExist();
+
+    await getService('store').flushSaves();
+    let file = await ctx.testRealmAdapter.openFile('Person/burcu.json');
+    let { relationships } = JSON.parse(file!.content as string).data;
+    assert.deepEqual(
+      relationships.friends,
+      { links: { self: null } },
+      'the saved card stores friends as empty',
+    );
+    assert.deepEqual(
+      Object.keys(relationships).filter((key) => key.startsWith('friends.')),
+      [],
+      'the saved card drops the removed links',
+    );
   });
 
   test<TestContextWithSave>('New cards are optimistically created for a linksTo field', async function (assert) {

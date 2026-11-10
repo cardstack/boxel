@@ -9,8 +9,12 @@ export function mergeRelationships(
   let merged = mergeWith(
     _formatForMerge(relData),
     _formatForMerge(otherRelData),
-    (_objectValue: any, sourceValue: any) => {
-      return Array.isArray(sourceValue) ? sourceValue : undefined;
+    (objectValue: any, sourceValue: any) => {
+      // An emptied linksToMany arrives as `{ links: { self: null } }`, not a
+      // list. Merged into the stored list, it would keep the list's links.
+      return Array.isArray(sourceValue) || Array.isArray(objectValue)
+        ? sourceValue
+        : undefined;
     },
   );
 
