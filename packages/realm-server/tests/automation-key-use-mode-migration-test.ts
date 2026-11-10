@@ -53,13 +53,13 @@ module(basename(import.meta.filename), function () {
     async function insertUse(
       mode: string,
       use: { refusal?: boolean; count?: number } = {},
-    ) {
-      await dbAdapter.execute(
+    ): Promise<string> {
+      let [row] = await dbAdapter.execute(
         use.refusal
           ? `INSERT INTO key_uses (key_id, realm_url, operation, caller, mode, outcome, code, count, refusal_window, created_at)
-             VALUES ($1, $2, 'forecast', $3, $4, 'refused', 'rate-limited', $5, '2026-11-10T12:00:00Z', '2026-11-10T12:00:30Z')`
+             VALUES ($1, $2, 'forecast', $3, $4, 'refused', 'rate-limited', $5, '2026-11-10T12:00:00Z', '2026-11-10T12:00:30Z') RETURNING id`
           : `INSERT INTO key_uses (key_id, realm_url, operation, caller, mode, outcome, status)
-             VALUES ($1, $2, 'forecast', $3, $4, 'sent', 200)`,
+             VALUES ($1, $2, 'forecast', $3, $4, 'sent', 200) RETURNING id`,
         {
           bind: [
             keyId,
@@ -70,6 +70,7 @@ module(basename(import.meta.filename), function () {
           ],
         },
       );
+      return String(row.id);
     }
 
     async function uses() {
@@ -80,19 +81,21 @@ module(basename(import.meta.filename), function () {
       return rows.map((row) => [row.mode, row.outcome, Number(row.count)]);
     }
 
+    // Whether the mode CHECK takes a use recorded under `mode`. The probe row
+    // is removed again, leaving the rows a test set up as they were.
     async function accepts(mode: string) {
+      let id: string;
       try {
-        await insertUse(mode);
+        id = await insertUse(mode);
       } catch (error: any) {
         if (/key_uses_mode_check/.test(String(error?.message ?? error))) {
           return false;
         }
         throw error;
       }
-      await dbAdapter.execute(
-        `DELETE FROM key_uses WHERE key_id = $1 AND mode = $2 AND outcome = 'sent'`,
-        { bind: [keyId, mode] },
-      );
+      await dbAdapter.execute(`DELETE FROM key_uses WHERE id = $1`, {
+        bind: [id],
+      });
       return true;
     }
 
