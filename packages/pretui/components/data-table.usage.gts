@@ -227,7 +227,7 @@ class DataTableUsage extends Component {
           @value={{this.size}}
           @options={{this.sizes}}
           @defaultValue='m'
-          @description='Density. The house scale is xs|s|m|l|xl and it sets the host font-size only, so every internal dimension scales together. sm/md/lg/default/small/medium/large/middle are accepted spellings.'
+          @description='Density. The house scale is xs|s|m|l|xl and it sets the host font-size only, so every internal dimension scales together. It reads the --boxel-font-size-* scale: xs and s are 2xs, m is xs, l is sm, xl is the base size. sm/md/lg/default/small/medium/large/middle are accepted spellings.'
           @onInput={{this.setSize}}
         />
         <Args.String
@@ -307,6 +307,14 @@ class DataTableUsage extends Component {
           @hideControls={{true}}
         />
       </:api>
+      <:cssVars as |Css|>
+        <Css.Basic
+          @name='pretui-data-table-font-size'
+          @type='dimension'
+          @description='An exact text size for the table, set on the table or an ancestor. It overrides @size, and every internal dimension scales with it.'
+          @defaultValue='var(--boxel-font-size-xs)'
+        />
+      </:cssVars>
     </FreestyleUsage>
     <style scoped>
       .dt-demo {
