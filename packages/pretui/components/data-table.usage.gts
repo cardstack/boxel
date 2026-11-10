@@ -320,13 +320,13 @@ class DataTableUsage extends Component {
     <style scoped>
       .dt-demo {
         display: grid;
-        gap: var(--space-4, 11px);
+        gap: var(--boxel-sp-sm);
         min-width: 0;
       }
       .dt-readout {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--space-4, 11px);
+        gap: var(--boxel-sp-sm);
         font-family: var(--font-mono);
         font-size: var(--text-ui-sm, 11.5px);
         color: var(--muted-foreground);
