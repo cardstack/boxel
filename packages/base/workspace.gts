@@ -628,8 +628,8 @@ class Isolated extends Component<typeof Workspace> {
               aria-label='Search this space'
               aria-keyshortcuts='Meta+K Control+K'
               {{on 'keydown' this.onSearchKeydown}}
-              data-test-workspace-search
               {{ignoredByPasswordManagers}}
+              data-test-workspace-search
             />
             {{! the visible hint is decorative — aria-keyshortcuts above carries
               the same thing to assistive tech, in both spellings }}

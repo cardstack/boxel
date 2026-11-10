@@ -335,8 +335,8 @@ class MarkFieldEdit extends Component<typeof MarkField> {
           @onInput={{@set}}
           @disabled={{not @canEdit}}
           @state={{this.validationState}}
-          data-test-mark-url-input
           {{ignoredByPasswordManagers}}
+          data-test-mark-url-input
         />
         {{#if @model}}
           {{#if @canEdit}}

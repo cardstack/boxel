@@ -229,8 +229,8 @@ export default class NumberField extends BaseNumberField {
         @min={{numberOption @configuration 'min'}}
         @max={{numberOption @configuration 'max'}}
         @disabled={{not @canEdit}}
-        data-test-number-input
         {{ignoredByPasswordManagers}}
+        data-test-number-input
       />
     </template>
 

@@ -275,8 +275,8 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
           <BoxelInputGroup
             @value={{this.pathInputValue}}
             @onInput={{this.setPathFromInput}}
-            data-test-path-input
             {{ignoredByPasswordManagers}}
+            data-test-path-input
           >
             <:before as |Accessories|>
               <Accessories.Text>/</Accessories.Text>
@@ -290,8 +290,8 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
               @value={{this.redirectToValue}}
               @onInput={{this.setRedirectTo}}
               @placeholder='/path or https://example.com/page'
-              data-test-redirect-input
               {{ignoredByPasswordManagers}}
+              data-test-redirect-input
             />
             <div class='status-code-cell'>
               <BoxelSelect
@@ -655,8 +655,8 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
                     @onChange={{this.commitKeys}}
                     @disabled={{not @canEdit}}
                     @placeholder='approver'
-                    data-test-setting-key={{row.index}}
                     {{ignoredByPasswordManagers}}
+                    data-test-setting-key={{row.index}}
                   />
                 </td>
                 <td class='value-cell'>
@@ -665,8 +665,8 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
                     @onInput={{fn this.setText row.index}}
                     @disabled={{not @canEdit}}
                     @placeholder={{this.valuePlaceholder}}
-                    data-test-setting-value={{row.index}}
                     {{ignoredByPasswordManagers}}
+                    data-test-setting-value={{row.index}}
                   />
                   {{#if row.typeNote}}
                     <span
