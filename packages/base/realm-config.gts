@@ -15,6 +15,7 @@ import {
 } from './card-api';
 import type { RealmEventContent } from './matrix-event';
 import BooleanField from './boolean';
+import CodeRefField from './code-ref';
 import NumberField from './number';
 import StringField from './string';
 import { JsonField } from './json-field';
@@ -2133,6 +2134,12 @@ export class RealmConfig extends CardDef {
     base: 'validate',
     nonGrantable: true,
   } satisfies OperationDeclaration;
+
+  // Read by the host, never run by the realm server (ADR 032).
+  @field realmExtensionModules = containsMany(CodeRefField, {
+    description:
+      "Modules that extend this realm's cards in the app, each a code ref to an export with the RealmExtension shape, such as a static provideMenuItems. A relative module resolves against this card",
+  });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: RealmConfig) {

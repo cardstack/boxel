@@ -34,7 +34,6 @@ import {
 import {
   CardCrudFunctionsContextName,
   CommandContextName,
-  getMenuItems,
 } from '@cardstack/runtime-common';
 
 import AdornContext from '@cardstack/host/components/adorn/adorn-context';
@@ -57,6 +56,7 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
 import type NetworkService from '../../services/network';
+import type RealmExtensionsService from '../../services/realm-extensions';
 import type StoreService from '../../services/store';
 import type {
   BaseDef,
@@ -76,6 +76,7 @@ function shouldRenderCompact(width: number, height: number): boolean {
 export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
   @service declare private network: NetworkService;
+  @service declare private realmExtensions: RealmExtensionsService;
   @service declare private store: StoreService;
 
   @consume(CardCrudFunctionsContextName)
@@ -618,13 +619,15 @@ export default class OperatorModeOverlays extends Overlays {
       return toMenuItems(menuItems);
     }
 
-    const cardMenuItems =
-      (cardDefOrId as CardDef)[getMenuItems]?.({
+    const cardMenuItems = this.realmExtensions.cardMenuItems(
+      cardDefOrId as CardDef,
+      {
         canEdit: this.realm.canWrite(cardId),
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         toolContext: this.toolContext,
-      }) ?? [];
+      },
+    );
 
     // Delete and New Card of This Type don't make sense from an embedded field
     // overlay — suppress them by context, not by misreporting canEdit

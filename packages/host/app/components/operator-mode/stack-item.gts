@@ -54,7 +54,6 @@ import {
   localId as localIdSymbol,
   CardContextName,
   CardCrudFunctionsContextName,
-  getMenuItems,
   baseCardRef,
 } from '@cardstack/runtime-common';
 
@@ -86,6 +85,7 @@ import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
+import type RealmExtensionsService from '../../services/realm-extensions';
 import type StoreService from '../../services/store';
 import type {
   CardContext,
@@ -147,6 +147,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private realmExtensions: RealmExtensionsService;
   @service declare private store: StoreService;
 
   @tracked private selectedCards = new TrackedSet<string>();
@@ -619,14 +620,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
 
     const items = toMenuItems(
-      this.card?.[getMenuItems]?.({
-        canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
-        cardCrudFunctions: this.cardCrudFunctions,
-        menuContext: 'interact',
-        toolContext: this.args.toolContext,
-        format: this.cardFormat,
-        useBaseTemplate: this.args.item.useBaseTemplate,
-      }) ?? [],
+      this.card
+        ? this.realmExtensions.cardMenuItems(this.card, {
+            canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
+            cardCrudFunctions: this.cardCrudFunctions,
+            menuContext: 'interact',
+            toolContext: this.args.toolContext,
+            format: this.cardFormat,
+            useBaseTemplate: this.args.item.useBaseTemplate,
+          })
+        : [],
     );
 
     if (this.canToggleExpanded) {

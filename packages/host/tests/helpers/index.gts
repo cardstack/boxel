@@ -2698,6 +2698,8 @@ export function realmConfigCardJSON(
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
+    // Code refs to the realm's extensions (ADR 032).
+    realmExtensionModules?: { module: string; name: string }[];
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -2719,6 +2721,9 @@ export function realmConfigCardJSON(
   }
   if (config.config !== undefined) {
     attrs.config = config.config;
+  }
+  if (config.realmExtensionModules !== undefined) {
+    attrs.realmExtensionModules = config.realmExtensionModules;
   }
   return JSON.stringify({
     data: {
