@@ -35,6 +35,41 @@ function site(): HTMLElement {
   return document.querySelector<HTMLElement>('[data-choreo-site]')!;
 }
 
+/**
+ * The custom properties the shell's fallback rules declare, in its light and
+ * dark rules: the rules on `:where(.choreo-site…)`, read from the stylesheets
+ * on the page.
+ */
+function fallbackDeclarations(): { light: Set<string>; dark: Set<string> } {
+  let found = { light: new Set<string>(), dark: new Set<string>() };
+  let sheets = [...document.styleSheets, ...document.adoptedStyleSheets];
+  for (let sheet of sheets) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue; // a cross-origin stylesheet
+    }
+    for (let rule of rules) {
+      if (
+        !(rule instanceof CSSStyleRule) ||
+        !rule.selectorText.includes(':where(.choreo-site')
+      ) {
+        continue;
+      }
+      let set = rule.selectorText.includes('data-theme="dark"')
+        ? found.dark
+        : found.light;
+      for (let name of rule.style) {
+        if (name.startsWith('--')) {
+          set.add(name);
+        }
+      }
+    }
+  }
+  return found;
+}
+
 /** the computed value of each custom property on the shell's root */
 function resolved(names: string[]): Record<string, string> {
   let style = getComputedStyle(site());
@@ -118,6 +153,22 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
       ].every((name) => names.includes(name)),
       'the theme sets the contract tokens, the gallery’s own and its eyebrow role',
     );
+
+    // and the fallback declares nothing the theme doesn't: a value theme.json
+    // drops must leave the fallback too
+    let declared = fallbackDeclarations();
+    assert.true(declared.light.size > 0, 'the shell’s fallback rules are read');
+    for (let [scheme, selector] of [
+      ['light', ':root'],
+      ['dark', '.dark'],
+    ] as const) {
+      let set = [...(groups?.get(selector)?.keys() ?? [])];
+      assert.deepEqual(
+        [...declared[scheme]].filter((name) => !set.includes(name)),
+        [],
+        `${scheme}: every name the fallback declares, the theme sets`,
+      );
+    }
 
     let themed: Record<string, Record<string, string>> = {};
     await renderDemo(theme);

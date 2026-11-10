@@ -106,7 +106,8 @@ export const ChoreoRoot: TOC<Signature> = <template>
     /* The gallery's palette and type where no theme card reaches the shell:
        theme.json's values, the light set and then the dark set over it, as
        the theme's stylesheet applies them. They must match theme.json; the
-       host's gallery theme-fallback test fails when the two differ.
+       host's gallery theme-fallback test fails when a value differs, or when
+       either declares a name the other doesn't.
 
        The values come in two reaches. The theme contract's tokens and the
        eyebrow role (theme.json's rootVariables, darkModeVariables and
