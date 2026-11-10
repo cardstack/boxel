@@ -43,13 +43,14 @@ export async function effectiveRealmPermissions(
 }
 
 // Whether `username` holds a Boxel account on this realm server: a row in its
-// `users` table. The realm server writes one when a person first signs in
-// through it, after their OpenID token is verified with their homeserver, and
-// `Realm#ensureSessionRoom` refuses a per-realm session to anyone without one.
-// The table is the realm server's own, so the question is answered the same
-// in every process that reaches the database, and never asks the homeserver,
-// which answers a profile request only to a user who shares a room with the
-// subject (ADR 011 §1.6).
+// `users` table (ADR 004 §1.4). The realm server writes one when a person
+// first signs in through it, after their OpenID token is verified with their
+// homeserver, and when their sessions are revoked (`revokeUserSessions`
+// upserts the row). `Realm#ensureSessionRoom` refuses a per-realm session to
+// anyone without one. The table is the realm server's own, so the question is
+// answered the same in every process that reaches the database, and never asks
+// the homeserver, which answers a profile request only to a user who shares a
+// room with the subject (ADR 011 §1.6).
 export function accountCheck(
   dbAdapter: DBAdapter,
   username: string,
