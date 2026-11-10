@@ -8,6 +8,10 @@ scope:
   - packages/runtime-common/**/*run-overlay*
   - packages/realm-server/**/*run-overlay*
   - packages/realm-server/lib/key-bindings.ts
+  - packages/realm-server/lib/key-uses.ts
+  - packages/runtime-common/card-operations/call-api.ts
+  - packages/realm-server/middleware/index.ts
+  - packages/realm-server/middleware/multi-realm-authorization.ts
 ---
 
 # 026. Give an automation run a token for its realm alone, and act as a person through `Realm.handleAutomation`
@@ -39,6 +43,10 @@ else. Every call the script makes MUST carry that token. A run MUST NOT use
 the run identity's ordinary realm session, or the prerender auth that
 `prepareRunCommand` mints for every realm its `runAs` user can reach.
 
+Switching on an automation whose cards load modules from a realm that is
+neither its own nor public MUST be refused, and the refusal MUST name that
+realm.
+
 ### 1.3. Every call goes through `Realm.handleAutomation`
 
 The realm server MUST handle each request that carries a run token through
@@ -52,8 +60,10 @@ A cancel or a pause MUST stop the run's next call.
 A `callApi` entry in a run's call MUST be an automation call, admitted
 through `automationAdmission` for the run's identity. It MUST be refused when
 the automation does not declare its operation. A write MUST target only the
-automation's realm. The server MUST read the declaration from the indexed
-automation card, as data, and MUST NOT run card code to learn it.
+automation's realm. A run MUST NOT write the realm's `realm.json`, the card
+its `policy` names, any `RealmPolicy` card, or any automation card. The
+server MUST read the declaration from the indexed automation card, as data,
+and MUST NOT run card code to learn it.
 
 The server MUST meter a run's counts (`callApi` calls, response bytes,
 `resolve` calls, writes) where it does the work, and MUST NOT take a count
@@ -93,6 +103,14 @@ people. If a grant could make someone a payer, whoever edits the policy could
 choose who pays. Permissions change while an automation runs on its
 schedule, so direct write is checked again just before the writes land.
 
+A direct writer can change `realm.json` and the policy card (ADR 024 §1.3),
+and so can a run that acts as one. A run is unattended and handles
+third-party data and webhook payloads, so it must not be able to change who
+can reach its realm, or widen the declaration that bounds its next run.
+ADR 021 §1.6 sets the same limit for OAuth tokens, which also act as a
+person. A card whose modules load from a private realm would fail on every
+run, so it is refused once, when it is switched on.
+
 ## 3. Considered options
 
 - **A run token for one realm, checked in `Realm.handleAutomation`, acting
@@ -103,6 +121,8 @@ schedule, so direct write is checked again just before the writes land.
   and it is held by the tab, which the script runs in.
 - **Enforcement in the tab.** The tab runs code that the realm doesn't
   trust, and its counts would be reported by the party they bound.
+- **A run with its identity's full direct write.** The run could rewrite the
+  realm's policy, or widen its own automation's declaration for the next run.
 - **Acting as the realm's own user.** Anyone who can edit the card could
   write with the realm's full authority.
 - **A service identity per realm.** It is a new principal outside the
