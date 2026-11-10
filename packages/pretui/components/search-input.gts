@@ -172,11 +172,26 @@ export class SearchInput extends Component<SearchInputSignature> {
         : 'right-start';
     let rect = square.getBoundingClientRect();
     this.openDistance = -rect.width;
-    // the room on the roomier side, less Popup's 8px gutter: a field no wider
-    // than that always fits on one side, so a narrow screen never cuts it
-    this.openRoom = Math.max(window.innerWidth - rect.left, rect.right) - 8;
+    this.measureRoom(rect);
     this.open = true;
   };
+  // the room on the roomier side, less Popup's 8px gutter: a field no wider
+  // than that always fits on one side, so a narrow screen never cuts it
+  private measureRoom(rect: DOMRect) {
+    this.openRoom = Math.max(window.innerWidth - rect.left, rect.right) - 8;
+  }
+  // while the field is open, the cap follows viewport resizes; the wrapper
+  // keeps the square's box, so it stands in for the swapped-out square
+  capOnResize = modifier((field: HTMLElement) => {
+    let resize = () => {
+      let root = field.closest<HTMLElement>('[data-pretui-search-collapse]');
+      if (root) {
+        this.measureRoom(root.getBoundingClientRect());
+      }
+    };
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  });
   get openStyle() {
     return htmlSafe(`max-inline-size: ${this.openRoom}px`);
   }
@@ -256,6 +271,7 @@ export class SearchInput extends Component<SearchInputSignature> {
     {{#if this.collapsed}}
       <div
         class='pretui-searchcollapse'
+        data-pretui-search-collapse
         data-open={{if this.open 'true'}}
         {{this.closesOnLeave}}
         data-test-pretui-search-input
@@ -303,6 +319,7 @@ export class SearchInput extends Component<SearchInputSignature> {
               @onClear={{this.clear}}
               style={{this.openStyle}}
               {{this.focusOnOpen}}
+              {{this.capOnResize}}
               data-test-pretui-search-field
             />
           </:default>

@@ -57,6 +57,7 @@ function placed() {
 // the component's own rules give: a fixed panel over a fixed-size square,
 // in an unscaled test container (a transform would re-anchor the fixed panel)
 const GEOMETRY = `#ember-testing { transform: none !important; zoom: 1 !important; }
+  [data-pretui-search-collapse] { inline-size: 32px; block-size: 32px; }
   [data-test-pretui-search-anchor] { display: grid; inline-size: 32px; block-size: 32px; }
   [data-test-pretui-search-anchor] > span { position: fixed; display: block; }
   [data-test-pretui-search-toggle] { inline-size: 100%; block-size: 100%; }
@@ -262,6 +263,35 @@ module('Pretui | components/search-input', function (hooks) {
     let square = await openOver();
     let room = Math.max(window.innerWidth - square.left, square.right) - 8;
     assert.strictEqual(field()?.style.maxInlineSize, `${room}px`);
+  });
+
+  test('the width cap follows a viewport resize while open', async function (assert) {
+    await render(
+      <template>
+        <div data-test-pad><SearchInput @display='collapsed' /></div>
+      </template>,
+    );
+    await openOver();
+    let square = root().getBoundingClientRect();
+    let wide = innerWidth;
+    let narrow = Math.ceil(square.right + 120);
+    // the harness can't resize the window, so innerWidth stands in for it
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: narrow,
+    });
+    try {
+      window.dispatchEvent(new Event('resize'));
+      await settled();
+      let room = Math.max(narrow - square.left, square.right) - 8;
+      assert.strictEqual(field()?.style.maxInlineSize, `${room}px`);
+      assert.true(
+        room < Math.max(wide - square.left, square.right) - 8,
+        'shrank',
+      );
+    } finally {
+      delete (window as { innerWidth?: number }).innerWidth;
+    }
   });
 
   test('positionPopup flips the field toward the room near the viewport edge', function (assert) {
