@@ -47,7 +47,7 @@ fi
 # before it reads the heap, or it measures garbage the collector has simply
 # not reached yet. Exposing the collector is all the flag does — it changes no
 # allocation or collection behavior on its own.
-# Spill large search-doc values (ADR 021) in every test run, so the whole
+# Spill large search-doc values in every test run, so the whole
 # suite exercises the spilled form. Set BOXEL_SPILL_SEARCH_DOCS=false to run
 # it over whole docs.
 BOXEL_SPILL_SEARCH_DOCS="${BOXEL_SPILL_SEARCH_DOCS-true}" \

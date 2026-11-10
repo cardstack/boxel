@@ -627,7 +627,7 @@ export function assembledLinkResourceBudget(): number {
 
 // The link-assembly bounds for a render's own reads (during prerender). A
 // render was once exempt from every bound, so a card in a densely linked graph
-// (OnTube's concepts link concepts, videos and domains, which link back)
+// (concepts that link concepts, videos and domains, which link back)
 // assembled the realm's whole connected closure for one render: ~8k resources
 // and several megabytes per card, which drove the indexing worker to its heap
 // ceiling and the machine into swap, and with it the realm server. A render

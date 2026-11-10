@@ -23,6 +23,7 @@ The following are important concepts:
 - [Realm Resource Identifiers](realm-resource-identifiers.md): How cards, modules, and files are named — including the portable `@cardstack/base/` prefix form and how the VirtualNetwork resolves it.
 - [Search](search.md): Every Card is searchable within and across realms.
 - [Search cookbook](search-cookbook.md): What people ask for, and the V2 query that answers it.
+- [Search intent](search-intent.md): How a card declares what its fields mean to search, and what each declaration does.
 - [Spec](spec.md): A Spec card documents an exported definition through its code ref, with examples, so the definition is searchable and can be packaged in a listing.
 - [Commands in headless Chrome](commands-in-headless-chrome.md): how a bot trigger becomes a `run-command` job that the prerenderer runs in a headless host tab through the `command-runner` route.
 

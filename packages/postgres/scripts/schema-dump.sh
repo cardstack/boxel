@@ -6,7 +6,7 @@ tmpFile='./schema_tmp.sql'
 # search doc. boxel_index_vectors (with its per-space partitions) and its
 # catalog boxel_vector_spaces are excluded: they exist only where Postgres has
 # pgvector, and the SQLite index scores `near` sorts from the search doc.
-# boxel_index_spill is excluded: the SQLite index never spills (ADR 021 §1.8).
+# boxel_index_spill is excluded: the SQLite index never spills.
 # boxel_term_stats and boxel_realm_text_stats are excluded: BM25 is
 # Postgres-only; the SQLite index scores a match 1 or 0.
 # Directory where SQLite schema files are written (relative to this script's location)

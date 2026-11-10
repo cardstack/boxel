@@ -71,7 +71,7 @@ test('async native identity encryption reopens existing key records without repl
     ...options,
     encryption: asynchronous,
   });
-  assert.equal(await store.isLinked('@ctse:default.boxel.localhost'), false);
+  assert.equal(await store.isLinked('@bob:default.boxel.localhost'), false);
   assert.deepEqual(
     (await readdir(directory, { withFileTypes: true }))
       .filter((entry) => entry.isFile())

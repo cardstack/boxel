@@ -164,36 +164,21 @@ async function seedEntry(dbAdapter: PgAdapter, url: string) {
   ]);
 }
 
-// The outer-wrapped projection — the one that exposes each sort value as an
-// inner aliased column and applies the ORDER BY against those aliases — is
-// reached only through `_search`'s `conditionalLiveDoc` branch, which no
-// public entry point selects, so the tests below drive `_search` directly.
-// The inner projection supplies what that branch requires of its caller: the
-// live serialization aliased `pristine_doc_fallback` and the markup aliased
-// `html`.
-const WRAPPED_PROJECTION =
-  'SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(i.pristine_doc) as pristine_doc_fallback, ANY_VALUE(ph.isolated_html) as html';
-
+// The wrapped order — each sort value exposed as an inner aliased column, the
+// ORDER BY applied against those aliases — is what a paged, faceted search
+// renders: its narrow pass counts the facets over a materialized match set
+// and orders the page from it. A facet with no filter anchor counts plain
+// values, so `title` takes that path without a card definition.
 function wrappedSearch(engine: IndexQueryEngine, sort: unknown) {
-  return (
-    engine as unknown as {
-      _search(
-        realmURL: URL,
-        query: { sort: unknown },
-        opts: Record<string, never>,
-        selectClauseExpression: string[],
-        entryType: 'instance',
-        conditionalLiveDoc: boolean,
-      ): Promise<{ results: { url?: unknown }[] }>;
-    }
-  )._search(
-    new URL(testRealmURL),
-    { sort },
-    {},
-    [WRAPPED_PROJECTION],
-    'instance',
-    true,
-  );
+  return engine
+    .searchCards(new URL(testRealmURL), {
+      sort: sort as Sort,
+      page: { number: 0, size: 10 },
+      facets: [{ by: 'title' }],
+    })
+    .then(({ cards }) => ({
+      results: cards.map((card) => ({ url: card.id })),
+    }));
 }
 
 module(basename(import.meta.filename), function () {
@@ -338,7 +323,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(orderBySql(), '', 'no ORDER BY was executed at all');
     });
 
-    test('the wrapped projection orders by its inner sort alias in both directions', async function (assert) {
+    test('a faceted page orders by its inner sort alias in both directions', async function (assert) {
       for (let direction of ['asc', 'desc'] as const) {
         let expected = direction === 'asc' ? urls : [...urls].reverse();
         executedSql = [];
@@ -351,12 +336,11 @@ module(basename(import.meta.filename), function () {
           `${direction} orders the rows by the inner sort alias`,
         );
         let sql = orderBySql();
-        // The call reaches the wrapped builder through a positional argument
-        // list, so pin that it actually took that branch: the outer select
-        // over `sub` and the inner sort alias only exist on this path.
+        // Pin that the search took the wrapped path: the materialized match
+        // set and the inner sort alias only exist on it.
         assert.ok(
-          /\) AS sub/.test(sql),
-          `${direction}: the outer select over \`sub\` was executed:\n${sql}`,
+          /WITH m AS MATERIALIZED/.test(sql),
+          `${direction}: the faceted narrow pass was executed:\n${sql}`,
         );
         assert.ok(
           /_sort_0/.test(sql),
@@ -469,7 +453,7 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('the wrapped projection refuses a direction that bypassed the grammar', async function (assert) {
+    test('a faceted page refuses a direction that bypassed the grammar', async function (assert) {
       await assert.rejects(
         wrappedSearch(engine, [
           { by: 'lastModified', direction: SUBQUERY_DIRECTION },

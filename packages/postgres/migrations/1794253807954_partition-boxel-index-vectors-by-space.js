@@ -5,7 +5,7 @@
 // runtime-common/vector-space.ts), so space is a safe partition key: one
 // partition per space, as Elasticsearch and OpenSearch keep one index per
 // embedding model. Vectors of different fields' models and of other realms
-// then stop sharing pages: an exact top-10 over OnTube's segments read all
+// then stop sharing pages: an exact top-10 over one space's passages read all
 // 54,289 pages of the table (2.5 s) because 198,532 of its vectors were
 // interleaved with everyone else's.
 //

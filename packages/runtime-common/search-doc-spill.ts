@@ -1,4 +1,4 @@
-// Spilling a search doc's large values out of the promoted row (ADR 021).
+// Spilling a search doc's large values out of the promoted row.
 //
 // On Postgres a jsonb value larger than about 2 KB is stored out of line
 // (TOAST), and every expression that reads one key of it fetches and
@@ -66,7 +66,7 @@ function neverSpills(rootKey: string): boolean {
 
 // Whether the index writer spills. Off unless the realm server's environment
 // sets BOXEL_SPILL_SEARCH_DOCS=true: the readers that resolve markers ship a
-// release before any writer spills (ADR 021 §1.9).
+// release before any writer spills.
 export function searchDocSpillEnabled(): boolean {
   let env = (
     globalThis as { process?: { env?: Record<string, string | undefined> } }

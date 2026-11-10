@@ -1,4 +1,4 @@
-// Spill tables for large search-doc values (ADR 021).
+// Spill tables for large search-doc values.
 //
 // When a card's search doc is too large to stay inline in its row, the index
 // writer replaces each large value (a vector, a long string, a long array)
@@ -16,8 +16,7 @@
 //   at its root and at every node, so a filter sees the original values.
 //
 // All of it is additive. A revision that predates this migration never reads
-// a spilled doc, because no writer spills until BOXEL_SPILL_SEARCH_DOCS is set
-// (ADR 021 §1.9).
+// a spilled doc, because no writer spills until BOXEL_SPILL_SEARCH_DOCS is set.
 
 exports.up = (pgm) => {
   pgm.sql(`

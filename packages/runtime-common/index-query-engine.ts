@@ -654,8 +654,8 @@ const DEFAULT_FILTER_CONTEXT: FilterContext = {
 // display title, as the search sheet matches it.
 const TRIGRAM_INDEXED_TITLE_KEYS = [CARD_TITLE_KEY, 'cardTitle'] as const;
 
-// Field serializers whose values never spill out of the search doc (ADR 021
-// §1.1): numbers, booleans, dates, and short fixed-form strings. A filter or
+// Field serializers whose values never spill out of the search doc: numbers,
+// booleans, dates, and short fixed-form strings. A filter or
 // sort on one reads `search_doc` directly; any other leaf reads through
 // `spill_text`. The title keys above never spill either (`search-doc-spill.ts`).
 const NEVER_SPILLED_SERIALIZERS: ReadonlySet<string> = new Set([
@@ -1569,12 +1569,6 @@ export class IndexQueryEngine {
     opts: QueryOptions,
     selectClauseExpression: CardExpression,
     entryType: 'instance' | 'file' | 'all' = 'instance',
-    // When set, the grouped projection is wrapped in an outer select so a
-    // conditional live `pristine_doc` can reference the computed `html` column
-    // once (see `search()`'s render branch). The inner projection must alias
-    // its raw live serialization as `pristine_doc_fallback` and its HTML as
-    // `html`.
-    conditionalLiveDoc = false,
   ): Promise<{
     meta: QueryResultsMeta;
     results: Partial<IndexRowWithHtml>[];
@@ -1640,7 +1634,6 @@ export class IndexQueryEngine {
         opts,
         selectClauseExpression,
         entryType,
-        conditionalLiveDoc,
       );
       out.meta.lets = { ...(out.meta.lets ?? {}), ...resolved.letMeta };
       return out;
@@ -1659,6 +1652,10 @@ export class IndexQueryEngine {
         return reranked;
       }
     }
+    // The query as it stood before the steps below rewrite it (lets, typos,
+    // word statistics, broad matches, relevance sorts, plain facets), so the
+    // overflow fallback re-runs what was asked rather than a rewritten copy.
+    let beforeRewrite = { filter, sort, facets };
     try {
       let letMeta: QueryResultsMeta['lets'];
       let letWarnings: NonNullable<QueryResultsMeta['warnings']> = [];
@@ -1849,46 +1846,18 @@ export class IndexQueryEngine {
       relevanceColumn = [...relevanceColumn, ...nearColumns, ...blendColumns];
       nearJoins = [...nearJoins, ...blendJoins];
 
-      let query: CardExpression;
-      if (conditionalLiveDoc) {
-        // Outer-wrap the grouped projection so the conditional `pristine_doc`
-        // references the already-computed `html` column rather than recomputing
-        // the HTML expression. Sort keys are exposed by the inner query and the
-        // outer ORDER BY applies them (plus the `url` tiebreaker), so ordering
-        // and paging match the unwrapped path.
-        let { innerSortColumns, outerOrderBy } =
-          this.#wrappedOrderExpression(sort);
-        query = [
-          'SELECT sub.*,',
-          'CASE WHEN sub.html IS NULL THEN sub.pristine_doc_fallback END as pristine_doc',
-          'FROM (',
-          ...selectClauseExpression,
-          ...relevanceColumn,
-          ...innerSortColumns,
-          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
-          ...nearJoins,
-          tableValuedFunctionsPlaceholder,
-          'WHERE',
-          ...everyCondition,
-          'GROUP BY i.url, i.type',
-          ') AS sub',
-          ...outerOrderBy,
-          ...limitClause,
-        ];
-      } else {
-        query = [
-          ...selectClauseExpression,
-          ...relevanceColumn,
-          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
-          ...nearJoins,
-          tableValuedFunctionsPlaceholder,
-          'WHERE',
-          ...everyCondition,
-          'GROUP BY i.url, i.type',
-          ...this.orderExpression(sort),
-          ...limitClause,
-        ];
-      }
+      let query: CardExpression = [
+        ...selectClauseExpression,
+        ...relevanceColumn,
+        `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+        ...nearJoins,
+        tableValuedFunctionsPlaceholder,
+        'WHERE',
+        ...everyCondition,
+        'GROUP BY i.url, i.type',
+        ...this.orderExpression(sort),
+        ...limitClause,
+      ];
       // Count over the same tables as the data query (via `opts`) so `total`
       // stays consistent with the result set — including in WIP mode and for a
       // `matches` predicate, which is shared with the data query through
@@ -1916,7 +1885,7 @@ export class IndexQueryEngine {
       let totalResults: Record<string, unknown>[];
       let facetResults: unknown[];
       let plainPage: PlainPage | undefined;
-      if (collapsed && collapseOn && !conditionalLiveDoc) {
+      if (collapsed && collapseOn) {
         // Collapsed: the narrow pass keeps each group's best rows by the
         // query's own order, then orders, counts and pages what remains.
         // Facets count every match, so they run on their own.
@@ -1978,7 +1947,6 @@ export class IndexQueryEngine {
             : [];
       } else if (
         page &&
-        !conditionalLiveDoc &&
         (plainPage = await this.#plainTopN({
           opts,
           sort,
@@ -2004,7 +1972,7 @@ export class IndexQueryEngine {
                 sort,
               )
             : [];
-      } else if (page && !conditionalLiveDoc) {
+      } else if (page) {
         // A paged search runs as a narrow pass then a wide one. The narrow
         // pass evaluates the filter once and returns only each match's key, its
         // sort values and the synthetic sort columns, ordered and limited to
@@ -2189,7 +2157,6 @@ export class IndexQueryEngine {
           { ...opts, nearExact: true },
           askedSelect,
           entryType,
-          conditionalLiveDoc,
         );
         if (exact.meta.near) {
           exact.meta.near = { ...exact.meta.near, reason: 'filtered-out' };
@@ -2248,7 +2215,9 @@ export class IndexQueryEngine {
       // A formula whose value overflows (or underflows) a double makes
       // Postgres raise rather than give a number. Run it over the top window
       // instead, where such a value is #NUM!, rather than failing the search.
-      let leading = Array.isArray(sort) ? sort[0] : undefined;
+      let leading = Array.isArray(beforeRewrite.sort)
+        ? beforeRewrite.sort[0]
+        : undefined;
       if (
         leading &&
         isExprSort(leading) &&
@@ -2266,10 +2235,10 @@ export class IndexQueryEngine {
         let out = await this._search(
           realmURL,
           {
-            filter,
-            sort: (sort as Sort).slice(1),
+            filter: beforeRewrite.filter,
+            sort: (beforeRewrite.sort as Sort).slice(1),
             page,
-            facets,
+            facets: beforeRewrite.facets,
             collapse,
             let: lets,
             explain,
@@ -2278,7 +2247,6 @@ export class IndexQueryEngine {
           opts,
           askedSelect,
           entryType,
-          conditionalLiveDoc,
         );
         out.meta.expression = {
           placement: 'top',
@@ -6593,7 +6561,7 @@ export class IndexQueryEngine {
   // index as a SQL/JSON path test: `$."concepts"."id" ? (@ == "a" || …)`,
   // whose lax mode reads every list on the way. The json_tree form it
   // replaces walks every row of the type (over a minute on 40k cards). A row
-  // whose list was spilled out of its doc (ADR 021) is matched on the
+  // whose list was spilled out of its doc is matched on the
   // restored list instead. Strings only, where the path test and the tree's
   // text comparison agree; anything else keeps the tree. Postgres only.
   #pluralPathMatch(
@@ -6931,7 +6899,7 @@ export class IndexQueryEngine {
     // collapse into a single function)
     let rootPluralPath: string | undefined;
     let isNumericField = false;
-    // Whether the leaf can hold a spilled value (ADR 021): read through
+    // Whether the leaf can hold a spilled value: read through
     // `spill_text`, which resolves a marker and is `->>` otherwise. Numbers,
     // booleans and dates never spill, so they keep the raw extraction their
     // casts and indexes expect.
@@ -7107,7 +7075,7 @@ export class IndexQueryEngine {
       !isNumericLeaf &&
       // A value longer than the inline limit may be spilled, which a
       // containment can't see, so it compares through `spill_text` instead. A
-      // shorter one is always inline (ADR 021 §1.1).
+      // shorter one is always inline.
       (this.#dbAdapter.kind !== 'pg' ||
         leaf.param.length <= SEARCH_DOC_INLINE_STRING_MAX)
     ) {
@@ -7924,7 +7892,7 @@ const INDEX_HAS_ERROR = `COALESCE(i.has_error, FALSE)`;
 // the render half), but the render half is a NOT EXISTS against
 // `prerendered_html_render_error_index`, a partial index holding only the rows
 // with a render error. A search that has to test thousands of candidates
-// (a type-ahead term matching 7,500 OnTube rows) then probes a tiny, cached
+// (a type-ahead term matching 7,500 rows of a 36k-card realm) then probes a tiny, cached
 // index per candidate instead of reading each candidate's prerendered row:
 // 1.6 s -> 0.18 s for that query.
 function notEffectivelyErrored(opts?: WIPOptions): string {
@@ -8071,7 +8039,7 @@ const TYPE_AHEAD_TSVECTOR = (alias: string) =>
 // are letters and digits only, so they carry no tsquery syntax. Undefined when
 // the query has no words.
 // Words too common to narrow a type-ahead: dropped when other words remain,
-// and a query made only of them matches nothing (13k of 36k OnTube cards hold
+// and a query made only of them matches nothing (13k of 36k cards in one realm hold
 // "the"; counting and ranking them took ~220 ms for a list of eight).
 const TYPE_AHEAD_STOP_WORDS = new Set([
   'the',
@@ -8098,7 +8066,7 @@ const TYPE_AHEAD_STOP_WORDS = new Set([
 
 // The tsquery for a type-ahead: every word must start some word of the card's
 // short names. A word shorter than MIN_PREFIX_LETTERS is a prefix of a large
-// share of the index (one letter matched 11k-24k of 36k OnTube cards at
+// share of the index (one letter matched 11k-24k of 36k cards in one realm at
 // 200-450 ms), so it matches as a whole word unless a longer word is there to
 // narrow the match first ("steve jo" keeps "jo" a prefix). Returns undefined
 // when nothing is left to match.

@@ -4,7 +4,7 @@ import { basename, join } from 'path';
 import { execFileSync } from 'child_process';
 import { readFileSync } from 'fs';
 
-// ADR 021 §1.4: only the index writer writes a promoted search doc, because a
+// Only the index writer writes a promoted search doc, because a
 // spilled doc's markers and its `boxel_index_spill` rows must change together.
 // SQL that assigns `search_doc` anywhere else would strand markers or values.
 

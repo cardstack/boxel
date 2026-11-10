@@ -34,7 +34,7 @@ export interface VectorSearchSettings {
   // holding 15% in 10 ms against 86 ms.
   minShare: number;
   // The HNSW search beam (pgvector's `hnsw.ef_search`, default 40).
-  // Measured on 50,000 of OnTube's 256-d segment vectors: 100 gives 98.5%
+  // Measured on 50,000 256-d passage vectors: 100 gives 98.5%
   // recall@10 against exact search at 1.7 ms a query.
   efSearch: number;
   // HNSW build settings: graph degree and build beam. pgvector's defaults

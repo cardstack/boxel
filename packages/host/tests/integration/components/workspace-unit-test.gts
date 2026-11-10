@@ -114,6 +114,15 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
         'Showing 8 of 40 results',
       );
     });
+
+    test('a total the realm stopped counting reads as the cap and more', function (assert) {
+      assert.strictEqual(
+        ws.describeSearchResults(8, 1000, true),
+        'Showing 8 of 1,000+ results',
+      );
+      assert.strictEqual(ws.formatSearchTotal(1000, true), '1,000+');
+      assert.strictEqual(ws.formatSearchTotal(1234), '1,234');
+    });
   });
 
   module('searchHotkeyLabel', function () {

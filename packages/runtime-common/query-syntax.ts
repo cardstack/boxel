@@ -16,6 +16,7 @@
 // `resolveQueryLabels` reads the type's fields, so it runs where definitions
 // are at hand (the engine, or a checker with a fixture).
 import { InvalidQueryError } from './invalid-query-error.ts';
+import { INTERNAL_SORT_KEYS } from './internal-sort-keys.ts';
 import { exprSortSql } from './formula-sql.ts';
 import type { CodeRef } from './code-ref.ts';
 
@@ -41,13 +42,6 @@ export interface LoweredQuery {
 
 // Sort keys that are not card fields and need no type.
 const GENERAL_SORTS = new Set(['lastModified', 'createdAt', 'cardURL']);
-const ENGINE_SORTS = new Set([
-  '_blend',
-  '_relevance',
-  '_matchRelevance',
-  '_when',
-  '_expr',
-]);
 const PATH_OPS = [
   'eq',
   'in',
@@ -57,7 +51,11 @@ const PATH_OPS = [
   'pattern',
   'regex',
 ] as const;
-const DEFAULT_FORMULA_TOP = 500;
+// A rerank's window: the rows it re-ranks unless it names `top`, and the most
+// it may name. An expression placed over the top window replaces a sort, so it
+// takes the whole window.
+export const DEFAULT_RERANK_TOP = 100;
+export const MAX_RERANK_TOP = 500;
 // The request grammar's name for the text score; the engine's is
 // `_matchRelevance`.
 const TEXT_RELEVANCE = 'textRelevance';
@@ -209,7 +207,11 @@ function anchored(filter: any, type: CodeRef | undefined): any {
     : f;
 }
 
-function lowerSignal(entry: any, type: CodeRef | undefined): any {
+function lowerSignal(
+  entry: any,
+  type: CodeRef | undefined,
+  knownFunctions?: ReadonlySet<string>,
+): any {
   if (!isObject(entry)) return entry;
   if ('boost' in entry) {
     let { boost, ...rest } = entry;
@@ -231,7 +233,9 @@ function lowerSignal(entry: any, type: CodeRef | undefined): any {
       );
     }
     // a blend ranks every match by each signal, so its formula runs as SQL
-    let placed = placeFormula(formula, undefined);
+    // Function names are checked here as in a placed expression, so a typo
+    // in a blend's expression says which function is unknown.
+    let placed = placeFormula(formula, knownFunctions);
     if (placed.placement !== 'sql') {
       throw new QuerySyntaxError(
         'expression-placement',
@@ -240,10 +244,14 @@ function lowerSignal(entry: any, type: CodeRef | undefined): any {
     }
     return { by: '_expr', expr: formula, ...rest };
   }
-  return lowerFieldSort(entry, type);
+  return lowerFieldSort(entry, type, knownFunctions);
 }
 
-function lowerFieldSort(entry: any, type: CodeRef | undefined): any {
+function lowerFieldSort(
+  entry: any,
+  type: CodeRef | undefined,
+  knownFunctions?: ReadonlySet<string>,
+): any {
   if (isObject(entry) && 'relevance' in entry) {
     // search intent's relevance: named weights for its signals
     let { relevance, ...rest } = entry;
@@ -262,8 +270,8 @@ function lowerFieldSort(entry: any, type: CodeRef | undefined): any {
   let out: Record<string, any> = { ...entry, by };
   if (by === '_when' && entry.when) out.when = anchored(entry.when, type);
   if (Array.isArray(entry.of))
-    out.of = entry.of.map((s: any) => lowerSignal(s, type));
-  if (!ENGINE_SORTS.has(by) && !GENERAL_SORTS.has(by) && !entry.on) {
+    out.of = entry.of.map((s: any) => lowerSignal(s, type, knownFunctions));
+  if (!INTERNAL_SORT_KEYS.has(by) && !GENERAL_SORTS.has(by) && !entry.on) {
     if (!type) {
       throw new QuerySyntaxError(
         'sort-needs-type',
@@ -379,7 +387,7 @@ function lowerQueryInto(
           by: '_blend',
           ...more,
           of: (Array.isArray(blend) ? blend : []).map((s) =>
-            lowerSignal(s, type),
+            lowerSignal(s, type, opts.knownFunctions),
           ),
         });
       } else if (isObject(entry) && 'formula' in entry) {
@@ -454,12 +462,12 @@ function lowerQueryInto(
           // over the top window, in BXL's full library
           query.rerank = {
             expression: formula,
-            top: DEFAULT_FORMULA_TOP,
+            top: MAX_RERANK_TOP,
             ...(direction ? { direction } : {}),
           };
         }
       } else {
-        sort.push(lowerSignal(entry, type));
+        sort.push(lowerSignal(entry, type, opts.knownFunctions));
       }
     }
     if (sort.length) query.sort = sort;

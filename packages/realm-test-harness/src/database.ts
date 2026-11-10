@@ -424,7 +424,7 @@ export async function rewriteClonedRealmServerUrls(
           [fromURL, toURL],
         );
 
-        // Spilled search-doc values (ADR 021). Markers resolve by `ref`
+        // Spilled search-doc values. Markers resolve by `ref`
         // alone, so the refs stay as they are; the next index of a card
         // replaces its rows under refs minted from the new URL.
         await client.query(

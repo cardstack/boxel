@@ -5,7 +5,7 @@
 // place an author's query comes in refuses them: the search request, and a
 // query-backed field's query, which the indexer runs in-process and the
 // client sends over the wire, so both legs refuse it alike.
-const INTERNAL_SORT_KEYS = new Set([
+export const INTERNAL_SORT_KEYS: ReadonlySet<string> = new Set([
   '_blend',
   '_expr',
   '_when',

@@ -2251,10 +2251,15 @@ module(basename(import.meta.filename), function (hooks) {
           direction: 'desc',
         },
       ],
+      facets: [{ by: 'channel', measure: { max: 'hnScore' } }],
     } as Query);
     assert.strictEqual(meta.expression?.placement, 'top');
     assert.ok(/overflows/.test(meta.expression?.reason ?? ''), 'it says why');
     assert.ok(titles.length > 0, 'the search still answers');
+    assert.ok(
+      meta.facets?.channel?.some((v: any) => v.measure),
+      'a measured facet survives the fallback',
+    );
   });
 
   test('unknown members are refused with a code and the nearest name', function (assert) {

@@ -135,7 +135,7 @@ import {
   ensureQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
-  savedFieldQuery,
+  resolveSavedFieldQuery,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -1617,10 +1617,15 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   // first read (the type may not be defined yet when the field is).
   get queryDefinition(): QueryWithInterpolations | undefined {
     if (!this.#declaredQuery) return undefined;
-    return (this.#savedQuery ??= savedFieldQuery(
+    if (this.#savedQuery) return this.#savedQuery;
+    // Cached only once resolved: read before the target type is defined, the
+    // query comes back as written and is resolved again on the next read.
+    let { query, resolved } = resolveSavedFieldQuery(
       this.#declaredQuery,
       () => this.card as unknown as typeof BaseDef,
-    ));
+    );
+    if (resolved) this.#savedQuery = query;
+    return query;
   }
   readonly eager?: boolean;
   constructor({
@@ -2107,10 +2112,15 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   // first read (the type may not be defined yet when the field is).
   get queryDefinition(): QueryWithInterpolations | undefined {
     if (!this.#declaredQuery) return undefined;
-    return (this.#savedQuery ??= savedFieldQuery(
+    if (this.#savedQuery) return this.#savedQuery;
+    // Cached only once resolved: read before the target type is defined, the
+    // query comes back as written and is resolved again on the next read.
+    let { query, resolved } = resolveSavedFieldQuery(
       this.#declaredQuery,
       () => this.card as unknown as typeof BaseDef,
-    ));
+    );
+    if (resolved) this.#savedQuery = query;
+    return query;
   }
   readonly eager?: boolean;
   constructor({

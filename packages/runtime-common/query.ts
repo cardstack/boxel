@@ -1,4 +1,5 @@
 import { isEqual } from 'lodash-es';
+import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import qs from 'qs';
 
 import {
@@ -7,7 +8,12 @@ import {
   type JsonValue,
 } from './json-validation.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
-import { lowerQuery, usesNewSyntax } from './query-syntax.ts';
+import {
+  DEFAULT_RERANK_TOP,
+  lowerQuery,
+  MAX_RERANK_TOP,
+  usesNewSyntax,
+} from './query-syntax.ts';
 import { exprSortSql } from './formula-sql.ts';
 import type { MATCH_RELEVANCE_SORT_KEY, BLEND_SORT_KEY } from './index.ts';
 import {
@@ -223,8 +229,7 @@ export function setCompareRowLimitForTests(n: number | undefined): void {
 }
 export const DEFAULT_NEAR_PEERS = 20;
 export const MAX_NEAR_PEERS = 100;
-export const DEFAULT_RERANK_TOP = 100;
-export const MAX_RERANK_TOP = 500;
+export { DEFAULT_RERANK_TOP, MAX_RERANK_TOP };
 
 // Why a result ranks where it does: the first `_blend` (or `_relevance`)
 // sort's fused score and each signal's part in it. `signal` names it: `text`,
@@ -1161,7 +1166,12 @@ export function assertQuery(
   }
   // The request grammar's newer spellings are checked in their lowered form.
   if (pointer.length === 1 && pointer[0] === '' && usesNewSyntax(query)) {
-    assertQuery(lowerQuery(query).query, ['', '']);
+    // Lowered as the engine lowers it, so an unknown function in an
+    // expression is refused here rather than when the query runs.
+    assertQuery(
+      lowerQuery(query, { knownFunctions: BXL_FORMULA_FUNCTIONS }).query,
+      ['', ''],
+    );
     return;
   }
 

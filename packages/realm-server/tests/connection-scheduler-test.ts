@@ -740,7 +740,7 @@ module(basename(import.meta.filename), function () {
     scheduler.dispose();
   });
 
-  // The env 73d hang: a burst of cold definition lookups, each winning its own
+  // The pool hang: a burst of cold definition lookups, each winning its own
   // coalesce lock in a transaction on a pinned connection and then reading
   // the cache through the adapter, filled the pool with holders that each
   // waited on a nested checkout no one could grant. Nested priority only

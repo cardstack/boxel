@@ -12,7 +12,7 @@
 // through the index and re-scores them exactly (runtime-common/vector-query.ts),
 // and only for a realm with more than a few thousand vectors in the field's
 // space; smaller ones are scanned exactly. m and ef_construction are
-// pgvector's defaults. Measured on 50,000 of OnTube's 256-d vectors: 12 s to
+// pgvector's defaults. Measured on 50,000 256-d vectors: 12 s to
 // build with 4 parallel workers and 512 MB of maintenance_work_mem, 40 MB of
 // index, 1.7 ms a top-10 at ef_search 100 with 98.5% recall@10. The engine
 // builds the index itself when it makes a new space's partition; this builds

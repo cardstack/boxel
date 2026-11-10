@@ -242,16 +242,26 @@ export function progressMilestone(pct: number): number {
   );
 }
 
+// A match count as the dropdown shows it: a capped count (the realm stops
+// counting at its cap) reads as "1,000+".
+export function formatSearchTotal(total: number, isEstimate = false): string {
+  return `${total.toLocaleString('en-US')}${isEstimate ? '+' : ''}`;
+}
+
 // The text the search status region announces once a search has settled.
 // `shown` is what the dropdown lists (capped), `total` the full hit count.
 // A settled zero is a real "no matches"; the caller is responsible for only
 // reaching here on settle, never for the empty debounce or dismissal windows.
-export function describeSearchResults(shown: number, total: number): string {
+export function describeSearchResults(
+  shown: number,
+  total: number,
+  totalIsEstimate = false,
+): string {
   if (!shown) {
     return 'No matching cards';
   }
   if (total > shown) {
-    return `Showing ${shown} of ${total} results`;
+    return `Showing ${shown} of ${formatSearchTotal(total, totalIsEstimate)} results`;
   }
   return shown === 1 ? '1 result' : `${shown} results`;
 }
@@ -754,7 +764,7 @@ class Isolated extends Component<typeof Workspace> {
                   data-test-search-see-all
                 >
                   See all
-                  {{this.searchTotal}}
+                  {{this.searchTotalLabel}}
                   results
                   <span class='search-scope-note kicker'>Cards only</span>
                 </Button>
@@ -3029,6 +3039,7 @@ class Isolated extends Component<typeof Workspace> {
       ['cardTitle', '_cardType'],
     );
     this.searchTotal = table?.total ?? 0;
+    this.searchTotalIsEstimate = Boolean(table?.totalIsEstimate);
     this.searchResults.splice(0, this.searchResults.length);
     for (let [id, title, type] of table?.rows ?? []) {
       if (typeof id !== 'string') {
@@ -3045,10 +3056,16 @@ class Isolated extends Component<typeof Workspace> {
     this.searchAnnouncement = describeSearchResults(
       this.searchResults.length,
       this.searchTotal,
+      this.searchTotalIsEstimate,
     );
   });
 
   @tracked private searchTotal = 0; // full hit count for the See-all row
+  @tracked private searchTotalIsEstimate = false; // the count stopped at the cap
+
+  private get searchTotalLabel(): string {
+    return formatSearchTotal(this.searchTotal, this.searchTotalIsEstimate);
+  }
 
   // Full results live in Library: a transient `Search: "term"` rail state
   // that remembers and restores the previous rail selection.
@@ -3524,7 +3541,9 @@ class Isolated extends Component<typeof Workspace> {
     query: Query,
     columns: string[],
     opts: { type?: CodeRef } = {},
-  ): Promise<{ rows: unknown[][]; total: number } | undefined> => {
+  ): Promise<
+    { rows: unknown[][]; total: number; totalIsEstimate: boolean } | undefined
+  > => {
     let realm = this.primaryRealm;
     if (!realm) {
       return undefined;
@@ -3553,10 +3572,14 @@ class Isolated extends Component<typeof Workspace> {
       }
       let doc = (await response.json()) as {
         rows?: unknown[][];
-        meta?: { page?: { total?: number } };
+        meta?: { page?: { total?: number; totalIsEstimate?: boolean } };
       };
       let rows = doc.rows ?? [];
-      return { rows, total: doc.meta?.page?.total ?? rows.length };
+      return {
+        rows,
+        total: doc.meta?.page?.total ?? rows.length,
+        totalIsEstimate: Boolean(doc.meta?.page?.totalIsEstimate),
+      };
     } catch (e) {
       // Same posture as `searchRealm`: a passive panel reads fine as empty.
       console.warn(`Workspace select failed for realm ${realm}`, e);

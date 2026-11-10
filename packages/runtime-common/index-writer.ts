@@ -116,7 +116,7 @@ export class IndexWriter {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
-      // Spill large search-doc values on promotion (ADR 021). Postgres only;
+      // Spill large search-doc values on promotion. Postgres only;
       // defaults to `searchDocSpillEnabled()`.
       spillSearchDocs?: boolean;
       // Reads a card's vector sidecar (`<card>.vectors.jsonl`) by the card's
@@ -757,7 +757,7 @@ export class Batch {
   // Defaults to `dbAdapter.kind === 'pg'`.
   #splitPrerenderHtml: boolean;
   // Whether this batch stages each row's spilled search doc and spill rows
-  // (ADR 021). Promotion reads them whenever they are present, so a batch that
+  //. Promotion reads them whenever they are present, so a batch that
   // doesn't spill still promotes rows an earlier attempt spilled correctly.
   #spillSearchDocs: boolean;
   // When true, this batch is the `prerender_html` job's batch: it writes only
@@ -851,7 +851,7 @@ export class Batch {
     opts?: {
       splitPrerenderHtml?: boolean;
       prerenderHtmlOnly?: boolean;
-      // Spill large search-doc values on promotion (ADR 021). Postgres only;
+      // Spill large search-doc values on promotion. Postgres only;
       // defaults to `searchDocSpillEnabled()`.
       spillSearchDocs?: boolean;
       // Reads a card's vector sidecar (`<card>.vectors.jsonl`) by the card's
@@ -2011,14 +2011,19 @@ export class Batch {
     }
     if (this.#spillSearchDocs) {
       // Spill the sanitized doc, so the spilled values are the bytes that get
-      // stored. Both columns are always written, so a row restaged within one
-      // staging never keeps a stale spill.
+      // stored.
       let spilled = await spillSearchDoc(docWithoutText, {
         url: href,
         type: String(sanitized.type),
       });
       sanitized.spilled_search_doc = spilled?.searchDoc ?? null;
       sanitized.spill_rows = spilled?.rows ?? null;
+    } else if (this.#dbAdapter.kind === 'pg') {
+      // Both columns are always written on Postgres, spilling or not, so a
+      // row restaged within one staging never keeps a spill from an earlier
+      // attempt (promotion prefers a spilled doc when one is there).
+      sanitized.spilled_search_doc = null;
+      sanitized.spill_rows = null;
     }
     return {
       preparedEntry: sanitized,
@@ -3461,7 +3466,7 @@ export class Batch {
     }
     // An error row carries this doc forward into the pass, which spills it
     // again and replaces its spill rows, so it must hold the values, not
-    // markers to rows the swap is about to replace (ADR 021 §1.4).
+    // markers to rows the swap is about to replace.
     await restoreSpilledSearchDocs(this.#dbAdapter, [entry]);
 
     let {
@@ -3914,7 +3919,7 @@ export class Batch {
 
   // The full search docs this pass staged for `chunk`'s live rows, matching
   // `filter`. Derived tables are built from these, never from the promoted
-  // doc, which may hold spill markers in place of the values (ADR 021 §1.4).
+  // doc, which may hold spill markers in place of the values.
   async #stagedSearchDocs(
     chunk: string[],
     filter: string,
@@ -4030,7 +4035,7 @@ export class Batch {
   }
 
   // Replaces `boxel_index_spill` for every URL this pass staged with the
-  // values its rows spilled (ADR 021 §1.3, §1.4): the promoted doc's markers
+  // values its rows spilled: the promoted doc's markers
   // and these rows come from one staging, published in one transaction. A
   // tombstoned URL, or a row that spilled nothing, keeps none. Set-based, so
   // the values never pass through the writer again. Postgres only.
@@ -4125,7 +4130,7 @@ export class Batch {
             'AS INTEGER) AS generation',
           ] as Expression)
         : column === 'search_doc' && this.#dbAdapter.kind === 'pg'
-          ? // A row staged with a spill promotes its spilled form (ADR 021),
+          ? // A row staged with a spill promotes its spilled form,
             // and no row keeps the render's `_searchText`: it lives on as
             // `search_tsv`.
             [

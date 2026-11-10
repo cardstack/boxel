@@ -13,8 +13,8 @@ import {
   searchCardsForTest,
 } from './helpers/index.ts';
 
-// Search intent end to end on a port of OnTube's talk card (a trimmed
-// `Moment`, hinted as docs/search-intent.md's OnTube example is): the real
+// Search intent end to end on a recorded-talk card (`Moment`, hinted the way
+// docs/search-intent.md's talk library is): the real
 // render stamps each field's role, typo words and pattern values, the real
 // index writer turns them into the weighted vector, the word list and
 // `pattern_text`, and every query runs through the search-entry wire grammar
@@ -206,13 +206,13 @@ function fileSystem() {
 }
 
 module(basename(import.meta.filename), function () {
-  module('OnTube search intent', function (hooks) {
+  module('talk search intent', function (hooks) {
     let testRealm: Realm;
     let dbAdapter: PgAdapter;
     let realmHref: string;
 
     setupPermissionedRealmCached(hooks, {
-      realmURL: new URL('http://127.0.0.1:4444/ontube/'),
+      realmURL: new URL('http://127.0.0.1:4444/talks/'),
       permissions: { '*': ['read'] },
       fileSystem: fileSystem() as never,
       onRealmSetup(args: { testRealm: Realm; dbAdapter: PgAdapter }) {

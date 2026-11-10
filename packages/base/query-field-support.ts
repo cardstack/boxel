@@ -82,14 +82,19 @@ function labelOnClass(card: typeof BaseDef, label: string): string | undefined {
 // does not resolve, is left as written and resolves when the query runs.
 // The indexer's leg (the field's definition) and the client's live refresh
 // both read the field's query through here, so they agree.
-export function savedFieldQuery(
+//
+// `resolved` is false when the target type couldn't be read yet (it may not be
+// defined when the field is), and the query comes back as written. A caller
+// that caches the answer caches only a resolved one, so an early read doesn't
+// fix the unresolved form.
+export function resolveSavedFieldQuery(
   query: QueryWithInterpolations,
   target: () => typeof BaseDef,
-): QueryWithInterpolations {
+): { query: QueryWithInterpolations; resolved: boolean } {
   try {
     let card = target();
     let ref = identifyCard(card);
-    return mapQueryPaths(query, (path, anchor) => {
+    let saved = mapQueryPaths(query, (path, anchor) => {
       if (!looksLikeLabel(path)) return path;
       let anchored =
         anchor === undefined ||
@@ -100,8 +105,9 @@ export function savedFieldQuery(
             (ref as { name: string }).name);
       return (anchored && labelOnClass(card, path)) || path;
     });
+    return { query: saved, resolved: true };
   } catch {
-    return query;
+    return { query, resolved: false };
   }
 }
 

@@ -691,7 +691,7 @@ export default function handleSearch(opts: {
     // A counts-only search (`page.size: 0`, as facet chips send) has no item
     // leg but does the most counting of any search: every match, once per
     // facet. Without the budget it could run for minutes (three
-    // COUNT(DISTINCT …) statements on studio-orb-cached were still running
+    // COUNT(DISTINCT …) statements on a large realm were still running
     // after 206 s), so it is bounded like an item-leg search.
     let countsOnly = Number(parsed.itemQuery.page?.size) === 0;
     let itemLegBounded =

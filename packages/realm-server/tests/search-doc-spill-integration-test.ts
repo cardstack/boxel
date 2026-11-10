@@ -26,7 +26,7 @@ import {
   testRealm,
 } from './helpers/index.ts';
 
-// ADR 021 end to end on Postgres: a large search doc is promoted with its
+// Spilling end to end on Postgres: a large search doc is promoted with its
 // large values spilled into `boxel_index_spill`, and every query answers
 // exactly as it does over the whole doc.
 

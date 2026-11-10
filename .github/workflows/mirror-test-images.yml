@@ -56,6 +56,7 @@ jobs:
             "synapse:v1.163.0=matrixdotorg/synapse:v1.163.0"
             "smtp4dev:v3.1=rnwood/smtp4dev:v3.1"
             "postgres:16.3=postgres:16.3"
+            "pgvector:0.8.0-pg16=pgvector/pgvector:0.8.0-pg16"
             "mock-oauth2-server:4.0.1=ghcr.io/navikt/mock-oauth2-server:4.0.1"
           )
           for entry in "${images[@]}"; do

@@ -1180,7 +1180,7 @@ module('local-identity-store-test.ts > owner namespaces', function () {
       '@alice:boxel.ai',
       '@alice:stack.cards',
       '@alice:boxel.ai:8448',
-      '@CTSE:boxel.ai',
+      '@CAROL:boxel.ai',
       '@alice:Boxel.ai',
       '@matrix:default.boxel.localhost',
       '@..:boxel.ai',
@@ -1208,7 +1208,10 @@ module('local-identity-store-test.ts > owner namespaces', function () {
   });
 
   test('namespace selection uses the configured server name and preserves existing hosted defaults', function (assert) {
-    assert.strictEqual(createRealmOwnerNamespace({})('@alice:boxel.ai'), 'alice');
+    assert.strictEqual(
+      createRealmOwnerNamespace({})('@alice:boxel.ai'),
+      'alice',
+    );
     const namespace = createRealmOwnerNamespace({
       ...environment,
       MATRIX_SERVER_NAME: 'boxel.ai',

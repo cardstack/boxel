@@ -170,7 +170,7 @@ const query = {
 
 **Watch out:** Under a realm policy, `linkedFrom` cannot sit inside a binding or a comparison filter.
 
-_Needs a value computed first (an embedding, a saved list, or several realms), so it is checked against the grammar only._
+_Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
 
 ### A category, then its neighbors
 
@@ -813,7 +813,7 @@ Embed the shopper's words, keep what is close enough, and rank by meaning with q
 
 **Watch out:** Embed a description of the products that solve it ("couch cover, pet barrier, dog bed"), not the complaint itself.
 
-_Needs a value computed first (an embedding, a saved list, or several realms), so it is checked against the grammar only._
+_Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
 
 ### A mood or occasion
 
@@ -834,7 +834,7 @@ const query = {
 
 No threshold: everything under budget stays, ranked by closeness to the mood.
 
-_Needs a value computed first (an embedding, a saved list, or several realms), so it is checked against the grammar only._
+_Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
 
 ## Dupes and twins
 
@@ -961,7 +961,7 @@ Over several realms, `merged` gives one list in the query's sort; the default `b
 
 **Watch out:** Send it to `_federated-search` with `realms`; blend and text scores compare only approximately across realms.
 
-_Needs a value computed first (an embedding, a saved list, or several realms), so it is checked against the grammar only._
+_Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
 
 ## Answering with numbers
 
@@ -1024,4 +1024,4 @@ const query = {
 
 ## Adding a pattern
 
-The patterns are generated from a case file that is also an eval: each entry carries the phrases, the query and the explanation, and the eval checks the query against the grammar and runs it. Add a pattern there rather than editing this page by hand.
+Each pattern pairs what people say with the query and why it is written that way. To add one, write it in the same shape, and check its query against the grammar (`assertQuery` in `@cardstack/runtime-common`) and run it against a realm before adding it here.
