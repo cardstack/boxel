@@ -153,15 +153,37 @@ module('process', (hooks) => {
     );
   });
 
-  test('a missing option is a usage error', async (assert) => {
-    let child = spawn(process.execPath, [MAIN, '--port=0'], {
+  async function usage(
+    args: string[],
+  ): Promise<{ code: number | null; stderr: string }> {
+    let child = spawn(process.execPath, [MAIN, ...args], {
       env: { ...process.env, NODE_NO_WARNINGS: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stderr = '';
     child.stderr!.on('data', (chunk) => (stderr += chunk));
-    let code = await new Promise((resolve) => child.once('exit', resolve));
-    assert.strictEqual(code, 2);
-    assert.true(stderr.includes('--historyRoot is required'), stderr);
+    let code = await new Promise<number | null>((resolve) =>
+      child.once('exit', resolve),
+    );
+    return { code, stderr };
+  }
+
+  test('a missing option is a usage error', async (assert) => {
+    let missingRoot = await usage(['--port=0']);
+    assert.strictEqual(missingRoot.code, 2);
+    assert.true(
+      missingRoot.stderr.includes('--historyRoot is required'),
+      missingRoot.stderr,
+    );
+
+    let missingPort = await usage([
+      `--historyRoot=${join(root, 'history')}`,
+      `--realmsRoot=${join(root, 'realms')}`,
+    ]);
+    assert.strictEqual(missingPort.code, 2);
+    assert.true(
+      missingPort.stderr.includes('--port is required'),
+      missingPort.stderr,
+    );
   });
 });

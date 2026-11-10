@@ -54,6 +54,7 @@ function integer(name: keyof typeof args, min: number): number {
 
 let historyRoot = required('historyRoot');
 let realmsRoot = required('realmsRoot');
+required('port');
 let port = integer('port', 0);
 let shardCount = integer('shardCount', 1);
 let taskCount = integer('taskCount', 1);
