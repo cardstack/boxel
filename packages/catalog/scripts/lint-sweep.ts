@@ -243,7 +243,7 @@ function lintHbs(outDir: string): LinterRun {
   return { diagnostics, status, output };
 }
 
-// scripts/lint-identity.ts prints `file(line,col): error mark-definition:
+// lint/identity.ts prints `file(line,col): error mark-definition:
 // message`, one line per definition, and exits 2 without printing any when it
 // can't run.
 function lintIdentity(): LinterRun {

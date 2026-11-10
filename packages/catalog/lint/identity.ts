@@ -19,12 +19,15 @@
 //
 // Run from packages/catalog:
 //
-//   node scripts/lint-identity.ts [dir]
+//   node lint/identity.ts [dir]
 //
 // It checks every .gts and .ts file under `dir` (default `contents`) and
 // prints one line per definition, `file(line,col): error mark-definition:
 // message`, the shape scripts/lint-sweep.ts reads. It exits 1 when it reports
 // any, and 2 when it can't run.
+//
+// It lives outside scripts/ because boxel-catalog's own CI Lint deletes that
+// folder before it runs this package's `pnpm lint`.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -33,11 +36,15 @@ import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
 
+import {
+  markDefinitionModule,
+  otherBaseSpelling,
+} from '../../runtime-common/export-identity-plugin.ts';
+
 const require = createRequire(import.meta.url);
 const { Preprocessor } = require('content-tag') as typeof import('content-tag');
 
 export const ruleName = 'mark-definition';
-const markDefinitionModule = '@cardstack/base/mark-definition';
 const markDefinitionName = 'markDefinition';
 const baseDefModule = '@cardstack/base/card-api';
 
@@ -45,7 +52,9 @@ export interface UnmarkedDefinition {
   file: string;
   line: number;
   column: number;
-  exportedName: string;
+  // The name the definition is exported under; absent for a report on the
+  // import of `markDefinition` itself.
+  exportedName: string | undefined;
   message: string;
 }
 
@@ -196,31 +205,43 @@ function decodeMappings(mappings: string): Segment[][] {
 
 // The local names `markDefinition` is imported under, and the namespaces its
 // module is imported as. The compiler recognizes it by exactly these forms.
+// An import of it from another spelling of a base module is one the compiler
+// refuses; a call through that name counts as wrapped here, so the import
+// itself is what gets reported.
 function markDefinitionImports(sourceFile: ts.SourceFile) {
   let names = new Set<string>();
   let namespaces = new Set<string>();
+  let misspelled: { specifier: ts.ImportSpecifier; source: string }[] = [];
   for (let statement of sourceFile.statements) {
     if (
       !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      statement.moduleSpecifier.text !== markDefinitionModule
+      !ts.isStringLiteral(statement.moduleSpecifier)
     ) {
       continue;
     }
+    let source = statement.moduleSpecifier.text;
     let bindings = statement.importClause?.namedBindings;
     if (bindings && ts.isNamespaceImport(bindings)) {
-      namespaces.add(bindings.name.text);
+      if (source === markDefinitionModule) {
+        namespaces.add(bindings.name.text);
+      }
     } else if (bindings) {
       for (let element of bindings.elements) {
         if (
-          (element.propertyName ?? element.name).text === markDefinitionName
+          (element.propertyName ?? element.name).text !== markDefinitionName
         ) {
+          continue;
+        }
+        if (source === markDefinitionModule) {
           names.add(element.name.text);
+        } else if (otherBaseSpelling.test(source)) {
+          names.add(element.name.text);
+          misspelled.push({ specifier: element, source });
         }
       }
     }
   }
-  return { names, namespaces };
+  return { names, namespaces, misspelled };
 }
 
 function unwrap(expression: ts.Expression): ts.Expression {
@@ -293,8 +314,10 @@ function separatelyExportedNames(sourceFile: ts.SourceFile) {
 
 // The exported values a module computes with a call it doesn't mark, each
 // with the name it is exported under and the call.
-function unmarkedExportedCalls(sourceFile: ts.SourceFile) {
-  let imports = markDefinitionImports(sourceFile);
+function unmarkedExportedCalls(
+  sourceFile: ts.SourceFile,
+  imports: ReturnType<typeof markDefinitionImports>,
+) {
   let exportedNames = separatelyExportedNames(sourceFile);
   let found: {
     exportedName: string;
@@ -420,7 +443,27 @@ export function findUnmarkedDefinitions({
     if (!sourceFile) {
       continue;
     }
-    let candidates = unmarkedExportedCalls(sourceFile);
+    let position = (node: ts.Node) => {
+      let generated = sourceFile.getLineAndCharacterOfPosition(
+        node.getStart(sourceFile),
+      );
+      let { line, column } = originalPosition(
+        rootName,
+        generated.line,
+        generated.character,
+      );
+      return { line: line + 1, column: column + 1 };
+    };
+    let imports = markDefinitionImports(sourceFile);
+    for (let { specifier, source } of imports.misspelled) {
+      found.push({
+        file: realNameOf.get(rootName)!,
+        ...position(specifier),
+        exportedName: undefined,
+        message: `import ${markDefinitionName} from '${markDefinitionModule}', not '${source}'. The compiler recognizes it only by that specifier.`,
+      });
+    }
+    let candidates = unmarkedExportedCalls(sourceFile, imports);
     if (candidates.length === 0) {
       continue;
     }
@@ -429,15 +472,8 @@ export function findUnmarkedDefinitions({
       if (!isDefinition(checker, checker.getTypeAtLocation(binding), baseDef)) {
         continue;
       }
-      let generated = sourceFile.getLineAndCharacterOfPosition(
-        call.getStart(sourceFile),
-      );
-      let { line, column } = originalPosition(
-        rootName,
-        generated.line,
-        generated.character,
-      );
-      let callee = call.expression.getText(sourceFile);
+      // The callee's own text, on one line, since each report is one line.
+      let callee = call.expression.getText(sourceFile).replace(/\s+/g, '');
       let wrapped =
         localName !== undefined
           ? `const ${localName} = markDefinition(${callee}(...))`
@@ -446,8 +482,7 @@ export function findUnmarkedDefinitions({
             : `export const ${exportedName} = markDefinition(${callee}(...))`;
       found.push({
         file: realNameOf.get(rootName)!,
-        line: line + 1,
-        column: column + 1,
+        ...position(call),
         exportedName,
         message:
           `${exportedName === 'default' ? 'The default export' : exportedName} ` +

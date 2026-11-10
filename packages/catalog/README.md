@@ -73,7 +73,7 @@ This package includes automated linting checks for JavaScript, TypeScript, and G
 - **ESLint**: Validates `.ts` and `.gts` files
 - **ember-template-lint**: Validates `.hbs` files
 - **ember-tsc**: TypeScript type checking
-- **Definition identity** (`scripts/lint-identity.ts`): an exported card or field definition made by a call, such as `enumField(...)` or a realm's own factory, has no identity unless the call is wrapped in `markDefinition` from `@cardstack/base/mark-definition` (ADR 010 §1.4.5). The check asks TypeScript which exported calls return a `BaseDef` subclass and reports the unwrapped ones. A definition that isn't exported is never wrapped, since nothing can name it.
+- **Definition identity** (`lint/identity.ts`): an exported card or field definition made by a call, such as `enumField(...)` or a realm's own factory, has no identity unless the call is wrapped in `markDefinition` from `@cardstack/base/mark-definition` (ADR 010 §1.4.5). The check asks TypeScript which exported calls return a `BaseDef` subclass and reports the unwrapped ones. A definition that isn't exported is never wrapped, since nothing can name it.
 
 ### Running Linting
 

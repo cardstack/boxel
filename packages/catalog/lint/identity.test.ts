@@ -11,7 +11,7 @@ import {
   findUnmarkedDefinitions,
   moduleFiles,
   type UnmarkedDefinition,
-} from './lint-identity.ts';
+} from './identity.ts';
 
 const catalogDir = resolve(import.meta.dirname, '..');
 
@@ -52,6 +52,11 @@ const fixtures: Record<string, string> = {
     export const TierField = tierField(['gold']);
     const Renamed = enumField(StringField, { options: ['c'] });
     export { Renamed as RenamedField };
+    export const Asserted = (tierField(['g']) as ReturnType<typeof tierField>);
+    export const Satisfied = tierField(['h']) satisfies ReturnType<typeof tierField>;
+    export const NonNull = tierField(['i'])!;
+    export const MultiLine = tierField
+      (['j']);
     export const NOT_A_DEFINITION = notADefinition(1);
     export const Untyped = untyped();
     const Unexported = enumField(StringField, { options: ['d'] });
@@ -78,6 +83,11 @@ const fixtures: Record<string, string> = {
     const E = markDefinition(tierField(['e']));
     export { E };
     export default markDefinition(tierField(['f']));
+  `,
+  'misspelled.ts': `
+    import { markDefinition } from 'https://cardstack.com/base/mark-definition';
+    import { tierField } from './factory';
+    export const Misspelled = markDefinition(tierField(['k']));
   `,
   'nested/imports-gts.ts': `
     import { StatusField } from '../unmarked.gts';
@@ -116,7 +126,11 @@ function reported(file: string) {
 
 test('reports an exported definition made by a base factory or a realm factory', () => {
   assert.deepEqual(reported('unmarked.gts'), [
+    'Asserted',
+    'MultiLine',
+    'NonNull',
     'RenamedField',
+    'Satisfied',
     'StatusField',
     'TierField',
   ]);
@@ -137,6 +151,27 @@ test('accepts every form of the wrap the compiler recognizes', () => {
   assert.deepEqual(reported('marked.ts'), []);
 });
 
+test('reports an import of markDefinition by another spelling of base, not the call it wraps', () => {
+  let reports = found.filter((d) => d.file === join(dir, 'misspelled.ts'));
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].exportedName, undefined);
+  assert.equal(reports[0].line, 1);
+  assert.match(
+    reports[0].message,
+    /^import markDefinition from '@cardstack\/base\/mark-definition', not 'https:\/\/cardstack\.com\/base\/mark-definition'/,
+  );
+});
+
+test('keeps a report on one line when the callee spans lines', () => {
+  let multiLine = found.find((d) => d.exportedName === 'MultiLine')!;
+  assert.ok(!multiLine.message.includes('\n'));
+  assert.match(multiLine.message, /markDefinition\(tierField\(\.\.\.\)\)/);
+});
+
+// Imports one .gts module by both of the names TypeScript looks for it under,
+// with and without the extension, and checks that neither stops the check.
+// Whether the two names resolve to one module is pinned by the realm-factory
+// test above, which fails when they don't, through base's own .gts modules.
 test('leaves alone an exported binding that only aliases a definition', () => {
   assert.deepEqual(reported('nested/imports-gts.ts'), []);
 });
