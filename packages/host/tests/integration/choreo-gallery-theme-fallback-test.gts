@@ -10,6 +10,7 @@ import { module, test } from 'qunit';
 import { parseCssGroups } from '@cardstack/boxel-ui/helpers';
 
 import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
+import { renderCard } from '../helpers/render-component';
 
 import type * as ThemeModule from '../../../choreo-gallery/realm/lib/theme';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -204,6 +205,29 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
       style.backgroundColor,
       'rgb(242, 236, 225)',
       'on the cream ground',
+    );
+  });
+
+  test('a shell its card forces dark renders the dark palette with no theme linked', async function (assert) {
+    // the feature reel stamps data-theme='dark' on its root whatever the
+    // reader's scheme, so the reader picks light here
+    await setScheme('light');
+    let { ChoreoFeatureReel } = await gallery.import<{
+      ChoreoFeatureReel: new () => CardAPI.CardDef;
+    }>('reel/feature-reel');
+    await renderCard(gallery.loader, new ChoreoFeatureReel(), 'isolated');
+
+    assert.strictEqual(
+      site().dataset['theme'],
+      'dark',
+      'the reel’s root is dark',
+    );
+    let style = getComputedStyle(site());
+    assert.strictEqual(style.color, 'rgb(243, 236, 227)', 'cream ink');
+    assert.strictEqual(
+      style.backgroundColor,
+      'rgb(46, 41, 36)',
+      'on the charcoal ground',
     );
   });
 
