@@ -2823,7 +2823,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'functions taking ; between arguments, such as map({name, total: ' +
     'ROUND(.price * .qty; 2)}); spelling "readable" for readable BXL; ' +
     'params("name") reads a value from params; one value out; no reduce, ' +
-    'def, try or @formats; 1 MB in and out), ' +
+    'def, try or @formats; 1 MB in (input and params) and 1 MB out per call, ' +
+    '10 MB in and out per run; 10 s per program; at most 100 calls per run), ' +
     'can ask the user a question mid-script and wait for the pick with ' +
     'realm.ask({ question, options: [{ label, value?, detail?, confidence? }], kind?, allowOther? }) ' +
     '(kind "recommend" proposes the first option, with its detail as the reason), ' +
