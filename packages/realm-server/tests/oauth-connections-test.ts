@@ -682,7 +682,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('an automation is refused at admission with needs-admin while the client a connection signs in through is broken or its share suspended', async function (assert) {
+  test('an automation is refused at admission with needs-admin while the client a connection signs in through is broken', async function (assert) {
     let { client } = await connectAndApprove();
     provider.clients = [{ clientId: CLIENT_ID, clientSecret: ROTATED_SECRET }];
     clock += 3600 * 1000;
@@ -706,7 +706,9 @@ module(basename(import.meta.filename), function (hooks) {
       undefined,
       'a client whose secret is replaced is admitted again',
     );
+  });
 
+  test('an automation is refused at admission with needs-admin while the share of the client a connection signs in through is suspended', async function (assert) {
     let shared = await addClient(OWNER, {}, 'team app');
     let share = await shareKey(dbAdapter, {
       owner: OWNER,
