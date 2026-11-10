@@ -58,11 +58,15 @@ cancel a batch.
 
 A submitted batch MUST be billed whether or not its results are used. A
 settle job MUST bill each batch once, when it reaches a final state, at the
-cost OpenRouter reports times the margin that metered charges use. A batch
+cost OpenRouter reports, the same as a plain AI call, with no margin. A batch
 that ends with no reported cost MUST be billed at the batch price of its
-requests, estimated at submit, times the same margin. For an automation that
-opts in, its caps, the minimum balance and its estimate MUST count its AI at
-twice the normal price. That factor bounds spending and MUST NOT be charged.
+requests, estimated at submit.
+
+Wherever the platform bounds a run's AI spending before a request is sent (a
+run's caps, its payer's minimum balance and its estimate), each batched
+request MUST count at twice the most it can cost at the normal price: once
+for the batch and once for its fallback. A request sent at the normal price
+counts once. That factor bounds spending and MUST NOT be charged.
 
 ## 2. Rationale
 
@@ -82,12 +86,13 @@ first run left off.
 A missed deadline pays for the batch and for the same requests at the normal
 price. A batch costs at most the normal price: the discount is typically
 half, but it varies by model, and web-search calls in a batch bill at the
-standard rate. So counting opted-in AI at twice the normal price in caps and
-the minimum balance means a missed deadline can't overspend. It only reserves
-headroom; each charge is still the price actually paid.
-OpenRouter's docs report the cost of a completed batch. They don't say
-whether an expired one is charged. Billing it at the submit estimate means we
-never pay for work we didn't bill.
+standard rate. So counting each batched request at twice its most at the
+normal price, wherever AI spending is bounded, means a missed deadline can't
+overspend. It only reserves headroom; each charge is still the price actually
+paid. A batch carries no margin, as a plain AI call carries none, so the
+author who opts in keeps the discount. OpenRouter's docs report the cost of a
+completed batch. They don't say whether an expired one is charged. Billing it
+at the submit estimate means we never pay for work we didn't bill.
 
 The interactive surface has a person waiting for an answer, so a batch there
 would only be slower. Limiting batch calls to run tokens keeps them tied to a
@@ -102,6 +107,9 @@ run that the platform will bill and follow up.
 - **Cancel the batch at the deadline.** OpenRouter has no cancel endpoint.
 - **Batch interactive calls.** A person is waiting, so a batch only makes
   the answer slower.
+- **Bill a batch at its cost times the margin metered charges use.** Plain AI calls
+  carry no margin, and at a margin of 2 or more, batching would cost as much
+  as not batching, or more.
 - **Bill only completed batches.** An expired or late batch we stopped
   waiting for may still cost us, and we would not recover it.
 
