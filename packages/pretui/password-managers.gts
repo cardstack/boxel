@@ -2,10 +2,12 @@
 //
 // A password manager guesses which fields on a page take a username or a
 // password, and a plain text field with no name looks like a username to it:
-// it fills the saved login in, or puts its icon in the field. Every field the
-// app draws outside the secure origin is one no login belongs in, so each
-// carries the hint every password manager reads. `autocomplete="off"` is no
-// substitute: LastPass fills a field that says it regardless.
+// it fills the saved login in, or puts its icon in the field. No login belongs
+// in a field the app draws outside the secure origin, so a text field drawn
+// there takes this modifier, which sets the hint every password manager reads.
+// Each field opts in, and nothing checks for one that doesn't.
+// `autocomplete="off"` is no substitute: LastPass fills a field that says it
+// regardless.
 //
 // The secure origin's sign-in, sign-up and password fields must never carry
 // these hints, so this is something a caller adds, never a default of an
