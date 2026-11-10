@@ -46,6 +46,7 @@ import {
   type VectorSidecarReader,
 } from './vector-index-writer.ts';
 export type { VectorSidecarReader } from './vector-index-writer.ts';
+import { syncLogLineIndex, type LogFileReader } from './log-line-index.ts';
 import { collectSearchDocPassages } from './passage-index.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
@@ -121,6 +122,9 @@ export class IndexWriter {
       // Reads a card's vector sidecar (`<card>.vectors.jsonl`) by the card's
       // URL, with its modified time; undefined when it has none.
       readVectorSidecar?: VectorSidecarReader;
+      // Reads a log file (`.jsonl`, `.log`) by URL, for its line rows
+      // (`log-line-index.ts`); undefined when it's gone.
+      readLogFile?: LogFileReader;
     },
   ) {
     let batch = new Batch(
@@ -834,6 +838,7 @@ export class Batch {
   // opposed to an incremental fan-out; recorded on the ledger row.
   #fullRealm = false;
   #readVectorSidecar: VectorSidecarReader | undefined;
+  #readLogFile: LogFileReader | undefined;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
   private virtualNetwork: VirtualNetwork;
   private jobInfo?: JobInfo;
@@ -852,6 +857,9 @@ export class Batch {
       // Reads a card's vector sidecar (`<card>.vectors.jsonl`) by the card's
       // URL, with its modified time; undefined when it has none.
       readVectorSidecar?: VectorSidecarReader;
+      // Reads a log file (`.jsonl`, `.log`) by URL, for its line rows
+      // (`log-line-index.ts`); undefined when it's gone.
+      readLogFile?: LogFileReader;
     },
   ) {
     this.realmURL = realmURL;
@@ -865,6 +873,7 @@ export class Batch {
       dbAdapter.kind === 'pg' &&
       (opts?.spillSearchDocs ?? searchDocSpillEnabled());
     this.#readVectorSidecar = opts?.readVectorSidecar;
+    this.#readLogFile = opts?.readLogFile;
     this.#stagingId =
       jobInfo && jobInfo.jobId > 0
         ? jobStagingId(jobInfo.jobId, jobInfo.reservationId)
@@ -3867,6 +3876,7 @@ export class Batch {
       await this.#syncVectorIndex();
       await this.#syncPassageIndex();
       await this.#syncSpillIndex();
+      await this.#syncLogLineIndex();
       await this.#syncWordList();
 
       // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
@@ -3928,6 +3938,20 @@ export class Batch {
 
   // Re-derives the stored vectors for every URL this pass staged (see
   // vector-index-writer.ts). Runs inside the swap transaction.
+  // Keeps `boxel_log_lines` in step with every log this pass staged: only
+  // the appended lines when a log has only grown (`log-line-index.ts`).
+  async #syncLogLineIndex() {
+    await syncLogLineIndex(
+      {
+        dbAdapter: this.#dbAdapter,
+        realmURL: this.realmURL.href,
+        query: (expression) => this.#query(expression),
+        readLogFile: this.#readLogFile,
+      },
+      [...this.#invalidations],
+    );
+  }
+
   async #syncVectorIndex() {
     await syncVectorIndex(
       {

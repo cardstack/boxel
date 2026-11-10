@@ -413,7 +413,10 @@ export class IndexRunner {
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
-      { readVectorSidecar: current.#readVectorSidecar },
+      {
+        readVectorSidecar: current.#readVectorSidecar,
+        readLogFile: current.#readLogFile,
+      },
     );
     let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation discovery and
@@ -682,7 +685,10 @@ export class IndexRunner {
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
-      { readVectorSidecar: current.#readVectorSidecar },
+      {
+        readVectorSidecar: current.#readVectorSidecar,
+        readLogFile: current.#readLogFile,
+      },
     );
     let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation — so the
@@ -1484,6 +1490,12 @@ export class IndexRunner {
     this.#shouldResetStoreForNextRender = false;
     return true;
   }
+
+  // A log file's text, for its line rows (`log-line-index.ts`).
+  #readLogFile = async (url: string) => {
+    let ref = await this.#reader.readFile(new URL(url));
+    return ref ? { content: ref.content } : undefined;
+  };
 
   // A card's vector sidecar, read by the card's URL.
   #readVectorSidecar = async (cardURL: string) => {

@@ -1,4 +1,5 @@
 import type Koa from 'koa';
+import { respondToLogSearch } from './log-search.ts';
 import {
   applyServerSearchPageBound,
   buildSearchErrorResponse,
@@ -7,6 +8,7 @@ import {
   ifNoneMatchMatches,
   isCodeRef,
   isItemLegSearch,
+  isLogQuery,
   logger,
   markPolicyScoped,
   parseRealmsFromPayload,
@@ -161,6 +163,12 @@ export default function handleSearch(opts: {
     // policy-scoped mark names these, so it never says which of them a
     // declaration searched.
     let requested = named;
+    // A search over one of the realm's logs (`from: { log }`) is answered
+    // from its line rows, not the card index (`log-search.ts`).
+    if (isLogQuery(payload)) {
+      await respondToLogSearch(ctxt, payload, named, realmList, dbAdapter);
+      return;
+    }
     // What a policy fragment is looked up by: a named query runs under the
     // name it was invoked with, on the type that declares it, and an ad-hoc
     // search as `query` on the type its filter targets. A filter with no type

@@ -1952,6 +1952,13 @@ import type { SearchEntryScope } from './search-entry.ts';
 
 export * from './search-entry.ts';
 export * from './search-bounds.ts';
+export * from './log-query.ts';
+export {
+  parseLogLine,
+  syncLogFile,
+  isLogFileURL,
+  type LogLineIndexHost,
+} from './log-line-index.ts';
 export * from './rerank-score.ts';
 export { barePath, looksLikeLabel, mapQueryPaths } from './query-syntax.ts';
 export * from './link-shape-policy.ts';
