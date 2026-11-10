@@ -144,6 +144,20 @@ export interface TypeCondition {
   ref: CodeRef;
 }
 
+// The arm of a list-path match that reads lists spilled out of the search
+// doc, deferred so pass 1 can ask whether the realm holds any spilled list
+// under that root at all. When it holds none (the usual case: only lists over
+// 1 KB spill) the arm resolves to FALSE, and the search doc's GIN index alone
+// answers the match. A marker test can't be served precisely by that index
+// (it stores keys and values, not paths), so keeping the arm costs a recheck
+// of every doc that merely contains the same words.
+export interface SpillArm {
+  kind: 'spill-arm';
+  realmURL: string;
+  root: string;
+  expression: CardExpression;
+}
+
 export type CardExpression = (
   | string
   | Param
@@ -157,6 +171,7 @@ export type CardExpression = (
   | FieldValue
   | FieldArity
   | TypeCondition
+  | SpillArm
 )[];
 
 export function addExplicitParens(expression: CardExpression): CardExpression;
@@ -314,6 +329,19 @@ export function typeCondition(ref: CodeRef): TypeCondition {
   return {
     kind: 'type-condition',
     ref,
+  };
+}
+
+export function spillArm(
+  realmURL: string,
+  root: string,
+  expression: CardExpression,
+): SpillArm {
+  return {
+    kind: 'spill-arm',
+    realmURL,
+    root,
+    expression,
   };
 }
 

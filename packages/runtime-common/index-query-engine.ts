@@ -26,11 +26,13 @@ import {
   type FieldArity,
   type JsonContainsQuery,
   type TypeCondition,
+  type SpillArm,
   param,
   isParam,
   tableValuedTree,
   typesContains,
   typeCondition as typeConditionNode,
+  spillArm as spillArmNode,
   separatedByCommas,
   addExplicitParens,
   any,
@@ -4143,6 +4145,22 @@ export class IndexQueryEngine {
     return [typeConditionNode(ref)];
   }
 
+  // A realm with no spilled list under the root can't match through the
+  // spilled arm, so the arm is FALSE and the GIN-served arm answers alone.
+  // One indexed probe per search (`boxel_index_spill_field_idx`).
+  private async handleSpillArm(arm: SpillArm): Promise<Expression> {
+    let rows = (await this.#query([
+      'SELECT 1 FROM boxel_index_spill WHERE realm_url =',
+      param(arm.realmURL),
+      'AND field_path =',
+      param(arm.root),
+      'LIMIT 1',
+    ] as Expression)) as unknown[];
+    return rows.length > 0
+      ? await this.makeExpression(arm.expression)
+      : ['FALSE'];
+  }
+
   private async handleTypeCondition(
     condition: TypeCondition,
   ): Promise<Expression> {
@@ -6551,8 +6569,9 @@ export class IndexQueryEngine {
     key: string,
     values: JSONTypes.Value[],
     // The match tests the outer row, so it reads whichever table the
-    // context's query does; the context isn't needed to name it.
-    _context: FilterContext,
+    // context's query does. The context's realm lets pass 1 drop the spilled
+    // arm when the realm has no spilled list under this root.
+    context: FilterContext,
   ): CardExpression | undefined {
     if (this.#dbAdapter.kind !== 'pg' || values.length === 0) {
       return undefined;
@@ -6574,10 +6593,8 @@ export class IndexQueryEngine {
     // be served by the index, and as a bare existence test it read every
     // row of the realm, once per outer candidate.
     let spilled = `$."${root}"."${SPILL_MARKER_KEY}" ? (${SPILL_KINDS.map((k) => `@ == ${JSON.stringify(k)}`).join(' || ')})`;
-    return [
+    let spilledArm: CardExpression = [
       '(i.search_doc @? CAST(',
-      param(test),
-      'AS jsonpath) OR (i.search_doc @? CAST(',
       param(spilled),
       // jsonb_build_object takes `any`, so a bare parameter has no type.
       'AS jsonpath) AND jsonb_path_exists(jsonb_build_object(CAST(',
@@ -6586,7 +6603,16 @@ export class IndexQueryEngine {
       param(root),
       'AS text))), CAST(',
       param(test),
-      'AS jsonpath))))',
+      'AS jsonpath)))',
+    ];
+    return [
+      '(i.search_doc @? CAST(',
+      param(test),
+      'AS jsonpath) OR',
+      ...(context.realmURL
+        ? [spillArmNode(context.realmURL.href, root, spilledArm)]
+        : spilledArm),
+      ')',
     ];
   }
 
@@ -6773,6 +6799,8 @@ export class IndexQueryEngine {
             return this.handleJsonContainsQuery(element);
           } else if (element.kind === 'type-condition') {
             return this.handleTypeCondition(element);
+          } else if (element.kind === 'spill-arm') {
+            return this.handleSpillArm(element);
           } else {
             throw assertNever(element);
           }

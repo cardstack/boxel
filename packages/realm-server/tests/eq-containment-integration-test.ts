@@ -458,6 +458,10 @@ module(basename(import.meta.filename), function () {
         /jsonb?_tree/.test(lastFilterSql()),
         'and no tree walk of the list is joined in',
       );
+      assert.notOk(
+        /spill_unmark\(i\.search_doc ->/.test(lastFilterSql()),
+        'a realm with no spilled contacts list drops the arm that reads spilled lists',
+      );
     });
 
     test('negated eq keeps `->>` and preserves NULL-on-absent-path semantics', async function (assert) {
