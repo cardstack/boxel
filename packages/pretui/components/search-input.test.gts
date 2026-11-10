@@ -271,23 +271,26 @@ module('Pretui | components/search-input', function (hooks) {
         <div data-test-pad><SearchInput @display='collapsed' /></div>
       </template>,
     );
-    await openOver();
-    let square = root().getBoundingClientRect();
-    let wide = window.innerWidth;
-    let before = Math.max(wide - square.left, square.right) - 8;
-    let narrow = Math.max(Math.ceil(square.right) + 40, wide - 200);
-    // the harness can't resize the window, so an own innerWidth stands in for
-    // it; restore exactly what was there so later tests read the real width
+    // the harness can't resize the window and may sit anywhere in it, so an
+    // own innerWidth stands in for the window: wide enough that the inline end
+    // is the roomier side, then narrowed. Restore exactly what was there so
+    // later tests read the real width.
     let original = Object.getOwnPropertyDescriptor(window, 'innerWidth');
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      value: narrow,
-    });
+    let setWidth = (value: number) =>
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value });
     try {
+      let rect = root().getBoundingClientRect();
+      let wide = Math.ceil(rect.right + rect.left + 2000);
+      setWidth(wide);
+      let square = await openOver();
+      let before = Math.max(wide - square.left, square.right) - 8;
+      assert.strictEqual(field()?.style.maxInlineSize, `${before}px`, 'capped to the wide window');
+      let narrow = Math.ceil(square.right + square.left + 500);
+      setWidth(narrow);
       window.dispatchEvent(new Event('resize'));
       await settled();
       let room = Math.max(narrow - square.left, square.right) - 8;
-      assert.strictEqual(field()?.style.maxInlineSize, `${room}px`);
+      assert.strictEqual(field()?.style.maxInlineSize, `${room}px`, 'recapped after the resize');
       assert.true(room < before, 'shrank');
     } finally {
       if (original) {
