@@ -14,12 +14,14 @@ scope:
 
 # 029. Charge metered usage at hosting unit cost times a configured margin, with a pricing version on every charge
 
-Automation runs cost the host compute, indexing, network and storage, and
-AI. A realm server recovers what its hosting provider charges for that usage,
-times one margin. The prices and the margin are deployment configuration, so
-changing one is a configuration edit and a redeploy, never a release, and a
-realm server on any provider prices at its own costs. Every charge records the pricing version it used and what it
-paid for, and a bad price never makes us charge less.
+Automation runs cost the host compute, indexing, network and storage. A realm
+server recovers what its hosting provider charges for that usage, times one
+margin. A run's AI is billed at the AI provider's cost, like any other AI
+call. The prices and the margin are deployment configuration, so changing one
+is a configuration edit and a redeploy, never a release, and a realm server
+on any provider prices at its own costs. Every charge records the pricing
+version it used and what it paid for, and a bad price never makes us charge
+less.
 
 ## 1. Decision
 
@@ -28,10 +30,12 @@ paid for, and a bad price never makes us charge less.
 A metered charge MUST be its hosting unit cost, what the deployment's
 provider charges for one unit of that usage, times one margin multiplier, at
 1,000 credits to the dollar (`CREDITS_PER_USD`). Metered charges are a run's
-compute, the indexing its writes cause, the network bytes it downloads,
-storage, and batched AI, which uses the AI provider's reported cost in place
-of a hosting unit cost. A metered charge MUST NOT be a flat price per run. This ADR
-does not change how a plain AI call is billed.
+compute, the indexing its writes cause, the network bytes it downloads, and
+storage. A metered charge MUST NOT be a flat price per run.
+
+AI is not a metered charge. A run's AI, plain or batched, MUST be billed at
+the cost the AI provider reports, times `CREDITS_PER_USD`, the same as a plain
+AI call, with no margin.
 
 ### 1.2. Prices are deployment configuration
 
@@ -63,11 +67,18 @@ priced at.
 
 ### 1.5. The minimum balance covers a run
 
+An automation's caps MUST include a cap on its runs' AI spending, in credits.
+Before it sends an AI request for a run, the server MUST compute the most the
+request can cost: its input and its output-token limit at the model's listed
+price. The server MUST refuse the request when the run's AI spending, plus
+that amount, would pass the cap. The amount MUST count against the cap until
+the request's actual cost replaces it.
+
 An automation's minimum balance MUST be computed from its caps snapshot at
-the current prices: the most one of its runs can cost, counting the most its
-batched AI can cost when it opts in. It MUST NOT be lower than the configured floor.
-A run MUST NOT start when its payer's balance, less their runs in flight and
-their unsettled batches, is below that minimum.
+the current prices: the most one of its runs can cost, counting its AI
+spending cap in full. It MUST NOT be lower than the configured floor. A run
+MUST NOT start when its payer's balance, less their runs in flight and their
+unsettled batches, is below that minimum.
 
 ### 1.6. A ledger entry says what it paid for, once
 
@@ -101,21 +112,32 @@ ADR 003 §1.1 leaves to each provider.
 
 Prices change more often than code ships, and a release to change a price
 would couple billing to the release train. Configuration makes a change an
-operator's edit plus a redeploy. In our deployment, SSM with
-`ignore_changes` leaves Terraform owning only the starting value. SSM keeps a
-version history of each parameter and limits edits to the IAM roles allowed
-to make them, and each process reads its environment once, at start. Prices in the database would be one more mutable store with its own
-access and audit, read on the hot path. The pricing version answers
-"what price was this charged at?" for every entry, across redeploys.
+operator's edit plus a redeploy. In our deployment, SSM with `ignore_changes`
+leaves Terraform owning only the starting value. SSM keeps a version history
+of each parameter and limits edits to the IAM roles allowed to make them, and
+each process reads its environment once, at start. Prices in the database
+would be one more mutable store with its own access and audit, read on the
+hot path. The pricing version answers "what price was this charged at?" for
+every entry, across redeploys.
 
 `spendCredits` charges only what the balance holds, so a run that costs more
 than the balance leaves the rest unpaid. A minimum balance at least as large
-as the most one run can cost makes every admitted run fully payable. Caps are
-set per automation, so the minimum is computed per automation, and configuration holds
-only a floor. A mistyped margin of 0.1 must never ship a tenfold discount.
-Fallback prices in code would be lower than the live ones the moment an
-operator raised a rate, so a bad value stops new runs instead. Interactive
-work and runs already going are unaffected, and the alert names the value.
+as the most one run can cost makes every admitted run fully payable. Caps on
+calls, writes and time hold no price, and one AI request can cost a fraction
+of a cent or several dollars, so AI gets a cap of its own, in credits. The
+server checks each request's worst case before sending it, so a run's AI
+can't pass the cap, and the minimum balance can count the cap as the most a
+run's AI costs. Caps are set per automation, so the minimum is computed per
+automation, and configuration holds only a floor. A mistyped margin of 0.1
+must never ship a tenfold discount. Fallback prices in code would be lower
+than the live ones the moment an operator raised a rate, so a bad value stops
+new runs instead. Interactive work and runs already going are unaffected, and
+the alert names the value.
+
+The margin pays for the infrastructure the platform runs and operates. AI is
+already priced by its provider, and plain AI calls carry no margin, so AI
+from an automation doesn't either. A margin on batched AI alone would also
+take back the batch discount the author opted in for.
 
 A ledger that says only how much was spent can't answer what a charge was
 for, can't show a charge on its run, and can't tell a retry from a second
@@ -130,6 +152,10 @@ one.
 
 - **Hosting unit cost times a margin, prices in deployment configuration, a
   pricing version on every charge (chosen).**
+- **A margin on batched AI.** Plain AI calls carry none, and at a margin of
+  2 or more it would make batching cost as much as not batching, or more.
+- **Bound AI only by a cap on calls.** A call cap holds no price, so the
+  minimum balance couldn't cover a run's AI.
 - **Flat prices per run.** They drift from cost and over- or under-charge by
   run size.
 - **Prices in code.** Every change needs a release.
