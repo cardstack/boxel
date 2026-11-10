@@ -16,6 +16,8 @@ import type * as ThemeModule from '../../../choreo-gallery/realm/lib/theme';
 import type * as CardAPI from '@cardstack/base/card-api';
 
 const SCHEMES = ['dark', 'light'] as const;
+/** where the gallery remembers the scheme a reader picked */
+const SCHEME_KEY = 'choreo-theme';
 const DEMO = 'keyframes';
 
 /**
@@ -43,11 +45,33 @@ function resolved(names: string[]): Record<string, string> {
 
 module('Integration | Choreo gallery | theme fallback', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
+  let storedScheme: string | null = null;
+
+  hooks.beforeEach(function () {
+    // the gallery's scheme persists to the document's own storage, not the
+    // test's window mock: keep what a developer chose on this origin, and
+    // start every test from the gallery's default
+    try {
+      storedScheme = globalThis.localStorage.getItem(SCHEME_KEY);
+      globalThis.localStorage.removeItem(SCHEME_KEY);
+    } catch {
+      storedScheme = null;
+    }
+  });
 
   hooks.afterEach(async function () {
     let { setThemeMode } =
       await gallery.import<typeof ThemeModule>('lib/theme');
     setThemeMode('dark');
+    try {
+      if (storedScheme === null) {
+        globalThis.localStorage.removeItem(SCHEME_KEY);
+      } else {
+        globalThis.localStorage.setItem(SCHEME_KEY, storedScheme);
+      }
+    } catch {
+      // persistence is optional
+    }
   });
 
   async function setScheme(scheme: 'dark' | 'light') {
