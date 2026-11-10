@@ -19,6 +19,8 @@ export const automationRef: ResolvedCodeRef = {
   name: 'Automation',
 };
 
+const DAY_MINUTES = 24 * 60;
+
 // A cron trigger may fire at most once every this many minutes.
 export const MIN_CRON_INTERVAL_MINUTES = 5;
 
@@ -192,13 +194,15 @@ export function readAutomationDeclaration(
 // A daylight-saving change can bring two times closer, so each change the
 // zone makes is applied to the day's times as `automation-schedule.ts` fires
 // them:
-// - a fixed-hour time the clocks skip fires as far past the change as it was
-//   into the gap, which can land it just before a later time (02:58 and 04:01
-//   are 3 minutes apart on a day 02:00 jumps to 03:00);
-// - an hourly-style expression fires the repeated wall times twice, so the
-//   last of the first pass and the first of the second can be close (01:58
-//   and the repeated 01:01 are 3 minutes apart on a day 02:00 falls back to
-//   01:00).
+// - a wall-clock expression's time that the clocks skip fires as far past the
+//   change as it was into the gap, which can land it just before a later time
+//   (02:58 and 04:01 are 3 minutes apart on a day 02:00 jumps to 03:00);
+// - an expression that follows elapsed time fires the repeated wall times
+//   twice, so the last of the first pass and the first of the second can be
+//   close (02:58 and the repeated 02:01 are 3 minutes apart on a day 03:00
+//   falls back to 02:00).
+// A change's window can cross midnight, so a time it moves is compared with
+// the next day's times too when two consecutive days can both match.
 // Without a time zone only the wall-clock spacing is checked.
 export function cronFrequencyError(
   expression: string,
@@ -212,29 +216,29 @@ export function cronFrequencyError(
     }
   }
   times.sort((a, b) => a - b);
+  let nextDayCanMatch = consecutiveDaysCanMatch(schedule);
   let closest = closestGap(times);
-  let acrossMidnight = times[0] + 24 * 60 - times[times.length - 1];
-  if (
-    acrossMidnight < MIN_CRON_INTERVAL_MINUTES &&
-    consecutiveDaysCanMatch(schedule)
-  ) {
+  let acrossMidnight = times[0] + DAY_MINUTES - times[times.length - 1];
+  if (acrossMidnight < MIN_CRON_INTERVAL_MINUTES && nextDayCanMatch) {
     closest = Math.min(closest, acrossMidnight);
   }
   if (timeZone !== undefined) {
     for (let change of clockChanges(timeZone)) {
-      let inChange = (t: number) =>
-        t >= change.start && t < change.start + change.length;
-      if (change.kind === 'skip' && !schedule.hourly) {
-        closest = Math.min(
-          closest,
-          closestGap(
-            times
-              .map((t) => (inChange(t) ? t + change.length : t))
-              .sort((a, b) => a - b),
-          ),
+      // How far into the change's window a time is, wrapping at midnight.
+      let into = (t: number) => (t - change.start + DAY_MINUTES) % DAY_MINUTES;
+      if (change.kind === 'skip' && !schedule.followsElapsedTime) {
+        let moved = times.map((t) =>
+          into(t) < change.length ? t + change.length : t,
         );
-      } else if (change.kind === 'repeat' && schedule.hourly) {
-        let repeated = times.filter(inChange);
+        if (nextDayCanMatch) {
+          moved.push(...times.map((t) => t + DAY_MINUTES));
+        }
+        closest = Math.min(closest, closestGap(moved.sort((a, b) => a - b)));
+      } else if (change.kind === 'repeat' && schedule.followsElapsedTime) {
+        let repeated = times
+          .map(into)
+          .filter((p) => p < change.length)
+          .sort((a, b) => a - b);
         if (repeated.length > 1) {
           closest = Math.min(
             closest,
@@ -313,7 +317,7 @@ function clockChanges(timeZone: string): ClockChange[] {
       // Skipped wall times start at the old offset's wall clock; repeated ones
       // at the new offset's.
       let wallStart = high + (kind === 'skip' ? before : after) * MINUTE_MS;
-      let start = Math.floor(wallStart / MINUTE_MS) % (24 * 60);
+      let start = Math.floor(wallStart / MINUTE_MS) % DAY_MINUTES;
       let change = { kind, start, length: Math.abs(after - before) };
       changes.set(`${kind}:${start}:${change.length}`, change);
     }

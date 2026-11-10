@@ -1,4 +1,5 @@
 import {
+  automationRef,
   cronFrequencyError,
   readAutomationDeclaration,
   type AutomationIndexEntry,
@@ -7,6 +8,7 @@ import {
 } from '../automation-declaration.ts';
 import { zonedDateTimeToUnixSeconds } from '../automation-schedule.ts';
 import type { SharedTests } from '../helpers/index.ts';
+import { rri } from '../realm-identifiers.ts';
 
 const REALM = 'https://realm.example/team/';
 const CARD = `${REALM}automations/nightly`;
@@ -53,7 +55,7 @@ function entry({
     realmURL: REALM,
     types,
     instance: {
-      id: CARD,
+      id: rri(CARD),
       type: 'card',
       attributes: {
         triggers: [cron('30 2 * * *')],
@@ -66,12 +68,7 @@ function entry({
       },
       relationships:
         script === null ? {} : { script: { links: { self: script } } },
-      meta: {
-        adoptsFrom: {
-          module: '@cardstack/catalog/automation/automation',
-          name: 'Automation',
-        },
-      },
+      meta: { adoptsFrom: automationRef },
     },
   };
 }
@@ -163,7 +160,7 @@ const tests = Object.freeze({
       ],
       operations: [
         {
-          targetType: { module: `${REALM}github/repo`, name: 'Repo' },
+          targetType: { module: rri(`${REALM}github/repo`), name: 'Repo' },
           operation: 'openIssues',
         },
       ],
@@ -347,6 +344,12 @@ const tests = Object.freeze({
       cronFrequencyError('1,58 1 * * *', 'America/New_York'),
       undefined,
       'a fixed-hour expression fires a repeated time once',
+    );
+    // Nuuk springs forward from 23:00 straight to 00:00.
+    assert.strictEqual(cronFrequencyError('1,58 1,23 * * *', 'UTC'), undefined);
+    assert.ok(
+      cronFrequencyError('1,58 1,23 * * *', 'America/Nuuk'),
+      'the skipped 23:58 fires at 00:58 the next day, 3 minutes before 01:01',
     );
     // Lord Howe skips half an hour, 02:00–02:30.
     assert.ok(
