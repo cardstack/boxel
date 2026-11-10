@@ -680,8 +680,14 @@ export default function handleSearch(opts: {
     // skipped. The realms fan-out and concurrency caps stay client-side on the
     // card `@context` surface, since the trusted host must be free to exceed
     // them.
+    // A counts-only search (`page.size: 0`, as facet chips send) has no item
+    // leg but does the most counting of any search: every match, once per
+    // facet. Without the budget it could run for minutes (three
+    // COUNT(DISTINCT …) statements on studio-orb-cached were still running
+    // after 206 s), so it is bounded like an item-leg search.
+    let countsOnly = Number(parsed.itemQuery.page?.size) === 0;
     let itemLegBounded =
-      isItemLegSearch(parsed.fieldset) && !cacheOnlyDefinitions;
+      (isItemLegSearch(parsed.fieldset) || countsOnly) && !cacheOnlyDefinitions;
 
     // The server page bounds. An absent item-leg page is clamped to the default
     // so the query carries a LIMIT; an explicit one is honored to the absolute
