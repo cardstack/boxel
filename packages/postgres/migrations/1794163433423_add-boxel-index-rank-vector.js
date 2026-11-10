@@ -59,7 +59,9 @@ exports.up = (pgm) => {
             WHERE (b.url, b.realm_url, b.type) IN (
               SELECT url, realm_url, type FROM boxel_index
               WHERE (rank_tsv IS NULL AND search_tsv IS NOT NULL)
-                 OR (search_title IS NULL AND search_doc ? '_title')
+                 -- A null _title would stay NULL after the update and be
+                 -- selected again forever, so only a real title counts.
+                 OR (search_title IS NULL AND search_doc ->> '_title' IS NOT NULL)
               LIMIT 500
             );
           GET DIAGNOSTICS updated = ROW_COUNT;

@@ -1,8 +1,7 @@
 import type Koa from 'koa';
 import {
   buildSearchErrorResponse,
-  LogQueryError,
-  runLogQuery,
+  logSearchResponse,
   SupportedMimeType,
   type DBAdapter,
   type LogQuery,
@@ -10,9 +9,10 @@ import {
 import { setContextResponse } from '../middleware/index.ts';
 
 // A `_search` whose body names `from: { log }` searches the lines of one of
-// the realm's logs (`log-query.ts` in runtime-common). It runs on one realm,
-// which the caller must read outright: a policy grant scopes cards, and has
-// no meaning for a log's lines yet.
+// the realm's logs (`log-query.ts` in runtime-common), answered exactly as
+// the realm's own `_search` answers it (`logSearchResponse`). It runs on one
+// realm, which the caller must read outright: a policy grant scopes cards,
+// and has no meaning for a log's lines yet.
 export async function respondToLogSearch(
   ctxt: Koa.Context,
   payload: LogQuery,
@@ -34,38 +34,19 @@ export async function respondToLogSearch(
   if (!readable.includes(realm)) {
     await setContextResponse(
       ctxt,
-      new Response(
-        JSON.stringify({
-          errors: [
-            {
-              status: '403',
-              title: 'Forbidden',
-              detail: `A log search needs read access to ${realm}`,
-            },
-          ],
-        }),
-        { status: 403, headers: { 'content-type': SupportedMimeType.JSON } },
+      buildSearchErrorResponse(
+        'a log search needs read access to the realm',
+        403,
       ),
     );
     return;
   }
-  try {
-    let result = await runLogQuery(dbAdapter, realm, payload);
-    await setContextResponse(
-      ctxt,
-      new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { 'content-type': SupportedMimeType.JSON },
-      }),
-    );
-  } catch (e) {
-    if (e instanceof LogQueryError) {
-      await setContextResponse(
-        ctxt,
-        buildSearchErrorResponse(`Invalid query: ${e.message}`, 400),
-      );
-      return;
-    }
-    throw e;
-  }
+  let { status, body } = await logSearchResponse(dbAdapter, realm, payload);
+  await setContextResponse(
+    ctxt,
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': SupportedMimeType.CardJson },
+    }),
+  );
 }

@@ -26,8 +26,12 @@ exports.up = (pgm) => {
   pgm.noTransaction();
   pgm.sql(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`);
   for (let [key, name] of TITLE_KEYS) {
+    // An interrupted CONCURRENTLY build leaves an INVALID index that `IF NOT
+    // EXISTS` would treat as done, so the build follows a DROP and a retry
+    // rebuilds it. Separate statements: CONCURRENTLY can't share one.
+    pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS ${name};`);
     pgm.sql(`
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS ${name}
+      CREATE INDEX CONCURRENTLY ${name}
         ON boxel_index
         USING GIN ((search_doc ->> '${key}') gin_trgm_ops);
     `);

@@ -31,8 +31,9 @@ exports.up = (pgm) => {
       entry JSONB NOT NULL,
       CONSTRAINT boxel_log_lines_pkey PRIMARY KEY (url, line_no)
     );
+    -- A log query names its file, so time ranges and order read this.
     CREATE INDEX IF NOT EXISTS boxel_log_lines_at_idx
-      ON boxel_log_lines (realm_url, url, at);
+      ON boxel_log_lines (url, at);
     CREATE INDEX IF NOT EXISTS boxel_log_lines_entry_idx
       ON boxel_log_lines USING gin (entry jsonb_path_ops);
 

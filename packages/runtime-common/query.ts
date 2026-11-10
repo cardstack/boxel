@@ -451,11 +451,13 @@ interface QueryCommon {
     // ranks a capped candidate set and reports an estimated total
     // (`meta.page.totalIsEstimate`). Still held to the time budget.
     exactTotal?: boolean;
-    // How much counting the total costs. `exact` (the default) counts every
-    // match. `capped` counts up to `SEARCH_TOTAL_CAP` and reports a lower
-    // bound past it. `none` counts nothing: `meta.page.hasMore` says whether
-    // another page exists, and the total is the rows seen so far. A page with
-    // no next page is always exactly counted, whatever the mode.
+    // How much counting the total costs. `capped` (the default) counts up to
+    // `SEARCH_TOTAL_CAP` (1,000) and reports a lower bound past it
+    // (`meta.page.totalIsEstimate`). `exact` counts every match. `none`
+    // counts nothing: `meta.page.hasMore` says whether another page exists,
+    // and the total is the rows seen so far. A page with no next page is
+    // always exactly counted, whatever the mode. A query-backed field's
+    // search counts exactly unless it says otherwise.
     total?: PageTotalMode;
   };
 }
@@ -1678,7 +1680,7 @@ function assertSortExpression(
     for (let key of Object.keys(sort)) {
       if (!['by', 'expr', 'on', 'direction', 'weight'].includes(key)) {
         throw new InvalidQueryError(
-          `${pointer.join('/') || '/'}: a formula sort takes formula, on, direction, weight and placement, not "${key}"`,
+          `${pointer.join('/') || '/'}: an expression sort takes by, expr, on, direction and weight, not "${key}"`,
           'unknown-key',
         );
       }

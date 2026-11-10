@@ -812,6 +812,16 @@ export default function handleSearch(opts: {
     if (parsed.scope && parsed.scope !== 'all') {
       cacheKeyOpts.scope = parsed.scope;
     }
+    // A merged federation orders, pages and sections the body differently
+    // from a per-realm one, and an expression placed over the top window
+    // comes from lowering rather than the item query: both key the body.
+    // Folded only when set, so other keys stay as they were.
+    if (parsed.federation?.results === 'merged') {
+      cacheKeyOpts.federation = 'merged';
+    }
+    if (parsed.expressionOverTopWindow) {
+      cacheKeyOpts.expressionOverTopWindow = true;
+    }
     // The mark is part of the body, and it is the one part a declared query
     // and the ad-hoc query it resolves to do not share, so it keys the cache
     // too. Folded only when some realm carries it, like the policy scope.

@@ -64,27 +64,14 @@ function neverSpills(rootKey: string): boolean {
   return rootKey.startsWith('_') || NEVER_SPILL_ROOT_KEYS.has(rootKey);
 }
 
-let spillEnabledOverride: boolean | undefined;
-
 // Whether the index writer spills. Off unless the realm server's environment
 // sets BOXEL_SPILL_SEARCH_DOCS=true: the readers that resolve markers ship a
 // release before any writer spills (ADR 021 §1.9).
 export function searchDocSpillEnabled(): boolean {
-  if (spillEnabledOverride !== undefined) {
-    return spillEnabledOverride;
-  }
   let env = (
     globalThis as { process?: { env?: Record<string, string | undefined> } }
   ).process?.env;
-  // ENV-ONLY (73d): on unless explicitly off, because the Studio runtime
-  // launcher passes its own environment to workers.
-  return env?.BOXEL_SPILL_SEARCH_DOCS !== 'false';
-}
-
-// For tests: force spilling on or off, or `undefined` to follow the
-// environment again.
-export function setSearchDocSpillEnabled(enabled: boolean | undefined) {
-  spillEnabledOverride = enabled;
+  return env?.BOXEL_SPILL_SEARCH_DOCS === 'true';
 }
 
 export function isSpillMarker(value: unknown): value is SpillMarker {

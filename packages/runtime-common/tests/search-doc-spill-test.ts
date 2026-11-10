@@ -205,7 +205,11 @@ const tests = Object.freeze({
     );
     assert.deepEqual(searchDoc.concepts, talk.concepts, 'concepts stay');
     assert.deepEqual(searchDoc.speakers, talk.speakers, 'speakers stay');
-    assert.deepEqual(searchDoc.facet0, talk.facet0, 'every short list stays');
+    assert.deepEqual(
+      searchDoc.facet0,
+      (talk as Record<string, unknown>).facet0,
+      'every short list stays',
+    );
     assert.true(
       JSON.stringify(searchDoc).length > 2000,
       'the doc stays over the target rather than spill a short list',

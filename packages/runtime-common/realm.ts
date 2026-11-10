@@ -3420,15 +3420,6 @@ export class Realm {
         this.searchEntriesResponse.bind(this),
         SEARCH_ROUTE,
       )
-      // ENV-ONLY DEBUG (not for the PR): run a search as `_search` does,
-      // capture the SQL it executes, and answer each SELECT's
-      // EXPLAIN (ANALYZE, BUFFERS) as plain text. Realm owner only.
-      .query(
-        '/_explain-search',
-        SupportedMimeType.CardJson,
-        this.explainSearchResponse.bind(this),
-        ACL_ONLY,
-      )
       // Answered on the realm ACL alone, as `_lint` and `_mtimes` are.
       .get(
         '/_types',
@@ -4556,203 +4547,6 @@ export class Realm {
       ...anonymous
     } = content;
     return anonymous;
-  }
-
-  // ENV-ONLY DEBUG (not for the PR). See the `_explain-search` route.
-  private async explainSearchResponse(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let adapter = this.#dbAdapter as any;
-    let original = adapter.execute.bind(adapter);
-    // `?diag` answers fixed read-only checks of the markdown_tsv migration;
-    // `?diag&repair` also finishes its backfill and builds its index.
-    let reqURL = new URL(request.url);
-    if (reqURL.searchParams.has('diag')) {
-      let out: string[] = [];
-      let run = async (label: string, sql: string) => {
-        try {
-          let rows = await original(sql);
-          out.push(`== ${label}\n${JSON.stringify(rows, null, 1)}`);
-        } catch (e: any) {
-          out.push(`== ${label}\nERROR ${e.message}`);
-        }
-      };
-      if (reqURL.searchParams.has('reservations')) {
-        // Active job reservations, whether their worker process is alive
-        // (worker ids end in -pid-<n>; workers run on this machine), and the
-        // job each one holds.
-        let rows = (await original(
-          `SELECT r.id, r.job_id, r.worker_id, r.locked_until, r.created_at, j.job_type, j.concurrency_group, j.status
-             FROM job_reservations r JOIN jobs j ON j.id = r.job_id
-            WHERE r.completed_at IS NULL AND r.locked_until > NOW()
-            ORDER BY r.created_at`,
-        )) as any[];
-        let alive = (workerId: string) => {
-          let pid = Number(/-pid-(\d+)/.exec(workerId ?? '')?.[1]);
-          if (!pid) return undefined;
-          try {
-            process.kill(pid, 0);
-            return true;
-          } catch {
-            return false;
-          }
-        };
-        let annotated = rows.map((r) => ({
-          ...r,
-          workerAlive: alive(r.worker_id),
-        }));
-        out.push(
-          `== active reservations\n${JSON.stringify(annotated, null, 1)}`,
-        );
-        if (reqURL.searchParams.has('release')) {
-          let dead = annotated.filter((r) => r.workerAlive === false);
-          for (let r of dead) {
-            await original(
-              `UPDATE job_reservations SET completed_at = NOW(), completion_reason = 'interrupted' WHERE id = $1 AND completed_at IS NULL`,
-              { bind: [r.id] },
-            );
-          }
-          out.push(
-            `== released ${dead.length} reservations held by dead workers: ${JSON.stringify(dead.map((r) => r.id))}`,
-          );
-        }
-      }
-      if (reqURL.searchParams.has('untrigger')) {
-        await run(
-          'drop prerendered_html trigger',
-          `DROP TRIGGER IF EXISTS prerendered_html_markdown_tsv_sync ON prerendered_html`,
-        );
-        await run(
-          'drop pending trigger',
-          `DROP TRIGGER IF EXISTS prerendered_html_pending_markdown_tsv_sync ON prerendered_html_pending`,
-        );
-        await run(
-          'drop function',
-          `DROP FUNCTION IF EXISTS prerendered_markdown_tsv_sync()`,
-        );
-        await run(
-          'drop pending column',
-          `ALTER TABLE prerendered_html_pending DROP COLUMN IF EXISTS markdown_tsv`,
-        );
-      }
-      if (reqURL.searchParams.has('removals')) {
-        // Studio envs never run the post-deploy migrations-removal job.
-        await run(
-          'drop old expression fts index (removal 1793936584289)',
-          `DROP INDEX CONCURRENTLY IF EXISTS prerendered_html_markdown_fts_idx`,
-        );
-        await run(
-          'drop the simple type-ahead index (removal 1794163616432)',
-          `DROP INDEX CONCURRENTLY IF EXISTS boxel_index_type_ahead_idx`,
-        );
-      }
-      if (reqURL.searchParams.has('repair')) {
-        let total = 0;
-        for (;;) {
-          let rows = (await original(
-            `WITH b AS (SELECT url, realm_url, type FROM prerendered_html WHERE markdown_tsv IS NULL AND markdown IS NOT NULL LIMIT 500)
-             UPDATE prerendered_html AS p SET markdown_tsv = to_tsvector('boxel_english', markdown_search_text(p.markdown))
-             FROM b WHERE p.url = b.url AND p.realm_url = b.realm_url AND p.type = b.type RETURNING 1 AS x`,
-          )) as unknown[];
-          total += rows.length;
-          if (rows.length === 0) {
-            break;
-          }
-        }
-        out.push(`== repair backfilled ${total} rows`);
-        await run(
-          'repair index',
-          `CREATE INDEX CONCURRENTLY IF NOT EXISTS prerendered_html_markdown_tsv_idx ON prerendered_html USING GIN (markdown_tsv)`,
-        );
-        await run('analyze', `ANALYZE prerendered_html`);
-      }
-      await run(
-        'latest migrations',
-        `SELECT name, run_on FROM migrations ORDER BY id DESC LIMIT 4`,
-      );
-      await run(
-        'tsv coverage',
-        `SELECT count(*) AS rows, count(markdown) AS with_markdown, count(markdown_tsv) AS with_tsv FROM prerendered_html`,
-      );
-      await run(
-        'indexes',
-        `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'prerendered_html'`,
-      );
-      await run(
-        'invalid indexes',
-        `SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE NOT i.indisvalid`,
-      );
-      await run(
-        'triggers',
-        `SELECT tgname, tgrelid::regclass::text AS tbl FROM pg_trigger WHERE tgname LIKE '%markdown_tsv%'`,
-      );
-      if (reqURL.searchParams.has('spill')) {
-        await run(
-          'spill rows by realm',
-          `SELECT realm_url, count(*) AS rows, count(DISTINCT url) AS urls, sum(pg_column_size(value)) AS bytes FROM boxel_index_spill GROUP BY realm_url ORDER BY rows DESC`,
-        );
-        await run(
-          'pending spill columns',
-          `SELECT count(*) AS pending, count(spilled_search_doc) AS spilled FROM boxel_index_pending`,
-        );
-        await run(
-          'stored search_doc size by spill state (developer/ontube instances)',
-          `SELECT (search_doc::text LIKE '%"$spilled"%') AS spilled, count(*) AS rows, round(avg(pg_column_size(search_doc))) AS avg_stored, max(pg_column_size(search_doc)) AS max_stored, round(avg(length(search_doc::text))) AS avg_json FROM boxel_index WHERE realm_url LIKE '%/developer/ontube/' AND type = 'instance' GROUP BY 1`,
-        );
-        await run(
-          'worker env flag',
-          `SELECT current_setting('application_name', true) AS app`,
-        );
-      }
-      return new Response(out.join('\n'), {
-        status: 200,
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
-      });
-    }
-    let captured: { sql: string; opts: any }[] = [];
-    adapter.execute = (sql: string, opts?: any) => {
-      if (/^\s*(SELECT|WITH)/i.test(sql)) {
-        captured.push({ sql, opts });
-      }
-      return original(sql, opts);
-    };
-    let started = Date.now();
-    let status: number;
-    try {
-      let response = await this.searchEntriesResponse(request, requestContext);
-      status = response.status;
-      await response.text();
-    } finally {
-      adapter.execute = original;
-    }
-    let elapsed = Date.now() - started;
-    let out: string[] = [
-      `search status ${status} in ${elapsed} ms; ${captured.length} SELECT statements`,
-    ];
-    for (let [n, { sql, opts }] of captured.entries()) {
-      out.push(`\n===== statement ${n + 1} =====\n${sql}`);
-      if (opts?.bind) {
-        out.push(`-- bind: ${JSON.stringify(opts.bind).slice(0, 2000)}`);
-      }
-      try {
-        let rows = await original(
-          `EXPLAIN (ANALYZE, BUFFERS, SETTINGS) ${sql}`,
-          opts?.bind ? { bind: opts.bind } : undefined,
-        );
-        out.push(
-          (rows as any[])
-            .map((r) => r['QUERY PLAN'] ?? JSON.stringify(r))
-            .join('\n'),
-        );
-      } catch (e: any) {
-        out.push(`-- explain failed: ${e.message}`);
-      }
-    }
-    return new Response(out.join('\n'), {
-      status: 200,
-      headers: { 'content-type': 'text/plain; charset=utf-8' },
-    });
   }
 
   private async invalidateURLs(
@@ -16794,10 +16588,15 @@ export class Realm {
           searchEntryQuery.itemQuery,
         );
         let columnsQuery = searchEntryQuery;
-        let runColumns = () =>
-          this.#realmIndexQueryEngine.searchColumns(columnsQuery, {
+        // The budget's signal and the request's own both stop the table's
+        // SQL, as they stop the item leg's below.
+        let runColumns = (budgetSignal?: AbortSignal) => {
+          let signal = mergeAbortSignals(budgetSignal, request.signal);
+          return this.#realmIndexQueryEngine.searchColumns(columnsQuery, {
             cacheOnlyDefinitions: duringPrerender,
+            ...(signal ? { signal } : {}),
           });
+        };
         try {
           return columnsResponse(
             duringPrerender
@@ -16815,8 +16614,12 @@ export class Realm {
           throw e;
         }
       }
+      // A counts-only search (page size 0, facet chips) runs its counts under
+      // the same budget: unbounded, a broad one runs for minutes.
+      let countsOnly = Number(searchEntryQuery.itemQuery.page?.size) === 0;
       let itemLegBounded =
-        isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
+        (isItemLegSearch(searchEntryQuery.fieldset) || countsOnly) &&
+        !duringPrerender;
       // Clamp an absent page to the default so the query carries a LIMIT, and
       // an over-maximum explicit one to the maximum (logged, so a short page
       // has an explanation somewhere).

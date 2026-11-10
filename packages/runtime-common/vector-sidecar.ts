@@ -102,6 +102,11 @@ export function parseVectorSidecar(text: string): {
     try {
       line = JSON.parse(raw);
     } catch {
+      line = undefined as unknown as Partial<VectorSidecarLine>;
+    }
+    // Valid JSON that isn't an object (`null`, a number, a list) is a bad
+    // line too, recorded like one rather than thrown on below.
+    if (typeof line !== 'object' || line === null || Array.isArray(line)) {
       errors.push({
         line: i + 1,
         code: 'invalid-sidecar-line',

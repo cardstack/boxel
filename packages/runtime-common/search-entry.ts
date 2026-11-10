@@ -2254,6 +2254,11 @@ export function combineSearchEntryResults(
     if (doc.meta?.page?.totalIsEstimate) {
       combined.meta.page.totalIsEstimate = true;
     }
+    // More follows the combined rows when more follows any realm's.
+    if (doc.meta?.page?.hasMore !== undefined) {
+      combined.meta.page.hasMore =
+        Boolean(combined.meta.page.hasMore) || doc.meta.page.hasMore;
+    }
     // Facet counts add up across realms. Each realm returns only its own top
     // values, so a value common overall but outside one realm's top `size`
     // is undercounted there.
@@ -2594,7 +2599,12 @@ export async function searchEntryRealms(
     );
     if (page) {
       let start = (page.number ?? 0) * page.size;
+      let union = combined.data.length;
       combined.data = combined.data.slice(start, start + page.size);
+      // The global page has a next one when the union runs past it, or when
+      // a realm held back rows beyond what it was asked for.
+      combined.meta.page.hasMore =
+        Boolean(combined.meta.page.hasMore) || union > start + page.size;
     }
     for (let entry of combined.data) {
       if (entry.meta && '_sortValues' in entry.meta) {

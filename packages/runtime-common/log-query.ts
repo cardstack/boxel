@@ -21,6 +21,11 @@
 //
 // Facets count the filtered lines by a path's values, largest first: the
 // aggregation over a subset that reading the file would otherwise mean.
+//
+// `select` returns only the named paths per line. `group` returns one row
+// per distinct value of a path (or several), with count, min, max, sum, avg,
+// distinct and latest aggregates over each group's lines. An unknown member
+// is refused, not ignored. See docs/search.md, "Searching a log".
 
 import { param, query as runQuery, type Expression } from './expression.ts';
 import type { DBAdapter } from './db.ts';
@@ -520,11 +525,19 @@ export async function runLogQuery(
   }
   assertKnownKeys(q);
   let url = resolveLogURL(q.from.log, realmURL);
+  // Whole numbers only: both go into LIMIT and OFFSET.
+  let wholeNumber = (value: unknown, what: string): number => {
+    let n = Number(value);
+    if (!Number.isInteger(n) || n < 0) {
+      throw new LogQueryError(`page.${what} is a whole number`);
+    }
+    return n;
+  };
   let size = Math.min(
     MAX_PAGE,
-    Math.max(0, Number(q.page?.size ?? DEFAULT_PAGE)),
+    wholeNumber(q.page?.size ?? DEFAULT_PAGE, 'size'),
   );
-  let number = Math.max(0, Number(q.page?.number ?? 0));
+  let number = wholeNumber(q.page?.number ?? 0, 'number');
   let totalMode = q.page?.total ?? 'capped';
   let where: Expression = [
     'WHERE l.url =',

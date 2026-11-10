@@ -155,7 +155,12 @@ export async function syncLogFile(
   host: LogLineIndexHost,
   url: string,
 ): Promise<{ inserted: number; rebuilt: boolean }> {
-  let file = host.readLogFile ? await host.readLogFile(url) : undefined;
+  // A batch that can't read files (an error batch) leaves the rows as they
+  // are, rather than reading "no reader" as "the file is gone".
+  if (!host.readLogFile) {
+    return { inserted: 0, rebuilt: false };
+  }
+  let file = await host.readLogFile(url);
   if (!file) {
     await dropFile(host, url);
     return { inserted: 0, rebuilt: false };

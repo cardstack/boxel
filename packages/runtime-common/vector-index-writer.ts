@@ -225,12 +225,14 @@ export async function syncVectorIndex(
           ]) as Expression,
         ),
       );
-      if (host.readVectorSidecar) {
-        await host.query([
-          'DELETE FROM boxel_index_vector_sidecars WHERE',
-          ...every([['realm_url =', param(realm)], host.stagedInChunk(clear)]),
-        ] as Expression);
-      }
+      // A sidecar's record goes with the vectors loaded from it, whether or
+      // not this pass can read sidecars: a batch with no reader (an error
+      // batch) that kept the record would leave the next pass reading the
+      // unchanged hash as "already loaded", and the vectors gone for good.
+      await host.query([
+        'DELETE FROM boxel_index_vector_sidecars WHERE',
+        ...every([['realm_url =', param(realm)], host.stagedInChunk(clear)]),
+      ] as Expression);
     }
 
     let values: VectorRow[] = [];

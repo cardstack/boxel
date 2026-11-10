@@ -108,6 +108,7 @@ import {
   type Facet,
   type FacetCount,
   type FacetMeasureOp,
+  FACET_INTERVALS,
   type FacetInterval,
   type FacetRange,
   type FacetStats,
@@ -513,10 +514,12 @@ export interface QueryResultsMeta {
   // keep track of page size and index number
   page: {
     total: number;
-    // The total is a lower bound rather than an exact count: a broad
-    // `matches` term matched more cards than the candidate cap, so only the
-    // capped candidates were ranked and counted (see `#capBroadMatches`).
-    // Absent when the total is exact. `page.exactTotal` asks for an exact one.
+    // The total is a lower bound rather than an exact count: a plain page
+    // stopped counting at SEARCH_TOTAL_CAP (`page.total` defaults to
+    // `capped`), or a broad `matches` term matched more cards than the
+    // candidate cap, so only the capped candidates were ranked and counted
+    // (see `#capBroadMatches`). Absent when the total is exact;
+    // `page.total: 'exact'` (or `page.exactTotal`) asks for an exact one.
     totalIsEstimate?: boolean;
     // Whether another page follows this one. Always set on a paged search, so
     // a caller that only needs "is there more" can send `page.total: 'none'`.
@@ -2402,7 +2405,9 @@ export class IndexQueryEngine {
     // Counting stops past the cap unless the caller asks for an exact total:
     // a page needs its rows and whether more follow, and an exact count of
     // a large match set costs a full pass for a number shown as "1,000+".
-    let mode: PageTotalMode = page.total ?? 'capped';
+    let mode: PageTotalMode =
+      page.total ??
+      ((page as { exactTotal?: boolean }).exactTotal ? 'exact' : 'capped');
     if (mode === 'none') {
       return {
         keys,
@@ -2422,7 +2427,12 @@ export class IndexQueryEngine {
       let counted = Number(row?.total ?? 0);
       return {
         keys,
-        total: Math.min(counted, SEARCH_TOTAL_CAP),
+        // Never below the rows already passed: a deep page past the cap
+        // still has at least that many matches.
+        total: Math.max(
+          offset + keys.length,
+          Math.min(counted, SEARCH_TOTAL_CAP),
+        ),
         hasMore,
         totalIsEstimate: counted > SEARCH_TOTAL_CAP,
       };
@@ -3035,7 +3045,8 @@ export class IndexQueryEngine {
       {
         filter: rerank.compare?.filter ?? query.filter,
         let: query.let,
-        page: { number: 0, size: compareRowLimit() },
+        // Exact: a set cut at its row limit says so by its total.
+        page: { number: 0, size: compareRowLimit(), total: 'exact' },
       },
       { ...opts, cardUrls: undefined },
       [`SELECT i.url AS url, ${columns}${group}`],
@@ -3332,6 +3343,8 @@ export class IndexQueryEngine {
         sort: binding.from.sort,
         page: {
           size: Math.min(binding.from.page?.size ?? MAX_LET_ROWS, MAX_LET_ROWS),
+          // Exact: a list cut at MAX_LET_ROWS says so by its total.
+          total: 'exact',
         },
       },
       // A binding a policy composed with a linked card's own type's grants
@@ -4682,8 +4695,9 @@ export class IndexQueryEngine {
   // takes at most that many candidates from each side (see
   // `matchesCondition`); the search reports its total as a lower bound
   // (`capped`). A term under a `not` is never capped, since bounding what it
-  // excludes would admit what it should not. `page.exactTotal` turns the cap
-  // off; the time budget still bounds the search.
+  // excludes would admit what it should not. An exact total
+  // (`page.total: 'exact'`, or `page.exactTotal`) turns the cap off; the time
+  // budget still bounds the search.
   async #capBroadMatches(
     filter: Filter | undefined,
     realmURL: URL,
@@ -4694,6 +4708,7 @@ export class IndexQueryEngine {
       !filter ||
       !page ||
       page.exactTotal ||
+      page.total === 'exact' ||
       this.#dbAdapter.kind !== 'pg' ||
       opts.pendingStagingId !== undefined
     ) {
@@ -5979,6 +5994,14 @@ export class IndexQueryEngine {
     opts: QueryOptions,
     condition: CardExpression,
   ): Promise<FacetCount[]> {
+    // The interval is written into the SQL below, so it's checked here too:
+    // a query-backed field's query reaches the engine without assertQuery.
+    if (!(FACET_INTERVALS as readonly string[]).includes(interval)) {
+      throw new InvalidQueryError(
+        `facet interval must be one of ${FACET_INTERVALS.join(', ')}`,
+        'invalid-value',
+      );
+    }
     let pgInstant = `CASE WHEN fv.num IS NOT NULL THEN to_timestamp((CASE WHEN abs(fv.num) >= 100000000000 THEN fv.num / 1000 ELSE fv.num END)::float8) AT TIME ZONE 'UTC' WHEN fv.value ~ '^\\d{4}-\\d{2}-\\d{2}' THEN fv.value::timestamptz AT TIME ZONE 'UTC' END`;
     let sqliteInstant = `CASE WHEN fv.num IS NOT NULL THEN datetime(CASE WHEN abs(fv.num) >= 100000000000 THEN fv.num / 1000.0 ELSE fv.num END, 'unixepoch') ELSE datetime(fv.value) END`;
     let sqliteBucket = {

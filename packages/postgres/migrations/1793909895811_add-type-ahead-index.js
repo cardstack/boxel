@@ -13,8 +13,12 @@
 
 exports.up = (pgm) => {
   pgm.noTransaction();
+  // An interrupted CONCURRENTLY build leaves an INVALID index that `IF NOT
+  // EXISTS` would treat as done, so the build follows a DROP and a retry
+  // rebuilds it. Separate statements: CONCURRENTLY can't share one.
+  pgm.sql(`DROP INDEX CONCURRENTLY IF EXISTS boxel_index_type_ahead_idx;`);
   pgm.sql(`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS boxel_index_type_ahead_idx
+    CREATE INDEX CONCURRENTLY boxel_index_type_ahead_idx
       ON boxel_index
       USING GIN (to_tsvector('simple', coalesce(search_doc ->> '_typeahead', '')));
   `);
