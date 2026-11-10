@@ -1,11 +1,15 @@
 ---
-status: accepted
+status: proposed
 date: 2026-11-10
 scope:
   - packages/runtime-common/**/*run-overlay*
+  - packages/runtime-common/**/run-overlay/**
   - packages/realm-server/**/*run-overlay*
+  - packages/realm-server/**/run-overlay/**
   - packages/postgres/migrations/*run-overlay*
-  - packages/runtime-common/card-operations/dispatch.ts
+  - packages/runtime-common/card-operations/coordinator.ts
+  - packages/runtime-common/card-operations/executors.ts
+  - packages/host/app/commands/*automation*
 ---
 
 # 027. Keep an automation's state in its realm, and commit a run's writes as one batch
@@ -15,7 +19,8 @@ upstream data with the realm's current files and writes only what differs.
 The run's writes are staged on the realm server, where the run reads them
 back, and they land together as one all-or-nothing batch when the script
 finishes. So a run that fails changes nothing, and the next run starts from
-the same files and catches up.
+the same files and catches up. In this ADR, a run is one run of an
+automation. The assistant's interactive runs follow ADR 022 §1.3.
 
 ## 1. Decision
 
@@ -24,8 +29,8 @@ the same files and catches up.
 An automation MUST NOT keep state between runs outside its realm. The
 platform MUST NOT give a script a store for cursors, last-seen values or
 copies of upstream data. A script SHOULD keep such state in files in its
-realm, such as a cursor file or a JSONL log. A run MUST get no other fact
-from outside its realm except what `realm.current.automation` reports.
+realm, such as a cursor file or a JSONL log. A run MUST NOT get state from
+an earlier run from anywhere but its realm and `realm.current.automation`.
 
 A script SHOULD compare upstream data with the realm's current files and
 write only what differs. It SHOULD build each card's path from a stable key
@@ -37,15 +42,18 @@ Every write a run makes MUST be staged in the run's overlay on the realm
 server. A write MUST NOT reach the realm while the run is going, and MUST NOT
 be staged in the tab. A write operation, such as `appendLine`, MUST be
 applied to the overlay, so that the overlay holds its result. The overlay
-MUST be readable from every realm-server instance. Only requests with the
-run's token MUST see it.
+MUST be readable from every realm-server instance. A request without the
+run's token MUST NOT see it.
 
 ### 1.3. A run reads its own writes
 
 Every read with the run's token MUST read through the overlay, so that it
 returns the staged version of a file or card. `cards.search` MUST run on the
 index, and the overlay MUST NOT change the index. A search MUST return the
-staged version of each card it finds. Staged files MUST NOT be indexed.
+staged version of each card it finds, and MUST omit a card the run has
+staged for deletion. Which cards match, and their order, MUST follow the
+indexed values, so a returned card's staged version MAY no longer match the
+query. Staged files MUST NOT be indexed.
 
 ### 1.4. One batch at the end, or nothing
 
@@ -94,3 +102,7 @@ created in this run keeps it in memory.
   from a place it doesn't trust, and the stage would be lost with the tab.
 - **Index staged cards so that search sees them.** Each staged card costs a
   render, and the index would hold cards that may never commit.
+
+## 4. Remediation
+
+Known gaps are listed in [remediation/027.md](remediation/027.md).
