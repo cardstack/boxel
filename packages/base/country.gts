@@ -52,10 +52,6 @@ class CountryFieldEdit extends Component<typeof CountryField> {
     }));
   });
 
-  get code() {
-    return this.args.model.code ?? undefined;
-  }
-
   @action onSelectCountry(code: string) {
     let country = this.countries.find((option) => option.value === code);
     if (!country) {
@@ -72,7 +68,7 @@ class CountryFieldEdit extends Component<typeof CountryField> {
       <Select
         @placeholder='Choose a country'
         @options={{this.countries}}
-        @value={{this.code}}
+        @value={{@model.code}}
         @onValueChange={{this.onSelectCountry}}
         @searchEnabled={{true}}
         class='country-field-edit'
