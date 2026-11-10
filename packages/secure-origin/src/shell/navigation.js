@@ -45,13 +45,22 @@ function inAppPath(url) {
     return undefined;
   }
   let page = target.pathname.slice(rootURL.length);
-  if (
-    !isPagePath(page) ||
-    movesAsDocument(splitPagePath(window.location.pathname).page, page)
-  ) {
+  if (!isPagePath(page) || movesAsDocument(shownPage(), page)) {
     return undefined;
   }
   return `/${page}`;
+}
+
+// The page the window shows, beneath the shell's address. That is the
+// router's page, not the address: a page that replaces the window's address
+// as it ends, such as a sign-up leaving the window signed in at `sign-in`,
+// stays on its route. Before the document's first transition ends the router
+// has no page, and the address is the page loading.
+function shownPage() {
+  if (router.currentURL == null) {
+    return splitPagePath(window.location.pathname).page;
+  }
+  return router.currentURL.replace(/[?#].*$/, '').replace(/^\//, '');
 }
 
 export const navigation = {

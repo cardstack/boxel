@@ -60,4 +60,24 @@ describe("moving between the shell's pages", () => {
     navigation.replace('/secure/sign-in');
     assert.deepEqual(fromReset, ['document /secure/sign-in']);
   });
+
+  test("the page a move leaves is the router's, whatever the address says", () => {
+    // A window sign-up ends by replacing the address with `sign-in`, and
+    // stays on the register route.
+    let moves = showing('register');
+    (globalThis as any).window.location.pathname = '/secure/sign-in';
+    navigation.assign('/secure/keys');
+    assert.deepEqual(moves, ['document /secure/keys']);
+  });
+
+  test('before the first transition ends, the page a move leaves is the address', () => {
+    let moves = showing('register');
+    useRouter({
+      rootURL: '/secure/',
+      currentURL: null,
+      transitionTo: (path: string) => moves.push(`route ${path}`),
+    });
+    navigation.assign('/secure/keys');
+    assert.deepEqual(moves, ['document /secure/keys']);
+  });
 });
