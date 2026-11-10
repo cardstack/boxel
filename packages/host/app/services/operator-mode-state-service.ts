@@ -23,7 +23,6 @@ import {
   RealmPaths,
   type LocalPath,
   codeRefWithAbsoluteIdentifier,
-  isAbsoluteIdentifier,
   isResolvedCodeRef,
   isCardDocumentString,
   isCardInstance,
@@ -34,7 +33,9 @@ import {
   SupportedMimeType,
   internalKeyFor,
   realmURL as realmURLSymbol,
+  realmPolicyCardNamed,
   trimJsonExtension,
+  MAX_MATRIX_EVENT_CONTENT_BYTES,
 } from '@cardstack/runtime-common';
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
@@ -89,12 +90,14 @@ import type {
   RealmPolicyForContext,
 } from '@cardstack/base/matrix-event';
 
-// The most a realm policy's rules may take in the AI context, serialized. The
-// context rides inline in every message and tool-result event sent from the
-// realm, and Matrix refuses an event past its size limit, so a policy whose
-// rules would crowd an event is named without them. A policy of a dozen
-// grants takes about 1 KB.
-const MAX_REALM_POLICY_RULES_BYTES = 8 * 1024;
+// The most the AI context may take, serialized, with a realm policy's rules in
+// it. The context rides inline in every message and tool-result event sent
+// from the realm, beside the message's body and attachments, and Matrix
+// refuses an event whose content passes MAX_MATRIX_EVENT_CONTENT_BYTES. So a
+// policy whose rules would take the context past a quarter of that is named
+// without them, and the rules never take the context past that quarter. A
+// policy of a dozen grants takes about 1 KB.
+const MAX_CONTEXT_BYTES_WITH_POLICY_RULES = MAX_MATRIX_EVENT_CONTENT_BYTES / 4;
 
 // The fields the AI context reads from a realm's config card and from the
 // policy card it names, a `RealmPolicy`, whose definition is in the catalog.
@@ -1842,11 +1845,17 @@ export default class OperatorModeStateService extends Service {
     // A realm's policy decides only for a caller its permissions decline, so
     // it matters to the assistant only where the user can't write. The realm
     // refuses its config card to a caller its permissions don't let read, so
-    // only a reader can learn which policy the realm names.
-    let realmPolicy =
-      realmPermissions.canWrite || !realmPermissions.canRead
-        ? undefined
-        : await this.realmPolicyForAIBot(realmUrl);
+    // only a reader can learn which policy the realm names. The realm answers
+    // such a caller its info only when a policy judges them, though, so info
+    // it answered tells the host that a policy does, if not which.
+    let realmPolicy: RealmPolicyForContext | undefined;
+    if (!realmPermissions.canWrite) {
+      if (realmPermissions.canRead) {
+        realmPolicy = await this.realmPolicyForAIBot(realmUrl);
+      } else if (this.realm.isInfoLoaded(ri(realmUrl))) {
+        realmPolicy = {};
+      }
+    }
 
     let result: BoxelContext = {
       agentId: this.matrixService.agentId,
@@ -1863,6 +1872,13 @@ export default class OperatorModeStateService extends Service {
     if (errorsDisplayed.length) {
       result.errorsDisplayed = errorsDisplayed;
     }
+    if (
+      result.realmPolicy?.rules &&
+      new TextEncoder().encode(JSON.stringify(result)).length >
+        MAX_CONTEXT_BYTES_WITH_POLICY_RULES
+    ) {
+      result.realmPolicy = { card: result.realmPolicy.card, tooLarge: true };
+    }
     return result;
   }
 
@@ -1876,19 +1892,24 @@ export default class OperatorModeStateService extends Service {
   // isn't. The rules the context carries can therefore lag an edit to the
   // policy by those few minutes, which an advisory note can bear: the realm
   // decides each invocation against the policy in force. Whatever can't be
-  // read is left out rather than failing the message: an unreadable config
-  // leaves the realm's policy unknown, and an unreadable policy card leaves
-  // its rules unknown.
+  // read is left out rather than failing the message. A config card that
+  // doesn't load leaves the context without a policy: it says nothing of
+  // whether the realm names one, and the realms a user can only read mostly
+  // name none, so the context claims a policy only where the host knows of
+  // one. A policy card that doesn't load leaves its rules unknown.
   private async realmPolicyForAIBot(
     realmURL: string,
   ): Promise<RealmPolicyForContext | undefined> {
     let configId = new RealmPaths(ri(realmURL)).fileRRI('realm');
     let config = await this.storeGetQuietly(configId);
+    // Read as the realm reads it, so a pointer the realm ignores names nothing.
     let pointer = isCardInstance(config)
-      ? (config as RealmConfigCard).policy?.trim()
+      ? realmPolicyCardNamed(
+          (config as RealmConfigCard).policy,
+          this.network.virtualNetwork,
+        )
       : undefined;
-    // The realm reads its policy only from an absolute or prefix-form id.
-    if (!pointer || !isAbsoluteIdentifier(pointer)) {
+    if (!pointer) {
       return undefined;
     }
     let policyId = rri(pointer);
@@ -1897,6 +1918,9 @@ export default class OperatorModeStateService extends Service {
       return { card: policyId };
     }
     let card = policy.id ? rri(policy.id) : policyId;
+    // A rule whose type isn't a module and a name, and a grant that names no
+    // operation, are left out: the realm compiles neither, so neither grants
+    // anything.
     let rules: NonNullable<RealmPolicyForContext['rules']> = [];
     for (let rule of (policy as RealmPolicyCard).rules ?? []) {
       if (!rule?.targetType) {
@@ -1925,12 +1949,6 @@ export default class OperatorModeStateService extends Service {
       if (grants.length > 0) {
         rules.push({ targetType, grants });
       }
-    }
-    if (
-      new TextEncoder().encode(JSON.stringify(rules)).length >
-      MAX_REALM_POLICY_RULES_BYTES
-    ) {
-      return { card, tooLarge: true };
     }
     return { card, rules };
   }

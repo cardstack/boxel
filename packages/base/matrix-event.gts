@@ -199,14 +199,16 @@ export interface BoxelErrorForContext {
 // decides each invocation itself, so this says what the policy offers, not
 // what any one call will be allowed.
 export interface RealmPolicyForContext {
-  card: RealmResourceIdentifier;
-  // Absent when the user can't read the policy card, or when `tooLarge` is set.
+  // Absent when the user can't read the realm's config card, which names it.
+  card?: RealmResourceIdentifier;
+  // Absent when the policy card can't be read, and when `tooLarge` is set.
   rules?: {
     targetType: ResolvedCodeRef;
     grants: { operation: string; where?: string }[];
   }[];
-  // Set in place of `rules` when they are too large to carry: the context
-  // rides inline in every message and tool-result event sent from the realm.
+  // Set in place of `rules` when they would take the context past what it may
+  // carry: the context rides inline in every message and tool-result event
+  // sent from the realm.
   tooLarge?: true;
 }
 
@@ -222,11 +224,14 @@ export interface BoxelContext {
     canRead: boolean;
     canWrite: boolean;
   };
-  // The policy of the realm at `realmUrl`, sent when the user can read that
-  // realm but not write it: its grants are what let the user run operations
-  // there anyway. Absent when the realm names no policy, and whenever
-  // `realmPermissions` doesn't let the user read the realm, since the realm
-  // refuses its config card to them.
+  // The policy of the realm at `realmUrl`, sent when the user can't write that
+  // realm and the host knows it names one: its grants are what let the user
+  // run operations there anyway. Absent when the realm names no policy, and
+  // when the host can't tell whether it names one. A user whose
+  // `realmPermissions` don't let them read the realm is refused its config
+  // card, so for them it is sent without a `card`, and only where the realm
+  // answered them its info, which it does for such a user only when a policy
+  // judges them.
   realmPolicy?: RealmPolicyForContext;
   errorsDisplayed?: BoxelErrorForContext[];
   tools?: Tool[];

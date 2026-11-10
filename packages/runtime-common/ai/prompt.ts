@@ -3572,26 +3572,24 @@ function mediaFileLabel(file: SerializedFileDef): string {
 }
 
 // What the context says about a workspace the user can't write. The realm's
-// policy can still grant them operations there, so where the realm names one,
-// the note lists what it grants rather than saying every change is refused.
-// A user the realm's permissions don't let read is refused its config card,
-// so for them the policy is unknown rather than absent: such a user reaches
-// the realm only through a policy. `user` is the Matrix id that a policy
-// condition's `actor()` reads.
+// policy can still grant them operations there, so where the host knows the
+// realm names one, the note lists what it grants rather than saying every
+// change is refused, or, where the host couldn't read the policy, says it may
+// grant some. `user` is the Matrix id that a policy condition's `actor()`
+// reads.
 function readOnlyWorkspaceNote(
   policy: RealmPolicyForContext | undefined,
-  canRead: boolean | undefined,
   user: string | undefined,
 ): string {
-  if (!policy && canRead !== false) {
+  if (!policy) {
     return `This workspace is read-only for the user: edits to its cards and files will be rejected.\n`;
   }
-  if (policy?.tooLarge) {
+  if (policy.tooLarge && policy.card) {
     return `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them operations here: more than the context can list. Read that card to see which. ${OFFER_GRANTED_OPERATIONS} The realm refuses an operation the policy doesn't grant when it runs.\n`;
   }
-  if (!policy?.rules) {
-    let named = policy ? `, ${policy.card},` : '';
-    return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the user can't read it, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS} The realm refuses an operation the policy doesn't grant when it runs.\n`;
+  if (!policy.rules) {
+    let named = policy.card ? `, ${policy.card},` : '';
+    return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS} The realm refuses an operation the policy doesn't grant when it runs.\n`;
   }
   if (policy.rules.length === 0) {
     return `This workspace is read-only for the user: edits to its cards and files will be rejected. Its policy, ${policy.card}, grants no operations.\n`;
@@ -3600,7 +3598,9 @@ function readOnlyWorkspaceNote(
   for (let { targetType, grants } of policy.rules) {
     let granted = grants
       .map(({ operation, where }) =>
-        where ? `${operation} when \`${where}\`` : operation,
+        where
+          ? `${codeSpan(operation)} when ${codeSpan(where)}`
+          : codeSpan(operation),
       )
       .join('; ');
     note += ` - ${humanReadable(targetType)}: ${granted}\n`;
@@ -3611,7 +3611,25 @@ function readOnlyWorkspaceNote(
 
 // Both tools invoke an operation through a card that exists: a create is
 // reached through a card of the type it creates.
-const OFFER_GRANTED_OPERATIONS = `When the user asks what they can do here, or for a change one of these operations makes, offer the operation and run it with invoke-card-operation, or realm.operations in run-realm-code, instead of telling them they need write access. An operation that creates a card runs through an existing card of the type it creates, so where the workspace holds no card of that type yet, neither tool can run it: say so rather than offering it.`;
+const OFFER_GRANTED_OPERATIONS = `When the user asks what they can do here, or asks for a change that an operation the policy grants would make, offer that operation and run it with invoke-card-operation, or realm.operations in run-realm-code, instead of telling them they need write access. An operation that creates a card runs through an existing card of the type it creates, so where the workspace holds no card of that type yet, neither tool can run it: say so rather than offering it.`;
+
+// Text from a policy, which the realm's owner writes, as a Markdown code span
+// on one line. A line break in it would end the list entry it is part of, and
+// the fence is one backtick longer than any run of them inside it, so a
+// backtick in the text can't close the span early.
+function codeSpan(text: string): string {
+  let line = text.replace(/\s+/g, ' ').trim();
+  let longestRun = Math.max(
+    0,
+    ...(line.match(BACKTICK_RUNS) ?? []).map((run) => run.length),
+  );
+  let fence = '`'.repeat(longestRun + 1);
+  // CommonMark strips one space from each end of a span's content, so one
+  // keeps a backtick at either end from joining the fence.
+  let pad = line.startsWith('`') || line.endsWith('`') ? ' ' : '';
+  return `${fence}${pad}${line}${pad}${fence}`;
+}
+const BACKTICK_RUNS = new RegExp('`+', 'g');
 
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
@@ -3648,7 +3666,6 @@ export const buildContextMessage = async (
       if (context?.realmPermissions?.canWrite === false) {
         result += readOnlyWorkspaceNote(
           context.realmPolicy,
-          context.realmPermissions.canRead,
           lastEventWithContext?.sender,
         );
       }

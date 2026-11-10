@@ -402,8 +402,8 @@ Current date and time: 2025-06-11T11:43:00.533Z
       );
       assert.true(
         context.includes(
-          ` - Book from ${LIBRARY}: borrow; renew when \`.borrowerId == actor()\`\n` +
-            ` - Shelf from ${LIBRARY}: addBook\n`,
+          ` - Book from ${LIBRARY}: \`borrow\`; \`renew\` when \`.borrowerId == actor()\`\n` +
+            ` - Shelf from ${LIBRARY}: \`addBook\`\n`,
         ),
         'each type lists its grants, each with its condition',
       );
@@ -413,7 +413,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       );
       assert.true(
         context.includes(
-          'offer the operation and run it with invoke-card-operation',
+          'offer that operation and run it with invoke-card-operation',
         ),
         'the assistant is told to offer the granted operations',
       );
@@ -425,18 +425,18 @@ Current date and time: 2025-06-11T11:43:00.533Z
       );
     });
 
-    test('says its policy may grant operations when the user cannot read the policy', async () => {
+    test('says its policy may grant operations when the policy card could not be read', async () => {
       let context = await contextFor({ card: POLICY });
 
       assert.true(
         context.includes(
-          `Its policy, ${POLICY}, can still grant them operations a card's type declares, but the user can't read it`,
+          `Its policy, ${POLICY}, can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown.`,
         ),
         'the policy is named, with its grants unknown',
       );
       assert.true(
         context.includes(
-          'offer the operation and run it with invoke-card-operation',
+          'offer that operation and run it with invoke-card-operation',
         ),
         'the assistant is told to offer operations rather than refuse',
       );
@@ -462,23 +462,48 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
 
     test('says a policy may grant operations to a user the realm admits only through it', async () => {
-      let context = await contextFor(undefined, { canRead: false });
+      let context = await contextFor({}, { canRead: false });
 
       assert.true(
         context.includes(
-          "Its policy can still grant them operations a card's type declares, but the user can't read it",
+          "Its policy can still grant them operations a card's type declares, but the policy couldn't be read",
         ),
         'the policy is unknown rather than absent',
       );
       assert.true(
         context.includes(
-          'offer the operation and run it with invoke-card-operation',
+          'offer that operation and run it with invoke-card-operation',
         ),
         'the assistant is told to offer operations rather than refuse',
       );
       assert.false(
         context.includes('edits to its cards and files will be rejected'),
         'the workspace is not described as refusing every change',
+      );
+    });
+
+    test('keeps a condition on its own list line, in a code span its backticks cannot close', async () => {
+      let context = await contextFor({
+        card: POLICY,
+        rules: [
+          {
+            targetType: { module: LIBRARY, name: 'Book' },
+            grants: [
+              {
+                operation: 'renew',
+                where: '.shelf == `new`\n  || .borrowerId == actor()',
+              },
+            ],
+          },
+        ],
+      });
+
+      assert.true(
+        context.includes(
+          ` - Book from ${LIBRARY}: \`renew\` when \`\`.shelf == \`new\` || .borrowerId == actor()\`\`\n` +
+            'In a condition, actor() is the user',
+        ),
+        'the condition is on one line, fenced past its own backticks',
       );
     });
 
@@ -489,6 +514,21 @@ Current date and time: 2025-06-11T11:43:00.533Z
         context.includes(
           'This workspace is read-only for the user: edits to its cards and files will be rejected.\n',
         ),
+      );
+    });
+
+    test('refuses every edit for a user who cannot read it, where no policy is known', async () => {
+      let context = await contextFor(undefined, { canRead: false });
+
+      assert.true(
+        context.includes(
+          'This workspace is read-only for the user: edits to its cards and files will be rejected.\n',
+        ),
+        'a realm that may name no policy is not said to grant anything',
+      );
+      assert.false(
+        context.includes('invoke-card-operation'),
+        'and the assistant is not told to offer operations',
       );
     });
   });
