@@ -73,6 +73,7 @@ This package includes automated linting checks for JavaScript, TypeScript, and G
 - **ESLint**: Validates `.ts` and `.gts` files
 - **ember-template-lint**: Validates `.hbs` files
 - **ember-tsc**: TypeScript type checking
+- **Definition identity** (`lint/identity.ts`): an exported card or field definition made by a call, such as `enumField(...)` or a realm's own factory, has no identity unless the call is wrapped in `markDefinition` from `@cardstack/base/mark-definition` (ADR 010 §1.4.5). The check asks TypeScript which exported calls return a `BaseDef` subclass and reports the unwrapped ones. A definition that isn't exported is never wrapped, since nothing can name it.
 
 ### Running Linting
 
@@ -90,6 +91,7 @@ Individual linting commands:
 pnpm lint:js      # ESLint check
 pnpm lint:hbs     # Template lint check
 pnpm lint:types   # TypeScript type check
+pnpm lint:identity  # Exported definitions made by a call are wrapped in markDefinition
 ```
 
 These commands run locally in this monorepo's `packages/catalog` package. If you submit a pull request to the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository, any linting run in CI is controlled by that repository's own workflow configuration.
