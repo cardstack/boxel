@@ -5513,12 +5513,14 @@ ${patchedFileSource}
       let patchEventId = addPatch(index);
       let attempt = await nextAttempt(patchEventId);
       attempts.push(attempt);
-      addWarningCheck(index, patchEventId, attempt ?? 1);
+      if (attempt !== undefined) {
+        addWarningCheck(index, patchEventId, attempt);
+      }
     }
     assert.deepEqual(
       attempts,
-      [1, 2, 3, 4],
-      'each fix message continues the count, so the fourth round is past the cap',
+      [1, 2, 3, undefined],
+      'each fix message continues the count, and past the cap no check is pending',
     );
 
     events.push({
@@ -11338,6 +11340,42 @@ module('absolutizeSkillLinks', () => {
         INDEX,
       ),
       '[c](https://localhost:4201/skills/commands/boxel-create-card.md "Create")',
+    );
+  });
+
+  test('leaves a [x](y) inside a fenced block or code span as written', () => {
+    let body = [
+      'Read [the rules](references/rules.md).',
+      '```ts',
+      'return [...super[getMenuItems](params)];',
+      '```',
+      '~~~',
+      'Links look like [text](url).',
+      '~~~',
+      'Write a link as `[text](url)`, or ``[a](b)`` with [a link](x.md) after.',
+      'See [`boxel/`](boxel/SKILL.md).',
+    ].join('\n');
+    assert.strictEqual(
+      absolutizeSkillLinks(body, INDEX),
+      [
+        'Read [the rules](https://localhost:4201/skills/references/rules.md).',
+        '```ts',
+        'return [...super[getMenuItems](params)];',
+        '```',
+        '~~~',
+        'Links look like [text](url).',
+        '~~~',
+        'Write a link as `[text](url)`, or ``[a](b)`` with [a link](https://localhost:4201/skills/x.md) after.',
+        'See [`boxel/`](https://localhost:4201/skills/boxel/SKILL.md).',
+      ].join('\n'),
+    );
+  });
+
+  test('a fenced block that is never closed runs to the end of the body', () => {
+    let body = '[a](a.md)\n```\n[b](b.md)\n';
+    assert.strictEqual(
+      absolutizeSkillLinks(body, INDEX),
+      '[a](https://localhost:4201/skills/a.md)\n```\n[b](b.md)\n',
     );
   });
 

@@ -14,33 +14,16 @@ import { Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
 import type { RealmIdentifier } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import { modalFocusTrapOptions } from '@cardstack/host/lib/modal-focus-trap';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 // The tile's Delete, Archive and Duplicate modals. The tile sends them to the
 // operator-mode modal outlet, so they render outside the dashboard's size
 // container, which would otherwise trap their fixed positioning.
-
-interface ModalFocusArgs {
-  onClose: () => void;
-  returnFocusTarget: () => HTMLElement | undefined;
-}
-
-// Focus opens on Cancel, stays in the modal, and goes back to the tile on
-// close. Escape closes the modal. The confirm button turns busy
-// rather than being replaced while its task runs, so it keeps focus.
-function modalFocusTrapOptions(dialogId: string, args: ModalFocusArgs) {
-  return {
-    initialFocus: `#${dialogId} [data-modal-initial-focus]`,
-    fallbackFocus: `#${dialogId}`,
-    allowOutsideClick: true,
-    escapeDeactivates: () => {
-      args.onClose();
-      return false;
-    },
-    setReturnFocus: (previous: HTMLElement | SVGElement) =>
-      args.returnFocusTarget() ?? previous,
-  };
-}
+//
+// Each opens with focus on Cancel and hands it back to the tile on close.
+// The confirm button turns busy rather than being replaced while its task
+// runs, so it keeps focus.
 
 interface DeleteWorkspaceModalSignature {
   Args: {
@@ -72,8 +55,8 @@ export class DeleteWorkspaceModal extends Component<DeleteWorkspaceModalSignatur
       @onClose={{@onClose}}
       @size='medium'
       @isCloseDisabled={{@isDeleting}}
-      @cardContainerClass='workspace-chooser-delete-modal'
-      class='workspace-chooser-delete-modal-container'
+      @cardContainerClass='workspace-delete-modal'
+      class='workspace-delete-modal-container'
       aria-label='Delete Workspace'
       id={{this.dialogId}}
       tabindex='-1'
@@ -174,23 +157,23 @@ export class DeleteWorkspaceModal extends Component<DeleteWorkspaceModalSignatur
       </:footer>
     </ModalContainer>
     <style scoped>
-      .workspace-chooser-delete-modal-container {
+      .workspace-delete-modal-container {
         --stack-card-footer-height: auto;
       }
-      .workspace-chooser-delete-modal-container > :deep(.boxel-modal__inner) {
+      .workspace-delete-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
       }
-      :deep(.workspace-chooser-delete-modal) {
+      :deep(.workspace-delete-modal) {
         height: auto;
         display: flex;
         flex-direction: column;
       }
-      :deep(.workspace-chooser-delete-modal > .dialog-box__content) {
+      :deep(.workspace-delete-modal > .dialog-box__content) {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
       }
-      :deep(.workspace-chooser-delete-modal > .dialog-box__content > * + *) {
+      :deep(.workspace-delete-modal > .dialog-box__content > * + *) {
         margin-top: 0;
       }
       .delete-modal__warning-icon {
@@ -322,8 +305,8 @@ export class ArchiveWorkspaceModal extends Component<ArchiveWorkspaceModalSignat
       @title=''
       @onClose={{@onClose}}
       @size='medium'
-      @cardContainerClass='workspace-chooser-archive-modal'
-      class='workspace-chooser-archive-modal-container'
+      @cardContainerClass='workspace-archive-modal'
+      class='workspace-archive-modal-container'
       aria-labelledby='{{this.dialogId}}-title'
       id={{this.dialogId}}
       tabindex='-1'
@@ -407,20 +390,20 @@ export class ArchiveWorkspaceModal extends Component<ArchiveWorkspaceModalSignat
       </:footer>
     </ModalContainer>
     <style scoped>
-      .workspace-chooser-archive-modal-container > :deep(.boxel-modal__inner) {
+      .workspace-archive-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
       }
-      :deep(.workspace-chooser-archive-modal) {
+      :deep(.workspace-archive-modal) {
         border-radius: var(--boxel-border-radius-2xl);
         max-width: var(--boxel-md-container);
         height: auto;
         display: flex;
         flex-direction: column;
       }
-      :deep(.workspace-chooser-archive-modal > .dialog-box__header) {
+      :deep(.workspace-archive-modal > .dialog-box__header) {
         display: none;
       }
-      :deep(.workspace-chooser-archive-modal > .dialog-box__content) {
+      :deep(.workspace-archive-modal > .dialog-box__content) {
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
         overflow: visible;
         height: auto;
@@ -429,10 +412,10 @@ export class ArchiveWorkspaceModal extends Component<ArchiveWorkspaceModalSignat
         flex-direction: column;
         gap: var(--boxel-sp-lg);
       }
-      :deep(.workspace-chooser-archive-modal > .dialog-box__content > * + *) {
+      :deep(.workspace-archive-modal > .dialog-box__content > * + *) {
         margin-top: 0;
       }
-      :deep(.workspace-chooser-archive-modal > .dialog-box__footer) {
+      :deep(.workspace-archive-modal > .dialog-box__footer) {
         height: auto;
         flex: none;
         padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
@@ -571,8 +554,8 @@ export class DuplicateWorkspaceModal extends Component<DuplicateWorkspaceModalSi
       @title=''
       @onClose={{@onClose}}
       @size='medium'
-      @cardContainerClass='workspace-chooser-duplicate-modal'
-      class='workspace-chooser-duplicate-modal-container'
+      @cardContainerClass='workspace-duplicate-modal'
+      class='workspace-duplicate-modal-container'
       aria-labelledby='{{this.dialogId}}-title'
       id={{this.dialogId}}
       tabindex='-1'
@@ -655,21 +638,20 @@ export class DuplicateWorkspaceModal extends Component<DuplicateWorkspaceModalSi
       </:footer>
     </ModalContainer>
     <style scoped>
-      .workspace-chooser-duplicate-modal-container
-        > :deep(.boxel-modal__inner) {
+      .workspace-duplicate-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
       }
-      :deep(.workspace-chooser-duplicate-modal) {
+      :deep(.workspace-duplicate-modal) {
         border-radius: var(--boxel-border-radius-2xl);
         max-width: var(--boxel-md-container);
         height: auto;
         display: flex;
         flex-direction: column;
       }
-      :deep(.workspace-chooser-duplicate-modal > .dialog-box__header) {
+      :deep(.workspace-duplicate-modal > .dialog-box__header) {
         display: none;
       }
-      :deep(.workspace-chooser-duplicate-modal > .dialog-box__content) {
+      :deep(.workspace-duplicate-modal > .dialog-box__content) {
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
         overflow: visible;
         height: auto;
@@ -678,10 +660,10 @@ export class DuplicateWorkspaceModal extends Component<DuplicateWorkspaceModalSi
         flex-direction: column;
         gap: var(--boxel-sp-lg);
       }
-      :deep(.workspace-chooser-duplicate-modal > .dialog-box__content > * + *) {
+      :deep(.workspace-duplicate-modal > .dialog-box__content > * + *) {
         margin-top: 0;
       }
-      :deep(.workspace-chooser-duplicate-modal > .dialog-box__footer) {
+      :deep(.workspace-duplicate-modal > .dialog-box__footer) {
         height: auto;
         flex: none;
         padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);

@@ -1,5 +1,7 @@
 name: Restore boxel-icons build cache
-description: Restores cached boxel-icons build output (dist + declarations) keyed on source inputs
+description: >-
+  Restores cached boxel-icons build output (dist + declarations) keyed on
+  boxel-icons' sources and on the dependency fetch's inputs
 
 inputs:
   save:
@@ -18,9 +20,17 @@ outputs:
 runs:
   using: composite
   steps:
+    # The key covers what boxel-icons' build is made from and what decides
+    # the versions of the tools that build it: the root manifest, the
+    # lockfile and the dependency fetch's other inputs. Those are the inputs
+    # the realm-server image rebuilds its boxel-icons stage on, and the ones
+    # the secure origin's `build/ensure-icons.ts` stamps its own build with,
+    # so a restored build is the one the image ships. A change to any of
+    # them makes the next jobs that restore boxel-icons miss and build it
+    # (about a minute and a half), until one of them saves the new key.
     - id: key
       shell: bash
-      run: echo "key=boxel-icons-${{ hashFiles('packages/boxel-icons/src/**', 'packages/boxel-icons/unpublished-development-types/**', 'packages/boxel-icons/package.json', 'packages/boxel-icons/rollup.config.mjs', 'packages/boxel-icons/tsconfig.json', 'packages/boxel-icons/babel.config.json') }}" >> "$GITHUB_OUTPUT"
+      run: echo "key=boxel-icons-${{ hashFiles('packages/boxel-icons/src/**', 'packages/boxel-icons/unpublished-development-types/**', 'packages/boxel-icons/package.json', 'packages/boxel-icons/rollup.config.mjs', 'packages/boxel-icons/tsconfig.json', 'packages/boxel-icons/babel.config.json') }}-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.pnpmfile.cjs', 'patches/**') }}" >> "$GITHUB_OUTPUT"
 
     - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       id: cache

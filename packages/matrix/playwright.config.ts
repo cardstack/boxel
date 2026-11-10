@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { join } from 'path';
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 import {
   DEFAULT_SYNAPSE_TEMPLATE,
   assignSpecFiles,
@@ -117,6 +118,9 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
+          // The sandbox is off only on Linux, for the reasons
+          // `chromeSandboxEnabled` gives.
+          chromiumSandbox: chromeSandboxEnabled(),
           args: [
             // Simulate resolving a custom workspace domain to a realm server.
             '--host-resolver-rules=MAP published.realm 127.0.0.1:4205',

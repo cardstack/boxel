@@ -171,6 +171,9 @@ export async function readSourceOperation(
       ? {
           openBody: () => {
             let opened = openContent();
+            if (!opened) {
+              return undefined;
+            }
             return {
               body: opened.content,
               ...(opened.size != null ? { size: opened.size } : {}),

@@ -26,6 +26,7 @@ const { ensureDirSync } = fsExtra;
 import {
   httpLogging,
   instanceIdHeader,
+  isVanishedFileBody,
   searchAdmission,
   orderConnectionsByRealm,
   methodOverrideSupport,
@@ -48,6 +49,10 @@ import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
+import type Provider from 'oidc-provider';
+import type { OAuthProviderConfig } from './lib/oauth-provider/config.ts';
+import { startOAuthProvider } from './lib/oauth-provider/provider.ts';
+import type { OAuthResourceDefinition } from './lib/oauth-provider/registry.ts';
 import {
   appOrigin,
   createSecureOrigin,
@@ -697,6 +702,7 @@ export class RealmServer {
   private grafanaSecret: string;
   private grafanaIdentity: GrafanaIdentityVerifier | undefined;
   private aiBotDelegationSecret: string | undefined;
+  private matrixInviteCheckSecret: string | undefined;
 
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
@@ -732,6 +738,7 @@ export class RealmServer {
   private clientAddress: ReturnType<typeof clientAddressSettingsFromEnv>;
   private secureOrigin: SecureOrigin | undefined;
   private googleSignIn: GoogleSignInConfig | undefined;
+  private oauthProvider: Provider | undefined;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -745,6 +752,7 @@ export class RealmServer {
     grafanaSecret,
     grafanaURL,
     aiBotDelegationSecret,
+    matrixInviteCheckSecret,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -767,6 +775,8 @@ export class RealmServer {
     secureOriginURL,
     secureOriginAppOrigins = [],
     googleSignIn,
+    oauthProvider,
+    __testOnlyOAuthResources,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -779,6 +789,7 @@ export class RealmServer {
     // The Grafana whose ID tokens operator actions are checked against.
     grafanaURL?: string;
     aiBotDelegationSecret?: string;
+    matrixInviteCheckSecret?: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
@@ -832,6 +843,13 @@ export class RealmServer {
     // The Google client the secure window signs in with (see
     // `lib/google-sign-in.ts`). Unset, it offers only a password.
     googleSignIn?: GoogleSignInConfig;
+    // Turns on Boxel's OAuth provider (see `lib/oauth-provider/`), whose
+    // pages are on the secure origin, so it needs `secureOriginURL` too.
+    // Unset, the provider is off and none of its routes are served.
+    oauthProvider?: OAuthProviderConfig;
+    // Resources a test adds to the provider's registry. main.ts never passes
+    // it: production resources are declared in the registry's code.
+    __testOnlyOAuthResources?: OAuthResourceDefinition[];
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -859,6 +877,7 @@ export class RealmServer {
 
     this.realmSecretSeed = realmSecretSeed;
     this.aiBotDelegationSecret = aiBotDelegationSecret;
+    this.matrixInviteCheckSecret = matrixInviteCheckSecret;
     this.realmServerSecretSeed = realmServerSecretSeed;
     this.grafanaSecret = grafanaSecret;
     this.grafanaIdentity = grafanaURL
@@ -907,6 +926,14 @@ export class RealmServer {
           { realmServerURL: serverURL, matrixURL: matrixClient.matrixURL },
         )
       : undefined;
+    if (oauthProvider) {
+      this.oauthProvider = startOAuthProvider({
+        serverURL,
+        config: oauthProvider,
+        hasSecureOrigin: Boolean(this.secureOrigin),
+        testOnlyResources: __testOnlyOAuthResources,
+      });
+    }
   }
 
   get app() {
@@ -967,8 +994,13 @@ export class RealmServer {
           // which carries both. So that request preflights, and without Accept
           // here the preflight fails and no browser client can invoke a card
           // operation cross-origin at all.
+          //
+          // MCP-Protocol-Version is the header an MCP client sends on every
+          // request after initialization, discovery included; a browser-based
+          // client (MCP Inspector) needs it allowed to reach the server at
+          // all.
           allowHeaders:
-            'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Policy-Audit-Confirmation, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Realm-Events, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action',
+            'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Policy-Audit-Confirmation, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Realm-Events, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action, MCP-Protocol-Version',
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,
@@ -986,8 +1018,11 @@ export class RealmServer {
           // `_federated-search` response (miss/join/hit); expose it so the
           // outcome is legible to a browser caller (host DevTools, client
           // telemetry), not just to server-side supertest/curl.
+          // WWW-Authenticate carries an OAuth resource's challenge, naming
+          // its metadata and scopes, which a browser-based OAuth client reads
+          // to start or restart its flow.
           exposeHeaders:
-            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache',
+            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache, WWW-Authenticate',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its
@@ -1034,6 +1069,7 @@ export class RealmServer {
           grafanaSecret: this.grafanaSecret,
           grafanaIdentity: this.grafanaIdentity,
           aiBotDelegationSecret: this.aiBotDelegationSecret,
+          matrixInviteCheckSecret: this.matrixInviteCheckSecret,
           virtualNetwork: this.virtualNetwork,
           serveHostApp,
           serveIndex,
@@ -1056,6 +1092,7 @@ export class RealmServer {
           linkShapePolicy: this.linkShapePolicy,
           secureOriginURL: this.secureOrigin?.url,
           googleSignIn: this.googleSignIn,
+          oauthProvider: this.oauthProvider,
         }),
       )
       .use(
@@ -1069,6 +1106,16 @@ export class RealmServer {
       .use(serveFromRealm);
 
     app.on('error', (err, ctx) => {
+      // A file response body whose file was deleted after the response was
+      // built: the file is simply gone, which is not a server fault. Only an
+      // error marked on that body is passed over; the same code raised
+      // anywhere else is reported like any other error.
+      if (isVanishedFileBody(err)) {
+        this.log.warn(
+          `${ctx.method} ${ctx.url}: file vanished while its response was being sent (${err.code})`,
+        );
+        return;
+      }
       console.error(`Unhandled server error`, err);
       Sentry.withScope((scope) => {
         scope.setSDKProcessingMetadata({ request: ctx.request });

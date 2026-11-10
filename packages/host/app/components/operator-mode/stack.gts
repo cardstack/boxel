@@ -77,31 +77,38 @@ export default class OperatorModeStack extends Component<Signature> {
   };
 
   <template>
-    <div
-      class={{cn
-        'operator-mode-stack'
-        stack-medium-padding-top=(eq @stackItems.length 2)
-        stack-small-padding-top=(gte @stackItems.length 3)
-      }}
-      ...attributes
-    >
+    <div class='operator-mode-stack' ...attributes>
       {{! the stack's motion region: its cards are the participants (motion/stack-motion.gts) }}
       <StackMotion
         class='inner'
         @phone={{this.operatorModeStateService.isMobileViewport}}
       >
-        {{#each @stackItems as |item i|}}
-          <OperatorModeStackItem
-            @item={{item}}
-            @index={{i}}
-            @stackItems={{@stackItems}}
-            @toolContext={{@toolContext}}
-            @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
-            @requestDeleteCard={{@deleteCard}}
-            @close={{@close}}
-            @setupStackItem={{@setupStackItem}}
-          />
-        {{/each}}
+        {{! The cards' top padding follows how many cards stand in the stack,
+        so it is set here, inside the region: the region measures the cards
+        before a render patches anything inside it, and a padding set
+        outside it would already have changed by then, so a card would jump
+        by the difference instead of moving. }}
+        <div
+          class={{cn
+            'stack-cards'
+            stack-medium-padding-top=(eq @stackItems.length 2)
+            stack-small-padding-top=(gte @stackItems.length 3)
+          }}
+          data-test-stack-cards
+        >
+          {{#each @stackItems as |item i|}}
+            <OperatorModeStackItem
+              @item={{item}}
+              @index={{i}}
+              @stackItems={{@stackItems}}
+              @toolContext={{@toolContext}}
+              @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
+              @requestDeleteCard={{@deleteCard}}
+              @close={{@close}}
+              @setupStackItem={{@setupStackItem}}
+            />
+          {{/each}}
+        </div>
       </StackMotion>
     </div>
 
@@ -124,7 +131,6 @@ export default class OperatorModeStack extends Component<Signature> {
         width: 100%;
         background-position: center;
         background-size: cover;
-        padding-top: var(--stack-padding-top);
         padding-inline: var(--stack-padding-inline);
         padding-bottom: var(--stack-padding-bottom);
         z-index: 0;
@@ -132,13 +138,13 @@ export default class OperatorModeStack extends Component<Signature> {
       /* The padding follows the cards standing in the stack: a leaving card
          is kept in the region's orphan layer while it fades, and must not
          hold the padding it had */
-      .stack-medium-padding-top:not(:has(> .inner > .item.expanded)) {
+      .stack-medium-padding-top:not(:has(> .item.expanded)) {
         --stack-padding-top: var(--stack-md-padding-top);
       }
-      .stack-small-padding-top:not(:has(> .inner > .item.expanded)) {
+      .stack-small-padding-top:not(:has(> .item.expanded)) {
         --stack-padding-top: var(--stack-sm-padding-top);
       }
-      .operator-mode-stack:has(> .inner > .item.expanded) {
+      .operator-mode-stack:has(> .inner > .stack-cards > .item.expanded) {
         --stack-padding-inline: 0;
         --stack-padding-bottom: 0;
       }
@@ -153,9 +159,14 @@ export default class OperatorModeStack extends Component<Signature> {
         width: 100%;
         height: 100%;
         position: relative;
+        margin: 0 auto;
+      }
+      .stack-cards {
+        position: relative;
+        height: calc(100% - var(--stack-padding-top));
+        margin-top: var(--stack-padding-top);
         display: flex;
         justify-content: center;
-        margin: 0 auto;
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
       }

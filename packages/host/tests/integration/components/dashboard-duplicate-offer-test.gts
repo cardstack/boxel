@@ -15,7 +15,6 @@ import {
   skillsRealmURL,
   testRealmURL,
 } from '../../helpers';
-import { setupFeatureFlag } from '../../helpers/feature-flags';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -27,7 +26,6 @@ const DUPLICATE = '[data-test-boxel-menu-item-text="Duplicate Workspace"]';
 module('Integration | dashboard | Duplicate Workspace offer', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupFeatureFlag(hooks, 'DASHBOARD_V2');
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

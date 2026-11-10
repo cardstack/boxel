@@ -226,6 +226,23 @@ module('Acceptance | prerender | module', function (hooks) {
     );
   });
 
+  // The index runner's canary names its module by prefix, so the route has to
+  // render a prefix-form id and report it back unchanged: the render runner
+  // checks the id the route reports against the one it sent.
+  test('renders a base-realm module named by prefix and reports the same id', async function (assert) {
+    let moduleId = `${baseRealmRRI}card-api`;
+
+    await visit(modulePath(moduleId));
+    let { status, model } = captureModuleResult();
+
+    assert.strictEqual(status, 'ready', 'route reports ready status');
+    assert.strictEqual(
+      model.id,
+      moduleId,
+      'returns the prefix-form id unchanged',
+    );
+  });
+
   test('classifies each of the three BaseDef families', async function (assert) {
     // A file is a sibling of a card under `BaseDef`, not a kind of field: it
     // has a URL and content-derived metadata, so the entry a consumer reads to

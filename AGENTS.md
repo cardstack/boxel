@@ -94,6 +94,14 @@
   ```
   This is a red herring. Just ignore this error.
 
+#### Build-time feature flags
+
+These are the host app's flags, fixed when the host is built. Realm-server feature flags are a separate mechanism: environment variables the realm server reads when it starts, set in its deployment config.
+
+- A flag is a boolean under `featureFlags` in `config/environment.js`, typed in `app/config/environment.ts`. App code reads it from `ENV.featureFlags` when it runs. The test build starts with every flag off.
+- To turn a flag on in a test module, call `setupFeatureFlag(hooks, 'FLAG_NAME')` from `tests/helpers/feature-flags.ts`. It turns the flag on before each test and restores it after. Don't set `ENV.featureFlags` directly in a test: the value carries over into every test that runs after it.
+- When you retire a flag, remove its `setupFeatureFlag` calls, its entries in both config files, and any CI job or environment variable that set it. Keep the helper, even when nothing calls it.
+
 #### Running tests from a fresh worktree or after switching branches
 
 The instructions above assume a fully bootstrapped checkout. A fresh `git worktree`, or the shared checkout after switching to a branch based on newer `main`, is NOT bootstrapped, and the failure looks nothing like "missing dependency" — the dev server / `vite build` reports a cryptic unresolved-import error and the QUnit page hangs forever without ever booting (`window.QUnit` stays undefined). Bootstrap in this order before building or serving:
@@ -140,10 +148,9 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 - To run the tests from the command line:
   - First make sure that the matrix server is not already running. You can stop the matrix server
     `pnpm stop:synapse`
-  - Ensure that host and realm server are running, the host with the dashboard on (the specs drive it, as CI's matrix host build does):
-    `cd ../host && DASHBOARD_V2=true pnpm start`
+  - Ensure that host and realm server are running:
+    `cd ../host && pnpm start`
     `MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix`
-  - The flag is baked in at build time. `test-services:matrix` reuses whatever host already answers on port 4200, so restart a dev server started without the flag. With no dev server it serves `packages/host/dist`: build that with `DASHBOARD_V2=true pnpm build` first, and rebuild it without the flag before running host tests or the AI assistant evals (`packages/ai-assistant-evals`) from it. The evals drive the workspace chooser, so they hang against a host with the flag.
   - Run tests:
     `pnpm test`
   - `pnpm test` starts Synapse from the `test` template, which asks for an invite code at registration. A spec that needs a Synapse configured otherwise goes under `tests/with-synapse/<template>/`, named for a template in `support/synapse/`, and runs in a pass of its own against a Synapse from that template:

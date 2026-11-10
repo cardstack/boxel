@@ -216,6 +216,14 @@ export const DEFAULT_PG_USER = process.env.TEST_HARNESS_PGUSER ?? 'postgres';
 export const DEFAULT_PG_POOL_MAX = Number(
   process.env.TEST_HARNESS_PG_POOL_MAX ?? 20,
 );
+// The connections past pool_max each process's scheduler may grant to unwedge
+// a pool whose every connection is held by work waiting on a nested checkout
+// (see `ConnectionScheduler`). It goes past pool_max only in that wedge, and
+// then by at most how deep holds nest, so the steady-state peak above stays
+// 40; both processes wedged at once at full overflow is 48, still under 50.
+export const DEFAULT_PG_POOL_OVERFLOW = Number(
+  process.env.TEST_HARNESS_PG_POOL_OVERFLOW ?? 4,
+);
 export const DEFAULT_MIGRATED_TEMPLATE_DB =
   process.env.TEST_HARNESS_MIGRATED_TEMPLATE_DB ?? 'boxel_migrated_template';
 export const DEFAULT_REALM_LOG_LEVELS =
@@ -225,6 +233,11 @@ export const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 export const REALM_SECRET_SEED = "shhh! it's a secret";
 export const REALM_SERVER_SECRET_SEED = "mum's the word";
 export const GRAFANA_SECRET = "shhh! it's a secret";
+// The value the Synapse templates give the invite module (boxel_invite_check).
+// The module answers an invite that involves a service user on its own; the
+// realm servers of this harness listen on dynamic ports the module isn't
+// configured with, so an invite between two end users is denied here.
+export const MATRIX_INVITE_CHECK_SECRET = "shhh! it's a secret";
 export const FIXTURE_REALM_SERVER_URL_PLACEHOLDER =
   'https://test-harness.test/';
 export const DEFAULT_MATRIX_SERVER_USERNAME =

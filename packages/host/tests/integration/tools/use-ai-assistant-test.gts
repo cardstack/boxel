@@ -25,6 +25,7 @@ import {
   testRealmURL,
   testRealmInfo,
   setupRealmCacheTeardown,
+  skillsIndexId,
   withCachedRealmSetup,
 } from '../../helpers';
 
@@ -265,6 +266,19 @@ module('Integration | tools | ai-assistant', function (hooks) {
       boxelMessage,
       'Hello, new room with "new"!',
       'Message should be sent to the new room',
+    );
+
+    let skillsState = getRoomState(
+      result.roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      '',
+    );
+    assert.deepEqual(
+      skillsState.enabledSkillCards.map(
+        (skill: { sourceUrl: string }) => skill.sourceUrl,
+      ),
+      [skillsIndexId],
+      'the new room has the default skill',
     );
   });
 

@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
+import { isWriteLockTimeout } from '@cardstack/runtime-common/card-operations';
 import {
   withConnectionOrdering,
   withConnectionTenant,
@@ -679,16 +680,11 @@ export function jwtMiddleware(
   };
 }
 
-// Operator actions (`/_grafana-*`) need the shared secret. A request that came
-// through the Grafana datasource proxy (it carries the proxy header, which the
-// datasource adds) must also carry a Grafana ID token for a signed-in user with
-// the Editor or Admin role. Every Grafana identity can reach the datasource
-// proxy, including the read-only preview service account, so the secret alone
-// would let any of them act. A request sent straight to the realm server with
-// the secret, as an operator holding it does from a shell, needs no token.
-export function grafanaAuthorization(
-  grafanaSecret: string,
-  grafanaIdentity: GrafanaIdentityVerifier | undefined,
+// Admits a request whose `Authorization: Bearer <token>` carries `secret`,
+// for the endpoints another service calls with a secret both sides are
+// configured with.
+export function sharedSecretAuthorization(
+  secret: string,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
@@ -704,43 +700,62 @@ export function grafanaAuthorization(
     // secret that itself contains whitespace stays intact in the
     // captured token (a greedy /\s+/ split would false-reject those).
     let bearerMatch = authorization.trim().match(/^bearer\s+(.+)$/i);
-    if (!bearerMatch || bearerMatch[1] !== grafanaSecret) {
+    if (!bearerMatch || bearerMatch[1] !== secret) {
       await sendResponseForUnauthorizedRequest(
         ctxt,
         AuthenticationErrorMessages.TokenInvalid,
       );
       return;
     }
-    if (ctxt.req.headers[GRAFANA_PROXY_HEADER] !== undefined) {
-      let idToken = ctxt.req.headers[GRAFANA_ID_HEADER];
-      if (!grafanaIdentity) {
-        await sendResponseForForbiddenRequest(
-          ctxt,
-          'Operator actions through Grafana are not available: GRAFANA_URL is not configured on the realm server',
-        );
-        return;
-      }
-      if (typeof idToken !== 'string' || !idToken) {
-        await sendResponseForForbiddenRequest(
-          ctxt,
-          'Operator actions through Grafana need a Grafana ID token',
-        );
-        return;
-      }
-      try {
-        let identity = await grafanaIdentity.verify(idToken);
-        getLogger('realm:grafana-identity').info(
-          `operator action ${ctxt.method} ${ctxt.path} by ${identity.username ?? '(no username)'} (${identity.subject}, ${identity.role})`,
-        );
-      } catch (e) {
-        if (e instanceof GrafanaIdentityError) {
-          await sendResponseForForbiddenRequest(ctxt, e.message);
+    await next();
+  };
+}
+
+// Operator actions (`/_grafana-*`) need the shared secret. A request that came
+// through the Grafana datasource proxy (it carries the proxy header, which the
+// datasource adds) must also carry a Grafana ID token for a signed-in user with
+// the Editor or Admin role. Every Grafana identity can reach the datasource
+// proxy, including the read-only preview service account, so the secret alone
+// would let any of them act. A request sent straight to the realm server with
+// the secret, as an operator holding it does from a shell, needs no token.
+export function grafanaAuthorization(
+  grafanaSecret: string,
+  grafanaIdentity: GrafanaIdentityVerifier | undefined,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let secretAuthorization = sharedSecretAuthorization(grafanaSecret);
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    await secretAuthorization(ctxt, async () => {
+      if (ctxt.req.headers[GRAFANA_PROXY_HEADER] !== undefined) {
+        let idToken = ctxt.req.headers[GRAFANA_ID_HEADER];
+        if (!grafanaIdentity) {
+          await sendResponseForForbiddenRequest(
+            ctxt,
+            'Operator actions through Grafana are not available: GRAFANA_URL is not configured on the realm server',
+          );
           return;
         }
-        throw e;
+        if (typeof idToken !== 'string' || !idToken) {
+          await sendResponseForForbiddenRequest(
+            ctxt,
+            'Operator actions through Grafana need a Grafana ID token',
+          );
+          return;
+        }
+        try {
+          let identity = await grafanaIdentity.verify(idToken);
+          getLogger('realm:grafana-identity').info(
+            `operator action ${ctxt.method} ${ctxt.path} by ${identity.username ?? '(no username)'} (${identity.subject}, ${identity.role})`,
+          );
+        } catch (e) {
+          if (e instanceof GrafanaIdentityError) {
+            await sendResponseForForbiddenRequest(ctxt, e.message);
+            return;
+          }
+          throw e;
+        }
       }
-    }
-    await next();
+      await next();
+    });
   };
 }
 
@@ -815,10 +830,30 @@ export async function sendResponseForUnauthorizedRequest(
   await sendResponseForError(ctxt, 401, 'Unauthorized Request', message);
 }
 
+// `cause` is the error being answered, when there is one. A write that gave
+// up waiting for its write locks is not a fault of the server's — another
+// write held them for longer than a writer waits — so it is answered as the
+// 503 with `Retry-After` that every other write surface gives it, rather than
+// as a 500.
 export async function sendResponseForSystemError(
   ctxt: Koa.Context,
   message: string,
+  cause?: unknown,
 ) {
+  if (isWriteLockTimeout(cause)) {
+    await setContextResponse(
+      ctxt,
+      new Response(JSON.stringify({ errors: [cause.error.detail] }), {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+          'Retry-After': String(cause.error.meta?.retryAfterSeconds),
+        },
+      }),
+    );
+    return;
+  }
   await sendResponseForError(ctxt, 500, 'System Error', message);
 }
 
@@ -843,6 +878,28 @@ export async function sendResponseForError(
   );
 }
 
+// A file body whose read fails because the file is no longer there: it was
+// deleted, by this host or another, after the response that streams it was
+// built. That is a file that is simply gone rather than a server fault, so the
+// error is marked where the stream becomes the response body, and the
+// server's error listener tells it apart from every other error by the mark.
+const VANISHED_FILE_BODY = Symbol('vanished-file-body');
+
+function markVanishedFileBody(error: unknown) {
+  let code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === 'ENOENT' || code === 'ENOTDIR') {
+    (error as { [VANISHED_FILE_BODY]?: true })[VANISHED_FILE_BODY] = true;
+  }
+}
+
+export function isVanishedFileBody(error: unknown): boolean {
+  return Boolean(
+    (error as { [VANISHED_FILE_BODY]?: true } | undefined)?.[
+      VANISHED_FILE_BODY
+    ],
+  );
+}
+
 export async function setContextResponse(
   ctxt: Koa.Context,
   response: ResponseWithNodeStream,
@@ -862,6 +919,9 @@ export async function setContextResponse(
   }
 
   if (nodeStream) {
+    // Attached before anything else listens, so the mark is on the error by
+    // the time any wrapping stream passes it on to Koa.
+    nodeStream.once('error', markVanishedFileBody);
     let declaredLength = headers.get('content-length');
     ctxt.body =
       declaredLength != null && ctxt.method !== 'HEAD'

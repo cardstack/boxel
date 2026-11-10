@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  find,
   settled,
   triggerEvent,
   waitFor,
@@ -653,6 +654,33 @@ module('Acceptance | host submode', function (hooks) {
         .exists();
     });
 
+    test('a card opened in host submode appears in Recents, and going back to one keeps its place', async function (assert) {
+      let primaryCardId = `${testRealmURL}ViewCardDemo/1`;
+      let stackCardId = `${testRealmURL}ViewCardDemo/2`;
+      let recentCards = getService('recent-cards-service');
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${primaryCardId}.json`],
+      });
+      assert.strictEqual(recentCards.recentCardIds[0], primaryCardId);
+
+      await click(
+        `[data-test-host-mode-card="${primaryCardId}"] [data-test-view-card-demo-button]`,
+      );
+      await waitFor(`[data-test-host-mode-stack-item="${stackCardId}"]`);
+      assert.strictEqual(recentCards.recentCardIds[0], stackCardId);
+
+      await click(`[data-test-host-mode-breadcrumb="${primaryCardId}"]`);
+      await waitUntil(
+        () =>
+          !document.querySelector(
+            `[data-test-host-mode-stack-item="${stackCardId}"]`,
+          ),
+      );
+      assert.strictEqual(recentCards.recentCardIds[0], stackCardId);
+    });
+
     test('viewCard tabs maintain state after stacking and closing cards', async function (assert) {
       let primaryCardId = `${testRealmURL}ViewCardDemo/1`;
       let firstStackCardId = `${testRealmURL}ViewCardDemo/2`;
@@ -962,6 +990,94 @@ module('Acceptance | host submode', function (hooks) {
         getService('realm-server').allocateUnlistedPath = async (
           sourceRealmURL: string,
         ) => ({ sourceRealmURL, slug: 'defaultunlistedab' });
+      });
+
+      test('the Publishing popover closes with its publish, even when the publish fails', async function (assert) {
+        getService('realm-server').publishRealm = async () => {
+          await publishDeferred.promise;
+          throw new Error('The domain refused the publish');
+        };
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+        await click('[data-test-publish-realm-modal] [data-test-close-modal]');
+        await waitUntil(() =>
+          find('[data-test-publish-realm-button]')?.textContent?.includes(
+            'Publishing…',
+          ),
+        );
+        await click('[data-test-publish-realm-button]');
+        assert.dom('[data-test-publishing-realm-popover]').exists();
+
+        publishDeferred.fulfill();
+        await waitUntil(
+          () =>
+            !find('[data-test-publish-realm-button]')?.textContent?.includes(
+              'Publishing…',
+            ),
+        );
+
+        assert
+          .dom('[data-test-publishing-realm-popover]')
+          .doesNotExist('it closes with the failed publish');
+      });
+
+      test('leaving host mode with the publish dialog open closes it, so it does not come back', async function (assert) {
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+        await click('[data-test-publish-realm-button]');
+        assert.dom('[data-test-publish-realm-modal]').exists();
+
+        let operatorModeState = getService('operator-mode-state-service');
+        operatorModeState.updateSubmode('interact');
+        await settled();
+        operatorModeState.updateSubmode('host');
+        await settled();
+
+        assert.dom('[data-test-host-submode]').exists();
+        assert.dom('[data-test-publish-realm-modal]').doesNotExist();
+      });
+
+      test('closing the publish dialog returns focus to the publish button, after it turns to Publishing', async function (assert) {
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+        await waitUntil(() =>
+          find('[data-test-publish-realm-button]')?.textContent?.includes(
+            'Publishing…',
+          ),
+        );
+
+        await click('[data-test-publish-realm-modal] [data-test-close-modal]');
+
+        // The focus trap hands focus back after a timeout that settled()
+        // doesn't track.
+        await waitUntil(
+          () =>
+            document.activeElement === find('[data-test-publish-realm-button]'),
+          { timeoutMessage: 'focus never returned to the publish button' },
+        );
+        assert.dom('[data-test-publish-realm-button]').isFocused();
+
+        // Let the publish finish, so nothing is left running past the test.
+        publishDeferred.fulfill();
+        await waitUntil(
+          () =>
+            !find('[data-test-publish-realm-button]')?.textContent?.includes(
+              'Publishing…',
+            ),
+        );
       });
 
       test('can publish realm', async function (assert) {

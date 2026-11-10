@@ -50,7 +50,6 @@ export default class GoogleCallback extends Component {
         </div>
         <div class='button-wrapper'>
           <AuthButton
-            @as='anchor'
             @href={{this.failure.startAgain}}
             @variant='secondary'
             data-test-secure-start-again

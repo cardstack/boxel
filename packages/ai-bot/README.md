@@ -50,6 +50,11 @@ Start the server with `pnpm start` or `pnpm start-dev` for live reload.
   - `AI_BOT_STREAM_THROTTLE_MS` (default `600`): min ms between edit sends.
   - `AI_BOT_STREAM_MIN_DELTA` (default `300`): min new characters before sending an edit (final send always occurs).
 
+### Large events
+
+- A correctness event over the content budget (`MAX_MATRIX_EVENT_CONTENT_BYTES`, 56 KB) carries its check request in Matrix media (ADR 016).
+  - `AI_BOT_MAX_EVENT_CONTENT_BYTES` lowers that budget, so a local run can send its requests through media without an edit large enough to need it, e.g. `AI_BOT_MAX_EVENT_CONTENT_BYTES=8192`.
+
 ## Usage
 
 Open the boxel application and go into operator mode. Click the bottom right button to launch the matrix rooms.

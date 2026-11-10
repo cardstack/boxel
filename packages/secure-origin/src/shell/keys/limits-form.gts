@@ -12,8 +12,8 @@ import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
-import Button from '../../components/button.gts';
-import BoxelInput from '../../components/input.gts';
+import { Button } from '@cardstack/pretui/components/button';
+import { Input } from '@cardstack/pretui/components/input';
 import type {
   KeyLimitChanges,
   KeyLimitName,
@@ -171,11 +171,11 @@ export default class LimitsForm extends Component<Signature> {
           {{#each group.fields as |field|}}
             <div class='field' data-test-key-limit={{field.name}}>
               <label class='label' for={{field.inputId}}>{{field.label}}</label>
-              <BoxelInput
-                @id={{field.inputId}}
+              <Input
+                @controlId={{field.inputId}}
                 @value={{field.value}}
                 @onInput={{field.onInput}}
-                @placeholder={{field.placeholder}}
+                placeholder={{field.placeholder}}
                 @describedBy='{{field.hintId}} {{field.noteId}}'
                 inputmode={{if field.whole 'numeric' 'decimal'}}
                 data-test-key-limit-input={{field.name}}
@@ -201,8 +201,8 @@ export default class LimitsForm extends Component<Signature> {
       <div class='actions'>
         <Button
           type='submit'
-          @kind='primary'
-          @size='extra-small'
+          @variant='primary'
+          @size='xs'
           @disabled={{this.state.saving}}
           @loading={{this.state.saving}}
           data-test-key-limits-save

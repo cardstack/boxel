@@ -25,7 +25,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import { logger } from '@cardstack/runtime-common';
+import { logger, nowDate } from '@cardstack/runtime-common';
 
 import {
   isHostedRealm,
@@ -77,8 +77,6 @@ const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
   { value: 'hosted', label: 'Hosted' },
 ];
 
-// Dashboard v2, shown in place of the workspace chooser when the
-// DASHBOARD_V2 feature flag is on.
 export default class Dashboard extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private network: NetworkService;
@@ -100,7 +98,9 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  @tracked private hour = new Date().getHours();
+  // Read through the clock seam: tests pin it, so a visual comparison of the
+  // dashboard doesn't depend on the hour the suite ran at.
+  @tracked private hour = nowDate().getHours();
 
   private get greeting() {
     return greetingFor(this.hour, this.matrixService.profile.displayName);
@@ -119,7 +119,7 @@ export default class Dashboard extends Component<Signature> {
     };
     let update = () => {
       clearTimeout(timer);
-      this.hour = new Date().getHours();
+      this.hour = nowDate().getHours();
       schedule();
     };
     let onVisibilityChange = () => {
@@ -981,9 +981,10 @@ export default class Dashboard extends Component<Signature> {
           )
           var(--dashboard-gutter-start);
         /* Only the contents fade in; the dark background paints at once, so
-           the operator-mode canvas never flashes after sign-in. */
-        opacity: 0;
-        animation: dashboard-fade-in 0.5s ease-in forwards;
+           the operator-mode canvas never flashes after sign-in. The transparent
+           start lives only in the keyframes, so where the animation doesn't run
+           (a snapshot, a renderer without animations) the contents still show. */
+        animation: dashboard-fade-in 0.5s ease-in both;
       }
       .dashboard-page {
         display: flex;
@@ -1238,7 +1239,6 @@ export default class Dashboard extends Component<Signature> {
         --dashboard-greeting-font-size: var(--boxel-font-size-lg);
         --dashboard-greeting-font-weight: 400;
       }
-      /* One tile per row, filling the dashboard's width. */
       @media (prefers-reduced-motion: reduce) {
         .dashboard-scroller {
           animation-duration: 0.01ms;

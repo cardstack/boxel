@@ -7,21 +7,10 @@ import { module, test } from 'qunit';
 
 import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
-import {
-  createJWT,
-  setupAcceptanceTestRealm,
-  setupAuthEndpoints,
-  setupLocalIndexing,
-  setupRealmCacheTeardown,
-  setupUserSubscription,
-  testRealmSecretSeed,
-  visitOperatorMode,
-  realmConfigCardJSON,
-} from '../helpers';
-import { setupFeatureFlag } from '../helpers/feature-flags';
-import { setupMockMatrix } from '../helpers/mock-matrix';
+import { createJWT, testRealmSecretSeed, visitOperatorMode } from '../helpers';
+import { setupDashboardTest } from '../helpers/dashboard';
+
 import { assertRecentFileURLs } from '../helpers/recent-files-cards';
-import { setupApplicationTest } from '../helpers/setup';
 
 const ownedRealmURL = 'http://test-realm/testuser/owned-workspace/';
 const sharedRealmURL = 'http://test-realm/otheruser/shared-workspace/';
@@ -41,74 +30,53 @@ const cardsGridIndex = {
 };
 
 module('Acceptance | dashboard delete', function (hooks) {
-  setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
-  setupRealmCacheTeardown(hooks);
-  setupFeatureFlag(hooks, 'DASHBOARD_V2');
-
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [ownedRealmURL, sharedRealmURL, delegatedOwnerRealmURL],
-  });
-
-  hooks.beforeEach(async function () {
-    setupUserSubscription();
-    setupAuthEndpoints();
-
-    await setupAcceptanceTestRealm({
-      realmURL: ownedRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write', 'realm-owner'],
-      },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Owned Workspace' }),
-        'index.json': cardsGridIndex,
-        'Person/1.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/card-api',
-                name: 'CardDef',
+  setupDashboardTest(hooks, {
+    matrix: {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [ownedRealmURL, sharedRealmURL, delegatedOwnerRealmURL],
+    },
+    realms: [
+      {
+        url: ownedRealmURL,
+        name: 'Owned Workspace',
+        contents: {
+          'index.json': cardsGridIndex,
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/card-api',
+                  name: 'CardDef',
+                },
               },
             },
           },
-        },
-        'person.gts': `import { CardDef } from "@cardstack/base/card-api";
+          'person.gts': `import { CardDef } from "@cardstack/base/card-api";
 
 export class Person extends CardDef {}
 `,
+        },
       },
-    });
-
-    await setupAcceptanceTestRealm({
-      realmURL: sharedRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write'],
-        '@otheruser:localhost': ['read', 'write', 'realm-owner'],
+      {
+        url: sharedRealmURL,
+        name: 'Shared Workspace',
+        permissions: {
+          '@testuser:localhost': ['read', 'write'],
+          '@otheruser:localhost': ['read', 'write', 'realm-owner'],
+        },
+        contents: { 'index.json': cardsGridIndex },
       },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Shared Workspace' }),
-        'index.json': cardsGridIndex,
+      {
+        url: delegatedOwnerRealmURL,
+        name: 'Delegated Owner Workspace',
+        permissions: {
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          '@otheruser:localhost': ['read', 'write', 'realm-owner'],
+        },
+        contents: { 'index.json': cardsGridIndex },
       },
-    });
-
-    await setupAcceptanceTestRealm({
-      realmURL: delegatedOwnerRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write', 'realm-owner'],
-        '@otheruser:localhost': ['read', 'write', 'realm-owner'],
-      },
-      contents: {
-        'realm.json': realmConfigCardJSON({
-          name: 'Delegated Owner Workspace',
-        }),
-        'index.json': cardsGridIndex,
-      },
-    });
+    ],
   });
 
   hooks.afterEach(function () {

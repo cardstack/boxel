@@ -1,6 +1,7 @@
 // Pretui — ContextRing: how much of the model's context the conversation uses, as a small ring.
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
+import { Tooltip } from './tooltip';
 
 export interface ContextRingSignature {
   Args: {
@@ -17,7 +18,12 @@ export interface ContextRingSignature {
   Element: HTMLSpanElement;
 }
 
+// 232.6k, 1M, 1.2M: a count that would round to 1000k or more is read in
+// millions instead
 function compact(n: number): string {
+  if (Math.round(n / 100) >= 10000) {
+    return `${Math.round(n / 100000) / 10}M`;
+  }
   return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
 }
 
@@ -49,40 +55,51 @@ export class ContextRing extends Component<ContextRingSignature> {
   get ringStyle() {
     return htmlSafe(`--pretui-ring-share: ${this.share * 360}deg`);
   }
-  /** the accessible name and tooltip; past @warnAt it says so in words, so
-   * the warning never rests on the ring's colour alone */
+  /** the accessible name and the tooltip that teaches what the percentage
+   * counts; past @warnAt it says so in words, so the warning never rests on
+   * the ring's color alone */
   get label(): string {
     if (this.over) {
       let { used, limit } = this.args;
-      return `Context full: ${compact(used)} tokens, ${compact(used - limit)} more than the ${compact(limit)} this model holds. Earlier messages may be summarized when the next one is sent`;
+      return `Context window full: ${compact(used)} tokens, ${compact(used - limit)} more than the ${compact(limit)} this model holds. Earlier messages may be summarized when the next one is sent`;
     }
     let warning = this.warns ? ', nearly full' : '';
-    return `Context ${this.percent}% used${warning}: ${compact(this.args.used)} of ${compact(this.args.limit)} tokens`;
+    return `Context window ${this.percent}% used${warning}: ${compact(this.args.used)} of ${compact(this.args.limit)} tokens`;
   }
   <template>
-    <span
-      class='pretui-contextring'
-      role='img'
-      aria-label={{this.label}}
-      title={{this.label}}
-      data-warn={{if this.warns 'true'}}
-      data-over={{if this.over 'true'}}
-      data-test-pretui-context-ring
+    <Tooltip
+      class='pretui-contextring-tip'
+      @content={{this.label}}
+      @labels={{true}}
       ...attributes
     >
       <span
-        class='pretui-contextring-ring'
-        style={{this.ringStyle}}
-        aria-hidden='true'
-      ></span>
-      {{#unless @compact}}<span
-          class='pretui-contextring-pct'
-          data-test-pretui-context-ring-pct
+        class='pretui-contextring'
+        role='img'
+        aria-label={{this.label}}
+        data-warn={{if this.warns 'true'}}
+        data-over={{if this.over 'true'}}
+        data-test-pretui-context-ring
+      >
+        <span
+          class='pretui-contextring-ring'
+          style={{this.ringStyle}}
           aria-hidden='true'
-        >{{#if this.over}}Full{{else}}{{this.percent}}%{{/if}}</span>{{/unless}}
-    </span>
+        ></span>
+        {{#unless @compact}}<span
+            class='pretui-contextring-pct'
+            data-test-pretui-context-ring-pct
+            aria-hidden='true'
+          >{{#if this.over}}Full{{else}}{{this.percent}}%{{/if}}</span>{{/unless}}
+      </span>
+    </Tooltip>
     <style scoped>
       @layer PretComponent {
+        /* the usual label fits on one line; the longer "nearly full" and
+           over-the-window labels wrap instead of running past the composer */
+        .pretui-contextring-tip {
+          --pretui-tooltip-measure: 20rem;
+        }
         .pretui-contextring {
           display: inline-flex;
           align-items: center;

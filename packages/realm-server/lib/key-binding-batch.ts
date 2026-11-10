@@ -1,4 +1,5 @@
 import {
+  keyFitsSlot,
   logger,
   param,
   query,
@@ -31,6 +32,13 @@ import {
   type SecureWindowTarget,
 } from './secure-window.ts';
 import { limitsOf } from './key-limit-settings.ts';
+import {
+  apiHostList,
+  apiHostsOfKeySql,
+  arrayColumn,
+  sendableKeySql,
+} from './oauth.ts';
+import { keyOfferedForSlot, type SlotSend } from './slot-fill.ts';
 import { normalizeGrantDestination } from './user-key-grants.ts';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 
@@ -62,8 +70,9 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // each slot's request and fingerprint, the snapshot it was last approved with
 // (for a changed slot, so the window can diff the two field by field), the
 // caller's keys a slot can take and the shares of theirs in the realm, each
-// with the destinations in the batch its grants already cover. Nothing of any
-// key's value is read.
+// with the destinations in the batch its grants already cover, and for each
+// slot the ones that can fill it (`keyOfferedForSlot`). Nothing of any key's value
+// is read.
 
 const log = logger('realm:key-bindings');
 
@@ -131,6 +140,7 @@ export interface BatchShare {
   label: string;
   keyId: string;
   keyName: string;
+  keyKind: UserKeyKind;
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
@@ -154,13 +164,31 @@ export interface ApprovalBatch {
   remainingPipelinesOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
+  // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
+  // one) that can fill each slot token, in every operation of the batch that
+  // sends it (`keyOfferedForSlot`), by use. One choice fills a slot token for the
+  // whole batch, so these are the only ones the window offers for it. Asked
+  // with `operations`, only those operations count. For
+  // `pipelines`, an operation approved for pipelines only is left out, as the
+  // window leaves it out of what it approves for pipelines, so a slot it
+  // sends to one more destination can take more keys.
+  fillers: Record<BatchUse, Record<string, string[]>>;
 }
+
+// Where the requests a batch approves run: from any card a reader opens, or
+// only from pipelines.
+export type BatchUse = 'interactive' | 'pipelines';
 
 export interface ApprovalBatchRequest {
   target: SecureWindowTarget;
   review?: boolean;
   // Also answer slots approved for pipelines only.
   interactive?: boolean;
+  // The operations an approval covers, by name, when it covers only some of
+  // the batch's: `fillers` then weigh only these, so a key that fits where
+  // they send is offered even if another operation sends the same slot token
+  // somewhere it can't reach. The batch itself still holds every operation.
+  operations?: string[];
 }
 
 // What a binding is read as here, with the snapshot of its last approval.
@@ -176,6 +204,8 @@ interface BindingRow {
   has_grant: boolean;
   share_owner: string | null;
   share_state: string | null;
+  // The kind of the key that fills it, its own or its share's.
+  key_kind: string | null;
   destination: string;
   method: string;
   path_template: string;
@@ -222,7 +252,12 @@ function approvable(
 export async function approvalBatch(
   deps: Deps,
   user: string,
-  { target, review = false, interactive = false }: ApprovalBatchRequest,
+  {
+    target,
+    review = false,
+    interactive = false,
+    operations,
+  }: ApprovalBatchRequest,
 ): Promise<ApprovalBatch> {
   let { dbAdapter } = deps;
   let resolved = await resolveWindowRequest(deps, user, { target });
@@ -250,6 +285,9 @@ export async function approvalBatch(
   let ownShares = await sharesIn(dbAdapter, realmURL.href, user);
 
   let groups = new Map<string, BatchGroup>();
+  // How each slot of the batch is sent, for deciding which keys fill it once
+  // the batch is cut to what one confirmation holds.
+  let sendOf = new Map<BatchSlot, SlotSend>();
   for (let [name, operation] of Object.entries(definition.operations ?? {})) {
     if (!approvable(operation)) {
       continue;
@@ -281,7 +319,7 @@ export async function approvalBatch(
       if (!status || (review && status !== 'changed')) {
         continue;
       }
-      slots.push({
+      let batchSlot: BatchSlot = {
         slot: token,
         key: slot.key,
         status,
@@ -297,7 +335,9 @@ export async function approvalBatch(
               },
             }
           : {}),
-      });
+      };
+      slots.push(batchSlot);
+      sendOf.set(batchSlot, { slot, callApi: request });
     }
     if (slots.length === 0) {
       continue;
@@ -340,13 +380,60 @@ export async function approvalBatch(
   let destinations = sorted.map((g) => g.destination.href);
   let coveredBy = (grants: string[]) =>
     destinations.filter((d) => grants.some((g) => destinationCovers(g, d)));
-
-  let needsUserKey = sorted.some((g) =>
-    g.operations.some((o) => o.slots.some((s) => s.key === 'userKey')),
+  // How each slot token is sent, by the operations of the batch `include`
+  // keeps.
+  let covered = (operation: BatchOperation) =>
+    operations === undefined || operations.includes(operation.name);
+  let sendsOf = (include: (operation: BatchOperation) => boolean) => {
+    let found = new Map<string, { key: BatchSlot['key']; sends: SlotSend[] }>();
+    for (let group of sorted) {
+      for (let operation of group.operations.filter(
+        (o) => covered(o) && include(o),
+      )) {
+        for (let slot of operation.slots) {
+          let entry = found.get(slot.slot) ?? { key: slot.key, sends: [] };
+          entry.sends.push(sendOf.get(slot)!);
+          found.set(slot.slot, entry);
+        }
+      }
+    }
+    return found;
+  };
+  let slotSends: Record<BatchUse, ReturnType<typeof sendsOf>> = {
+    interactive: sendsOf(() => true),
+    // The operations the window approves for pipelines (`batchFor` in the
+    // secure origin's `approval-batch.ts`).
+    pipelines: sendsOf((o) => o.status !== 'pipelines-only'),
+  };
+  let needsUserKey = [...slotSends.interactive.values()].some(
+    (s) => s.key === 'userKey',
   );
-  let needsShare = sorted.some((g) =>
-    g.operations.some((o) => o.slots.some((s) => s.key !== 'userKey')),
+  let needsShare = [...slotSends.interactive.values()].some(
+    (s) => s.key !== 'userKey',
   );
+  let keys = needsUserKey ? await slotKeys(dbAdapter, user) : [];
+  let shares = needsShare ? ownShares : [];
+  let fillersOf = (sends: ReturnType<typeof sendsOf>) =>
+    Object.fromEntries(
+      [...sends].map(([token, { key, sends }]) => [
+        token,
+        key === 'userKey'
+          ? keys
+              .filter(({ kind, apiHosts }) =>
+                keyOfferedForSlot({ kind, apiHosts }, sends),
+              )
+              .map(({ id }) => id)
+          : shares
+              .filter(({ keyKind, apiHosts }) =>
+                keyOfferedForSlot({ kind: keyKind, apiHosts }, sends),
+              )
+              .map(({ id }) => id),
+      ]),
+    );
+  let fillers: Record<BatchUse, Record<string, string[]>> = {
+    interactive: fillersOf(slotSends.interactive),
+    pipelines: fillersOf(slotSends.pipelines),
+  };
   return {
     realm: { url: realm.url, name: realmName },
     card: {
@@ -359,18 +446,15 @@ export async function approvalBatch(
     groups: sorted,
     remaining,
     remainingPipelinesOnly,
-    keys: needsUserKey
-      ? (await slotKeys(dbAdapter, user)).map(({ grants, ...key }) => ({
-          ...key,
-          covers: coveredBy(grants),
-        }))
-      : [],
-    shares: needsShare
-      ? ownShares.map(({ grants, ...share }) => ({
-          ...share,
-          covers: coveredBy(grants),
-        }))
-      : [],
+    keys: keys.map(({ grants, apiHosts: _apiHosts, ...key }) => ({
+      ...key,
+      covers: coveredBy(grants),
+    })),
+    shares: shares.map(({ grants, apiHosts: _apiHosts, ...share }) => ({
+      ...share,
+      covers: coveredBy(grants),
+    })),
+    fillers,
   };
 }
 
@@ -508,7 +592,11 @@ function slotStatus(
   if (!row || !row.has_grant) {
     return 'new';
   }
-  if (row.state === 'needs-reapproval' || row.fingerprint !== fingerprint) {
+  if (
+    row.state === 'needs-reapproval' ||
+    row.fingerprint !== fingerprint ||
+    (row.key_kind !== null && !keyFitsSlot(row.key_kind, slot.keyKind))
+  ) {
     return 'changed';
   }
   if (interactive && !row.interactive) {
@@ -528,6 +616,7 @@ async function bindingRows(
   return (await query(dbAdapter, [
     `SELECT b.operation_name, b.instance_url, b.slot, b.key_id, b.share_id, b.approved_by, b.fingerprint, b.state, b.interactive,
             (g.id IS NOT NULL) AS has_grant, s.owner AS share_owner, s.state AS share_state,
+            (SELECT k.kind FROM user_keys k WHERE k.id = COALESCE(b.key_id, s.key_id)) AS key_kind,
             a.destination, a.method, a.path_template, a.headers_template, a.placement, a.placement_name, a.transform, a.body_template
        FROM key_bindings b
        JOIN key_binding_approvals a ON a.id = b.approval_id
@@ -549,21 +638,26 @@ async function bindingRows(
 }
 
 // The caller's keys a `{{userKey}}` slot can take, by name, each with its
-// grants' destinations. An OAuth client that only signs people in is never
-// granted a destination, so it is left out.
+// grants' destinations and, for an OAuth key, its client's API hosts. An
+// OAuth client that only signs people in is never granted a destination, so
+// it is left out.
 async function slotKeys(
   dbAdapter: DBAdapter,
   user: string,
-): Promise<(Omit<BatchKey, 'covers'> & { grants: string[] })[]> {
+): Promise<
+  (Omit<BatchKey, 'covers'> & {
+    grants: string[];
+    apiHosts: string[] | null;
+  })[]
+> {
   let rows = await query(dbAdapter, [
-    `SELECT k.id, k.name, k.kind, k.state,
+    `SELECT k.id, k.name, k.kind, k.state, ${apiHostsOfKeySql('k.id')} AS api_hosts,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM user_keys k
-       LEFT JOIN oauth_clients c ON c.key_id = k.id
        LEFT JOIN user_key_grants g ON g.key_id = k.id
       WHERE k.owner = `,
     param(user),
-    ` AND (k.kind <> 'oauth-client' OR c.grant_type = 'client_credentials')
+    ` AND ${sendableKeySql('k.id')}
       GROUP BY k.id, k.name, k.kind, k.state
       ORDER BY k.name`,
   ]);
@@ -572,19 +666,28 @@ async function slotKeys(
     name: row.name as string,
     kind: row.kind as UserKeyKind,
     state: row.state as string,
-    grants: grantList(row.grants),
+    grants: arrayColumn(row.grants),
+    apiHosts: apiHostList(row.api_hosts),
   }));
 }
 
 // The caller's active shares in the realm, by label, each with its key's
-// grants' destinations.
+// grants' destinations and, for an OAuth key, its client's API hosts. A
+// share of an OAuth client that only signs people in is how teammates
+// connect their own accounts, never a credential a request sends, so it is
+// left out.
 async function sharesIn(
   dbAdapter: DBAdapter,
   realmURL: string,
   user: string,
-): Promise<(Omit<BatchShare, 'covers'> & { grants: string[] })[]> {
+): Promise<
+  (Omit<BatchShare, 'covers'> & {
+    grants: string[];
+    apiHosts: string[] | null;
+  })[]
+> {
   let rows = await query(dbAdapter, [
-    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap,
+    `SELECT s.id, s.label, s.key_id, k.name AS key_name, k.kind AS key_kind, ${apiHostsOfKeySql('s.key_id')} AS api_hosts, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap,
             EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive) AS interactive,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
@@ -595,7 +698,8 @@ async function sharesIn(
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
-      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap
+        AND ${sendableKeySql('s.key_id')}
+      GROUP BY s.id, s.label, s.key_id, k.name, k.kind, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap
       ORDER BY s.label`,
   ]);
   return rows.map((row) => ({
@@ -603,7 +707,9 @@ async function sharesIn(
     label: row.label as string,
     keyId: row.key_id as string,
     keyName: row.key_name as string,
-    grants: grantList(row.grants),
+    keyKind: row.key_kind as UserKeyKind,
+    grants: arrayColumn(row.grants),
+    apiHosts: apiHostList(row.api_hosts),
     interactive: Boolean(row.interactive),
     dailyBudget: limitsOf(row).dailyBudget,
     anonymous: Boolean(row.anonymous),
@@ -614,19 +720,4 @@ async function sharesIn(
         ? null
         : Number(row.anonymous_monthly_cap),
   }));
-}
-
-// An aggregated array column, as the adapter returns it: an array, or
-// Postgres' text form of one.
-function grantList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value as string[];
-  }
-  if (typeof value === 'string') {
-    let inner = value.replace(/^\{|\}$/g, '');
-    return inner === ''
-      ? []
-      : inner.split(',').map((item) => item.replace(/^"|"$/g, ''));
-  }
-  return [];
 }

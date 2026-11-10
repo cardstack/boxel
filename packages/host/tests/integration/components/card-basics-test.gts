@@ -37,6 +37,7 @@ import {
   Theme,
 } from '@cardstack/base/card-api';
 import CodeRefField from '@cardstack/base/code-ref';
+import ColorField from '@cardstack/base/color';
 import DateField from '@cardstack/base/date';
 import DateTimeField from '@cardstack/base/datetime';
 import EmailField from '@cardstack/base/email';
@@ -4426,6 +4427,40 @@ module('Integration | card-basics', function (hooks) {
         cleanWhiteSpace(root.textContent!),
         'Mango First Name Mango Is Cool true Notes',
       );
+    });
+
+    test('text fields in edit format tell password managers to skip them', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field age = contains(NumberField);
+        @field email = contains(EmailField);
+        @field nicknames = containsMany(StringField);
+        @field favoriteColor = contains(ColorField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        firstName: 'Mango',
+        age: 3,
+        email: 'mango@example.com',
+        nicknames: ['Mangy', 'Mango Bear'],
+        favoriteColor: '#ffaa00',
+      });
+
+      await renderCard(loader, mango, 'edit');
+
+      for (let input of [
+        '[data-test-field="firstName"] input',
+        '[data-test-field="age"] input',
+        '[data-test-field="email"] input',
+        '[data-test-field="nicknames"] [data-test-item="0"] input',
+        '[data-test-field="nicknames"] [data-test-item="1"] input',
+        '[data-test-field="favoriteColor"] [data-test-color-text-input]',
+      ]) {
+        assert.dom(input).hasAttribute('data-1p-ignore', '', input);
+        assert.dom(input).hasAttribute('data-lpignore', 'true', input);
+        assert.dom(input).hasAttribute('data-form-type', 'other', input);
+        assert.dom(input).hasAttribute('data-bwignore', '', input);
+      }
     });
 
     test('renders boolean edit view', async function (assert) {

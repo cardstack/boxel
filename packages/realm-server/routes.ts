@@ -58,6 +58,7 @@ import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
+import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
@@ -141,6 +142,8 @@ import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
 import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-network';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
+import type Provider from 'oidc-provider';
+import { registerOAuthProviderRoutes } from './lib/oauth-provider/serve.ts';
 import {
   handleAddUserKey,
   handleDeleteUserKey,
@@ -225,6 +228,11 @@ export type CreateRoutesArgs = {
   // than minting tokens, so the feature stays inert until a secret is
   // provisioned.
   aiBotDelegationSecret?: string;
+  // Shared secret the homeserver's invite module presents to `/_invite-check`
+  // (ADR 011 §1.6). Optional: when unset the endpoint responds 503, which the
+  // module treats as a denial, so an unconfigured homeserver admits no invite
+  // between end users rather than every one.
+  matrixInviteCheckSecret?: string;
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
@@ -272,6 +280,9 @@ export type CreateRoutesArgs = {
   // The Google client the secure window signs in with. Unset, the secure
   // window offers only a password.
   googleSignIn?: GoogleSignInConfig;
+  // Boxel's OAuth provider (see `lib/oauth-provider/`). Unset, the provider
+  // is off and none of its routes are served.
+  oauthProvider?: Provider;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -295,6 +306,10 @@ export function createRoutes(args: CreateRoutesArgs) {
     realmsRootPath: args.realmsRootPath,
     reconciler: args.reconciler,
   };
+
+  if (args.oauthProvider) {
+    registerOAuthProviderRoutes(router, args.oauthProvider);
+  }
 
   router.get(
     '/',
@@ -661,7 +676,6 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'card',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
-      matrixURL: args.matrixClient.matrixURL.href,
       matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
@@ -673,7 +687,6 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'module',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
-      matrixURL: args.matrixClient.matrixURL.href,
       matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
@@ -685,7 +698,6 @@ export function createRoutes(args: CreateRoutesArgs) {
       kind: 'file-extract',
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
-      matrixURL: args.matrixClient.matrixURL.href,
       matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
@@ -854,6 +866,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleSetRealmCatalog(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
+  // Shared-secret authenticated inside the handler, which also answers 503
+  // while no secret is configured.
+  router.get('/_invite-check', handleInviteCheck(args));
   router.post(
     '/_realm-auth',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

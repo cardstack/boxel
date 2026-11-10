@@ -1,6 +1,7 @@
 import { StringField, Component, field, CardDef, contains } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { markdownEscape, not } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 import { markdownLink } from './markdown-helpers';
@@ -24,6 +25,7 @@ export default class UrlField extends StringField {
         @onInput={{@set}}
         @disabled={{not @canEdit}}
         @state={{this.validationState}}
+        {{ignoredByPasswordManagers}}
       />
     </template>
   };

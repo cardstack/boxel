@@ -715,6 +715,30 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(write.status, 404, 'a write to the realm: 404');
     });
 
+    test('serves none of the build probe', async function (assert) {
+      // The build writes the probe beside the pages, in `probe/` with a
+      // manifest of its own, so the policy test can load it; the realm server
+      // reads only the pages' manifest.
+      let probeFiles: string[] = Object.values(
+        JSON.parse(
+          readFileSync(join(buildDir, 'probe', 'manifest.json'), 'utf8'),
+        ).entries as Record<string, string[]>,
+      ).flat();
+      assert.ok(probeFiles.includes('probe.html'), 'the build has a probe');
+      let shellFiles = new Set(Object.values(buildManifest).flat());
+      for (let name of probeFiles) {
+        for (let path of [
+          `/secure/probe/${name}`,
+          ...(shellFiles.has(name) ? [] : [`/secure/${name}`]),
+        ]) {
+          let response = await request.get(path).set('Host', secureHost);
+          assert.strictEqual(response.status, 404, `${path}: 404`);
+        }
+      }
+      let page = await request.get('/secure/probe').set('Host', secureHost);
+      assert.strictEqual(page.status, 404, '/secure/probe: 404');
+    });
+
     test('recognises its host with the default port spelled out', async function (assert) {
       let response = await request
         .get('/test/person.gts')

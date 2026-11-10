@@ -24,7 +24,8 @@ import {
   isToolResultWithOutputMsgtype,
 } from '../matrix-constants.ts';
 
-import { downloadFile } from './matrix-utils.ts';
+import { restoreExternalFields } from './external-fields.ts';
+import { downloadFile, downloadMatrixMediaText } from './matrix-utils.ts';
 import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { HistoryConstructionError } from './types.ts';
 
@@ -184,6 +185,12 @@ function parseContentData(event: IRoomEvent) {
 }
 
 async function downloadAttachments(event: IRoomEvent, client: MatrixClient) {
+  let externalFieldErrors = await restoreExternalFields(event.content, (url) =>
+    downloadMatrixMediaText(client, url),
+  );
+  for (let error of externalFieldErrors) {
+    getLog().error(`event ${event.event_id}: ${error}`);
+  }
   if (
     event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE ||
     event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE

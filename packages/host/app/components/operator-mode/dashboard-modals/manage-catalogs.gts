@@ -224,7 +224,7 @@ class ManageCatalogsModal extends Component<ManageCatalogsModalSignature> {
       .intro {
         margin: 0;
       }
-      /* The dialog inherits the chooser's light-on-dark scrollbar color;
+      /* The dialog inherits the dashboard's scrollbar color;
          restate it from the dialog's own tokens, light or dark. */
       .realm-list-frame {
         scrollbar-color: color-mix(

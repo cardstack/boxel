@@ -101,6 +101,9 @@ export interface InputGroupControls {
 }
 export interface InputGroupApi {
   elementId: string;
+  /** the id of the group's error row while it shows one, for a control the
+   * caller supplies to name as its error message and description */
+  errorMessageId?: string;
 }
 
 function asAccessories(a: unknown): InputGroupAccessories {
@@ -163,6 +166,15 @@ export class InputGroup extends Component<InputGroupSignature> {
   get state(): InputGroupState | undefined {
     return this.args.state ?? (this.invalid ? 'invalid' : undefined);
   }
+  // The group's api for the caller's own controls: boxel-ui's, plus the id
+  // of the error row the group draws under its element id.
+  api = (group: { elementId: string }): InputGroupApi => ({
+    elementId: group.elementId,
+    errorMessageId:
+      this.state === 'invalid' && this.args.errorMessage
+        ? `error-message-${group.elementId}`
+        : undefined,
+  });
   handleInput = (value: string) => {
     emit(
       [this.args.onInput, this.args.onChange, this.args.onValueChange],
@@ -196,7 +208,7 @@ export class InputGroup extends Component<InputGroupSignature> {
             {{yield
               (asControls Controls)
               (asAccessories Accessories)
-              group
+              (this.api group)
             }}
           </:default>
           <:after as |Accessories group|>
@@ -241,8 +253,10 @@ export class InputGroup extends Component<InputGroupSignature> {
         /* Input's field style via the token channel; the text accessories
            and the helper row take the step below the field's text */
         .pretui-inputgroup {
+          /* the field's height and type, with Input's opt-in knobs */
+          --_group-h: var(--pretui-field-h, var(--boxel-form-control-height-sm));
           width: 100%;
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(--pretui-field-font-size, var(--boxel-font-size-xs));
           letter-spacing: var(--boxel-lsp-xs);
           /* the group's input inherits this line-height, and its padding-block
              is --boxel-sp-xxs: the line-height token assumes 0.25rem */
@@ -250,12 +264,15 @@ export class InputGroup extends Component<InputGroupSignature> {
           --boxel-sp-xxs: 0.25rem;
           --background: var(--field);
           --border: var(--input);
-          --boxel-form-control-height: var(--boxel-form-control-height-sm);
+          --boxel-form-control-height: var(--_group-h);
           /* the group's controls inherit its min-height inside its 1px
              border, so the knob is the height less both borders */
-          --boxel-input-height: calc(var(--boxel-form-control-height-sm) - 2px);
+          --boxel-input-height: calc(var(--_group-h) - 2px);
           --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
-          --boxel-font-size-sm: var(--boxel-font-size-2xs);
+          --boxel-font-size-sm: var(
+            --pretui-field-message-font-size,
+            var(--boxel-font-size-2xs)
+          );
           /* a Button add-on's own 14px text overflows the height */
           --boxel-button-font: 700 var(--boxel-font-size-2xs) /
             var(--boxel-form-control-line-height-sm) var(--boxel-font-family);

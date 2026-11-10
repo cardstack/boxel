@@ -10,16 +10,11 @@ import type WorkspaceDuplicationService from '@cardstack/host/services/workspace
 
 import {
   setupAcceptanceTestRealm,
-  setupLocalIndexing,
-  setupRealmCacheTeardown,
-  setupUserSubscription,
   skillsRealmURL,
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupFeatureFlag } from '../helpers/feature-flags';
-import { setupMockMatrix } from '../helpers/mock-matrix';
-import { setupApplicationTest } from '../helpers/setup';
+import { setupDashboardTest } from '../helpers/dashboard';
 
 // Duplicate Workspace is offered only on the skills realm, so an in-process
 // test realm is mounted at the resolved skills realm URL; the virtual network
@@ -58,56 +53,35 @@ async function openDuplicateModal() {
 }
 
 module('Acceptance | dashboard duplicate', function (hooks) {
-  setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
-  setupRealmCacheTeardown(hooks);
-  setupFeatureFlag(hooks, 'DASHBOARD_V2');
-
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [ownedRealmURL],
-  });
-
-  hooks.beforeEach(async function () {
-    setupUserSubscription();
-
-    await setupAcceptanceTestRealm({
-      realmURL: ownedRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+  let mockMatrixUtils = setupDashboardTest(hooks, {
+    matrix: {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [ownedRealmURL],
+    },
+    authEndpoints: false,
+    realms: [
+      {
+        url: ownedRealmURL,
+        name: 'Workspace A',
+        contents: { 'index.json': cardsGridIndex },
       },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
-        'index.json': cardsGridIndex,
+      {
+        url: skillsRealmURL,
+        name: 'Boxel Skills',
+        permissions: { '*': ['read'] },
+        contents: {
+          'index.json': cardsGridIndex,
+          'README.md': 'A collection of skills.\n',
+          'skills/test-skill/SKILL.md': skillMarkdown,
+        },
       },
-    });
-
-    await setupAcceptanceTestRealm({
-      realmURL: skillsRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '*': ['read'],
+      {
+        url: grantedRealmURL,
+        name: 'Granted Workspace',
+        permissions: { '@testuser:localhost': ['read', 'write'] },
+        contents: { 'index.json': cardsGridIndex },
       },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Boxel Skills' }),
-        'index.json': cardsGridIndex,
-        'README.md': 'A collection of skills.\n',
-        'skills/test-skill/SKILL.md': skillMarkdown,
-      },
-    });
-
-    await setupAcceptanceTestRealm({
-      realmURL: grantedRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write'],
-      },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Granted Workspace' }),
-        'index.json': cardsGridIndex,
-      },
-    });
+    ],
   });
 
   // The duplicate target realm is mounted beforehand with the two files

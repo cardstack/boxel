@@ -7,18 +7,8 @@ import { module, test } from 'qunit';
 import { testRealmInfo } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import {
-  setupAcceptanceTestRealm,
-  setupLocalIndexing,
-  setupRealmCacheTeardown,
-  setupRealmServerEndpoints,
-  setupUserSubscription,
-  visitOperatorMode,
-  realmConfigCardJSON,
-} from '../helpers';
-import { setupFeatureFlag } from '../helpers/feature-flags';
-import { setupMockMatrix } from '../helpers/mock-matrix';
-import { setupApplicationTest } from '../helpers/setup';
+import { setupRealmServerEndpoints, visitOperatorMode } from '../helpers';
+import { setupDashboardTest } from '../helpers/dashboard';
 
 // Workspace A is owned by the test user; Workspace C is read/write only (the
 // test user is not its owner), so the Re-index action must never appear on it.
@@ -56,62 +46,48 @@ function simulateIndexDone(mockMatrixUtils: any, realmURL: string) {
 }
 
 module('Acceptance | dashboard re-index', function (hooks) {
-  setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
-  setupRealmCacheTeardown(hooks);
-  setupFeatureFlag(hooks, 'DASHBOARD_V2');
-
   let receivedMethod: string | null = null;
   let receivedPathname: string | null = null;
   let responseStatus = 204;
   let responseBody: string | null = null;
 
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [ownedRealmURL, readOnlyRealmURL],
-  });
-
-  setupRealmServerEndpoints(hooks, [
-    {
-      route: 'testuser/workspace-a/_full-reindex',
-      getResponse: async (req: Request) => {
-        receivedMethod = req.method;
-        receivedPathname = new URL(req.url).pathname;
-        return new Response(responseBody, { status: responseStatus });
-      },
+  let mockMatrixUtils = setupDashboardTest(hooks, {
+    matrix: {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [ownedRealmURL, readOnlyRealmURL],
     },
-  ]);
-
-  hooks.beforeEach(async function () {
-    setupUserSubscription();
-    receivedMethod = null;
-    receivedPathname = null;
-    responseStatus = 204;
-    responseBody = null;
-
-    await setupAcceptanceTestRealm({
-      realmURL: ownedRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+    authEndpoints: false,
+    beforeRealms(hooks) {
+      setupRealmServerEndpoints(hooks, [
+        {
+          route: 'testuser/workspace-a/_full-reindex',
+          getResponse: async (req: Request) => {
+            receivedMethod = req.method;
+            receivedPathname = new URL(req.url).pathname;
+            return new Response(responseBody, { status: responseStatus });
+          },
+        },
+      ]);
+      hooks.beforeEach(function () {
+        receivedMethod = null;
+        receivedPathname = null;
+        responseStatus = 204;
+        responseBody = null;
+      });
+    },
+    realms: [
+      {
+        url: ownedRealmURL,
+        name: 'Workspace A',
+        contents: { 'index.json': cardsGridIndex },
       },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
-        'index.json': cardsGridIndex,
+      {
+        url: readOnlyRealmURL,
+        name: 'Workspace C',
+        permissions: { '@testuser:localhost': ['read', 'write'] },
+        contents: { 'index.json': cardsGridIndex },
       },
-    });
-
-    await setupAcceptanceTestRealm({
-      realmURL: readOnlyRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write'],
-      },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Workspace C' }),
-        'index.json': cardsGridIndex,
-      },
-    });
+    ],
   });
 
   test('Re-index is offered only on workspaces the user owns', async function (assert) {

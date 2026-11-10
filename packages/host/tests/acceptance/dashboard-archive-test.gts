@@ -4,21 +4,13 @@ import { module, test } from 'qunit';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import {
-  setupAcceptanceTestRealm,
-  setupLocalIndexing,
-  setupRealmCacheTeardown,
-  setupUserSubscription,
-  visitOperatorMode,
-  realmConfigCardJSON,
-} from '../helpers';
-import { setupFeatureFlag } from '../helpers/feature-flags';
-import { setupMockMatrix } from '../helpers/mock-matrix';
+import { visitOperatorMode } from '../helpers';
+import { setupDashboardTest } from '../helpers/dashboard';
+
 import {
   getRealmServerRoute,
   registerRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
-import { setupApplicationTest } from '../helpers/setup';
 
 // Workspace A is owned by the test user; Workspace C is read/write only (the
 // test user is not its owner), so archive affordances must never appear on it.
@@ -57,42 +49,25 @@ async function expandArchived() {
 }
 
 module('Acceptance | dashboard archive', function (hooks) {
-  setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
-  setupRealmCacheTeardown(hooks);
-  setupFeatureFlag(hooks, 'DASHBOARD_V2');
-
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [ownedRealmURL, readOnlyRealmURL],
-  });
-
-  hooks.beforeEach(async function () {
-    setupUserSubscription();
-
-    await setupAcceptanceTestRealm({
-      realmURL: ownedRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+  setupDashboardTest(hooks, {
+    matrix: {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [ownedRealmURL, readOnlyRealmURL],
+    },
+    authEndpoints: false,
+    realms: [
+      {
+        url: ownedRealmURL,
+        name: 'Workspace A',
+        contents: { 'index.json': cardsGridIndex },
       },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
-        'index.json': cardsGridIndex,
+      {
+        url: readOnlyRealmURL,
+        name: 'Workspace C',
+        permissions: { '@testuser:localhost': ['read', 'write'] },
+        contents: { 'index.json': cardsGridIndex },
       },
-    });
-
-    await setupAcceptanceTestRealm({
-      realmURL: readOnlyRealmURL,
-      mockMatrixUtils,
-      permissions: {
-        '@testuser:localhost': ['read', 'write'],
-      },
-      contents: {
-        'realm.json': realmConfigCardJSON({ name: 'Workspace C' }),
-        'index.json': cardsGridIndex,
-      },
-    });
+    ],
   });
 
   test('the Archived section loads its list only once expanded, and says when it is empty', async function (assert) {

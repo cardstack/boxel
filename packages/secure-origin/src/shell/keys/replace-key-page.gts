@@ -28,9 +28,10 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import { getKey, replaceKey, windowContext } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
+import { Button } from '@cardstack/pretui/components/button';
+import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
+import KeyRound from '@cardstack/boxel-icons/key-round';
 
 import {
   failureMessage,
@@ -38,7 +39,7 @@ import {
   loadFailure,
   type LoadFailure,
 } from './context.ts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { eq } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 import { pageTitle, withWayBack } from './trail.ts';
@@ -60,7 +61,7 @@ import { ServiceAccountEntry } from './service-account-entry.ts';
 import ServiceAccountFields, {
   type ServiceAccountReplacing,
 } from './service-account-fields.gts';
-import { addressOf } from './workspace-dropdown.gts';
+import { addressOf } from './workspaces.ts';
 
 // What the page does for one slot.
 type SlotView =
@@ -163,7 +164,13 @@ class SlotPanel extends Component<{
         <h2 class='slot-name'>{{@view.slot}}</h2>
       {{/if}}
       {{#if @replaced}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p
             class='value'
             role='status'
@@ -172,9 +179,15 @@ class SlotPanel extends Component<{
             data-test-replace-key-replaced
           ><strong>{{this.keyName}}</strong>
             is replaced.</p>
-        </FieldContainer>
+        </Field>
       {{else if this.replacing}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='value'>
             <strong
               data-test-replace-key-name
@@ -209,7 +222,7 @@ class SlotPanel extends Component<{
               </span>
             {{/if}}
           </p>
-        </FieldContainer>
+        </Field>
         <form
           novalidate
           {{on 'submit' this.save}}
@@ -225,14 +238,14 @@ class SlotPanel extends Component<{
             <KeyFields @value={{this.form.value}} @onValue={{this.setValue}} />
           {{/if}}
           {{#if this.form.error}}
-            <div class='keys-error' role='alert' data-test-keys-error>
-              {{this.form.error}}
-            </div>
+            <Alert @tone='danger' role='alert'>
+              <span data-test-keys-error>{{this.form.error}}</span>
+            </Alert>
           {{/if}}
           <div class='slot-actions'>
             <Button
               type='submit'
-              @kind='primary'
+              @variant='primary'
               @disabled={{this.submitDisabled}}
               @loading={{this.form.saving}}
               data-test-replace-key-save
@@ -240,7 +253,13 @@ class SlotPanel extends Component<{
           </div>
         </form>
       {{else if this.reconnecting}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='value'>
             <strong
               data-test-replace-key-name
@@ -256,25 +275,37 @@ class SlotPanel extends Component<{
               </span>
             {{/if}}
           </p>
-        </FieldContainer>
+        </Field>
         <div class='slot-actions'>
           <Button
-            @kind='primary'
+            @variant='primary'
             {{on 'click' this.reconnect}}
             data-test-replace-key-reconnect
           >Reconnect</Button>
         </div>
       {{else if this.accepted}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='message' data-test-replace-key-accepted>
             <strong>{{this.accepted.key.name}}</strong>
             still works:
             {{this.serviceName}}
             accepts it, so there’s nothing to replace.
           </p>
-        </FieldContainer>
+        </Field>
       {{else if this.someoneElses}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='message' data-test-replace-key-not-yours>
             {{#if this.someoneElses.suspended}}
               The workspace’s key{{this.quotedLabel}}
@@ -302,9 +333,15 @@ class SlotPanel extends Component<{
               {{/if}}
             {{/if}}
           </p>
-        </FieldContainer>
+        </Field>
       {{else}}
-        <FieldContainer @tag='div' @label='Key in use' @icon={{KeyRound}}>
+        <Field
+          @reserveMessage={{false}}
+          @orientation='horizontal'
+          @labelTag='span'
+          @label='Key in use'
+          @icon={{KeyRound}}
+        >
           <p class='message' data-test-replace-key-unbound>
             {{#if this.unboundShared}}
               No key is shared into
@@ -315,7 +352,7 @@ class SlotPanel extends Component<{
               nothing to replace.
             {{/if}}
           </p>
-        </FieldContainer>
+        </Field>
       {{/if}}
     </section>
 
@@ -359,12 +396,6 @@ class SlotPanel extends Component<{
       .slot-actions {
         display: flex;
         justify-content: flex-end;
-      }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
       }
     </style>
   </template>

@@ -15,9 +15,9 @@ import type RealmServerService from '../services/realm-server';
 import type RecentFilesService from '../services/recent-files-service';
 
 // Creates a workspace (realm) owned by the current user, the same way the
-// "New Workspace" tile in the workspace chooser does: the realm is created on
-// the user's realm server and recorded in the user's realm list, so it shows
-// up in the chooser right away. Both the create-workspace tool and
+// dashboard's New Workspace button does: the realm is created on the user's
+// realm server and recorded in the user's realm list, so it shows up on the
+// dashboard right away. Both the create-workspace tool and
 // `realm.workspaces.create` in run-realm-code come through here.
 export async function createWorkspace(
   services: { matrixService: MatrixService; realm: RealmService },

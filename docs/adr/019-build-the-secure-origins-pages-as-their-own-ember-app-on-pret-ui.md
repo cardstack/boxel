@@ -98,6 +98,14 @@ lockfile pins, and the allowlist MAY name any of them:
   `ember-power-calendar-moment`, `ember-power-select`,
   `ember-resize-modifier`, `ember-sortable`, `ember-velcro`, `focus-trap`,
   `lodash-es`, `pluralize` and `tracked-built-ins`.
+- The packages the build reaches through those: `@embroider/macros`,
+  Embroider's run-time macros, which compiled addon code such as
+  `ember-provide-consume-context`'s calls into; `ember-truth-helpers` and
+  `ember-element-helper`, through `ember-basic-dropdown` and
+  `ember-power-select`; and `ember-style-modifier`, through
+  `ember-basic-dropdown`. `ember-style-modifier` sets style properties
+  through the CSSOM (`element.style.setProperty`), which the policy allows
+  (§1.5).
 
 Any other package, including a package the build reaches through one of these,
 MUST be added in a change reviewed for it, the change that first lets Pret UI
@@ -124,9 +132,13 @@ unchanged, with no `unsafe-inline` and no `unsafe-eval`. Templates MUST NOT
 bind or set a `style` attribute, and this includes every Pret UI and boxel-ui
 template the pages render. The package's template lint MUST enable
 `no-inline-styles` with `allowDynamicStyles: false`, and the package's lint
-MUST apply the same rule to each Pret UI module the package imports. Code that
-styles an element at run time MUST use the CSSOM
-(`element.style.setProperty`). Scoped CSS MUST be emitted as files. Entry
+MUST apply the same rule to each Pret UI module the package imports. That
+lint MUST also refuse, in each of those modules, code that creates a `<style>`
+element or sets a `style` attribute at run time. Code that styles an element
+at run time MUST use the CSSOM (`element.style.setProperty`). That rule binds
+code a page runs. Any other module MAY ship code that creates a `<style>`
+element or sets a `style` attribute at run time when no page runs that code,
+and the build record marks it (§1.8). Scoped CSS MUST be emitted as files. Entry
 documents MUST hold no inline script or style. A test MUST load each built
 page under the policy and fail on any `securitypolicyviolation` event. The
 secure origin MUST NOT be served by a development server that injects styles
@@ -169,6 +181,17 @@ Ember, to an allowed package, or to a Pret UI or boxel-ui module the origin
 ships shows, in
 the pull request that makes it, exactly what changes on the origin.
 
+The record MUST also mark each module whose code in the build output creates
+a `<style>` element or sets a `style` attribute through a DOM call that names
+it (`createElement`, `setAttribute` and their namespaced forms, in any case),
+and each build's copy of a module separately. A name the code computes, or
+markup written as a string, isn't marked. When a mark changes, the failure
+MUST name that module and §1.5 before anything else. The policy test loads
+each page but can't take every path a page can, so the mark is what shows a
+reviewer a shipped module that could break a page under the policy. The build
+probe MUST ship one such module that nothing runs, so the record always holds
+a mark and the check fails when marking stops working.
+
 ### 1.9. One implementation of the sign-in screens
 
 The host SHOULD render its own sign-in, registration and password-reset
@@ -194,8 +217,8 @@ boxel-icons (`@cardstack/boxel-icons`), as ADR 009 §1.3 sets out. Where Pret
 UI's counterpart can't ship yet, the package MAY keep its own, and the fix
 SHOULD be made in Pret UI so the package's copy can go. The usual reasons a
 Pret UI module can't ship are a bound `style` attribute in its template or in
-a boxel-ui component it renders, a `<style>` element added at run time or
-left unscoped, and an import of the base realm.
+a boxel-ui component it renders, a `<style>` element left unscoped, or one
+added at run time (§1.5), and an import of the base realm.
 
 ## 2. Rationale
 
@@ -234,11 +257,12 @@ above, for Pret UI and for the boxel-ui it brings:
 - **Size.** Pret UI exports each component from its own module, with no
   index to pull in, so the bundle holds only the Pret UI modules a page
   imports. Pret UI's wrappers of boxel-ui components import boxel-ui's
-  `components` index, though, and boxel-ui declares no `sideEffects`, so the
-  first such wrapper a page uses can bring much of boxel-ui and its
-  dependencies with it: ADR 008 measured 1,265 KB through those index
-  modules. That cost is accepted. The build record shows it (§1.8), and it
-  shrinks as ADR 009 §1.6 moves Pret UI off boxel-ui.
+  `components` index, and boxel-ui declares only its stylesheets and its
+  own tests as side effects, so a wrapper brings the boxel-ui component it
+  wraps and that component's imports, not the whole index. ADR 008 measured
+  1,265 KB through those index modules without that declaration. The build
+  record shows what each page ships (§1.8), and it shrinks further as
+  ADR 009 §1.6 moves Pret UI off boxel-ui.
 - **Style attributes.** boxel-ui's LoadingIndicator and BoxelIcon set
   `style` attributes the policy refuses, and so do about 130 of the modules
   in Pret UI's `components/`. So §1.5 holds for every Pret UI and boxel-ui

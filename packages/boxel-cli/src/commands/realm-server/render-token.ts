@@ -3,6 +3,10 @@ import { closeSync, constants, fchmodSync, openSync, writeSync } from 'fs';
 import { cliLog } from '../../lib/cli-log.ts';
 import { FG_GREEN, RESET } from '../../lib/colors.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import {
+  resolveRealmIdentifier,
+  type ResolveRealmIdentifierOptions,
+} from '../../lib/resolve-realm-identifier.ts';
 import { operatorRequest } from '../../lib/seed-auth.ts';
 
 // `boxel realm-server render-token`: a diagnostic session for rendering one
@@ -70,6 +74,35 @@ export function buildRenderURL(
   let options = { cardRender: true, ...(clearCache ? { clearCache } : {}) };
   let host = hostURL.endsWith('/') ? hostURL : `${hostURL}/`;
   return `${host}render/${encodeURIComponent(cardFile)}/1/${encodeURIComponent(JSON.stringify(options))}/html/${format}/0`;
+}
+
+// The card URL to ask about and the realm server to ask. A card in prefix
+// form (`@cardstack/catalog/…`) resolves on the network of `--realm-server`
+// when it is given, else of the configured realm server, since the server
+// takes card URLs. With no `--realm-server`, the server is the card URL's
+// origin.
+export async function renderTokenTarget(
+  card: string,
+  realmServer: string | undefined,
+  resolveOptions: Omit<ResolveRealmIdentifierOptions, 'realmServerUrl'> = {},
+): Promise<{ card: string; realmServerUrl: string }> {
+  let resolved = await resolveRealmIdentifier(card, {
+    ...resolveOptions,
+    realmServerUrl: realmServer,
+  });
+  if (!resolved.ok) {
+    throw new Error(resolved.error);
+  }
+  let cardURL: URL;
+  try {
+    cardURL = new URL(resolved.url);
+  } catch {
+    throw new Error(`Not a card URL or realm identifier: ${card}`);
+  }
+  return {
+    card: resolved.url,
+    realmServerUrl: realmServer ?? cardURL.origin,
+  };
 }
 
 export async function mintRenderToken(
@@ -156,7 +189,10 @@ export function registerRenderTokenCommand(realmServer: Command): void {
     .description(
       "Issue a read-only diagnostic session for rendering a live card in a browser as the indexer does, and write it with the card's render URL to a file",
     )
-    .argument('<card-url>', 'The card to render')
+    .argument(
+      '<card-url>',
+      'The card to render, as a URL or in prefix form (@cardstack/<realm>/…)',
+    )
     .requiredOption(
       '--note <text>',
       'Who is asking and why, at most 300 characters. The server logs it with the mint and every use of the session. A name in it is recorded as given, not verified',
@@ -194,13 +230,14 @@ export function registerRenderTokenCommand(realmServer: Command): void {
         if (!realmSecretSeed) {
           throw new Error('A realm secret seed is required');
         }
+        let target = await renderTokenTarget(card, options.realmServer);
         let render = await mintRenderToken(
           {
-            realmServerUrl: options.realmServer ?? new URL(card).origin,
+            realmServerUrl: target.realmServerUrl,
             realmSecretSeed,
           },
           {
-            card,
+            card: target.card,
             note: options.note!,
             realmOnly: options.realmOnly,
             format: options.format,

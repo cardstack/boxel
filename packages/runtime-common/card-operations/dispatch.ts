@@ -55,6 +55,7 @@ import {
   type OperationRequest,
   type OperationSourceBody,
   type OperationTarget,
+  unresolvableAsUndefined,
 } from './types.ts';
 import {
   PRERENDERED_HTML_FORMATS,
@@ -240,13 +241,16 @@ export interface OperationStoredFile {
   // where the adapter can measure what it opened; `size` above is the stat
   // the handle opened with, which a write elsewhere can leave describing a
   // version of the file the stream does not read. The content returned is
-  // the stream `content` yields.
-  openContent?: () => {
-    content: OperationSourceBody;
-    size?: number;
-    // The opened content's modification time, in milliseconds.
-    lastModifiedMs?: number;
-  };
+  // the stream `content` yields. Undefined when the open finds the file gone,
+  // which the handle's stat can miss when another host deleted it.
+  openContent?: () =>
+    | {
+        content: OperationSourceBody;
+        size?: number;
+        // The opened content's modification time, in milliseconds.
+        lastModifiedMs?: number;
+      }
+    | undefined;
 }
 
 export interface OperationStoredFileMeta {
@@ -969,15 +973,23 @@ async function resolveAndGate(
   if (opts.builtInOnly && declared && scope.coarseDeclined !== 'none') {
     throw notPermitted(target, name);
   }
-  let decision = await gateOperation(
-    core,
-    gateSubject(target, typeChain),
-    name,
-    definition,
-    typeDefinition,
-    scope,
-    loaded,
-  );
+  // A refusal the gate's own reads raise is told as resolution's are: a
+  // definition that is not ready names the type a stored document adopts,
+  // which a caller the ACL declined may not learn.
+  let decision: Awaited<ReturnType<typeof gateOperation>>;
+  try {
+    decision = await gateOperation(
+      core,
+      gateSubject(target, typeChain),
+      name,
+      definition,
+      typeDefinition,
+      scope,
+      loaded,
+    );
+  } catch (e: unknown) {
+    throw refusal(e);
+  }
   if (
     decision.kind === GATE_REFUSED.kind ||
     decision.kind === GATE_MISSING.kind ||
@@ -1317,11 +1329,9 @@ export async function htmlDeclarationOf(
   let resolved = codeRef ? core.resolveCodeRef(codeRef, url) : undefined;
   let typeDefinition: Definition | undefined;
   if (resolved) {
-    try {
-      typeDefinition = await core.definitionLookup.lookupDefinition(resolved);
-    } catch {
-      typeDefinition = undefined;
-    }
+    typeDefinition = await unresolvableAsUndefined(() =>
+      core.definitionLookup.lookupDefinition(resolved),
+    );
   }
   if (!typeDefinition) {
     return {
@@ -1904,15 +1914,13 @@ async function definitionFor(
   if (!resolved) {
     return undefined;
   }
-  try {
+  return await unresolvableAsUndefined(async () => {
     if (target.kind === 'type') {
       return await core.definitionLookup.lookupDefinitionEntry(resolved);
     }
     let definition = await core.definitionLookup.lookupDefinition(resolved);
     return definition ? { definition } : undefined;
-  } catch {
-    return undefined;
-  }
+  });
 }
 
 // The type an operation on `target` resolves through, as the module and export

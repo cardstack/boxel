@@ -14,7 +14,11 @@ import {
 } from '../search-bounds.ts';
 import type { EntryCollectionDocument } from '../document-types.ts';
 import type { CardResource, Relationship } from '../resource-types.ts';
-import { OperationFailure, type EntryPosition } from './types.ts';
+import {
+  OperationFailure,
+  unresolvableAsUndefined,
+  type EntryPosition,
+} from './types.ts';
 import { settledWithin, STAGING_WIDTH } from './coordinator.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import { loadPolicy } from './gate.ts';
@@ -792,11 +796,9 @@ async function definitionOf(
   if (!resolved) {
     return undefined;
   }
-  try {
-    return await core.definitionLookup.lookupDefinition(resolved);
-  } catch {
-    return undefined;
-  }
+  return await unresolvableAsUndefined(() =>
+    core.definitionLookup.lookupDefinition(resolved),
+  );
 }
 
 // Whether this batch mints cards, as the envelope alone can tell.

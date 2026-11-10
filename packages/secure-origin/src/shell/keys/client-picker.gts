@@ -6,10 +6,11 @@
 import { fn } from '@ember/helper';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import FieldContainer from '../../components/field-container.gts';
-import Globe from '../../components/icons/globe.gts';
-import RadioTile from '../../components/radio-tile.gts';
-import { eq, gt } from '../../helpers/truth-helpers.ts';
+import { Field } from '@cardstack/pretui/components/field';
+import Globe from '@cardstack/boxel-icons/globe';
+import { RadioCard } from '@cardstack/pretui/components/radio-card';
+
+import { gt } from '@cardstack/pretui/helpers';
 
 import { scopesOf, type ConnectableClient } from './context.ts';
 
@@ -41,26 +42,44 @@ interface Signature {
   };
 }
 
+// The clients as tiles to choose between, each by its index, and the client a
+// tile stands for.
+const cardsOf = (clients: ConnectableClient[]) =>
+  clients.map(({ label }, index) => ({ value: String(index), title: label }));
+const clientOf = (clients: ConnectableClient[], index: string) =>
+  clients[Number(index)]!;
+// '' rather than undefined when no client is chosen, so the tiles stay
+// controlled: RadioCard takes an undefined @value as uncontrolled and would
+// keep a pick of its own.
+const selectedOf = (selected: number | undefined) =>
+  selected === undefined ? '' : String(selected);
+const chooseIndex = (onSelect: (index: number) => void, index: string) =>
+  onSelect(Number(index));
+
 const ClientPicker: TemplateOnlyComponent<Signature> = <template>
-  <FieldContainer
-    @tag='div'
+  <Field
+    @reserveMessage={{false}}
+    @orientation='horizontal'
+    @labelTag='span'
     @label='Sign in with'
     @icon={{Globe}}
     data-test-client-picker
+    as |_controlId _messageId labelId|
   >
-    <fieldset class='picker'>
-      <legend
-        class={{if (gt @clients.length 1) 'prompt' 'visually-hidden'}}
-      >Select an app</legend>
-      {{#each @clients as |client index|}}
-        <RadioTile
-          @name='client'
-          @value={{index}}
-          @checked={{eq @selected index}}
-          @onChange={{fn @onSelect index}}
-          data-test-client-choice={{client.label}}
-        >
-          <div class='tile'>
+    <div class='picker'>
+      {{#if (gt @clients.length 1)}}
+        <p class='prompt'>Select an app</p>
+      {{/if}}
+      <RadioCard
+        @name='client'
+        @options={{cardsOf @clients}}
+        @value={{selectedOf @selected}}
+        @onValueChange={{fn chooseIndex @onSelect}}
+        aria-labelledby={{labelId}}
+        as |card|
+      >
+        {{#let (clientOf @clients card.value) as |client|}}
+          <div class='tile' data-test-client-choice={{client.label}}>
             <div class='label' data-test-client-label>{{client.label}}</div>
             <div class='meta'>
               <span data-test-client-owner>{{clientOwner
@@ -87,37 +106,24 @@ const ClientPicker: TemplateOnlyComponent<Signature> = <template>
               {{/if}}
             {{/let}}
           </div>
-        </RadioTile>
-      {{/each}}
-    </fieldset>
-  </FieldContainer>
+        {{/let}}
+      </RadioCard>
+    </div>
+  </Field>
 
   <style scoped>
     .picker {
-      margin: 0;
-      padding: 0;
-      border: 0;
       display: grid;
       gap: var(--boxel-sp-xs);
       min-width: 0;
     }
     .prompt {
-      padding: 0;
-      margin-bottom: var(--boxel-sp-xs);
+      margin: 0;
       font-size: var(--boxel-font-size-sm);
       line-height: var(--boxel-line-height-sm);
       color: var(--muted-foreground);
     }
-    .visually-hidden {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
     .tile {
-      padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       overflow-wrap: anywhere;
     }
     .label {

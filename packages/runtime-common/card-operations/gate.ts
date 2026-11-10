@@ -55,6 +55,8 @@ import {
   type BaseOperation,
   type OperationDefinition,
   type OperationTarget,
+  isOperationFailure,
+  unresolvableAsUndefined,
 } from './types.ts';
 
 // ============================================================================
@@ -1147,12 +1149,9 @@ async function cardSourceSubject(
     return undefined;
   }
   policyGateStats(core).definitionLookups++;
-  let entry: { definition: Definition; types: string[] } | undefined;
-  try {
-    entry = await core.definitionLookup.lookupDefinitionEntry(type);
-  } catch {
-    return undefined;
-  }
+  let entry = await unresolvableAsUndefined(() =>
+    core.definitionLookup.lookupDefinitionEntry(type),
+  );
   return entry
     ? {
         kind: 'card',
@@ -1175,11 +1174,11 @@ async function fileAdoptionChain(
     return undefined;
   }
   policyGateStats(core).definitionLookups++;
-  try {
-    return (await core.definitionLookup.lookupDefinitionEntry(resolved))?.types;
-  } catch {
-    return undefined;
-  }
+  return (
+    await unresolvableAsUndefined(() =>
+      core.definitionLookup.lookupDefinitionEntry(resolved),
+    )
+  )?.types;
 }
 
 // What a read's predicate is evaluated against.
@@ -1308,7 +1307,12 @@ export async function dischargePendingDecision(
     if (notes) {
       recordLockDecision(core, pending, notes, started, { failed: e });
     }
-    throw e;
+    // A refusal the lock's reads raise names the type the stored bytes adopt,
+    // which a caller the ACL declined may not learn, so such a caller is told
+    // it as not permitted.
+    throw scope.coarseDeclined === 'all' && isOperationFailure(e)
+      ? notPermitted(pending.target, pending.name)
+      : e;
   }
   if (notes) {
     recordLockDecision(core, pending, notes, started, { decision: admission });
@@ -1829,7 +1833,12 @@ async function readNonGrantableInChain(
   let answers = await Promise.all(
     types.slice(from).map(async (_key, offset) => {
       let type = await chainType(types, from + offset, read).catch(
-        () => undefined,
+        (e: unknown) => {
+          if (isOperationFailure(e)) {
+            throw e;
+          }
+          return undefined;
+        },
       );
       if (!type) {
         return 'unreadable' as const;
@@ -1956,11 +1965,11 @@ async function recordedChain(
   core: OperationCore,
   type: ResolvedCodeRef,
 ): Promise<string[] | undefined> {
-  try {
-    return (await core.definitionLookup.lookupDefinitionEntry(type))?.types;
-  } catch {
-    return undefined;
-  }
+  return (
+    await unresolvableAsUndefined(() =>
+      core.definitionLookup.lookupDefinitionEntry(type),
+    )
+  )?.types;
 }
 
 // Whether the realm ACL declined this invocation. A caller declined only
@@ -2363,11 +2372,9 @@ async function containedDefinition(
   if (!resolved) {
     return undefined;
   }
-  try {
-    return await core.definitionLookup.lookupDefinition(resolved);
-  } catch {
-    return undefined;
-  }
+  return await unresolvableAsUndefined(() =>
+    core.definitionLookup.lookupDefinition(resolved),
+  );
 }
 
 function ownField(
@@ -2471,12 +2478,9 @@ async function mintedSubject(
   if (!url || !resource || !type) {
     return undefined;
   }
-  let definition: Definition | undefined;
-  try {
-    definition = await core.definitionLookup.lookupDefinition(type);
-  } catch {
-    return undefined;
-  }
+  let definition = await unresolvableAsUndefined(() =>
+    core.definitionLookup.lookupDefinition(type),
+  );
   let project = await projector(core, definition, {
     relativeTo: url,
     linksRelativeTo: new URL(`${url.href}.json`),
@@ -2525,7 +2529,10 @@ async function projector(
         resolveReference: (reference) =>
           policy.resolvedLink(reference, at.linksRelativeTo),
       });
-  } catch {
+  } catch (err: unknown) {
+    if (isOperationFailure(err)) {
+      throw err;
+    }
     return undefined;
   }
 }
