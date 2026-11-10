@@ -1,8 +1,9 @@
 ---
-status: accepted
+status: proposed
 date: 2026-11-10
 scope:
   - packages/host/app/lib/realm-runner/transform*
+  - packages/host/app/tools/run-realm-code.ts
 ---
 
 # 031. Evaluate a script's BXL in a worker beside QuickJS, under the transform profile
@@ -20,7 +21,7 @@ every call.
 
 A `realm.transform` program MUST run in a transform worker, outside QuickJS,
 in the same browser or tab as the script that called it. It MUST NOT run
-inside QuickJS, and it MUST NOT run on a server.
+inside QuickJS, and it MUST NOT run on the realm server.
 
 ### 1.2. One worker per run
 
@@ -42,8 +43,9 @@ Each call MUST be bounded by a cap on the program's size, a cap on its input
 and params together, and a cap on its output. BXL's runtime limits MUST be
 set explicitly, never left at BXL's defaults. Each call MUST have a
 wall-clock limit, past which the host ends the worker. The next call then
-starts a new one. An interactive run MUST also bound its transforms per run
-(ADR 022 §1.6). An automation run's time limit bounds its transforms.
+starts a new one. Every run MUST bound the bytes its transforms move in and
+out (ADR 022 §1.6). An interactive run MUST also bound its number of
+transforms. An automation run's time limit bounds that number instead.
 
 ## 2. Rationale
 
@@ -66,8 +68,9 @@ regular-expression match, which can backtrack for a long time inside one
 step, and ADR 015 §3 rejected authored regular expressions on the server for
 that reason. Here a program may carry an authored pattern, so the
 wall-clock limit that ends the worker is what bounds it. BXL's default step
-limit would refuse an ordinary map over a few thousand objects, so the limits
-are set to the ones the tool advertises.
+limit would refuse an ordinary map over a few thousand objects, so the step
+limit is set high, and the advertised time and size limits are the ones a
+program meets.
 
 ## 3. Considered options
 
@@ -82,3 +85,7 @@ are set to the ones the tool advertises.
   transforms two sets of rules.
 - **A worker per call.** Every call pays the worker's start-up and BXL's
   load.
+
+## 4. Remediation
+
+Known gaps are listed in [remediation/031.md](remediation/031.md).

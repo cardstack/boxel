@@ -37,4 +37,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [020](020-run-every-launched-browser-with-its-sandbox-on-and-a-current-chrome.md)               | Run every launched browser with its sandbox on, on a current Chrome                       | proposed   |
 | [021](021-run-boxels-oauth-provider-in-the-realm-server-with-opaque-resource-bound-tokens.md)   | Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource  | proposed   |
 | [022](022-do-the-assistants-workspace-work-in-one-sandboxed-script.md)                          | Do the assistant's workspace work in one sandboxed script                                 | proposed   |
-| [031](031-evaluate-a-scripts-bxl-in-a-worker-beside-quickjs-under-the-transform-profile.md)     | Evaluate a script's BXL in a worker beside QuickJS, under the transform profile           | accepted   |
+| [031](031-evaluate-a-scripts-bxl-in-a-worker-beside-quickjs-under-the-transform-profile.md)     | Evaluate a script's BXL in a worker beside QuickJS, under the transform profile           | proposed   |
