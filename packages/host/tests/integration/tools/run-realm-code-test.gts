@@ -5412,6 +5412,89 @@ return 1;`);
     );
   });
 
+  test('realm.transform reshapes JSON with a jq-spelled BXL program and its params', async function (assert) {
+    let result = await run(`
+const posts = [
+  { title: 'A', points: 10, url: 'https://a.example' },
+  { title: 'B', points: 40, url: 'https://b.example' },
+  { title: 'B again', points: 25, url: 'https://b.example' },
+];
+const top = await realm.transform(
+  posts,
+  'group_by(.url) | map(max_by(.points)) | sort_by(-.points) | .[0:params("keep")] | map({title, score: ROUND(.points / 3; 1)})',
+  { params: { keep: 1 } },
+);
+const lines = await realm.transform(
+  { site: 'North', punches: [{ staffId: 's1' }, { staffId: 's2' }] },
+  '.site as $s | .punches | map({staffId, site: $s} | tojson)',
+);
+const phrase = await realm.transform(
+  { productName: 'Linen overshirt', productDescription: 'Light and loose. Made in Portugal.' },
+  '.productName + " " + (.productDescription | split(". ")[0])',
+);
+return { top, lines, phrase };`);
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      top: [{ title: 'B', score: 13.3 }],
+      lines: [
+        '{"staffId":"s1","site":"North"}',
+        '{"staffId":"s2","site":"North"}',
+      ],
+      phrase: 'Linen overshirt Light and loose',
+    });
+  });
+
+  test('realm.transform refuses what the transform profile bans, and a bad call, with the reason', async function (assert) {
+    let result = await run(`
+const reasons = [];
+for (const [input, source, options] of [
+  [[1, 2], 'reduce .[] as $x (0; . + $x)'],
+  [{}, '.a |'],
+  [{}, '.', { spelling: 'yaml' }],
+  [{}, '.', { schema: {} }],
+  [{}, '.[] '],
+]) {
+  try {
+    await realm.transform(input, source, options);
+    reasons.push('ran');
+  } catch (e) {
+    reasons.push(e.message);
+  }
+}
+return reasons;`);
+
+    let [loop, parse, spelling, option, many] = JSON.parse(
+      result.scriptResult!,
+    ) as string[];
+    assert.true(
+      loop.includes('transform-loop-banned'),
+      `a loop is refused with its code: ${loop}`,
+    );
+    assert.true(
+      parse.startsWith('realm.transform: the program does not parse'),
+      `a program that does not parse says so: ${parse}`,
+    );
+    assert.true(
+      spelling.includes('"jq" (the default) or "readable"'),
+      `an unknown spelling names the ones there are: ${spelling}`,
+    );
+    assert.true(
+      option.includes('schema is not one'),
+      `an unknown option is named: ${option}`,
+    );
+    assert.true(
+      many.includes('produces one value'),
+      `a program with several values is refused: ${many}`,
+    );
+  });
+
+  test('realm.transform refuses input over its size limit', async function (assert) {
+    await assert.rejects(
+      run(`await realm.transform('x'.repeat(1_100_000), '.');`),
+      /realm.transform takes at most 1000000 bytes of input/,
+    );
+  });
+
   // Auto-fix answers come from the same proxy. `fix` turns the code the
   // runner sent into the code the model answers with.
   function answerFixes(fix: (code: string) => string) {

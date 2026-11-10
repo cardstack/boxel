@@ -103,6 +103,10 @@ import runRealmCode, {
   DeadlineExtension,
   RealmScriptError,
 } from '../lib/realm-runner/runner';
+import {
+  RealmTransformer,
+  transformRequest,
+} from '../lib/realm-runner/transform';
 import { STOPPED_BY_USER } from '../lib/realm-runner/types';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { loadSkillSource } from '../lib/skill-tools';
@@ -497,6 +501,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'web.search': false,
   'web.read': false,
   resolve: false,
+  transform: false,
   activity: false,
   plan: false,
   ask: false,
@@ -649,6 +654,8 @@ class RealmFsSession {
   // Aborted when the run ends, so a workspace create or an image request
   // still in flight stops holding up the report.
   private inFlight = new AbortController();
+  // Runs realm.transform programs, in a worker started on the first one.
+  private transformer = new RealmTransformer();
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
   // has reported.
@@ -738,6 +745,7 @@ class RealmFsSession {
   close() {
     this.closed = true;
     this.captures.close();
+    this.transformer.close();
     this.inFlight.abort();
     // Calls waiting for a research slot wake and are refused.
     for (let wake of this.researchWaiters.splice(0)) {
@@ -1551,6 +1559,10 @@ class RealmFsSession {
       case 'web.read':
       case 'resolve':
         return await this.researchCall(method, args);
+      case 'transform':
+        return await this.transformer.run(
+          transformRequest(args[0], args[1], args[2]),
+        );
       case 'activity':
         return this.reportActivity(args[0]);
       case 'plan':
@@ -2803,6 +2815,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'with realm.web.read (Firecrawl; throws with the reason a page cannot ' +
     'be read), can repair or normalize data into a JSON schema with ' +
     'realm.resolve (at most 3 calls per run; it refuses requests for code), ' +
+    'can reshape JSON with a BXL program with realm.transform(input, ' +
+    'program, { params?, spelling? }) (jq spelling by default, with Excel ' +
+    'functions taking ; between arguments, such as map({name, total: ' +
+    'ROUND(.price * .qty; 2)}); spelling "readable" for readable BXL; ' +
+    'params("name") reads a value from params; one value out; no reduce, ' +
+    'def, try or @formats; 1 MB in and out), ' +
     'can ask the user a question mid-script and wait for the pick with ' +
     'realm.ask({ question, options: [{ label, value?, detail?, confidence? }], kind?, allowOther? }) ' +
     '(kind "recommend" proposes the first option, with its detail as the reason), ' +

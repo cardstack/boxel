@@ -114,6 +114,8 @@ const BOOTSTRAP = `
         read: (url, options) => call('web.read', [url, options ?? {}]),
       }),
       resolve: (request) => call('resolve', [request ?? {}]),
+      transform: (input, source, options) =>
+        call('transform', [input ?? null, source, options ?? {}]),
       activity: (details) => call('activity', [details ?? {}]),
       plan: (steps) => call('plan', [steps]),
       ask: (request) => call('ask', [request ?? {}]),
@@ -199,6 +201,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'web.search',
   'web.read',
   'resolve',
+  'transform',
   'activity',
   'plan',
   'ask',
