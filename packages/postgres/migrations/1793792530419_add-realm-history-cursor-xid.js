@@ -5,8 +5,9 @@
 // files of one realm overlap too, so a realm's events arrive in the same
 // order, and its cursor in `realm_history_state` is the pair
 // `(cursor_xid, cursor_seq)` of the last event recorded rather than a `seq`
-// alone. A cursor already past the start takes its event's `xid`; left at 0,
-// it would sit below every event and have the realm's history recorded again.
+// alone. Every existing row takes the starting cursor `(0, 0)`: a cursor
+// moves only when realm-historian records an event, which writes both
+// columns.
 
 exports.up = (pgm) => {
   pgm.sql(`
@@ -16,12 +17,6 @@ exports.up = (pgm) => {
   pgm.sql(`
     ALTER TABLE realm_history_state
       ADD COLUMN IF NOT EXISTS cursor_xid xid8 NOT NULL DEFAULT '0'
-  `);
-  pgm.sql(`
-    UPDATE realm_history_state state
-    SET cursor_xid = event.xid
-    FROM realm_change_events event
-    WHERE event.seq = state.cursor_seq AND state.cursor_seq > 0
   `);
 };
 
