@@ -440,6 +440,21 @@ Current date and time: 2025-06-11T11:43:00.533Z
       );
     });
 
+    test('names a policy too large to list, and points at its card', async () => {
+      let context = await contextFor({ card: POLICY, tooLarge: true });
+
+      assert.true(
+        context.includes(
+          `its policy, ${POLICY}, grants them operations here: more than the context can list. Read that card to see which.`,
+        ),
+        'the policy is named, with the card to read for its grants',
+      );
+      assert.false(
+        context.includes('edits to its cards and files will be rejected'),
+        'the workspace is not described as refusing every change',
+      );
+    });
+
     test('says a policy may grant operations to a user the realm admits only through it', async () => {
       let context = await contextFor(undefined, { canRead: false });
 

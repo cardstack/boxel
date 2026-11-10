@@ -89,6 +89,13 @@ import type {
   RealmPolicyForContext,
 } from '@cardstack/base/matrix-event';
 
+// The most a realm policy's rules may take in the AI context, serialized. The
+// context rides inline in every message and tool-result event sent from the
+// realm, and Matrix refuses an event past its size limit, so a policy whose
+// rules would crowd an event is named without them. A policy of a dozen
+// grants takes about 1 KB.
+const MAX_REALM_POLICY_RULES_BYTES = 8 * 1024;
+
 // The fields the AI context reads from a realm's config card and from the
 // policy card it names, a `RealmPolicy`, whose definition is in the catalog.
 type RealmConfigCard = CardDef & { policy?: string | null };
@@ -1911,6 +1918,12 @@ export default class OperatorModeStateService extends Service {
       if (grants.length > 0) {
         rules.push({ targetType, grants });
       }
+    }
+    if (
+      new TextEncoder().encode(JSON.stringify(rules)).length >
+      MAX_REALM_POLICY_RULES_BYTES
+    ) {
+      return { card, tooLarge: true };
     }
     return { card, rules };
   }

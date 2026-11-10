@@ -179,10 +179,13 @@ module('Integration | a realm that checks permissions', function (hooks) {
   async function setupSchool({
     enforcePermissions,
     readableByTestUser,
+    policy = classroomPolicy,
   }: {
     enforcePermissions?: true;
     // Gives the test user read on the school realm, and nothing more.
     readableByTestUser?: true;
+    // The policy card the school names.
+    policy?: LooseSingleCardDocument;
   }): Promise<TestRealmAdapter> {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -209,7 +212,7 @@ module('Integration | a realm that checks permissions', function (hooks) {
         }),
         'classrooms/room-204.json': classroom('Room 204', [TEST_USER]),
         'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
-        'policies/classrooms.json': classroomPolicy,
+        'policies/classrooms.json': policy,
       },
     });
     // Imported through the loader the realm's instances were built by, since
@@ -315,6 +318,46 @@ module('Integration | a realm that checks permissions', function (hooks) {
         ],
       },
       'the context carries the rules of the policy the school names',
+    );
+  });
+
+  test('the AI context names a policy whose rules are too large to carry, without them', async function (assert) {
+    // About 12 KB of grants, past what the context carries inline.
+    let grants = Array.from({ length: 200 }, () => ({
+      operation: 'rename',
+      where: TEACHES,
+    }));
+    await setupSchool({
+      enforcePermissions: true,
+      readableByTestUser: true,
+      policy: {
+        data: {
+          ...classroomPolicy.data,
+          attributes: {
+            cardInfo: { name: 'Classrooms' },
+            rules: [
+              {
+                targetType: {
+                  module: `${DEFINITIONS}classroom`,
+                  name: 'Classroom',
+                },
+                grants,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    let context = await operatorModeState.getSummaryForAIBot();
+    assert.deepEqual(
+      context.realmPolicy,
+      { card: rri(`${SCHOOL}policies/classrooms`), tooLarge: true },
+      'the policy is named, and its rules are left out',
     );
   });
 

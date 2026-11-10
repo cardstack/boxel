@@ -3586,6 +3586,9 @@ function readOnlyWorkspaceNote(
   if (!policy && canRead !== false) {
     return `This workspace is read-only for the user: edits to its cards and files will be rejected.\n`;
   }
+  if (policy?.tooLarge) {
+    return `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them operations here: more than the context can list. Read that card to see which. ${OFFER_GRANTED_OPERATIONS} The realm refuses an operation the policy doesn't grant when it runs.\n`;
+  }
   if (!policy?.rules) {
     let named = policy ? `, ${policy.card},` : '';
     return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the user can't read it, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS} The realm refuses an operation the policy doesn't grant when it runs.\n`;

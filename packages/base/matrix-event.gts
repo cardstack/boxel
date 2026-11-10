@@ -200,11 +200,14 @@ export interface BoxelErrorForContext {
 // what any one call will be allowed.
 export interface RealmPolicyForContext {
   card: RealmResourceIdentifier;
-  // Absent when the user can't read the policy card.
+  // Absent when the user can't read the policy card, or when `tooLarge` is set.
   rules?: {
     targetType: ResolvedCodeRef;
     grants: { operation: string; where?: string }[];
   }[];
+  // Set in place of `rules` when they are too large to carry: the context
+  // rides inline in every message and tool-result event sent from the realm.
+  tooLarge?: true;
 }
 
 export interface BoxelContext {
