@@ -17,6 +17,7 @@ import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '@cardstack/boxel-icons/tag';
 import { Input } from '@cardstack/pretui/components/input';
 import { Textarea } from '@cardstack/pretui/components/textarea';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 
 import { fitContent } from '../../modifiers/fit-content.ts';
 
@@ -120,6 +121,7 @@ export default class ServiceAccountFields extends Component<Signature> {
           @onInput={{this.setSubject}}
           name='service-account-subject'
           data-test-service-account-subject
+          {{ignoredByPasswordManagers}}
         />
         <p class='hint'>Only for a service account with domain-wide delegation.
           Leave it empty to act as the service account itself.</p>
@@ -143,6 +145,7 @@ export default class ServiceAccountFields extends Component<Signature> {
           name='service-account-scopes'
           spellcheck='false'
           data-test-service-account-scopes
+          {{ignoredByPasswordManagers}}
           {{fitContent @entry.scopes}}
         />
         <p class='hint'>What its tokens may do, one per line, or separated by

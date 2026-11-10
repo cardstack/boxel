@@ -38,6 +38,7 @@ import { Alert } from '@cardstack/pretui/components/alert';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '@cardstack/boxel-icons/tag';
 import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { navigation } from '../navigation.js';
 import {
   addressAbove,
@@ -100,7 +101,12 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
         @onRetry={{this.load}}
       />
     {{else if this.choosing}}
-      <form novalidate {{on 'submit' this.connect}} data-test-connect-form>
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.connect}}
+        data-test-connect-form
+      >
         <EditPage @heading={{this.heading}} data-test-connect>
           <:intro>You sign in on the site itself, in this window. Boxel keeps
             the sign-in encrypted, and cards can use it only for the requests
@@ -149,6 +155,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
                     @onInput={{this.setName}}
                     name='connection-name'
                     data-test-connect-name
+                    {{ignoredByPasswordManagers}}
                   />
                 </Field>
               {{/unless}}

@@ -14,6 +14,7 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import { Button } from '@cardstack/pretui/components/button';
 import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import type {
   KeyLimitChanges,
   KeyLimitName,
@@ -162,6 +163,7 @@ export default class LimitsForm extends Component<Signature> {
     <form
       class='limits'
       novalidate
+      data-form-type='other'
       {{on 'submit' this.save}}
       data-test-key-limits-form
     >
@@ -179,6 +181,7 @@ export default class LimitsForm extends Component<Signature> {
                 @describedBy='{{field.hintId}} {{field.noteId}}'
                 inputmode={{if field.whole 'numeric' 'decimal'}}
                 data-test-key-limit-input={{field.name}}
+                {{ignoredByPasswordManagers}}
               />
               <span class='hint' id={{field.hintId}}>{{field.hint}}</span>
               <span

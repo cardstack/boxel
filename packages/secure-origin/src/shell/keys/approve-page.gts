@@ -95,6 +95,7 @@ import { Field } from '@cardstack/pretui/components/field';
 import { Alert } from '@cardstack/pretui/components/alert';
 import Globe from '@cardstack/boxel-icons/globe';
 import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import { eq, gt } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
@@ -276,7 +277,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         {{/if}}
       </DonePage>
     {{else if this.choosing}}
-      <form novalidate {{on 'submit' this.save}} data-test-approve-form>
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.save}}
+        data-test-approve-form
+      >
         <EditPage @heading={{this.heading}} data-test-approve>
           <:intro>
             {{#if @review}}
@@ -592,6 +598,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     inputmode='numeric'
                     aria-labelledby={{labelId}}
                     data-test-approve-budget-input
+                    {{ignoredByPasswordManagers}}
                   />
                   <span
                     id='budget-note-{{share.id}}'

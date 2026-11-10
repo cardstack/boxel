@@ -51,6 +51,7 @@ import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import Tag from '@cardstack/boxel-icons/tag';
 import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
@@ -137,7 +138,12 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         {{/if}}
       </DonePage>
     {{else if this.choosing}}
-      <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.save}}
+        data-test-share-key-form
+      >
         <EditPage @heading={{this.title}} data-test-share-key>
           <:intro>
             {{#if this.forAnyone}}
@@ -230,6 +236,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                   @onInput={{this.setLabel}}
                   name='share-label'
                   data-test-share-label
+                  {{ignoredByPasswordManagers}}
                 />
               </Field>
             </KeyAudience>

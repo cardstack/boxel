@@ -22,6 +22,7 @@ import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import { Input } from '@cardstack/pretui/components/input';
 import { Textarea } from '@cardstack/pretui/components/textarea';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 
 import { readConfig } from '../../security/session.js';
 
@@ -127,6 +128,7 @@ export default class OAuthClientFields extends Component<Signature> {
             name='authorize-url'
             spellcheck='false'
             data-test-oauth-authorize-url
+            {{ignoredByPasswordManagers}}
           />
           <span class='hint'>The address of the site’s page where people sign
             in. The site’s developer documentation calls it the authorization
@@ -154,6 +156,7 @@ export default class OAuthClientFields extends Component<Signature> {
           name='token-url'
           spellcheck='false'
           data-test-oauth-token-url
+          {{ignoredByPasswordManagers}}
         />
         <span class='hint'>Where Boxel collects access once someone signs in.
           The documentation calls it the token URL.</span>
@@ -178,6 +181,7 @@ export default class OAuthClientFields extends Component<Signature> {
           name='scopes'
           spellcheck='false'
           data-test-oauth-scopes
+          {{ignoredByPasswordManagers}}
         />
         <span class='hint'>What the app asks to do, in the site’s own words (its
           documentation calls them scopes), separated by spaces. Leave this
@@ -203,6 +207,7 @@ export default class OAuthClientFields extends Component<Signature> {
             autocomplete='off'
             spellcheck='false'
             data-test-oauth-api-hosts
+            {{ignoredByPasswordManagers}}
           />
         </div>
         <span class='hint'>The addresses of the site’s API this app is for, one
