@@ -36,4 +36,5 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [019](019-build-the-secure-origins-pages-as-their-own-ember-app-on-pret-ui.md)                  | Build the secure origin's pages as their own Ember app, on Pret UI                        | proposed   |
 | [020](020-run-every-launched-browser-with-its-sandbox-on-and-a-current-chrome.md)               | Run every launched browser with its sandbox on, on a current Chrome                       | proposed   |
 | [021](021-run-boxels-oauth-provider-in-the-realm-server-with-opaque-resource-bound-tokens.md)   | Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource  | proposed   |
-| [022](022-search-by-vector-and-rank-fusion-in-the-realms-own-index.md)                          | Search by vector and rank fusion in the realm's own index                                 | proposed   |
+| [022](022-do-the-assistants-workspace-work-in-one-sandboxed-script.md)                          | Do the assistant's workspace work in one sandboxed script                                 | proposed   |
+| [023](023-search-by-vector-and-rank-fusion-in-the-realms-own-index.md)                          | Search by vector and rank fusion in the realm's own index                                 | proposed   |

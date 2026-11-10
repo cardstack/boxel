@@ -15,7 +15,7 @@ scope:
   - packages/realm-server/tests/scripts/test-pg-config.sh
 ---
 
-# 022. Search by vector and rank fusion in the realm's own index
+# 023. Search by vector and rank fusion in the realm's own index
 
 A card can carry embeddings in a `VectorField`. A realm search can filter on
 them (`near`), sort by them (a `near` sort), and fuse several rankings into one
@@ -124,4 +124,4 @@ image keeps working without vectors until it is recreated.
 
 ## 7. Remediation
 
-Known gaps are listed in [remediation/022.md](remediation/022.md).
+Known gaps are listed in [remediation/023.md](remediation/023.md).
