@@ -9,6 +9,10 @@
     {
       "path": "fields/policy-predicate/policy-predicate.gts",
       "reason": "PolicyPredicateField: the BXL `where` condition on an OperationGrant"
+    },
+    {
+      "path": "automation/automation.gts",
+      "reason": "Automation: the automation definition the server reads from the index as data (its script, triggers, callApi operations, caps, params, milestones and batchedAI)"
     }
   ],
   "tests": {
@@ -20,6 +24,7 @@
     ],
     "realmServer": [
       "anonymous-key-use-test",
+      "automation-card-test",
       "catalog-test-subset-test",
       "direct-writer-queries-test",
       "policy-share-audit-test",
