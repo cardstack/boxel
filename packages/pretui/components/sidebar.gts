@@ -389,6 +389,18 @@ export class Sidebar extends Component<SidebarSignature> {
   get showResize(): boolean {
     return Boolean(this.args.resizable) && !this.mobile && !this.collapsed;
   }
+  /** At the end with the content scrolling, the content's scrollbar runs
+   * along the seam, so the seam control's hit lane is kept inside the rail
+   * rather than reaching over the scrollbar. A folded offcanvas rail has no
+   * width to hold one. */
+  get seamLane(): boolean {
+    return (
+      this.placement === 'end' &&
+      this.scroll === 'content' &&
+      (this.showResize || this.showHandle) &&
+      !(this.collapsed && this.collapsible === 'offcanvas')
+    );
+  }
   get resizePlacement(): 'start' | 'end' {
     return this.placement === 'end' ? 'start' : 'end';
   }
@@ -442,12 +454,20 @@ export class Sidebar extends Component<SidebarSignature> {
       ? undefined
       : this.clampWidth(this.dragWidth);
   }
+  /** Until the seam moves, the caller's `@width` renders in its own unit (a
+   * rem width follows the root font size); only a width the bounds clamp
+   * becomes px. */
   get width(): string | undefined {
     if (!this.args.resizable) {
       return this.args.width;
     }
-    let px = this.seamSize ?? this.clampedWidth;
-    return px === undefined ? this.args.width : px + 'px';
+    if (this.seamSize !== undefined) {
+      return this.seamSize + 'px';
+    }
+    let px = this.clampedWidth;
+    return px === undefined || px === resolveLength(this.defaultWidth)
+      ? this.args.width
+      : px + 'px';
   }
   get style() {
     return cssStyleFrom([
@@ -667,6 +687,7 @@ export class Sidebar extends Component<SidebarSignature> {
       data-mobile={{if this.mobile 'true' 'false'}}
       data-bordered={{if @bordered 'true' 'false'}}
       data-scroll={{this.scroll}}
+      data-seam-lane={{if this.seamLane 'true'}}
       data-test-pretui-sidebar
       {{restoresOpen @persistKey this.restore this.restoreWidth}}
       {{measuresPane
@@ -818,6 +839,15 @@ export class Sidebar extends Component<SidebarSignature> {
     </div>
 
     <style scoped>
+      /* How open the rail is, 0 to 1. Registered so it interpolates: folding
+         and opening slide it, while a width set from the seam changes the
+         track at once (ADR 007 §1.5) with no state kept for the animation.
+         Unregistered (an older browser), every change is instant. */
+      @property --_pretui-sidebar-open {
+        syntax: '<number>';
+        inherits: false;
+        initial-value: 1;
+      }
       @layer PretComponent {
         /* One grid, not a viewport-pinned panel plus an in-flow ghost spacer.
            shadcn needs the ghost because its rail is pinned to the VIEWPORT and
@@ -828,9 +858,23 @@ export class Sidebar extends Component<SidebarSignature> {
         .pretui-sidebar-shell {
           --pretui-sidebar-width: 16rem;
           --pretui-sidebar-rail-width: 3.25rem;
+          /* Both seam controls share one geometry: a strip inside the rail's
+             edge, with a hit area reaching past it over the content. 24px in
+             all on a fine pointer, 44px on a coarse one. */
+          --_pretui-sidebar-seam: 0.5rem;
+          --_pretui-sidebar-seam-outset: 1rem;
+          /* the rail's own inset, which the seam lane is measured against */
+          --_pretui-sidebar-pad: var(--space-3, 0.5rem);
+          /* the track runs between the folded width and the open one */
+          --_pretui-sidebar-open: 1;
+          --_pretui-sidebar-folded: var(--pretui-sidebar-rail-width);
+          --pretui-sidebar-track: calc(
+            var(--_pretui-sidebar-folded) +
+              (var(--pretui-sidebar-width) - var(--_pretui-sidebar-folded)) *
+              var(--_pretui-sidebar-open)
+          );
           display: grid;
           grid-template-columns: var(--pretui-sidebar-track) minmax(0, 1fr);
-          --pretui-sidebar-track: var(--pretui-sidebar-width);
           min-inline-size: 0;
           min-block-size: 0;
           inline-size: 100%;
@@ -840,7 +884,7 @@ export class Sidebar extends Component<SidebarSignature> {
           font-size: var(--text-ui-md, 12.5px);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
-          transition: grid-template-columns var(--pretui-dur-morph, 300ms)
+          transition: --_pretui-sidebar-open var(--pretui-dur-morph, 300ms)
             var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02));
         }
         /* Logical: `end` swaps the tracks and moves the rail to column 2. In RTL
@@ -858,8 +902,8 @@ export class Sidebar extends Component<SidebarSignature> {
           grid-column: 1;
           grid-row: 1;
         }
-        .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail'] {
-          --pretui-sidebar-track: var(--pretui-sidebar-rail-width);
+        .pretui-sidebar-shell[data-state='collapsed'] {
+          --_pretui-sidebar-open: 0;
         }
         /* The icon rail's look reaches SidebarGroup and SidebarItem through
            custom properties inherited from the rail element, so page content
@@ -883,8 +927,8 @@ export class Sidebar extends Component<SidebarSignature> {
             --pretui-sbrail-item-size: 2.75rem;
           }
         }
-        .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas'] {
-          --pretui-sidebar-track: 0px;
+        .pretui-sidebar-shell[data-collapsible='offcanvas'] {
+          --_pretui-sidebar-folded: 0px;
         }
         /* In the drawer mode the rail is in the top layer, so the grid is one
            column and the content takes all of it. */
@@ -931,7 +975,7 @@ export class Sidebar extends Component<SidebarSignature> {
         .pretui-sidebar-foot {
           flex: none;
           min-inline-size: 0;
-          padding: var(--space-3, 8px);
+          padding: var(--_pretui-sidebar-pad);
         }
         .pretui-sidebar-foot {
           box-shadow: 0 -1px 0 var(--border);
@@ -946,7 +990,7 @@ export class Sidebar extends Component<SidebarSignature> {
           overflow-y: auto;
           overscroll-behavior: contain;
           scrollbar-width: thin;
-          padding: var(--space-3, 8px);
+          padding: var(--_pretui-sidebar-pad);
           display: grid;
           gap: var(--space-3, 8px);
           align-content: start;
@@ -960,27 +1004,88 @@ export class Sidebar extends Component<SidebarSignature> {
         .pretui-sidebar-shell[data-mobile='true'] .pretui-sidebar-content {
           grid-column: 1;
         }
-        /* The handle straddles the seam. 44px of hit area on a coarse pointer
-           , a 2px painted line, and a resize-style cursor so the
-           affordance reads before it is pressed. */
-        .pretui-sidebar-handle {
+        @media (any-pointer: coarse) {
+          .pretui-sidebar-shell {
+            --_pretui-sidebar-seam: 1.375rem;
+            --_pretui-sidebar-seam-outset: 1.375rem;
+          }
+        }
+        /* At the end with the content scrolling, the content's scrollbar runs
+           along the seam, and an overlay scrollbar reserves no gutter to step
+           around. So the whole 24px lane moves inside the rail, whose head,
+           body and foot pad their content clear of it (their dividers still
+           run to the edge); the icon rail widens by the extra padding so its
+           icons keep their column. */
+        .pretui-sidebar-shell[data-seam-lane] {
+          --_pretui-sidebar-seam: 1.5rem;
+          --_pretui-sidebar-seam-outset: 0rem;
+        }
+        .pretui-sidebar-shell[data-seam-lane][data-collapsible='rail'] {
+          --_pretui-sidebar-folded: calc(
+            var(--pretui-sidebar-rail-width) + var(--_pretui-sidebar-seam) -
+              var(--_pretui-sidebar-pad)
+          );
+        }
+        .pretui-sidebar-shell[data-seam-lane] > .pretui-sidebar-rail > * {
+          padding-inline-start: var(--_pretui-sidebar-seam);
+        }
+        /* The toggle and the resize seam sit on the same strip, so their
+           hover lines fall on the same rail edge; both follow the track as it
+           slides. Kept inside the shell, so a folded offcanvas rail's toggle
+           isn't clipped off its edge. */
+        .pretui-sidebar-handle,
+        .pretui-sidebar-shell > .pretui-sidebar-resize {
           position: absolute;
           inset-block: 0;
-          inset-inline-start: calc(var(--pretui-sidebar-track) - 0.5rem);
-          inline-size: 1rem;
+          inset-inline-start: max(
+            0rem,
+            calc(var(--pretui-sidebar-track) - var(--_pretui-sidebar-seam))
+          );
+          inline-size: var(--_pretui-sidebar-seam);
           z-index: var(--pretui-z-raised, 1);
+        }
+        .pretui-sidebar-shell[data-placement='end'] > .pretui-sidebar-handle,
+        .pretui-sidebar-shell[data-placement='end'] > .pretui-sidebar-resize {
+          inset-inline-start: auto;
+          inset-inline-end: max(
+            0rem,
+            calc(var(--pretui-sidebar-track) - var(--_pretui-sidebar-seam))
+          );
+        }
+        /* A real button with a 2px painted line on the rail edge, and the
+           separator's resize cursor so the affordance reads before it is
+           pressed. */
+        .pretui-sidebar-handle {
           display: grid;
-          place-items: center;
+          align-items: stretch;
+          justify-items: end;
           padding: 0;
           border: 0;
           background: none;
-          cursor: ew-resize;
-          transition: inset-inline-start var(--pretui-dur-morph, 300ms)
-            var(--pretui-ease-morph, cubic-bezier(0.3, 0.7, 0.2, 1.02));
+          cursor: col-resize;
         }
-        .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-handle {
+        .pretui-sidebar-shell[data-placement='end'] > .pretui-sidebar-handle,
+        .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas']
+          > .pretui-sidebar-handle {
+          justify-items: start;
+        }
+        /* folded offcanvas at the end: the shell's edge is the strip's end */
+        .pretui-sidebar-shell[data-placement='end'][data-state='collapsed'][data-collapsible='offcanvas']
+          > .pretui-sidebar-handle {
+          justify-items: end;
+        }
+        /* The hit area past the strip, over the content. */
+        .pretui-sidebar-handle::before {
+          content: '';
+          position: absolute;
+          inset-block: 0;
+          inset-inline-start: 100%;
+          inline-size: var(--_pretui-sidebar-seam-outset);
+        }
+        .pretui-sidebar-shell[data-placement='end']
+          > .pretui-sidebar-handle::before {
           inset-inline-start: auto;
-          inset-inline-end: calc(var(--pretui-sidebar-track) - 0.5rem);
+          inset-inline-end: 100%;
         }
         /* @scroll='content': one row the shell's height, so the content pane
            scrolls on its own and the rail never moves. */
@@ -992,67 +1097,33 @@ export class Sidebar extends Component<SidebarSignature> {
           overflow-y: auto;
           overscroll-behavior: contain;
         }
-        /* The resize seam: a 0.5rem strip inside the rail's edge whose hit
-           area reaches 1rem past it, a 24px target without widening the
-           rail. */
-        .pretui-sidebar-resize {
-          --pretui-resize-handle-size: 0.5rem;
-          --pretui-resize-handle-outset: 1rem;
-          position: absolute;
-          inset-block: 0;
-          inset-inline-start: calc(var(--pretui-sidebar-track) - 0.5rem);
-          z-index: var(--pretui-z-raised, 1);
+        /* The resize seam takes the shared strip and outset. */
+        .pretui-sidebar-shell > .pretui-sidebar-resize {
+          --pretui-resize-handle-size: var(--_pretui-sidebar-seam);
+          --pretui-resize-handle-outset: var(--_pretui-sidebar-seam-outset);
         }
-        .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-resize {
-          inset-inline-start: auto;
-          inset-inline-end: calc(var(--pretui-sidebar-track) - 0.5rem);
-        }
-        /* At the end with the content scrolling, the content's scrollbar runs
-           along the seam. The seam gives way: no outset, so its hit area stays
-           inside the rail and the scrollbar keeps its own. */
-        .pretui-sidebar-shell[data-placement='end'][data-scroll='content']
-          .pretui-sidebar-resize {
-          --pretui-resize-handle-outset: 0rem;
-        }
-        /* While the seam is dragged, or resized from the keyboard, the grid
-           follows at once instead of sliding behind it (ADR 007 §1.5).
-           Keyed off ResizeHandle's own drag and focus state, so the sidebar
-           holds no animation-only state. */
-        .pretui-sidebar-shell:has(> .pretui-sidebar-resize[data-dragging='true']),
-        .pretui-sidebar-shell:has(> .pretui-sidebar-resize:focus-visible) {
-          transition: none;
-        }
+        /* Drawn as ResizeHandle draws its line, so both controls look alike. */
         .pretui-sidebar-handle-line {
           inline-size: 2px;
-          block-size: 100%;
-          border-radius: 2px;
-          background: transparent;
-          transition: background var(--pretui-dur-snap, 180ms)
+          border-radius: var(--boxel-border-radius-2xs);
+          background-color: transparent;
+          transition: background-color var(--pretui-dur-snap, 180ms)
             var(--pretui-ease-snap, ease);
         }
-        .pretui-sidebar-handle:hover .pretui-sidebar-handle-line {
-          background: var(--primary);
+        @media (hover: hover) {
+          .pretui-sidebar-handle:hover .pretui-sidebar-handle-line {
+            background-color: var(--primary-ink);
+          }
         }
         .pretui-sidebar-handle:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: -2px;
-          border-radius: var(--radius-chip, 6px);
-        }
-        /* Coarse pointers get a real target rather than a 16px sliver. */
-        @media (any-pointer: coarse) {
-          .pretui-sidebar-handle {
-            inline-size: 2.75rem;
-            inset-inline-start: calc(var(--pretui-sidebar-track) - 1.375rem);
-          }
-          .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-handle {
-            inset-inline-end: calc(var(--pretui-sidebar-track) - 1.375rem);
-          }
+          border-radius: var(--boxel-border-radius-sm);
         }
         /* Reduced motion lands on the end state: the rail is at its width, the
            handle is at the seam, nothing is mid-slide. */
         @media (prefers-reduced-motion: reduce) {
           .pretui-sidebar-shell,
-          .pretui-sidebar-handle,
           .pretui-sidebar-handle-line {
             transition: none;
           }
@@ -1456,7 +1527,9 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           inline-size: var(--pretui-sbrail-item-size, 100%);
           margin-inline: var(--pretui-sbrail-item-margin, 0);
           min-inline-size: 0;
-          min-block-size: var(--control-h, 28px);
+          /* the same floor expanded and in the icon rail, so the hover and
+             active background keep their height as the rail folds */
+          min-block-size: var(--control-h, 1.75rem);
           justify-content: var(--pretui-sbrail-item-justify, flex-start);
           padding: 0 var(--pretui-sbrail-item-pad, 0.6em);
           border: 0;
@@ -1502,9 +1575,13 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         .pretui-sbitem[aria-disabled='true']:hover {
           background: none;
         }
+        /* Fixed tracks the box's own size: auto tracks grow to a larger
+           yielded glyph and spill it to the end and bottom, off the label's
+           center line and off center in the rail's square. */
         .pretui-sbitem-icon {
           flex: none;
           display: grid;
+          grid-template: minmax(0, 1fr) / minmax(0, 1fr);
           place-items: center;
           inline-size: 1.15em;
           block-size: 1.15em;

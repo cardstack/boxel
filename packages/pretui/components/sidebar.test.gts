@@ -470,6 +470,80 @@ module('Pretui | components/sidebar', function (hooks) {
     localStorage.removeItem('pretui-sidebar:t-flip:width');
   });
 
+  // The seam's geometry is CSS the harness doesn't apply, so these pin the
+  // hook it keys off; the 24px lane itself is checked in the screenshots.
+  const lane = () => shells().map((s) => s.dataset['seamLane'] ?? 'none');
+
+  test("@placement='end' with @scroll='content': the seam keeps its hit lane inside the rail", async function (assert) {
+    await render(<template>
+      <Sidebar @label='A' @mobile={{false}} @placement='end' @scroll='content' @resizable={{true}}><:nav>Lots</:nav></Sidebar>
+      <Sidebar @label='B' @mobile={{false}} @placement='start' @scroll='content' @resizable={{true}}><:nav>Lots</:nav></Sidebar>
+      <Sidebar @label='C' @mobile={{false}} @placement='end' @scroll='page' @resizable={{true}}><:nav>Lots</:nav></Sidebar>
+    </template>);
+    assert.deepEqual(lane(), ['true', 'none', 'none'], 'only where the content scrollbar runs along the seam');
+  });
+
+  test("@placement='end' with @scroll='content': the plain toggle keeps the same lane, and no control means no lane", async function (assert) {
+    await render(<template>
+      <Sidebar @label='A' @mobile={{false}} @placement='end' @scroll='content'><:nav>Lots</:nav></Sidebar>
+      <Sidebar @label='B' @mobile={{false}} @placement='end' @scroll='content' @open={{false}}><:nav>Lots</:nav></Sidebar>
+      <Sidebar @label='C' @mobile={{false}} @placement='end' @scroll='content' @collapsible='none'><:nav>Lots</:nav></Sidebar>
+      <Sidebar @label='D' @mobile={{true}} @placement='end' @scroll='content'><:nav>Lots</:nav></Sidebar>
+    </template>);
+    assert.dom('[data-test-pretui-sidebar-handle]').exists({ count: 2 });
+    assert.deepEqual(lane(), ['true', 'true', 'none', 'none'], 'expanded and icon rail alike; not for a pinned rail or the drawer');
+  });
+
+  test('@resizable: a rem @width keeps its unit until the seam moves', async function (assert) {
+    let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='15rem'><:nav>Lots</:nav></Sidebar></template>);
+    assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), '15rem', 'the caller\'s unit');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', String(Math.round(15 * rem)), 'announced in px');
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'ArrowRight');
+    assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), Math.round(15 * rem + 16) + 'px', 'px once resized');
+  });
+
+  test('@resizable: a rem @width outside the bounds is still clamped', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='40rem' @maxWidth={{300}}><:nav>Lots</:nav></Sidebar></template>);
+    assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), '300px');
+  });
+
+  // The slide itself is CSS the harness doesn't apply. What it rests on: a
+  // resize only moves the width, and a fold or open only flips the state, so
+  // the registered open fraction slides while the width follows at once.
+  test('@resizable: a keyboard resize moves only the width, a keyboard fold and open only the state', async function (assert) {
+    const width = () => shells()[0]!.style.getPropertyValue('--pretui-sidebar-width');
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px'><:nav>Lots</:nav></Sidebar></template>);
+    seamEl().focus();
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'ArrowRight');
+    assert.deepEqual([state(), width()], ['expanded', '216px'], 'the arrow key changes the width alone');
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'Home');
+    assert.deepEqual([state(), width()], ['collapsed', '216px'], 'Home folds and keeps the width');
+    await click('[data-test-pretui-sidebar-handle]');
+    assert.deepEqual([state(), width()], ['expanded', '216px'], 'reopening returns to it');
+    assert.strictEqual(document.activeElement, seamEl(), 'focus is back on the seam');
+  });
+
+  test("a folded offcanvas rail drops the seam lane, so its toggle sits on the shell's edge", async function (assert) {
+    await render(<template><Sidebar @label='A' @mobile={{false}} @placement='end' @scroll='content' @collapsible='offcanvas' @open={{false}}><:nav>Lots</:nav></Sidebar></template>);
+    assert.dom('[data-test-pretui-sidebar-handle]').exists();
+    assert.deepEqual(lane(), ['none']);
+  });
+
+  // The centering is CSS the harness doesn't apply; this pins the markup it
+  // rests on, and the screenshots the look.
+  test('SidebarItem: icon and label are siblings on the row, in the expanded list and the icon rail alike', async function (assert) {
+    await render(<template>
+      <SidebarItem @label='Lots' @icon={{Icon24}} @onClick={{noop}} />
+      <SidebarItem @label='Bids' @collapsed={{true}} @onClick={{noop}}><:icon><Icon24 /></:icon></SidebarItem>
+    </template>);
+    let [expanded, rail] = [...document.querySelectorAll('[data-test-pretui-sidebar-item]')];
+    let kids = (el: Element | undefined) => [...(el?.children ?? [])].map((c) => c.hasAttribute('data-test-pretui-sidebar-item-icon') ? 'icon' : c.hasAttribute('data-test-pretui-sidebar-item-label') ? 'label' : c.tagName);
+    assert.deepEqual(kids(expanded), ['icon', 'label'], 'one row, icon then label');
+    assert.deepEqual(kids(rail), ['icon'], 'the rail square holds the icon alone');
+    assert.dom('[data-test-pretui-sidebar-item-icon] > svg', rail as HTMLElement).exists('a yielded glyph sits directly in the icon box');
+  });
+
   test('SidebarItem @icon renders the icon into the sized slot, decorative', async function (assert) {
     await render(<template><SidebarItem @label='Lots' @icon={{Icon24}} /></template>);
     assert.dom('[data-test-pretui-sidebar-item-icon] > svg').exists();
