@@ -12559,10 +12559,14 @@ export class Realm {
         // as "send less" rather than as "the realm is broken, try again". So
         // the refusal is carried back across as the error this route has
         // always thrown, keeping the status the batch chose.
-        throw new CardError(err.error.detail ?? err.message, {
+        let cardError = new CardError(err.error.detail ?? err.message, {
           status: err.error.status,
           title: err.error.title,
         });
+        if (err.error.meta) {
+          cardError.meta = err.error.meta;
+        }
+        throw cardError;
       }
       throw err;
     }
@@ -14699,6 +14703,7 @@ export class Realm {
         requestContext,
         message: detail,
         status,
+        ...(error.meta ? { meta: error.meta } : {}),
         ...identity,
       });
     }

@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
+import { isWriteLockTimeout } from '@cardstack/runtime-common/card-operations';
 import {
   withConnectionOrdering,
   withConnectionTenant,
@@ -772,10 +773,30 @@ export async function sendResponseForUnauthorizedRequest(
   await sendResponseForError(ctxt, 401, 'Unauthorized Request', message);
 }
 
+// `cause` is the error being answered, when there is one. A write that gave
+// up waiting for its write locks is not a fault of the server's — another
+// write held them for longer than a writer waits — so it is answered as the
+// 503 with `Retry-After` that every other write surface gives it, rather than
+// as a 500.
 export async function sendResponseForSystemError(
   ctxt: Koa.Context,
   message: string,
+  cause?: unknown,
 ) {
+  if (isWriteLockTimeout(cause)) {
+    await setContextResponse(
+      ctxt,
+      new Response(JSON.stringify({ errors: [cause.error.detail] }), {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+          'Retry-After': String(cause.error.meta?.retryAfterSeconds),
+        },
+      }),
+    );
+    return;
+  }
   await sendResponseForError(ctxt, 500, 'System Error', message);
 }
 
