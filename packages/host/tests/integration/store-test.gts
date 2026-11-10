@@ -5892,10 +5892,12 @@ module('Integration | Store', function (hooks) {
       },
     );
 
+    // the stack holds one reference, and the opened card is in Recents, whose
+    // cards interact mode loads for its New menu
     assert.strictEqual(
       storeService.getReferenceCount(hassan),
-      1,
-      `reference count for ${hassan} is 1`,
+      2,
+      `reference count for ${hassan} is 2`,
     );
     // slow down the save so we can get deterministic results
     await withSlowSave(1000, async () => {
@@ -5906,14 +5908,14 @@ module('Integration | Store', function (hooks) {
       );
       assert.strictEqual(
         storeService.getReferenceCount(hassan),
-        1,
-        `reference count for ${hassan} is 1`,
+        2,
+        `reference count for ${hassan} is 2`,
       );
     });
     assert.strictEqual(
       storeService.getReferenceCount(hassan),
-      1,
-      `reference count for ${hassan} is 1`,
+      2,
+      `reference count for ${hassan} is 2`,
     );
   });
 

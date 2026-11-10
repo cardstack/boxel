@@ -131,6 +131,67 @@ The counters (`realmEventSends`, `realmEventFailedSends`,
 the window since the previous line. The others are read at the moment of the
 sample.
 
+### The database pool on the health line
+
+A realm-server whose pool connections are all held by work that is not finishing
+hangs every request that touches the database, while its event loop sits idle.
+`GET /` answers from memory and `/_liveness` reads a heartbeat, so both stay green.
+The health line is where it shows:
+
+```
+dbConnections=… dbWaiting=… dbWaitingAtShare=… dbOldestWaitMs=… dbIdleInTx=… dbIdleInTxMaxMs=… dbAdvisoryWaiters=… dbAdvisoryWaitMaxMs=…
+```
+
+- `dbConnections=inUse/limit` and `dbWaiting` are the connection scheduler's
+  state at the sample. A pool at its limit with acquisitions waiting is routine: on
+  production it happens in bursts of a minute or two, and it clears without help.
+- `dbOldestWaitMs` is how long the acquisition that has waited longest has been
+  waiting. This is the field that tells a stuck pool from a busy one. Under load the
+  queue keeps moving and the oldest wait stays short, however many acquisitions
+  queue. When the pool's holders stop finishing, nothing is granted, and it climbs
+  for as long as that lasts.
+- The other four come from `pg_stat_activity`, read every 30 seconds by
+  `SessionProbe` (`packages/postgres/session-probe.ts`) on a connection outside
+  the pool. A probe that waited for a pooled connection would go silent exactly
+  when the pool is starved. `dbIdleInTx` and `dbIdleInTxMaxMs` count the sessions
+  idle inside an open transaction and give the longest such idle time. That is a
+  client that stopped driving its transaction while its locks stay taken.
+  `dbAdvisoryWaiters` and `dbAdvisoryWaitMaxMs` count the sessions blocked on an
+  advisory lock and give the longest such wait. Each of those holds a pooled
+  connection while it waits.
+
+The session readings cover every session of the role the realm-server connects as,
+across the whole database: Postgres shows another role's session state only to a
+role with `pg_read_all_stats`. So every replica reports the same sessions, and the
+fields are absent from a line when the probe has had no successful reading in the
+last minute. A probe that starts failing logs one `pg-session-probe` warning, and
+another line when it recovers. A server with `track_activities` off records no
+session state at all, so on one the probe fails every sample rather than report
+zeros it cannot see.
+
+Three alerts in the realm-server availability group read these fields:
+
+| Alert                                 | Fires when                                               |
+| ------------------------------------- | -------------------------------------------------------- |
+| Realm Server DB Pool Stuck            | `dbOldestWaitMs` above 60s in every minute for 5 minutes |
+| Realm Server DB Transaction Left Idle | `dbIdleInTxMaxMs` above 10 minutes                       |
+| Realm Server DB Advisory Lock Wait    | `dbAdvisoryWaitMaxMs` above 10 minutes                   |
+
+Some work holds a transaction idle on purpose. A card write keeps its lock
+transaction open while it writes its files and waits for them to index, and every
+writer to those files waits behind it. A write of more than 256 files takes the
+whole realm's lock instead. On production the longest of these holds run to about
+8 minutes (the `writeLock … holdMs=` lines). The two session alerts sit above that,
+so a slow bulk write does not fire them.
+
+None of these drives a health check. On ECS, a failing health check replaces the
+task, and pool saturation is routine and clears without help. A check that probed
+the pool with a short timeout would replace tasks that were only busy, and every
+replacement starts with a cold cache. A wedged pool is the one case where
+replacement is the cure, because dropping the task's connections ends the
+transactions that hold it. That calls for a person who can see which of the two
+cases this is.
+
 ## `_readiness-check` is not one of them
 
 `GET /<realm>/_readiness-check` shares the word "readiness" but answers a different

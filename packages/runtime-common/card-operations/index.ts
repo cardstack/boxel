@@ -282,6 +282,9 @@ export {
   AUTHENTICATION_REQUIRED,
   definitionNotReady,
   DEFINITION_RETRY_AFTER_SECONDS,
+  WriteLockTimeoutError,
+  WRITE_LOCK_RETRY_AFTER_SECONDS,
+  isWriteLockTimeout,
 } from './types.ts';
 export {
   buildCallApiRequest,

@@ -273,11 +273,21 @@ export class NodeAdapter implements RealmAdapter {
     // where the path stat's length may not. The stream stops at that length,
     // so content an append adds while it is being read is left for the next
     // read rather than sent past the length this one declared.
+    //
+    // The path stat can also describe a file that is no longer there: another
+    // host's delete leaves this one's attribute cache saying it exists until
+    // the open finds otherwise. That open settles it, so `openContent` reports
+    // the file gone and a response can answer not-found before it commits to
+    // a body. `content` has no such answer to give, so it yields a stream
+    // whose read fails as a vanished file's does, which is where its
+    // consumers handle one.
     let opened:
       | { content: Readable; size?: number; lastModifiedMs?: number }
+      | 'gone'
       | undefined;
+    let goneContent: Readable | undefined;
     let open = () => {
-      if (!opened) {
+      if (opened === undefined) {
         let fd: number | undefined;
         try {
           fd = openSync(absolutePath, 'r');
@@ -296,14 +306,17 @@ export class NodeAdapter implements RealmAdapter {
               lastModifiedMs,
             };
           }
-        } catch (_err) {
+        } catch (err: any) {
           if (fd !== undefined) {
             closeSync(fd);
           }
-          // A file deleted since the stat above surfaces as the stream's own
-          // error when it is read, which is where consumers already handle a
-          // vanished file. No length is claimed for it.
-          opened = { content: createReadStream(absolutePath) };
+          if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+            opened = 'gone';
+          } else {
+            // Any other failure to open surfaces as the stream's own error
+            // when it is read. No length is claimed for it.
+            opened = { content: createReadStream(absolutePath) };
+          }
         }
       }
       return opened;
@@ -311,9 +324,17 @@ export class NodeAdapter implements RealmAdapter {
     return {
       path,
       get content() {
-        return open().content;
+        let result = open();
+        if (result === 'gone') {
+          goneContent ??= createReadStream(absolutePath);
+          return goneContent;
+        }
+        return result.content;
       },
-      openContent: open,
+      openContent: () => {
+        let result = open();
+        return result === 'gone' ? undefined : result;
+      },
       lastModified: lastModifiedSeconds(stat),
       lastModifiedMs: stat.mtimeMs,
       size: stat.size,

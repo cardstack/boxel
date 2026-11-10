@@ -152,9 +152,8 @@ jobs:
       repository: "boxel-ai-bot-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/ai-bot/Dockerfile"
-      # Staging images are built for amd64 and arm64, each platform on a
-      # native runner. Production images are amd64 only.
-      platforms: ${{ inputs.environment == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+      # Built for amd64 and arm64, each platform on a native runner.
+      platforms: "linux/amd64,linux/arm64"
 
   build-bot-runner:
     name: Build bot-runner Docker image
@@ -166,7 +165,7 @@ jobs:
       repository: "boxel-bot-runner-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/bot-runner/Dockerfile"
-      platforms: ${{ inputs.environment == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+      platforms: "linux/amd64,linux/arm64"
 
   build-host:
     name: Build host
@@ -188,7 +187,7 @@ jobs:
       repository: "boxel-realm-server-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/realm-server/realm-server.Dockerfile"
-      platforms: ${{ inputs.environment == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+      platforms: "linux/amd64,linux/arm64"
       build-args: |
         "realm_server_script=scripts/start-${{ inputs.environment }}.sh"
 
@@ -202,7 +201,7 @@ jobs:
       repository: "boxel-prerender-manager-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/realm-server/prerender-manager.Dockerfile"
-      platforms: ${{ inputs.environment == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+      platforms: "linux/amd64,linux/arm64"
       build-args: |
         "prerender_manager_script=scripts/start-prerender-manager.sh"
 
@@ -231,7 +230,7 @@ jobs:
       repository: "boxel-worker-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/realm-server/worker.Dockerfile"
-      platforms: ${{ inputs.environment == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+      platforms: "linux/amd64,linux/arm64"
       build-args: |
         "worker_script=scripts/start-worker-${{ inputs.environment }}.sh"
 
@@ -245,7 +244,7 @@ jobs:
       repository: "boxel-pg-migration-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/postgres/Dockerfile"
-      platforms: ${{ inputs.environment == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+      platforms: "linux/amd64,linux/arm64"
 
   # The whole environment-changing half of the deploy, held under one
   # concurrency group for its full duration. `needs` lists every build so the

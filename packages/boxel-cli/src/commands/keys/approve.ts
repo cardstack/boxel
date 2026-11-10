@@ -10,6 +10,7 @@ import {
   type ApprovedBinding,
   type BatchOperation,
   type BatchTarget,
+  type BatchUse,
   type BindingPreview,
   type BindingSnapshot,
   type KeyBinding,
@@ -168,7 +169,7 @@ function placement(snapshot: BindingSnapshot): string {
 }
 
 // One slot of the approval: which slot, and the key or share that fills it.
-interface Fill {
+export interface Fill {
   slot: string;
   kind: 'userKey' | 'apiKey';
   id: string;
@@ -176,7 +177,7 @@ interface Fill {
   covers: string[];
 }
 
-interface Planned {
+export interface Planned {
   operation: BatchOperation;
   destination: string;
   host: string;
@@ -195,22 +196,65 @@ function chosenOperations(
   );
 }
 
+// The hosts the batch sends a slot token to, for `use`: every operation the
+// realm server weighed in naming the token's fillers that sends it.
+function slotHosts(
+  batch: ApprovalBatch,
+  token: string,
+  use: BatchUse,
+): string[] {
+  let hosts = new Set<string>();
+  for (let group of batch.groups) {
+    for (let op of group.operations) {
+      if (use === 'pipelines' && op.status === 'pipelines-only') {
+        continue;
+      }
+      if (batch.fillersFor && !batch.fillersFor.includes(op.name)) {
+        continue;
+      }
+      if (op.slots.some((s) => s.slot === token)) {
+        hosts.add(group.destination.host);
+      }
+    }
+  }
+  return [...hosts];
+}
+
 // Fills each slot of the chosen operations that `name` can fill: a
 // `{{userKey}}` slot with the user's key of that name, an `{{apiKey}}` slot
 // with their share in the realm under that label. `--slot` narrows it to one
 // slot.
-function plan(
+//
+// A key or share fills a slot only where the batch's `fillers` offer it for
+// `use`, as the secure window's approve page offers only those. Asked for the
+// operations `--operation` names, `fillers` weigh only where those send. One
+// that would fill a slot of its type but isn't offered there is refused,
+// naming the slot and why, rather than approved to send where its credential
+// can't be used.
+export function plan(
   batch: ApprovalBatch,
   name: string,
-  { operation, slot }: { operation?: string; slot?: string },
+  {
+    operation,
+    slot,
+    use,
+  }: { operation?: string; slot?: string; use: BatchUse },
 ): Planned[] {
   let key = batch.keys.find((k) => k.name === name);
   let share = batch.shares.find((s) => s.label === name);
+  let offered = (token: string, id: string) =>
+    !batch.fillers || (batch.fillers[use]?.[token] ?? []).includes(id);
+  let refused = new Set<string>();
   let planned: Planned[] = [];
   for (let { operation: op, group } of chosenOperations(batch, operation)) {
     let fills: Fill[] = [];
     for (let s of op.slots) {
       if (slot !== undefined && s.slot !== slot) {
+        continue;
+      }
+      let filler = s.key === 'userKey' ? key : share;
+      if (filler && !offered(s.slot, filler.id)) {
+        refused.add(s.slot);
         continue;
       }
       if (s.key === 'userKey' && key) {
@@ -240,6 +284,31 @@ function plan(
         fills,
       });
     }
+  }
+  if (refused.size > 0) {
+    let tokens = [...refused];
+    let hosts = [
+      ...new Set(tokens.flatMap((token) => slotHosts(batch, token, use))),
+    ];
+    let filled = [
+      ...new Set(planned.flatMap((p) => p.fills.map((f) => f.slot))),
+    ];
+    let it = tokens.length === 1 ? 'it' : 'them';
+    // A slot the realm server weighed by every operation of the card, though
+    // the approval covers only one.
+    let batchWide =
+      operation !== undefined && !batch.fillersFor
+        ? ` This realm server offers a key for a slot by every operation of ${batch.card.name} that sends it, not only ${operation}.`
+        : '';
+    // `--slot` helps only where what it fills needs no new grant: the secure
+    // window approves every slot of an operation.
+    let next =
+      filled.length > 0 && newGrants(planned).length === 0
+        ? `Pass --slot ${filled.join(' or --slot ')} to approve only what it fills, or name another key or share`
+        : 'Name another key or share';
+    throw new Error(
+      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.length === 1 ? hosts[0] : `every one of ${hosts.join(', ')}`}, where ${batch.fillersFor ? 'the operations approved send' : 'the batch sends'} ${it}.${batchWide} ${next}`,
+    );
   }
   return planned;
 }
@@ -516,6 +585,7 @@ export async function keysApprove(
   let batch = await approvalBatch(ctx.realmServerUrl, token, {
     target,
     interactive: Boolean(options.interactive),
+    ...(parsed.operation ? { operations: [parsed.operation] } : {}),
   });
   // A card is named by its own URL, so the type --operation names is checked
   // against the one the card adopts from. Both are asked of the realm server,
@@ -541,6 +611,7 @@ export async function keysApprove(
   let planned = plan(batch, name, {
     operation: parsed.operation,
     slot: options.slot,
+    use: options.interactive ? 'interactive' : 'pipelines',
   });
   if (planned.length === 0) {
     let pending = chosenOperations(batch, parsed.operation);
@@ -708,12 +779,35 @@ export async function keysApprove(
         : `The secure window closed without approving ${batch.card.name}'s requests`,
     );
   }
+  // The window fills each slot with what the person chose there, from the
+  // keys its own batch offers, which need not include the one named here. A
+  // slot it filled otherwise is named with the key or share that fills it,
+  // rather than reported as approved with `name`.
+  let otherwise = approved.flatMap((b) => {
+    let named = planned
+      .find((p) => p.operation.name === b.operation)
+      ?.fills.find((f) => f.slot === b.slot);
+    let id = b.keyId ?? b.shareId;
+    if (!named || id === named.id) {
+      return [];
+    }
+    let filler =
+      batch.keys.find((k) => k.id === id)?.name ??
+      batch.shares.find((s) => s.id === id)?.label ??
+      'another key';
+    return [`${b.operationLabel ?? b.operation} (${b.slot}) with ${filler}`];
+  });
   let result: ApproveResult = { approved, via: 'window' };
   emit(ctx, result, () => {
     let count = new Set(approved.map((b) => b.operation)).size;
     console.log(
       `${FG_GREEN}Approved ${count} ${count === 1 ? 'call' : 'calls'} that ${batch.card.name} makes, in the secure window.${RESET}`,
     );
+    if (otherwise.length > 0) {
+      console.log(
+        `${FG_YELLOW}The secure window approved ${otherwise.join(', ')}, not ${name}.${RESET}`,
+      );
+    }
   });
   return result;
 }

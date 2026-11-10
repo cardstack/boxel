@@ -9,3 +9,9 @@ export function postgresConfig(defaultConfig: ClientConfig = {}) {
     database: process.env.PGDATABASE || 'postgres',
   });
 }
+
+// The connection settings of the boxel database: the ones the adapter's pool
+// connects with, for any other connection that must reach the same database.
+export function boxelDatabaseConfig() {
+  return postgresConfig({ database: 'boxel' });
+}
