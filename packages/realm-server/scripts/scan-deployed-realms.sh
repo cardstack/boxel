@@ -25,6 +25,13 @@ if [ -z "$MATRIX_SERVER_NAME" ]; then
   exit 1
 fi
 
+# The realm server's kill switch for history stops every journal write,
+# these included.
+if [ "$REALM_HISTORY_JOURNAL" = off ]; then
+  echo "[scan-deployed-realms] REALM_HISTORY_JOURNAL=off, so no scan events are appended" >&2
+  exit 0
+fi
+
 COMMIT="${BOXEL_COMMIT:-$(git -C "$SCRIPTS_DIR" rev-parse HEAD 2>/dev/null)}"
 if [ -z "$COMMIT" ]; then
   echo "[scan-deployed-realms] the deployed commit is unknown, so the scan events name none" >&2
