@@ -94,4 +94,22 @@ module('Pretui | components/data-table', function (hooks) {
       .includesText('pretui-data-table-font-size');
     assert.dom('[data-test-pretui-usage]').includesText('--pretui-size-*');
   });
+
+  test('the table body sits in a DataShell inside the root', async function (assert) {
+    // The root sets --pretui-data-font-size: 1em, which reaches DataShell only
+    // by inheritance, so the shell, and the table in it, must be descendants.
+    await render(
+      <template>
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{ROWS}}
+          @key={{rowKey}}
+          @size='l'
+        />
+      </template>,
+    );
+    assert
+      .dom('[data-test-pretui-datatable] [data-test-pretui-data] table')
+      .exists();
+  });
 });

@@ -1237,6 +1237,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           gap: var(--space-3, 8px);
           min-width: 0;
           font-size: var(--pretui-data-table-font-size, var(--boxel-font-size-xs));
+          /* DataShell, which holds the table body, sets its own size; 1em
+             hands it the size resolved here */
+          --pretui-data-font-size: 1em;
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
           /* The control columns' effective widths. A pin offset computed in
