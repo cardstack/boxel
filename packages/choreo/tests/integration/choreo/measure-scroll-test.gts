@@ -43,7 +43,11 @@ type Signature = { Args: { state: State } };
 const Content = <template>
   <Choreo class='stage' style='position:relative' as |c|>
     <div style={{@state.aboveStyle}}></div>
-    <div data-box style='height:40px;background:#0af' {{motion id='box'}}></div>
+    <div
+      data-test-box
+      style='height:40px;background:#0af'
+      {{motion id='box'}}
+    ></div>
     {{#if @state.extra}}
       <div
         style='position:absolute;top:0;left:0;width:1px;height:1px'
@@ -56,7 +60,10 @@ const Content = <template>
 
 // a scroller in normal flow, with a fixed height
 const InBlock = <template>
-  <div data-scroller style='height:120px;overflow-y:auto;overflow-anchor:none'>
+  <div
+    data-test-scroller
+    style='height:120px;overflow-y:auto;overflow-anchor:none'
+  >
     <Content @state={{@state}} />
   </div>
 </template> satisfies TOC<Signature>;
@@ -74,7 +81,7 @@ const InGrowingFlexItem = <template>
       <div style='height:100px'></div>
     </div>
     <div
-      data-scroller
+      data-test-scroller
       style='flex:1 1 auto;min-height:0;overflow-y:auto;overflow-anchor:none'
     >
       <Content @state={{@state}} />
@@ -86,7 +93,7 @@ const InGrowingFlexItem = <template>
 // would move the ones before it
 const AsSpreadFlexRow = <template>
   <div
-    data-scroller
+    data-test-scroller
     style='display:flex;justify-content:space-between;align-items:flex-start;width:400px;height:120px;overflow-y:auto;overflow-anchor:none'
   >
     <div style='flex:none;width:100px;height:10px'></div>
@@ -96,12 +103,56 @@ const AsSpreadFlexRow = <template>
   </div>
 </template> satisfies TOC<Signature>;
 
+class Crossing {
+  @tracked page: 'long' | 'short' = 'long';
+}
+
+const crossingScroll = () => 1400;
+const isLong = (c: Crossing) => c.page === 'long';
+
+// a @route region in the page's flow: a long page that crosses to a short
+// one, placing the window past the short page's end
+const Pages = <template>
+  <Choreo
+    @route={{true}}
+    @scroll={{crossingScroll}}
+    style='position:relative'
+    as |c|
+  >
+    {{#if (isLong @crossing)}}
+      <div style='height:2500px'></div>
+      <div
+        data-test-card
+        style='width:100px;height:100px;background:#0af'
+        {{motion id='card' role='stage'}}
+      ></div>
+      <div style='height:1400px'></div>
+    {{else}}
+      <div style='height:1000px'></div>
+      <div
+        data-test-card
+        style='width:100px;height:100px;background:#0af'
+        {{motion id='card' role='stage'}}
+      ></div>
+      <div style='height:400px'></div>
+    {{/if}}
+    <c.Crossing @duration={{2}} @ease='linear' @leave={{0.1}} @arrive={{0.1}} />
+  </Choreo>
+</template> satisfies TOC<{ Args: { crossing: Crossing } }>;
+
+function addStyle(css: string): HTMLStyleElement {
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+  return style;
+}
+
 function scroller(): HTMLElement {
-  return document.querySelector('[data-scroller]') as HTMLElement;
+  return document.querySelector('[data-test-scroller]') as HTMLElement;
 }
 function box(): DOMRect {
   return (
-    document.querySelector('[data-box]') as HTMLElement
+    document.querySelector('[data-test-box]') as HTMLElement
   ).getBoundingClientRect();
 }
 const frame = () =>
@@ -207,6 +258,60 @@ module('Integration | choreo | measure keeps the scroll', function (hooks) {
       await render(<template><InDocument @state={{state}} /></template>);
       let el = document.scrollingElement as HTMLElement;
       await assertFlightKeepsTheEnd(assert, state, el, window);
+    });
+
+    test('a <body> whose overflow goes to the viewport is not taken for the scroller', async function (assert) {
+      // overflow-x: hidden computes <body>'s overflow-y to auto, but with
+      // <html> visible, both go to the viewport, and the document scrolls
+      const style = addStyle('body { overflow-x: hidden; }');
+      try {
+        const state = new State(1200);
+        await render(<template><InDocument @state={{state}} /></template>);
+        let el = document.scrollingElement as HTMLElement;
+        await assertFlightKeepsTheEnd(assert, state, el, window);
+      } finally {
+        style.remove();
+      }
+    });
+  });
+
+  module('a region that places the window', function (hooks) {
+    setupFixtureViewport(hooks, { scroll: true });
+    let style: HTMLStyleElement | undefined;
+    hooks.beforeEach(function () {
+      // the region in the page's flow, so the page is as long as its scene
+      style = addStyle(
+        '#ember-testing-container, #ember-testing { position: static !important; height: auto !important; }',
+      );
+    });
+    hooks.afterEach(function () {
+      style?.remove();
+    });
+
+    test('a crossing whose @scroll lands past the end of the arriving page starts its flight where the card stood', async function (assert) {
+      const crossing = new Crossing();
+      await render(<template><Pages @crossing={{crossing}} /></template>);
+      window.scrollTo(0, 2200);
+      assert.strictEqual(window.scrollY, 2200, 'the reader is down the page');
+      await frame();
+      const card = () =>
+        (
+          document.querySelector('[data-test-card]') as HTMLElement
+        ).getBoundingClientRect();
+      const before = card();
+      crossing.page = 'short';
+      await rerender();
+      await frame();
+      const start = card();
+      assert.true(
+        window.scrollY < 1400,
+        `the window is clamped to the short page (${window.scrollY})`,
+      );
+      assert.true(
+        Math.abs(start.top - before.top) < 10,
+        `the flight starts where the card stood (${before.top} -> ${start.top})`,
+      );
+      await settled();
     });
   });
 });

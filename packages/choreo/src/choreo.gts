@@ -39,6 +39,7 @@ import compile, { continuation, fadeOn, sameScore } from './compile.ts';
 import {
   join as joinPass,
   leave as leavePass,
+  letGo,
   type Pass,
   setBeforeMeasure,
   setPassScheduler,
@@ -365,6 +366,14 @@ function scrolls(el: Element): boolean {
 /** the nearest ancestor that scrolls vertically: what `@inView` calls the view */
 function scrollerOf(el: Element): HTMLElement | null {
   for (let p = el.parentElement; p; p = p.parentElement) {
+    // while <html> lets its overflow show, <body>'s overflow is the
+    // viewport's: <body> never scrolls, the document does
+    if (
+      p === document.body &&
+      getComputedStyle(document.documentElement).overflowY === 'visible'
+    ) {
+      continue;
+    }
     const overflow = getComputedStyle(p).overflowY;
     if (
       overflow === 'auto' ||
@@ -806,6 +815,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     if (this.args.route && this.arrived.size && this.snapshots.size) {
       const intent = this.args.scroll ?? 'top';
       const y = intent === 'top' ? 0 : intent();
+      letGo(document.scrollingElement);
       window.scrollTo(0, y);
     }
     const before = this.rootSnapshot ?? root.getBoundingClientRect();

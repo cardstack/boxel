@@ -133,6 +133,9 @@ export function registerSettle(fn: () => void): () => void {
   };
 }
 
+/** each scroller the barrier holds while its regions measure, with its strut */
+const held = new Map<Element, HTMLElement>();
+
 function runBarrier() {
   booked = false;
   const hosts = [...intents];
@@ -161,7 +164,6 @@ function runBarrier() {
   // bottom of the view. Nothing a region measures sits below it. Where the
   // content really got shorter, the browser clamps once the strut is gone,
   // as a change in size.
-  const struts: HTMLElement[] = [];
   const seen = new Set<HTMLElement>();
   for (const host of hosts) {
     const scroller = host.scroller?.();
@@ -171,7 +173,7 @@ function runBarrier() {
     seen.add(scroller);
     const el = strut(scroller);
     if (el) {
-      struts.push(el);
+      held.set(scroller, el);
     }
   }
   try {
@@ -189,10 +191,26 @@ function runBarrier() {
       pass.host.finishPass(pass);
     }
   } finally {
-    for (const el of struts) {
+    for (const el of held.values()) {
       el.remove();
     }
+    held.clear();
   }
+}
+
+/**
+ * Takes the hold off a scroller that a region is about to place itself, as a
+ * `@route` region places the window before it measures. The region chose
+ * that scroll, so nothing is left to keep, and a strut still standing would
+ * let it land past the end of the content, where the browser clamps it once
+ * the strut is gone.
+ */
+export function letGo(scroller: Element | null) {
+  if (!scroller) {
+    return;
+  }
+  held.get(scroller)?.remove();
+  held.delete(scroller);
 }
 
 /**
