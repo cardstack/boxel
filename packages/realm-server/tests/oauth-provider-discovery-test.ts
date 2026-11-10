@@ -24,12 +24,16 @@ import {
   OAuthProviderConfigError,
   readOAuthProviderConfig,
 } from '../lib/oauth-provider/config.ts';
-import { createOAuthProvider } from '../lib/oauth-provider/provider.ts';
+import {
+  createOAuthProvider,
+  startOAuthProvider,
+} from '../lib/oauth-provider/provider.ts';
 import {
   buildRegistry,
   oauthIssuer,
   registryScopes,
   type OAuthResourceDefinition,
+  type OAuthScope,
 } from '../lib/oauth-provider/registry.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
@@ -286,6 +290,45 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('starting the provider', function () {
+    test('needs a secure origin', function (assert) {
+      assert.throws(
+        () =>
+          startOAuthProvider({
+            serverURL: new URL('https://realms.example.test/'),
+            config: testOAuthProviderConfig(),
+            hasSecureOrigin: false,
+          }),
+        (error: unknown) =>
+          error instanceof OAuthProviderConfigError &&
+          /no secureOriginURL/.test(error.message),
+      );
+    });
+
+    test('refuses a server URL with a path, since discovery is served at the root', function (assert) {
+      assert.throws(
+        () =>
+          startOAuthProvider({
+            serverURL: new URL('https://realms.example.test/boxel/'),
+            config: testOAuthProviderConfig(),
+            hasSecureOrigin: true,
+          }),
+        (error: unknown) =>
+          error instanceof OAuthProviderConfigError &&
+          /must have no path/.test(error.message),
+      );
+    });
+
+    test('takes its issuer from the server URL, with no trailing slash', function (assert) {
+      let provider = startOAuthProvider({
+        serverURL: new URL('https://realms.example.test/'),
+        config: testOAuthProviderConfig(),
+        hasSecureOrigin: true,
+      });
+      assert.strictEqual(provider.issuer, 'https://realms.example.test');
+    });
+  });
+
   module('the registry', function () {
     test("derives the issuer and each resource's identifier from the server URL, with no trailing slash", function (assert) {
       assert.strictEqual(
@@ -312,6 +355,25 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         registryScopes(buildRegistry('https://a.test', [testResource])),
         ['boxel:read', 'boxel:write', 'test:probe'],
+      );
+    });
+
+    test('is frozen, all the way down', function (assert) {
+      let registry = buildRegistry('https://a.test', [testResource]);
+      assert.true(Object.isFrozen(registry), 'the list');
+      for (let resource of registry) {
+        assert.true(Object.isFrozen(resource), `${resource.id}`);
+        assert.true(Object.isFrozen(resource.scopes), `${resource.id} scopes`);
+        for (let scope of resource.scopes) {
+          assert.true(Object.isFrozen(scope), `${resource.id} ${scope.name}`);
+        }
+      }
+      assert.throws(() => {
+        (registry[0].scopes as OAuthScope[]).push(testResource.scopes[1]);
+      }, TypeError);
+      assert.false(
+        Object.isFrozen(testResource.scopes),
+        "the caller's definition is left as it was",
       );
     });
 
@@ -390,10 +452,16 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("names the issuer from the server's URL, whatever host the request names", async function (assert) {
-      let response = await request.get(DISCOVERY, 'other-host.example.test');
-      assert.strictEqual(response.status, 200);
-      assert.strictEqual(response.body.issuer, 'http://127.0.0.1:0');
+    test("answers only on the issuer's host", async function (assert) {
+      // Published sites are served on other hosts, from pages users write.
+      for (let path of [DISCOVERY, '/_oauth-provider/auth']) {
+        let response = await request.get(path, 'site.published.example.test');
+        assert.strictEqual(
+          response.status,
+          404,
+          `${path} on another host is not found`,
+        );
+      }
     });
 
     test('serves no OpenID discovery, signing keys, or endpoint not yet built', async function (assert) {

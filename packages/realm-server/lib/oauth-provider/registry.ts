@@ -1,8 +1,9 @@
 // The resources the OAuth provider issues tokens for. Each is an API named by
 // one URL, the audience of its tokens. The list is code, so adding a resource
 // is a reviewed change: every resource also needs a controller that checks
-// its tokens. Tests add a resource of their own through the realm server's
-// test-only option; nothing in production can.
+// its tokens. What a scope admits is decided by each resource's controller,
+// not here (ADR 021 §1.3). Tests add a resource of their own through the
+// realm server's test-only option; nothing in production can.
 
 export type OAuthClientKinds =
   // Any client: one identified by a client ID metadata document, or one that
@@ -30,7 +31,7 @@ export interface OAuthResourceDefinition {
   description: string;
   // One sentence consent shows, saying what a grant reaches.
   coverage: string;
-  scopes: OAuthScope[];
+  scopes: readonly OAuthScope[];
   clients: OAuthClientKinds;
 }
 
@@ -74,16 +75,22 @@ export function oauthIssuer(serverURL: URL | string): string {
   return String(serverURL).replace(/\/+$/, '');
 }
 
+// The registry is frozen, all the way down, since it must not change while
+// the server runs (ADR 021 §1.3).
 export function buildRegistry(
   issuer: string,
   testOnlyResources: readonly OAuthResourceDefinition[] = [],
-): OAuthResource[] {
+): readonly OAuthResource[] {
   let base = oauthIssuer(issuer);
   let registry = [...RESOURCES, ...testOnlyResources].map(
-    ({ path, ...resource }) => ({
-      ...resource,
-      id: oauthIssuer(`${base}${path}`),
-    }),
+    ({ path, scopes, ...resource }): OAuthResource =>
+      Object.freeze({
+        ...resource,
+        scopes: Object.freeze(
+          scopes.map((scope) => Object.freeze({ ...scope })),
+        ),
+        id: oauthIssuer(`${base}${path}`),
+      }),
   );
   let seen = new Set<string>();
   for (let { id } of registry) {
@@ -92,7 +99,7 @@ export function buildRegistry(
     }
     seen.add(id);
   }
-  return registry;
+  return Object.freeze(registry);
 }
 
 // Every scope any resource declares, each once, in declaration order.

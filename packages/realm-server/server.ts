@@ -51,12 +51,8 @@ import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import type Provider from 'oidc-provider';
 import type { OAuthProviderConfig } from './lib/oauth-provider/config.ts';
-import { createOAuthProvider } from './lib/oauth-provider/provider.ts';
-import {
-  buildRegistry,
-  oauthIssuer,
-  type OAuthResourceDefinition,
-} from './lib/oauth-provider/registry.ts';
+import { startOAuthProvider } from './lib/oauth-provider/provider.ts';
+import type { OAuthResourceDefinition } from './lib/oauth-provider/registry.ts';
 import {
   appOrigin,
   createSecureOrigin,
@@ -919,16 +915,11 @@ export class RealmServer {
         )
       : undefined;
     if (oauthProvider) {
-      if (!this.secureOrigin) {
-        throw new Error(
-          `the OAuth provider needs a secure origin for its pages: this realm server has no secureOriginURL`,
-        );
-      }
-      let issuer = oauthIssuer(serverURL);
-      this.oauthProvider = createOAuthProvider({
-        issuer,
+      this.oauthProvider = startOAuthProvider({
+        serverURL,
         config: oauthProvider,
-        registry: buildRegistry(issuer, __testOnlyOAuthResources),
+        hasSecureOrigin: Boolean(this.secureOrigin),
+        testOnlyResources: __testOnlyOAuthResources,
       });
     }
   }

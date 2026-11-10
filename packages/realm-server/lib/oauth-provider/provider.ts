@@ -2,14 +2,17 @@ import * as Sentry from '@sentry/node';
 import Provider, { errors } from 'oidc-provider';
 import type { Configuration, KoaContextWithOIDC } from 'oidc-provider';
 import { logger } from '@cardstack/runtime-common';
+import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
 import { OAuthProviderConfigError } from './config.ts';
 import type { OAuthProviderConfig } from './config.ts';
-import type { OAuthResource } from './registry.ts';
-import { registryScopes } from './registry.ts';
+import type { OAuthResource, OAuthResourceDefinition } from './registry.ts';
+import { buildRegistry, oauthIssuer, registryScopes } from './registry.ts';
 
 export const log = logger('boxel:oauth-provider');
 
-export const OAUTH_PROVIDER_PATH_PREFIX = '/_oauth-provider';
+// Every route of the provider is beneath this prefix, which request telemetry
+// strips of its query strings and bodies.
+export const OAUTH_PROVIDER_PATH_PREFIX = OAUTH_PROVIDER_PATH;
 export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 
 // The fields discovery copies from the library's document. That document
@@ -34,6 +37,40 @@ const DISCOVERY_FIELDS = [
   'scopes_supported',
 ] as const;
 
+// Starts the provider for a realm server. Its issuer is the server's URL
+// (ADR 021 §1.1), so every resource's identifier and every URL it publishes
+// are built from that, never from a request.
+export function startOAuthProvider({
+  serverURL,
+  config,
+  hasSecureOrigin,
+  testOnlyResources,
+}: {
+  serverURL: URL;
+  config: OAuthProviderConfig;
+  hasSecureOrigin: boolean;
+  testOnlyResources?: readonly OAuthResourceDefinition[];
+}): Provider {
+  if (!hasSecureOrigin) {
+    throw new OAuthProviderConfigError(
+      `the OAuth provider needs a secure origin for its pages: this realm server has no secureOriginURL`,
+    );
+  }
+  // Discovery is served at the root, which RFC 8414 allows only for an
+  // issuer with no path.
+  if (serverURL.pathname !== '/') {
+    throw new OAuthProviderConfigError(
+      `the OAuth provider's issuer is the realm server's URL, which must have no path: ${serverURL.href}`,
+    );
+  }
+  let issuer = oauthIssuer(serverURL);
+  return createOAuthProvider({
+    issuer,
+    config,
+    registry: buildRegistry(issuer, testOnlyResources),
+  });
+}
+
 export function createOAuthProvider({
   issuer,
   config,
@@ -41,7 +78,7 @@ export function createOAuthProvider({
 }: {
   issuer: string;
   config: OAuthProviderConfig;
-  registry: OAuthResource[];
+  registry: readonly OAuthResource[];
 }): Provider {
   let scopes = registryScopes(registry);
   let configuration: Configuration = {
@@ -77,6 +114,17 @@ export function createOAuthProvider({
       devInteractions: { enabled: false },
       resourceIndicators: {
         enabled: true,
+        // The library's defaults, set so an upgrade can't change them. An
+        // authorization request that names no resource is given none, and
+        // Boxel's checks before the library decide it. A token request that
+        // names none takes the grant's resource, and is refused when the
+        // grant holds several (ADR 021 §1.3).
+        defaultResource: (
+          _ctx: KoaContextWithOIDC,
+          _client: unknown,
+          oneOf?: readonly string[],
+        ) => oneOf,
+        useGrantedResource: () => false,
         getResourceServerInfo: (
           _ctx: KoaContextWithOIDC,
           resourceIndicator: string,
