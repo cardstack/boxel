@@ -264,6 +264,25 @@ module('Integration | password reset', function (hooks) {
       );
     });
 
+    test('carries no hint that keeps a password manager out of its fields', async function (assert) {
+      await render(<template><ResetPassword @link={{LINK}} /></template>);
+      for (let field of [
+        '[data-test-password-field]',
+        '[data-test-confirm-password-field]',
+      ]) {
+        for (let hint of [
+          'data-1p-ignore',
+          'data-lpignore',
+          'data-form-type',
+          'data-bwignore',
+        ]) {
+          assert
+            .dom(field)
+            .doesNotHaveAttribute(hint, `${field} has no ${hint}`);
+        }
+      }
+    });
+
     test('checks the new password before it is sent', async function (assert) {
       await render(<template><ResetPassword @link={{LINK}} /></template>);
       await fillIn('[data-test-password-field]', 'short');

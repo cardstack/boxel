@@ -7,21 +7,25 @@ import {
   systemInitiatedPriority,
   unarchiveRealm,
   type Realm,
+  namedRealmUsers,
 } from '@cardstack/runtime-common';
 import { FULL_REINDEX_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/full-reindex';
 import * as Sentry from '@sentry/node';
-import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import { resolveAndAuthorizeArchiveTarget } from './archive-realm-utils.ts';
+import {
+  notifyRealmsListUpdated,
+  resolveAndAuthorizeArchiveTarget,
+} from './archive-realm-utils.ts';
 
 const log = logger('handle-unarchive');
 
 export default function handleUnarchiveRealm({
   dbAdapter,
+  matrixClient,
   queue,
   sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -30,11 +34,12 @@ export default function handleUnarchiveRealm({
       ctxt,
       dbAdapter,
       'unarchive',
+      matrixClient.serverName,
     );
     if (!target) {
       return;
     }
-    let { realmURL, permissions, ownerUserId } = target;
+    let { realmURL, permissions } = target;
 
     try {
       // Capture archived state before clearing it: only a realm that was
@@ -81,13 +86,13 @@ export default function handleUnarchiveRealm({
       });
       await setContextResponse(ctxt, response);
 
-      // Tell the owner's other sessions their realm list changed so a session
+      // Tell everyone the realm names that their realm list changed so a session
       // viewing the workspace chooser restores the realm to Your Workspaces —
       // and drops it from the Archived section if that session already has it
       // open — without a reload. Best-effort: the realm is already restored, so
       // a failed notify must not turn a successful unarchive into an error.
       try {
-        await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+        await notifyRealmsListUpdated(sendEvent, namedRealmUsers(permissions));
       } catch (error) {
         Sentry.captureException(error);
       }

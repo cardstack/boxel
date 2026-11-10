@@ -6,6 +6,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { restartableTask, timeout, all } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
@@ -83,6 +84,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
                   )
                   'invalid'
                 }}
+                {{ignoredByPasswordManagers}}
               />
             </FieldContainer>
           {{/unless}}

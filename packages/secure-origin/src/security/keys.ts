@@ -764,10 +764,10 @@ export interface RequestSnapshot {
 }
 
 // Why a slot needs approving: `new`, never approved or no longer usable;
-// `changed`, its request changed since it was approved; `pipelines-only`,
-// approved and unchanged, but for pipelines only (answered only when the
+// `changed`, its request changed since it was approved; `automations-only`,
+// approved and unchanged, but for automations only (answered only when the
 // batch is asked for with `interactive`).
-export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
+export type BatchSlotStatus = 'new' | 'changed' | 'automations-only';
 
 // One credential slot of an operation in a batch: why it needs approving, the
 // request it would approve and its fingerprint, and what it was last approved
@@ -839,22 +839,22 @@ export interface ApprovalBatch {
   // Operations left for after this confirmation, which takes at most so many
   // slots.
   remaining: number;
-  // Operations approved for pipelines only that didn't fit either, in a batch
+  // Operations approved for automations only that didn't fit either, in a batch
   // asked with `interactive`.
-  remainingPipelinesOnly: number;
+  remainingAutomationsOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
   // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
   // one) that can fill each slot token in every operation of the batch that
-  // sends it, as the realm server decides, by use: for `pipelines`, without
-  // the operations approved for pipelines only. Asked with `operations`, only
+  // sends it, as the realm server decides, by use: for `automations`, without
+  // the operations approved for automations only. Asked with `operations`, only
   // those operations count, and a slot none of them sends isn't named. The
   // page offers only these.
   fillers: BatchFillers;
 }
 
 export type BatchFillers = Record<
-  'interactive' | 'pipelines',
+  'interactive' | 'automations',
   Record<string, string[]>
 >;
 
@@ -863,7 +863,7 @@ export async function approvalBatch(
   request: {
     target: NonNullable<WindowContextRequest['target']>;
     review: boolean;
-    // Also answer operations approved for pipelines only.
+    // Also answer operations approved for automations only.
     interactive?: boolean;
     // The operations an approval covers, by name, when it covers only some
     // of the batch's: `fillers` then weigh only these. The batch still holds

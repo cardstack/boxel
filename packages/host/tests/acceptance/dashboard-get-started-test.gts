@@ -211,7 +211,7 @@ module('Acceptance | dashboard get started', function (hooks) {
       .doesNotExist('a done step does not say what publishing needs');
   });
 
-  test('owning only workspaces that cannot be published, the publish step says so instead of offering a button', async function (assert) {
+  test('administering only workspaces that cannot be published, the publish step says so instead of offering a button', async function (assert) {
     await visitAsNewUser();
     await openSteps();
 
@@ -223,9 +223,9 @@ module('Acceptance | dashboard get started', function (hooks) {
       );
   });
 
-  test('owning no workspace, the publish step says publishing needs one', async function (assert) {
+  test('able to edit no workspace, the publish step says publishing needs one', async function (assert) {
     mockMatrixUtils.setRealmPermissions({
-      [realmURL]: ['read', 'write'],
+      [realmURL]: ['read'],
     });
     await visitAsNewUser();
     await openSteps();
@@ -234,11 +234,11 @@ module('Acceptance | dashboard get started', function (hooks) {
     assert
       .dom('[data-test-get-started-publish-unavailable]')
       .hasText(
-        'Publishing needs a workspace you own. Create one to publish it.',
+        'Publishing needs a workspace you can edit. Create one to publish it.',
       );
   });
 
-  test("the publish step's note waits for the info of the workspaces the user owns", async function (assert) {
+  test("the publish step's note waits for the info of the workspaces the user administers", async function (assert) {
     await visitAsNewUser();
     // Holds Workspace A's info back, as a slow load does.
     let resource = (getService('realm') as any).realms.get(realmURL);
@@ -271,7 +271,7 @@ module('Acceptance | dashboard get started', function (hooks) {
     test('with one workspace to publish, the publish step opens it in host mode with the publish dialog', async function (assert) {
       await visitAsNewUser();
       markPublishable(ownedRealmURL);
-      // Publishable, but shared with the user rather than theirs.
+      // Publishable, but shared with the user to read only.
       markPublishable(sharedRealmURL);
       await settled();
       await openSteps();
@@ -370,7 +370,7 @@ module('Acceptance | dashboard get started', function (hooks) {
       }
       markUpdated(realmURL, new Date(now - 60_000));
       markUpdated(ownedRealmURL, new Date(now - 30_000));
-      // The newest, but shared with the user rather than theirs.
+      // The newest, but shared with the user to read only.
       markUpdated(sharedRealmURL, new Date(now));
       await settled();
       await openSteps();

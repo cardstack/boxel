@@ -2,6 +2,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { modifier } from 'ember-modifier';
 
 import {
@@ -107,6 +108,7 @@ export default class SearchBar extends Component<Signature> {
           {{elementCallback @onInputInsertion}}
           {{autoFocus}}
           data-search-field
+          {{ignoredByPasswordManagers}}
           data-test-search-field
         />
       </div>

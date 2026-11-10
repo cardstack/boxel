@@ -406,7 +406,7 @@ type CreateWorkspace = (input: {
   endpoint?: string;
 }) => Promise<{ url: string; name: string }>;
 
-// Deletes a workspace the current user owns and returns its URL.
+// Deletes a workspace the current user administers and returns its URL.
 type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
 
 // The index of the run's realm. Every call acts on the whole realm or on

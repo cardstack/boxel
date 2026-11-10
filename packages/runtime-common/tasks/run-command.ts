@@ -90,7 +90,6 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   dbAdapter,
   prerenderer,
   createPrerenderAuth,
-  matrixURL,
   matrixServerName,
 }) =>
   async function (args) {
@@ -108,7 +107,6 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
 
     let outcome = await prepareRunCommand({
       dbAdapter,
-      matrixURL,
       matrixServerName,
       createPrerenderAuth,
       realmURL,
