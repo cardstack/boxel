@@ -17,7 +17,13 @@ import {
   IconButton,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { and, bool, cn, eq } from '@cardstack/boxel-ui/helpers';
+import {
+  and,
+  bool,
+  cn,
+  eq,
+  type MenuItemOptions,
+} from '@cardstack/boxel-ui/helpers';
 import { ignoredByPasswordManagers } from './components/password-managers';
 import BooleanField from './boolean';
 // host-mode mutation: publish and unpublish are registered host tools
@@ -26,6 +32,7 @@ import BooleanField from './boolean';
 import GetPublishedRealmsTool from '@cardstack/boxel-host/tools/get-published-realms';
 import PublishRealmTool from '@cardstack/boxel-host/tools/publish-realm';
 import UnpublishRealmTool from '@cardstack/boxel-host/tools/unpublish-realm';
+import GetCardTool from '@cardstack/boxel-host/tools/get-card';
 import {
   GetPublishedRealmsInput,
   PublishRealmInput,
@@ -48,6 +55,7 @@ import PanelLeftCloseIcon from '@cardstack/boxel-icons/panel-left-close';
 import PanelLeftOpenIcon from '@cardstack/boxel-icons/panel-left-open';
 import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
 import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
+import PinIcon from '@cardstack/boxel-icons/pin';
 
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
@@ -61,7 +69,10 @@ import {
   inferContentType,
   isCardInstance,
   isFileDefInstance,
+  isRealmIndexCardId,
   excludeCardInstanceFileRows,
+  RealmPaths,
+  rri,
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
@@ -95,6 +106,7 @@ import {
   type FileDef,
 } from './card-api';
 import { MarkdownDef } from './markdown-file-def'; // realm README
+import { rawArrayValues } from './watched-array';
 // Content-only markdown renderer: the README's prose with no file shell chrome
 // (no file bar, metadata, or fixed-height scroll box). The card owns the frame.
 // Imported from its own module rather than the `file-formats/index` barrel,
@@ -102,6 +114,10 @@ import { MarkdownDef } from './markdown-file-def'; // realm README
 // this card's graph for nothing.
 import { MarkdownPreview } from './file-formats/markdown-preview';
 import type { RealmEventContent } from './matrix-event';
+import type {
+  RealmExtension,
+  RealmExtensionMenuItemParams,
+} from './realm-extension';
 import type { Spec } from './spec';
 import { now as clockNow, nowDate } from './helpers/clock';
 
@@ -3996,6 +4012,17 @@ export class Workspace extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
+
+  // As a realm extension (ADR 032): a realm that lists Workspace in its
+  // `realm.json` gets "Pin to Workspace" on the menu of each of its cards,
+  // which pins the card to the realm's index card.
+  static provideMenuItems(
+    card: CardDef,
+    params: RealmExtensionMenuItemParams,
+  ): MenuItemOptions[] {
+    return pinToWorkspaceMenuItems(card, params);
+  }
+
   // Rows per Library page. A subclass may page in smaller steps.
   static libraryPageSize = SEARCH_PAGE_SIZE;
 
@@ -4828,4 +4855,48 @@ export class Workspace extends CardDef {
     }
     return this.displayName;
   }
+}
+
+Workspace satisfies RealmExtension;
+
+// Pins `card` to the Workspace at the root of its realm. Offered only where
+// the user can write that realm, and never on the Workspace itself.
+function pinToWorkspaceMenuItems(
+  card: CardDef,
+  params: RealmExtensionMenuItemParams,
+): MenuItemOptions[] {
+  let cardId = typeof card.id === 'string' ? rri(card.id) : undefined;
+  if (
+    params.menuContext !== 'interact' ||
+    !params.canEdit ||
+    !cardId ||
+    isRealmIndexCardId(cardId, params.realm)
+  ) {
+    return [];
+  }
+  let workspaceId = new RealmPaths(params.realm).fileRRI('index');
+  return [
+    {
+      label: 'Pin to Workspace',
+      icon: PinIcon,
+      action: async () => {
+        let workspace = await new GetCardTool(params.toolContext).execute({
+          cardId: workspaceId,
+        });
+        if (!(workspace instanceof Workspace)) {
+          throw new Error(
+            `cannot pin ${cardId}: the realm's index card ${workspaceId} is not a Workspace`,
+          );
+        }
+        // The raw backing array keeps the links of pins whose cards are
+        // missing or not loaded yet, which the field's own value would drop.
+        let pinned = rawArrayValues(workspace.entryPoints ?? []);
+        if (pinned.some((pin) => isCardInstance(pin) && pin.id === card.id)) {
+          return;
+        }
+        workspace.entryPoints = [...pinned, card];
+        params.cardCrudFunctions.saveCard?.(workspaceId);
+      },
+    },
+  ];
 }

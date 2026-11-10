@@ -664,6 +664,55 @@ function assignRealmConfig(
   realmInfo.config = structuredClone(config) as Record<string, JsonValue>;
 }
 
+// The RealmConfig card's `realmExtensionModules`, as data. Each entry that is
+// a code ref keeps its name and has its module resolved against the card, so
+// the host can load it from any page. Anything else is dropped with a warning,
+// and the realm server never loads what remains (ADR 032).
+function assignRealmExtensionModules(
+  realmInfo: RealmInfo,
+  value: unknown,
+  relativeTo: RealmResourceIdentifier,
+  log: { warn: (message: string) => void },
+): void {
+  delete realmInfo.realmExtensionModules;
+  if (value == null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    log.warn(
+      `ignoring the RealmConfig card's \`realmExtensionModules\`, which is ${typeof value} rather than a list of code refs`,
+    );
+    return;
+  }
+  let refs: ResolvedCodeRef[] = [];
+  for (let entry of value as unknown[]) {
+    let module = (entry as Partial<ResolvedCodeRef> | null)?.module;
+    let name = (entry as Partial<ResolvedCodeRef> | null)?.name;
+    if (
+      typeof module !== 'string' ||
+      !module ||
+      typeof name !== 'string' ||
+      !name
+    ) {
+      log.warn(
+        `ignoring an entry of the RealmConfig card's \`realmExtensionModules\` that is not a code ref: ${JSON.stringify(entry)}`,
+      );
+      continue;
+    }
+    let absolute = codeRefWithAbsoluteIdentifier(
+      { module: rri(module), name },
+      relativeTo,
+      undefined,
+    );
+    if (isResolvedCodeRef(absolute)) {
+      refs.push({ module: absolute.module, name: absolute.name });
+    }
+  }
+  if (refs.length > 0) {
+    realmInfo.realmExtensionModules = refs;
+  }
+}
+
 // Which card holds the realm's policy, as the RealmConfig card at `realm.json`
 // names it. Applied by the file overlay alone, which is authoritative for the
 // pointer (the index overlay says why), and like `config` called only where
@@ -848,6 +897,10 @@ export type RealmInfo = {
   // the index's isolated HTML. Optional to avoid forcing every
   // RealmInfo fixture to update.
   includePrerenderedDefaultRealmIndex?: boolean | null;
+  // The RealmConfig card's `realmExtensionModules`, with each module resolved
+  // to an absolute RRI. The host loads them; the realm server only reads them
+  // as data (ADR 032). Absent when the realm lists none.
+  realmExtensionModules?: ResolvedCodeRef[];
 };
 
 // Counts behind a favorite workspace tile's Cards / Files / Definitions row.
@@ -18368,6 +18421,9 @@ export class Realm {
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
     );
+    let realmConfigCardId = rri(
+      this.#virtualNetwork.unresolveURL(realmConfigCardURL.href),
+    );
     try {
       let cardFilePath: LocalPath = this.paths.local(
         this.paths.fileURL('realm.json'),
@@ -18405,6 +18461,14 @@ export class Realm {
         }
         if ('config' in attrs) {
           assignRealmConfig(realmInfo, attrs.config, this.#log);
+        }
+        if ('realmExtensionModules' in attrs) {
+          assignRealmExtensionModules(
+            realmInfo,
+            attrs.realmExtensionModules,
+            realmConfigCardId,
+            this.#log,
+          );
         }
         if ('policy' in attrs) {
           assignRealmPolicy(
@@ -18453,6 +18517,14 @@ export class Realm {
         }
         if ('config' in attrs) {
           assignRealmConfig(realmInfo, attrs.config, this.#log);
+        }
+        if ('realmExtensionModules' in attrs) {
+          assignRealmExtensionModules(
+            realmInfo,
+            attrs.realmExtensionModules,
+            realmConfigCardId,
+            this.#log,
+          );
         }
         // `policy` is not overlaid from here. The file overlay above is the
         // only one that reads it, so the file on disk is authoritative for the
