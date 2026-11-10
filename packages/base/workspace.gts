@@ -62,15 +62,20 @@ import {
   isCardInstance,
   isFileDefInstance,
   excludeCardInstanceFileRows,
+  resolveRRIReference,
+  rri,
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
+  trimJsonExtension,
   type Query,
   type Filter,
   type CodeRef,
 } from '@cardstack/runtime-common';
 
 import { ResizeHandle } from './components/resize-handle';
+import { rawArrayValues } from './watched-array';
+import { isNonPresentLink } from './field-support';
 import CardsGridLayout, {
   VIEW_OPTIONS,
   SORT_OPTIONS,
@@ -783,6 +788,7 @@ class Isolated extends Component<typeof Workspace> {
                               aria-label='Unpin'
                               title='Unpin'
                               {{on 'click' (this.unpinDoor index)}}
+                              data-test-door-unpin={{index}}
                             />
                           {{/if}}
                         </div>
@@ -2789,8 +2795,20 @@ class Isolated extends Component<typeof Workspace> {
     }
     let card = await this.args.context?.store.get(chosenId);
     if (card && isCardInstance(card)) {
-      let existing = (this.args.model.entryPoints ?? []) as CardDef[];
-      if (existing.some((c) => c?.id === card.id)) {
+      // The raw backing array keeps the links of pins whose cards are missing
+      // or not loaded yet, which reading the field directly would save as
+      // empty.
+      let existing = rawArrayValues(this.args.model.entryPoints ?? []);
+      let modelId = this.args.model.id;
+      let isChosenCard = (pin: unknown) =>
+        isCardInstance(pin)
+          ? pin.id === card.id
+          : isNonPresentLink(pin) &&
+            modelId !== undefined &&
+            trimJsonExtension(
+              resolveRRIReference(pin.reference, rri(modelId)),
+            ) === card.id;
+      if (existing.some(isChosenCard)) {
         return; // already pinned
       }
       this.args.model.entryPoints = [...existing, card];
@@ -2799,7 +2817,7 @@ class Isolated extends Component<typeof Workspace> {
   });
 
   unpinDoor = (index: number) => () => {
-    let pts = (this.args.model.entryPoints ?? []) as CardDef[];
+    let pts = rawArrayValues(this.args.model.entryPoints ?? []);
     this.args.model.entryPoints = pts.filter((_, i) => i !== index);
     this.savePins();
   };

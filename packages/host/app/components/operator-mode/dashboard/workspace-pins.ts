@@ -60,12 +60,21 @@ export class WorkspacePins {
   }
 
   // Whether the realm's index card is a Workspace, and so can hold pins:
-  // undefined until the first search answers.
+  // undefined until a search answers.
   get isWorkspace(): boolean | undefined {
     if (this.#resource.entries.length > 0) {
       return true;
     }
-    return this.#resource.isLoading ? undefined : false;
+    return this.#resource.isLoading || this.failed ? undefined : false;
+  }
+
+  // Whether the last search failed with no earlier answer to fall back on.
+  get failed(): boolean {
+    return (
+      !this.#resource.isLoading &&
+      this.#resource.entries.length === 0 &&
+      (this.#resource.errors?.length ?? 0) > 0
+    );
   }
 }
 
