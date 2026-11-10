@@ -18,14 +18,16 @@ import type * as CardAPI from '@cardstack/base/card-api';
 const SCHEMES = ['dark', 'light'] as const;
 const DEMO = 'keyframes';
 
-/** the eyebrow role the gallery's kickers read */
-const EYEBROW = [
-  '--boxel-eyebrow-font-family',
-  '--boxel-eyebrow-font-size',
-  '--boxel-eyebrow-line-height',
-  '--boxel-eyebrow-font-weight',
-  '--boxel-eyebrow-letter-spacing',
-];
+/**
+ * The typography role variable the card container derives from a theme's
+ * `--theme-<role>-*` variable, which the gallery's components read: the label
+ * role is `--boxel-ui-label-*`, and every other role keeps its name.
+ */
+function roleVariable(themeVariable: string): string {
+  return themeVariable
+    .replace(/^--theme-label-/, '--boxel-ui-label-')
+    .replace(/^--theme-/, '--boxel-');
+}
 
 function site(): HTMLElement {
   return document.querySelector<HTMLElement>('[data-choreo-site]')!;
@@ -68,20 +70,29 @@ module('Integration | Choreo gallery | theme fallback', function (hooks) {
   test('a demo with no theme linked resolves every value the gallery theme sets, in each scheme', async function (assert) {
     let theme = (await gallery.theme()) as CardAPI.Theme;
     let groups = parseCssGroups(theme.cssVariables);
-    let names = [
+    let themeNames = [
       ...new Set(
         [':root', '.dark'].flatMap((selector) => [
           ...(groups?.get(selector)?.keys() ?? []),
         ]),
       ),
-    ]
-      .filter((name) => name.startsWith('--'))
-      .concat(EYEBROW);
+    ].filter((name) => name.startsWith('--'));
+    // a role the theme sets reaches the gallery as the container's role
+    // variable, so the shell has to resolve that the same way too
+    let names = themeNames.concat(
+      themeNames
+        .filter((name) => name.startsWith('--theme-'))
+        .map(roleVariable),
+    );
     assert.true(
-      ['--foreground', '--background', '--copper', '--iris-ink'].every((name) =>
-        names.includes(name),
-      ),
-      'the theme sets the contract tokens and the gallery’s own',
+      [
+        '--foreground',
+        '--background',
+        '--copper',
+        '--iris-ink',
+        '--boxel-eyebrow-font-size',
+      ].every((name) => names.includes(name)),
+      'the theme sets the contract tokens, the gallery’s own and its eyebrow role',
     );
 
     let themed: Record<string, Record<string, string>> = {};
