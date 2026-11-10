@@ -21,7 +21,7 @@ import {
   type RealmClient,
 } from './realm-api.ts';
 
-import type { PipelineApprovalTarget } from './key-seed.ts';
+import type { AutomationApprovalTarget } from './key-seed.ts';
 
 export interface Evaluation {
   // The EvaluationCard's id.
@@ -45,8 +45,8 @@ export interface Evaluation {
   skillFeatures: string[];
   // Overrides the GOOD grade's default time budget per prompt.
   secondsPerPrompt?: number;
-  // Operations approved for scheduled pipelines only before the first prompt.
-  pipelineApprovals: PipelineApproval[];
+  // Operations approved for automations only before the first prompt.
+  automationApprovals: AutomationApproval[];
   // A conversation-only evaluation: the run passes when every prompt was sent
   // and nothing was written, with no card to render.
   expectsNoWrites: boolean;
@@ -61,7 +61,7 @@ export interface Evaluation {
 // another user puts into the test workspace.
 export type KeyFrom = 'own-key' | 'share';
 
-export interface PipelineApproval {
+export interface AutomationApproval {
   // One of `initialCards`, without its `.json` suffix; its card type is what
   // is approved.
   card: RealmResourceIdentifier;
@@ -161,8 +161,8 @@ export async function loadEvaluation(
       );
     }
   }
-  let pipelineApprovals = pipelineApprovalsOf(doc, id, cardUrl);
-  for (let { card } of pipelineApprovals) {
+  let automationApprovals = automationApprovalsOf(doc, id, cardUrl);
+  for (let { card } of automationApprovals) {
     if (!initialCards.some((seed) => cardIdOf(seed) === card)) {
       throw new Error(
         `${cardUrl} approves an operation of ${card}, but does not seed it in initialCards`,
@@ -193,36 +193,36 @@ export async function loadEvaluation(
       attributes.secondsPerPrompt > 0
         ? attributes.secondsPerPrompt
         : undefined,
-    pipelineApprovals,
+    automationApprovals,
     expectsNoWrites: attributes.expectsNoWrites === true,
     seedScript,
     adoptsFrom: doc.data.meta.adoptsFrom,
   };
 }
 
-// `pipelineApprovals` is a containsMany of a field whose card is a link, so
+// `automationApprovals` is a containsMany of a field whose card is a link, so
 // each entry's attributes are at its position in the attribute array and its
-// card is the relationship `pipelineApprovals.<position>.card`.
-function pipelineApprovalsOf(
+// card is the relationship `automationApprovals.<position>.card`.
+function automationApprovalsOf(
   doc: CardDocument,
   id: RealmResourceIdentifier,
   cardUrl: string,
-): PipelineApproval[] {
-  let entries: unknown = doc.data.attributes?.pipelineApprovals;
+): AutomationApproval[] {
+  let entries: unknown = doc.data.attributes?.automationApprovals;
   if (!Array.isArray(entries)) {
     return [];
   }
   return entries.map((entry, position) => {
     let { operation, keyFrom } = (entry ?? {}) as Record<string, unknown>;
-    let [card] = linkedIds(doc, `pipelineApprovals.${position}.card`, id);
+    let [card] = linkedIds(doc, `automationApprovals.${position}.card`, id);
     if (!card || typeof operation !== 'string' || !operation.trim()) {
       throw new Error(
-        `${cardUrl} pipelineApprovals[${position}] names no card or no operation`,
+        `${cardUrl} automationApprovals[${position}] names no card or no operation`,
       );
     }
     if (keyFrom !== 'own-key' && keyFrom !== 'share') {
       throw new Error(
-        `${cardUrl} pipelineApprovals[${position}] has keyFrom ${JSON.stringify(keyFrom)}; it is "own-key" or "share"`,
+        `${cardUrl} automationApprovals[${position}] has keyFrom ${JSON.stringify(keyFrom)}; it is "own-key" or "share"`,
       );
     }
     return { card: cardIdOf(card), operation: operation.trim(), keyFrom };
@@ -397,16 +397,16 @@ export function promptCardIds(
   );
 }
 
-// Each pipeline approval as the test workspace names it: the card type of the
+// Each automation approval as the test workspace names it: the card type of the
 // copied card, read from the seed's `adoptsFrom`, which a relative module
 // reference resolves against the copy's own id.
-export function pipelineApprovalTargets(
+export function automationApprovalTargets(
   bundle: EvaluationBundle,
   testRealmUrl: string,
-): PipelineApprovalTarget[] {
+): AutomationApprovalTarget[] {
   testRealmUrl = ensureTrailingSlash(testRealmUrl);
   let testRealm = realmPaths(testRealmUrl);
-  return (bundle.pipelineApprovals ?? []).map(
+  return (bundle.automationApprovals ?? []).map(
     ({ card, operation, keyFrom }) => {
       let path = `${localPath(card, bundle.realmUrl)}.json`;
       let file = bundle.files.find((f) => f.path === path);

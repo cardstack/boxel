@@ -341,8 +341,9 @@ interface PublishProgressResponseBody {
 
 // Reads a published realm's in-flight indexing/prerendering progress from
 // `GET {realmServerURL}_publish-progress`. Served by the realm server (not the
-// published realm) and authorized against the caller's `realm-owner`
-// permission, so it carries the realm-server token like `publishRealm` does.
+// published realm) and authorized against the caller administering the realm
+// it was published from, so it carries the realm-server token like
+// `publishRealm` does.
 export const fetchPublishProgress: RealmOperation<
   FetchPublishProgressInput,
   PublishProgress

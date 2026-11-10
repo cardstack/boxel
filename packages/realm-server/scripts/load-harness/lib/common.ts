@@ -1,11 +1,12 @@
 // Shared plumbing for the load harness: endpoint defaults, the production
 // guard, credential reading, argument parsing, and percentile summaries.
 //
-// Nothing in this directory imports from the workspace, and nothing here needs
-// `node_modules`. The harness has to run from inside the same AWS region as the
-// realm server under test — a CloudShell session or an ECS task, neither of
-// which has a checkout — so installing it is `cp -r` plus a Node that strips
-// types. Keep it to global `fetch` and `node:` built-ins.
+// The harness has to run from inside the same AWS region as the realm server
+// under test — a CloudShell session or an ECS task, neither of which has a
+// checkout or `node_modules`. `pnpm load-harness:bundle` bundles `run-load.ts`
+// and the workspace modules it imports into `dist/run-load.mjs`, and that one
+// file is what gets copied there. The bundle must need only global `fetch` and
+// `node:` built-ins.
 
 import { readFileSync } from 'node:fs';
 

@@ -5,7 +5,13 @@ import type {
   SubscriptionCycle,
   User,
 } from '@cardstack/runtime-common';
-import { logger, param, query } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  logger,
+  param,
+  query,
+  userInitiatedPrerenderHtmlPriority,
+} from '@cardstack/runtime-common';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import {
@@ -16,7 +22,7 @@ import {
   insertUser,
   prepareTestDB,
 } from './helpers/index.ts';
-import type { PgAdapter } from '@cardstack/postgres';
+import { PgQueueRunner, type PgAdapter } from '@cardstack/postgres';
 import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handlers/payment-succeeded';
 import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
 import { handleCheckoutSessionCompleted } from '@cardstack/billing/stripe-webhook-handlers/checkout-session-completed';
@@ -29,6 +35,7 @@ import {
 } from '@cardstack/billing/billing-queries';
 import type { TaskArgs } from '@cardstack/runtime-common/tasks';
 import { dailyCreditGrant } from '@cardstack/runtime-common/tasks/daily-credit-grant';
+import { enqueueDailyCreditGrant } from '../scripts/daily-credit-grant.ts';
 
 import type {
   StripeInvoicePaymentSucceededWebhookEvent,
@@ -1248,6 +1255,37 @@ module(basename(import.meta.filename), function () {
     });
 
     module('daily credit grant', function () {
+      test('is claimed by a high-priority worker', async function (assert) {
+        // The high-priority pool is the one a full reindex never occupies, so
+        // a grant it can claim doesn't wait behind one.
+        await enqueueDailyCreditGrant({ lowCreditThreshold: 10 });
+
+        let claimed = new Deferred<void>();
+        let worker = new PgQueueRunner({
+          adapter: dbAdapter,
+          workerId: 'high-priority-worker',
+          priority: userInitiatedPrerenderHtmlPriority,
+        });
+        worker.register('daily-credit-grant', async () => {
+          claimed.fulfill();
+        });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let timedOut = new Promise<'timed out'>((resolve) => {
+          timer = setTimeout(() => resolve('timed out'), 10_000);
+        });
+        try {
+          await worker.start();
+          let outcome = await Promise.race([
+            claimed.promise.then(() => 'claimed' as const),
+            timedOut,
+          ]);
+          assert.strictEqual(outcome, 'claimed');
+        } finally {
+          clearTimeout(timer);
+          await worker.destroy();
+        }
+      });
+
       test('grants credits when user falls below the threshold', async function (assert) {
         let user = await insertUser(
           dbAdapter,
