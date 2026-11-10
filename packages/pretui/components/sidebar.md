@@ -79,7 +79,7 @@ APG **Disclosure** for the toggle, on a named navigation landmark.
 
 ## Theming
 
-`--pretui-sidebar-width` (a resizable or dragged width overrides it inline), `--pretui-sidebar-rail-width`, `--pretui-sidebar-bg`, `--pretui-sidebar-track`, `--pretui-drawer-size` (mobile), `--pretui-selected` and `--pretui-primary-ink` (the active item), `--primary`, `--foreground`, `--muted-foreground`, `--border`, `--hover`, `--ring`, `--radius-chip`, `--control-h`, `--inset`, `--pretui-z-raised`, `--pretui-dur-morph` / `--pretui-ease-morph` (the width slide), `--pretui-dur-snap` / `--pretui-ease-snap`, the `--pretui-size-*` steps, `--font-mono`, `--track-eyebrow`, `--track-ui`, the `--text-ui-*` sizes and `--space-2` / `--space-3`.
+`--pretui-sidebar-width` (a resizable or dragged width overrides it inline), `--pretui-sidebar-rail-width`, `--pretui-resize-handle-size` / `--pretui-resize-handle-outset` (the resize seam; the outset is fixed at 0 where `@placement='end'` meets `@scroll='content'`), `--pretui-sidebar-bg`, `--pretui-sidebar-track`, `--pretui-drawer-size` (mobile), `--pretui-selected` and `--pretui-primary-ink` (the active item), `--primary`, `--foreground`, `--muted-foreground`, `--border`, `--hover`, `--ring`, `--radius-chip`, `--control-h`, `--inset`, `--pretui-z-raised`, `--pretui-dur-morph` / `--pretui-ease-morph` (the width slide), `--pretui-dur-snap` / `--pretui-ease-snap`, the `--pretui-size-*` steps, `--font-mono`, `--track-eyebrow`, `--track-ui`, the `--text-ui-*` sizes and `--space-2` / `--space-3`.
 
 Widths are args as well as tokens. The slide is dropped under reduced motion.
 

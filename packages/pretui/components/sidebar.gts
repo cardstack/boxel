@@ -14,6 +14,7 @@ import { tracked } from '@glimmer/tracking';
 import { concat, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+import { schedule } from '@ember/runloop';
 import { modifier } from 'ember-modifier';
 
 import { cssDeclaration, cssStyleFrom } from '../pretui-css';
@@ -454,6 +455,14 @@ export class Sidebar extends Component<SidebarSignature> {
   private noteSeamFocus() {
     let active = typeof document === 'undefined' ? null : document.activeElement;
     this.refocusSeam = active?.getAttribute('data-sidebar-seam') === this.railId;
+    // A swap installs the new control during the render; when the state
+    // didn't change (a controlled parent kept @open), nothing consumes the
+    // flag, so it is dropped once that render is done.
+    if (this.refocusSeam) {
+      schedule('afterRender', () => {
+        this.refocusSeam = false;
+      });
+    }
   }
   /** Takes focus only when the swap dropped it on the body; focus the user
    * has since moved elsewhere stays there. */
@@ -559,7 +568,6 @@ export class Sidebar extends Component<SidebarSignature> {
    * to a modal drawer the moment the pane was hidden, so it changes nothing.
    */
   setWidth = (width: number) => {
-    this.noteSeamFocus();
     let narrow = width > 0 && width < this.mobileBreakpoint;
     if (narrow !== this.narrowPane) {
       this.drawerOpen = false;
@@ -592,6 +600,9 @@ export class Sidebar extends Component<SidebarSignature> {
     }
     let next = band === 'full';
     let changed = next !== this.open;
+    if (changed) {
+      this.noteSeamFocus();
+    }
     if (this.args.open === undefined) {
       this.internal = next;
     }
@@ -761,9 +772,9 @@ export class Sidebar extends Component<SidebarSignature> {
             @controls={{this.railId}}
             data-sidebar-seam={{this.railId}}
             {{this.refocus}}
-            data-test-pretui-sidebar-resize
             {{on 'pointermove' this.moveSeam}}
             {{on 'click' this.clickSeam}}
+            data-test-pretui-sidebar-resize
           />
         {{else if this.showHandle}}
           {{! A REAL tab stop. shadcn's rail is a <button tabIndex={-1}> and
@@ -778,8 +789,8 @@ export class Sidebar extends Component<SidebarSignature> {
             aria-controls={{this.railId}}
             data-sidebar-seam={{this.railId}}
             {{this.refocus}}
-            data-test-pretui-sidebar-handle
             {{on 'click' this.toggle}}
+            data-test-pretui-sidebar-handle
           ><span class='pretui-sidebar-handle-line' aria-hidden='true'></span>
           </button>
         {{/if}}
@@ -1022,11 +1033,11 @@ export class Sidebar extends Component<SidebarSignature> {
         /* Coarse pointers get a real target rather than a 16px sliver. */
         @media (any-pointer: coarse) {
           .pretui-sidebar-handle {
-            inline-size: 44px;
-            inset-inline-start: calc(var(--pretui-sidebar-track) - 22px);
+            inline-size: 2.75rem;
+            inset-inline-start: calc(var(--pretui-sidebar-track) - 1.375rem);
           }
           .pretui-sidebar-shell[data-placement='end'] .pretui-sidebar-handle {
-            inset-inline-end: calc(var(--pretui-sidebar-track) - 22px);
+            inset-inline-end: calc(var(--pretui-sidebar-track) - 1.375rem);
           }
         }
         /* Reduced motion lands on the end state: the rail is at its width, the
@@ -1513,7 +1524,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
            pointer keeps the kit's 28px rhythm. */
         @media (any-pointer: coarse) {
           .pretui-sbitem {
-            min-block-size: 44px;
+            min-block-size: 2.75rem;
           }
           .pretui-sbitem[data-collapsed='true'] {
             inline-size: 2.75rem;

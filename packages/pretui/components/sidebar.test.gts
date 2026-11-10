@@ -28,6 +28,16 @@ async function resizeTo(width: number, until: () => boolean) {
   await waitUntil(until, { timeout: 2000 });
   await settled();
 }
+// Resizes the pane and waits one rendering step: a ResizeObserver reports in
+// the frame's rendering step, so it has fired before the next frame's
+// animation callback. For a resize that changes no visible state.
+async function resizeQuietly(width: number) {
+  pane().style.inlineSize = width + 'px';
+  let done = false;
+  requestAnimationFrame(() => requestAnimationFrame(() => (done = true)));
+  await waitUntil(() => done, { timeout: 2000 });
+  await settled();
+}
 const seamEl = () => document.querySelector('[data-test-pretui-sidebar-resize]') as HTMLElement;
 // The harness delivers no stylesheet and may scale its container, so a drag
 // is written in layout px and converted, as in the ResizeHandle tests.
@@ -116,7 +126,8 @@ module('Pretui | components/sidebar', function (hooks) {
     await resizeTo(1200, () => state() === 'expanded');
     await click('[data-test-pretui-sidebar-handle]');
     assert.strictEqual(state(), 'collapsed', 'collapsed by hand in the full band');
-    await resizeTo(800, () => state() === 'collapsed');
+    // already folded, so the rail band changes nothing visible to wait on
+    await resizeQuietly(800);
     await resizeTo(1200, () => state() === 'expanded');
     assert.strictEqual(state(), 'expanded', 'crossing back hands control to the automatic choice');
   });
@@ -368,12 +379,48 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.dom('[data-test-outside]').isFocused('focus stays where the user put it');
   });
 
+  test('@resizable: a fold the controlled parent ignores does not steal focus later', async function (assert) {
+    class Knobs {
+      @tracked open = true;
+    }
+    let knobs = new Knobs();
+    let calls: boolean[] = [];
+    let onOpenChange = (v: boolean) => calls.push(v);
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @open={{knobs.open}} @onOpenChange={{onOpenChange}} @resizable={{true}}><:nav>Lots</:nav></Sidebar></template>);
+    seamEl().focus();
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'Home');
+    assert.deepEqual(calls, [false], 'the parent hears the fold');
+    assert.strictEqual(state(), 'expanded', 'and ignores it');
+    seamEl().blur();
+    knobs.open = false;
+    await settled();
+    assert.strictEqual(state(), 'collapsed');
+    assert.notStrictEqual(document.activeElement, document.querySelector('[data-test-pretui-sidebar-handle]'), 'the toggle button does not take focus');
+  });
+
+  test('@resizable: a pane resize that swaps nothing leaves focus alone later', async function (assert) {
+    class Knobs {
+      @tracked open = true;
+    }
+    let knobs = new Knobs();
+    await render(<template><div data-test-pane><Sidebar @label='Library' @open={{knobs.open}} @resizable={{true}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(1200, () => !!seamEl());
+    seamEl().focus();
+    await resizeQuietly(1100);
+    seamEl().blur();
+    knobs.open = false;
+    await settled();
+    assert.strictEqual(state(), 'collapsed');
+    assert.notStrictEqual(document.activeElement, document.querySelector('[data-test-pretui-sidebar-handle]'), 'the toggle button does not take focus');
+  });
+
   test('@resizable: the first seam click after a band reopen toggles', async function (assert) {
     await render(<template><div data-test-pane><Sidebar @label='Library' @resizable={{true}} @width='200px' @minWidth={{150}} @railBreakpoint={{1024}}><:nav>Lots</:nav></Sidebar></div></template>);
     await resizeTo(1200, () => state() === 'expanded' && !!seamEl());
     await drag(200, 100);
     assert.strictEqual(state(), 'collapsed', 'the drag folds the rail');
-    await resizeTo(800, () => state() === 'collapsed');
+    // already folded, so the rail band changes nothing visible to wait on
+    await resizeQuietly(800);
     await resizeTo(1200, () => state() === 'expanded');
     await click('[data-test-pretui-sidebar-resize]');
     assert.strictEqual(state(), 'collapsed', 'the click toggles');
