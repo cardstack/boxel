@@ -18,6 +18,7 @@ const ALICE = '@alice:localhost';
 const BOB = '@bob:localhost';
 const CAROL = '@carol:localhost';
 const OUTAGE_MS = 20 * 60_000;
+const LIMITS = DEFAULT_GROUPING_LIMITS;
 
 // The time `seconds` after T0, in milliseconds since the epoch.
 function at(seconds: number): number {
@@ -219,7 +220,7 @@ module('grouper', (hooks) => {
     });
 
     test('an event with no open group opens one', (assert) => {
-      assert.deepEqual(decide(undefined, event(0)), {});
+      assert.deepEqual(decide(undefined, event(0), LIMITS), {});
     });
 
     test('an event with an invalid occurred_at is refused', (assert) => {
@@ -233,60 +234,70 @@ module('grouper', (hooks) => {
   module('quiet period', () => {
     test('an event within the quiet period of the latest write joins the group', (assert) => {
       let group = groupOf(event(0), event(1));
-      assert.deepEqual(decide(group, event(2.9)), {});
+      assert.deepEqual(decide(group, event(2.9), LIMITS), {});
     });
 
     test('an event at the end of the quiet period closes the group before it', (assert) => {
       let group = groupOf(event(0), event(1));
-      assert.deepEqual(decide(group, event(3)), {
+      assert.deepEqual(decide(group, event(3), LIMITS), {
         closeBefore: 'quiet-period',
       });
     });
 
     test('the clock closes the group once the quiet period has passed since its latest write', (assert) => {
       let group = groupOf(event(0), event(1));
-      assert.deepEqual(deadline(group), { at: at(3), reason: 'quiet-period' });
-      assert.strictEqual(closedByClock(group, at(2.999)), undefined);
-      assert.strictEqual(closedByClock(group, at(3)), 'quiet-period');
+      assert.deepEqual(deadline(group, LIMITS), {
+        at: at(3),
+        reason: 'quiet-period',
+      });
+      assert.strictEqual(closedByClock(group, at(2.999), LIMITS), undefined);
+      assert.strictEqual(closedByClock(group, at(3), LIMITS), 'quiet-period');
     });
 
     test('a write carrying an earlier time than the latest does not shorten the quiet period', (assert) => {
       let group = groupOf(event(0), event(1), event(0.5));
-      assert.strictEqual(deadline(group).at, at(3));
+      assert.strictEqual(deadline(group, LIMITS).at, at(3));
     });
   });
 
   module('maximum age', () => {
     test('a run of writes with no pause closes at the maximum age after its earliest write', (assert) => {
-      assert.deepEqual(decide(groupOf(...burst(0, 28)), event(29)), {});
-      assert.deepEqual(decide(groupOf(...burst(0, 29)), event(30)), {
+      assert.deepEqual(decide(groupOf(...burst(0, 28)), event(29), LIMITS), {});
+      assert.deepEqual(decide(groupOf(...burst(0, 29)), event(30), LIMITS), {
         closeBefore: 'max-age',
       });
     });
 
     test('the clock closes the group at the maximum age while the writes continue', (assert) => {
       let group = groupOf(...burst(0, 29));
-      assert.deepEqual(deadline(group), { at: at(30), reason: 'max-age' });
-      assert.strictEqual(closedByClock(group, at(29.999)), undefined);
-      assert.strictEqual(closedByClock(group, at(30)), 'max-age');
+      assert.deepEqual(deadline(group, LIMITS), {
+        at: at(30),
+        reason: 'max-age',
+      });
+      assert.strictEqual(closedByClock(group, at(29.999), LIMITS), undefined);
+      assert.strictEqual(closedByClock(group, at(30), LIMITS), 'max-age');
     });
 
     test('a write carrying an earlier time than the first moves the maximum age earlier', (assert) => {
       let group = groupOf(...burst(10, 39), event(9.5));
-      assert.deepEqual(deadline(group), { at: at(39.5), reason: 'max-age' });
+      assert.deepEqual(deadline(group, LIMITS), {
+        at: at(39.5),
+        reason: 'max-age',
+      });
     });
   });
 
   module('writer', () => {
     test("another author's event closes the group", (assert) => {
-      assert.deepEqual(decide(groupOf(event(0)), event(1, { author: BOB })), {
-        closeBefore: 'author',
-      });
+      assert.deepEqual(
+        decide(groupOf(event(0)), event(1, { author: BOB }), LIMITS),
+        { closeBefore: 'author' },
+      );
     });
 
     test('an event on another channel closes the group', (assert) => {
       assert.deepEqual(
-        decide(groupOf(event(0)), event(1, { channel: 'boxel-cli' })),
+        decide(groupOf(event(0)), event(1, { channel: 'boxel-cli' }), LIMITS),
         { closeBefore: 'channel' },
       );
     });
@@ -294,16 +305,17 @@ module('grouper', (hooks) => {
     test("another agent's event closes the group", (assert) => {
       let ai = { channel: 'ai-assistant', room: '!room:localhost' } as const;
       let group = groupOf(event(0, { ...ai, agent: 'model-a' }));
-      assert.deepEqual(decide(group, event(1, { ...ai, agent: 'model-b' })), {
-        closeBefore: 'agent',
-      });
+      assert.deepEqual(
+        decide(group, event(1, { ...ai, agent: 'model-b' }), LIMITS),
+        { closeBefore: 'agent' },
+      );
     });
 
     test('an event from another room closes the group, even with the same agent', (assert) => {
       let ai = { channel: 'ai-assistant', agent: 'model-a' } as const;
       let group = groupOf(event(0, { ...ai, room: '!one:localhost' }));
       assert.deepEqual(
-        decide(group, event(1, { ...ai, room: '!two:localhost' })),
+        decide(group, event(1, { ...ai, room: '!two:localhost' }), LIMITS),
         { closeBefore: 'room' },
       );
     });
@@ -315,18 +327,26 @@ module('grouper', (hooks) => {
         room: '!room:localhost',
         correlationId: 'tool-call-1',
       } as const;
-      assert.deepEqual(decide(groupOf(event(0, ai)), event(1, ai)), {});
+      assert.deepEqual(decide(groupOf(event(0, ai)), event(1, ai), LIMITS), {});
     });
 
     for (let channel of ['ai-assistant', 'mcp'] as const) {
       test(`on ${channel}, another tool call's event closes the group`, (assert) => {
         let group = groupOf(event(0, { channel, correlationId: 'call-1' }));
         assert.deepEqual(
-          decide(group, event(0.1, { channel, correlationId: 'call-2' })),
+          decide(
+            group,
+            event(0.1, { channel, correlationId: 'call-2' }),
+            LIMITS,
+          ),
           { closeBefore: 'tool-call' },
         );
         assert.deepEqual(
-          decide(group, event(0.1, { channel, correlationId: 'call-1' })),
+          decide(
+            group,
+            event(0.1, { channel, correlationId: 'call-1' }),
+            LIMITS,
+          ),
           {},
           'the same tool call joins',
         );
@@ -336,7 +356,7 @@ module('grouper', (hooks) => {
     test('on ai-assistant, events with no tool call join the group', (assert) => {
       let group = groupOf(event(0, { channel: 'ai-assistant' }));
       assert.deepEqual(
-        decide(group, event(1, { channel: 'ai-assistant' })),
+        decide(group, event(1, { channel: 'ai-assistant' }), LIMITS),
         {},
       );
     });
@@ -345,7 +365,11 @@ module('grouper', (hooks) => {
       for (let channel of ['host', 'boxel-cli', 'api'] as const) {
         let group = groupOf(event(0, { channel, correlationId: 'request-1' }));
         assert.deepEqual(
-          decide(group, event(1, { channel, correlationId: 'request-2' })),
+          decide(
+            group,
+            event(1, { channel, correlationId: 'request-2' }),
+            LIMITS,
+          ),
           {},
           channel,
         );
@@ -383,14 +407,14 @@ module('grouper', (hooks) => {
     for (let intent of intents) {
       test(`a ${intent.kind} event closes the open group before and after it`, (assert) => {
         let group = groupOf(event(0), event(0.5));
-        assert.deepEqual(decide(group, event(1, { intent })), {
+        assert.deepEqual(decide(group, event(1, { intent }), LIMITS), {
           closeBefore: 'intent',
           closeAfter: 'intent',
         });
       });
 
       test(`a ${intent.kind} event with no open group is a group of its own`, (assert) => {
-        assert.deepEqual(decide(undefined, event(0, { intent })), {
+        assert.deepEqual(decide(undefined, event(0, { intent }), LIMITS), {
           closeAfter: 'intent',
         });
       });
@@ -413,7 +437,9 @@ module('grouper', (hooks) => {
 
     test('a group opened by an intent event takes no other event', (assert) => {
       let group = openGroup(event(0, { intent: { kind: 'delete-realm' } }));
-      assert.deepEqual(decide(group, event(0.5)), { closeBefore: 'intent' });
+      assert.deepEqual(decide(group, event(0.5), LIMITS), {
+        closeBefore: 'intent',
+      });
     });
   });
 
@@ -421,41 +447,50 @@ module('grouper', (hooks) => {
     test('neither the quiet period nor the maximum age closes a push group', (assert) => {
       let events = range(0, 29).map((step) => pushEvent(step * 3, 'P'));
       let group = groupOf(...events.slice(0, -1));
-      assert.deepEqual(decide(group, events[29]), {}, 'a 3 s gap, 87 s in');
+      assert.deepEqual(
+        decide(group, events[29], LIMITS),
+        {},
+        'a 3 s gap, 87 s in',
+      );
       let whole = groupOf(...events);
-      assert.deepEqual(deadline(whole), {
+      assert.deepEqual(deadline(whole, LIMITS), {
         at: at(87 + 60),
         reason: 'push-timeout',
       });
-      assert.strictEqual(closedByClock(whole, at(87 + 59.999)), undefined);
+      assert.strictEqual(
+        closedByClock(whole, at(87 + 59.999), LIMITS),
+        undefined,
+      );
     });
 
     test("the push's final event closes its group after it", (assert) => {
       let group = groupOf(pushEvent(0, 'P'), pushEvent(3, 'P'));
-      assert.deepEqual(decide(group, pushEvent(6, 'P', { final: true })), {
-        closeAfter: 'push-final',
-      });
+      assert.deepEqual(
+        decide(group, pushEvent(6, 'P', { final: true }), LIMITS),
+        { closeAfter: 'push-final' },
+      );
     });
 
     test('a final event with no open group is a group of its own', (assert) => {
-      assert.deepEqual(decide(undefined, pushEvent(0, 'P', { final: true })), {
-        closeAfter: 'push-final',
-      });
+      assert.deepEqual(
+        decide(undefined, pushEvent(0, 'P', { final: true }), LIMITS),
+        { closeAfter: 'push-final' },
+      );
     });
 
     test('a final mark on an event with no push ID is ignored', (assert) => {
       assert.deepEqual(
-        decide(groupOf(event(0)), event(1, { pushFinal: true })),
+        decide(groupOf(event(0)), event(1, { pushFinal: true }), LIMITS),
         {},
       );
     });
 
     test('an abandoned push closes at the push timeout after its latest write', (assert) => {
       let group = groupOf(pushEvent(0, 'P'), pushEvent(3, 'P'));
-      assert.strictEqual(closedByClock(group, at(62.999)), undefined);
-      assert.strictEqual(closedByClock(group, at(63)), 'push-timeout');
+      assert.strictEqual(closedByClock(group, at(62.999), LIMITS), undefined);
+      assert.strictEqual(closedByClock(group, at(63), LIMITS), 'push-timeout');
       assert.deepEqual(
-        decide(group, pushEvent(63, 'P')),
+        decide(group, pushEvent(63, 'P'), LIMITS),
         { closeBefore: 'push-timeout' },
         'the push resuming after the timeout opens a further group',
       );
@@ -484,11 +519,11 @@ module('grouper', (hooks) => {
 
     test('a push starting or ending closes the open group', (assert) => {
       let write = groupOf(event(0, { author: BOB, channel: 'boxel-cli' }));
-      assert.deepEqual(decide(write, pushEvent(0.5, 'P')), {
+      assert.deepEqual(decide(write, pushEvent(0.5, 'P'), LIMITS), {
         closeBefore: 'push',
       });
       assert.deepEqual(
-        decide(groupOf(pushEvent(0, 'P')), pushEvent(0.5, 'Q')),
+        decide(groupOf(pushEvent(0, 'P')), pushEvent(0.5, 'Q'), LIMITS),
         { closeBefore: 'push' },
         'another push',
       );
@@ -496,6 +531,7 @@ module('grouper', (hooks) => {
         decide(
           groupOf(pushEvent(0, 'P')),
           event(0.5, { author: BOB, channel: 'boxel-cli' }),
+          LIMITS,
         ),
         { closeBefore: 'push' },
         'a write outside the push',
@@ -541,11 +577,11 @@ module('grouper', (hooks) => {
         { seqs: range(1, 8), reason: 'quiet-period' },
       ]);
       assert.strictEqual(
-        closedByClock(groupOf(...events), at(8.999)),
+        closedByClock(groupOf(...events), at(8.999), LIMITS),
         undefined,
       );
       assert.strictEqual(
-        closedByClock(groupOf(...events), at(9)),
+        closedByClock(groupOf(...events), at(9), LIMITS),
         'quiet-period',
       );
     });

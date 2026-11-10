@@ -47,8 +47,10 @@ export interface GroupingLimits {
 }
 
 // The proposed limits. The push values are placeholders until they are
-// measured under production load; every function takes its limits as an
-// argument, so a task can run with others.
+// measured under production load. Every function requires its limits as an
+// argument, so a task can run with others, and a caller hands the same limits
+// to each: the next event and the clock agree on a group's deadline only when
+// they measure it with the same limits.
 export const DEFAULT_GROUPING_LIMITS: GroupingLimits = {
   quietPeriodMs: 2_000,
   maxAgeMs: 30_000,
@@ -134,7 +136,7 @@ export function extendGroup(group: OpenGroup, event: ChangeEvent): OpenGroup {
 export function decide(
   group: OpenGroup | undefined,
   event: ChangeEvent,
-  limits: GroupingLimits = DEFAULT_GROUPING_LIMITS,
+  limits: GroupingLimits,
 ): Decision {
   let decision: Decision = {};
   let closeBefore = group ? closesBefore(group, event, limits) : undefined;
@@ -152,10 +154,7 @@ export function decide(
 
 // When time closes the group, and why. A recorder with no later event in
 // hand schedules its check for this moment.
-export function deadline(
-  group: OpenGroup,
-  limits: GroupingLimits = DEFAULT_GROUPING_LIMITS,
-): Deadline {
+export function deadline(group: OpenGroup, limits: GroupingLimits): Deadline {
   if (isPush(group.first)) {
     return {
       at: group.latestAt + limits.pushTimeoutMs,
@@ -183,7 +182,7 @@ export function deadline(
 export function closedByClock(
   group: OpenGroup,
   now: number,
-  limits: GroupingLimits = DEFAULT_GROUPING_LIMITS,
+  limits: GroupingLimits,
 ): CloseReason | undefined {
   let { at, reason } = deadline(group, limits);
   return now >= at ? reason : undefined;
