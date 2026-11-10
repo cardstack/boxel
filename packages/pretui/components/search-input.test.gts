@@ -13,6 +13,7 @@ import {
   settled,
 } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
+import { on } from '@ember/modifier';
 import { SearchInput } from './search-input';
 import { positionPopup } from '../internal/overlay';
 
@@ -27,24 +28,21 @@ function toggle(): HTMLButtonElement | null {
 function input(): HTMLInputElement | null {
   return root().querySelector('input');
 }
-// Popover's panel; anchorTo positions the layer around it
-function panel(): HTMLElement | null {
-  return root().querySelector('[role="dialog"]');
+// the open field; anchorTo positions Popup's layer, its parent
+function field(): HTMLElement | null {
+  return root().querySelector('[data-test-pretui-search-field]');
 }
 function layer(): HTMLElement {
-  return panel()?.parentElement as HTMLElement;
+  return field()?.parentElement as HTMLElement;
 }
-// the anchor anchorTo measures: the layer's parent
+// the anchor anchorTo measures
 function anchorRect(): DOMRect {
-  return (layer().parentElement as HTMLElement).getBoundingClientRect();
+  return (
+    root().querySelector('[data-test-pretui-search-anchor]') as HTMLElement
+  ).getBoundingClientRect();
 }
-// Popover's backdrop is out of the tab order
 function focusables(): HTMLElement[] {
-  return [
-    ...root().querySelectorAll<HTMLElement>(
-      'button:not([tabindex="-1"]), input',
-    ),
-  ];
+  return [...root().querySelectorAll<HTMLElement>('button, input')];
 }
 // the left/top anchorTo wrote, against the square it measured on open
 function placed() {
@@ -59,15 +57,14 @@ function placed() {
 // the component's own rules give: a fixed panel over a fixed-size square,
 // in an unscaled test container (a transform would re-anchor the fixed panel)
 const GEOMETRY = `#ember-testing { transform: none !important; zoom: 1 !important; }
-  [data-test-pretui-popover] { display: grid; inline-size: 32px; block-size: 32px; }
-  [data-test-pretui-popover] > span > span { position: fixed; display: block; }
-  [data-test-pretui-popover] [aria-label='Close'] { position: fixed; inset: 0; }
+  [data-test-pretui-search-anchor] { display: grid; inline-size: 32px; block-size: 32px; }
+  [data-test-pretui-search-anchor] > span { position: fixed; display: block; }
   [data-test-pretui-search-toggle] { inline-size: 100%; block-size: 100%; }
   [data-test-pad] { padding: 2rem; }
   [data-test-scroller] { block-size: 6rem; overflow: auto; }
   [data-test-spacer] { block-size: 3rem; }
   [data-test-tail] { block-size: 20rem; }
-  [data-test-pretui-search-input] [role='dialog'] { display: block; inline-size: 240px; }`;
+  [data-test-pretui-search-field] { display: block; inline-size: 240px; }`;
 async function openOver(): Promise<DOMRect> {
   await click(toggle() as HTMLElement);
   return anchorRect();
@@ -113,10 +110,9 @@ module('Pretui | components/search-input', function (hooks) {
       input(),
       'the field opens focused',
     );
-    assert.strictEqual(
-      panel()?.getAttribute('aria-label'),
-      'Search tasks',
-      'the panel is named too',
+    assert.notOk(
+      root().querySelector('[role="dialog"]'),
+      'the open field is not announced as a dialog',
     );
     await fillIn(input() as HTMLInputElement, 'bug');
     assert.deepEqual(seen, ['bug']);
@@ -264,14 +260,8 @@ module('Pretui | components/search-input', function (hooks) {
       </template>,
     );
     let square = await openOver();
-    let popover = root().querySelector(
-      '[data-test-pretui-popover]',
-    ) as HTMLElement;
     let room = Math.max(window.innerWidth - square.left, square.right) - 8;
-    assert.strictEqual(
-      popover.style.getPropertyValue('--pretui-popover-max-width'),
-      `${room}px`,
-    );
+    assert.strictEqual(field()?.style.maxInlineSize, `${room}px`);
   });
 
   test('positionPopup flips the field toward the room near the viewport edge', function (assert) {
@@ -328,14 +318,38 @@ module('Pretui | components/search-input', function (hooks) {
     );
   });
 
-  test('a click outside closes it and returns focus to the square', async function (assert) {
+  test('an outside click closes it and the clicked control still gets the click', async function (assert) {
+    let clicks = 0;
+    let onNext = () => clicks++;
     await render(
-      <template><SearchInput @display='collapsed' @value='bug' /></template>,
+      <template>
+        <SearchInput @display='collapsed' @value='bug' /><button
+          type='button'
+          data-test-next
+          {{on 'click' onNext}}
+        >Next</button>
+      </template>,
     );
     await click(toggle() as HTMLElement);
-    await click(root().querySelector('[aria-label="Close"]') as HTMLElement);
+    assert.ok(field(), 'open');
+    await click('[data-test-next]');
+    await waitUntil(() => !field());
+    assert.strictEqual(clicks, 1, 'the click reached the control');
+    assert.strictEqual(
+      document.activeElement,
+      document.querySelector('[data-test-next]'),
+      'focus went where the click went',
+    );
+    assert.ok(toggle(), 'the square is back');
+  });
+
+  test('Escape returns focus to the square', async function (assert) {
+    await render(<template><SearchInput @display='collapsed' /></template>);
+    await click(toggle() as HTMLElement);
+    await triggerKeyEvent(input() as HTMLInputElement, 'keydown', 'Escape');
     await waitUntil(() => document.activeElement === toggle());
-    assert.strictEqual(panel(), null, 'closed');
+    assert.notOk(field(), 'closed');
+    assert.strictEqual(document.activeElement, toggle());
   });
 
   test('closing removes the panel, so nothing covers later controls', async function (assert) {
@@ -348,10 +362,10 @@ module('Pretui | components/search-input', function (hooks) {
       </template>,
     );
     await click(toggle() as HTMLElement);
-    assert.ok(panel(), 'open');
+    assert.ok(field(), 'open');
     await triggerKeyEvent(input() as HTMLInputElement, 'keydown', 'Escape');
     await waitUntil(() => document.activeElement === toggle());
-    assert.strictEqual(panel(), null, 'the panel is gone');
+    assert.strictEqual(field(), null, 'the layer is gone');
     await click('[data-test-next]');
     assert.strictEqual(
       document.activeElement,

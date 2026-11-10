@@ -11,7 +11,7 @@ import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { TYPED_BLOCK_RULES } from '../internal/extras';
 import { SEARCH_START_PADDING, SearchGlyph } from '../internal/search-glyph';
-import { Popover } from '../components/popover';
+import { Popup } from '../components/popup';
 import { FieldDress } from '../internal/field-dress';
 
 // A BoxelInput in Input's field style with the kit's own magnifier, plus the
@@ -165,7 +165,7 @@ export class SearchInput extends Component<SearchInputSignature> {
     let square = event.currentTarget as HTMLElement;
     // the panel is placed beside the square, pulled back by the square's own
     // width so the field starts over it; toward the inline end, so RTL opens
-    // leftward, and Popover flips it to the other side when that end has no room
+    // leftward, and Popup flips it to the other side when that end has no room
     this.openPlacement =
       getComputedStyle(square).direction === 'rtl'
         ? 'left-start'
@@ -178,27 +178,32 @@ export class SearchInput extends Component<SearchInputSignature> {
     this.open = true;
   };
   get openStyle() {
-    return htmlSafe(`--pretui-popover-max-width: ${this.openRoom}px`);
+    return htmlSafe(`max-inline-size: ${this.openRoom}px`);
   }
-  private root?: HTMLElement;
-  // focusout from inside the field, on the wrapper
+  // keydown and focusout from inside the field, on the wrapper; Popup renders
+  // its layer inside the anchor, so both bubble here. With no backdrop, a
+  // click outside reaches what was clicked and closes the field through
+  // focusout.
   closesOnLeave = modifier((root: HTMLElement) => {
-    this.root = root;
+    root.addEventListener('keydown', this.closeOnEscape);
     root.addEventListener('focusout', this.closeOnLeave);
-    return () => root.removeEventListener('focusout', this.closeOnLeave);
+    return () => {
+      root.removeEventListener('keydown', this.closeOnEscape);
+      root.removeEventListener('focusout', this.closeOnLeave);
+    };
   });
-  // Popover's own dismissals (Escape from anywhere, a click outside); its
-  // focus return finds no trigger, which is swapped out while open, so the
-  // square takes focus back once it renders again
-  onOpenChange = (open: boolean) => {
-    if (open) {
+  private closeOnEscape = (event: KeyboardEvent) => {
+    if (!this.open || event.key !== 'Escape') {
       return;
     }
+    event.preventDefault();
+    // keep an enclosing dialog or card from also closing on this Escape
+    event.stopPropagation();
+    let root = event.currentTarget as HTMLElement;
     this.open = false;
+    // the square renders in the same frame the field leaves
     requestAnimationFrame(() => {
-      this.root
-        ?.querySelector<HTMLElement>('[data-pretui-search-toggle]')
-        ?.focus();
+      root.querySelector<HTMLElement>('[data-pretui-search-toggle]')?.focus();
     });
   };
   private closeOnLeave = (event: FocusEvent) => {
@@ -256,19 +261,17 @@ export class SearchInput extends Component<SearchInputSignature> {
         data-test-pretui-search-input
         ...attributes
       >
-        {{! the open field is a Popover panel (position: fixed), so the clip
+        {{! the open field is in a Popup layer (position: fixed), so the clip
             of an enclosing LayoutControl can't cut it or its clear button; the
             anchor keeps the square's size while the toggle is swapped out }}
-        <Popover
+        <Popup
           class='pretui-searchcollapse-anchor'
-          style={{this.openStyle}}
           @open={{this.open}}
-          @onOpenChange={{this.onOpenChange}}
           @placement={{this.openPlacement}}
           @distance={{this.openDistance}}
-          @label={{this.searchName}}
+          data-test-pretui-search-anchor
         >
-          <:trigger>
+          <:anchor>
             {{#unless this.open}}
               {{! a raw button, not Button: the square is the field's own face
                   (--field, --input), which Button's variants don't draw }}
@@ -278,7 +281,6 @@ export class SearchInput extends Component<SearchInputSignature> {
                 id={{@controlId}}
                 aria-label={{unless @controlId this.collapsedName}}
                 title={{this.collapsedName}}
-                aria-haspopup='dialog'
                 aria-expanded='false'
                 disabled={{this.disabled}}
                 data-pretui-search-toggle
@@ -288,7 +290,7 @@ export class SearchInput extends Component<SearchInputSignature> {
                 <SearchIcon width='14' height='14' aria-hidden='true' />
               </button>
             {{/unless}}
-          </:trigger>
+          </:anchor>
           <:default>
             <SearchField
               class='pretui-searchcollapse-field'
@@ -299,10 +301,12 @@ export class SearchInput extends Component<SearchInputSignature> {
               @controlId={{@controlId}}
               @showClear={{this.showClear}}
               @onClear={{this.clear}}
+              style={{this.openStyle}}
               {{this.focusOnOpen}}
+              data-test-pretui-search-field
             />
           </:default>
-        </Popover>
+        </Popup>
       </div>
     {{else}}
       <SearchField
@@ -320,18 +324,12 @@ export class SearchInput extends Component<SearchInputSignature> {
     <style scoped>
       @layer PretComponent {
         /* @display 'collapsed': a square the height of the field; the open
-           field lies over the square from its start, in a fixed Popover panel
-           whose knobs strip its chrome so the field is the whole panel */
+           field lies over the square from its start, in a fixed Popup layer */
         .pretui-searchcollapse {
           --_search-h: var(
             --pretui-field-h,
             var(--boxel-form-control-height-sm)
           );
-          --pretui-popover-width: var(--pretui-search-open-w, 15rem);
-          --pretui-popover-min-width: 0;
-          --pretui-shadow-overlay: none;
-          --space-4: 0;
-          --popover: transparent;
           position: relative;
           inline-size: var(--_search-h);
           block-size: var(--_search-h);
@@ -370,8 +368,9 @@ export class SearchInput extends Component<SearchInputSignature> {
           inline-size: 100%;
           block-size: 100%;
         }
+        /* capped inline, on open, to the roomier side of the square */
         .pretui-searchcollapse-field {
-          inline-size: 100%;
+          inline-size: var(--pretui-search-open-w, 15rem);
         }
       }
     </style>
