@@ -9,27 +9,37 @@ the homeserver has to refuse any other invite between them (§1.6): a client
 can call the invite API directly, so the host app's own behavior can't keep
 the rule.
 
-A room may hold one end user and any number of service users (the realm
-server's account, the AI bot and the other bots, a realm's own account), so
-an invite from or to a service user is allowed here, without asking anyone:
-a user's session room and AI assistant rooms need no grant, and they are
-created before any realm server of a test stack is reachable. A service
-user is an account on this homeserver named by the convention `isBotAccount`
-applies in packages/runtime-common/db-queries/realm-permission-queries.ts;
+A room may hold any number of service users (the realm server's account,
+the AI bot and the other bots, a realm's own account) beside its end users,
+so an invite to a service user is allowed here without asking anyone: a
+user's AI assistant rooms need no grant, and they are created before any
+realm server of a test stack is reachable. A service user is an account on
+this homeserver named by the convention `isBotAccount` applies in
+packages/runtime-common/db-queries/realm-permission-queries.ts;
 test_service_account_vectors.json runs against both, so they can't diverge
 unnoticed.
 
-Only the realm server knows the grants, so for an invite between two end
-users this module asks it:
+An invite to an end user is judged by the room it would put them in, not by
+who sends it. Every other end user the room holds, joined or invited, and the
+inviter when they are an end user, has to share a realm with the invitee.
+Registration doesn't reserve the service users' names, so a person can hold
+an account that passes as one; judging the room keeps that account from
+putting two end users who share no realm into one room. A service user's
+invite into a room that holds no other end user, such as the realm server
+creating a user's session room, needs no grant and asks no one.
+
+Only the realm server knows the grants, so for each of those pairs this
+module asks it:
 
     GET <realm_server_url>/_invite-check?inviter=<id>&invitee=<id>
     Authorization: Bearer <shared_secret>
 
-and allows the invite only on a `200` whose body is `{"allowed": true}`.
-Anything else, including an unreachable realm server, a non-200 response and
-a body of another shape, denies the invite: the module fails closed and logs
-a warning, since a homeserver that can't check the rule must not admit an
-invite the rule would refuse.
+with the other end user as `inviter`, and allows the invite only when every
+answer is a `200` whose body is `{"allowed": true}`. Anything else, including
+a room whose state can't be read, an unreachable realm server, a non-200
+response and a body of another shape, denies the invite: the module fails
+closed and logs a warning, since a homeserver that can't check the rule must
+not admit an invite the rule would refuse.
 
 Configuration, under `modules:` in homeserver.yaml:
 
@@ -127,37 +137,70 @@ class BoxelInviteCheck:
         self, inviter: str, invitee: str, room_id: str
     ) -> InviteDecision:
         server_name = self._api.server_name
-        if is_service_user(inviter, server_name) or is_service_user(
-            invitee, server_name
-        ):
+        if is_service_user(invitee, server_name):
             return NOT_SPAM
+
         try:
-            body = await self._api.http_client.get_json(
-                f"{self._config.realm_server_url}/_invite-check",
-                args={"inviter": inviter, "invitee": invitee},
-                headers={"Authorization": [f"Bearer {self._config.shared_secret}"]},
-            )
+            end_users = await self._end_users_in_room(room_id, server_name)
         except Exception as e:  # noqa: BLE001 - every failure denies the invite
             logger.warning(
                 "boxel_invite_check: refusing invite from %s to %s in %s: "
-                "the realm server could not be asked: %r",
+                "the room's members could not be read: %r",
                 inviter,
                 invitee,
                 room_id,
                 e,
             )
             return Codes.FORBIDDEN
+        if not is_service_user(inviter, server_name):
+            end_users.add(inviter)
+        end_users.discard(invitee)
 
-        allowed = body.get("allowed") if isinstance(body, dict) else None
-        if allowed is True:
-            return NOT_SPAM
-        if allowed is not False:
+        for end_user in sorted(end_users):
+            if not await self._may_share_a_room(end_user, invitee, room_id):
+                return Codes.FORBIDDEN
+        return NOT_SPAM
+
+    async def _end_users_in_room(self, room_id: str, server_name: str) -> set[str]:
+        """The end users joined to or invited to `room_id`."""
+        state = await self._api.get_room_state(room_id, [("m.room.member", None)])
+        return {
+            event.state_key
+            for event in state.values()
+            if event.membership in ("join", "invite")
+            and not is_service_user(event.state_key, server_name)
+        }
+
+    async def _may_share_a_room(
+        self, end_user: str, invitee: str, room_id: str
+    ) -> bool:
+        """Whether the realm server answers that `end_user` and `invitee` share
+        a realm. Every failure to get a clear yes is a no."""
+        try:
+            body = await self._api.http_client.get_json(
+                f"{self._config.realm_server_url}/_invite-check",
+                args={"inviter": end_user, "invitee": invitee},
+                headers={"Authorization": [f"Bearer {self._config.shared_secret}"]},
+            )
+        except Exception as e:  # noqa: BLE001 - every failure denies the invite
             logger.warning(
-                "boxel_invite_check: refusing invite from %s to %s in %s: "
-                "the realm server answered with an unexpected body: %r",
-                inviter,
+                "boxel_invite_check: refusing invite of %s to %s, which holds %s: "
+                "the realm server could not be asked: %r",
                 invitee,
                 room_id,
+                end_user,
+                e,
+            )
+            return False
+
+        allowed = body.get("allowed") if isinstance(body, dict) else None
+        if allowed is not True and allowed is not False:
+            logger.warning(
+                "boxel_invite_check: refusing invite of %s to %s, which holds %s: "
+                "the realm server answered with an unexpected body: %r",
+                invitee,
+                room_id,
+                end_user,
                 body,
             )
-        return Codes.FORBIDDEN
+        return allowed is True
