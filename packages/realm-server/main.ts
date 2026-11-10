@@ -142,6 +142,16 @@ if (!GRAFANA_SECRET) {
   process.exit(-1);
 }
 
+// The Grafana whose signing keys verify operator actions proxied through it.
+// Local and test runs work without it, so its absence is a warning, not a
+// startup failure.
+const GRAFANA_URL = process.env.GRAFANA_URL || undefined;
+if (!GRAFANA_URL) {
+  console.warn(
+    `GRAFANA_URL is not set: operator actions proxied through Grafana will be refused`,
+  );
+}
+
 const MATRIX_URL = process.env.MATRIX_URL;
 if (!MATRIX_URL) {
   console.error(
@@ -977,7 +987,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
-    grafanaURL: process.env.GRAFANA_URL || undefined,
+    grafanaURL: GRAFANA_URL,
     aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
     matrixInviteCheckSecret: MATRIX_INVITE_CHECK_SECRET,
     dbAdapter,

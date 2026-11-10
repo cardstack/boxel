@@ -70,7 +70,7 @@ if [[ "$env_name" != "local" ]]; then
     SYNAPSE_PROMETHEUS_URL
     # Per-env realm-server base URL: substituted into dashboards' realm_server
     # constant template variable, and the URL of the realm-server-operator
-    # datasource — CS-10923
+    # datasource
     REALM_SERVER_URL
     # Realm-server shared secret. The realm-server-operator datasource holds
     # it in secureJsonData and attaches it to the operator-action calls it
