@@ -46,9 +46,8 @@ export const readRealmFileTool: Tool = {
       "Read files from a realm on demand — e.g. a skill's SKILL.md, or the " +
       `reference files it lists. Reads up to ${READ_REALM_FILE_MAX_URLS} ` +
       'files in one call, so batch the files you already know you need ' +
-      'rather than reading one at a time — every extra round of reads ' +
-      'delays your answer. Pick the most relevant files first and read ' +
-      "more on a later turn if you still need them. Reading a skill's " +
+      'rather than reading one at a time. Pick the most relevant files ' +
+      "first and read more on a later turn if you still need them. Reading a skill's " +
       'markdown file also unlocks the tools that skill declares: they ' +
       'become callable on your next turn, so read the skill file first ' +
       'when you intend to use its tools.',
@@ -63,9 +62,9 @@ export const readRealmFileTool: Tool = {
           items: { type: 'string' },
           description:
             'Identifiers of the files to read, each exactly as it appears ' +
-            'in the skill: a full URL, or a realm-prefix form such as ' +
-            '`@cardstack/base/card-api.gts`. A link in a skill is already ' +
-            "absolute — don't shorten or rewrite it. List each file once, " +
+            'where it is linked: a full URL, or a realm-prefix form such as ' +
+            '`@cardstack/base/card-api.gts`. A relative link resolves ' +
+            'against the URL of the file that contains it. List each file once, ' +
             `at most ${READ_REALM_FILE_MAX_URLS} per call. The realm each ` +
             'file lives in is worked out for you.',
         },
