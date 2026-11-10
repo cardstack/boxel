@@ -35,6 +35,11 @@
     },
     "types": ["node", "qunit", "@cardstack/local-types"]
   },
-  "include": ["../base/**/*", "main.ts", "setup-logger.ts", "src", "tests"],
-  "exclude": ["../base/**/__boxel/**"]
+  "include": [
+    "../base/types/**/*",
+    "main.ts",
+    "setup-logger.ts",
+    "src",
+    "tests"
+  ]
 }
