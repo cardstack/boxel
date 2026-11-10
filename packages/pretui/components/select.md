@@ -5,7 +5,7 @@ Choose one value from a known list. Use it when the options are enumerable and t
 ## The contract
 
 ```
-@options: { value, label, meta? }[]   (required; meta is a muted second part after the label, such as an address that tells two same-named options apart; search matches the label alone)
+@options: { value, label, meta?, glyph? }[]   (required; meta is a muted second part after the label, such as an address that tells two same-named options apart; glyph is a decorative character before the label, such as a flag; search and typeahead match the label alone)
 @value?, @defaultValue?, @placeholder? (default 'Select…'), @disabled?, @controlId?
 @searchEnabled?   (a search box above the list, focused on open, that password managers leave alone)
 @label?, @labelledBy?   (the trigger's accessible name)
@@ -20,6 +20,8 @@ Choose one value from a known list. Use it when the options are enumerable and t
 
 **Password managers leave the search box alone.** It carries every password manager's hint to skip a field (`ignoredByPasswordManagers`), since a box that filters a list never takes a login. It renders in the wormhole, so a caller couldn't put the hint on it.
 
+**A glyph leads the label without joining it.** An option's `glyph` (a flag, an emoji) is drawn before its label on the trigger and in the list, and hidden from assistive technology. It plays no part in matching: the search and the trigger's typeahead read the label, so typing "P" still finds "🇵🇹 Portugal". This is Radix's and React Aria's `textValue` split, between what a row shows and what typeahead reads, kept to the one case data can express.
+
 ## Prior art
 
 **Radix `Select`** composes `Root/Trigger/Value/Portal/Content/Item/ItemText/ItemIndicator` and is famously strict about `value`/`onValueChange` being strings. **Web Awesome `wa-select`** takes `<wa-option>` children, supports `multiple`, `clearable`, `with-label`/`hint`, and participates in native form validation. **React Spectrum `Picker`** uses a collection API (`items` + render function) and `selectedKey`/`onSelectionChange`.
@@ -29,6 +31,8 @@ Pretui's most consequential departure is under the hood: **it rides boxel-ui's `
 **The dropdown renders in BoxelSelect's wormhole**, so no `overflow: hidden` ancestor clips it. BoxelSelect copies its `--boxel-dropdown-*` knobs from the trigger onto the wormhole each time it opens, and a custom property's computed value has its `var()` references resolved. Select sets those knobs to theme tokens (`--popover`, `--popover-foreground`, `--hover`, `--border`, `--primary`, `--primary-foreground`, `--ring`), so the dropdown carries the trigger's theme, dark mode included, with no `:deep()` rule reaching into it.
 
 **Inside a Dialog, Drawer, CommandPalette or EditInPlace editor the list renders in place.** A modal `<dialog>` makes everything outside it inert, the wormhole included, and an editor that commits on blur reads focus moving into the wormhole as leaving. Each of those provides the `pretui-popups-in-place` context, and Select reads it when it is created and passes `@renderInPlace`: ember-basic-dropdown reads that argument only once, at creation, so it cannot come from where the Select later finds itself in the DOM. In place the list takes the theme through the cascade and scrolls with its trigger; a long list scrolls its container instead of floating over its edge. Pressing inside the list keeps focus where it was, and choosing leaves focus on the trigger, so an editor around the Select never reads a pick as leaving.
+
+An option's glyph sits a word space before its label and takes the row's color and type.
 
 The selected row is a `--primary` fill; its text and checkmark are `--primary-foreground`. The trigger's 1px `--input` border sits inside its 1.75rem box, as on Input, and focus lays a 2px `--ring` outline over it; on hover the border pulls toward `--foreground`, strengthening in both schemes like a Button's edge. Its corners are the theme radius less 0.125rem, the same as Button and Input.
 

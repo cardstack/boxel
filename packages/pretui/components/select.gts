@@ -22,6 +22,11 @@ export interface SelectOption {
    * an address that tells two options with the same label apart. The
    * search matches the label alone. */
   meta?: string;
+  /** a character drawn before the label, on the trigger and in the list,
+   * such as a country's flag. It is decorative: hidden from assistive
+   * technology, and the search and the trigger's typeahead read the label
+   * alone, so typing a name's first letter still finds it. */
+  glyph?: string;
 }
 
 export const SELECT_DISPLAYS = ['full', 'icon'] as const;
@@ -543,6 +548,13 @@ export class Select extends Component<SelectSignature> {
         data-test-pretui-select-trigger
         as |option|
       >
+        {{#if option.glyph}}
+          <span
+            class='pretui-select-glyph'
+            aria-hidden='true'
+            data-test-pretui-select-option-glyph
+          >{{option.glyph}}</span>
+        {{/if}}
         <span data-test-pretui-select-option>{{option.label}}</span>
         {{#if option.meta}}
           <span
