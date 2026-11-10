@@ -13,9 +13,13 @@
 // these hints, so this is something a caller adds, never a default of an
 // input component.
 //
-// Base's field templates set the same hints with base's own copy
+// Two copies of this list set the same hints where this module can't be
+// imported. Base's field templates use base's own copy
 // (`packages/base/components/password-managers.ts`), because card-api must
-// load without Pret UI. Keep the attributes the same in both.
+// load without Pret UI. boxel-ui's Picker writes the list into its search field
+// (`packages/boxel-ui/src/components/picker/before-options-with-search.gts`),
+// because boxel-ui can't import Pret UI. Keep the attributes the same in all
+// three.
 import { modifier } from 'ember-modifier';
 
 // Each password manager's own attribute for skipping a field.
