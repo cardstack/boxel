@@ -45,7 +45,10 @@ describe('file read/write with seed-based auth (integration)', () => {
         {
           home,
           input: 'export const seeded = 42;\n',
-          env: { BOXEL_REALM_SECRET_SEED: realmSecretSeed },
+          env: {
+            BOXEL_REALM_SECRET_SEED: realmSecretSeed,
+            MATRIX_SERVER_NAME: 'localhost',
+          },
         },
       );
       expect(writeRes.ok, writeRes.stderr).toBe(true);
@@ -60,7 +63,13 @@ describe('file read/write with seed-based auth (integration)', () => {
           '--realm-secret-seed',
           '--json',
         ],
-        { home, env: { BOXEL_REALM_SECRET_SEED: realmSecretSeed } },
+        {
+          home,
+          env: {
+            BOXEL_REALM_SECRET_SEED: realmSecretSeed,
+            MATRIX_SERVER_NAME: 'localhost',
+          },
+        },
       );
       expect(readRes.ok, readRes.stderr).toBe(true);
       let result = readRes.json<{ ok: boolean; content?: string }>();

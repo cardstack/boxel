@@ -8,7 +8,7 @@ import {
   archiveRealm,
   fetchAllRealmsWithOwners,
   fetchArchivedRealmsForOwner,
-  fetchRealmOwnerUsername,
+  fetchRealmOwnerUserId,
   fetchUserPermissions,
   insertPermissions,
   isRealmArchived,
@@ -381,19 +381,19 @@ module(basename(import.meta.filename), function () {
 
       await insertPublishedRealm({ sourceRealmURL, publishedRealmURL });
 
-      let owners = await fetchAllRealmsWithOwners(dbAdapter);
+      let owners = await fetchAllRealmsWithOwners(dbAdapter, 'localhost');
       let ownerByRealm = new Map(
-        owners.map((owner) => [owner.realm_url, owner.owner_username]),
+        owners.map((owner) => [owner.realm_url, owner.owner_user_id]),
       );
 
       assert.strictEqual(
         ownerByRealm.get(sourceRealmURL),
-        'owner',
+        '@owner:localhost',
         'returns source realm owner',
       );
       assert.strictEqual(
         ownerByRealm.get(publishedRealmURL),
-        'owner',
+        '@owner:localhost',
         'falls back to source realm owner for published realms',
       );
     });
@@ -409,15 +409,52 @@ module(basename(import.meta.filename), function () {
         ownerUsername: publishedOwner,
       });
 
-      let owners = await fetchAllRealmsWithOwners(dbAdapter);
+      let owners = await fetchAllRealmsWithOwners(dbAdapter, 'localhost');
       let ownerByRealm = new Map(
-        owners.map((owner) => [owner.realm_url, owner.owner_username]),
+        owners.map((owner) => [owner.realm_url, owner.owner_user_id]),
       );
 
       assert.strictEqual(
         ownerByRealm.get(publishedRealmURL),
-        'realm/published-only',
+        '@realm/published-only:localhost',
         'uses published realm owner when source owner is missing',
+      );
+    });
+
+    test('an owner on another homeserver is named by their full id', async function (assert) {
+      const realmURL = 'http://example.com/visited/';
+      const visitor = '@visitor:other.example';
+
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        [visitor]: ['read', 'realm-owner'],
+      });
+
+      let listed = new Map(
+        (await fetchAllRealmsWithOwners(dbAdapter, 'localhost')).map(
+          (owner) => [owner.realm_url, owner.owner_user_id],
+        ),
+      );
+      assert.strictEqual(listed.get(realmURL), visitor, 'listed');
+      assert.strictEqual(
+        await fetchRealmOwnerUserId(dbAdapter, realmURL, 'localhost'),
+        visitor,
+        'alone',
+      );
+    });
+
+    test("a `realm/` account on another homeserver is not a realm's own account", async function (assert) {
+      const realmURL = 'http://example.com/shared-name/';
+      const foreignBot = '@realm/elsewhere:other.example';
+
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@realm/shared-name:localhost': ['read', 'realm-owner'],
+        [foreignBot]: ['read', 'realm-owner'],
+      });
+
+      assert.strictEqual(
+        await fetchRealmOwnerUserId(dbAdapter, realmURL, 'localhost'),
+        foreignBot,
+        "the realm's own account on the paired homeserver yields to any other owner",
       );
     });
 
@@ -428,7 +465,7 @@ module(basename(import.meta.filename), function () {
       const publishedOnlyRealmURL = 'http://example.com/published-only/';
 
       await insertPermissions(dbAdapter, new URL(ownedRealmURL), {
-        '@realm/owned': ['read', 'realm-owner'],
+        '@realm/owned:localhost': ['read', 'realm-owner'],
         '@owner:localhost': ['read', 'realm-owner'],
       });
       await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
@@ -442,29 +479,36 @@ module(basename(import.meta.filename), function () {
       });
 
       let listed = new Map(
-        (await fetchAllRealmsWithOwners(dbAdapter)).map((owner) => [
-          owner.realm_url,
-          owner.owner_username,
-        ]),
+        (await fetchAllRealmsWithOwners(dbAdapter, 'localhost')).map(
+          (owner) => [owner.realm_url, owner.owner_user_id],
+        ),
       );
       for (let [realmURL, expected, why] of [
-        [ownedRealmURL, 'owner', 'its human owner, not its bot'],
-        [publishedRealmURL, 'owner', "a published realm's source owner"],
+        [ownedRealmURL, '@owner:localhost', 'its human owner, not its bot'],
+        [
+          publishedRealmURL,
+          '@owner:localhost',
+          "a published realm's source owner",
+        ],
         [
           publishedOnlyRealmURL,
-          'realm/published-only',
+          '@realm/published-only:localhost',
           'the owner its registry row records',
         ],
       ]) {
         assert.strictEqual(listed.get(realmURL), expected, `listed: ${why}`);
         assert.strictEqual(
-          await fetchRealmOwnerUsername(dbAdapter, realmURL),
+          await fetchRealmOwnerUserId(dbAdapter, realmURL, 'localhost'),
           expected,
           `alone: ${why}`,
         );
       }
       assert.strictEqual(
-        await fetchRealmOwnerUsername(dbAdapter, 'http://example.com/nobody/'),
+        await fetchRealmOwnerUserId(
+          dbAdapter,
+          'http://example.com/nobody/',
+          'localhost',
+        ),
         undefined,
         'and a realm neither names an owner for has none',
       );
