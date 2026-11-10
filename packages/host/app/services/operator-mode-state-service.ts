@@ -1833,10 +1833,13 @@ export default class OperatorModeStateService extends Service {
       canWrite: this.realm.canWrite(realmUrl),
     };
     // A realm's policy decides only for a caller its permissions decline, so
-    // it matters to the assistant only where the user can't write.
-    let realmPolicy = realmPermissions.canWrite
-      ? undefined
-      : await this.realmPolicyForAIBot(realmUrl);
+    // it matters to the assistant only where the user can't write. The realm
+    // refuses its config card to a caller its permissions don't let read, so
+    // only a reader can learn which policy the realm names.
+    let realmPolicy =
+      realmPermissions.canWrite || !realmPermissions.canRead
+        ? undefined
+        : await this.realmPolicyForAIBot(realmUrl);
 
     let result: BoxelContext = {
       agentId: this.matrixService.agentId,

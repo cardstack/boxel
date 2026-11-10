@@ -219,9 +219,11 @@ export interface BoxelContext {
     canRead: boolean;
     canWrite: boolean;
   };
-  // The policy of the realm at `realmUrl`, sent when the user can't write that
-  // realm: its grants are what let the user run operations there anyway.
-  // Absent when the realm names no policy, or its config can't be read.
+  // The policy of the realm at `realmUrl`, sent when the user can read that
+  // realm but not write it: its grants are what let the user run operations
+  // there anyway. Absent when the realm names no policy, and whenever
+  // `realmPermissions` doesn't let the user read the realm, since the realm
+  // refuses its config card to them.
   realmPolicy?: RealmPolicyForContext;
   errorsDisplayed?: BoxelErrorForContext[];
   tools?: Tool[];

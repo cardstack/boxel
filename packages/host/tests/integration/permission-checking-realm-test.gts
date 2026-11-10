@@ -318,6 +318,27 @@ module('Integration | a realm that checks permissions', function (hooks) {
     );
   });
 
+  test('the AI context marks a user the realm admits only through its policy as unable to read it', async function (assert) {
+    await setupSchool({ enforcePermissions: true });
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    let context = await operatorModeState.getSummaryForAIBot();
+    assert.strictEqual(context.realmUrl, SCHOOL, 'the user is in the school');
+    assert.deepEqual(
+      context.realmPermissions,
+      { canRead: false, canWrite: false },
+      'the school’s permissions give the user nothing',
+    );
+    assert.strictEqual(
+      context.realmPolicy,
+      undefined,
+      'and the policy the school names is left for the prompt to call unknown',
+    );
+  });
+
   test('a sign-in that fails is reported, and the next one tries again', async function (assert) {
     // A realm with no policy whose ACL gives the test user nothing: its
     // `_info` refuses them, so signing in to it fails.

@@ -342,6 +342,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
     async function contextFor(
       realmPolicy?: RealmPolicyForContext,
+      { canRead = true }: { canRead?: boolean } = {},
     ): Promise<string> {
       const history: DiscreteMatrixEvent[] = [
         {
@@ -357,7 +358,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
               context: {
                 submode: 'interact',
                 realmUrl: WORKSPACE,
-                realmPermissions: { canRead: true, canWrite: false },
+                realmPermissions: { canRead, canWrite: false },
                 ...(realmPolicy ? { realmPolicy } : {}),
               },
             },
@@ -423,9 +424,36 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
       assert.true(
         context.includes(
-          `Its policy, ${POLICY}, can still grant them operations here, but the user can't read it`,
+          `Its policy, ${POLICY}, can still grant them operations a card's type declares, but the user can't read it`,
         ),
         'the policy is named, with its grants unknown',
+      );
+      assert.true(
+        context.includes(
+          'offer the operation and run it with invoke-card-operation',
+        ),
+        'the assistant is told to offer operations rather than refuse',
+      );
+      assert.false(
+        context.includes('edits to its cards and files will be rejected'),
+        'the workspace is not described as refusing every change',
+      );
+    });
+
+    test('says a policy may grant operations to a user the realm admits only through it', async () => {
+      let context = await contextFor(undefined, { canRead: false });
+
+      assert.true(
+        context.includes(
+          "Its policy can still grant them operations a card's type declares, but the user can't read it",
+        ),
+        'the policy is unknown rather than absent',
+      );
+      assert.true(
+        context.includes(
+          'offer the operation and run it with invoke-card-operation',
+        ),
+        'the assistant is told to offer operations rather than refuse',
       );
       assert.false(
         context.includes('edits to its cards and files will be rejected'),
