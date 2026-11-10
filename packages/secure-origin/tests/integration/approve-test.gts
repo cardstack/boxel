@@ -876,8 +876,11 @@ module('Integration | approve pages', function (hooks) {
           409,
           'operation "listPRs" sends another request than the one shown for slot userKey; show it again',
         ),
-      'POST _key-bindings/batch': () => {
-        answered++;
+      'POST _key-bindings/batch': ({ body }) => {
+        // Asked for some operations, the batch only weighs their fillers.
+        if (!body.data.attributes.operations) {
+          answered++;
+        }
         return json(200, {
           data: { type: 'key-binding-batch', attributes: withFillers(batch()) },
         });
@@ -1031,6 +1034,273 @@ module('Integration | approve pages', function (hooks) {
         '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub token"]) input',
       )
       .isChecked('the key the slot starts on is chosen in its place');
+  });
+
+  // A batch with an account that reaches only the GraphQL API: it fills the
+  // slot for the operations that send there, but not with the upload, which
+  // sends the same slot to uploads.github.com. The realm server weighs the
+  // fillers by the operations the request names, as `fillers` does.
+  function apiOnlyAccount() {
+    let declared = batch();
+    let account = batch({
+      keys: [
+        ...declared.keys,
+        {
+          id: 'key-api-only',
+          name: 'GitHub API account',
+          kind: 'oauth-connection',
+          state: 'active',
+          covers: [],
+        },
+      ],
+    });
+    serve({
+      'POST _key-bindings/batch': ({ body }) => {
+        let named: string[] | undefined = body.data.attributes.operations;
+        let reachesUploads = !named || named.includes('upload');
+        return json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: {
+              ...account,
+              fillers: filledBy(
+                'userKey',
+                reachesUploads
+                  ? ['key-gh', 'key-other']
+                  : ['key-gh', 'key-other', 'key-api-only'],
+              ),
+            },
+          },
+        });
+      },
+    });
+  }
+
+  function batchRequests() {
+    return requests
+      .filter((r) => r.path === '_key-bindings/batch')
+      .map((r) => r.body.data.attributes);
+  }
+
+  test('a slot offers the keys that fill it in the ticked operations, not the whole batch', async function (assert) {
+    apiOnlyAccount();
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-key="GitHub API account"]')
+      .doesNotExist('with the upload ticked, the account can’t fill the slot');
+    assert.strictEqual(
+      batchRequests().length,
+      1,
+      'with every operation ticked, the batch’s own fillers answer',
+    );
+
+    await click('[data-test-approve-tick="upload"]');
+    await waitFor('[data-test-approve-key="GitHub API account"]');
+    assert.deepEqual(
+      batchRequests()[1]?.operations,
+      ['listComments', 'listPRs', 'listReviews'],
+      'the batch is asked again for the ticked operations',
+    );
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+    );
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.deepEqual(
+      approval.operations.map(
+        (o: { operation: string; slots: { userKey: { keyId: string } } }) => [
+          o.operation,
+          o.slots.userKey.keyId,
+        ],
+      ),
+      [
+        ['listComments', 'key-api-only'],
+        ['listPRs', 'key-api-only'],
+        ['listReviews', 'key-api-only'],
+      ],
+    );
+  });
+
+  test('ticking an operation the chosen key can’t fill gives way to a key that can', async function (assert) {
+    apiOnlyAccount();
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-approve-tick="upload"]');
+    await waitFor('[data-test-approve-key="GitHub API account"]');
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+    );
+
+    await click('[data-test-approve-tick="upload"]');
+    await waitUntil(
+      () => !find('[data-test-approve-key="GitHub API account"]'),
+    );
+    assert.strictEqual(
+      batchRequests().length,
+      2,
+      'with every operation ticked again, the batch’s own fillers answer',
+    );
+    assert
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub token"]) input',
+      )
+      .isChecked('the key the slot starts on is chosen in its place');
+    assert.dom('[data-test-approve-save]').isEnabled();
+  });
+
+  test('opened by the CLI for some operations, a slot offers the keys that fill it in those', async function (assert) {
+    apiOnlyAccount();
+    visitShell(
+      `approve#${new URLSearchParams({
+        card: CARD,
+        operation: 'listPRs',
+        operations: 'listPRs',
+        cli_port: '51234',
+        cli_state: 'c'.repeat(32),
+      })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-key="GitHub API account"]');
+    assert.deepEqual(batchRequests()[1]?.operations, ['listPRs']);
+    assert.dom('[data-test-approve-save]').hasText('Approve 1 call');
+  });
+
+  test('opened by the CLI for some operations with a key that fills only those, the page starts on that key', async function (assert) {
+    apiOnlyAccount();
+    visitShell(
+      `approve#${new URLSearchParams({
+        card: CARD,
+        operation: 'listPRs',
+        key: 'key-api-only',
+        operations: 'listPRs',
+        cli_port: '51234',
+        cli_state: 'c'.repeat(32),
+      })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+      )
+      .isChecked('the key the CLI named starts chosen');
+  });
+
+  test('a request that changed while shown keeps a key that fills only the ticked operations', async function (assert) {
+    apiOnlyAccount();
+    let served = routes['POST _key-bindings/batch']!;
+    let refused = false;
+    serve({
+      'POST _key-bindings': () => {
+        if (refused) {
+          return json(201, { data: [], meta: { batchId: 'b' } });
+        }
+        refused = true;
+        return refusal(
+          409,
+          'operation "listPRs" sends another request than the one shown for slot userKey; show it again',
+        );
+      },
+      'POST _key-bindings/batch': served,
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-approve-tick="upload"]');
+    await waitFor('[data-test-approve-key="GitHub API account"]');
+    await click(
+      '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+    );
+    await click('[data-test-approve-save]');
+    await waitFor('[data-test-keys-error]');
+    assert
+      .dom(
+        '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
+      )
+      .isChecked('the key the user chose stays chosen');
+    assert.dom('[data-test-approve-tick="upload"] input').isNotChecked();
+  });
+
+  test('an answer for operations ticked before the latest tick is ignored', async function (assert) {
+    apiOnlyAccount();
+    let served = routes['POST _key-bindings/batch']!;
+    let release: (() => void) | undefined;
+    serve({
+      'POST _key-bindings/batch': async (request) => {
+        if (request.body.data.attributes.operations) {
+          await new Promise<void>((resolve) => (release = resolve));
+        }
+        return served(request);
+      },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    // Not awaited: the click settles only once the batch answers.
+    void click('[data-test-approve-tick="upload"]');
+    await waitUntil(() => release !== undefined);
+    await click('[data-test-approve-tick="upload"]');
+    assert
+      .dom('[data-test-approve-save]')
+      .isEnabled('every operation is ticked again');
+    release!();
+    await settled();
+    assert
+      .dom('[data-test-approve-key="GitHub API account"]')
+      .doesNotExist(
+        'the answer for the upload unticked came too late to count',
+      );
+    assert.dom('[data-test-approve-save]').isEnabled();
+  });
+
+  test('Approve waits for the keys the ticked operations offer', async function (assert) {
+    apiOnlyAccount();
+    let served = routes['POST _key-bindings/batch']!;
+    let release: (() => void) | undefined;
+    serve({
+      'POST _key-bindings/batch': async (request) => {
+        if (request.body.data.attributes.operations) {
+          await new Promise<void>((resolve) => (release = resolve));
+        }
+        return served(request);
+      },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    // Not awaited: the click settles only once the batch answers.
+    void click('[data-test-approve-tick="upload"]');
+    await waitUntil(() => release !== undefined);
+    assert.dom('[data-test-approve-save]').isDisabled();
+    assert.dom('[data-test-approve-save]').hasAttribute('aria-busy', 'true');
+    release!();
+    await waitFor('[data-test-approve-key="GitHub API account"]');
+    assert.dom('[data-test-approve-save]').isEnabled();
+    assert.dom('[data-test-approve-save]').doesNotHaveAttribute('aria-busy');
+  });
+
+  test('when the keys the ticked operations offer can’t be read, the slot offers the ones that fit the whole batch', async function (assert) {
+    apiOnlyAccount();
+    let served = routes['POST _key-bindings/batch']!;
+    serve({
+      'POST _key-bindings/batch': (request) =>
+        request.body.data.attributes.operations
+          ? refusal(500, 'Something broke')
+          : served(request),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-approve-tick="upload"]');
+    await waitUntil(() => batchRequests().length === 2);
+    await settled();
+    assert.dom('[data-test-approve-key="GitHub API account"]').doesNotExist();
+    assert.dom('[data-test-approve-save]').isEnabled();
+    assert.dom('[data-test-approve-save]').hasText('Approve 3 calls');
   });
 
   test('a page that starts on pipelines only starts each slot on a key pipelines offer', async function (assert) {
