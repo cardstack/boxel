@@ -23,7 +23,7 @@ import { EmptyState } from './empty-state';
 import { Pagination } from './pagination';
 import { Menu } from './menu';
 import type { MenuEntry } from '../internal/menu';
-import { rovingTabindex } from '../focus';
+import { OWNS_PRESS, rovingTabindex } from '../focus';
 import {
   printValue,
   readField,
@@ -179,6 +179,10 @@ export interface DataTableSignature<T> {
     defaultSelected?: readonly RowKey[];
     /** fires with the next selection on every change */
     onSelectionChange?: (keys: RowKey[], rows: T[]) => void;
+    /** Opens a row: a click on the row (not on a control inside it) or Enter
+     * on the focused row. With `selectionMode` on, a click selects instead and
+     * Enter still activates. Without it, rows are not focusable. */
+    onActivate?: (row: T, index: number) => void;
     /** controlled column visibility — the keys that are SHOWN */
     visibleColumns?: readonly string[];
     /** uncontrolled seed; defaults to every column without `hidden` */
@@ -860,6 +864,32 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       box.checked = this.table.isSelected(row, index);
     }
   };
+  get activatable(): true | undefined {
+    return this.args.onActivate ? true : undefined;
+  }
+  onRowClick = (row: T, index: number, event: Event) => {
+    if (!this.args.onActivate) {
+      return;
+    }
+    if ((event.target as Element).closest(OWNS_PRESS)) {
+      return;
+    }
+    if (this.selectable) {
+      this.table.toggleSelected(row, index);
+    } else {
+      this.args.onActivate(row, index);
+    }
+  };
+  onRowKeydown = (row: T, index: number, event: Event) => {
+    if (
+      (event as KeyboardEvent).key === 'Enter' &&
+      this.args.onActivate &&
+      event.target === event.currentTarget
+    ) {
+      event.preventDefault();
+      this.args.onActivate(row, index);
+    }
+  };
   toggleAll = (event: Event) => {
     let box = event.target as HTMLInputElement;
     this.table.selectAll();
@@ -1105,7 +1135,11 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                     class='pretui-dt-row'
                     aria-selected={{line.ariaSelected}}
                     data-selected={{line.selectedFlag}}
+                    data-activatable={{this.activatable}}
+                    tabindex={{if this.activatable '0'}}
                     data-test-pretui-dt-row
+                    {{on 'click' (fn this.onRowClick line.row line.index)}}
+                    {{on 'keydown' (fn this.onRowKeydown line.row line.index)}}
                   >
                     {{#if this.selectable}}
                       <td class='pretui-dt-pick' data-pin={{this.leadPin}}>
@@ -1479,6 +1513,13 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         }
         .pretui-dt-row:hover td {
           background: var(--hover, var(--boxel-100));
+        }
+        .pretui-dt-row[data-activatable] {
+          cursor: pointer;
+        }
+        .pretui-dt-row[data-activatable]:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
         }
         .pretui-dt-row[data-selected='true'] td {
           background: var(--pretui-selected, var(--boxel-100));

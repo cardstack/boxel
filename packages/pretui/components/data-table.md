@@ -16,6 +16,7 @@ Not built, and not stubbed: virtualization (the kit already has one windowing en
 @sortable?, @sort?, @defaultSort?, @onSortChange?, @comparator?
 @selectionMode?                       — none|single|multi
 @selected?, @defaultSelected?, @onSelectionChange?
+@onActivate?                          — (row, index): a click on the row, or Enter on the focused row
 @visibleColumns?, @defaultVisibleColumns?, @onVisibleColumnsChange?, @columnMenu?
 @filters?, @defaultFilters?, @onFiltersChange?
 @expandedKeys?, @defaultExpandedKeys?, @onExpandedChange?
@@ -34,6 +35,8 @@ Not built, and not stubbed: virtualization (the kit already has one windowing en
 **Every view axis is controlled or uncontrolled by the same rule.** Sort, selection, visibility, filters, expansion and page each take a value, a `default*` seed and an `on*Change` callback. Passing the value makes the axis controlled and the component stops writing its own copy; leaving it out lets the component keep state and still report every change. There is no separate flag that switches modes.
 
 **`@flush` is for a table that already has a frame around it.** A Panel or card that holds the table draws its own ring and radius; without `@flush` the table draws a second one inside it. `@flush` drops the table's ring, radius and header fill and trims the inline padding on the first and last cells to 4px (room for an edge control's focus outline, which the scroller would otherwise clip); the header keeps an opaque `--card` fill so a sticky header stays readable, so the columns line up with the container's own content edge. Rules between rows stay. Default false.
+
+**`@onActivate` opens a row, as in List.** It makes every row focusable (`tabindex='0'`, a `--ring` focus outline, a pointer cursor). A click on the row calls it, unless the click landed on a link, button, input or other control inside the row; Enter on the focused row calls it. With `@selectionMode` on, a click selects the row and only Enter activates, so selection and activation stay separate. Without `@onActivate` the rows are not focusable and have no pointer cursor. A row with one obvious destination should still put a real link in a cell; **Table** stays a plain `<table>` with no row activation.
 
 **Pass `@key`.** Without it the row's identity is its index, and a listing sorts. The index handed to the key function is absolute across pages, so even the index fallback does not let selection leak from page 1 to page 2, but a keyed row is the only one that survives a sort.
 
@@ -91,17 +94,18 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 
 ## React ecosystem
 
-| TanStack / Ant / shadcn                 | Pretui                                                |
-| --------------------------------------- | ----------------------------------------------------- |
-| `columns` / `accessorKey` / `header`    | `@columns` with `key` / `label` / `value`             |
-| `data` / `dataSource`                   | `@rows` (`@dataSource` accepted)                      |
-| `sorting` / `onSortingChange`           | `@sort` / `@onSortChange`                             |
-| `rowSelection` / `onRowSelectionChange` | `@selected` / `@onSelectionChange` + `@selectionMode` |
-| `columnVisibility`                      | `@visibleColumns` / `@onVisibleColumnsChange`         |
-| `columnFilters`                         | `@filters` / `@onFiltersChange`                       |
-| `pagination`                            | `@pageSize` / `@page` / `@onPageChange`               |
-| Ant `expandable`                        | `<:expanded as \|row index\|>`                        |
-| Ant `fixed`                             | `pin` on the column (`fixed: true` accepted)          |
-| Ant `size` / density                    | `@size`                                               |
-| `getRowId`                              | `@key`                                                |
-| empty / loading                         | `<:empty>` / `<:loading>` / `@busy`                   |
+| TanStack / Ant / shadcn                                                           | Pretui                                                |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `columns` / `accessorKey` / `header`                                              | `@columns` with `key` / `label` / `value`             |
+| `data` / `dataSource`                                                             | `@rows` (`@dataSource` accepted)                      |
+| `sorting` / `onSortingChange`                                                     | `@sort` / `@onSortChange`                             |
+| `onRowClick` (MUI, PrimeReact), `onRowClicked` (AG Grid), `onAction` (React Aria) | `@onActivate`                                         |
+| `rowSelection` / `onRowSelectionChange`                                           | `@selected` / `@onSelectionChange` + `@selectionMode` |
+| `columnVisibility`                                                                | `@visibleColumns` / `@onVisibleColumnsChange`         |
+| `columnFilters`                                                                   | `@filters` / `@onFiltersChange`                       |
+| `pagination`                                                                      | `@pageSize` / `@page` / `@onPageChange`               |
+| Ant `expandable`                                                                  | `<:expanded as \|row index\|>`                        |
+| Ant `fixed`                                                                       | `pin` on the column (`fixed: true` accepted)          |
+| Ant `size` / density                                                              | `@size`                                               |
+| `getRowId`                                                                        | `@key`                                                |
+| empty / loading                                                                   | `<:empty>` / `<:loading>` / `@busy`                   |

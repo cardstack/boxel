@@ -8,7 +8,7 @@
 // --pretui-size-* and from --pretui-data-table-font-size are checked on the
 // usage page, not here.
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { click, focus, render, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { DataTable } from './data-table';
 import type { DataColumn } from './data-table';
@@ -111,5 +111,64 @@ module('Pretui | components/data-table', function (hooks) {
     assert
       .dom('[data-test-pretui-datatable] [data-test-pretui-data] table')
       .exists();
+  });
+
+  test('@onActivate: row click and Enter activate; controls inside do not', async function (assert) {
+    let calls: string[] = [];
+    let onActivate = (row: Row, index: number) =>
+      calls.push(row.id + '@' + String(index));
+    await render(
+      <template>
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{ROWS}}
+          @key={{rowKey}}
+          @onActivate={{onActivate}}
+        >
+          <:cell as |text|>
+            <button type='button' data-test-cell-button>{{text}}</button>
+          </:cell>
+        </DataTable>
+      </template>,
+    );
+    assert.dom('[data-test-pretui-dt-row]').hasAttribute('tabindex', '0');
+    await click('[data-test-cell-button]');
+    assert.deepEqual(calls, [], 'a control inside the row does not activate');
+    await click('[data-test-pretui-dt-row]');
+    assert.deepEqual(calls, ['a@0'], 'a click on the row activates');
+    await focus('[data-test-pretui-dt-row]');
+    await triggerKeyEvent('[data-test-pretui-dt-row]', 'keydown', 'Enter');
+    assert.deepEqual(calls, ['a@0', 'a@0'], 'Enter activates');
+  });
+
+  test('@onActivate with selectionMode: click selects, Enter activates', async function (assert) {
+    let activated = 0;
+    let onActivate = () => activated++;
+    await render(
+      <template>
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{ROWS}}
+          @key={{rowKey}}
+          @selectionMode='multi'
+          @onActivate={{onActivate}}
+        />
+      </template>,
+    );
+    await click('[data-test-pretui-dt-row]');
+    assert.dom('[data-test-pretui-dt-row]').hasAttribute('aria-selected', 'true');
+    assert.strictEqual(activated, 0, 'click does not activate');
+    await triggerKeyEvent('[data-test-pretui-dt-row]', 'keydown', 'Enter');
+    assert.strictEqual(activated, 1, 'Enter activates');
+  });
+
+  test('without @onActivate rows are not focusable', async function (assert) {
+    await render(
+      <template>
+        <DataTable @columns={{COLUMNS}} @rows={{ROWS}} @key={{rowKey}} />
+      </template>,
+    );
+    assert.dom('[data-test-pretui-dt-row]').doesNotHaveAttribute('tabindex');
+    assert.dom('[data-test-pretui-dt-row]').doesNotHaveAttribute('data-activatable');
   });
 });

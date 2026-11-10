@@ -65,6 +65,7 @@ class DataTableUsage extends Component {
   @tracked showDetail = true;
   @tracked lastSort = '—';
   @tracked lastSelection = '—';
+  @tracked lastActivated = '—';
   @tracked lastFilters = '—';
 
   setSelectionMode = (v: string) => (this.selectionMode = v as SelectionMode);
@@ -82,6 +83,9 @@ class DataTableUsage extends Component {
   rowKey = (row: Lot): RowKey => row.id;
   rowLabel = (row: Lot): string => lotLabel(row);
 
+  onActivate = (row: Lot) => {
+    this.lastActivated = row.id;
+  };
   onSortChange = (sort: SortState | null) => {
     this.lastSort = sort ? sort.key + ' ' + sort.dir : 'unsorted';
   };
@@ -134,6 +138,8 @@ class DataTableUsage extends Component {
               <strong>{{this.lastSort}}</strong></span>
             <span>selected
               <strong>{{this.lastSelection}}</strong></span>
+            <span>Activated:
+              <strong data-test-dt-activated>{{this.lastActivated}}</strong></span>
             <span>filters
               <strong>{{this.lastFilters}}</strong></span>
           </div>
@@ -153,6 +159,7 @@ class DataTableUsage extends Component {
               @itemNoun='lot'
               @minWidth='46rem'
               @onSortChange={{this.onSortChange}}
+              @onActivate={{this.onActivate}}
               @onSelectionChange={{this.onSelectionChange}}
               @onFiltersChange={{this.onFiltersChange}}
             >
@@ -238,6 +245,10 @@ class DataTableUsage extends Component {
           @defaultValue='none'
           @description="'none', 'single' or 'multi'. multi adds a header select-all whose mixed state is a real indeterminate checkbox, so it announces aria-checked mixed. Every selected tr carries aria-selected as well as data-selected."
           @onInput={{this.setSelectionMode}}
+        />
+        <Args.Action
+          @name='onActivate'
+          @description='(row, index). A click on the row (not on a control inside it) or Enter on the focused row. With selectionMode on, a click selects and only Enter activates. Omitted, rows are not focusable and have no pointer cursor.'
         />
         <Args.Bool
           @name='pinFirst (demo knob)'
