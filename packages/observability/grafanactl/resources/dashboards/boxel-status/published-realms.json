@@ -709,7 +709,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: grant a permission level on the **selected published realm** (dropdown or Manual URL box) to a Matrix user. To add access for yourself, type your own Matrix ID (e.g. `@you:matrix.host`) or pick it from the list. Note: publishing already grants public read (`*` → read), so you typically only need this to give yourself read/write. POSTs to the realm-server with `Authorization: Bearer ${grafana_secret}` (token substituted from SSM at apply time), same mechanism as the Realms dashboard Grant Permission panel.",
+        "description": "Operator action: grant a permission level on the **selected published realm** (dropdown or Manual URL box) to a Matrix user. To add access for yourself, type your own Matrix ID (e.g. `@you:matrix.host`) or pick it from the list. Note: publishing already grants public read (`*` → read), so you typically only need this to give yourself read/write. POSTs to the realm-server through the Grafana datasource proxy, which adds the realm-server credential, same mechanism as the Realms dashboard Grant Permission panel.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
@@ -796,7 +796,7 @@
               "size": "md",
               "variant": "primary",
               "value": "",
-              "customCode": "const manual = ${realm_manual:doublequote};\nconst picker = ${realm_picker:doublequote};\nconst rawRealm = (manual && String(manual).trim()) ? String(manual).trim() : picker;\nconst realm = rawRealm ? rawRealm.replace(/[/]+$/, '') + '/' : rawRealm;\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst permission = (context.panel.elements.find(function(e){return e.id==='permission';})||{}).value || 'read';\nconst trimmed = String(username).trim();\nif (!realm) {\n  context.grafana.notifyWarning(['Realm required', 'Pick a published realm from the dropdown or paste a URL into the Manual URL box.']);\n  return;\n}\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a Matrix user from the list or type one (e.g. @user:matrix.host).']);\n  return;\n}\nconst read = 'true';\nconst write = permission === 'read_write' ? 'true' : 'false';\nconst label = permission === 'read_write' ? 'read/write' : 'read';\nif (!window.confirm('Grant ' + label + ' to ' + trimmed + ' on ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const url = ${realm_server:doublequote} + '_grafana-upsert-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed)\n            + '&read=' + read\n            + '&write=' + write;\n  const r = await fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission granted', label + ' granted to ' + trimmed + ' on ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Grant failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Grant failed', String(err)]);\n}\n\n})();"
+              "customCode": "const manual = ${realm_manual:doublequote};\nconst picker = ${realm_picker:doublequote};\nconst rawRealm = (manual && String(manual).trim()) ? String(manual).trim() : picker;\nconst realm = rawRealm ? rawRealm.replace(/[/]+$/, '') + '/' : rawRealm;\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst permission = (context.panel.elements.find(function(e){return e.id==='permission';})||{}).value || 'read';\nconst trimmed = String(username).trim();\nif (!realm) {\n  context.grafana.notifyWarning(['Realm required', 'Pick a published realm from the dropdown or paste a URL into the Manual URL box.']);\n  return;\n}\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a Matrix user from the list or type one (e.g. @user:matrix.host).']);\n  return;\n}\nconst read = 'true';\nconst write = permission === 'read_write' ? 'true' : 'false';\nconst label = permission === 'read_write' ? 'read/write' : 'read';\nif (!window.confirm('Grant ' + label + ' to ' + trimmed + ' on ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const url = '/api/datasources/proxy/uid/realm-server-operator/_grafana-upsert-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed)\n            + '&read=' + read\n            + '&write=' + write;\n  const r = await fetch(url, { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission granted', label + ' granted to ' + trimmed + ' on ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Grant failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Grant failed', String(err)]);\n}\n\n})();"
             }
           ],
           "initial": {
@@ -1250,20 +1250,6 @@
           "skipUrlSync": false,
           "sort": 1,
           "type": "query"
-        },
-        {
-          "hide": 2,
-          "name": "realm_server",
-          "query": "__REALM_SERVER_URL__",
-          "skipUrlSync": true,
-          "type": "constant"
-        },
-        {
-          "hide": 2,
-          "name": "grafana_secret",
-          "query": "REPLACE_AT_APPLY_TIME",
-          "skipUrlSync": true,
-          "type": "constant"
         }
       ]
     },
