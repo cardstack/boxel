@@ -35,6 +35,7 @@
     "@types/mime-types": "catalog:",
     "@types/ms": "catalog:",
     "@types/node": "catalog:",
+    "@types/oidc-provider": "9.13.1",
     "@types/pg": "catalog:",
     "@types/pluralize": "catalog:",
     "@types/qs": "catalog:",
@@ -161,6 +162,7 @@
     "@aws-sdk/lib-storage": "^3.1065.0",
     "@cardstack/secure-origin": "workspace:*",
     "morphdom": "^2.7.8",
+    "oidc-provider": "9.13.3",
     "puppeteer": "^25.0.2",
     "tldts": "^6.1.86"
   }
