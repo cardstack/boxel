@@ -28,6 +28,7 @@
 // re-run counts as the host's behaviour.
 
 import { writeFileSync } from 'node:fs';
+import { prefixRealmNetworkFor } from '@cardstack/runtime-common/prefix-realm-network';
 
 import { authenticate, realmAuthHeader, type Session } from './lib/auth.ts';
 import {
@@ -893,6 +894,7 @@ if (args.deriveWorkload) {
   });
   let raw = workloadFromCardTypeSummary(entries, {
     realmUrl,
+    network: await prefixRealmNetworkFor(args.realmServerUrl),
     top: args.deriveTop,
     pageSize: args.derivePageSize,
   });

@@ -80,7 +80,11 @@ export interface PrListingWorkflowHandlerDeps {
   enqueueRunCommand: EnqueueRunCommandFn;
   githubClient: GitHubClient;
   lintSubmissionFiles: LintSubmissionFilesFn;
+  linkCheckDelayMs?: number;
 }
+
+const LINK_CHECK_ATTEMPTS = 5;
+const DEFAULT_LINK_CHECK_DELAY_MS = 2000;
 
 // Inline orchestrator for the listing-PR workflow. Workaround until
 // user-based proxy requests exist (would let users register auth tokens for
@@ -90,12 +94,15 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
   private enqueueRunCommand: EnqueueRunCommandFn;
   private createListingPRHandler: CreateListingPRHandler;
   private lintSubmissionFiles: LintSubmissionFilesFn;
+  private linkCheckDelayMs: number;
 
   constructor(deps: PrListingWorkflowHandlerDeps) {
     this.submissionBotUserId = deps.submissionBotUserId;
     this.enqueueRunCommand = deps.enqueueRunCommand;
     this.createListingPRHandler = new CreateListingPRHandler(deps.githubClient);
     this.lintSubmissionFiles = deps.lintSubmissionFiles;
+    this.linkCheckDelayMs =
+      deps.linkCheckDelayMs ?? DEFAULT_LINK_CHECK_DELAY_MS;
   }
 
   matches(eventContent: BotTriggerEventContent): boolean {
@@ -472,11 +479,67 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     prCardUrl: string | null,
   ): Promise<void> {
     if (!ctx.workflowCardUrl || !prCardUrl) return;
+    let isNewPrCard = prCardUrl !== ctx.existingPrCardUrl;
+    if (isNewPrCard) {
+      // The link patch runs as the submitter and loads the PR card, which
+      // reads as a 404 to anyone but its writer until its first index pass
+      // ends. The bot wrote it, so the bot's read waits for that pass.
+      await this.withRetries(() =>
+        this.fetchCardDocument({
+          cardId: prCardUrl,
+          runAs: this.submissionBotUserId,
+          realmURL: ctx.submissionRealm,
+        }),
+      );
+    }
     await this.patchWorkflowCard(ctx, {
       relationships: {
         prCard: { links: { self: prCardUrl } },
       },
     });
+    if (isNewPrCard) {
+      await this.confirmPrCardLinked(ctx, ctx.workflowCardUrl, prCardUrl);
+    }
+  }
+
+  // A patch job reports ready before its save lands, and a link whose target
+  // failed to load is saved as null, so the link is read back.
+  private async confirmPrCardLinked(
+    ctx: WorkflowContext,
+    workflowCardUrl: string,
+    prCardUrl: string,
+  ): Promise<void> {
+    await this.withRetries(async () => {
+      let doc = await this.fetchCardDocument({
+        cardId: workflowCardUrl,
+        runAs: ctx.runAs,
+        realmURL: ctx.workflowCardRealm,
+      });
+      let self = optionalString(doc?.data?.relationships?.prCard?.links?.self);
+      let linked = self
+        ? resolveRRIReference(self, workflowCardUrl as RealmResourceIdentifier)
+        : undefined;
+      if (!linked || !sameCardId(linked, prCardUrl)) {
+        throw new Error(
+          `the workflow card's PR card link did not save (expected ${prCardUrl})`,
+        );
+      }
+    });
+  }
+
+  private async withRetries<T>(fn: () => Promise<T>): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < LINK_CHECK_ATTEMPTS; attempt++) {
+      if (attempt > 0) {
+        await new Promise((r) => setTimeout(r, this.linkCheckDelayMs));
+      }
+      try {
+        return await fn();
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError;
   }
 
   // Retry reuses a card still carrying the previous attempt's failure; clear
@@ -636,6 +699,11 @@ function requireCardId(
     );
   }
   return id as RealmResourceIdentifier;
+}
+
+function sameCardId(a: string, b: string): boolean {
+  let strip = (id: string) => id.replace(/\.json$/, '');
+  return strip(a) === strip(b);
 }
 
 function optionalString(value: unknown): string | null {

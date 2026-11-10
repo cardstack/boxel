@@ -1,6 +1,9 @@
 import type Koa from 'koa';
+import * as Sentry from '@sentry/node';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   fetchRealmPermissions,
+  isRealmAdministrator,
   param,
   query,
   type DBAdapter,
@@ -16,13 +19,11 @@ import {
 } from '../middleware/index.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
 
 export interface ArchiveTarget {
   realmURL: string;
   permissions: RealmPermissions;
-  // The authorized requester (realm owner). Handlers use it to notify the
-  // owner's other sessions that their realm list changed.
-  ownerUserId: string;
 }
 
 // Parse the JSON:API body, resolve the target realm URL, and authorize the
@@ -32,15 +33,16 @@ export interface ArchiveTarget {
 // Rules (shared by both endpoints):
 //   - body id must be a valid realm URL, else 400;
 //   - a source realm_registry row must exist for it, else 404 (a permission
-//     row alone is not proof the realm exists — a stale/manual realm-owner
-//     grant must not let an arbitrary URL be archived);
+//     row alone is not proof the realm exists — a stale/manual grant must
+//     not let an arbitrary URL be archived);
 //   - published/bootstrap realms are not archivable, else 422;
-//   - requester must be a realm-owner of the target realm, else 403;
+//   - requester must administer the target realm, else 403;
 //   - public/catalog realms (world-readable) are not archivable, else 422.
 export async function resolveAndAuthorizeArchiveTarget(
   ctxt: Koa.Context,
   dbAdapter: DBAdapter,
   action: 'archive' | 'unarchive',
+  matrixServerName: string,
 ): Promise<ArchiveTarget | null> {
   let token = ctxt.state.token as RealmServerTokenClaim;
   if (!token) {
@@ -110,13 +112,13 @@ export async function resolveAndAuthorizeArchiveTarget(
     return null;
   }
 
-  let { user: ownerUserId } = token;
+  let { user: requesterUserId } = token;
   let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
 
-  if (!permissions[ownerUserId]?.includes('realm-owner')) {
+  if (!isRealmAdministrator(permissions, requesterUserId, matrixServerName)) {
     await sendResponseForForbiddenRequest(
       ctxt,
-      `${ownerUserId} does not have enough permission to ${action} realm ${realmURL}`,
+      `${requesterUserId} does not have enough permission to ${action} realm ${realmURL}`,
     );
     return null;
   }
@@ -131,5 +133,25 @@ export async function resolveAndAuthorizeArchiveTarget(
     return null;
   }
 
-  return { realmURL, permissions, ownerUserId };
+  return { realmURL, permissions };
+}
+
+// Tells each of `users` that their realm list changed, so a session showing
+// the workspace chooser picks up an archive, restore or delete without a
+// reload. An administrator who isn't the realm's owner can make the change,
+// so it goes to every user the realm's permission rows name, not only the
+// caller. Best-effort per user: one failed send doesn't stop the rest.
+export async function notifyRealmsListUpdated(
+  sendEvent: CreateRoutesArgs['sendEvent'],
+  users: string[],
+): Promise<void> {
+  await Promise.all(
+    users.map(async (user) => {
+      try {
+        await sendEvent(user, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (error) {
+        Sentry.captureException(error);
+      }
+    }),
+  );
 }

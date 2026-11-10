@@ -7,6 +7,7 @@ scope:
   - packages/realm-server/scripts/**
   - packages/realm-server/tests/**
   - packages/realm-test-harness/**
+  - packages/runtime-common/chrome-sandbox.ts
   - packages/boxel-cli/src/**
   - packages/boxel-cli/package.json
   - packages/software-factory/**

@@ -9,8 +9,11 @@ import type { SharedTests } from '../helpers/index.ts';
 import type { TaskArgs } from '../tasks/index.ts';
 import { runCommand } from '../tasks/run-command.ts';
 
+// `rows` answer the permission queries. A `users` grant asks the `users`
+// table whether the runner holds a Boxel account, answered from `accounts`.
 function makeDBAdapter(
   rows: Record<string, unknown>[],
+  accounts: string[] = [],
   assertion?: (sql: string, opts?: ExecuteOptions) => void,
 ): DBAdapter {
   return {
@@ -19,6 +22,11 @@ function makeDBAdapter(
     isClosed: false,
     execute: async (sql: string, opts?: ExecuteOptions) => {
       assertion?.(sql, opts);
+      if (/SELECT EXISTS \(SELECT 1 FROM users/i.test(sql)) {
+        return [
+          { user_exists: accounts.includes(String(opts?.bind?.[0])) },
+        ] as any;
+      }
       return rows as any;
     },
     close: async () => {},
@@ -32,12 +40,15 @@ function makeDBAdapter(
 
 function makeTaskArgs({
   dbRows,
+  accounts,
   prerenderResult,
   onRunCommand,
   onCreatePrerenderAuth,
   onReportStatus,
 }: {
   dbRows: Record<string, unknown>[];
+  // The ids that hold a Boxel account, for a realm with a `users` grant.
+  accounts?: string[];
   prerenderResult?: RunCommandResponse;
   onRunCommand?: (args: {
     userId: string;
@@ -65,7 +76,7 @@ function makeTaskArgs({
   };
 
   return {
-    dbAdapter: makeDBAdapter(dbRows),
+    dbAdapter: makeDBAdapter(dbRows, accounts),
     queuePublisher: {} as QueuePublisher,
     indexWriter: {} as any,
     prerenderer,
@@ -328,28 +339,13 @@ const tests = Object.freeze({
     });
   },
 
-  'mints the union of the users grant for a registered matrix user': async (
-    assert,
-  ) => {
-    assert.expect(2);
-    let profileRequests: string[] = [];
-    let realFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: any, init?: any) => {
-      let url = typeof input === 'string' ? input : input.url;
-      if (url.includes('/_matrix/client/v3/profile/')) {
-        profileRequests.push(url);
-        return new Response(JSON.stringify({ displayname: 'Alice' }), {
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      return realFetch(input, init);
-    }) as typeof fetch;
+  'mints the union of the users grant for a runner with a Boxel account':
+    async (assert) => {
+      assert.expect(1);
+      let authCall:
+        | { userId: string; permissions: Record<string, unknown> }
+        | undefined;
 
-    let authCall:
-      | { userId: string; permissions: Record<string, unknown> }
-      | undefined;
-
-    try {
       let task = runCommand(
         makeTaskArgs({
           dbRows: [
@@ -368,6 +364,7 @@ const tests = Object.freeze({
               realm_owner: false,
             },
           ],
+          accounts: ['@alice:localhost'],
           onCreatePrerenderAuth: (userId, permissions) => {
             authCall = { userId, permissions };
           },
@@ -383,22 +380,14 @@ const tests = Object.freeze({
         dedupeKey: null,
         jobInfo: { id: 6 } as any,
       });
-    } finally {
-      globalThis.fetch = realFetch;
-    }
 
-    assert.deepEqual(authCall, {
-      userId: '@alice:localhost',
-      permissions: {
-        'http://localhost:4201/experiments/': ['read', 'write'],
-      },
-    });
-    assert.strictEqual(
-      profileRequests.length,
-      1,
-      'resolves the users grant against the homeserver once',
-    );
-  },
+      assert.deepEqual(authCall, {
+        userId: '@alice:localhost',
+        permissions: {
+          'http://localhost:4201/experiments/': ['read', 'write'],
+        },
+      });
+    },
 
   'runs for a runner whose only access is the wildcard grant': async (
     assert,

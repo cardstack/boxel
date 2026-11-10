@@ -36,6 +36,9 @@ FROM base
 ARG realm_server_script
 ENV realm_server_script=$realm_server_script
 
+# This image never launches a browser, so skip Puppeteer's Chrome download.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 COPY . ./
 RUN CI=1 pnpm install -r --offline
 COPY --from=boxel-icons /realm-server/packages/boxel-icons/dist ./packages/boxel-icons/dist

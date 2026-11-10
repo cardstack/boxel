@@ -39,3 +39,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [022](022-do-the-assistants-workspace-work-in-one-sandboxed-script.md)                                       | Do the assistant's workspace work in one sandboxed script                                       | proposed   |
 | [024](024-build-realm-access-on-one-policy-that-only-widens-and-give-direct-write-only-to-administrators.md) | Build realm access on one policy that only widens, and give direct write only to administrators | accepted   |
 | [027](027-keep-an-automations-state-in-its-realm-and-commit-a-runs-writes-as-one-batch.md)                   | Keep an automation's state in its realm, and commit a run's writes as one batch                 | proposed   |
+| [030](030-batch-ai-only-when-an-automation-opts-in-end-the-run-while-it-waits-and-bill-every-batch.md)       | Batch AI only when an automation opts in, end the run while it waits, and bill every batch      | proposed   |

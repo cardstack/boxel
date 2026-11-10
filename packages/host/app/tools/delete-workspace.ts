@@ -10,7 +10,7 @@ import type RealmServerService from '../services/realm-server';
 import type RecentFilesService from '../services/recent-files-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
-// Deletes a workspace (realm) the current user owns (see `deleteWorkspace`).
+// Deletes a workspace (realm) the current user administers (see `deleteWorkspace`).
 export default class DeleteWorkspaceTool extends HostBaseTool<
   typeof BaseToolModule.RealmIdentifierCard,
   undefined
@@ -30,7 +30,7 @@ export default class DeleteWorkspaceTool extends HostBaseTool<
   static neverAutoExecutes = true;
 
   description =
-    'Permanently delete a workspace (realm) owned by the current user, including all of its cards and files. This cannot be undone. Only realms the user owns can be deleted.';
+    'Permanently delete a workspace (realm) the current user administers, including all of its cards and files. This cannot be undone. Only realms the user can edit can be deleted.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
