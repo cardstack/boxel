@@ -1110,7 +1110,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   }
 
   // A refusal the approve page fixes: an operation whose binding is missing,
-  // approved for pipelines only, or changed since it was approved. The page
+  // approved for automations only, or changed since it was approved. The page
   // gathers every other operation on the card that needs the same.
   get problemNeedsApproval(): boolean {
     let code = this.problem?.code;

@@ -17,6 +17,10 @@ const MODES = {
 };
 
 function rewriteMode(pgm, from, to) {
+  // Writers wait until the migration commits, so no row under the new mode
+  // appears between the fold and the rewrite, or between the rewrite and the
+  // CHECK that follows it. Reads go on.
+  pgm.sql(`LOCK TABLE key_uses IN SHARE ROW EXCLUSIVE MODE`);
   pgm.sql(`
     WITH folded AS (
       UPDATE key_uses target

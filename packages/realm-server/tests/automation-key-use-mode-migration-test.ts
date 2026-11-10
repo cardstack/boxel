@@ -40,24 +40,28 @@ module(basename(import.meta.filename), function () {
       },
     });
 
+    // Runs a migration as node-pg-migrate does: its statements in order, in
+    // one transaction.
     async function run(file: string, direction: 'up' | 'down') {
       let statements: string[] = [];
       require(file)[direction]({
         sql: (statement: string) => statements.push(statement),
       });
-      for (let statement of statements) {
-        await dbAdapter.execute(statement);
-      }
+      await dbAdapter.withTransaction(async (txQuery: any) => {
+        for (let statement of statements) {
+          await txQuery([statement]);
+        }
+      });
     }
 
     async function insertUse(
       mode: string,
-      use: { refusal?: boolean; count?: number } = {},
+      use: { refusal?: boolean; count?: number; at?: string } = {},
     ): Promise<string> {
       let [row] = await dbAdapter.execute(
         use.refusal
           ? `INSERT INTO key_uses (key_id, realm_url, operation, caller, mode, outcome, code, count, refusal_window, created_at)
-             VALUES ($1, $2, 'forecast', $3, $4, 'refused', 'rate-limited', $5, '2026-11-10T12:00:00Z', '2026-11-10T12:00:30Z') RETURNING id`
+             VALUES ($1, $2, 'forecast', $3, $4, 'refused', 'rate-limited', $5, '2026-11-10T12:00:00Z', $6) RETURNING id`
           : `INSERT INTO key_uses (key_id, realm_url, operation, caller, mode, outcome, status)
              VALUES ($1, $2, 'forecast', $3, $4, 'sent', 200) RETURNING id`,
         {
@@ -66,7 +70,9 @@ module(basename(import.meta.filename), function () {
             REALM,
             CALLER,
             mode,
-            ...(use.refusal ? [use.count ?? 1] : []),
+            ...(use.refusal
+              ? [use.count ?? 1, use.at ?? '2026-11-10T12:00:10Z']
+              : []),
           ],
         },
       );
@@ -79,6 +85,15 @@ module(basename(import.meta.filename), function () {
         { bind: [keyId] },
       )) as { mode: string; outcome: string; count: number }[];
       return rows.map((row) => [row.mode, row.outcome, Number(row.count)]);
+    }
+
+    // When the collapsed refusal row last counted a refusal.
+    async function lastRefusalAt() {
+      let [row] = await dbAdapter.execute(
+        `SELECT to_char(created_at AT TIME ZONE 'UTC', 'HH24:MI:SS') AS at FROM key_uses WHERE key_id = $1 AND outcome = 'refused'`,
+        { bind: [keyId] },
+      );
+      return row.at;
     }
 
     // Whether the mode CHECK takes a use recorded under `mode`. The probe row
@@ -122,8 +137,13 @@ module(basename(import.meta.filename), function () {
         'a task that predates the name can still record its uses',
       );
 
-      // A departing task's refusal in the same minute, under the old mode.
-      await insertUse('pipeline', { refusal: true, count: 2 });
+      // A departing task's refusal later in the same minute, under the old
+      // mode.
+      await insertUse('pipeline', {
+        refusal: true,
+        count: 2,
+        at: '2026-11-10T12:00:40Z',
+      });
       await run(REQUIRE, 'up');
       assert.deepEqual(
         await uses(),
@@ -133,8 +153,31 @@ module(basename(import.meta.filename), function () {
         ],
         'the refusal is folded into its twin under the new mode',
       );
+      assert.strictEqual(
+        await lastRefusalAt(),
+        '12:00:40',
+        'the folded row keeps the later refusal',
+      );
       assert.false(await accepts('pipeline'));
       assert.true(await accepts('automation'));
+    });
+
+    test('down folds an automation refusal into its pipeline twin', async function (assert) {
+      await run(REQUIRE, 'down');
+      await insertUse('pipeline', {
+        refusal: true,
+        count: 2,
+        at: '2026-11-10T12:00:50Z',
+      });
+      await insertUse('automation', { refusal: true, count: 3 });
+
+      await run(ALLOW, 'down');
+      assert.deepEqual(await uses(), [['pipeline', 'refused', 5]]);
+      assert.strictEqual(
+        await lastRefusalAt(),
+        '12:00:50',
+        'the twin already held the later refusal, and keeps it',
+      );
     });
 
     test('down restores the pipeline mode and its rows', async function (assert) {
