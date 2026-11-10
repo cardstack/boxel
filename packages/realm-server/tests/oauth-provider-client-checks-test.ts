@@ -14,6 +14,7 @@ import {
   boxelHosts,
   isOnBoxelHost,
   redirectURIRefusal,
+  redirectURIsRefusal,
 } from '../lib/oauth-provider/redirect-uris.ts';
 import {
   DEFAULT_NEW_CLIENT_LIMIT,
@@ -150,7 +151,7 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('a client is native exactly when every redirect URI is plain HTTP on loopback', function (assert) {
+    test('a client with any plain HTTP loopback redirect is native', function (assert) {
       assert.strictEqual(
         applicationTypeFor([
           'http://localhost/callback',
@@ -163,14 +164,45 @@ module(basename(import.meta.filename), function () {
           'http://localhost/callback',
           'https://example.com/callback',
         ]),
+        'native',
+        'so its loopback redirect matches on any port',
+      );
+      assert.strictEqual(
+        applicationTypeFor(['https://example.com/callback']),
         'web',
       );
       assert.strictEqual(
         applicationTypeFor(['https://localhost/callback']),
         'web',
-        'an HTTPS loopback redirect stays web, which the library allows',
+        'an HTTPS loopback redirect alone stays web, which the library allows',
       );
       assert.strictEqual(applicationTypeFor([]), 'web');
+    });
+
+    test('an HTTPS loopback redirect is refused beside a plain HTTP loopback one', function (assert) {
+      assert.strictEqual(
+        redirectURIsRefusal(
+          ['http://127.0.0.1/callback', 'https://example.com/callback'],
+          hosts,
+        ),
+        undefined,
+      );
+      assert.strictEqual(
+        redirectURIsRefusal(['https://localhost/callback'], hosts),
+        undefined,
+      );
+      let refusal =
+        redirectURIsRefusal(
+          ['http://127.0.0.1/callback', 'https://localhost/callback'],
+          hosts,
+        ) ?? '(allowed)';
+      assert.true(/can't be listed beside/.test(refusal), refusal);
+      let first =
+        redirectURIsRefusal(
+          ['http://127.0.0.1/callback', 'cursor://callback'],
+          hosts,
+        ) ?? '(allowed)';
+      assert.true(/must use https/.test(first), `each is checked: ${first}`);
     });
   });
 
@@ -272,6 +304,33 @@ module(basename(import.meta.filename), function () {
           { admitted: true },
           'only the first two counted overall',
         );
+      });
+
+      test('a caller the overall limit refuses keeps its own allowance', async function (assert) {
+        // The caller's own bucket refills over an hour, the overall one over
+        // a minute, so only a refund leaves the caller its two.
+        const SLOW_OWN = {
+          perAddress: { requests: 2, windowSeconds: 3600 },
+          overall: { requests: 3, windowSeconds: 60 },
+        };
+        for (let address of ['192.0.2.1', '192.0.2.2', '192.0.2.3']) {
+          await takeNewClient(store, address, SLOW_OWN);
+        }
+        for (let i = 0; i < 3; i++) {
+          assert.strictEqual(
+            outcomeOf(await takeNewClient(store, '192.0.2.9', SLOW_OWN)),
+            'limited',
+            `refused overall, attempt ${i + 1}`,
+          );
+        }
+        nowMs += 60_000;
+        for (let i = 0; i < 2; i++) {
+          assert.deepEqual(
+            await takeNewClient(store, '192.0.2.9', SLOW_OWN),
+            { admitted: true },
+            `its own two are still there once the overall limit refills (${i + 1})`,
+          );
+        }
       });
 
       test('counts an IPv6 caller by its /64', async function (assert) {

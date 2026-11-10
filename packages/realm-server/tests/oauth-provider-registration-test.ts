@@ -288,6 +288,43 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(await server.storedClientCount(), 0, 'none stored');
     });
 
+    test('a client with both HTTPS and loopback redirects is native, so its loopback redirect matches any port', async function (assert) {
+      let response = await server.register({
+        ...loopbackClient,
+        redirect_uris: [
+          'https://client.example.test/callback',
+          'http://127.0.0.1/callback',
+        ],
+      });
+      assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+      let stored = await server.storedClient(response.body.client_id);
+      assert.strictEqual(stored?.application_type, 'native');
+
+      let mixed = await server.register({
+        ...loopbackClient,
+        redirect_uris: [
+          'http://127.0.0.1/callback',
+          'https://localhost/callback',
+        ],
+      });
+      assert.strictEqual(mixed.status, 400, JSON.stringify(mixed.body));
+      assert.strictEqual(mixed.body.error, 'invalid_redirect_uri');
+    });
+
+    test("a registration Boxel allows and the library refuses gets the library's JSON error, and nothing is stored", async function (assert) {
+      let response = await server.register({
+        ...loopbackClient,
+        grant_types: ['implicit'],
+      });
+      assert.strictEqual(response.status, 400, JSON.stringify(response.body));
+      assert.true(
+        /application\/json/.test(String(response.headers['content-type'])),
+        `JSON (${response.headers['content-type']})`,
+      );
+      assert.strictEqual(response.body.error, 'invalid_client_metadata');
+      assert.strictEqual(await server.storedClientCount(), 0, 'none stored');
+    });
+
     test('a registration that is not a JSON object is refused', async function (assert) {
       let notJSON = await server
         .post(REGISTRATION)
@@ -306,6 +343,14 @@ module(basename(import.meta.filename), function () {
         .send({ redirect_uris: 'http://127.0.0.1/callback' });
       assert.strictEqual(form.status, 400);
       assert.strictEqual(form.body.error, 'invalid_client_metadata');
+
+      let tooLarge = await server.register({
+        ...loopbackClient,
+        client_name: 'x'.repeat(60 * 1024),
+      });
+      assert.strictEqual(tooLarge.status, 400, 'a body over the limit');
+      assert.strictEqual(tooLarge.body.error, 'invalid_client_metadata');
+      assert.strictEqual(await server.storedClientCount(), 0, 'none stored');
     });
   });
 

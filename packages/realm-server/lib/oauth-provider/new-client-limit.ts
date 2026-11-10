@@ -17,6 +17,7 @@ import {
   parseRateLimitSpec,
   rateLimitKey,
   type AnonymousRateLimit,
+  type RateLimitRefusal,
   type RateLimitStore,
   type TokenBucketLimit,
 } from '@cardstack/runtime-common';
@@ -56,7 +57,9 @@ export type NewClientOutcome =
 
 // Takes one new client from the caller's bucket and from the overall one.
 // `address` is the `CLIENT_IP_HEADER` value. An IPv6 caller is counted by
-// its /64, which one holder usually has whole.
+// its /64, which one holder usually has whole. A caller the overall bucket
+// refuses gets its own token back, so waiting out everyone else's
+// registrations doesn't spend its own allowance.
 export async function takeNewClient(
   store: RateLimitStore,
   address: string | undefined,
@@ -66,25 +69,35 @@ export async function takeNewClient(
   if (!parsed) {
     return { admitted: false, reason: 'unknown-address' };
   }
-  for (let [key, bucket] of [
-    [
-      counterKey('oauth-new-client', 'address', rateLimitKey(parsed)),
-      limit.perAddress,
-    ],
-    [counterKey('oauth-new-client', 'all'), limit.overall],
-  ] as const) {
-    let outcome = await store.take(key, tokenBucket(bucket));
-    if (!outcome.admitted) {
-      return isRateLimitUnavailable(outcome)
-        ? { admitted: false, reason: 'unavailable' }
-        : {
-            admitted: false,
-            reason: 'limited',
-            retryAfterSeconds: outcome.retryAfterSeconds,
-          };
-    }
+  let addressKey = counterKey(
+    'oauth-new-client',
+    'address',
+    rateLimitKey(parsed),
+  );
+  let addressBucket = tokenBucket(limit.perAddress);
+  let byAddress = await store.take(addressKey, addressBucket);
+  if (!byAddress.admitted) {
+    return refusal(byAddress);
+  }
+  let overall = await store.take(
+    counterKey('oauth-new-client', 'all'),
+    tokenBucket(limit.overall),
+  );
+  if (!overall.admitted) {
+    await store.refund(addressKey, addressBucket);
+    return refusal(overall);
   }
   return { admitted: true };
+}
+
+function refusal(outcome: RateLimitRefusal): NewClientOutcome {
+  return isRateLimitUnavailable(outcome)
+    ? { admitted: false, reason: 'unavailable' }
+    : {
+        admitted: false,
+        reason: 'limited',
+        retryAfterSeconds: outcome.retryAfterSeconds,
+      };
 }
 
 function tokenBucket({

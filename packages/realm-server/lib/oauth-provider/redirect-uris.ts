@@ -135,21 +135,46 @@ export function redirectURIRefusal(
   return undefined;
 }
 
+// Why a client's list of redirect URIs is refused, or undefined when every
+// one is allowed and they can be registered together. A client with a plain
+// HTTP loopback redirect is registered as native (see `applicationTypeFor`),
+// and the library refuses an HTTPS loopback redirect for a native client, so
+// the two can't be listed together.
+export function redirectURIsRefusal(
+  uris: readonly unknown[],
+  hosts: BoxelHosts,
+): string | undefined {
+  for (let uri of uris) {
+    let refusal = redirectURIRefusal(uri, hosts);
+    if (refusal) {
+      return refusal;
+    }
+  }
+  let urls = uris.map((uri) => new URL(uri as string));
+  if (urls.some(isLoopbackRedirect) && urls.some(isHTTPSLoopback)) {
+    return "an HTTPS redirect URI on localhost, 127.0.0.1 or [::1] can't be listed beside a plain HTTP one";
+  }
+  return undefined;
+}
+
 // The application type a client is registered as, which Boxel decides from
 // its redirect URIs, never from what the client declares. The library matches
-// a loopback redirect on any port only for a native client, and refuses an
-// HTTPS loopback redirect for one, so a client is native exactly when every
-// redirect URI is plain HTTP on a loopback host.
+// a loopback redirect on any port only for a native client (RFC 8252 §7.3), so
+// a client with any plain HTTP loopback redirect is native. A native client
+// may also list HTTPS redirects off loopback.
 export function applicationTypeFor(
   redirectURIs: readonly string[],
 ): 'native' | 'web' {
-  return redirectURIs.length > 0 &&
-    redirectURIs.every((uri) => {
-      let url = URL.parse(uri);
-      return Boolean(url && isLoopbackRedirect(url));
-    })
+  return redirectURIs.some((uri) => {
+    let url = URL.parse(uri);
+    return Boolean(url && isLoopbackRedirect(url));
+  })
     ? 'native'
     : 'web';
+}
+
+function isHTTPSLoopback(url: URL): boolean {
+  return url.protocol === 'https:' && LOOPBACK_HOSTS.has(url.hostname);
 }
 
 // A host in one spelling: lower case, with one trailing dot dropped (a fully

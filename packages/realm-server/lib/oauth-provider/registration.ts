@@ -12,7 +12,7 @@ import {
 import { takeNewClient, type NewClientLimit } from './new-client-limit.ts';
 import {
   applicationTypeFor,
-  redirectURIRefusal,
+  redirectURIsRefusal,
   type BoxelHosts,
 } from './redirect-uris.ts';
 
@@ -84,11 +84,9 @@ export function checkRegistration(
       `a registration may list at most ${MAX_REDIRECT_URIS} redirect URIs`,
     );
   }
-  for (let uri of redirectURIs) {
-    let refusal = redirectURIRefusal(uri, hosts);
-    if (refusal) {
-      return refuse('invalid_redirect_uri', refusal);
-    }
+  let refusal = redirectURIsRefusal(redirectURIs, hosts);
+  if (refusal) {
+    return refuse('invalid_redirect_uri', refusal);
   }
   if (body.scope !== undefined && typeof body.scope !== 'string') {
     return refuse('invalid_client_metadata', 'scope must be a string');
