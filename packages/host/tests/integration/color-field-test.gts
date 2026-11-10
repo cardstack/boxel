@@ -337,8 +337,7 @@ module('Integration | color field configuration', function (hooks) {
       );
       await settled();
 
-      let input =
-        '[data-test-field-container] :is(.color-hex-input, .color-value-input, .color-css-input)';
+      let input = '[data-test-field-container] [data-test-color-text-input]';
       assert.dom(input).hasAttribute('data-1p-ignore', '', defaultFormat);
       assert.dom(input).hasAttribute('data-lpignore', 'true', defaultFormat);
       assert.dom(input).hasAttribute('data-form-type', 'other', defaultFormat);

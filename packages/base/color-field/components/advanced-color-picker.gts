@@ -623,6 +623,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onKeyPress={{this.handleCssKeyPress}}
             @disabled={{not @canEdit}}
             {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{else if (eq this.outputFormat 'rgb')}}
           <BoxelInput
@@ -634,6 +635,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onKeyPress={{this.handleColorKeyPress}}
             @disabled={{not @canEdit}}
             {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{else if (eq this.outputFormat 'hsl')}}
           <BoxelInput
@@ -645,6 +647,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onKeyPress={{this.handleColorKeyPress}}
             @disabled={{not @canEdit}}
             {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{else if (eq this.outputFormat 'hsb')}}
           <BoxelInput
@@ -656,6 +659,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onKeyPress={{this.handleColorKeyPress}}
             @disabled={{not @canEdit}}
             {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{else}}
           <BoxelInput
@@ -667,6 +671,7 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onKeyPress={{this.handleHexKeyPress}}
             @disabled={{not @canEdit}}
             {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{/if}}
       </div>
