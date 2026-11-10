@@ -19,16 +19,10 @@ scope:
 
 A realm's permissions and its one `RealmPolicy` card together decide who may
 do what in it, and the policy only widens what the permissions allow
-(ADR 006 §1.3). This ADR records what follows from that for anyone designing
-roles on a realm, and the rules the policy engine keeps so that a grant admits
-only what its author wrote. To give a role less access, give it fewer direct
-permissions and grant back what it needs. Put every role in the realm's one
-policy. Give direct write only to the realm's administrators, because direct
-write controls the policy. Let the predicate decide whether a caller may
-invoke, and the operation decide what is written. Keep authorization cards out
-of every grant's reach, fail closed, and scope search with filters compiled
-from the policy. The `realm-policy-authoring` skill in boxel-skills covers
-writing a policy.
+(ADR 006 §1.3). This ADR records how to design roles on that model (§1.1 to
+§1.3) and the rules the policy engine keeps so that a grant admits only what
+its author wrote (§1.4 to §1.7). The `realm-policy-authoring` skill in
+boxel-skills covers writing a policy.
 
 ## 1. Decision
 
@@ -58,6 +52,11 @@ administrators. A user who contributes to a realm but does not administer it
 MUST get write access through policy grants. The platform MUST NOT add a
 permission level or a grant that separates writing the realm's settings or
 its policy from writing the rest of its contents.
+
+`realm-owner` is a separate level that only some administrators hold. It
+admits granting and revoking permissions, archiving, and publishing
+(ADR 006 §1.2), and it is assigned only when a realm is created or published.
+A realm's administrators are its direct writers, whether or not they own it.
 
 ### 1.4. The predicate decides whether, and the operation decides what
 
@@ -145,35 +144,14 @@ direct write lost the power to change `realm.json`, which would create a
 second write level. The simpler and truthful model is that direct writers are
 the realm's administrators, and everyone else writes through grants.
 
-A grant has to admit what its author meant and nothing more. A caller-supplied
-value must not decide its own authorization, so a predicate never reads params.
-A volatile call would give two answers for one caller and one card. A partial
-match holds for callers the author never named: `.teacherIds |
-contains([actor()])` holds for `@bob:server` when the list holds
-`@bob:server.org`. A create is judged by the realm's resolution of its type,
-so a caller can't have one type's grants consulted while creating another.
-What a caller may change is the job of the operation. A named operation is
-declared by the card type's author, so granting it grants exactly what that
-author wrote, and granting its base would undo that.
-
-If any grant could write the config card or a policy card, one grant could
-become every grant. If any grant could read one directly, a caller the realm
-admits only through grants could read every rule that judges them. A granted
-answer's shape never depends on how its caller was authorized, so the link
-closure is an authoring constraint the realm warns about, not a boundary it
-enforces.
-
-A policy only widens, so a fault in deciding admission must never widen. A
-broken policy then costs access, which someone notices, and never grants it,
-which nobody does. A grant with an issue is left out alone, so one mistake
-doesn't take the rest of the policy down with it.
-
-The search engine pages through the index in SQL. Judging each row against a
-predicate would mean reading every candidate and dropping the ones refused,
-which paging can't survive. So a `query` grant is a filter compiled with the
-policy, and a grant that can't compile to one adds nothing rather than rows it
-can't judge. Finding a card by its id and listing every card of a type are
-different powers, so `read` and `query` are separate grants.
+§1.4 to §1.7 keep a grant to what its author wrote. The predicate's inputs
+stay outside the caller's reach, so a grant can't be talked into admitting
+anyone, and a named operation grants exactly what its declaring type's author
+wrote. A grant that could reach an authorization card could become every
+grant. A fault in a policy that only widens must never widen. And search
+pages in SQL, so it can only be scoped by a filter. The reasoning for each is
+in the headers of `gate.ts`, `policy.ts`, `policy-filter.ts` and
+`policy-query.ts`, which Sources cites.
 
 ## 3. Considered options
 
