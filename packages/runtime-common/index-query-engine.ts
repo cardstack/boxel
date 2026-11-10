@@ -190,6 +190,8 @@ import type { RequestTimings } from './request-timings.ts';
 import {
   restoreSpilledSearchDocs,
   SEARCH_DOC_INLINE_STRING_MAX,
+  SPILL_KINDS,
+  SPILL_MARKER_KEY,
 } from './search-doc-spill.ts';
 
 // A filter path resolves in the schema but crosses a `linksTo`/`linksToMany`
@@ -6548,7 +6550,9 @@ export class IndexQueryEngine {
   #pluralPathMatch(
     key: string,
     values: JSONTypes.Value[],
-    context: FilterContext,
+    // The match tests the outer row, so it reads whichever table the
+    // context's query does; the context isn't needed to name it.
+    _context: FilterContext,
   ): CardExpression | undefined {
     if (this.#dbAdapter.kind !== 'pg' || values.length === 0) {
       return undefined;
@@ -6563,19 +6567,26 @@ export class IndexQueryEngine {
     let path = '$' + segments.map((x) => `."${x}"`).join('');
     let test = `${path} ? (${values.map((v) => `@ == ${JSON.stringify(v)}`).join(' || ')})`;
     let root = segments[0];
+    // Both arms test the candidate row itself, so the planner either drives
+    // the match from the GIN index (a BitmapOr of the two path tests) or
+    // checks each candidate another condition already narrowed. The marker
+    // test names the marker's kinds: a path with no comparison in it can't
+    // be served by the index, and as a bare existence test it read every
+    // row of the realm, once per outer candidate.
+    let spilled = `$."${root}"."${SPILL_MARKER_KEY}" ? (${SPILL_KINDS.map((k) => `@ == ${JSON.stringify(k)}`).join(' || ')})`;
     return [
-      `(i.url, i.realm_url, i.type) IN (SELECT pm.url, pm.realm_url, pm.type FROM ${context.indexTable} AS pm WHERE pm.search_doc @? CAST(`,
+      '(i.search_doc @? CAST(',
       param(test),
-      `AS jsonpath) UNION ALL SELECT ps.url, ps.realm_url, ps.type FROM ${context.indexTable} AS ps WHERE ps.search_doc @? CAST(`,
-      param(`$."${root}"."$spilled"`),
+      'AS jsonpath) OR (i.search_doc @? CAST(',
+      param(spilled),
       // jsonb_build_object takes `any`, so a bare parameter has no type.
       'AS jsonpath) AND jsonb_path_exists(jsonb_build_object(CAST(',
       param(root),
-      'AS text), spill_unmark(ps.search_doc -> CAST(',
+      'AS text), spill_unmark(i.search_doc -> CAST(',
       param(root),
       'AS text))), CAST(',
       param(test),
-      'AS jsonpath)))',
+      'AS jsonpath))))',
     ];
   }
 

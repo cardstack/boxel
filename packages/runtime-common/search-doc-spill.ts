@@ -31,7 +31,8 @@ export const SEARCH_DOC_INLINE_ARRAY_MAX = 64;
 
 export const SPILL_MARKER_KEY = '$spilled';
 
-export type SpillKind = 'vector' | 'value';
+export const SPILL_KINDS = ['vector', 'value'] as const;
+export type SpillKind = (typeof SPILL_KINDS)[number];
 
 export interface SpillMarker {
   [SPILL_MARKER_KEY]: SpillKind;
