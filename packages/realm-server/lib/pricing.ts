@@ -213,7 +213,7 @@ export function checkPricingAtStartup(
     );
   } else {
     current = undefined;
-    let message = `pricing check failed in ${processName}: this process will not admit automation runs or submit batches until its pricing variables are fixed and it restarts. ${check.problems
+    let message = `pricing check failed in ${processName}: this process has no prices, so it must not admit automation runs or submit batches until its pricing variables are fixed and it restarts. ${check.problems
       .map(({ variable, problem }) => `${variable} ${problem}`)
       .join('; ')}`;
     log.error(message);
