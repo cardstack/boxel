@@ -422,7 +422,9 @@ export default class CapabilitiesService
       body: JSON.stringify({ checks }),
     });
     if (!response.ok) {
-      let detail = await response.text().catch(() => '');
+      // A script's error reaches the model as it is, and a proxy can answer
+      // with a whole page, so only the start of the body is quoted.
+      let detail = (await response.text().catch(() => '')).slice(0, 500);
       throw new Error(
         `${realmURL} did not answer the capability check: ${response.status} ${response.statusText}${detail ? ` ${detail}` : ''}`,
       );
