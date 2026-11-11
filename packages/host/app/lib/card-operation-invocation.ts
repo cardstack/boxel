@@ -1,6 +1,6 @@
 import type { BaseOperation } from '@cardstack/runtime-common';
 
-import type { CardDef } from '@cardstack/base/card-api';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 import type * as OperationsModule from '@cardstack/base/operations';
 
 // The checks an operation named as data passes before it is sent, shared by
@@ -108,7 +108,11 @@ function own(
 // declared on `CardDef` itself, so a type that does not set one of its own
 // reports as "Card", which tells a caller nothing about the card they named.
 export function defNameOf(card: CardDef): string {
-  let owner = card.constructor as { displayName?: string; name?: string };
+  return typeNameOf(card.constructor as typeof CardDef);
+}
+
+export function typeNameOf(type: typeof BaseDef): string {
+  let owner = type as { displayName?: string; name?: string };
   return owner.name || owner.displayName || 'this card';
 }
 
@@ -144,6 +148,51 @@ export function assertInstanceOperation(
         names.length > 0
           ? `It declares: ${names.join(', ')}`
           : 'It declares none'
+      }`,
+    );
+  }
+  return base;
+}
+
+// An operation that acts on a type rather than on one of its cards, invoked
+// through the class itself: the plain `create`, and a declared operation the
+// type carries in that scope, such as a declared create. Refuses what
+// `assertInstanceOperation` refuses, listing the names the type carries in
+// this scope. Answers the base, as `assertInstanceOperation` does.
+//
+// The bucket is built here, from the class, and building it names the class
+// by its module and export, so a class no module exports is refused by
+// `operations()` itself.
+export function assertTypeOperation(
+  operationsModule: typeof OperationsModule,
+  type: typeof BaseDef,
+  name: string,
+): BaseOperation {
+  let declarations = operationsModule.getDeclaredOperations(type);
+  let bucket = (
+    operationsModule.operations as (target: unknown) => OperationsBucket
+  )(type);
+  let base = baseOf(name, declarations);
+  if (declarations[name] && base === 'query') {
+    throw new Error(
+      `"${name}" is a query operation: it answers a live set of search results, not a value. Search with search-entries, or realm.cards.search or realm.entries.search in run-realm-code, instead.`,
+    );
+  }
+  if (
+    name === BATCH_MEMBER ||
+    typeof bucket[name] !== 'function' ||
+    !offeredHere(name, 'type', base, declarations)
+  ) {
+    let names = invocableNames([{ scope: 'type', bucket }], declarations);
+    throw new Error(
+      `"${name}" is not an operation ${typeNameOf(type)} carries on the type itself${
+        declarations[name]
+          ? ': it acts on one of its cards, so it is invoked on that card'
+          : ''
+      }. ${
+        names.length > 0
+          ? `On the type it carries: ${names.join(', ')}`
+          : 'It carries none on the type'
       }`,
     );
   }

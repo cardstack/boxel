@@ -1405,13 +1405,20 @@ export class ExecuteAtomicOperationsResult extends CardDef {
 // One invocation of one operation a card's type declares. 'payload' carries
 // the operation's params, keyed exactly as its 'params' schema names them.
 //
-// 'realm' and 'relationships' describe a card the plain 'create' mints, and
-// are read for nothing else: where it lands, and the links it is created
-// holding, as JSON:API relationship objects. An operation that runs against
-// the card at 'cardId' runs in that card's own realm, and a declared
+// The operation is reached through exactly one of 'cardId' and 'type'. A card
+// id names a card to act on, and through that card's class its type. 'type'
+// names the type itself, by module and export, for an operation that acts on
+// a type - such as a create - where no card of it is at hand.
+//
+// 'realm' is where a type's operation runs, so a call naming 'type' needs it.
+// With 'cardId' it is read only for the plain 'create', as where the minted
+// card lands; an operation that runs against the card at 'cardId' runs in that
+// card's own realm. 'relationships' is the links a card the plain 'create'
+// mints is created holding, as JSON:API relationship objects; a declared
 // operation takes the cards it links among its params.
 export class InvokeCardOperationInput extends CardDef {
   @field cardId = contains(StringField);
+  @field type = contains(CodeRefField);
   @field operation = contains(StringField);
   @field payload = contains(JsonField);
   @field realm = contains(StringField);

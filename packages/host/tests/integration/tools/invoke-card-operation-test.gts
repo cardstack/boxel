@@ -83,6 +83,19 @@ const REPORT_MODULE = `
       query: { filter: { on: () => Report, eq: { status: 'open' } } },
     };
   }
+
+  // A type the realm holds no card of. Its own create is how its first card
+  // is made, so the operation is reached through the type alone.
+  export class Member extends CardDef {
+    @field handle = contains(StringField);
+
+    @operation static join = {
+      base: 'create',
+      of: () => Member,
+      params: { handle: StringField },
+      fill: { handle: params('handle') },
+    };
+  }
 `;
 
 function reportFile(headline: string) {
@@ -130,7 +143,8 @@ function realmContents() {
 // The tool's input as a caller writes it, which is the shape `execute` builds
 // the input card from rather than the card type itself.
 interface ToolInput {
-  cardId: string;
+  cardId?: string;
+  type?: { module: string; name: string };
   operation: string;
   payload?: Record<string, unknown>;
   realm?: string;
@@ -155,6 +169,8 @@ const SESSION_DEFAULT_REALM = 'http://test-realm/somewhere-else/';
 // nothing at all would leave the recorded realm unchanged and the assertion
 // would still hold.
 const REALM_NAMED_BY_CALLER = 'http://test-realm/named-by-the-caller/';
+
+const MEMBER = { module: `${testRealmURL}report`, name: 'Member' };
 
 // A transport that records instead of reaching the realm, for the cases about
 // what a call puts on the wire, and about a refusal that has to happen before
@@ -550,6 +566,187 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
     assert.ok(
       isCardErrorJSONAPI(await getService('store').get(missing)),
       'and the store is what reported it missing',
+    );
+  });
+
+  test('a create the type declares makes the first card of its type, reached through the type alone', async function (assert) {
+    let result = await invoke({
+      type: MEMBER,
+      operation: 'join',
+      payload: { handle: 'ada' },
+      realm: testRealmURL,
+    });
+
+    assert.ok(
+      result.cardId.startsWith(testRealmURL),
+      `the new card was made in the realm the call named: ${result.cardId}`,
+    );
+    assert.ok(result.version, 'and the result carries the version it holds');
+    let stored = await storedCard(
+      `${result.cardId.slice(testRealmURL.length)}.json`,
+    );
+    assert.strictEqual(
+      stored.data.attributes.handle,
+      'ada',
+      'the declaration filled the new card from the payload',
+    );
+    assert.strictEqual(
+      stored.data.meta.adoptsFrom.name,
+      'Member',
+      'and it is a card of the type the call named',
+    );
+  });
+
+  test('the plain create runs on a type whose module is named from the realm root', async function (assert) {
+    let result = await invoke({
+      type: { module: './report', name: 'Member' },
+      operation: 'create',
+      payload: { handle: 'grace' },
+      realm: testRealmURL,
+    });
+
+    let stored = await storedCard(
+      `${result.cardId.slice(testRealmURL.length)}.json`,
+    );
+    assert.strictEqual(
+      stored.data.attributes.handle,
+      'grace',
+      'the field values reached the new card',
+    );
+    assert.strictEqual(
+      stored.data.meta.adoptsFrom.name,
+      'Member',
+      'and the relative module named the type in the realm the call named',
+    );
+  });
+
+  test('an operation on a type is sent to the realm the call names, carrying the type', async function (assert) {
+    let { sent } = recordingTransport();
+
+    await invoke({
+      type: MEMBER,
+      operation: 'join',
+      payload: { handle: 'lin' },
+      realm: REALM_NAMED_BY_CALLER,
+    });
+
+    assert.strictEqual(sent.length, 1, 'one batch was sent');
+    assert.strictEqual(
+      sent[0].realmURL,
+      REALM_NAMED_BY_CALLER,
+      'to the realm the caller named, which is not the one this session writes to by default',
+    );
+    let [entry] = sent[0].envelope['boxel:operations'] as any[];
+    assert.strictEqual(entry['boxel:name'], 'join', 'naming the operation');
+    assert.strictEqual(
+      entry.href,
+      undefined,
+      'against no card, since there is none to name',
+    );
+    assert.strictEqual(
+      entry.data.meta.adoptsFrom.name,
+      'Member',
+      'and with the type it runs on',
+    );
+  });
+
+  test('an operation on a type needs the realm it runs in', async function (assert) {
+    let { sent } = recordingTransport();
+
+    let message = await refusal({
+      type: MEMBER,
+      operation: 'join',
+      payload: { handle: 'nowhere' },
+    });
+
+    assert.true(
+      message.includes('Name it with "realm"'),
+      `the refusal asks for the realm: ${message}`,
+    );
+    assert.strictEqual(sent.length, 0, 'and nothing was sent to any realm');
+  });
+
+  test('a call reaches its operation through a card or a type, not both and not neither', async function (assert) {
+    let { sent } = recordingTransport();
+
+    let both = await refusal({
+      cardId: `${testRealmURL}report-commented`,
+      type: MEMBER,
+      operation: 'join',
+      payload: { handle: 'both' },
+      realm: testRealmURL,
+    });
+    assert.true(
+      both.includes('exactly one of "cardId"'),
+      `naming both is refused: ${both}`,
+    );
+    assert.true(both.includes('not both'), `and says why: ${both}`);
+
+    let neither = await refusal({
+      operation: 'join',
+      payload: { handle: 'neither' },
+      realm: testRealmURL,
+    });
+    assert.true(
+      neither.includes('exactly one of "cardId"'),
+      `naming neither is refused: ${neither}`,
+    );
+    assert.true(neither.includes('give one'), `and says why: ${neither}`);
+    assert.strictEqual(sent.length, 0, 'and nothing was sent to the realm');
+  });
+
+  test('an operation that acts on a card is refused when named on its type, with the ones the type carries', async function (assert) {
+    let { sent } = recordingTransport();
+
+    let message = await refusal({
+      type: { module: `${testRealmURL}report`, name: 'Report' },
+      operation: 'addComment',
+      payload: { body: 'On the type' },
+      realm: testRealmURL,
+    });
+
+    assert.strictEqual(
+      message,
+      '"addComment" is not an operation Report carries on the type itself: it acts on one of its cards, so it is invoked on that card. On the type it carries: create',
+    );
+    assert.strictEqual(sent.length, 0, 'and nothing was sent to the realm');
+  });
+
+  test('relationships are refused for a create the type declares', async function (assert) {
+    let { sent } = recordingTransport();
+
+    let message = await refusal({
+      type: MEMBER,
+      operation: 'join',
+      payload: { handle: 'linked' },
+      relationships: {
+        activity: { links: { self: `${testRealmURL}activity-lab-safety` } },
+      },
+      realm: testRealmURL,
+    });
+
+    assert.true(
+      message.includes('no new card for "relationships" to describe'),
+      `the refusal says the declaration names its links among its params: ${message}`,
+    );
+    assert.strictEqual(sent.length, 0, 'and nothing was sent to the realm');
+  });
+
+  test('a type that does not load is reported as the reason the operation did not run', async function (assert) {
+    let message = await refusal({
+      type: { module: `${testRealmURL}report`, name: 'Nobody' },
+      operation: 'join',
+      payload: { handle: 'missing' },
+      realm: testRealmURL,
+    });
+
+    assert.true(
+      message.includes('Nobody from'),
+      `the refusal names the type: ${message}`,
+    );
+    assert.true(
+      message.includes('did not load'),
+      `as one that did not load: ${message}`,
     );
   });
 });

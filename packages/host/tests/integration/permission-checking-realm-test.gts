@@ -16,6 +16,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
+import InvokeCardOperationTool from '@cardstack/host/tools/invoke-card-operation';
 
 import {
   provideConsumeContext,
@@ -72,7 +73,12 @@ const CLASSROOM_MODULE = `
     Component,
   } from '@cardstack/base/card-api';
   import StringField from '@cardstack/base/string';
-  import { operation, operations, params } from '@cardstack/base/operations';
+  import {
+    actor,
+    operation,
+    operations,
+    params,
+  } from '@cardstack/base/operations';
 
   export class Classroom extends CardDef {
     @field title = contains(StringField);
@@ -107,6 +113,20 @@ const CLASSROOM_MODULE = `
       </template>
     };
   }
+
+  // A student's place in a course. A school starts with none, so enrolling
+  // is reached through the type: there is no enrollment to reach it through.
+  export class Enrollment extends CardDef {
+    @field course = contains(StringField);
+    @field studentId = contains(StringField);
+
+    @operation static enroll = {
+      base: 'create',
+      of: () => Enrollment,
+      params: { course: StringField },
+      fill: { course: params('course'), studentId: actor() },
+    };
+  }
 `;
 
 const REALM_POLICY = {
@@ -126,6 +146,25 @@ const classroomPolicy: LooseSingleCardDocument = {
             { operation: 'read' },
             { operation: 'rename', where: TEACHES },
           ],
+        },
+      ],
+    },
+    meta: { adoptsFrom: REALM_POLICY },
+  },
+};
+
+// Lets any signed-in caller enroll themselves and read an enrollment. The
+// plain create is not granted, so the declared one is the only way a caller
+// the ACL declines makes an enrollment.
+const enrollmentPolicy: LooseSingleCardDocument = {
+  data: {
+    type: 'card',
+    attributes: {
+      cardInfo: { name: 'Enrollments' },
+      rules: [
+        {
+          targetType: { module: `${DEFINITIONS}classroom`, name: 'Enrollment' },
+          grants: [{ operation: 'read' }, { operation: 'enroll' }],
         },
       ],
     },
@@ -593,6 +632,63 @@ module('Integration | a realm that checks permissions', function (hooks) {
       await storedTitle(adapter, 'classrooms/room-205.json'),
       'Renamed',
       'and the rename lands',
+    );
+  });
+
+  test('the AI assistant runs a create the policy grants on a type the school holds no enrollment of', async function (assert) {
+    let adapter = await setupSchool({
+      enforcePermissions: true,
+      readableByTestUser: true,
+      policy: enrollmentPolicy,
+    });
+    assert.false(
+      getService('realm').canWrite(SCHOOL),
+      'the test user cannot write the school',
+    );
+    await settleRealmRenders();
+
+    let tool = new InvokeCardOperationTool(
+      getService('tool-service').toolContext,
+    );
+    // The type as the AI context names it, from the policy's rule.
+    let type = { module: `${DEFINITIONS}classroom`, name: 'Enrollment' };
+
+    let result = await tool.execute({
+      type,
+      operation: 'enroll',
+      payload: { course: 'Biology' },
+      realm: SCHOOL,
+    } as any);
+
+    assert.true(
+      result.cardId?.startsWith(SCHOOL),
+      `the enrollment was made in the school: ${result.cardId}`,
+    );
+    let file = await adapter.openFile(
+      `${result.cardId.slice(SCHOOL.length)}.json`,
+    );
+    let { attributes } = JSON.parse(file!.content as string).data;
+    assert.deepEqual(
+      { course: attributes.course, studentId: attributes.studentId },
+      { course: 'Biology', studentId: TEST_USER },
+      'filled from the payload and the caller, as the declaration says',
+    );
+    await settleRealmRenders();
+
+    let refusal: unknown;
+    try {
+      await tool.execute({
+        type,
+        operation: 'create',
+        payload: { course: 'Chemistry', studentId: TEST_USER },
+        realm: SCHOOL,
+      } as any);
+    } catch (e) {
+      refusal = e;
+    }
+    assert.true(
+      refusal instanceof OperationsError,
+      `the plain create, which the policy does not grant, is refused by the realm: ${String(refusal)}`,
     );
   });
 });
