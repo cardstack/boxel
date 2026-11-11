@@ -1329,6 +1329,9 @@ export interface CreateCodeEditorStateOptions {
   // object each time: each spec becomes one theme, made once and reused, as
   // every theme CodeMirror makes adds a stylesheet to the page for good.
   theme?: Parameters<typeof EditorView.theme>[0];
+  // The theme is for a dark surface, so CodeMirror's own base styles (the
+  // cursor, the selection, panels) take their dark variants under it.
+  dark?: boolean;
   onDocChange?: (text: string) => void;
 }
 
@@ -1351,13 +1354,20 @@ function languageExtension(language: CodeEditorLanguage | undefined) {
 // (`classHighlighter`) rather than coloured here, so the component that hosts
 // the editor colours them from its theme. Tab is left to move focus, so the
 // editor is never a keyboard trap.
-const codeEditorThemes = new WeakMap<object, Extension>();
+const codeEditorThemes = {
+  light: new WeakMap<object, Extension>(),
+  dark: new WeakMap<object, Extension>(),
+};
 
-function codeEditorTheme(spec: Parameters<typeof EditorView.theme>[0]) {
-  let theme = codeEditorThemes.get(spec);
+function codeEditorTheme(
+  spec: Parameters<typeof EditorView.theme>[0],
+  dark: boolean,
+) {
+  let themes = dark ? codeEditorThemes.dark : codeEditorThemes.light;
+  let theme = themes.get(spec);
   if (!theme) {
-    theme = EditorView.theme(spec);
-    codeEditorThemes.set(spec, theme);
+    theme = EditorView.theme(spec, { dark });
+    themes.set(spec, theme);
   }
   return theme;
 }
@@ -1395,7 +1405,9 @@ function createCodeEditorState(
     syntaxHighlighting(classHighlighter),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     ...languageExtension(options.language),
-    ...(options.theme ? [codeEditorTheme(options.theme)] : []),
+    ...(options.theme
+      ? [codeEditorTheme(options.theme, options.dark ?? false)]
+      : []),
     EditorState.tabSize.of(2),
     EditorState.readOnly.of(readOnly),
     EditorView.editable.of(!readOnly),

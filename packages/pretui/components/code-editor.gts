@@ -101,11 +101,94 @@ const EDITOR_THEME: Record<string, Record<string, string>> = {
   },
 };
 
-// Read-only code has no active line to mark.
+// Read-only code has no active line to mark, and its gutter sits on the
+// muted surface the root gives read-only code.
 const READ_ONLY_THEME: Record<string, Record<string, string>> = {
   ...EDITOR_THEME,
+  '.cm-gutters': {
+    ...EDITOR_THEME['.cm-gutters'],
+    backgroundColor: 'transparent',
+  },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'transparent' },
 };
+
+// `@dark`: the colours of code mode's editor, Monaco's `vs-dark` theme on the
+// background code mode gives it. These are fixed colours, not tokens, so the
+// editor looks the same as code mode's whatever theme the page is in.
+export const MONACO_DARK = {
+  background: '#413e4e',
+  readOnlyBackground: '#606060',
+  foreground: '#d4d4d4',
+  lineNumber: '#858585',
+  activeLineNumber: '#c6c6c6',
+  activeLineBorder: '#282828',
+  selection: '#264f78',
+  cursor: '#aeafad',
+  bracketMatch: '#0064001a',
+  bracketMatchBorder: '#888888',
+  comment: '#608b4e',
+  string: '#ce9178',
+  number: '#b5cea8',
+  keyword: '#569cd6',
+  type: '#3dc9b0',
+  delimiter: '#dcdcdc',
+} as const;
+
+const DARK_THEME: Record<string, Record<string, string>> = {
+  '&': EDITOR_THEME['&'],
+  '&.cm-focused': { outline: 'none' },
+  '.cm-scroller': EDITOR_THEME['.cm-scroller'],
+  '.cm-content': {
+    paddingBlock: 'var(--boxel-sp-xs)',
+    caretColor: MONACO_DARK.cursor,
+  },
+  '.cm-gutters': {
+    backgroundColor: 'transparent',
+    color: MONACO_DARK.lineNumber,
+    borderInlineEnd: 'none',
+    userSelect: 'none',
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'transparent',
+    color: MONACO_DARK.activeLineNumber,
+  },
+  // Monaco marks the current line with a border, not a fill.
+  '.cm-activeLine': {
+    backgroundColor: 'transparent',
+    boxShadow: `inset 0 0 0 2px ${MONACO_DARK.activeLineBorder}`,
+  },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
+    { backgroundColor: MONACO_DARK.selection },
+  '.cm-cursor, .cm-dropCursor': { borderInlineStartColor: MONACO_DARK.cursor },
+  '&.cm-focused .cm-matchingBracket': {
+    backgroundColor: MONACO_DARK.bracketMatch,
+    outline: `1px solid ${MONACO_DARK.bracketMatchBorder}`,
+  },
+  '.tok-comment': { color: MONACO_DARK.comment },
+  '.tok-string': { color: MONACO_DARK.string },
+  '.tok-number': { color: MONACO_DARK.number },
+  '.tok-keyword, .tok-bool, .tok-atom, .tok-literal': {
+    color: MONACO_DARK.keyword,
+  },
+  '.tok-typeName, .tok-className': { color: MONACO_DARK.type },
+  '.tok-punctuation, .tok-operator': { color: MONACO_DARK.delimiter },
+};
+
+const DARK_READ_ONLY_THEME: Record<string, Record<string, string>> = {
+  ...DARK_THEME,
+  '.cm-activeLine': { backgroundColor: 'transparent' },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'transparent',
+    color: MONACO_DARK.lineNumber,
+  },
+};
+
+function editorTheme(dark: boolean, readOnly: boolean) {
+  if (dark) {
+    return readOnly ? DARK_READ_ONLY_THEME : DARK_THEME;
+  }
+  return readOnly ? READ_ONLY_THEME : EDITOR_THEME;
+}
 
 const DEFAULT_MIN_LINES = 3;
 const DEFAULT_MAX_LINES = 24;
@@ -138,6 +221,7 @@ interface CodeMirrorLike {
     labelledBy?: string;
     describedBy?: string;
     theme?: Record<string, Record<string, string>>;
+    dark?: boolean;
     onDocChange?: (text: string) => void;
   }): unknown;
 }
@@ -153,6 +237,8 @@ export interface CodeEditorSignature {
     language?: CodeEditorLanguage | string;
     /** shows the code and lets it be selected, but not changed */
     readOnly?: boolean;
+    /** code mode's colours: Monaco's dark theme, whatever the page's theme */
+    dark?: boolean;
     /** the line-number gutter (default true) */
     lineNumbers?: boolean;
     /** height floor, in lines (default 3) */
@@ -273,9 +359,11 @@ export class CodeEditor extends Component<CodeEditorSignature> {
     }
     let value = this.args.value ?? '';
     let readOnly = Boolean(this.args.readOnly);
+    let dark = Boolean(this.args.dark);
     let config = JSON.stringify([
       this.language,
       readOnly,
+      dark,
       this.lineNumbers,
       this.args.controlId ?? '',
       this.args.label ?? '',
@@ -321,7 +409,8 @@ export class CodeEditor extends Component<CodeEditorSignature> {
       label: this.args.label,
       labelledBy: this.args.labelledBy,
       describedBy: this.args.describedBy,
-      theme: readOnly ? READ_ONLY_THEME : EDITOR_THEME,
+      theme: editorTheme(dark, readOnly),
+      dark,
       onDocChange: (text: string) => {
         if (isDestroying(this) || isDestroyed(this) || this.applyingValue) {
           return;
@@ -345,6 +434,7 @@ export class CodeEditor extends Component<CodeEditorSignature> {
       class='pretui-code-editor'
       data-language={{this.language}}
       data-read-only={{if @readOnly 'true' 'false'}}
+      data-dark={{if @dark 'true' 'false'}}
       data-loaded={{if this.cm 'true' 'false'}}
       {{keepStyle this.keptStyle}}
       data-test-pretui-code-editor
@@ -389,7 +479,34 @@ export class CodeEditor extends Component<CodeEditorSignature> {
           outline: 2px solid var(--ring);
           outline-offset: 1px;
         }
-        .pretui-code-editor-fallback {
+        /* Read-only code sits on a muted surface, so it doesn't pass for a
+           field that takes typing. */
+        .pretui-code-editor[data-read-only='true'] {
+          background-color: color-mix(in oklch, var(--muted) 70%, var(--card));
+        }
+        /* Code mode's colours. The tokens are set here as well as in the dark
+           CodeMirror theme so the read-only fallback, which is CodeBlock and
+           reads tokens, comes out close to the editor before it loads. */
+        .pretui-code-editor[data-dark='true'] {
+          --card: #413e4e;
+          --card-foreground: #d4d4d4;
+          --foreground: #d4d4d4;
+          --muted-foreground: #858585;
+          --pretui-code-comment: #608b4e;
+          --pretui-code-string: #ce9178;
+          --pretui-code-number: #b5cea8;
+          --pretui-code-keyword: #569cd6;
+          --pretui-code-name: #3dc9b0;
+          background-color: #413e4e;
+          color: #d4d4d4;
+          color-scheme: dark;
+        }
+        .pretui-code-editor[data-dark='true'][data-read-only='true'] {
+          --card: #606060;
+          background-color: #606060;
+        }
+        .pretui-code-editor .pretui-code-editor-fallback {
+          background-color: transparent;
           box-shadow: none;
           border-radius: 0;
         }

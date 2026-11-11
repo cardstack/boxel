@@ -9,6 +9,7 @@ Source code you can edit: a CodeMirror editor with a language mode, line numbers
 @onInput?     — fires with the whole text after every edit
 @language?    — 'javascript' | 'typescript' | 'json' | 'plain' (default); anything else is plain
 @readOnly?    — the code can be read, selected and copied, but not changed
+@dark?        — code mode's colours: Monaco's dark theme, whatever the page's theme
 @lineNumbers? — the gutter (default true)
 @minLines?    — height floor, in lines (default 3)
 @maxLines?    — height ceiling, in lines (default 24); past it the editor scrolls
@@ -25,7 +26,11 @@ Element: HTMLDivElement
 
 **An echo of your own typing is not a new value.** The editor reports every change the user makes through `@onInput`, and a caller usually stores it and passes it straight back as `@value`. The component remembers the last text it reported and ignores a `@value` that matches it, so the caller's round trip never resets the document or the caret. Any other `@value`, such as a save from somewhere else, replaces the document in the same editor, and that replacement is not reported back through `@onInput`: it is the caller's change, not the user's.
 
-**A change of language, read-only, line numbers, id or naming rebuilds the editor, keeping its text.** Those are fixed when CodeMirror makes its state; rebuilding keeps what the user typed rather than reverting to `@value`. A new `@value` that arrives in the same render wins, as it would without the rebuild.
+**Read-only looks read-only.** It sits on a muted surface with no current-line mark, so a reader doesn't take it for a field that takes typing, and it is announced through `aria-readonly`.
+
+**`@dark` is code mode's editor.** It takes the colours code mode's Monaco editor uses, so a card that edits code beside code mode's editor can look like it: Monaco's `vs-dark` token colours, gutter, selection and cursor on the background code mode gives Monaco (`#413e4e`, and `#606060` when read-only). These are fixed colours, not theme tokens, because the point is to match that one editor rather than the page. Lezer's tags map onto Monaco's token kinds: keywords, booleans and `null` are Monaco's keyword blue, type and class names its type teal, and names Monaco leaves uncoloured stay the foreground. One difference remains: Monaco colours JSON keys light blue, while the JavaScript grammar that highlights JSON here sees quoted keys as strings.
+
+**A change of language, read-only, dark, line numbers, id or naming rebuilds the editor, keeping its text.** Those are fixed when CodeMirror makes its state; rebuilding keeps what the user typed rather than reverting to `@value`. A new `@value` that arrives in the same render wins, as it would without the rebuild.
 
 **Undo is the user's own edits.** A `@value` that replaces the document doesn't enter the undo history, so undo never brings back the text a save from elsewhere replaced.
 
@@ -71,6 +76,8 @@ Clicking a span label doesn't move focus; the editor takes focus from a click on
 ## Theming
 
 `--pretui-code-size` and `--pretui-code-leading` (type metrics, shared with CodeBlock; tabs are two columns wide), `--pretui-shadow-card`, and the syntax channel CodeBlock reads: `--pretui-code-keyword`, `--pretui-code-string`, `--pretui-code-number`, `--pretui-code-comment`, `--pretui-code-name`. Code reads the same whether it is being read or edited.
+
+Under `@dark` none of the syntax tokens apply. The frame sets them, along with `--card`, `--foreground` and `--muted-foreground`, to code mode's colours, so the CodeBlock shown before the editor loads comes out close to the editor. It isn't exact, because CodeBlock blends each hue with the foreground.
 
 The frame sits in `@layer PretComponent`. CodeMirror's own DOM is styled through an `EditorView.theme` the component hands the editor, because CodeMirror injects its base theme as unlayered CSS that a layered rule can't outrank; the theme's values are the same tokens. `--pretui-code-editor-min` and `--pretui-code-editor-max` (line counts) are set from `@minLines` and `@maxLines`.
 
