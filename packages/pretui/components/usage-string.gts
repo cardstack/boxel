@@ -22,6 +22,9 @@ export interface UsageStringSignature {
     options?: string[];
     /** edit the value in a Textarea, for text with line breaks */
     multiline?: boolean;
+    /** with @multiline: the Textarea reads as code, in the mono font with
+     * long lines scrolling sideways rather than wrapping */
+    monospace?: boolean;
     onInput?: (value: string) => void;
   };
   Element: HTMLElement;
@@ -68,12 +71,20 @@ export class UsageString extends Component<UsageStringSignature> {
                 @controlId={{this.controlId}}
               />
             {{else if @multiline}}
-              <Textarea
-                @value={{this.valueStr}}
-                @onInput={{this.callOnInput}}
-                @controlId={{this.controlId}}
-                rows='6'
-              />
+              {{! Textarea sets its own font to inherit, so the mono font is
+                  the wrapper's and the textarea takes it from there. }}
+              <div
+                class='pretui-usage-string-multiline'
+                data-monospace={{if @monospace 'true' 'false'}}
+              >
+                <Textarea
+                  @value={{this.valueStr}}
+                  @onInput={{this.callOnInput}}
+                  @controlId={{this.controlId}}
+                  rows='6'
+                  wrap={{if @monospace 'off' 'soft'}}
+                />
+              </div>
             {{else}}
               <Input
                 @value={{this.valueStr}}
@@ -95,5 +106,16 @@ export class UsageString extends Component<UsageStringSignature> {
         @defaultValue={{@defaultValue}}
       />
     {{/if}}
+    <style scoped>
+      .pretui-usage-string-multiline[data-monospace='true'] {
+        font-family: var(--font-mono);
+        font-size: var(--pretui-code-size, var(--boxel-font-size-xs));
+        line-height: var(--pretui-code-leading, 1.6);
+      }
+      .pretui-usage-string-multiline[data-monospace='true'] textarea {
+        white-space: pre;
+        overflow-x: auto;
+      }
+    </style>
   </template>
 }

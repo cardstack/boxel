@@ -82,17 +82,22 @@ module('Pretui | components/freestyle-usage', function (hooks) {
         <FreestyleUsage @name='CodeEditor'>
           <:example>x</:example>
           <:api as |Args|>
-            <Args.String @name='value' @value='one' @multiline={{true}} @onInput={{onInput}} />
+            <Args.String @name='value' @value='one' @multiline={{true}} @monospace={{true}} @onInput={{onInput}} />
+            <Args.String @name='note' @value='a note' @multiline={{true}} @onInput={{onInput}} />
             <Args.String @name='label' @value='Go' @onInput={{onInput}} />
           </:api>
         </FreestyleUsage>
       </template>,
     );
     let aside = root().querySelector('[data-test-pretui-usage-props]') as HTMLElement;
-    let textarea = aside.querySelector('textarea') as HTMLTextAreaElement;
+    let [textarea, note] = Array.from(aside.querySelectorAll('textarea'));
     assert.ok(textarea, 'the multiline knob is a textarea');
     assert.strictEqual(textarea.value, 'one');
-    assert.strictEqual(aside.querySelectorAll('textarea').length, 1, 'a plain string knob stays an input');
+    assert.strictEqual(aside.querySelectorAll('textarea').length, 2, 'a plain string knob stays an input');
+    assert.strictEqual(textarea.getAttribute('wrap'), 'off', 'monospace code scrolls sideways rather than wrapping');
+    assert.dom(textarea.parentElement!.closest('.pretui-usage-string-multiline')).hasAttribute('data-monospace', 'true', 'and sits in the mono wrapper');
+    assert.strictEqual(note.getAttribute('wrap'), 'soft', 'prose wraps');
+    assert.dom(note.closest('.pretui-usage-string-multiline')).hasAttribute('data-monospace', 'false');
     await fillIn(textarea, 'one\ntwo');
     assert.deepEqual(seen, ['one\ntwo']);
   });
