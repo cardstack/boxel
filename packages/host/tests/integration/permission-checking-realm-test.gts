@@ -364,8 +364,17 @@ module('Integration | a realm that checks permissions', function (hooks) {
 
   test('the AI context tells a user the realm admits only through its policy that a policy judges them', async function (assert) {
     await setupSchool({ enforcePermissions: true });
-    // As the host does to show the school in a classroom's header.
-    await getService('realm').ensureRealmMeta(SCHOOL);
+    // The host asked the school for its info during setup's renders, which
+    // the school answers as its own requests, without asking who sent them.
+    // So the host signs in to it afresh, and the school decides whether to
+    // answer: one whose policy judges the user does.
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await realmService.reauthenticate(SCHOOL);
+    assert.true(
+      realmService.isInfoLoaded(ri(SCHOOL)),
+      'the school answered the user its info',
+    );
 
     let operatorModeState = getService('operator-mode-state-service');
     operatorModeState.restore({
@@ -387,11 +396,16 @@ module('Integration | a realm that checks permissions', function (hooks) {
 
   test('the AI context names no policy for a user a realm without one does not let read', async function (assert) {
     await setupSchool({ enforcePermissions: true, policy: null });
-    // A realm with no policy answers its info only to a caller its
-    // permissions let read, so the host never learns it.
-    await getService('realm')
-      .ensureRealmMeta(SCHOOL)
-      .catch(() => undefined);
+    // As in the test above, the host signs in to the school afresh, so the
+    // school decides whether to answer its info. A realm with no policy
+    // answers it only to a caller its permissions let read.
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await assert.rejects(
+      realmService.reauthenticate(SCHOOL),
+      /Failed to fetch realm info/,
+      'the school refused the user its info',
+    );
 
     let operatorModeState = getService('operator-mode-state-service');
     operatorModeState.restore({
@@ -400,8 +414,8 @@ module('Integration | a realm that checks permissions', function (hooks) {
     let context = await operatorModeState.getSummaryForAIBot();
     assert.strictEqual(context.realmUrl, SCHOOL, 'the user is in the school');
     assert.false(
-      getService('realm').isInfoLoaded(ri(SCHOOL)),
-      'the school did not answer its info',
+      realmService.isInfoLoaded(ri(SCHOOL)),
+      'the host still holds no info for the school',
     );
     assert.strictEqual(
       context.realmPolicy,
