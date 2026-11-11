@@ -83,6 +83,9 @@ export interface AutomationCaps {
   callApiCalls: number;
   responseBytes: number;
   resolveCalls: number;
+  // Credits a run's AI requests may cost in all. A request is refused when
+  // its most possible cost would take the run past it (ADR 029 §1.5).
+  aiCredits: number;
   writes: number;
   seconds: number;
   // At least one of the two is set; a null one doesn't limit spending.
@@ -94,6 +97,7 @@ export const AUTOMATION_CAP_NAMES: readonly (keyof AutomationCaps)[] = [
   'callApiCalls',
   'responseBytes',
   'resolveCalls',
+  'aiCredits',
   'writes',
   'seconds',
   'dailyCredits',

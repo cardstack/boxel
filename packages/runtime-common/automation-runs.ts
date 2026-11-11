@@ -62,6 +62,10 @@ export interface AutomationRun extends AutomationRunCounts {
   errorReason: string | null;
   errorMessage: string | null;
   canceledBy: string | null;
+  // Credits the run's finished AI requests cost, and the most its AI requests
+  // in flight can cost (see `reserveAutomationRunAICredits`).
+  aiCreditsSpent: number;
+  aiCreditsReserved: number;
   createdAt: string;
   startedAt: string | null;
   commitStartedAt: string | null;
@@ -354,6 +358,85 @@ export async function addAutomationRunCounts(
   ]);
 }
 
+// What came of asking to reserve credits for one of a run's AI requests:
+//
+// - `reserved`: the credits count against the run's AI spending cap.
+//   Send the request, then settle it with `settleAutomationRunAICredits`.
+// - `over-cap`: what the run has spent on AI, plus what its requests in
+//   flight have reserved, plus this request's credits, would pass the cap.
+//   Refuse the request.
+// - `not-running`: the run is pending, finished or canceled.
+// - `missing`: there is no such run.
+export type AutomationRunAIReservation =
+  | { kind: 'reserved' | 'over-cap' | 'not-running'; run: AutomationRun }
+  | { kind: 'missing' };
+
+// Reserves `credits`, the most an AI request can cost, against a running
+// run's AI spending cap, `cap` (ADR 029 §1.5). The check and the reservation
+// are one statement, so two requests racing for the last of a run's AI
+// credits can't both get them. A reservation counts against the cap until
+// `settleAutomationRunAICredits` replaces it with what the request cost.
+export async function reserveAutomationRunAICredits(
+  dbAdapter: DBAdapter,
+  id: string,
+  credits: number,
+  cap: number,
+): Promise<AutomationRunAIReservation> {
+  assertCredits('reserve', credits);
+  assertCredits('cap a run at', cap);
+  let [row] = await query(dbAdapter, [
+    'UPDATE automation_runs SET ai_credits_reserved = ai_credits_reserved +',
+    param(credits),
+    'WHERE id =',
+    param(id),
+    "AND state = 'running'",
+    'AND ai_credits_spent + ai_credits_reserved +',
+    param(credits),
+    '<=',
+    param(cap),
+    'RETURNING *',
+  ]);
+  if (row) {
+    return { kind: 'reserved', run: runFromRow(row) };
+  }
+  let run = await getAutomationRun(dbAdapter, id);
+  if (!run) {
+    return { kind: 'missing' };
+  }
+  return { kind: run.state === 'running' ? 'over-cap' : 'not-running', run };
+}
+
+// Settles an AI request that reserved `reserved` credits: releases the
+// reservation and adds `cost`, what the request cost in credits, to the run's
+// AI spending. A request that was never sent, or cost nothing, settles with
+// a `cost` of 0. It applies in any state, since the request was paid for
+// whether or not the run is still going. A request whose cost can't be
+// learned settles at its reservation, the most it could have cost.
+export async function settleAutomationRunAICredits(
+  dbAdapter: DBAdapter,
+  id: string,
+  { reserved, cost }: { reserved: number; cost: number },
+): Promise<void> {
+  assertCredits('release', reserved);
+  assertCredits('spend', cost);
+  await query(dbAdapter, [
+    'UPDATE automation_runs SET ai_credits_reserved = GREATEST(ai_credits_reserved -',
+    param(reserved),
+    ', 0), ai_credits_spent = ai_credits_spent +',
+    param(cost),
+    'WHERE id =',
+    param(id),
+  ]);
+}
+
+function assertCredits(action: string, credits: number) {
+  if (!Number.isFinite(credits) || credits < 0) {
+    throw new Error(
+      `a run can only ${action} a finite number of AI credits, 0 or more, not ${credits}`,
+    );
+  }
+}
+
 // Changes a running run that `attempt` owns, and returns it, or returns
 // undefined when the run isn't running or `attempt` doesn't own it.
 async function updateOwned(
@@ -395,6 +478,8 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     callApiResponseBytes: Number(row.call_api_response_bytes),
     resolveCalls: Number(row.resolve_calls),
     writes: Number(row.writes),
+    aiCreditsSpent: Number(row.ai_credits_spent ?? 0),
+    aiCreditsReserved: Number(row.ai_credits_reserved ?? 0),
     createdAt: iso(row.created_at)!,
     startedAt: iso(row.started_at),
     commitStartedAt: iso(row.commit_started_at),

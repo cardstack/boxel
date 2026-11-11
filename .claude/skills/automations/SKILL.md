@@ -85,15 +85,15 @@ Each call scans local days with one `Intl` offset lookup per matching day (about
 
 The server reads the card from the index as data and never runs its module, so every field it reads is a stored value, never a computed:
 
-| Field                  | Type                                | Notes                                                                                                                                                                                                                                                                                                    |
-| ---------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `script`               | `linksTo(FileDef)`                  | the Realm Runner script, in the card's realm                                                                                                                                                                                                                                                             |
-| `triggers`             | `containsMany(AutomationTrigger)`   | `kind` (`cron` / `once` / `webhook`), `label`, then the fields for that kind (below)                                                                                                                                                                                                                     |
-| `operations`           | `containsMany(AutomationOperation)` | `targetType` (code ref) and `operation`: the `callApi` operations a run may call                                                                                                                                                                                                                         |
-| `caps`                 | `contains(AutomationCaps)`          | per run `callApiCalls`, `responseBytes`, `resolveCalls`, `writes`, `seconds` (≤ 1200); per day `dailyCredits` and per month `monthlyCredits` (daily ≤ monthly when both are set). Every run limit is required; for credits, one of the two is enough, and an empty one doesn't limit spending. 0 forbids |
-| `params`               | `containsMany(AutomationParam)`     | `name` / `value` strings handed to the script at the start of each run, which reads them as `realm.current.automation.params`                                                                                                                                                                            |
-| `batchedAI`            | `BooleanField`                      | off unless `true`                                                                                                                                                                                                                                                                                        |
-| `batchDeadlineMinutes` | `NumberField`                       | with `batchedAI` on, minutes a batch may take before its requests go again at the normal price; 1–1440, 60 when unset                                                                                                                                                                                    |
+| Field                  | Type                                | Notes                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `script`               | `linksTo(FileDef)`                  | the Realm Runner script, in the card's realm                                                                                                                                                                                                                                                                                                    |
+| `triggers`             | `containsMany(AutomationTrigger)`   | `kind` (`cron` / `once` / `webhook`), `label`, then the fields for that kind (below)                                                                                                                                                                                                                                                            |
+| `operations`           | `containsMany(AutomationOperation)` | `targetType` (code ref) and `operation`: the `callApi` operations a run may call                                                                                                                                                                                                                                                                |
+| `caps`                 | `contains(AutomationCaps)`          | per run `callApiCalls`, `responseBytes`, `resolveCalls`, `aiCredits` (AI spending, in credits), `writes`, `seconds` (≤ 1200); per day `dailyCredits` and per month `monthlyCredits` (daily ≤ monthly when both are set). Every run limit is required; for credits, one of the two is enough, and an empty one doesn't limit spending. 0 forbids |
+| `params`               | `containsMany(AutomationParam)`     | `name` / `value` strings handed to the script at the start of each run, which reads them as `realm.current.automation.params`                                                                                                                                                                                                                   |
+| `batchedAI`            | `BooleanField`                      | off unless `true`                                                                                                                                                                                                                                                                                                                               |
+| `batchDeadlineMinutes` | `NumberField`                       | with `batchedAI` on, minutes a batch may take before its requests go again at the normal price; 1–1440, 60 when unset                                                                                                                                                                                                                           |
 
 A trigger's fields by kind: `cron` reads `expression`, `timeZone`, optional `count`, and optional `untilDate` with optional `untilTime` (absent: 23:59, the end of that day) in `timeZone`; `once` reads `date`, `time` and `timeZone`; `webhook` reads `webhookPath`, one of the realm's incoming webhooks. Dates are `DateField` (`yyyy-MM-dd`); times are `StringField`s holding a wall-clock `HH:MM`.
 
@@ -150,6 +150,7 @@ cancel works by changing it. The functions that change it are in
 | `error_reason`, `error_message`                                                | For an error: a code (such as `script-error`, `timed-out`, `commit-interrupted`) and its detail                              |
 | `canceled_by`                                                                  | Who canceled the run                                                                                                         |
 | `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, which the realm server must add to where it does the work, never taking them from the tab                |
+| `ai_credits_spent`, `ai_credits_reserved`                                      | Credits the run's finished AI requests cost, and the worst case of those in flight (see _The AI spending cap_)               |
 | `created_at`, `started_at`, `commit_started_at`, `committed_at`, `finished_at` | When the run was enqueued, first started (a retry keeps it), claimed its commit, had its commit land, and ended              |
 
 A run is unique by `(automation_id, trigger, slot)`, the same three its
@@ -271,6 +272,25 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
 
 The row holds run state only. A run's log (its console lines and platform
 calls) doesn't go on it.
+
+### The AI spending cap
+
+A cap on `resolve` calls holds no price, since one AI request can cost a fraction of a cent or several dollars, so the card also caps what a run's AI may cost: `caps.aiCredits`, in credits (ADR 029 §1.5). It is required like every run limit; 0 forbids AI spending. The switch-on estimate and the minimum balance count it in full as the most one run's AI can cost (`runCostCeiling`, the `pricing` skill).
+
+Before the server sends an AI request for a run, `admitAutomationRunAIRequest` (`packages/realm-server/lib/automation-ai-spending.ts`) prices its worst case and reserves it on the run row:
+
+- **The worst case** is `aiRequestCostCeiling(body, price)` in `packages/runtime-common/automation-ai-cost.ts`: one input token per byte of the request body (no tokenizer encodes text in fewer bytes than tokens), each `image_url` part at the image price, the request's `max_completion_tokens` or `max_tokens` (no more than the model's limit, and the model's limit when the request sets none) at the output price, plus the per-request and web-search prices. A request that nothing bounds, because neither it nor the model's listing limits its output, is refused (`unbounded-output`). The price is the model's OpenRouter listing, read from its indexed `OpenRouterModel` card with `readOpenRouterModelPrice`; a variable price (`-1`, as `openrouter/auto` lists) can't be read, so such a model can't be priced.
+- **The reservation** is `reserveAutomationRunAICredits`, one conditional `UPDATE`: it adds the worst case to `ai_credits_reserved` only while the run is running and `ai_credits_spent + ai_credits_reserved` plus the worst case stays within the cap. Otherwise the request is refused (`over-cap`), so requests in flight at once can't between them pass the cap.
+- **Settling** is `settleAutomationRunAIRequest`, exactly once per admitted request: it releases the reservation and adds the cost the AI provider reports. A request never sent settles at 0; one whose cost can't be learned settles at its reservation, the most it could have cost. It applies in any state, since the request was paid for whether or not the run is still going.
+
+Raising `aiCredits` above the automation's caps snapshot pauses it like raising any other cap, since the snapshot holds every cap in `AUTOMATION_CAP_NAMES`.
+
+```sql
+SELECT state, ai_credits_spent, ai_credits_reserved, resolve_calls
+  FROM automation_runs WHERE id = '<run id>';
+```
+
+A finished run with `ai_credits_reserved` above 0 has an admitted request that was never settled.
 
 ## The queue tier and worker lane
 
