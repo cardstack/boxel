@@ -172,7 +172,9 @@ function contextValue(raw: string | null | undefined): string | undefined {
 //   stays open past realm-historian's quiet period and maximum age, so a
 //   stray push id on another channel would hold that writer's revision open.
 //   `pushFinal` marks the push's last request, so it is kept only beside a
-//   push id.
+//   push id. It closes the group early; a push whose last request records no
+//   event (it was refused, or changed nothing) closes at realm-historian's
+//   push timeout instead.
 //
 // A writer with no request sets its context itself. `mcp` is the channel for
 // writes made through the MCP connector, with the OAuth client as `agent` and

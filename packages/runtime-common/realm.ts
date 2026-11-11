@@ -6510,8 +6510,9 @@ export class Realm {
       await this.removeFileMeta(removedFiles);
       return createdMap;
     }
-    // How the write was made, checked here whoever set it.
-    let context = history ? writeContextForEvent(history) : undefined;
+    // How the write was made, checked here whoever set it. A write that
+    // names nothing is `api`.
+    let context = writeContextForEvent(history ?? { channel: 'api' });
     let event: ChangeEventInput | undefined =
       changes.length > 0
         ? {
@@ -6522,7 +6523,6 @@ export class Realm {
             // The effective authenticated user, never a client-supplied
             // header. A write with no user is the realm's own Matrix user's.
             author: initiatingUser ?? this.#matrixClientUserId,
-            channel: context?.channel ?? 'api',
             ...(partial ? { partial: true } : {}),
             changes,
           }
