@@ -20,6 +20,10 @@ import {
   type StoreReadType,
   type getCard,
 } from '@cardstack/runtime-common';
+import {
+  isLiveRender,
+  scopedRenderContext,
+} from '@cardstack/runtime-common/render-context';
 
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
 import type StoreService from '@cardstack/host/services/store';
@@ -31,27 +35,6 @@ import SearchResultError from './search-result-error';
 import type { BaseDef, CardContext } from '@cardstack/base/card-api';
 
 const log = logger('component:search/hydratable-card');
-
-// Whether `element` renders for someone looking at a card rather than for an
-// index render. The same rule as base's `isLiveRender` (base/render-context.ts),
-// which host code cannot import as a value because base reaches the app through
-// the loader: no render context means live; a context scoped to the element an
-// index render mounts into leaves everything outside that element live; an
-// unscoped context (a prerender tab) makes the whole page an index render.
-function isLiveRenderElement(element: Element): boolean {
-  let context = globalThis as {
-    __boxelRenderContext?: unknown;
-    __boxelRenderContextScope?: unknown;
-  };
-  if (!context.__boxelRenderContext) {
-    return true;
-  }
-  let scope = context.__boxelRenderContextScope;
-  if (typeof scope !== 'string') {
-    return false;
-  }
-  return !element.closest(`#${scope}`);
-}
 
 // `HydrationMode` is the card-facing contract (it rides the `@context`
 // search surface), so it lives in runtime-common; re-exported here because this
@@ -221,7 +204,7 @@ export default class HydratableCard extends Component<Signature> {
   // A host tab that indexes its own realm sets that same flag only while one of
   // its index renders runs, and scopes it to the element the render mounts
   // into. A row anywhere else in the tab is live even while the flag is set, so
-  // once the row's element can be placed, `isLiveRenderElement` answers for it.
+  // once the row's element can be placed, `isLiveRender` answers for it.
   // Before that the row reads the flag as it stands, which keeps a row inside an
   // index render inert from its first frame. The answer is tracked, so a row that
   // first rendered during one of those index renders re-resolves as soon as its
@@ -234,17 +217,23 @@ export default class HydratableCard extends Component<Signature> {
     return Boolean((globalThis as any).__boxelRenderContext);
   }
 
-  // Placed on the inert element, which renders before any live card does.
+  // Placed on whichever element the row renders, inert or live, so a row has
+  // its element's answer whichever it rendered first. A row that went straight
+  // to live would otherwise fall back to the raw flag the next time it
+  // re-resolves, and drop back to inert if that happened during an index
+  // render.
   private placeRender = modifier((element: Element) => {
-    let live = isLiveRenderElement(element);
-    let renderContext = Boolean((globalThis as any).__boxelRenderContext);
-    if (renderContext) {
-      log.info(
-        `placing ${this.args.cardId} under a render context: live=${live} scope=${String((globalThis as any).__boxelRenderContextScope)} resident=${this.isResident} mode=${this.mode}`,
-      );
-    }
+    let live = isLiveRender(element);
     if (live === this.live) {
       return;
+    }
+    // A host tab's own index render is the only time the flag and the element
+    // can disagree, so that is the only placement worth recording.
+    let scope = scopedRenderContext();
+    if (scope) {
+      log.info(
+        `placing ${this.args.cardId} during the tab's index render (scope ${scope}): live=${live} resident=${this.isResident} mode=${this.mode}`,
+      );
     }
     let cancelled = false;
     // After the render that installed this modifier, which read `live`.
@@ -357,6 +346,7 @@ export default class HydratableCard extends Component<Signature> {
           wrapper element (which would perturb grid/child-selector styling) is
           needed. }}
       <CardRenderer
+        {{this.placeRender}}
         @card={{this.liveCard}}
         @format={{this.format}}
         @codeRef={{@renderType}}
