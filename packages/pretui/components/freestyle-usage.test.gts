@@ -4,7 +4,7 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { fillIn, render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { FreestyleUsage } from './freestyle-usage';
 
@@ -73,5 +73,27 @@ module('Pretui | components/freestyle-usage', function (hooks) {
     assert.deepEqual(apiRows.map((r) => r.querySelector('td')?.textContent?.trim()), ['String', 'Bool', 'Action', 'Yield']);
     let cssRows = Array.from(root().querySelector('[data-test-pretui-usage-css-vars]')?.querySelectorAll('[data-test-pretui-usage-arg]') ?? []);
     assert.deepEqual(cssRows.map((r) => Array.from(r.querySelectorAll(':is(th, td)')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim())), [['--pretui-btn-radius', 'CSS', '', '6px']]);
+  });
+  test('a multiline string knob is a textarea, and reports what is typed', async function (assert) {
+    let seen: string[] = [];
+    let onInput = (value: string) => seen.push(value);
+    await render(
+      <template>
+        <FreestyleUsage @name='CodeEditor'>
+          <:example>x</:example>
+          <:api as |Args|>
+            <Args.String @name='value' @value='one' @multiline={{true}} @onInput={{onInput}} />
+            <Args.String @name='label' @value='Go' @onInput={{onInput}} />
+          </:api>
+        </FreestyleUsage>
+      </template>,
+    );
+    let aside = root().querySelector('[data-test-pretui-usage-props]') as HTMLElement;
+    let textarea = aside.querySelector('textarea') as HTMLTextAreaElement;
+    assert.ok(textarea, 'the multiline knob is a textarea');
+    assert.strictEqual(textarea.value, 'one');
+    assert.strictEqual(aside.querySelectorAll('textarea').length, 1, 'a plain string knob stays an input');
+    await fillIn(textarea, 'one\ntwo');
+    assert.deepEqual(seen, ['one\ntwo']);
   });
 });

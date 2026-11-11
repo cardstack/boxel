@@ -1,6 +1,6 @@
 ## What it is
 
-The string argument row of a **FreestyleUsage** page — `Args.String`. In the docs lens it is a table row; in the property lens it is a live control bound to the example. With `@options` it renders a **Select**; without, an **Input**. Use it for any string-valued argument. For a boolean, **UsageBool**; a number, **UsageNumber**; a list, **UsageArray**; anything structural, **UsageObject** or **UsageArgument**.
+The string argument row of a **FreestyleUsage** page — `Args.String`. In the docs lens it is a table row; in the property lens it is a live control bound to the example. With `@options` it renders a **Select**; with `@multiline`, a **Textarea**, for a value with line breaks such as source code; otherwise an **Input**. Use it for any string-valued argument. For a boolean, **UsageBool**; a number, **UsageNumber**; a list, **UsageArray**; anything structural, **UsageObject** or **UsageArgument**.
 
 ## The contract
 
@@ -9,6 +9,7 @@ The string argument row of a **FreestyleUsage** page — `Args.String`. In the d
 @name?, @description?, @defaultValue?, @required?, @optional?, @hideControls?
 @value?: string | null
 @options?: string[]
+@multiline?: boolean   — a Textarea, six rows tall, instead of an Input; ignored with @options
 @onInput?(value: string)
 ```
 

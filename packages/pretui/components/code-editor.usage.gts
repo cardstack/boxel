@@ -177,6 +177,7 @@ class CodeEditorUsage extends Component {
         <Args.String
           @name='value'
           @value={{this.value}}
+          @multiline={{true}}
           @description='The source text. Passing back what onInput reported is an echo and leaves the document and caret alone; any other value replaces the document in the same editor.'
           @onInput={{this.setValue}}
         />

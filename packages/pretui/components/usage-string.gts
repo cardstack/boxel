@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
 import { Input } from './input';
 import { Select } from './select';
+import { Textarea } from './textarea';
 import { UsageArgument } from './usage-argument';
 import { PropReadOnly, PropRow, readOnlyText } from '../internal/freestyle';
 import type { ArgsMode } from '../internal/freestyle';
@@ -19,6 +20,8 @@ export interface UsageStringSignature {
     hideControls?: boolean;
     value?: string | null;
     options?: string[];
+    /** edit the value in a Textarea, for text with line breaks */
+    multiline?: boolean;
     onInput?: (value: string) => void;
   };
   Element: HTMLElement;
@@ -63,6 +66,13 @@ export class UsageString extends Component<UsageStringSignature> {
                 @value={{this.valueStr}}
                 @onValueChange={{this.callOnInput}}
                 @controlId={{this.controlId}}
+              />
+            {{else if @multiline}}
+              <Textarea
+                @value={{this.valueStr}}
+                @onInput={{this.callOnInput}}
+                @controlId={{this.controlId}}
+                rows='6'
               />
             {{else}}
               <Input
