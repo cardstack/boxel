@@ -296,7 +296,7 @@ export const QUERY_GRAMMAR = {
         validator: 'assertLinkedFromFilter',
         refusals: ['invalid-value', 'unknown-key'],
         description:
-          "The cards another card links to: { card: <absolute card URL in the searched realm>, field: 'items' }, where field is a linksTo or linksToMany of that card.",
+          "The cards another card links to: { card: <the id of a card in the searched realm: its URL, its @scope/… id or '$REALM/<path>'>, field: 'items' }, where field is a linksTo or linksToMany of that card.",
       },
       {
         name: 'every',

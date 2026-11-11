@@ -17025,12 +17025,14 @@ export class Realm {
 
     // The request's type references, as the absolute code refs they name:
     // a shorthand parsed, a `$REALM/` module resolved against this realm.
+    // A `linkedFrom.card` likewise, as the URL the index keys the card by.
     // Resolved here, where the request arrives, so everything after (the
     // policy lookup, the checks, the cache, the engine) reads one spelling.
     try {
       payload = resolveTypeReferences(payload, {
         realm: this.url,
         canonicalize: (url) => this.#virtualNetwork.unresolveURL(url),
+        resolveCardId: (id) => this.#virtualNetwork.toURLHref(id),
       });
     } catch (e: unknown) {
       if (!(e instanceof InvalidQueryError)) {

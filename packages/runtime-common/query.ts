@@ -43,7 +43,7 @@ import {
   type Vector,
 } from './serializers/vector.ts';
 import { SEARCH_RANK_SIGNALS, type SearchRankSignal } from './search-intent.ts';
-import { isAbsoluteIdentifier } from './realm-identifiers.ts';
+import { isAbsoluteIdentifier, isPrefixForm } from './realm-identifiers.ts';
 import { resolveTypeReferences } from './type-reference.ts';
 import {
   BINDING_NAME,
@@ -2511,9 +2511,20 @@ function assertLinkedFromFilter(filter: any, pointer: string[]) {
       );
     }
   }
-  if (typeof v.card !== 'string' || !/^https?:\/\//.test(v.card)) {
+  // A card id in any form a card reference takes (ADR 002): an absolute URL,
+  // a registered prefix's id, or `$REALM/<path>`, which the boundary
+  // resolves against the query's realm (type-reference.ts).
+  if (
+    typeof v.card !== 'string' ||
+    /\s/.test(v.card) ||
+    !(
+      /^https?:\/\/[^/]/.test(v.card) ||
+      (isPrefixForm(v.card) && /^@[^/]+\/[^/]+/.test(v.card)) ||
+      (v.card.startsWith('$REALM/') && v.card.length > '$REALM/'.length)
+    )
+  ) {
     throw new InvalidQueryError(
-      `${at}/card: card must be an absolute card URL`,
+      `${at}/card: card must be a card's id: its URL, its @scope/… id or $REALM/<path>`,
       'invalid-value',
     );
   }

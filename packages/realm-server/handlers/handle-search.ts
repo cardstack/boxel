@@ -175,9 +175,12 @@ export default function handleSearch(opts: {
     // the request names, or refused when it names several. Resolved here,
     // where the request arrives, so the policy lookup, the checks, the cache
     // and the engine read one spelling.
-    let typeReferences = searchTypeReferenceContext(named, (url) =>
-      virtualNetwork.unresolveURL(url),
-    );
+    let typeReferences = {
+      ...searchTypeReferenceContext(named, (url) =>
+        virtualNetwork.unresolveURL(url),
+      ),
+      resolveCardId: (id: string) => virtualNetwork.toURLHref(id),
+    };
     try {
       payload = resolveTypeReferences(payload, typeReferences);
     } catch (e) {

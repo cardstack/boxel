@@ -153,6 +153,19 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test('linkedFrom takes a card id in any form a card reference takes', function (assert) {
+    for (let card of [
+      'http://test-realm/List/saved',
+      '@cardstack/catalog/List/saved',
+      '$REALM/List/saved',
+    ]) {
+      assertQuery({
+        filter: { linkedFrom: { card, field: 'items' } },
+      } as unknown as Query);
+    }
+    assert.ok(true, 'each is accepted');
+  });
+
   test('a refusal cannot be made without a code', function (assert) {
     assert.strictEqual(
       InvalidQueryError.length,

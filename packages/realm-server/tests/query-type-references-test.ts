@@ -477,6 +477,98 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module("a linkedFrom card's id", function () {
+    // ADR 002: resolved once at the boundary, in any form a card reference
+    // takes.
+    let card = (
+      filter: unknown,
+      ctx: Parameters<typeof resolveTypeReferences>[1],
+    ) => (resolveTypeReferences({ filter }, ctx) as any).filter.linkedFrom.card;
+
+    test('$REALM/ resolves against the query’s realm, and a prefix id to its URL', function (assert) {
+      assert.strictEqual(
+        card(
+          { linkedFrom: { card: '$REALM/List/saved', field: 'items' } },
+          {
+            realm: REALM,
+          },
+        ),
+        `${REALM}List/saved`,
+      );
+      let network = new VirtualNetwork();
+      network.addRealmMapping('@test/linked/', REALM);
+      assert.strictEqual(
+        card(
+          { linkedFrom: { card: '@test/linked/List/saved', field: 'items' } },
+          { realm: REALM, resolveCardId: (id) => network.toURLHref(id) },
+        ),
+        `${REALM}List/saved`,
+      );
+    });
+
+    test('a nested prefix id resolves to its URL', function (assert) {
+      let network = new VirtualNetwork();
+      network.addRealmMapping('@test/linked/', REALM);
+      let out = resolveTypeReferences(
+        {
+          filter: {
+            every: [
+              {
+                not: {
+                  linkedFrom: {
+                    card: '@test/linked/List/saved',
+                    field: 'items',
+                  },
+                },
+              },
+            ],
+          },
+        },
+        { realm: REALM, resolveCardId: (id) => network.toURLHref(id) },
+      ) as any;
+      assert.strictEqual(
+        out.filter.every[0].not.linkedFrom.card,
+        `${REALM}List/saved`,
+      );
+      assert.strictEqual(
+        card(
+          { linkedFrom: { card: '@unknown/x/List/saved', field: 'items' } },
+          {
+            realm: REALM,
+            resolveCardId: (id) => network.toURLHref(id),
+          },
+        ),
+        '@unknown/x/List/saved',
+        'a prefix the network does not know is left as written',
+      );
+    });
+
+    test('$REALM/ is refused across several realms and outside the realm', function (assert) {
+      assert.throws(
+        () =>
+          card(
+            { linkedFrom: { card: '$REALM/List/saved', field: 'items' } },
+            searchTypeReferenceContext([REALM, PEER]),
+          ),
+        (e: any) =>
+          e instanceof InvalidQueryError &&
+          e.code === 'invalid-value' &&
+          /use the card's URL or @scope\/… id/.test(e.message),
+      );
+      assert.throws(
+        () =>
+          card(
+            { linkedFrom: { card: '$REALM/../x', field: 'items' } },
+            {
+              realm: REALM,
+            },
+          ),
+        (e: any) =>
+          e instanceof InvalidQueryError && /leaves its realm/.test(e.message),
+      );
+    });
+  });
+
   module('the older spelling', function () {
     // On main a string `type` or `on` is refused in both spellings ("type is
     // not valid", and a top-level `type` is an unknown member there), so the

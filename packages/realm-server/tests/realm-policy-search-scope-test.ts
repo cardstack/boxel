@@ -10,6 +10,7 @@ import type {
   QueueRunner,
   Realm,
   RealmPermissions,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
@@ -130,6 +131,7 @@ function policyCard() {
 
 module(basename(import.meta.filename), function (hooks) {
   let newsroom: Realm;
+  let virtualNetwork: VirtualNetwork;
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
@@ -145,8 +147,9 @@ module(basename(import.meta.filename), function (hooks) {
     publisher: QueuePublisher;
     runner: QueueRunner;
   }) {
+    virtualNetwork = createVirtualNetwork();
     let result = await runTestRealmServerWithRealms({
-      virtualNetwork: createVirtualNetwork(),
+      virtualNetwork,
       realmsRootPath: join(dirSync().name, 'realm_server_1'),
       realms: [
         {
@@ -424,6 +427,46 @@ module(basename(import.meta.filename), function (hooks) {
       owner,
       'and a hidden row changes nothing',
     );
+  });
+
+  test("linkedFrom names its card in any id form, and reads it under that card's grants", async function (assert) {
+    // ADR 002: the card's URL, its registered prefix's id and `$REALM/<path>`
+    // name one card, resolved where the request arrives, so the Picks grant
+    // that opens the list to its owner applies to each.
+    let body = (card: string) => ({
+      filter: {
+        every: [
+          { 'item.on': Article, eq: { 'item.status': 'published' } },
+          { linkedFrom: { card, field: 'items' } },
+        ],
+      },
+      fields: { entry: ['item.headline'] },
+    });
+    let ids = (rows: unknown[][]) => rows.map(([id]) => id);
+    // A prefix over the lists' folder only: one over the whole realm would
+    // re-spell the realm's already-indexed types too.
+    virtualNetwork.addRealmMapping('@test/picks/', `${NEWSROOM}picks/`);
+    try {
+      for (let card of [
+        `${NEWSROOM}picks/mine`,
+        '@test/picks/mine',
+        '@test/picks/mine.json',
+        '$REALM/picks/mine',
+      ]) {
+        assert.deepEqual(
+          ids((await search(body(card))).rows),
+          ['articles/a', 'articles/c'],
+          `the owner gets the articles ${card} links`,
+        );
+        assert.deepEqual(
+          ids((await search(body(card), OTHER)).rows),
+          [],
+          `a caller the Picks grant does not admit reads none of ${card}'s links`,
+        );
+      }
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/picks/');
+    }
   });
 
   test("a caller's binding and linkedFrom each keep their meaning under the policy", async function (assert) {

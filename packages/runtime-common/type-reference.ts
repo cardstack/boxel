@@ -39,6 +39,10 @@ export interface TypeReferenceContext {
   // Re-spells a resolved URL in its canonical form (prefix form for a mapped
   // realm). A VirtualNetwork's `unresolveURL`.
   canonicalize?: (url: string) => string;
+  // Resolves a card id in prefix form to the URL the index keys the card by.
+  // A VirtualNetwork's `toURLHref`. Absent, a prefix-form `linkedFrom.card`
+  // is left as written (the engine matches it in either form).
+  resolveCardId?: (id: string) => string;
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -200,6 +204,57 @@ function filterRefs(
   }
   if ('not' in out) {
     out = withKey(out, 'not', filterRefs(out.not, `${where}/not`, ctx));
+  }
+  if (isRecord(out.linkedFrom) && typeof out.linkedFrom.card === 'string') {
+    let card = cardIdRef(out.linkedFrom.card, `${where}/linkedFrom/card`, ctx);
+    if (card !== out.linkedFrom.card) {
+      out = withKey(out, 'linkedFrom', { ...out.linkedFrom, card });
+    }
+  }
+  return out;
+}
+
+// A card id a filter names (`linkedFrom.card`), in any form a card reference
+// takes: an absolute URL, a registered prefix's id (`@scope/name/…`), or
+// `$REALM/<path>` in the realm the query belongs to. Resolved once, here: a
+// realm-relative id against that realm, and a prefix-form one, where the
+// boundary has a network, to the URL the index keys the card by. A form the
+// network does not know is left for the checks and the engine (it names no
+// card here, so it matches nothing).
+function cardIdRef(
+  id: string,
+  where: string,
+  ctx: TypeReferenceContext,
+): string {
+  let out = id;
+  if (id.startsWith(REALM_ROOT)) {
+    let path = id.slice(REALM_ROOT.length);
+    if (
+      path === '' ||
+      path.startsWith('/') ||
+      path.split('/').some((s) => s === '..' || s === '.')
+    ) {
+      throw new InvalidQueryError(
+        `${where}: "${id.slice(0, 80)}" leaves its realm; $REALM/ is followed by a card's path inside the realm`,
+        'invalid-value',
+      );
+    }
+    if (ctx.noRealm) {
+      throw new InvalidQueryError(
+        `${where}: "${id.slice(0, 80)}" is relative to a realm, and ${ctx.noRealm}; use the card's URL or @scope/… id`,
+        'invalid-value',
+      );
+    }
+    if (ctx.realm === undefined) return id;
+    let base = ctx.realm.endsWith('/') ? ctx.realm : `${ctx.realm}/`;
+    out = `${base}${path}`;
+  }
+  if (ctx.resolveCardId && isPrefixForm(out)) {
+    try {
+      return ctx.resolveCardId(out);
+    } catch {
+      return out;
+    }
   }
   return out;
 }

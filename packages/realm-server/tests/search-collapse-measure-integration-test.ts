@@ -679,8 +679,34 @@ module(basename(import.meta.filename), function (hooks) {
         assertQuery({
           filter: { linkedFrom: { card: 'List/saved', field: 'items' } },
         } as any),
-      /card must be an absolute card URL/,
+      /card must be a card's id: its URL, its @scope\/… id or \$REALM\/<path>/,
     );
+    // ADR 002: a card's id in its registered prefix's form names the same
+    // card as its URL.
+    // over the lists' folder only: a prefix over the whole realm would
+    // re-spell its already-indexed types too
+    virtualNetwork.addRealmMapping('@test/lists/', `${testRealm}List/`);
+    try {
+      assert.deepEqual(
+        await titles({
+          linkedFrom: { card: '@test/lists/saved', field: 'items' },
+        }),
+        ['d', 'b', 'f'],
+        'a prefix-form id names the card its URL does',
+      );
+      assert.deepEqual(
+        await titles({
+          linkedFrom: {
+            card: '@test/lists/saved.json',
+            field: 'pinned',
+          },
+        }),
+        ['c'],
+        'with or without .json',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/lists/');
+    }
   });
 
   async function addSavedList() {
