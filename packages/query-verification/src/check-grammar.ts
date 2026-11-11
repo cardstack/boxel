@@ -77,19 +77,7 @@ const KNOWN: {
   about: string;
   applies: (query: Record<string, any>, actual: string | undefined) => boolean;
   seen: number;
-}[] = [
-  {
-    about:
-      'an `exists` or `missing` sharing its node with a member that is not an operator is refused with invalid-filter, as a second operator is, where the spec gives an unknown member unknown-key (with the nearest name) and a beside-`matches` modifier conflicting-members',
-    applies: (query, actual) =>
-      actual === 'invalid-filter' &&
-      ['exists', 'missing'].some((k) => k in (query.filter ?? {})) &&
-      Object.keys(query.filter).some(
-        (k) => !['exists', 'missing', 'on', 'type'].includes(k),
-      ),
-    seen: 0,
-  },
-];
+}[] = [];
 
 function holds(
   name: string,

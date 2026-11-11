@@ -18,7 +18,7 @@
 // `resolveQueryLabels` reads the type's fields, so it runs where definitions
 // are at hand (the engine, or a checker with a fixture).
 import { internBindingReferences } from './binding-reference.ts';
-import { newerSpellingMarkers } from './query-grammar.ts';
+import { grammarMembers, newerSpellingMarkers } from './query-grammar.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
 import { INTERNAL_SORT_KEYS } from './internal-sort-keys.ts';
 import { unknownBxlFunctions } from '@cardstack/bxl/compiler';
@@ -46,6 +46,10 @@ export interface LoweredQuery {
   notes: LoweringNotes;
 }
 
+// The filter operators, `exists` and `missing` among them.
+const FILTER_OPERATORS = new Set(
+  grammarMembers('filter', (m) => m.role === 'operator'),
+);
 // Sort keys that are not card fields and need no type.
 const GENERAL_SORTS = new Set(['lastModified', 'createdAt', 'cardURL']);
 const PATH_OPS = [
@@ -542,15 +546,24 @@ function lowerFilter(node: any, type: CodeRef | undefined): any {
       let others = Object.keys(node).filter(
         (key) => key !== k && key !== 'on' && key !== 'type',
       );
-      if (others.length) {
+      let operators = others.filter((key) => FILTER_OPERATORS.has(key));
+      if (operators.length) {
         throw new QuerySyntaxError(
           'invalid-filter',
-          `filter: ${k} is an operator of its own; combine it with "${others[0]}" under "every"`,
+          `filter: ${k} is an operator of its own; combine it with "${operators[0]}" under "every"`,
         );
       }
       let test = { eq: { [barePath(v)]: null } };
       let lowered = k === 'missing' ? test : { not: test };
-      return node.on ? { on: node.on, ...lowered } : lowered;
+      // A member that is not an operator stays beside the lowered test, so
+      // the filter's own check refuses it as it would beside any operator
+      // (unknown-key with the nearest name, or conflicting-members).
+      let rest = Object.fromEntries(
+        others.map((key) => [key, (node as Record<string, any>)[key]]),
+      );
+      return node.on
+        ? { on: node.on, ...lowered, ...rest }
+        : { ...lowered, ...rest };
     } else if (k === 'fields' && Array.isArray(v)) {
       out[k] = v.map((p) => (typeof p === 'string' ? barePath(p) : p));
     } else if (k === 'within' && typeof v === 'string') {
