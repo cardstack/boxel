@@ -53,7 +53,7 @@ versions may change behavior until `1.0.0`.
   the scroll height of the nearest block-flow scroller above each region with a hidden block after
   its content, and takes the block out once the runs stand again. A region with no scrolling element
   above it holds the document, with the block at the end of `<body>`. A `@route` region takes the
-  block out before it places the window. `<body>` with an overflow of its own (such as
+  block out before it runs `@scroll` and places the window. `<body>` with an overflow of its own (such as
   `overflow-x: hidden`) while `<html>`'s is visible is no longer taken for a scroller, since its
   overflow goes to the viewport: the document is held, and `@inView` measures against the viewport
   there. A scroller that is a flex or grid container, or whose own size would change with the block

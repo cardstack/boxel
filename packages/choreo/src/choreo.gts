@@ -826,9 +826,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // the arriving scene wants it after the swap renders and BEFORE final
     // bounds are measured, so every landing is measured where it will live
     if (this.args.route && this.arrived.size && this.snapshots.size) {
+      // the hold comes off first, so @scroll reads the page as it is
+      letGo(document.scrollingElement);
       const intent = this.args.scroll ?? 'top';
       const y = intent === 'top' ? 0 : intent();
-      letGo(document.scrollingElement);
       window.scrollTo(0, y);
     }
     const before = this.rootSnapshot ?? root.getBoundingClientRect();

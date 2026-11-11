@@ -105,9 +105,10 @@ const AsSpreadFlexRow = <template>
 
 class Crossing {
   @tracked page: 'long' | 'short' = 'long';
+  // where the crossing places the window
+  scroll: () => number = () => 1400;
 }
 
-const crossingScroll = () => 1400;
 const isLong = (c: Crossing) => c.page === 'long';
 
 // a @route region in the page's flow: a long page that crosses to a short
@@ -115,7 +116,7 @@ const isLong = (c: Crossing) => c.page === 'long';
 const Pages = <template>
   <Choreo
     @route={{true}}
-    @scroll={{crossingScroll}}
+    @scroll={{@crossing.scroll}}
     style='position:relative'
     as |c|
   >
@@ -312,6 +313,25 @@ module('Integration | choreo | measure keeps the scroll', function (hooks) {
         `the flight starts where the card stood (${before.top} -> ${start.top})`,
       );
       await settled();
+    });
+
+    test('a crossing whose @scroll reads the page reads it without the strut', async function (assert) {
+      const crossing = new Crossing();
+      // 200px above the end of the arriving page
+      crossing.scroll = () =>
+        document.scrollingElement!.scrollHeight - window.innerHeight - 200;
+      await render(<template><Pages @crossing={{crossing}} /></template>);
+      window.scrollTo(0, 2200);
+      assert.strictEqual(window.scrollY, 2200, 'the reader is down the page');
+      await frame();
+      crossing.page = 'short';
+      await rerender();
+      await settled();
+      const end = document.scrollingElement!.scrollHeight - window.innerHeight;
+      assert.true(
+        Math.abs(window.scrollY - (end - 200)) < 2,
+        `the window is 200px above the end (${window.scrollY}, end ${end})`,
+      );
     });
   });
 });
