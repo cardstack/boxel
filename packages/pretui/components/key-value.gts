@@ -172,6 +172,15 @@ export class KeyValue<T extends KeyValueItem = KeyValueItem> extends Component<K
         .pretui-kv[data-divided] dd:not(:first-of-type) {
           border-block-start: 1px solid var(--border);
         }
+        /* Inline padding knob (default 0). The padding sits on the cells,
+           not the list, so divided hairlines keep running the full width:
+           keys pad their start edge, values their end edge. */
+        .pretui-kv dt {
+          padding-inline-start: var(--pretui-kv-pad-inline, 0);
+        }
+        .pretui-kv dd {
+          padding-inline-end: var(--pretui-kv-pad-inline, 0);
+        }
         .pretui-kv[data-value-align='end'] dd {
           justify-content: flex-end;
           text-align: end;
@@ -180,6 +189,11 @@ export class KeyValue<T extends KeyValueItem = KeyValueItem> extends Component<K
           grid-template-columns: minmax(0, 1fr);
           row-gap: var(--boxel-sp-6xs);
         }
+        /* One column: every cell pads both sides. */
+        .pretui-kv[data-layout='stacked'] dt,
+        .pretui-kv[data-layout='stacked'] dd {
+          padding-inline: var(--pretui-kv-pad-inline, 0);
+        }
         .pretui-kv[data-layout='stacked'] dt:not(:first-child) {
           margin-block-start: var(--boxel-sp-xs);
         }
@@ -187,6 +201,15 @@ export class KeyValue<T extends KeyValueItem = KeyValueItem> extends Component<K
           display: flex;
           flex-wrap: wrap;
           align-items: center;
+        }
+        /* Pairs sit in a wrapping strip, so the strip itself carries the
+           padding; the pairs' own cells take none. */
+        .pretui-kv[data-layout='inline'] {
+          padding-inline: var(--pretui-kv-pad-inline, 0);
+        }
+        .pretui-kv[data-layout='inline'] dt,
+        .pretui-kv[data-layout='inline'] dd {
+          padding-inline: 0;
         }
         .pretui-kv-pair {
           display: flex;
