@@ -37,9 +37,15 @@ export interface ReconcilerDeps {
   unmount: (realm: Realm) => Promise<void>;
   // Optional for tests — poll interval in ms (default 30s).
   pollIntervalMs?: number;
-  // Bootstrap realm URLs in CLI --path order. Pinned realms start in this
-  // order; the registry query has no order of its own.
-  bootstrapOrder?: string[];
+  // The bootstrap realm URLs this process was started with, in CLI --path
+  // order. Only these pinned rows are mounted eagerly, and they start in this
+  // order; the registry query has no order of its own. Pinned rows outlive
+  // the process that wrote them: in a database several dev checkouts share,
+  // one can name a realm this process was started without, at a path in
+  // another checkout or in one that has since been deleted. A pinned row not
+  // listed here is left to the request path. Omitted, every pinned row is
+  // mounted eagerly.
+  bootstrapRealms?: string[];
 }
 
 // Reconciles a process's in-memory realm state against realm_registry.
@@ -188,12 +194,13 @@ export class RealmRegistryReconciler {
     }
     this.knownByUrl = nextKnown;
 
-    // Eager mount: pinned rows only. In Phase 3, non-pinned rows wait
-    // for first-request mount via lookupOrMount(). Pinned rows
-    // (bootstrap: base, catalog) need to be available before the server
-    // accepts traffic on the home page / catalog path, so they mount on
-    // the reconciler's first pass and on every subsequent pass that
-    // detects a new pinned row.
+    // Eager mount: pinned rows only, and of those only the ones this
+    // process was started with (see `bootstrapRealms`). In Phase 3,
+    // non-pinned rows wait for first-request mount via lookupOrMount().
+    // Pinned rows (bootstrap: base, catalog) need to be available before
+    // the server accepts traffic on the home page / catalog path, so they
+    // mount on the reconciler's first pass and on every subsequent pass
+    // that detects a new pinned row.
     //
     // Two-phase mount, matching Phase 2's loadRealms() shape: prepare
     // (synchronous publish to realms[] + virtualNetwork) for ALL pinned
@@ -215,11 +222,12 @@ export class RealmRegistryReconciler {
     // through a single worker process anyway, so parallelism here
     // doesn't reduce wall-clock time but does increase memory and
     // contention. Sequential matches Phase 2's tested behavior.
+    let bootstrapRealms = this.#deps.bootstrapRealms;
     let rank = new Map(
-      (this.#deps.bootstrapOrder ?? []).map((url, index) => [url, index]),
+      (bootstrapRealms ?? []).map((url, index) => [url, index]),
     );
     let pinnedRows = [...nextKnown.values()]
-      .filter((row) => row.pinned)
+      .filter((row) => row.pinned && (!bootstrapRealms || rank.has(row.url)))
       .sort(
         (a, b) =>
           (rank.get(a.url) ?? Number.MAX_SAFE_INTEGER) -
