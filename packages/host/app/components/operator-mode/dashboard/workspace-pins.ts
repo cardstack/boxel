@@ -99,7 +99,7 @@ function indexCardURL(realmURL: string): string {
 // On the split index path, an edit to a pinned card re-renders the index
 // card's HTML without reindexing it, so it isn't one of these. The fused path
 // (SQLite) reindexes it, which only costs an extra search.
-function indexCardReindexed(
+export function indexCardReindexed(
   event: RealmEventContent,
   realmURL: string,
 ): boolean {
