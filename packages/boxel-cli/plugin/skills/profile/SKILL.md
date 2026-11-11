@@ -1,5 +1,5 @@
 ---
-description: Manage saved boxel-cli profiles (credentials for users / environments). Use when the user wants to list profiles, add a new profile, switch the active profile, remove a profile, or migrate from a legacy .env file.
+description: Manage saved boxel-cli profiles (credentials for users / environments). Use when the user wants to list profiles, add a new profile, switch the active profile, run one command as a different profile (--profile), remove a profile, or migrate from a legacy .env file.
 ---
 
 # Profiles
@@ -12,7 +12,8 @@ Wraps `boxel profile`, which manages credentials for different users and environ
 | ----------------------------------------------------- | --------------------------------------------- |
 | "what profiles do I have?" / "who am I logged in as?" | `boxel profile list`                          |
 | "log in" / "add a new account"                        | `boxel profile add` (interactive — preferred) |
-| "switch to my staging account"                        | `boxel profile switch <username-or-fragment>` |
+| "do this as my staging account" (one command)         | `boxel <command> … --profile <profile-id>`    |
+| "switch to my staging account" (from now on)          | `boxel profile switch <username-or-fragment>` |
 | "remove that old profile"                             | `boxel profile remove <profile-id>`           |
 | "import from my old .env"                             | `boxel profile migrate`                       |
 
@@ -25,6 +26,24 @@ Profiles use the Matrix ID format: `@username:domain`.
 - Local dev: `@username:<env-slug>.localhost`
 
 `switch` accepts a partial match — `boxel profile switch sarah` is enough if there's only one profile matching `sarah`.
+
+## Acting as another profile for one command
+
+The active profile is one setting for the whole machine. `boxel profile switch` changes it for every terminal, script and agent session at once, so a switch made for one action also changes who every other running session acts as.
+
+To act as a different profile for one action, use `--profile` with any command except `boxel profile` itself, and leave the active profile alone:
+
+```bash
+boxel realm create my-realm "My Realm" --profile @sarah:stack.cards
+boxel realm push ./my-realm https://realms-staging.stack.cards/sarah/my-realm/ --profile @sarah:stack.cards
+```
+
+- `--profile` takes the exact profile ID, as `boxel profile list` shows it. Partial matches aren't accepted.
+- It applies to that one command. The active profile isn't changed, and tokens the command refreshes are saved to the named profile.
+- `BOXEL_PROFILE=<profile-id>` in the environment does the same for every command run with it, so it suits a script or a session that should always act as one account. `--profile` wins over it.
+- A profile ID that isn't saved, or a profile with no stored session, stops the command before it does anything. The error lists the saved profiles.
+
+Don't run `boxel profile switch` and then switch back to do something once as another account. Another session can run a command between the two switches and act as the wrong account.
 
 ## Which environment a new profile targets
 
@@ -98,5 +117,5 @@ Manage saved profiles for different users/environments
 ## Pitfalls
 
 - A fresh machine has no profiles. `boxel profile list` returns empty until `boxel profile add` is run at least once.
-- The active profile is per-shell — switching doesn't propagate to other open terminals automatically.
+- The active profile is machine-wide. `boxel profile switch` changes it for every open terminal and agent session. Use `--profile` for a one-off.
 - `migrate` is a one-shot operation for users coming from the old `.env` storage. New users don't need it.
