@@ -453,7 +453,7 @@ sort: [
 ];
 ```
 
-An expression that isn't a non-empty string is refused (`invalid-expression`), and so is a jq construct outside BXL's query profile (see [The query expression profile](#limits)), naming it. One longer than 2,000 characters is `invalid-value`; one of more than 200 parts, or whose SQL nests too deeply, is `limit-exceeded`. There is no `placement` member and no top-level `rerank`: either is refused (`unknown-key`) with the sort entry to write instead. Postgres only.
+An expression that isn't a non-empty string is refused (`invalid-expression`), and so is a jq construct outside BXL's query profile (see [The query expression profile](#limits)), naming it. One longer than 2,000 characters, of more than 200 parts, or whose SQL nests too deeply is `limit-exceeded`. There is no `placement` member and no top-level `rerank`: either is refused (`unknown-key`) with the sort entry to write instead. Postgres only.
 
 ### Why a result ranks where it does (`explain`)
 
@@ -1141,10 +1141,10 @@ A query the grammar refuses gets a 400 whose body carries a code a caller can ac
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `unknown-key`            | A member the grammar does not have, with the nearest real one: in the newer spelling anywhere, in the older spelling at the top level. Also a removed spelling, with the one to write: `typeahead`, `rerank`, `placement`, `formula`, `{ "$let": "name" }` and the engine's internal sort keys (see [Compatibility](#compatibility-older-and-newer-spellings)). |
 | `unknown-field`          | A field the type does not have, with the nearest field: in a filter, a sort, a facet, `select`, or an expression (only when no card of the type in the realm holds a value there, so an expression over a base type still reads its subclasses' fields).                                                                                                        |
-| `invalid-value`          | A member has the wrong kind of value or one out of range (see [Limits](#limits)): a `minSimilarity` outside -1 to 1, an unknown `timeZone`, a malformed relative date on a date field, a regular expression Postgres cannot compile, a reserved or `$`-less binding name, a malformed `{ "$literal" }`, an expression over 2,000 characters.                    |
+| `invalid-value`          | A member has the wrong kind of value or one out of range (see [Limits](#limits)): a `minSimilarity` outside -1 to 1, an unknown `timeZone`, a malformed relative date on a date field, a regular expression Postgres cannot compile, a reserved or `$`-less binding name, a malformed `{ "$literal" }`.                                                         |
 | `missing-member`         | Something the query needs is absent: an operator's field map, a blend's signals, a binding's `from`.                                                                                                                                                                                                                                                            |
 | `conflicting-members`    | Two members that cannot go together: two operators in one filter node, `compare` with both `near` and `by`, two facets on one `by` with different options.                                                                                                                                                                                                      |
-| `limit-exceeded`         | More of something than a query may have ([Limits](#limits)), an expression of more than 200 parts or whose SQL nests too deeply, a glob too large to compile, a value past a double's range in an expression (`EXP(1000)`), or a card search's `page.size` above 100.                                                                                           |
+| `limit-exceeded`         | More of something than a query may have ([Limits](#limits)), an expression of more than 2,000 characters or 200 parts or whose SQL nests too deeply, a glob too large to compile, a value past a double's range in an expression (`EXP(1000)`), or a card search's `page.size` above 100.                                                                       |
 | `invalid-nesting`        | Something placed where it cannot go: a binding's query reading another binding, `top` or `compare` on a blend signal, a blend inside a blend.                                                                                                                                                                                                                   |
 | `invalid-type`           | A type reference that names no card type: a shorthand with no `#` or name, a module that names none (an `@scope/…` identifier under a prefix no realm or package on the server is registered at, among them), a relative module in the shorthand, or `$REALM/` across several realms.                                                                           |
 | `needs-type`             | A path that needs the query's type and has none: `select`, a `near` sort, a facet whose holder types disagree on the field's kind.                                                                                                                                                                                                                              |
@@ -1183,22 +1183,22 @@ Every number a query is held to, from the code that holds it. The first table is
 
 The members that came with the newer grammar have one limit, since only the newer spelling has them. Past a count the query is refused with `limit-exceeded`; outside a range it is `invalid-value` (`invalid-page` for the page):
 
-| What                                      | Limit                                                                                                                    |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| An `expression`                           | 2,000 characters (`invalid-value`); 200 parts of its syntax tree, about 100 terms joined by operators (`limit-exceeded`) |
-| Signals in a `blend`; its `k`             | 1 to 8; a whole number from 1 to 1,000,000 (default 60)                                                                  |
-| A window's `top`                          | 1 to 500 (100 when `compare` is given without `top`)                                                                     |
-| A comparison set (`compare`)              | reads at most 10,000 rows, then describes those (`compare-truncated`)                                                    |
-| `compare.near`'s `k`; its `minSimilarity` | 1 to 100 (default 20); -1 to 1                                                                                           |
-| `facets`; a facet's `size`; its `ranges`  | 8; 1 to 1,000 (default 50); 1 to 50                                                                                      |
-| `fields` beside `matches`                 | 1 to 8                                                                                                                   |
-| `let` bindings; a binding's `page.size`   | 1 to 4; 1 to 10,000                                                                                                      |
-| What a list binding holds                 | 10,000 rows read, 10,000 values kept, then the first of them (`binding-truncated`)                                       |
-| `collapse.keep`                           | 1 to 10 (default 1)                                                                                                      |
-| `select` columns                          | 64                                                                                                                       |
-| A `near` target                           | 1 to 2,000 components, each finite and no larger than 1,000,000,000 either way                                           |
-| `page.number`                             | a whole number from 0 to 1,000,000,000                                                                                   |
-| Logs in one log query (`from.logs`)       | 100                                                                                                                      |
+| What                                      | Limit                                                                                                  |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| An `expression`                           | 2,000 characters; 200 parts of its syntax tree, about 100 terms joined by operators (`limit-exceeded`) |
+| Signals in a `blend`; its `k`             | 1 to 8; a whole number from 1 to 1,000,000 (default 60)                                                |
+| A window's `top`                          | 1 to 500 (100 when `compare` is given without `top`)                                                   |
+| A comparison set (`compare`)              | reads at most 10,000 rows, then describes those (`compare-truncated`)                                  |
+| `compare.near`'s `k`; its `minSimilarity` | 1 to 100 (default 20); -1 to 1                                                                         |
+| `facets`; a facet's `size`; its `ranges`  | 8; 1 to 1,000 (default 50); 1 to 50                                                                    |
+| `fields` beside `matches`                 | 1 to 8                                                                                                 |
+| `let` bindings; a binding's `page.size`   | 1 to 4; 1 to 10,000                                                                                    |
+| What a list binding holds                 | 10,000 rows read, 10,000 values kept, then the first of them (`binding-truncated`)                     |
+| `collapse.keep`                           | 1 to 10 (default 1)                                                                                    |
+| `select` columns                          | 64                                                                                                     |
+| A `near` target                           | 1 to 2,000 components, each finite and no larger than 1,000,000,000 either way                         |
+| `page.number`                             | a whole number from 0 to 1,000,000,000                                                                 |
+| Logs in one log query (`from.logs`)       | 100                                                                                                    |
 
 What a search reads and returns is bounded too. These never refuse a query (except a card search's page): they cut or count short, and say so.
 

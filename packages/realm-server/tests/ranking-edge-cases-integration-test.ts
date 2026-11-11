@@ -1079,15 +1079,14 @@ module(basename(import.meta.filename), function (hooks) {
         });
       }
 
-      // pins current behavior; rule not yet decided: docs/search.md gives an
-      // expression no length limit. Today one past 2,000 characters is
-      // refused, with `invalid-value`.
-      test(`${form}: an expression past 2,000 characters is refused with a code`, async function (assert) {
+      // docs/search.md (Limits): an expression past 2,000 characters is
+      // refused with `limit-exceeded`, like every other size limit.
+      test(`${form}: an expression past 2,000 characters is refused with limit-exceeded`, async function (assert) {
         await index(items);
         let long = 'score' + ' + 1'.repeat(750);
         let outcome = await attempt(queryOf(long, 'desc'));
         assertRefused(assert, outcome, DOCUMENTED_CODES, '3,005 characters');
-        assertRefused(assert, outcome, 'invalid-value', '3,005 characters');
+        assertRefused(assert, outcome, 'limit-exceeded', '3,005 characters');
       });
     }
 

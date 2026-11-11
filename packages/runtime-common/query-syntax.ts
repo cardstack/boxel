@@ -658,7 +658,7 @@ export function assertExpressionInSql(
 ): void {
   if (expr.length > 2000) {
     throw new QuerySyntaxError(
-      'invalid-value',
+      'limit-exceeded',
       `expression: an expression is at most 2,000 characters, and this one has ${expr.length}`,
     );
   }

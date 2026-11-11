@@ -94,6 +94,11 @@ check(() => {
   refused('NOW()', /use it inside DAYS/, 'a bare date');
   refused('.items[0]', /list positions/, 'list positions');
   refused('rating | . + 1', /not part of the score profile/, 'pipes');
+  refused(
+    'rating & "a"',
+    /^The operator & \(text joining\) is not part of the score profile/,
+    '& is named as itself, not as the pipe it is rewritten to',
+  );
   refused('ROUND(rating, x)', /digits are a whole number/, 'computed digits');
   refused('', /cannot be empty/, 'nothing');
   refused('IF(rating)', /IF takes 2 to 3 arguments/, 'arity');

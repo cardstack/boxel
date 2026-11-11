@@ -915,6 +915,17 @@ function describe(node: BxlAstNode): string {
     case 'call':
       return node.name;
     case 'binary':
+      // the parser rewrites Excel's `a & b` as `(a|tostring) + (b|tostring)`
+      // before the tree is read, so a pipe into `tostring` was written `&`
+      if (
+        node.operator === '|' &&
+        node.right.type === 'call' &&
+        node.right.name === 'tostring' &&
+        node.right.args.length === 0
+      ) {
+        return 'The operator & (text joining)';
+      }
+      return `The operator ${node.operator}`;
     case 'unary':
       return `The operator ${node.operator}`;
     default:

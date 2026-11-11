@@ -6304,7 +6304,7 @@ module(basename(import.meta.filename), function (hooks) {
           type: T,
           sort: [{ expression: sumOfLength(2001), ...(top ? { top } : {}) }],
         },
-        { refused: 'invalid-value' },
+        { refused: 'limit-exceeded' },
       );
     }
     await add(

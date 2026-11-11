@@ -1734,7 +1734,7 @@ export function assertQuery(
         if (value.expression.length > 2000) {
           throw new InvalidQueryError(
             `${at}/expression: an expression is at most 2,000 characters, and this one has ${value.expression.length}`,
-            'invalid-value',
+            'limit-exceeded',
           );
         }
         assertQueryExpressionProfile(`${at}/expression`, value.expression);

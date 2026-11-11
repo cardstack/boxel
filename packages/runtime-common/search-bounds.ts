@@ -719,6 +719,8 @@ function warnOncePerClamp(size: number, max: number): void {
 // Reject a federated item-leg request that fans out to more realms than the
 // cap. It can't be clamped (we can't choose which realms to drop), so the
 // author must narrow the `realms` list.
+// Called by the host store on a card-initiated search (`@context`), never on
+// the host's own (search-test.ts pins both).
 export function assertRealmsBound(realms: string[]): void {
   if (realms.length > maxRealmsPerRequest) {
     throw new SearchBoundError(

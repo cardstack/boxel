@@ -120,6 +120,39 @@ module(basename(import.meta.filename), function () {
     assert.ok(true, 'both are accepted');
   });
 
+  test('a refusal names the operator the author wrote', function (assert) {
+    // `&` joins text and is rewritten as `tostring` pipes before the score
+    // profile reads the tree; the refusal still names `&`.
+    assert.throws(
+      () =>
+        assertQuery({
+          type: on,
+          sort: [{ expression: 'rating & "a"' }],
+        } as unknown as Query),
+      (e: any) =>
+        e instanceof InvalidQueryError &&
+        e.code === 'expression-unsupported' &&
+        /The operator & \(text joining\) is not part of the score profile/.test(
+          e.message,
+        ) &&
+        !/operator \|/.test(e.message),
+    );
+  });
+
+  test('an expression past 2,000 characters is refused as a size limit', function (assert) {
+    assert.throws(
+      () =>
+        assertQuery({
+          type: on,
+          sort: [{ expression: `rating${' + 1'.repeat(600)}` }],
+        } as unknown as Query),
+      (e: any) =>
+        e instanceof InvalidQueryError &&
+        e.code === 'limit-exceeded' &&
+        /at most 2,000 characters/.test(e.message),
+    );
+  });
+
   test('a refusal cannot be made without a code', function (assert) {
     assert.strictEqual(
       InvalidQueryError.length,
