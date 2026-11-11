@@ -1552,6 +1552,96 @@ function encodedSize(content: RealmEventContent): number {
   return new TextEncoder().encode(JSON.stringify(content)).length;
 }
 
+// The completion for a pass whose invalidations will not fit in an event:
+// no list, so every subscriber reloads what it holds of the realm. See
+// `RealmWideIncrementalIndexEventContent`. Returns the event with a note on
+// what it had to leave out, for the sender to log.
+//
+// Which modules moved goes in first: without it every tab that loaded code
+// from the realm rebuilds. Authorship is then kept in the most specific form
+// that fits. The writer's own `clientAuthored` first, which spares its tab a
+// re-read of the cards it sent. Then the same request ids with
+// `clientAuthored` emptied, which still lets the writer recognize its write —
+// a wait keyed on the id hears the pass land — while re-reading every card,
+// the cautious reading an empty list carries. Shared-pass writers keep only
+// their ids, with `changed: null`, since the cards each changed are exactly
+// what does not fit. Only when none of that fits does authorship go entirely.
+export function realmWideCompletion(
+  content: IncrementalIndexEventContent,
+  coalescedWrites: CoalescedIndexWrite[] | undefined = content.coalescedWrites,
+): { event: RealmWideIncrementalIndexEventContent; warning: string } {
+  let bare: RealmWideIncrementalIndexEventContent = {
+    eventName: 'index',
+    indexType: 'incremental',
+    realmWide: true,
+    ...(content.generation !== undefined
+      ? { generation: content.generation }
+      : {}),
+    realmURL: content.realmURL,
+  };
+  let withModules: RealmWideIncrementalIndexEventContent = {
+    ...bare,
+    invalidatedModules: content.invalidations.filter(hasExecutableExtension),
+  };
+  let realmWide =
+    encodedSize(withModules) <= MAX_EVENT_CONTENT_BYTES ? withModules : bare;
+  let requestIds = {
+    ...(Object.prototype.hasOwnProperty.call(content, 'clientRequestId')
+      ? { clientRequestId: content.clientRequestId }
+      : {}),
+    ...(coalescedWrites
+      ? {
+          coalescedWrites: coalescedWrites.map(({ clientRequestId }) => ({
+            clientRequestId,
+            changed: null,
+          })),
+        }
+      : {}),
+  };
+  let candidates: RealmWideIncrementalIndexEventContent[] = [
+    {
+      ...realmWide,
+      ...requestIds,
+      ...(content.clientAuthored
+        ? { clientAuthored: content.clientAuthored }
+        : {}),
+    },
+    {
+      ...realmWide,
+      ...requestIds,
+      ...(content.clientAuthored ? { clientAuthored: [] } : {}),
+    },
+  ];
+  let reason = `its ${content.invalidations.length} invalidations encode to ${encodedSize(content)} bytes, over the ${MAX_EVENT_CONTENT_BYTES}-byte budget, so every subscriber reloads the realm's cards and searches${realmWide === bare ? '; its invalidated modules would not fit either' : ''}`;
+  for (let candidate of candidates) {
+    if (encodedSize(candidate) <= MAX_EVENT_CONTENT_BYTES) {
+      return {
+        event: candidate,
+        warning: `(request ${content.clientRequestId ?? 'none'}) goes out realm-wide: ${reason}`,
+      };
+    }
+  }
+  return {
+    event: realmWide,
+    warning: `goes out realm-wide without its writers' request ids, which would not fit either: ${reason}`,
+  };
+}
+
+// The incremental completion as it can be sent: itself when it fits in an
+// event, its realm-wide form when it does not. For a sender that assembles the
+// listed form whole, with nothing optional to shed first.
+export function incrementalCompletionThatFits(
+  content: IncrementalIndexEventContent,
+): {
+  event: IncrementalIndexEventContent | RealmWideIncrementalIndexEventContent;
+  warning?: string;
+} {
+  if (encodedSize(content) <= MAX_EVENT_CONTENT_BYTES) {
+    return { event: content };
+  }
+  return realmWideCompletion(content);
+}
+
 // The versions a shared pass's announcer may report: those of the cards no
 // other writer in the pass changed.
 //
@@ -4498,10 +4588,9 @@ export class Realm {
     // cannot carry goes out as a realm-wide completion instead, and the
     // homeserver never sees an event it would reject.
     if (encodedSize(content) > MAX_EVENT_CONTENT_BYTES) {
-      this.broadcastRealmEvent(
-        this.#realmWideCompletion(content, coalescedWrites),
-        delivery,
-      );
+      let { event, warning } = realmWideCompletion(content, coalescedWrites);
+      this.#log.warn(`index event for ${this.url} ${warning}`);
+      this.broadcastRealmEvent(event, delivery);
       return;
     }
     let versions = opts?.versions;
@@ -4510,87 +4599,6 @@ export class Realm {
       content = this.#withCoalescedWrites(content, coalescedWrites);
     }
     this.broadcastRealmEvent(withVersionsIfItFits(content, versions), delivery);
-  }
-
-  // The completion for a pass whose invalidations will not fit in an event:
-  // no list, so every subscriber reloads what it holds of the realm. See
-  // `RealmWideIncrementalIndexEventContent`.
-  //
-  // Authorship is kept in the most specific form that fits. The writer's own
-  // `clientAuthored` first, which spares its tab a re-read of the cards it
-  // sent. Then the same request ids with `clientAuthored` emptied, which still
-  // lets the writer recognize its write — a wait keyed on the id hears the
-  // pass land — while re-reading every card, the cautious reading an empty
-  // list carries. Shared-pass writers keep only their ids, with `changed:
-  // null`, since the cards each changed are exactly what does not fit. Only
-  // when none of that fits does authorship go entirely.
-  #realmWideCompletion(
-    content: IncrementalIndexEventContent,
-    coalescedWrites: CoalescedIndexWrite[] | undefined,
-  ): RealmWideIncrementalIndexEventContent {
-    let bare: RealmWideIncrementalIndexEventContent = {
-      eventName: 'index',
-      indexType: 'incremental',
-      realmWide: true,
-      ...(content.generation !== undefined
-        ? { generation: content.generation }
-        : {}),
-      realmURL: content.realmURL,
-    };
-    // Which modules moved is worth more to a subscriber than which request
-    // moved them — without it every tab that loaded code from the realm
-    // rebuilds — so it goes in first, and authorship is fitted around it.
-    let withModules: RealmWideIncrementalIndexEventContent = {
-      ...bare,
-      invalidatedModules: content.invalidations.filter(hasExecutableExtension),
-    };
-    let realmWide =
-      encodedSize(withModules) <= MAX_EVENT_CONTENT_BYTES ? withModules : bare;
-    let requestIds = {
-      ...(Object.prototype.hasOwnProperty.call(content, 'clientRequestId')
-        ? { clientRequestId: content.clientRequestId }
-        : {}),
-      ...(coalescedWrites
-        ? {
-            coalescedWrites: coalescedWrites.map(({ clientRequestId }) => ({
-              clientRequestId,
-              changed: null,
-            })),
-          }
-        : {}),
-    };
-    let candidates: RealmWideIncrementalIndexEventContent[] = [
-      {
-        ...realmWide,
-        ...requestIds,
-        ...(content.clientAuthored
-          ? { clientAuthored: content.clientAuthored }
-          : {}),
-      },
-      {
-        ...realmWide,
-        ...requestIds,
-        ...(content.clientAuthored ? { clientAuthored: [] } : {}),
-      },
-    ];
-    let reason = `its ${content.invalidations.length} invalidations encode to ${encodedSize(content)} bytes, over the ${MAX_EVENT_CONTENT_BYTES}-byte budget, so every subscriber reloads the realm's cards and searches`;
-    if (realmWide === bare) {
-      this.#log.warn(
-        `index event for ${this.url} goes out realm-wide without naming its invalidated modules, which would not fit either`,
-      );
-    }
-    for (let candidate of candidates) {
-      if (encodedSize(candidate) <= MAX_EVENT_CONTENT_BYTES) {
-        this.#log.warn(
-          `index event for ${this.url} (request ${content.clientRequestId ?? 'none'}) goes out realm-wide: ${reason}`,
-        );
-        return candidate;
-      }
-    }
-    this.#log.warn(
-      `index event for ${this.url} goes out realm-wide without its writers' request ids, which would not fit either: ${reason}`,
-    );
-    return realmWide;
   }
 
   // `coalescedWrites` on a shared pass's event, as much of it as fits.

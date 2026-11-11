@@ -2883,24 +2883,7 @@ export default class StoreService extends Service implements StoreInterface {
   // deferral behind an in-flight read — and every card awaiting its index row
   // is re-read, as after a full index.
   #reloadRealmWide(event: RealmWideIncrementalIndexEventContent): number {
-    // Compared as the identifiers `realmOf` answers with, which for a realm
-    // reached through a registered prefix is not the URL the event carries.
-    let realm: string | undefined;
-    try {
-      realm = this.realm.realmOf(new URL(event.realmURL)) ?? event.realmURL;
-    } catch (_e) {
-      realm = event.realmURL;
-    }
-    let inRealm = (id: string | undefined): id is string => {
-      if (!id) {
-        return false;
-      }
-      try {
-        return this.realm.realmOf(rri(id)) === realm;
-      } catch (_e) {
-        return false;
-      }
-    };
+    let inRealm = this.#inRealm(event.realmURL);
     let modules = event.invalidatedModules;
     let alreadyFlushed = new Set(
       (modules ?? []).filter((module) =>
@@ -2927,34 +2910,47 @@ export default class StoreService extends Service implements StoreInterface {
       this.rebuildForCodeChange.perform();
       return 0;
     }
-    // Spelled as an index event spells a card — its realm href without
-    // `.json` — so the per-card rules match the event's authorship against
-    // these exactly as they would against a listed event's invalidations.
+    // Spelled as an index event spells them — a card as its realm href
+    // without `.json`, so the per-card rules match the event's authorship
+    // against it exactly as against a listed event's invalidations, and a
+    // file as its realm href, which is the key file-meta is held under.
     let ids = new Set<string>();
-    let add = (id: string) => {
+    let add = (id: string, kind: 'card' | 'file') => {
+      let href: string;
       try {
-        ids.add(
-          this.network.virtualNetwork.toURLHref(id).replace(/\.json$/, ''),
-        );
+        href = this.network.virtualNetwork.toURLHref(id);
       } catch (_e) {
-        ids.add(id);
+        href = id;
       }
+      ids.add(kind === 'card' ? href.replace(/\.json$/, '') : href);
     };
     for (let instance of this.store.allCardInstances()) {
       if (inRealm(instance.id)) {
-        add(instance.id);
-      }
-    }
-    for (let instance of this.store.allFileMetaInstances()) {
-      if (inRealm(instance.id)) {
-        add(instance.id);
+        add(instance.id, 'card');
       }
     }
     for (let [id, error] of this.store.cardErrorEntries()) {
       // Awaiting-index cards are re-read by the sweep below, which also
-      // covers reads still in flight.
+      // covers reads still in flight from `get`.
       if (!error.awaitingIndex && inRealm(id)) {
-        add(id);
+        add(id, 'card');
+      }
+    }
+    // A link resolution in flight is a read the sweep below does not see; named
+    // here, it is deferred until it settles, as a listed invalidation is.
+    for (let { url } of this.store.cardDocLoadsInFlight()) {
+      if (inRealm(url)) {
+        add(url, 'card');
+      }
+    }
+    for (let instance of this.store.allFileMetaInstances()) {
+      if (inRealm(instance.id)) {
+        add(instance.id, 'file');
+      }
+    }
+    for (let [id] of this.store.fileMetaErrorEntries()) {
+      if (inRealm(id)) {
+        add(id, 'file');
       }
     }
     realmEventsLogger.debug(
@@ -3374,16 +3370,39 @@ export default class StoreService extends Service implements StoreInterface {
     }
   });
 
+  // Whether an id belongs to the realm an event names. Compared as the
+  // identifiers `realmOf` answers with, which for a realm reached through a
+  // registered prefix is not the URL the event carries.
+  #inRealm(realmURL: string): (id: string | undefined) => id is string {
+    let realm: string | undefined;
+    try {
+      realm = this.realm.realmOf(new URL(realmURL)) ?? realmURL;
+    } catch (_e) {
+      realm = realmURL;
+    }
+    return (id: string | undefined): id is string => {
+      if (!id) {
+        return false;
+      }
+      try {
+        return this.realm.realmOf(rri(id)) === realm;
+      } catch (_e) {
+        return false;
+      }
+    };
+  }
+
   // Re-read every card being held as awaiting-index in `realmURL`. Their whole
   // state is "a row for me is coming", and a from-scratch pass is one way it
   // arrives without any event naming the card.
   private reloadAwaitingIndexInstances(realmURL: string): number {
+    let inRealm = this.#inRealm(realmURL);
     let reloaded = 0;
     for (let [id, error] of this.store.cardErrorEntries()) {
       if (!error.awaitingIndex) {
         continue;
       }
-      if (this.realm.realmOf(rri(id)) !== realmURL) {
+      if (!inRealm(id)) {
         continue;
       }
       realmEventsLogger.debug(
@@ -3398,7 +3417,7 @@ export default class StoreService extends Service implements StoreInterface {
     // no later event is coming to say so. Same treatment the incremental
     // branch gives an invalidation that names a card mid-read.
     for (let id of this.inflightGetCards.keys()) {
-      if (this.realm.realmOf(rri(id)) !== realmURL) {
+      if (!inRealm(id)) {
         continue;
       }
       realmEventsLogger.debug(
@@ -3415,7 +3434,7 @@ export default class StoreService extends Service implements StoreInterface {
         this.#builtFromSource.delete(localId);
         continue;
       }
-      if (!instance.id || this.realm.realmOf(rri(instance.id)) !== realmURL) {
+      if (!inRealm(instance.id)) {
         continue;
       }
       realmEventsLogger.debug(

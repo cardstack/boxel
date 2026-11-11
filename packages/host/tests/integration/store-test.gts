@@ -4465,6 +4465,27 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  // Count the loader resets a test causes. The coalesced rebuild starts with
+  // one, so the count tells a rebuild from a per-card re-read even where both
+  // leave the card holding the same state.
+  function countLoaderResets() {
+    let loaderService = getService('loader-service');
+    let original = loaderService.resetLoader.bind(loaderService);
+    let count = 0;
+    loaderService.resetLoader = ((...args: Parameters<typeof original>) => {
+      count++;
+      return original(...args);
+    }) as typeof original;
+    return {
+      get count() {
+        return count;
+      },
+      stop() {
+        loaderService.resetLoader = original;
+      },
+    };
+  }
+
   // What a realm sends when a pass invalidated more than one event can list.
   function realmWideEvent(
     extra: Partial<RealmWideIncrementalIndexEventContent> = {},
@@ -4504,11 +4525,21 @@ module('Integration | Store', function (hooks) {
         getService('realm').info(testRealmURL).isIndexing,
         'the realm reads as indexing once the pass starts',
       );
-      events.deliver(realmWideEvent());
-      await settled();
+      let resets = countLoaderResets();
+      try {
+        events.deliver(realmWideEvent());
+        await settled();
+      } finally {
+        resets.stop();
+      }
       assert.false(
         getService('realm').info(testRealmURL).isIndexing,
         'and as done once its realm-wide completion arrives',
+      );
+      assert.strictEqual(
+        resets.count,
+        0,
+        'an event naming no changed module re-reads cards rather than rebuilding',
       );
     } finally {
       events.restore();
@@ -4574,8 +4605,17 @@ module('Integration | Store', function (hooks) {
     try {
       await writePerson('Person/hassan.json', 'Hassan Rebuilt');
       await events.nextEventFor(url);
-      events.deliver(realmWideEvent({ invalidatedModules: undefined }));
-      await settled();
+      let resets = countLoaderResets();
+      try {
+        events.deliver(realmWideEvent({ invalidatedModules: undefined }));
+        await settled();
+      } finally {
+        resets.stop();
+      }
+      assert.ok(
+        resets.count > 0,
+        'the tab rebuilds, since a module it loaded from the realm may have changed',
+      );
     } finally {
       events.restore();
     }

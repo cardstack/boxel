@@ -361,11 +361,11 @@ class RealmResource {
               // invalidations carry the card id without `.json`, so the
               // RealmConfig card at `<realm>/realm.json` appears as
               // `<realm>/realm`. A realm-wide incremental names nothing, so
-              // like a full index it leaves realm info alone.
+              // the config card may be among what it moved.
               if (
                 data.indexType === 'incremental' &&
-                !('realmWide' in data) &&
-                data.invalidations.includes(`${this.realmURL}realm`)
+                ('realmWide' in data ||
+                  data.invalidations.includes(`${this.realmURL}realm`))
               ) {
                 this.refreshInfo();
               }
