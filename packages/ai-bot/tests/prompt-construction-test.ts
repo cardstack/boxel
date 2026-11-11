@@ -480,6 +480,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
         context.includes('edits to its cards and files will be rejected'),
         'the workspace is not described as refusing every change',
       );
+      assert.true(
+        context.includes(
+          "The user can't read this workspace directly either: the realm serves them only the cards and files its policy grants, and answers any other as not found.",
+        ),
+        'and the assistant is told what a read the policy does not grant comes back as',
+      );
     });
 
     test('keeps a condition on its own list line, in a code span its backticks cannot close', async () => {
@@ -528,16 +534,18 @@ Current date and time: 2025-06-11T11:43:00.533Z
       };
       for (let [policy, context] of Object.entries(notes)) {
         assert.true(context.includes(ASKS), `the note for ${policy} names it`);
+        assert.false(
+          context.includes("can't read this workspace directly"),
+          `and the note for ${policy} does not tell a reader their reads are limited`,
+        );
       }
       assert.false(
         (await contextFor()).includes('realm.operations.capabilities'),
         'a workspace whose realm names no policy has nothing to ask about',
       );
-      assert.false(
-        (await contextFor({}, { canRead: false })).includes(
-          'realm.operations.capabilities',
-        ),
-        'nor is it named to a user the realm admits only through its policy, whom run-realm-code does not run for',
+      assert.true(
+        (await contextFor({}, { canRead: false })).includes(ASKS),
+        'the note for a user the realm admits only through its policy names it, since the policy is all that admits them',
       );
     });
 
