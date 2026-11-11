@@ -102,7 +102,7 @@ export const skillsRealmURL: string = ensureTrailingSlash(
 );
 
 /**
- * The URL of a `.md` skill file (`skills/<name>/SKILL.md`) in the skills
+ * The URL of a `.md` skill file (`<name>/SKILL.md`) in the skills
  * realm — the markdown skill form, resolved as a `MarkdownDef` whose
  * `boxel.kind: skill` frontmatter makes it a skill source. Spelled as a
  * resolved absolute URL for the same reason as `skillsIndexId`: a skill body
@@ -110,10 +110,10 @@ export const skillsRealmURL: string = ensureTrailingSlash(
  * id can anchor that resolution.
  *
  * @example
- * skillFileURL('source-code-editing')  // `${skillsRealmURL}skills/source-code-editing/SKILL.md`
+ * skillFileURL('source-code-editing')  // `${skillsRealmURL}source-code-editing/SKILL.md`
  */
 export function skillFileURL(skillName: string): string {
-  return `${skillsRealmURL}skills/${skillName}/SKILL.md`;
+  return `${skillsRealmURL}${skillName}/SKILL.md`;
 }
 
 // The skills index, the default skill for every new AI room. Spelled as a
