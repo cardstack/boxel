@@ -163,6 +163,8 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   #skillIds = new Set<string>();
+  // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+  #rewritingSkillUrls = false;
   #hasRegisteredDestructor = false;
   #responseStreamPreviewDisposer: (() => void) | undefined;
   // Highest to-device preview `sequence` applied per streaming message
@@ -821,11 +823,33 @@ export class RoomResource extends Resource<Args> {
 
   private async loadSkills(skillCardFileDefs: SerializedFile[]) {
     let skillIds: string[] = [];
+    let hasMovedSkill = false;
     for (let skillCardFileDef of skillCardFileDefs) {
       let skillId = await this.loadEnabledSkill(skillCardFileDef);
       if (skillId) {
         skillIds.push(skillId);
+        if (
+          isMarkdownSkillId(skillCardFileDef.sourceUrl) &&
+          skillId !== skillCardFileDef.sourceUrl
+        ) {
+          hasMovedSkill = true;
+        }
       }
+    }
+    // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+    // The skill pills and `tools` read the room state's URLs, so a skill that
+    // loaded from the other URL is written back to the state now rather than
+    // on the next send. The state update reloads the room with the new URLs.
+    if (hasMovedSkill && this.roomId && !this.#rewritingSkillUrls) {
+      this.#rewritingSkillUrls = true;
+      this.matrixService
+        .updateSkillsAndToolsIfNeeded(this.roomId)
+        .catch((e) =>
+          console.warn(
+            `Failed to rewrite moved skill URLs for room ${this.roomId}: ${e}`,
+          ),
+        )
+        .finally(() => (this.#rewritingSkillUrls = false));
     }
     let oldReferences = [...(this.#skillIds ?? [])];
     let newReferences = [...(skillIds ?? [])];
