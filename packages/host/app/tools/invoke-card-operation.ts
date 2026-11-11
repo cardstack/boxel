@@ -1,22 +1,17 @@
 import { service } from '@ember/service';
 
 import {
-  ensureTrailingSlash,
   humanReadable,
   isCardInstance,
   isResolvedCodeRef,
   realmURL,
-  rri,
 } from '@cardstack/runtime-common';
 import type {
   BaseOperation,
   CodeRef,
-  Loader,
   OperationWriteResult,
-  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isWrite } from '@cardstack/runtime-common/card-operations';
-import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
 import {
   BATCH_MEMBER,
@@ -25,13 +20,14 @@ import {
   baseOf,
   defNameOf,
   invocableNames,
+  loadOperationType,
   offeredHere,
   type OperationsBucket,
 } from '../lib/card-operation-invocation';
 import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
-import type { BaseDef, CardDef } from '@cardstack/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 import type * as OperationsModule from '@cardstack/base/operations';
 
@@ -204,7 +200,12 @@ A write answers the card it wrote and the version that card now holds; a read an
         `"${name}" on ${humanReadable(type)} acts on the type rather than on a card, so no card says which realm it runs in. Name it with "realm": where it runs, and where a card it creates lands.`,
       );
     }
-    let Type = await loadType(type, input.realm, this.loaderService.loader);
+    let Type = await loadOperationType(
+      name,
+      type,
+      input.realm,
+      this.loaderService.loader,
+    );
 
     let operationsModule = await this.loadOperationsModule();
     let base = assertTypeOperation(operationsModule, Type, name);
@@ -310,27 +311,6 @@ function invokeOptions(
     ...(realm ? { realm } : {}),
     ...(relationships ? { relationships } : {}),
   };
-}
-
-// The class a type-scoped call names. A relative module is read from the root
-// of the realm the call runs in, as a path in that realm is.
-async function loadType(
-  type: ResolvedCodeRef,
-  realm: string,
-  loader: Loader,
-): Promise<typeof BaseDef> {
-  try {
-    return await loadCardDef(type, {
-      loader,
-      relativeTo: rri(ensureTrailingSlash(realm)),
-    });
-  } catch (error) {
-    throw new Error(
-      `${humanReadable(type)} did not load: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
 }
 
 // The payload as the operation reads it. A field the caller left unset arrives

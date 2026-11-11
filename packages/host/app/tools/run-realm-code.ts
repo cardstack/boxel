@@ -7,7 +7,6 @@ import {
   clearReplacedArrayFieldMeta,
   coerceErrorMessage,
   ensureTrailingSlash,
-  humanReadable,
   isBinaryContentType,
   isCardInstance,
   isFileDefInstance,
@@ -41,7 +40,6 @@ import {
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
 import { isWrite } from '@cardstack/runtime-common/card-operations';
-import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -49,6 +47,7 @@ import {
   assertInstanceOperation,
   assertPayloadSuppliesParams,
   assertTypeOperation,
+  loadOperationType,
   type OperationsBucket,
 } from '../lib/card-operation-invocation';
 import {
@@ -164,7 +163,7 @@ import type RecentFilesService from '../services/recent-files-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type Base64ImageFieldType from '@cardstack/base/base64-image';
-import type { BaseDef, CardDef } from '@cardstack/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 import type * as OperationsModule from '@cardstack/base/operations';
 
@@ -3926,17 +3925,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     payload: Record<string, unknown> | undefined,
     realmURL: string,
   ): Promise<OperationAnswer> {
-    let Type: typeof BaseDef;
-    try {
-      Type = await loadCardDef(type, {
-        loader: this.loaderService.loader,
-        relativeTo: rri(realmURL),
-      });
-    } catch (error) {
-      throw new Error(
-        `cannot run "${operation}": ${humanReadable(type)} did not load: ${coerceErrorMessage(error, 'unknown error')}`,
-      );
-    }
+    let Type = await loadOperationType(
+      operation,
+      type,
+      realmURL,
+      this.loaderService.loader,
+    );
     let base = assertTypeOperation(operationsModule, Type, operation);
     assertPayloadSuppliesParams(
       operation,

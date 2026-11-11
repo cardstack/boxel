@@ -1,4 +1,12 @@
-import type { BaseOperation } from '@cardstack/runtime-common';
+import {
+  ensureTrailingSlash,
+  humanReadable,
+  rri,
+  type BaseOperation,
+  type Loader,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
+import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
 import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 import type * as OperationsModule from '@cardstack/base/operations';
@@ -152,6 +160,28 @@ export function assertInstanceOperation(
     );
   }
   return base;
+}
+
+// The class an operation on a type names. A relative module is read from the
+// root of the realm the operation runs in, as a path in that realm is.
+export async function loadOperationType(
+  name: string,
+  type: ResolvedCodeRef,
+  realm: string,
+  loader: Loader,
+): Promise<typeof BaseDef> {
+  try {
+    return await loadCardDef(type, {
+      loader,
+      relativeTo: rri(ensureTrailingSlash(realm)),
+    });
+  } catch (error) {
+    throw new Error(
+      `cannot run "${name}": ${humanReadable(type)} did not load: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 // An operation that acts on a type rather than on one of its cards, invoked
