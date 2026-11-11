@@ -198,8 +198,12 @@ module('Acceptance | workspace card', function (hooks) {
       .dom(`${STACK} nav.tabs [aria-current="true"]`)
       .hasText('Library', 'the pill switches to the Library segment');
     assert
-      .dom(`${STACK} [data-test-selected-filter="Note"]`)
-      .exists('the Library opens with the clicked type pre-selected');
+      .dom(`${STACK} [data-test-library-filter="Note"]`)
+      .hasAria(
+        'current',
+        'page',
+        'the Library opens with the clicked type pre-selected',
+      );
   });
 
   // The Library rail lists a row per realm card type (sourced from the same
@@ -215,7 +219,7 @@ module('Acceptance | workspace card', function (hooks) {
 
     assert
       .dom(
-        `${STACK} [data-test-boxel-filter-list-button="Note"] [data-test-filter-list-count]`,
+        `${STACK} [data-test-library-filter="Note"] [data-test-pretui-sidebar-item-badge]`,
       )
       .hasText('1', 'the Note rail row shows its single-instance count');
   });
@@ -397,8 +401,8 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     await click(WORKSPACE_BUTTON);
     await waitFor(`${STACK} nav.tabs`);
     await click(`${STACK} [data-test-workspace-tab="library"]`);
-    await waitFor(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
-    await click(`${STACK} [data-test-boxel-filter-list-button="${name}"]`);
+    await waitFor(`${STACK} [data-test-library-filter="${name}"]`);
+    await click(`${STACK} [data-test-library-filter="${name}"]`);
   }
 
   function noteId(i: number) {
@@ -565,13 +569,13 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     await click(`${PAGINATION} [aria-label="Next"]`);
     await waitForGridItems(NOTE_COUNT - PAGE_SIZE);
 
-    await click(`${STACK} [data-test-boxel-filter-list-button="Memo"]`);
+    await click(`${STACK} [data-test-library-filter="Memo"]`);
     await waitForGridItems(1);
     assert
       .dom(PAGINATION)
       .doesNotExist('a filter that fits on one page shows no page controls');
 
-    await click(`${STACK} [data-test-boxel-filter-list-button="Note"]`);
+    await click(`${STACK} [data-test-library-filter="Note"]`);
     await waitForGridItems(PAGE_SIZE);
     assert.dom(`${PAGINATION} [aria-current="page"]`).hasText('1');
   });

@@ -82,34 +82,13 @@ class Edit extends Component<typeof AmountWithCurrency> {
         width: 100%;
       }
 
-      .input-selectable-currency-amount__select[aria-disabled='true'] {
-        opacity: 0.5;
-      }
-
-      .input-selectable-currency-amount__dropdown-item {
-        white-space: nowrap;
-      }
-
-      .input-selectable-currency-amount__dropdown
-        :deep(.ember-power-select-options[role='listbox']) {
-        max-height: 18em;
-      }
-
       .input-selectable-currency > div {
         height: 100%;
       }
 
+      /* the currency picker sets its own height and type size */
       :deep(.currency-field-edit) {
-        min-width: 100px;
-        height: 100%;
-        font-size: var(--boxel-font-size-sm);
-      }
-
-      .boxel-selectable-currency-icon__icon {
-        margin-right: var(--boxel-sp-xxxs);
-        vertical-align: bottom;
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
+        min-width: 6.25rem;
       }
     </style>
   </template>

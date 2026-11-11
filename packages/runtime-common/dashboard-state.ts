@@ -16,6 +16,8 @@ export interface AppBoxelDashboardContent {
   // How many setup steps the user has copied, per agent. Nothing can see the
   // agent's chat, so copying a step is what counts as doing it.
   agentSetup?: Partial<Record<DashboardAgent, number>>;
+  // Set the first time the user opens a card, in any browser.
+  openedCard?: boolean;
 }
 
 // Account data is whatever was last written, by any version of the app, so
@@ -29,6 +31,9 @@ export function parseDashboardContent(
   let parsed: AppBoxelDashboardContent = {};
   if (typeof content.onboardingDismissed === 'boolean') {
     parsed.onboardingDismissed = content.onboardingDismissed;
+  }
+  if (typeof content.openedCard === 'boolean') {
+    parsed.openedCard = content.openedCard;
   }
   if (isDashboardAgent(content.agent)) {
     parsed.agent = content.agent;

@@ -37,6 +37,10 @@ export const PRICING_VARIABLES = {
 
 export type PricingValueName = keyof typeof PRICING_VARIABLES;
 
+// The GB that per-GB rates are quoted in. AWS bills data transfer and
+// storage in binary gigabytes, 2^30 bytes.
+export const BYTES_PER_GB = 1024 ** 3;
+
 // How each value is checked. A rate or a task size must be above zero, since
 // a zero would make that usage free. Tabs and processes count things, so they
 // are whole numbers. The floor may be zero, because the minimum balance an
