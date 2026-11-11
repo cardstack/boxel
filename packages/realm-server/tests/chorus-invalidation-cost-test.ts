@@ -214,7 +214,12 @@ module(basename(import.meta.filename), function (hooks) {
   async function applyGinSettings() {
     let gin = (
       (await adapter.execute(
-        `SELECT indexname FROM pg_indexes WHERE indexdef ILIKE '%USING gin%'`,
+        // A partitioned index (the log lines') holds no storage parameters
+        // of its own; its partitions' indexes are listed on their own.
+        `SELECT i.indexname FROM pg_indexes AS i
+           JOIN pg_class AS c ON c.relname = i.indexname
+           JOIN pg_namespace AS n ON n.oid = c.relnamespace AND n.nspname = i.schemaname
+          WHERE i.indexdef ILIKE '%USING gin%' AND c.relkind = 'i'`,
       )) as { indexname: string }[]
     ).map(({ indexname }) => indexname);
     for (let index of gin) {
