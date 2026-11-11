@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start), when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -159,6 +159,52 @@ Add the variable to `PRICING_VARIABLES` and its check to `VALUE_KINDS` in
 parameter and task wiring in the infra repo before the release that reads it
 reaches an environment, since a process without it fails its check. Name it
 for the resource and unit it prices, not a provider's product (ADR 029 §1.2).
+
+## The estimate shown at switch-on
+
+Switching an automation on shows what it is likely to cost a month and asks
+for a monthly cap. `estimateAutomationCost`
+(`packages/realm-server/lib/automation-estimate.ts`) builds it from the
+automation's triggers, its caps and the current prices, and records the
+pricing version it used.
+
+**The per-run ceiling.** `runCostCeiling` prices the most one run can cost
+under its caps, each part in credits:
+
+```
+compute = seconds cap × prerenderTabUsdPerSecond × PRICING_MARGIN × 1000
+network = response-bytes cap / 2^30 × PRICING_USD_PER_DOWNLOADED_GB × PRICING_MARGIN × 1000
+AI      = the run's AI spending cap, already in credits, no margin
+```
+
+A GB is 2^30 bytes (`BYTES_PER_GB` in `pricing.ts`), the unit AWS bills
+transfer and storage in. The indexing a run's writes cause has no cap that
+bounds it, so the ceiling leaves it out.
+
+**The runs counted.** The ceiling is multiplied by:
+
+- each unbounded cron trigger's runs in an average month: its runs in the
+  year after now, over 12, so a monthly trigger counts 1, a yearly one 1/12,
+  and an hourly one's 23- and 25-hour daylight-saving days even out;
+- every run left on each bounded cron trigger (`until`, `count` or both),
+  from the schedule library's `remainingRuns`, even when they span more than
+  a month;
+- one run for each `once` trigger that hasn't fired.
+
+Two triggers that fire at the same instant each count, since each starts a
+run. Webhook triggers aren't counted, because nothing predicts deliveries;
+the result lists their labels in `webhookTriggers` for the screen to say so.
+A trigger with an invalid expression or time zone never runs and counts
+nothing. When a bounded count reaches the schedule library's limit
+(`REMAINING_RUNS_LIMIT`), `runsAtLeast` is set and the estimate is a lower
+bound. The total is rounded up to whole credits.
+
+**Recent Preview cost** is passed in and returned beside the estimate, never
+added to it, since Preview is charged to whoever clicks, not the payer.
+
+The result also breaks the ceiling into its parts (`perRun`) and the runs
+into `unboundedRunsPerMonth`, `boundedCronRuns`, `onceRuns` and one entry
+per trigger, so the screen can show where the number comes from.
 
 ## Reading the ledger by kind and reference
 
