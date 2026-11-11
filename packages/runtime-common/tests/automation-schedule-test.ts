@@ -78,6 +78,35 @@ const tests = Object.freeze({
     );
   },
 
+  'reads Sunday at the end of a day-of-week range as 7': async (assert) => {
+    assert.deepEqual(
+      [...parseCronExpression('0 0 * * FRI-SUN').daysOfWeek].sort(),
+      [0, 5, 6],
+    );
+    assert.deepEqual(
+      [...parseCronExpression('0 0 * * 5-0').daysOfWeek].sort(),
+      [0, 5, 6],
+    );
+    assert.strictEqual(
+      typeof cronExpressionError('0 0 * * SAT-FRI'),
+      'string',
+      'any other backwards range is still an error',
+    );
+  },
+
+  'remembers an invalid expression': async (assert) => {
+    let expression = '0 0 31 2 *';
+    let first = cronExpressionError(expression);
+    let started = performance.now();
+    for (let i = 0; i < 20; i++) {
+      assert.strictEqual(cronExpressionError(expression), first);
+    }
+    assert.ok(
+      performance.now() - started < 50,
+      'later calls skip the 400-year scan',
+    );
+  },
+
   'expands macros': async (assert) => {
     let after = at('2026-11-10T12:34:00Z');
     assert.strictEqual(
