@@ -672,9 +672,9 @@ export class KnownDate extends Component<KnownDateSignature> {
               <Input
                 @controlId={{slot.id}}
                 @value={{slot.value}}
-                placeholder={{slot.placeholder}}
+                @placeholder={{slot.placeholder}}
                 @invalid={{this.invalid}}
-                disabled={{@disabled}}
+                @disabled={{@disabled}}
                 @onInput={{this.handlerFor slot.part}}
                 inputmode={{slot.inputmode}}
                 autocomplete={{slot.autocomplete}}
