@@ -8,6 +8,7 @@ import {
 } from '../automation-declaration.ts';
 import { zonedDateTimeToUnixSeconds } from '../automation-schedule.ts';
 import type { SharedTests } from '../helpers/index.ts';
+import { PrefixRealmNetwork } from '../prefix-realm-network.ts';
 import { rri } from '../realm-identifiers.ts';
 
 const REALM = 'https://realm.example/team/';
@@ -129,7 +130,7 @@ const tests = Object.freeze({
     assert.deepEqual(result.declaration, {
       url: CARD,
       realmURL: REALM,
-      script: `${REALM}scripts/nightly.js`,
+      script: rri(`${REALM}scripts/nightly.js`),
       triggers: [
         {
           kind: 'cron',
@@ -254,6 +255,64 @@ const tests = Object.freeze({
       [['script-outside-realm', 'script']],
       'a relative link that climbs out of the realm',
     );
+    assert.deepEqual(
+      codes(read(entry({ script: '$REALM/scripts/x.js' }))),
+      [['script-outside-realm', 'script']],
+      'a realm-rooted link has no realm root to resolve against in URL form',
+    );
+  },
+
+  'reads a card whose id is in prefix form': async (assert) => {
+    let catalogURL = 'https://catalog.example.test/';
+    let prefixEntry = (): AutomationIndexEntry => {
+      let e = entry({
+        attributes: {
+          operations: [
+            {
+              targetType: { module: '../github/repo', name: 'Repo' },
+              operation: 'openIssues',
+            },
+          ],
+        },
+      });
+      return {
+        ...e,
+        url: `${catalogURL}automations/nightly`,
+        realmURL: catalogURL,
+        instance: {
+          ...e.instance!,
+          id: rri('@cardstack/catalog/automations/nightly'),
+        },
+      };
+    };
+    let result = readAutomationDeclaration(prefixEntry(), {
+      automationTypeKey: TYPE_KEY,
+      virtualNetwork: new PrefixRealmNetwork({
+        '@cardstack/catalog/': catalogURL,
+      }),
+    });
+    assert.true(result.ok, JSON.stringify(codes(result)));
+    if (result.ok) {
+      assert.strictEqual(
+        result.declaration.script,
+        '@cardstack/catalog/scripts/nightly.js',
+        'the script keeps the card id’s form',
+      );
+      assert.deepEqual(result.declaration.operations, [
+        {
+          targetType: {
+            module: rri('@cardstack/catalog/github/repo'),
+            name: 'Repo',
+          },
+          operation: 'openIssues',
+        },
+      ]);
+    }
+    assert.deepEqual(
+      codes(read(prefixEntry())),
+      [['script-outside-realm', 'script']],
+      'without a network, a prefix-form script is not found in a realm known by its URL',
+    );
   },
 
   'reports a bad cron expression without throwing': async (assert) => {
@@ -346,6 +405,24 @@ const tests = Object.freeze({
       cronFrequencyError('0 2,3 * * *', 'America/New_York'),
       undefined,
       'a skipped 02:00 and 03:00 are the same instant, which fires once',
+    );
+    // Spring-forward is a Sunday in New York, so a schedule that never fires
+    // on that day or the next isn't moved by it.
+    assert.strictEqual(
+      cronFrequencyError('1,58 2,4 * * MON', 'America/New_York'),
+      undefined,
+      'on Mondays only, the skipped Sunday 02:58 never fires',
+    );
+    assert.ok(
+      cronFrequencyError('1,58 2,4 * * SUN', 'America/New_York'),
+      'on Sundays, the skipped 02:58 fires at 03:58, 3 minutes before 04:01',
+    );
+    // London skips 01:00–02:00 in March: an expression that follows elapsed
+    // time fires 00:58 and then 02:00, which is an hour less on the clock.
+    assert.strictEqual(cronFrequencyError('0,58 */2 * * *', 'UTC'), undefined);
+    assert.ok(
+      cronFrequencyError('0,58 */2 * * *', 'Europe/London'),
+      '00:58 GMT and 02:00 BST are 2 minutes apart',
     );
     // Berlin repeats 02:00–03:00 in October: an hourly-style expression fires
     // those times twice.
@@ -518,6 +595,27 @@ const tests = Object.freeze({
         ),
       ),
       [['daily-credits-above-monthly', 'caps.dailyCredits']],
+    );
+    assert.deepEqual(
+      codes(
+        read(
+          entry({
+            attributes: {
+              caps: {
+                ...CAPS,
+                seconds: 1201,
+                dailyCredits: 501,
+                monthlyCredits: 500,
+              },
+            },
+          }),
+        ),
+      ),
+      [
+        ['seconds-cap-too-high', 'caps.seconds'],
+        ['daily-credits-above-monthly', 'caps.dailyCredits'],
+      ],
+      'reported alongside a problem with another cap',
     );
   },
 

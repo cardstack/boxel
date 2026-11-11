@@ -9,8 +9,15 @@ import {
   type WebhookTrigger,
 } from './automation-schedule.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
-import { rri } from './realm-identifiers.ts';
+import { RealmPaths } from './paths.ts';
+import {
+  resolveRRIReference,
+  ri,
+  rri,
+  type RealmResourceIdentifier,
+} from './realm-identifiers.ts';
 import type { CardResource } from './resource-types.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 // The catalog's `Automation` card type. An automation's definition is an
 // instance of it, or of a type that descends from it.
@@ -53,6 +60,10 @@ export interface ReadAutomationOptions {
   // `automationRef` as `internalKeyFor` spells it in the reading realm, the
   // spelling the index records adoption chains in.
   automationTypeKey: string;
+  // Tells whether a script in prefix form (`@cardstack/catalog/...`) is inside
+  // a realm known by its URL, and the reverse. Without it, only a script in
+  // the same form as `realmURL` is found inside the realm.
+  virtualNetwork?: Pick<VirtualNetwork, 'toURL' | 'toURLHref'>;
 }
 
 // Values a trigger or the automation hands the script.
@@ -92,8 +103,9 @@ export const AUTOMATION_CAP_NAMES: readonly (keyof AutomationCaps)[] = [
 export interface AutomationDeclaration {
   url: string;
   realmURL: string;
-  // The script file's absolute URL, inside `realmURL`.
-  script: string;
+  // The script file, inside `realmURL`, in the form of the card's id. A
+  // prefix-form id is resolved to a URL where the run fetches the script.
+  script: RealmResourceIdentifier;
   triggers: AutomationTriggerDeclaration[];
   operations: AutomationOperationDeclaration[];
   caps: AutomationCaps;
@@ -145,7 +157,7 @@ export type AutomationReadResult =
 // anything the card says.
 export function readAutomationDeclaration(
   entry: AutomationIndexEntry,
-  { automationTypeKey }: ReadAutomationOptions,
+  { automationTypeKey, virtualNetwork }: ReadAutomationOptions,
 ): AutomationReadResult {
   if (!entry.types?.includes(automationTypeKey)) {
     return refuse(
@@ -166,11 +178,12 @@ export function readAutomationDeclaration(
     problems.push({ code, path, message });
 
   let attributes = entry.instance.attributes ?? {};
-  let cardURL = entry.instance.id ?? entry.url;
+  // Relative links are relative to the card's id, in whichever form it has.
+  let cardId = entry.instance.id ?? rri(entry.url);
 
-  let script = readScript(entry, cardURL, report);
+  let script = readScript(entry, cardId, virtualNetwork, report);
   let triggers = readTriggers(attributes.triggers, report);
-  let operations = readOperations(attributes.operations, cardURL, report);
+  let operations = readOperations(attributes.operations, cardId, report);
   let caps = readCaps(attributes.caps, report);
   let params = readParams(attributes.params, 'params', report);
   let batchDeadlineMinutes = readBatchDeadline(
@@ -208,17 +221,20 @@ export function readAutomationDeclaration(
 // only when two consecutive days can both match.
 //
 // A daylight-saving change can bring two times closer, so each change the
-// zone makes is applied to the day's times as `automation-schedule.ts` fires
-// them:
-// - a wall-clock expression's time that the clocks skip fires as far past the
-//   change as it was into the gap, which can land it just before a later time
-//   (02:58 and 04:01 are 3 minutes apart on a day 02:00 jumps to 03:00);
-// - an expression that follows elapsed time fires the repeated wall times
-//   twice, so the last of the first pass and the first of the second can be
-//   close (02:58 and the repeated 02:01 are 3 minutes apart on a day 03:00
-//   falls back to 02:00).
-// A change's window can cross midnight, so a time it moves is compared with
-// the next day's times too when two consecutive days can both match.
+// zone makes is applied to the days around it that the schedule matches, the
+// way `automation-schedule.ts` fires them:
+// - the clocks skip wall times, so the times either side of the gap are the
+//   gap's length closer than on the wall clock. A wall-clock expression fires
+//   a skipped time as far past the change as it was into the gap (02:58 fires
+//   at 03:58, 3 minutes before 04:01, on a day 02:00 jumps to 03:00); an
+//   expression that follows elapsed time doesn't fire it (00:58 and 02:00 are
+//   2 minutes apart on a day 01:00 jumps to 02:00).
+// - the clocks repeat wall times, and an expression that follows elapsed time
+//   fires them twice, so the last of the first pass and the first of the
+//   second can be close (02:58 and the repeated 02:01 are 3 minutes apart on a
+//   day 03:00 falls back to 02:00).
+// A change's window can cross midnight, so the next day's times are placed
+// around it too, when the schedule matches that day.
 // Without a time zone only the wall-clock spacing is checked.
 export function cronFrequencyError(
   expression: string,
@@ -232,35 +248,26 @@ export function cronFrequencyError(
     }
   }
   times.sort((a, b) => a - b);
-  let nextDayCanMatch = consecutiveDaysCanMatch(schedule);
   let closest = closestGap(times);
   let acrossMidnight = times[0] + DAY_MINUTES - times[times.length - 1];
-  if (acrossMidnight < MIN_CRON_INTERVAL_MINUTES && nextDayCanMatch) {
+  if (
+    acrossMidnight < MIN_CRON_INTERVAL_MINUTES &&
+    consecutiveDaysCanMatch(schedule)
+  ) {
     closest = Math.min(closest, acrossMidnight);
   }
-  if (timeZone !== undefined) {
+  if (timeZone !== undefined && closest >= MIN_CRON_INTERVAL_MINUTES) {
+    // A change's effect depends only on its shape and on which days around it
+    // the schedule matches, which most of a zone's changes share.
+    let checked = new Set<string>();
     for (let change of clockChanges(timeZone)) {
-      // How far into the change's window a time is, wrapping at midnight.
-      let into = (t: number) => (t - change.start + DAY_MINUTES) % DAY_MINUTES;
-      if (change.kind === 'skip' && !schedule.followsElapsedTime) {
-        let moved = times.map((t) =>
-          into(t) < change.length ? t + change.length : t,
-        );
-        if (nextDayCanMatch) {
-          moved.push(...times.map((t) => t + DAY_MINUTES));
-        }
-        closest = Math.min(closest, closestGap(moved.sort((a, b) => a - b)));
-      } else if (change.kind === 'repeat' && schedule.followsElapsedTime) {
-        let repeated = times
-          .map(into)
-          .filter((p) => p < change.length)
-          .sort((a, b) => a - b);
-        if (repeated.length > 1) {
-          closest = Math.min(
-            closest,
-            repeated[0] + change.length - repeated[repeated.length - 1],
-          );
-        }
+      let days = [-1, 0, 1, 2].map((offset) =>
+        dayNumberMatches(schedule, change.day + offset) ? 1 : 0,
+      );
+      let key = `${change.kind}:${change.start}:${change.length}:${days.join('')}`;
+      if (!checked.has(key)) {
+        checked.add(key);
+        closest = Math.min(closest, closestGapAround(schedule, times, change));
       }
     }
   }
@@ -283,11 +290,65 @@ function closestGap(sorted: number[]): number {
   return closest;
 }
 
+// The closest two fire times on the days around a clock change, from the day
+// before it starts to the day after it ends. Each matching day's times are
+// placed in elapsed minutes from the start of the change's day, on its clock
+// before the change.
+function closestGapAround(
+  schedule: CronSchedule,
+  times: number[],
+  change: ClockChange,
+): number {
+  let gapEnd = change.start + change.length;
+  // The change touches only its own day's times and, when its window crosses
+  // midnight, the next day's. A schedule that matches neither isn't moved.
+  let touched = gapEnd > DAY_MINUTES ? [0, 1] : [0];
+  if (
+    !touched.some((offset) => dayNumberMatches(schedule, change.day + offset))
+  ) {
+    return Infinity;
+  }
+  let fires: number[] = [];
+  for (let offset = -1; offset <= 2; offset++) {
+    if (!dayNumberMatches(schedule, change.day + offset)) {
+      continue;
+    }
+    for (let t of times) {
+      let wall = offset * DAY_MINUTES + t;
+      if (wall < change.start) {
+        fires.push(wall);
+      } else if (wall >= gapEnd) {
+        fires.push(
+          change.kind === 'skip' ? wall - change.length : wall + change.length,
+        );
+      } else if (change.kind === 'skip') {
+        // A skipped time fires as far past the change as it was into the gap,
+        // which is the same instant on the clock before it; an expression that
+        // follows elapsed time doesn't fire it.
+        if (!schedule.followsElapsedTime) {
+          fires.push(wall);
+        }
+      } else {
+        // A repeated time fires on its first pass, and an expression that
+        // follows elapsed time fires it again on the second.
+        fires.push(wall);
+        if (schedule.followsElapsedTime) {
+          fires.push(wall + change.length);
+        }
+      }
+    }
+  }
+  return closestGap(fires.sort((a, b) => a - b));
+}
+
 interface ClockChange {
   // `skip`: the clocks jump forward over these wall times. `repeat`: the
   // clocks fall back and these wall times happen twice.
   kind: 'skip' | 'repeat';
-  // Minute of the day the affected wall times start at.
+  // The local day the affected wall times start on, as days since
+  // 1970-01-01.
+  day: number;
+  // Minute of that day the affected wall times start at.
   start: number;
   // Minutes.
   length: number;
@@ -299,19 +360,20 @@ const CLOCK_CHANGE_FROM = Date.UTC(2020, 0, 1);
 const CLOCK_CHANGE_TO = Date.UTC(2060, 0, 1);
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
+const DAY_MS = DAY_MINUTES * MINUTE_MS;
 const clockChangeCache = new Map<string, ClockChange[]>();
 const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
 
-// The distinct daylight-saving (or other offset) changes a zone makes, as the
-// wall times each skips or repeats. A zone changes its offset at most a few
-// times a year, so weekly samples find every change, and a search to the
-// minute finds when it happens.
+// The daylight-saving (or other offset) changes a zone makes, each with the
+// local day it falls on and the wall times it skips or repeats. A zone changes
+// its offset at most a few times a year, so weekly samples find every change,
+// and a search to the minute finds when it happens.
 function clockChanges(timeZone: string): ClockChange[] {
   let cached = clockChangeCache.get(timeZone);
   if (cached) {
     return cached;
   }
-  let changes = new Map<string, ClockChange>();
+  let changes: ClockChange[] = [];
   let previousMs = CLOCK_CHANGE_FROM;
   let previousOffset = offsetMinutes(timeZone, previousMs);
   for (let ms = previousMs + WEEK_MS; ms <= CLOCK_CHANGE_TO; ms += WEEK_MS) {
@@ -333,16 +395,18 @@ function clockChanges(timeZone: string): ClockChange[] {
       // Skipped wall times start at the old offset's wall clock; repeated ones
       // at the new offset's.
       let wallStart = high + (kind === 'skip' ? before : after) * MINUTE_MS;
-      let start = Math.floor(wallStart / MINUTE_MS) % DAY_MINUTES;
-      let change = { kind, start, length: Math.abs(after - before) };
-      changes.set(`${kind}:${start}:${change.length}`, change);
+      changes.push({
+        kind,
+        day: Math.floor(wallStart / DAY_MS),
+        start: Math.floor(wallStart / MINUTE_MS) % DAY_MINUTES,
+        length: Math.abs(after - before),
+      });
     }
     previousMs = ms;
     previousOffset = offset;
   }
-  let result = [...changes.values()];
-  clockChangeCache.set(timeZone, result);
-  return result;
+  clockChangeCache.set(timeZone, changes);
+  return changes;
 }
 
 // The zone's offset from UTC at an instant, in minutes.
@@ -376,6 +440,11 @@ function offsetMinutes(timeZone: string, ms: number): number {
   return Math.round((wall - (ms - (ms % MINUTE_MS))) / MINUTE_MS);
 }
 
+// Whether two consecutive days can both match depends only on the parsed day
+// and month sets, and `parseCronExpression` caches the parsed schedule, so the
+// answer is kept per schedule.
+const consecutiveDaysCache = new WeakMap<CronSchedule, boolean>();
+
 // The Gregorian calendar repeats every 400 years, so whether any two
 // consecutive days both match is settled by one 400-year cycle. Unrestricted
 // day fields match every day of an allowed month, and every month has
@@ -384,24 +453,36 @@ function consecutiveDaysCanMatch(schedule: CronSchedule): boolean {
   if (!schedule.daysOfMonthRestricted && !schedule.daysOfWeekRestricted) {
     return true;
   }
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  let start = Date.UTC(2000, 0, 1);
-  let end = Date.UTC(2400, 0, 2);
+  let cached = consecutiveDaysCache.get(schedule);
+  if (cached !== undefined) {
+    return cached;
+  }
+  let start = Date.UTC(2000, 0, 1) / DAY_MS;
+  let end = Date.UTC(2400, 0, 2) / DAY_MS;
   let previous = false;
-  for (let ms = start; ms < end; ms += DAY_MS) {
-    let day = new Date(ms);
-    let matches = dayMatches(
-      schedule,
-      day.getUTCMonth() + 1,
-      day.getUTCDate(),
-      day.getUTCDay(),
-    );
+  let result = false;
+  for (let day = start; day < end; day++) {
+    let matches = dayNumberMatches(schedule, day);
     if (matches && previous) {
-      return true;
+      result = true;
+      break;
     }
     previous = matches;
   }
-  return false;
+  consecutiveDaysCache.set(schedule, result);
+  return result;
+}
+
+// Whether the schedule matches a calendar day, given as days since
+// 1970-01-01.
+function dayNumberMatches(schedule: CronSchedule, day: number): boolean {
+  let date = new Date(day * DAY_MS);
+  return dayMatches(
+    schedule,
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+    date.getUTCDay(),
+  );
 }
 
 function dayMatches(
@@ -437,9 +518,10 @@ function refuse(
 
 function readScript(
   entry: AutomationIndexEntry,
-  cardURL: string,
+  cardId: RealmResourceIdentifier,
+  virtualNetwork: ReadAutomationOptions['virtualNetwork'],
   report: Report,
-): string | undefined {
+): RealmResourceIdentifier | undefined {
   let relationship = entry.instance?.relationships?.script;
   let self = Array.isArray(relationship)
     ? undefined
@@ -448,26 +530,30 @@ function readScript(
     report('missing-script', 'script', 'An automation must link its script');
     return undefined;
   }
-  let scriptURL: URL;
+  let script: RealmResourceIdentifier;
+  let inRealm: boolean;
   try {
-    scriptURL = new URL(self, cardURL);
+    script = rri(resolveRRIReference(self, cardId));
+    inRealm = new RealmPaths(ri(entry.realmURL), virtualNetwork).inRealm(
+      script,
+    );
   } catch {
     report(
       'script-outside-realm',
       'script',
-      `The script link "${self}" is not a URL in the automation's realm`,
+      `The script link "${self}" doesn't name a file in the automation's realm`,
     );
     return undefined;
   }
-  if (!scriptURL.href.startsWith(entry.realmURL)) {
+  if (!inRealm) {
     report(
       'script-outside-realm',
       'script',
-      `The script ${scriptURL.href} is outside the automation's realm ${entry.realmURL}`,
+      `The script ${script} is outside the automation's realm ${entry.realmURL}`,
     );
     return undefined;
   }
-  return scriptURL.href;
+  return script;
 }
 
 function readTriggers(
@@ -686,7 +772,7 @@ function localDateTime(
 
 function readOperations(
   raw: unknown,
-  cardURL: string,
+  cardId: RealmResourceIdentifier,
   report: Report,
 ): AutomationOperationDeclaration[] {
   let operations: AutomationOperationDeclaration[] = [];
@@ -714,20 +800,23 @@ function readOperations(
       continue;
     }
     operations.push({
-      targetType: { module: rri(resolveModule(module, cardURL)), name },
+      targetType: { module: resolveModule(module, cardId), name },
       operation,
     });
   }
   return operations;
 }
 
-// A relative module is relative to the card; a URL or a prefix such as
-// `@cardstack/catalog/` stays as written.
-function resolveModule(module: string, cardURL: string): string {
+// A relative module is relative to the card's id, and keeps its form; a URL
+// or a prefix such as `@cardstack/catalog/` stays as written.
+function resolveModule(
+  module: string,
+  cardId: RealmResourceIdentifier,
+): RealmResourceIdentifier {
   if (module.startsWith('./') || module.startsWith('../')) {
-    return new URL(module, cardURL).href;
+    return rri(resolveRRIReference(module, cardId));
   }
-  return module;
+  return rri(module);
 }
 
 function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
@@ -776,7 +865,6 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
     ok = false;
   }
   if (
-    ok &&
     typeof caps.dailyCredits === 'number' &&
     typeof caps.monthlyCredits === 'number' &&
     caps.dailyCredits > caps.monthlyCredits
