@@ -28,14 +28,6 @@ export const KNOWN: Known[] = [
     cases: /\(spelling [123]\)$|, as a date-time$|^a date and a date-time$/,
     kind: 'answers',
   },
-  {
-    about:
-      'a number written as a string compares as text with a list of numbers (`eq: { ds: "0.50" }` misses `[0.5]`), where on a single number field Postgres compares it as a number',
-    evaluators: ['postgres'],
-    file: 'values',
-    cases: /^(not )?eq ds "0\.50"$/,
-    kind: 'answers',
-  },
 ];
 
 // Tracks which known divergences one evaluator hits over one vector file.

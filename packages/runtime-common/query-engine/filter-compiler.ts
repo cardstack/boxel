@@ -100,6 +100,9 @@ import {
 import { FILE_PATTERN_FIELDS, searchesByPattern } from '../search-intent.ts';
 import stringify from 'safe-stable-stringify';
 
+// A JSON (and SQL/JSON path) number literal.
+const JSON_NUMBER = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$/;
+
 export abstract class FilterCompiler extends ExpressionResolver {
   // Text filters compile in text-search.ts.
   protected abstract typeAheadCondition(
@@ -1023,7 +1026,16 @@ export abstract class FilterCompiler extends ExpressionResolver {
       return undefined;
     }
     let path = '$' + segments.map((x) => `."${x}"`).join('');
-    let test = `${path} ? (${values.map((v) => `@ == ${JSON.stringify(v)}`).join(' || ')})`;
+    // A string that spells a number also matches that number, as a number
+    // field's value compares as a number on a single field (`::numeric`):
+    // a list of numbers holds JSON numbers, which `@ == "0.50"` never equals.
+    // A list of text holds only strings, so it still compares as text.
+    let test = `${path} ? (${values
+      .flatMap((v) => [
+        `@ == ${JSON.stringify(v)}`,
+        ...(JSON_NUMBER.test(v as string) ? [`@ == ${v}`] : []),
+      ])
+      .join(' || ')})`;
     let root = segments[0];
     // Both arms test the candidate row itself, so the planner either drives
     // the match from the GIN index (a BitmapOr of the two path tests) or
