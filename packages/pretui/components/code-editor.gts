@@ -125,26 +125,10 @@ const READ_ONLY_THEME: Record<string, Record<string, string>> = {
 };
 
 // `@dark`: the colours of code mode's editor, Monaco's `vs-dark` theme on the
-// background code mode gives it. These are fixed colours, not tokens, so the
-// editor looks the same as code mode's whatever theme the page is in.
-export const MONACO_DARK = {
-  background: '#413e4e',
-  readOnlyBackground: '#606060',
-  foreground: '#d4d4d4',
-  lineNumber: '#858585',
-  activeLineNumber: '#c6c6c6',
-  activeLineBorder: '#282828',
-  selection: '#264f78',
-  cursor: '#aeafad',
-  bracketMatch: '#0064001a',
-  bracketMatchBorder: '#888888',
-  comment: '#608b4e',
-  string: '#ce9178',
-  number: '#b5cea8',
-  keyword: '#569cd6',
-  type: '#3dc9b0',
-  delimiter: '#dcdcdc',
-} as const;
+// background code mode gives it. The values are set once, as the
+// `--pretui-code-editor-*` properties in the component's stylesheet, and the
+// CodeMirror theme reads them, so the editor and its fallback can't drift.
+const darkColour = (name: string) => `var(--pretui-code-editor-${name})`;
 
 const DARK_THEME: Record<string, Record<string, string>> = {
   '&': EDITOR_THEME['&'],
@@ -152,38 +136,38 @@ const DARK_THEME: Record<string, Record<string, string>> = {
   '.cm-scroller': EDITOR_THEME['.cm-scroller'],
   '.cm-content': {
     paddingBlock: 'var(--boxel-sp-xs)',
-    caretColor: MONACO_DARK.cursor,
+    caretColor: darkColour('cursor'),
   },
   '.cm-gutters': {
     backgroundColor: 'transparent',
-    color: MONACO_DARK.lineNumber,
+    color: darkColour('line-number'),
     borderInlineEnd: 'none',
     userSelect: 'none',
   },
   '.cm-activeLineGutter': {
     backgroundColor: 'transparent',
-    color: MONACO_DARK.activeLineNumber,
+    color: darkColour('active-line-number'),
   },
   // Monaco marks the current line with a border, not a fill.
   '.cm-activeLine': {
     backgroundColor: 'transparent',
-    boxShadow: `inset 0 0 0 2px ${MONACO_DARK.activeLineBorder}`,
+    boxShadow: `inset 0 0 0 2px ${darkColour('active-line-border')}`,
   },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-    { backgroundColor: MONACO_DARK.selection },
-  '.cm-cursor, .cm-dropCursor': { borderInlineStartColor: MONACO_DARK.cursor },
+    { backgroundColor: darkColour('selection') },
+  '.cm-cursor, .cm-dropCursor': { borderInlineStartColor: darkColour('cursor') },
   '&.cm-focused .cm-matchingBracket': {
-    backgroundColor: MONACO_DARK.bracketMatch,
-    outline: `1px solid ${MONACO_DARK.bracketMatchBorder}`,
+    backgroundColor: darkColour('bracket-match'),
+    outline: `1px solid ${darkColour('bracket-match-border')}`,
   },
-  '.tok-comment': { color: MONACO_DARK.comment },
-  '.tok-string': { color: MONACO_DARK.string },
-  '.tok-number': { color: MONACO_DARK.number },
+  '.tok-comment': { color: 'var(--pretui-code-comment)' },
+  '.tok-string': { color: 'var(--pretui-code-string)' },
+  '.tok-number': { color: 'var(--pretui-code-number)' },
   '.tok-keyword, .tok-bool, .tok-atom, .tok-literal': {
-    color: MONACO_DARK.keyword,
+    color: 'var(--pretui-code-keyword)',
   },
-  '.tok-typeName, .tok-className': { color: MONACO_DARK.type },
-  '.tok-punctuation, .tok-operator': { color: MONACO_DARK.delimiter },
+  '.tok-typeName, .tok-className': { color: 'var(--pretui-code-name)' },
+  '.tok-punctuation, .tok-operator': { color: darkColour('delimiter') },
 };
 
 const DARK_READ_ONLY_THEME: Record<string, Record<string, string>> = {
@@ -191,7 +175,7 @@ const DARK_READ_ONLY_THEME: Record<string, Record<string, string>> = {
   '.cm-activeLine': { backgroundColor: 'transparent' },
   '.cm-activeLineGutter': {
     backgroundColor: 'transparent',
-    color: MONACO_DARK.lineNumber,
+    color: darkColour('line-number'),
   },
 };
 
@@ -497,26 +481,40 @@ export class CodeEditor extends Component<CodeEditorSignature> {
         .pretui-code-editor[data-read-only='true'] {
           background-color: color-mix(in oklch, var(--muted) 70%, var(--card));
         }
-        /* Code mode's colours. The tokens are set here as well as in the dark
-           CodeMirror theme so the read-only fallback, which is CodeBlock and
-           reads tokens, comes out close to the editor before it loads. */
+        /* Code mode's colours: Monaco's vs-dark on code mode's editor
+           background. These are the only definitions of them; the dark
+           CodeMirror theme reads the same properties. */
         .pretui-code-editor[data-dark='true'] {
-          --card: #413e4e;
-          --card-foreground: #d4d4d4;
-          --foreground: #d4d4d4;
-          --muted-foreground: #858585;
+          --pretui-code-editor-bg: #413e4e;
+          --pretui-code-editor-fg: #d4d4d4;
+          --pretui-code-editor-line-number: #858585;
+          --pretui-code-editor-active-line-number: #c6c6c6;
+          --pretui-code-editor-active-line-border: #282828;
+          --pretui-code-editor-selection: #264f78;
+          --pretui-code-editor-cursor: #aeafad;
+          --pretui-code-editor-bracket-match: #0064001a;
+          --pretui-code-editor-bracket-match-border: #888888;
+          --pretui-code-editor-delimiter: #dcdcdc;
           --pretui-code-comment: #608b4e;
           --pretui-code-string: #ce9178;
           --pretui-code-number: #b5cea8;
           --pretui-code-keyword: #569cd6;
           --pretui-code-name: #3dc9b0;
-          background-color: #413e4e;
-          color: #d4d4d4;
+          background-color: var(--pretui-code-editor-bg);
+          color: var(--pretui-code-editor-fg);
           color-scheme: dark;
         }
         .pretui-code-editor[data-dark='true'][data-read-only='true'] {
-          --card: #606060;
-          background-color: #606060;
+          --pretui-code-editor-bg: #606060;
+        }
+        /* The CodeBlock shown before the editor loads reads the theme's
+           tokens, so they are pointed at code mode's colours on it alone,
+           close to the editor it stands in for. */
+        .pretui-code-editor[data-dark='true'] .pretui-code-editor-fallback {
+          --card: var(--pretui-code-editor-bg);
+          --card-foreground: var(--pretui-code-editor-fg);
+          --foreground: var(--pretui-code-editor-fg);
+          --muted-foreground: var(--pretui-code-editor-line-number);
         }
         .pretui-code-editor .pretui-code-editor-fallback {
           background-color: transparent;

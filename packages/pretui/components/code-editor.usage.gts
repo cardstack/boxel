@@ -300,17 +300,17 @@ class CodeEditorUsage extends Component {
     <style scoped>
       .pretui-codeeditor-demo {
         display: grid;
-        gap: var(--space-3, 8px);
-        max-width: 620px;
+        gap: var(--boxel-sp-xs);
+        max-width: 38.75rem;
       }
       .pretui-codeeditor-note {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .pretui-codeeditor-cap {
-        margin: var(--space-3, 8px) 0 0;
-        font-size: var(--text-ui-xs, 10.5px);
+        margin: var(--boxel-sp-xs) 0 0;
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted-foreground);
