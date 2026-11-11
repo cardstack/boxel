@@ -1,10 +1,12 @@
-// Where the OAuth provider keeps what it stores: one table per kind of object
-// the library hands its adapter, each arriving with the work that first
+// Where the OAuth provider keeps what it stores: a table for each kind of
+// object the library hands its adapter, each arriving with the work that first
 // stores it. A kind with no table yet is refused, never kept in memory, which
 // would lose it on restart and differ between the realm server's processes.
+// Short-lived objects share `oauth_provider_objects` (`objects.ts`).
 
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
+import { ObjectAdapter } from './objects.ts';
 
 export class OAuthProviderStorageError extends Error {
   name = 'OAuthProviderStorageError';
@@ -19,6 +21,8 @@ export function oauthProviderAdapter(
     switch (name) {
       case 'Client':
         return new DynamicClientAdapter(dbAdapter);
+      case 'Interaction':
+        return new ObjectAdapter(dbAdapter, name);
       default:
         throw new OAuthProviderStorageError(
           `the OAuth provider has no storage for ${name}`,

@@ -476,6 +476,7 @@ module(basename(import.meta.filename), function () {
         token_endpoint_auth_methods_supported: ['none'],
         grant_types_supported: ['authorization_code'],
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
+        authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
         registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
       });
       assert.strictEqual(
@@ -498,7 +499,6 @@ module(basename(import.meta.filename), function () {
       for (let path of [
         OPENID_DISCOVERY,
         '/_oauth-provider/jwks',
-        '/_oauth-provider/auth',
         '/_oauth-provider/token',
       ]) {
         let response = await request.get(path);

@@ -55,6 +55,7 @@ import {
   type OAuthProviderService,
 } from './lib/oauth-provider/provider.ts';
 import type { NewClientLimit } from './lib/oauth-provider/new-client-limit.ts';
+import type { CallerLimit } from './lib/oauth-provider/caller-limit.ts';
 import type { OAuthResourceDefinition } from './lib/oauth-provider/registry.ts';
 import {
   appOrigin,
@@ -775,6 +776,7 @@ export class RealmServer {
     googleSignIn,
     oauthProvider,
     oauthNewClientLimit,
+    oauthAuthorizationLimit,
     __testOnlyOAuthResources,
   }: {
     serverURL: URL;
@@ -846,6 +848,9 @@ export class RealmServer {
     // The provider's limit on new clients. Unset, the default
     // (`new-client-limit.ts`).
     oauthNewClientLimit?: NewClientLimit;
+    // The provider's limit on starting a flow. Unset, the default
+    // (`authorization.ts`).
+    oauthAuthorizationLimit?: CallerLimit;
     // Resources a test adds to the provider's registry. main.ts never passes
     // it: production resources are declared in the registry's code.
     __testOnlyOAuthResources?: OAuthResourceDefinition[];
@@ -933,6 +938,7 @@ export class RealmServer {
           domainsForPublishedRealms?.boxelSpace,
         ].filter((domain): domain is string => Boolean(domain)),
         newClientLimit: oauthNewClientLimit,
+        authorizationLimit: oauthAuthorizationLimit,
         testOnlyResources: __testOnlyOAuthResources,
       });
     }

@@ -1,4 +1,13 @@
 import {
+  callerLimitFormat,
+  parseCallerLimit,
+  type CallerLimit,
+} from './caller-limit.ts';
+import {
+  DEFAULT_AUTHORIZATION_LIMIT,
+  OAUTH_AUTHORIZATION_RATE_LIMIT_VAR,
+} from './authorization.ts';
+import {
   DEFAULT_NEW_CLIENT_LIMIT,
   OAUTH_CLIENT_RATE_LIMIT_VAR,
   parseNewClientLimit,
@@ -71,7 +80,7 @@ export function readNewClientLimit(
   let limit = parseNewClientLimit(spec);
   if (!limit) {
     throw new OAuthProviderConfigError(
-      `${OAUTH_CLIENT_RATE_LIMIT_VAR} must be named parts, each optional: address, network and all as requests/windowSeconds, and alert as a count below all's requests, for example address=20/3600,network=100/3600,all=2000/3600,alert=500, not "${spec}"`,
+      `${OAUTH_CLIENT_RATE_LIMIT_VAR} must be ${callerLimitFormat(DEFAULT_NEW_CLIENT_LIMIT)}, not "${spec}"`,
     );
   }
   return limit;
@@ -111,4 +120,23 @@ export function parseOAuthProviderConfig(value: unknown): OAuthProviderConfig {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// The limit on starting a flow (see `authorization.ts`). Read only when the
+// provider is on. Unset, the default; a value that is not a limit stops the
+// server.
+export function readAuthorizationLimit(
+  env: Record<string, string | undefined>,
+): CallerLimit {
+  let spec = env[OAUTH_AUTHORIZATION_RATE_LIMIT_VAR]?.trim();
+  if (!spec) {
+    return DEFAULT_AUTHORIZATION_LIMIT;
+  }
+  let limit = parseCallerLimit(spec, DEFAULT_AUTHORIZATION_LIMIT);
+  if (!limit) {
+    throw new OAuthProviderConfigError(
+      `${OAUTH_AUTHORIZATION_RATE_LIMIT_VAR} must be ${callerLimitFormat(DEFAULT_AUTHORIZATION_LIMIT)}, not "${spec}"`,
+    );
+  }
+  return limit;
 }

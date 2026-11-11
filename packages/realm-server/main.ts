@@ -3,6 +3,7 @@ import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
 import {
+  readAuthorizationLimit,
   readNewClientLimit,
   readOAuthProviderConfig,
 } from './lib/oauth-provider/config.ts';
@@ -480,6 +481,9 @@ const oauthProvider = readOAuthProviderConfig(process.env, {
 });
 const oauthNewClientLimit = oauthProvider
   ? readNewClientLimit(process.env)
+  : undefined;
+const oauthAuthorizationLimit = oauthProvider
+  ? readAuthorizationLimit(process.env)
   : undefined;
 
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
@@ -1002,7 +1006,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
-    ...(oauthProvider ? { oauthProvider, oauthNewClientLimit } : {}),
+    ...(oauthProvider
+      ? { oauthProvider, oauthNewClientLimit, oauthAuthorizationLimit }
+      : {}),
   });
 
   const secureHttpServer =
