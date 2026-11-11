@@ -250,7 +250,8 @@ export function createOAuthProvider({
     // Set, rather than left to the library's default, so a client may
     // register for the refresh grant; the library allows the grant only once
     // this is set or `offline_access` is a scope. Refresh tokens follow the
-    // user's choice at consent, which no flow records yet, so none is issued.
+    // renewal choice a flow's consent decision records, which no grant
+    // carries until a flow finishes into one, so none is issued.
     issueRefreshToken: async () => false,
     // The library accepts only S256 challenges; this makes one required of
     // every client, not just public ones.

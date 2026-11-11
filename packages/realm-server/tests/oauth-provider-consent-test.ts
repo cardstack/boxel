@@ -30,6 +30,7 @@ import {
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { getMatrixAdminToken, registerUser } from '../synapse.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { revokeUserSessions } from '@cardstack/runtime-common/db-queries/user-queries';
 import {
   findConsentDecision,
   sha256Hex,
@@ -218,16 +219,23 @@ module(basename(import.meta.filename), function (hooks) {
     return interactionUid(response.headers.location);
   }
 
+  interface Caller {
+    authorization?: string;
+    origin?: string;
+    host?: string;
+  }
+
   function details(
     uid: string,
     {
       authorization,
       origin = SECURE_ORIGIN,
-    }: { authorization?: string; origin?: string } = {},
+      host = serverURL.host,
+    }: Caller = {},
   ) {
     let request = supertest(server!)
       .get(`/_oauth-provider/consent/${uid}`)
-      .set('Host', serverURL.host)
+      .set('Host', host)
       .set('Origin', origin);
     return authorization
       ? request.set('Authorization', authorization)
@@ -240,11 +248,12 @@ module(basename(import.meta.filename), function (hooks) {
     {
       authorization,
       origin = SECURE_ORIGIN,
-    }: { authorization?: string; origin?: string } = {},
+      host = serverURL.host,
+    }: Caller = {},
   ) {
     let request = supertest(server!)
       .post(`/_oauth-provider/consent/${uid}`)
-      .set('Host', serverURL.host)
+      .set('Host', host)
       .set('Origin', origin)
       .set('Content-Type', 'application/json');
     if (authorization) {
@@ -340,6 +349,55 @@ module(basename(import.meta.filename), function (hooks) {
       let read = await details(uid, { authorization: session });
       assert.strictEqual(read.status, 401);
       assert.deepEqual(read.body, { error: 'signed-out' });
+    });
+
+    test("a secure window session is refused once its user's sessions are revoked", async function (assert) {
+      let user = await matrixAccount();
+      let uid = await startFlow(await register());
+      let session = await secureSessionAuth(db, user);
+      await revokeUserSessions(db, user);
+      // A token minted in the same second as the revocation survives it, so
+      // the revocation is placed a second later to cover this one.
+      await db.execute(
+        `UPDATE users SET sessions_revoked_at = sessions_revoked_at + 1
+           WHERE matrix_user_id = $1`,
+        { bind: [user] },
+      );
+      let [{ live }] = (await db.execute(
+        `SELECT count(*)::int AS live FROM secure_sessions
+           WHERE user_id = $1 AND expires_at > now()`,
+        { bind: [user] },
+      )) as { live: number }[];
+      assert.strictEqual(live, 1, "precondition: the session's row is live");
+
+      let read = await details(uid, { authorization: session });
+      assert.strictEqual(read.status, 401);
+      assert.deepEqual(read.body, { error: 'signed-out' });
+      let decided = await decide(
+        uid,
+        { decision: 'allow', renew: true },
+        { authorization: session },
+      );
+      assert.strictEqual(decided.status, 401);
+      assert.strictEqual(await findConsentDecision(db, uid), undefined);
+    });
+
+    test("the routes answer only on the issuer's host", async function (assert) {
+      let user = await matrixAccount();
+      let uid = await startFlow(await register());
+      let session = await secureSessionAuth(db, user);
+      let caller = { authorization: session, host: 'published.example.test' };
+      let read = await details(uid, caller);
+      assert.strictEqual(read.status, 404);
+      assert.strictEqual(read.body.app, undefined, 'no consent details');
+      let decided = await decide(
+        uid,
+        { decision: 'allow', renew: true },
+        caller,
+      );
+      assert.strictEqual(decided.status, 404);
+      assert.strictEqual(decided.body.ticket, undefined, 'no ticket');
+      assert.strictEqual(await findConsentDecision(db, uid), undefined);
     });
   });
 
@@ -550,6 +608,9 @@ module(basename(import.meta.filename), function (hooks) {
         (await findConsentDecision(db, uid))!.allowed,
         'the first decision stands',
       );
+      let read = await details(uid, { authorization: session });
+      assert.strictEqual(read.status, 409, 'a decided flow shows no consent');
+      assert.deepEqual(read.body, { error: 'decided' });
 
       let other = await secureSessionAuth(db, await matrixAccount());
       let byAnother = await decide(
@@ -562,6 +623,50 @@ module(basename(import.meta.filename), function (hooks) {
         409,
         'another user cannot decide it either',
       );
+    });
+
+    test('a decision whose ticket cannot be stored leaves the flow undecided', async function (assert) {
+      let session = await secureSessionAuth(db, await matrixAccount());
+      let uid = await startFlow(await register());
+      await db.execute(`
+        CREATE FUNCTION refuse_consent_ticket() RETURNS trigger AS $$
+        BEGIN
+          IF NEW.kind = 'ConsentTicket' THEN
+            RAISE EXCEPTION 'no tickets in this test';
+          END IF;
+          RETURN NEW;
+        END $$ LANGUAGE plpgsql
+      `);
+      await db.execute(`
+        CREATE TRIGGER refuse_consent_ticket
+          BEFORE INSERT ON oauth_provider_objects
+          FOR EACH ROW EXECUTE FUNCTION refuse_consent_ticket()
+      `);
+      try {
+        let failed = await decide(
+          uid,
+          { decision: 'allow', renew: true },
+          { authorization: session },
+        );
+        assert.strictEqual(failed.status, 500);
+        assert.strictEqual(
+          await findConsentDecision(db, uid),
+          undefined,
+          'no decision is left without its ticket',
+        );
+      } finally {
+        await db.execute(
+          `DROP TRIGGER refuse_consent_ticket ON oauth_provider_objects`,
+        );
+        await db.execute(`DROP FUNCTION refuse_consent_ticket()`);
+      }
+      let retried = await decide(
+        uid,
+        { decision: 'allow', renew: true },
+        { authorization: session },
+      );
+      assert.strictEqual(retried.status, 201, 'the flow can be decided again');
+      assert.strictEqual(typeof retried.body.ticket, 'string');
     });
 
     test('a decision that is not one is refused', async function (assert) {
@@ -645,7 +750,8 @@ module(basename(import.meta.filename), function (hooks) {
     test('no ticket or interaction ID is stored readable, logged or sent to Sentry', async function (assert) {
       let user = await matrixAccount({ email: 'consent-secret@example.test' });
       let session = await secureSessionAuth(db, user);
-      let clientId = await register();
+      let clientName = 'Consent Secret Marker App 3f9d';
+      let clientId = await register({ clientName });
       let uid = '';
       let ticket = '';
       let telemetry = await telemetryDuring(async () => {
@@ -671,10 +777,15 @@ module(basename(import.meta.filename), function (hooks) {
         telemetry.logs.includes('consent allowed'),
         'consents allowed are logged',
       );
+      assert.true(
+        telemetry.logs.includes(clientId),
+        'precondition: the consent log lines name the client',
+      );
       assertNoSecrets(assert, telemetry, {
         'interaction ID': uid,
         ticket,
         email: 'consent-secret@example.test',
+        "client's self-chosen name": clientName,
       });
       let stored = await rawObjects();
       assert.true(

@@ -21,11 +21,15 @@ import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
 import { secureSessionClient, type AccountContact } from '../secure-session.ts';
 import { retrieveUserSessionClaim } from '../../utils/jwt.ts';
 import { appName, type AppName } from './app-name.ts';
-import { FIXED_ERROR_PAGES } from './authorization.ts';
+import {
+  findClient,
+  FIXED_ERROR_PAGES,
+  type LibraryClient,
+} from './authorization.ts';
 import {
   CONSENT_TICKET_TTL_SECONDS,
-  createConsentDecision,
-  storeConsentTicket,
+  decideFlow,
+  findConsentDecision,
 } from './objects.ts';
 import type { OAuthResource, OAuthScope } from './registry.ts';
 
@@ -73,12 +77,6 @@ export interface ConsentDecisionRequest {
   renew: boolean;
 }
 
-interface LibraryClient {
-  clientId: string;
-  clientName?: string;
-  grantTypes?: readonly string[];
-}
-
 // A flow awaiting its decision, as the provider holds it.
 interface Flow {
   client: LibraryClient;
@@ -98,7 +96,8 @@ export interface ConsentDeps {
   accountContact: AccountContactLookup;
 }
 
-// `GET /_oauth-provider/consent/:uid`.
+// `GET /_oauth-provider/consent/:uid`. A flow already decided answers 409
+// `decided`.
 export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
   return async function handleConsentDetails(ctxt) {
     let user = await secureWindowUser(ctxt, deps);
@@ -108,6 +107,10 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
     let flow = await findFlow(deps, ctxt.params.uid);
     if (!flow) {
       return respond(ctxt, 404, { error: FIXED_ERROR_PAGES.expired });
+    }
+    // A decided flow shows no consent: the page says it was answered.
+    if (await findConsentDecision(deps.dbAdapter, ctxt.params.uid)) {
+      return respond(ctxt, 409, { error: 'decided' });
     }
     let account: AccountContact;
     try {
@@ -145,7 +148,9 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
 }
 
 // `POST /_oauth-provider/consent/:uid`: Allow or Deny, and whether to renew.
-// Answers a ticket that finishes the flow. A flow is decided once.
+// Answers a ticket that finishes the flow. A flow is decided once, and the
+// decision and its ticket are stored together or not at all, so a failure
+// leaves the flow open to decide again.
 export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
   return async function handleConsentDecision(ctxt) {
     let user = await secureWindowUser(ctxt, deps);
@@ -162,7 +167,7 @@ export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
     }
     let allowed = request.decision === 'allow';
     let renew = allowed && request.renew && renewalOffered(flow.client);
-    let decided = await createConsentDecision(
+    let ticket = await decideFlow(
       deps.dbAdapter,
       ctxt.params.uid,
       {
@@ -177,16 +182,17 @@ export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
           ]),
         ),
       },
-      flow.remainingSeconds,
+      {
+        decisionExpiresIn: flow.remainingSeconds,
+        ticketExpiresIn: Math.min(
+          CONSENT_TICKET_TTL_SECONDS,
+          flow.remainingSeconds,
+        ),
+      },
     );
-    if (!decided) {
+    if (!ticket) {
       return respond(ctxt, 409, { error: 'decided' });
     }
-    let ticket = await storeConsentTicket(
-      deps.dbAdapter,
-      ctxt.params.uid,
-      Math.min(CONSENT_TICKET_TTL_SECONDS, flow.remainingSeconds),
-    );
     log.info(
       `consent ${allowed ? 'allowed' : 'denied'}: ${describe(
         flow,
@@ -280,21 +286,6 @@ async function findFlow(
     resources,
     remainingSeconds,
   };
-}
-
-async function findClient(
-  provider: Provider,
-  clientId: unknown,
-): Promise<LibraryClient | undefined> {
-  if (typeof clientId !== 'string' || clientId.length === 0) {
-    return undefined;
-  }
-  try {
-    return (await provider.Client.find(clientId)) as LibraryClient | undefined;
-  } catch {
-    // A stored client the library can no longer load is no client.
-    return undefined;
-  }
 }
 
 function nameOf(flow: Flow, preRegistered: ReadonlySet<string>): AppName {
