@@ -17,10 +17,13 @@ import {
   sanitizeLoggingCorrelationId,
 } from './prerender-headers.ts';
 
-// How a write was made. The realm server sets `operations`, `system`,
-// `deploy` and `mcp` itself. `host`, `ai-assistant` and `boxel-cli` are what
-// a client may claim in `X-Boxel-Write-Channel`. `api` is a write whose
-// request names no channel.
+// How a write was made: the client that made it, not the endpoint it reached,
+// so a batch sent through `/_operations` records the channel its request
+// claims. `host`, `ai-assistant` and `boxel-cli` are what a client may claim
+// in `X-Boxel-Write-Channel`. `operations`, `system`, `deploy` and `mcp` are
+// the realm server's own: only a writer in the realm server names one, in
+// code, and a header claiming one is ignored. `api` is a write whose request
+// names no channel.
 export type WriteChannel =
   | 'host'
   | 'ai-assistant'
