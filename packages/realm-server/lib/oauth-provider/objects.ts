@@ -5,26 +5,31 @@
 // Each object's value is a bearer secret: an interaction's ID is in the
 // browser's URL, and an error reference is too. A row is stored and found only
 // by the SHA-256 of that value, and never holds the value itself (ADR 021
-// §1.2). The library copies an object's ID into its payload, as `jti` and, for
-// an interaction, inside the URL it resumes at, so the adapter takes every
-// copy out before storing and puts it back when it finds the row.
+// §1.2). The library copies an interaction's ID into its payload twice, as
+// `jti` and in `returnTo`, the URL the flow resumes at. The interaction
+// adapter leaves both out and rebuilds them when it finds the row. A payload
+// that still holds the value anywhere else is refused, never stored.
 //
 // A row past its expiry reads as missing, whether or not it has been deleted.
+// Each store first deletes rows that have expired, so abandoned flows and
+// error pages nobody opened don't pile up.
 
 import { createHash, randomBytes } from 'crypto';
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
 
-// Stands in for the object's value wherever it appeared in the payload.
-const VALUE_PLACEHOLDER = '[oauth-provider-object-value]';
-
 const ERROR_REFERENCE_KIND = 'ErrorReference';
 
-// How long an error reference lasts (spec A2).
+// How long an error reference lasts: as long as the flow it ends could have
+// taken (`INTERACTION_TTL_SECONDS`).
 export const ERROR_REFERENCE_TTL_SECONDS = 10 * 60;
 
 export function sha256Hex(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+export class OAuthProviderObjectError extends Error {
+  name = 'OAuthProviderObjectError';
 }
 
 async function storeObject(
@@ -34,18 +39,22 @@ async function storeObject(
   payload: Record<string, unknown>,
   expiresInSeconds: number,
 ): Promise<void> {
+  let stored = JSON.stringify(payload);
+  if (stored.includes(jsonEscaped(value))) {
+    throw new OAuthProviderObjectError(
+      `the OAuth provider's ${kind} holds its own value, so it can't be stored`,
+    );
+  }
+  await dbAdapter.execute(
+    `DELETE FROM oauth_provider_objects WHERE expires_at <= now()`,
+  );
   await dbAdapter.execute(
     `INSERT INTO oauth_provider_objects (kind, id_hash, payload, expires_at)
        VALUES ($1, decode($2, 'hex'), $3::jsonb, now() + make_interval(secs => $4))
        ON CONFLICT (kind, id_hash) DO UPDATE
          SET payload = EXCLUDED.payload, expires_at = EXCLUDED.expires_at`,
     {
-      bind: [
-        kind,
-        sha256Hex(value),
-        withoutValue(payload, value),
-        expiresInSeconds,
-      ],
+      bind: [kind, sha256Hex(value), stored, expiresInSeconds],
     },
   );
 }
@@ -60,7 +69,7 @@ async function findObject(
        WHERE kind = $1 AND id_hash = decode($2, 'hex') AND expires_at > now()`,
     { bind: [kind, sha256Hex(value)] },
   )) as { payload: unknown }[];
-  return row ? withValue(row.payload, value) : undefined;
+  return row ? asRecord(row.payload) : undefined;
 }
 
 // Deletes the object and answers what it held, if it was there and current.
@@ -76,7 +85,7 @@ async function takeObject(
        RETURNING payload, expires_at > now() AS current`,
     { bind: [kind, sha256Hex(value)] },
   )) as { payload: unknown; current: boolean }[];
-  return row?.current ? withValue(row.payload, value) : undefined;
+  return row?.current ? asRecord(row.payload) : undefined;
 }
 
 async function destroyObject(
@@ -91,17 +100,11 @@ async function destroyObject(
   );
 }
 
-// The payload as stored: no `jti`, and the value replaced wherever else it
-// appears. The value is a random string the library or Boxel generated, so it
-// appears nowhere by chance.
-function withoutValue(payload: Record<string, unknown>, value: string): string {
-  let { jti: _jti, ...rest } = payload;
-  return JSON.stringify(rest).split(jsonEscaped(value)).join(VALUE_PLACEHOLDER);
-}
-
-function withValue(stored: unknown, value: string): Record<string, unknown> {
-  let text = typeof stored === 'string' ? stored : JSON.stringify(stored);
-  return JSON.parse(text.split(VALUE_PLACEHOLDER).join(jsonEscaped(value)));
+function asRecord(stored: unknown): Record<string, unknown> {
+  return (typeof stored === 'string' ? JSON.parse(stored) : stored) as Record<
+    string,
+    unknown
+  >;
 }
 
 // The value as it appears inside a JSON string.
@@ -109,16 +112,19 @@ function jsonEscaped(value: string): string {
   return JSON.stringify(value).slice(1, -1);
 }
 
-// The library's adapter for a kind of object kept in
-// `oauth_provider_objects`. An interaction is stored, found and deleted by its
-// ID; the library looks up nothing else for one.
-export class ObjectAdapter implements Adapter {
-  #dbAdapter: DBAdapter;
-  #kind: string;
+const INTERACTION_KIND = 'Interaction';
 
-  constructor(dbAdapter: DBAdapter, kind: string) {
+// The library's adapter for its interactions. An interaction is stored, found
+// and deleted by its ID; the library looks up nothing else for one.
+// `resumeURL` builds the URL the flow resumes at from the issuer and the ID,
+// never from the request that started the flow.
+export class InteractionAdapter implements Adapter {
+  #dbAdapter: DBAdapter;
+  #resumeURL: (id: string) => string;
+
+  constructor(dbAdapter: DBAdapter, resumeURL: (id: string) => string) {
     this.#dbAdapter = dbAdapter;
-    this.#kind = kind;
+    this.#resumeURL = resumeURL;
   }
 
   async upsert(
@@ -126,22 +132,29 @@ export class ObjectAdapter implements Adapter {
     payload: AdapterPayload,
     expiresIn: number,
   ): Promise<void> {
+    let { jti: _jti, returnTo: _returnTo, ...rest } = payload;
     await storeObject(
       this.#dbAdapter,
-      this.#kind,
+      INTERACTION_KIND,
       id,
-      payload as Record<string, unknown>,
+      rest as Record<string, unknown>,
       expiresIn,
     );
   }
 
   async find(id: string): Promise<AdapterPayload | undefined> {
-    let payload = await findObject(this.#dbAdapter, this.#kind, id);
-    return payload ? ({ ...payload, jti: id } as AdapterPayload) : undefined;
+    let payload = await findObject(this.#dbAdapter, INTERACTION_KIND, id);
+    return payload
+      ? ({
+          ...payload,
+          jti: id,
+          returnTo: this.#resumeURL(id),
+        } as AdapterPayload)
+      : undefined;
   }
 
   async destroy(id: string): Promise<void> {
-    await destroyObject(this.#dbAdapter, this.#kind, id);
+    await destroyObject(this.#dbAdapter, INTERACTION_KIND, id);
   }
 
   async findByUserCode(): Promise<never> {
@@ -161,7 +174,9 @@ export class ObjectAdapter implements Adapter {
   }
 
   #unused(method: string) {
-    return new Error(`the OAuth provider's ${this.#kind} has no ${method}`);
+    return new Error(
+      `the OAuth provider's ${INTERACTION_KIND} has no ${method}`,
+    );
   }
 }
 
@@ -172,7 +187,7 @@ export type AuthorizationRefusalReason =
   | 'unknown-client'
   | 'bad-redirect-uri'
   | 'library'
-  // Boxel's checks before the library (spec A9).
+  // Boxel's checks before the library (`checkAuthorizationRequest`).
   | 'unsupported-response-type'
   | 'pkce-required'
   | 'prompt-none'

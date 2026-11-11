@@ -6,28 +6,34 @@
 
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { ObjectAdapter } from './objects.ts';
+import { InteractionAdapter } from './objects.ts';
 
 export class OAuthProviderStorageError extends Error {
   name = 'OAuthProviderStorageError';
 }
 
 // The library's `adapter` setting: called with each kind's name the first
-// time the library stores or finds one of that kind.
+// time the library stores or finds one of that kind. `interactionResumeURL`
+// builds the URL an interaction resumes at, from the issuer.
 export function oauthProviderAdapter(
   dbAdapter: DBAdapter,
+  {
+    interactionResumeURL,
+  }: { interactionResumeURL?: (id: string) => string } = {},
 ): (name: string) => Adapter {
   return function adapterFor(name: string): Adapter {
     switch (name) {
       case 'Client':
         return new DynamicClientAdapter(dbAdapter);
       case 'Interaction':
-        return new ObjectAdapter(dbAdapter, name);
-      default:
-        throw new OAuthProviderStorageError(
-          `the OAuth provider has no storage for ${name}`,
-        );
+        if (!interactionResumeURL) {
+          break;
+        }
+        return new InteractionAdapter(dbAdapter, interactionResumeURL);
     }
+    throw new OAuthProviderStorageError(
+      `the OAuth provider has no storage for ${name}`,
+    );
   };
 }
 

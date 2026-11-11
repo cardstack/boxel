@@ -74,8 +74,9 @@ const DISCOVERY_FIELDS = [
 ] as const;
 const GRANT_TYPES_SERVED = ['authorization_code'];
 
-// How long the library keeps a flow's interaction, and its own session (spec
-// A2). The session never outlives a flow: Boxel drops it at the start of each.
+// How long the library keeps a flow's interaction, and its own session: long
+// enough for a person to sign in and consent, and no longer. The session never
+// outlives a flow: Boxel drops it at the start of each (ADR 021 §1.7).
 const INTERACTION_TTL_SECONDS = 10 * 60;
 const SESSION_TTL_SECONDS = 10 * 60;
 
@@ -139,7 +140,10 @@ export function startOAuthProvider({
     issuer,
     config,
     registry,
-    adapter: oauthProviderAdapter(dbAdapter),
+    adapter: oauthProviderAdapter(dbAdapter, {
+      interactionResumeURL: (id) =>
+        `${issuer}${OAUTH_AUTHORIZATION_PATH}/${id}`,
+    }),
     renderError: renderLibraryError({ dbAdapter, secureOriginURL }),
   });
   // Boxel's own apps, listed in code. None is listed yet.
@@ -354,6 +358,12 @@ export function createOAuthProvider({
       }`,
     );
   }
+  // In production TLS ends at the load balancer, so the library would take
+  // every request for plain HTTP: its cookies would lack `Secure`. It reads
+  // the scheme from `X-Forwarded-Proto` instead, which `serve.ts` sets from
+  // the issuer before every request, and which nothing else reads from the
+  // caller.
+  provider.proxy = true;
 
   // Runs around the library's own routing: after it builds the discovery
   // document, publish only the fields Boxel serves, with the registry's

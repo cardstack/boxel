@@ -9,7 +9,7 @@ import { startSentryCapture, type SentryEvent } from './sentry-capture.ts';
 //
 // The OAuth provider's tests drive an endpoint with known values (a token, a
 // code, an interaction ID, an error reference) and check that none of them is
-// in what this returns (`assertNoSecrets`), as ADR 021 §1.2 and spec §14 ask.
+// in what this returns (`assertNoSecrets`), as ADR 021 §1.2 asks.
 export interface CapturedTelemetry {
   logs: string;
   sentry: string;

@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'http';
 import type Koa from 'koa';
 import type Router from '@koa/router';
 import { fullRequestURL } from '../../middleware/index.ts';
@@ -39,12 +40,14 @@ export function registerOAuthProviderRoutes(
     handleErrorReturn,
   }: OAuthProviderService,
 ) {
-  let issuerHost = new URL(provider.issuer).host;
+  let issuerURL = new URL(provider.issuer);
+  let issuerHost = issuerURL.host;
   let callback = provider.callback();
   let serve = async (ctxt: Koa.Context) => {
     // The library writes the response itself. Headers already set on it,
     // such as CORS, stay.
     ctxt.respond = false;
+    asTheIssuerServes(ctxt.req, issuerURL);
     await callback(ctxt.req, ctxt.res);
   };
   let onIssuerHost =
@@ -81,4 +84,15 @@ export function registerOAuthProviderRoutes(
     `${OAUTH_ERROR_PATH}/:ref/return`,
     onIssuerHost(boxelOnly(handleErrorReturn)),
   );
+}
+
+// The library runs in proxy mode (`provider.ts`), so it reads the request's
+// scheme and host from forwarding headers. Before it sees a request, the
+// scheme is set to the issuer's, whatever the caller or a load balancer sent,
+// so its cookies are `Secure` exactly when the issuer is HTTPS. The forwarded
+// host is removed, so the library reads the host from `Host`, which has
+// already been checked against the issuer's.
+export function asTheIssuerServes(req: IncomingMessage, issuerURL: URL) {
+  req.headers['x-forwarded-proto'] = issuerURL.protocol.slice(0, -1);
+  delete req.headers['x-forwarded-host'];
 }

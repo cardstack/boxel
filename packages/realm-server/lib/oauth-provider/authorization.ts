@@ -153,7 +153,8 @@ function isAllowedAt(
 }
 
 // Boxel's checks on a request, after the rate limit and with the session
-// cookie already dropped (spec A9, steps 3 to 6). Answers the resources the
+// cookie already dropped: its shape, its resources, whether the client may use
+// them, and its scopes (ADR 021 §1.3, §1.4). Answers the resources the
 // request is for, or why it is refused. A request from a client the library
 // doesn't know is handed on, since the library refuses it itself.
 export function checkAuthorizationRequest(
@@ -177,12 +178,17 @@ export function checkAuthorizationRequest(
   let challengeMethod = single(query, 'code_challenge_method');
   let prompt = single(query, 'prompt');
   let scopeParam = single(query, 'scope');
+  // A repeated redirect URI or state is refused here too, rather than left to
+  // the library: which copy a check reads and which one a redirect uses must
+  // never differ.
   if (
     responseType === REPEATED ||
     challenge === REPEATED ||
     challengeMethod === REPEATED ||
     prompt === REPEATED ||
-    scopeParam === REPEATED
+    scopeParam === REPEATED ||
+    single(query, 'redirect_uri') === REPEATED ||
+    single(query, 'state') === REPEATED
   ) {
     return refuse('invalid_request', 'malformed');
   }
@@ -344,6 +350,7 @@ export function authorizationHandler({
       let returnable =
         client !== undefined &&
         typeof redirectUri === 'string' &&
+        state !== REPEATED &&
         client.redirectUriAllowed(redirectUri);
       log.info(
         `authorization refused: ${check.reason} (${check.error}), client ${client?.clientId ?? 'unknown'}`,

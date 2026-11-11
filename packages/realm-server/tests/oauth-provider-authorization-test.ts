@@ -23,7 +23,11 @@ import {
   assertNoSecrets,
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
-import { ObjectAdapter, sha256Hex } from '../lib/oauth-provider/objects.ts';
+import {
+  InteractionAdapter,
+  sha256Hex,
+} from '../lib/oauth-provider/objects.ts';
+import { asTheIssuerServes } from '../lib/oauth-provider/serve.ts';
 import { appName } from '../lib/oauth-provider/app-name.ts';
 import {
   scrubRequestTelemetry,
@@ -201,7 +205,15 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
     },
     authorize(
       params: Params,
-      { forwardedFor, cookie }: { forwardedFor?: string; cookie?: string } = {},
+      {
+        forwardedFor,
+        cookie,
+        headers = {},
+      }: {
+        forwardedFor?: string;
+        cookie?: string;
+        headers?: Record<string, string>;
+      } = {},
     ) {
       let query = new URLSearchParams();
       for (let [name, value] of Object.entries(params)) {
@@ -217,6 +229,9 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
       }
       if (cookie) {
         request = request.set('Cookie', cookie);
+      }
+      for (let [name, value] of Object.entries(headers)) {
+        request = request.set(name, value);
       }
       return request;
     },
@@ -243,9 +258,13 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
       return JSON.stringify(rows);
     },
     interaction(uid: string) {
-      return new ObjectAdapter(db!, 'Interaction').find(uid);
+      return new InteractionAdapter(db!, resumeURL).find(uid);
     },
   };
+}
+
+function resumeURL(uid: string): string {
+  return `${ISSUER}/_oauth-provider/auth/${uid}`;
 }
 
 // A request every check passes, for the client registered with `REDIRECT_URI`.
@@ -519,6 +538,34 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a repeated parameter is refused as malformed, and a repeated redirect URI or state offers nothing to return to', async function (assert) {
+      let clientId = await server.register();
+      let cases: [string, Params, boolean][] = [
+        ['response_type twice', { response_type: ['code', 'code'] }, true],
+        ['scope twice', { scope: ['boxel:read', 'boxel:write'] }, true],
+        [
+          'redirect_uri twice',
+          { redirect_uri: [REDIRECT_URI, 'https://evil.example/callback'] },
+          false,
+        ],
+        ['state twice', { state: ['one', 'two'] }, false],
+      ];
+      for (let [name, overrides, returnOffered] of cases) {
+        let response = await server.authorize(validParams(clientId, overrides));
+        assert.strictEqual(response.status, 303, `${name}: ${response.text}`);
+        let found = await details(
+          errorReference(assert, response.headers.location),
+        );
+        assert.strictEqual(found.body.error, 'invalid_request', name);
+        assert.strictEqual(found.body.reason, 'malformed', name);
+        assert.strictEqual(
+          found.body.returnOffered,
+          returnOffered,
+          `${name}: "Return" offered`,
+        );
+      }
+    });
+
     test("an unknown client and a redirect URI the client didn't register reach the error page with nothing to return to", async function (assert) {
       let clientId = await server.register();
       let unknown = await server.authorize(
@@ -723,9 +770,10 @@ module(basename(import.meta.filename), function () {
 
       let interaction = await server.interaction(uid);
       assert.strictEqual(interaction?.jti, uid, 'found with its ID restored');
-      assert.true(
-        String(interaction?.returnTo).endsWith(`/${uid}`),
-        'its resume URL is restored',
+      assert.strictEqual(
+        interaction?.returnTo,
+        resumeURL(uid),
+        'its resume URL is rebuilt from the issuer',
       );
 
       await server
@@ -743,6 +791,82 @@ module(basename(import.meta.filename), function () {
         404,
         'an expired error is gone',
       );
+
+      let next = await server.authorize(validParams(clientId));
+      let rowsAfter = await server.objectRows();
+      assert.deepEqual(
+        rowsAfter.map(({ kind }) => kind),
+        ['Interaction'],
+        'storing the next object deletes the expired ones',
+      );
+      assert.ok(
+        await server.interaction(interactionUid(next.headers.location)),
+        'and keeps the new one',
+      );
+    });
+
+    test("what a client sends is stored as it sent it, and a payload holding its own ID isn't stored", async function (assert) {
+      let clientId = await server.register();
+      let state = '[oauth-provider-object-value] state';
+      let started = await server.authorize(validParams(clientId, { state }));
+      let interaction = await server.interaction(
+        interactionUid(started.headers.location),
+      );
+      assert.strictEqual(
+        (interaction!.params as Record<string, unknown>).state,
+        state,
+      );
+
+      let id = 'an-interaction-id-a8e1f0';
+      await assert.rejects(
+        new InteractionAdapter(server.db(), resumeURL).upsert(
+          id,
+          { params: { state: `before ${id} after` } },
+          60,
+        ),
+        /holds its own value/,
+      );
+      assert.false(
+        (await server.rawObjects()).includes(id),
+        'nothing holding it was written',
+      );
+    });
+
+    test('the library takes its scheme from the issuer and its host from Host, whatever forwarding headers the caller sends', async function (assert) {
+      let clientId = await server.register();
+      let response = await server.authorize(validParams(clientId), {
+        headers: {
+          'X-Forwarded-Proto': 'https',
+          'X-Forwarded-Host': 'evil.example',
+        },
+      });
+      assert.strictEqual(response.status, 303, response.text);
+      let cookies = ([] as string[]).concat(
+        response.headers['set-cookie'] ?? [],
+      );
+      let interactionCookies = cookies.filter((cookie) =>
+        cookie.startsWith('_interaction='),
+      );
+      assert.strictEqual(interactionCookies.length, 1, 'the flow is bound');
+      assert.false(
+        /;\s*secure/i.test(interactionCookies[0]),
+        'not Secure, since this issuer is plain HTTP',
+      );
+    });
+
+    test("before the library sees a request, its scheme is the issuer's and any forwarded host is gone", function (assert) {
+      let req = {
+        headers: {
+          host: 'realm-server.example',
+          'x-forwarded-proto': 'http',
+          'x-forwarded-host': 'evil.example',
+        },
+      } as unknown as Parameters<typeof asTheIssuerServes>[0];
+      asTheIssuerServes(req, new URL('https://realm-server.example'));
+      assert.deepEqual(req.headers, {
+        host: 'realm-server.example',
+        'x-forwarded-proto': 'https',
+      });
     });
 
     test('the interaction and error routes reach logs and Sentry only by fixed labels', async function (assert) {
