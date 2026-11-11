@@ -17,7 +17,7 @@ A text field for filtering or querying, with a clear button that appears once it
 
 `clear` sets the internal value to `''` **and** calls `@onInput('')`, so a controlled parent is told about the clear rather than having to notice it, then moves focus back to the input (the button leaves with the text).
 
-**`@display='collapsed'`** renders a square button, the height of the field, that opens the full field over the row. It opens on click only (Enter and Space click it), never on focus, so Tab reaches the button without changing the page. Escape or moving focus away closes it; Escape returns focus to the button and does not bubble, so an enclosing dialog stays open. `--pretui-search-open-w` (default 15rem) sets the open width.
+**`@display='collapsed'`** renders a square button, the height of the field, that opens the full field over the row. It opens on click only (Enter and Space click it), never on focus, so Tab reaches the button without changing the page. Escape or moving focus away closes it; Escape returns focus to the button and does not bubble, so an enclosing dialog stays open. The open field is in a **Popup** layer, fixed-positioned, so a clipping container such as LayoutControl's toolbar can't cut it; it lies over the square toward the inline end (leftward in RTL), flips when that side has no room, and is never wider than the roomier side. There is no backdrop: a click outside closes it and still reaches what was clicked. `--pretui-search-open-w` (default 15rem) sets the open width.
 
 There is no debounce. `@onInput` fires per keystroke, and throttling is the caller's job — which is right for a component that cannot know whether the filter is a synchronous array filter or a network round trip.
 
@@ -49,7 +49,7 @@ Gaps, in order:
 
 ## Theming
 
-Input's field style: a `--field` face with `--foreground` text, an `--input` edge, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. The magnifier is the kit's own 14px `--muted-foreground` glyph, not BoxelInput's search variant, so hover, invalid and placeholder match Input.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`, or the row height a LayoutControl's `@controlHeight` sets, `--pretui-row-h`, which wins) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. The magnifier is the kit's own 14px `--muted-foreground` glyph, not BoxelInput's search variant, so hover, invalid and placeholder match Input.
 
 It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming.
 

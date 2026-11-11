@@ -342,6 +342,11 @@ module('Integration | register', function (hooks) {
     assert
       .dom(error('password'))
       .hasText('Password must be at least 8 characters long');
+    await fillIn('[data-test-password-field]', 'a'.repeat(513));
+    await triggerEvent('[data-test-password-field]', 'blur');
+    assert
+      .dom(error('password'))
+      .hasText('Password must be at most 512 characters long');
     await fillIn('[data-test-password-field]', 'longenough1');
     await fillIn('[data-test-confirm-password-field]', 'different1');
     await triggerEvent('[data-test-confirm-password-field]', 'blur');
@@ -548,6 +553,25 @@ module('Integration | register', function (hooks) {
     );
     await click('[data-test-cancel-btn]');
     assert.deepEqual(assigned, ['cli-sign-in?port=1']);
+  });
+
+  test('the new password fields state the password rule', async function (assert) {
+    servers.realmServer('GET _secure-origin', () => ({
+      data: { attributes: { matrixServerName: 'localhost' } },
+    }));
+    await render(<template><Register @signInURL='sign-in' /></template>);
+    for (let field of [
+      '[data-test-password-field]',
+      '[data-test-confirm-password-field]',
+    ]) {
+      assert
+        .dom(field)
+        .hasAttribute('autocomplete', 'new-password')
+        .hasAttribute('minlength', '8')
+        .hasAttribute('passwordrules', 'minlength: 8; maxlength: 512;')
+        // A browser cuts a pasted password to `maxlength` without a word.
+        .doesNotHaveAttribute('maxlength');
+    }
   });
 
   test('the email validation link lands on a page that says so', async function (assert) {

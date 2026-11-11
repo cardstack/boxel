@@ -327,7 +327,7 @@ export class Button extends Component<ButtonSignature> {
           align-items: center;
           justify-content: center;
           gap: var(--pretui-button-gap, 0.48em);
-          min-height: var(--pretui-button-h, 2.24em);
+          min-height: var(--pretui-row-h, var(--pretui-button-h, 2.24em));
           min-width: var(--pretui-button-min-w, 0);
           padding: 0.2em var(--pretui-button-px, 0.96em);
           border: 1px solid var(--pretui-btn-edge, transparent);
@@ -395,7 +395,7 @@ export class Button extends Component<ButtonSignature> {
         .pretui-btn[data-size='xs'] {
           font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
           /* keeps the 24px minimum target when the theme's xs step is small */
-          min-height: max(var(--pretui-button-h, 2.24em), 1.5rem);
+          min-height: max(var(--pretui-row-h, var(--pretui-button-h, 2.24em)), 1.5rem);
         }
         .pretui-btn[data-size='s'] {
           font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
@@ -594,10 +594,10 @@ export class Button extends Component<ButtonSignature> {
            24px floor, so the two stay square together. */
         .pretui-btn[data-display='icon'] {
           padding: 0;
-          width: var(--pretui-button-h, 2.24em);
+          width: var(--pretui-row-h, var(--pretui-button-h, 2.24em));
         }
         .pretui-btn[data-display='icon'][data-size='xs'] {
-          width: max(var(--pretui-button-h, 2.24em), 1.5rem);
+          width: max(var(--pretui-row-h, var(--pretui-button-h, 2.24em)), 1.5rem);
         }
         .pretui-btn[data-state='busy'] .pretui-btn-label {
           opacity: 0;
