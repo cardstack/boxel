@@ -1,6 +1,40 @@
 ---
 name: automations
-description: Developer guide to the automations system — realm admins' Realm Runner scripts that run on cron, one-time or webhook triggers. Covers how trigger timing is computed (cron in a time zone, daylight saving, `once`, `until` and `count`, per-trigger cursors and run counts, make-up runs after an outage, next run, *done*, runs left) in `runtime-common/automation-schedule.ts`. Also covers the `automations` table (the automation row): one row per switched-on automation holding its payer, state (active, paused with a reason, waiting for credits, done), caps snapshot, per-trigger run counts and next run, and the functions in `packages/runtime-common/automations.ts` that switch an automation on, pause, resume and remove it, pause it when a card edit raises a cap or turns on `batchedAI`, and pause it when its payer loses direct write. Use when calling or changing those functions, adding a column to `automations`, or diagnosing why an automation is paused, has no next run, or isn't running. Also covers how an automation's runs are tracked on the server — the `automation_runs` table (the run row), its states (pending, running, complete, error, canceled), which queue attempt owns a run, how a commit is claimed and recorded so a run commits at most once, and what a retried job does with a run whose commit already happened. Use when working on the automations table, the tick, reconcile, the automation card's view, the switch-on estimate, or anything that asks when an automation runs next; or when changing or calling `packages/runtime-common/automation-runs.ts`, writing the run-command task or the `Realm.handleAutomation` checks that read the run row, adding a column to `automation_runs`, or diagnosing a run that is stuck, errored with `commit-interrupted`, or committed twice. Also covers how an automation run reaches a worker — the automation priority tier (`automationInitiatedPriority = 5` in runtime-common's queue.ts), the automation worker lane (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT` in the start scripts and the dev stack), which lanes claim a run and which never do, and how the tier meets the prerender server's high-priority tab tier. Use when enqueueing the job that runs an automation (from its schedule, reconcile, an automation's webhook trigger, a batch follow-up, Preview or Run now), when a run waits in the queue longer than expected, when sizing or adding the automation lane in a deployment, or when changing the priority tiers, `lib/worker-lanes.ts` or `worker-manager.ts`.
+description: >-
+  Developer guide to the automations system — realm admins' Realm Runner scripts
+  that run on cron, one-time or webhook triggers. Covers how trigger timing is
+  computed (cron in a time zone, daylight saving, `once`, `until` and `count`,
+  per-trigger cursors and run counts, make-up runs after an outage, next run,
+  *done*, runs left) in `runtime-common/automation-schedule.ts`. Also covers the
+  `automations` table (the automation row): one row per switched-on automation
+  holding its payer, state (active, paused with a reason, waiting for credits,
+  done), caps snapshot, per-trigger run counts and next run, and the functions
+  in `packages/runtime-common/automations.ts` that switch an automation on,
+  pause, resume and remove it, pause it when a card edit raises a cap or turns
+  on `batchedAI`, and pause it when its payer loses direct write. Use when
+  calling or changing those functions, adding a column to `automations`, or
+  diagnosing why an automation is paused, has no next run, or isn't running.
+  Also covers how an automation's runs are tracked on the server — the
+  `automation_runs` table (the run row), its states (pending, running, complete,
+  error, canceled), which queue attempt owns a run, how a commit is claimed and
+  recorded so a run commits at most once, and what a retried job does with a run
+  whose commit already happened. Use when working on the automations table, the
+  tick, reconcile, the automation card's view, the switch-on estimate, or
+  anything that asks when an automation runs next; or when changing or calling
+  `packages/runtime-common/automation-runs.ts`, writing the run-command task or
+  the `Realm.handleAutomation` checks that read the run row, adding a column to
+  `automation_runs`, or diagnosing a run that is stuck, errored with
+  `commit-interrupted`, or committed twice. Also covers how an automation run
+  reaches a worker — the automation priority tier (`automationInitiatedPriority
+  = 5` in runtime-common's queue.ts), the automation worker lane
+  (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT`
+  in the start scripts and the dev stack), which lanes claim a run and which
+  never do, and how the tier meets the prerender server's high-priority tab
+  tier. Use when enqueueing the job that runs an automation (from its schedule,
+  reconcile, an automation's webhook trigger, a batch follow-up, Preview or Run
+  now), when a run waits in the queue longer than expected, when sizing or
+  adding the automation lane in a deployment, or when changing the priority
+  tiers, `lib/worker-lanes.ts` or `worker-manager.ts`.
 ---
 
 # Automations
@@ -129,7 +163,7 @@ The reader passes the trigger's time zone whenever it's valid.
 
 ## The automation row
 
-Every switched-on automation has one row in `automations`, keyed by the card's canonical identifier (`automation_id`). The card is the definition; the row is who pays and where the automation is (ADR 028 §1.3). A card with no row is not switched on, and nothing runs it. The functions that change the row are in `packages/runtime-common/automations.ts`, exported from `@cardstack/runtime-common`. The table is server-only and excluded from the SQLite schema dump.
+Every switched-on automation has one row in `automations`, keyed by the card's canonical identifier (`automation_id`). The card is the definition; the row is who pays and where the automation is (ADR 028 §1.3). A card with no row is not switched on, and nothing runs it. The functions that change the row are in `packages/runtime-common/automations.ts`, imported as `@cardstack/runtime-common/automations` (it isn't re-exported from the package index, which would pull the declaration reader into every package that imports the index). The table is server-only and excluded from the SQLite schema dump.
 
 ### What a row holds
 

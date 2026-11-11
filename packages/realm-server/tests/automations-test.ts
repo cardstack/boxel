@@ -2,25 +2,27 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
-  capsRaisedAbove,
-  checkAutomationCaps,
-  checkAutomationPayer,
   createAutomationRun,
-  getAutomation,
   getAutomationRun,
   insertPermissions,
-  pauseAutomation,
-  removeAutomation,
-  resumeAutomation,
   ri,
   rri,
   startAutomationRunAttempt,
-  switchOnAutomation,
   VirtualNetwork,
-  type AutomationActorOptions,
-  type AutomationRow,
   type DBAdapter,
 } from '@cardstack/runtime-common';
+import {
+  capsRaisedAbove,
+  checkAutomationCaps,
+  checkAutomationPayer,
+  getAutomation,
+  pauseAutomation,
+  removeAutomation,
+  resumeAutomation,
+  switchOnAutomation,
+  type AutomationActorOptions,
+  type AutomationRow,
+} from '@cardstack/runtime-common/automations';
 import type {
   AutomationCaps,
   AutomationDeclaration,
