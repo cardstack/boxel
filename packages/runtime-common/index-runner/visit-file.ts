@@ -26,6 +26,7 @@ import {
 } from '../index.ts';
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
+import { isLogFileURL } from '../log-line-index.ts';
 import {
   readServedFile,
   type WrittenFileRereads,
@@ -182,14 +183,27 @@ export async function renderFileForIndexing({
     url,
     new URL(encodeURI(localPath), url),
   ]);
-  let fileRef = writtenFileRereads
-    ? await writtenFileRereads.readVisitedFile(readFile, {
-        recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
-        label: `${jobIdentity(jobInfo)} ${url.href}`,
-        ifMissing: 'indexing it as removed',
-        log: { info: logInfo, warn: logWarn },
-      })
-    : (await readFile()).file;
+  // A log's visit needs none of its bytes: its file meta reads the head and
+  // the tail by range, and its lines are synced from the indexed offset
+  // (`log-line-index.ts`). Only its modification time is read here, from a
+  // one-byte range, so a pass after an append costs no more than the append.
+  let logMeta =
+    isLogFileURL(url.href) && reader.readRange
+      ? await reader.readRange(url, 0, 1)
+      : undefined;
+  let fileRef = logMeta
+    ? {
+        content: '',
+        lastModified: logMeta.lastModified ?? unixTime(Date.now()),
+      }
+    : writtenFileRereads
+      ? await writtenFileRereads.readVisitedFile(readFile, {
+          recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
+          label: `${jobIdentity(jobInfo)} ${url.href}`,
+          ifMissing: 'indexing it as removed',
+          log: { info: logInfo, warn: logWarn },
+        })
+      : (await readFile()).file;
   if (!fileRef) {
     let error = new CardError(`missing file ${url.href}`, { status: 404 });
     error.deps = [url.href];

@@ -5,6 +5,7 @@ import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   LogQueryError,
+  markLogRewritten,
   param,
   parseLogLine,
   query,
@@ -13,6 +14,7 @@ import {
   syncLogFile,
   type Expression,
   type LogLineIndexHost,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import { setupDB } from './helpers/index.ts';
@@ -74,7 +76,7 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(page.data.length, 2);
       assert.deepEqual(
-        page.data[0].entry.what,
+        (page.data[0].entry as { what?: unknown }).what,
         { action: 'like', postUri: 'at://post/1' },
         'what is an object, not a string',
       );
@@ -105,6 +107,64 @@ module(basename(import.meta.filename), function () {
         page.data.map((r) => r.line),
         [2],
       );
+    });
+
+    test('an edit to the first line rebuilds the rows: through the realm, or when it moves the size', async function (assert) {
+      write([event(1, 'like'), event(2, 'skip'), event(3, 'save')]);
+      await syncLogFile(host, logURL);
+      // Line 1 changes in place, the size and the last line as they were: a
+      // write the realm makes other than an append marks the log rewritten.
+      write([event(1, 'hide'), event(2, 'skip'), event(3, 'save')]);
+      await markLogRewritten(host, logURL);
+      let result = await syncLogFile(host, logURL);
+      assert.deepEqual(result, { inserted: 3, rebuilt: true });
+      let page = await runLogQuery(dbAdapter, realmURL, {
+        from: { log: logURL },
+        filter: { eq: { 'what.action': 'hide' } },
+      });
+      assert.deepEqual(
+        page.data.map((r) => r.line),
+        [1],
+      );
+      let stale = await runLogQuery(dbAdapter, realmURL, {
+        from: { log: logURL },
+        filter: { eq: { 'what.action': 'like' } },
+      });
+      assert.deepEqual(stale.data, [], 'no row keeps the old first line');
+
+      // An edit to line 1 that changes its length, then an append: the last
+      // indexed line no longer sits where it did, so the log is rebuilt.
+      write([
+        event(1, 'shared'),
+        event(2, 'skip'),
+        event(3, 'save'),
+        event(4, 'like'),
+      ]);
+      assert.deepEqual(await syncLogFile(host, logURL), {
+        inserted: 4,
+        rebuilt: true,
+      });
+    });
+
+    test('an edit and an append in one pass, or a removed line, rebuild the rows', async function (assert) {
+      write([event(1, 'like'), event(2, 'skip')]);
+      await syncLogFile(host, logURL);
+      write([event(1, 'like'), event(5, 'skip'), event(3, 'save')]);
+      assert.deepEqual(await syncLogFile(host, logURL), {
+        inserted: 3,
+        rebuilt: true,
+      });
+      write([event(1, 'like'), event(3, 'save')]);
+      assert.deepEqual(await syncLogFile(host, logURL), {
+        inserted: 2,
+        rebuilt: true,
+      });
+      assert.strictEqual(await lineCount(), 2);
+      // Unchanged since: nothing to insert, nothing rebuilt.
+      assert.deepEqual(await syncLogFile(host, logURL), {
+        inserted: 0,
+        rebuilt: false,
+      });
     });
 
     test('a line without its newline waits for it', async function (assert) {
@@ -179,7 +239,7 @@ module(basename(import.meta.filename), function () {
         'numeric range and not',
       );
 
-      let recent = resolveLogTime('now-3m', now);
+      let recent = resolveLogTime('now-3m', new Date(now));
       let lastFew = await runLogQuery(dbAdapter, realmURL, {
         ...base,
         filter: { range: { at: { gte: recent } } },
@@ -254,7 +314,7 @@ module(basename(import.meta.filename), function () {
           from: { log: logURL },
           fields: ['what'],
         } as any),
-        /unknown member "fields"/,
+        /"fields" is a card query's, and a log query does not support it/,
       );
     });
 
@@ -330,6 +390,95 @@ module(basename(import.meta.filename), function () {
         runLogQuery(dbAdapter, realmURL, { from: { log: 'notes.txt' } }),
         LogQueryError,
       );
+    });
+
+    test('a prefix-form log id resolves through the virtual network', async function (assert) {
+      write([event(1, 'like'), event(2, 'skip')]);
+      await syncLogFile(host, logURL);
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping('@test/logs/', realmURL);
+      let page = await runLogQuery(
+        dbAdapter,
+        realmURL,
+        { from: { log: '@test/logs/Profile/history.jsonl' } },
+        { virtualNetwork },
+      );
+      assert.strictEqual(page.meta.log, logURL);
+      assert.strictEqual(page.data.length, 2);
+      await assert.rejects(
+        runLogQuery(dbAdapter, realmURL, {
+          from: { log: '@test/logs/Profile/history.jsonl' },
+        }),
+        LogQueryError,
+        'with no virtual network a prefix-form id is refused, not joined as a path',
+      );
+      let elsewhere = new VirtualNetwork();
+      elsewhere.addRealmMapping('@test/other/', 'http://elsewhere/');
+      await assert.rejects(
+        runLogQuery(
+          dbAdapter,
+          realmURL,
+          { from: { log: '@test/other/history.jsonl' } },
+          { virtualNetwork: elsewhere },
+        ),
+        LogQueryError,
+        'a prefix-form id of another realm is refused',
+      );
+    });
+
+    test('a path or range bound named like an Object member is data, never SQL', async function (assert) {
+      files.set(
+        logURL,
+        [
+          JSON.stringify({ at: '2026-11-10 06:01:00', constructor: 'kept' }),
+          JSON.stringify({ at: '2026-11-10 06:02:00' }),
+        ]
+          .map((l) => `${l}\n`)
+          .join(''),
+      );
+      await syncLogFile(host, logURL);
+      let from = { log: logURL };
+      let exists = await runLogQuery(dbAdapter, realmURL, {
+        from,
+        filter: { exists: 'constructor' },
+      });
+      assert.deepEqual(
+        exists.data.map((r) => r.line),
+        [1],
+        'only the line whose entry has a `constructor` member',
+      );
+      let contains = await runLogQuery(dbAdapter, realmURL, {
+        from,
+        filter: { contains: { toString: 'x' } },
+      });
+      assert.strictEqual(contains.data.length, 0, 'no entry has `toString`');
+      for (let bound of ['constructor', 'toString', '__proto__']) {
+        await assert.rejects(
+          runLogQuery(dbAdapter, realmURL, {
+            from,
+            filter: { range: { at: { [bound]: 'now' } } as any },
+          }),
+          LogQueryError,
+          `range bound ${bound} is refused`,
+        );
+      }
+    });
+
+    test('a time outside the range of dates is refused, not a crash', async function (assert) {
+      for (let value of ['now-999999999999y', 1e20]) {
+        assert.throws(
+          () => resolveLogTime(value),
+          LogQueryError,
+          `${value} is refused`,
+        );
+        await assert.rejects(
+          runLogQuery(dbAdapter, realmURL, {
+            from: { log: logURL },
+            filter: { range: { at: { gte: value } } },
+          }),
+          LogQueryError,
+        );
+      }
     });
   });
 });

@@ -13,7 +13,8 @@
 // - every key names one of the line type's own non-computed fields;
 // - a value is normalized by its field's family: a number field takes a
 //   number or a numeric string, a boolean field a boolean or "true" /
-//   "false", a date field `YYYY-MM-DD`, a datetime field an ISO time, a big
+//   "false", a date field `YYYY-MM-DD`, a datetime field an ISO time (UTC
+//   when it names no zone), a big
 //   integer its digits, a string field a string (a number or boolean becomes
 //   its text); anything else of the wrong shape is refused;
 // - a compound field is checked the same way, recursively; a containsMany
@@ -24,12 +25,19 @@ import { fieldSerializer } from '@cardstack/runtime-common';
 import type { BaseDef } from './card-api';
 import { getFields, lineTypeOf, primitive, StringField } from './card-api';
 
+const ISO_DATE_TIME =
+  /^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(Z|[+-]\d\d:\d\d)?$/i;
+
 export class LogLineError extends Error {
   name = 'LogLineError';
 }
 
+// The type's own display name, else its class name: an inherited one
+// (FieldDef's "Field") names no line type.
 function typeName(type: typeof BaseDef): string {
-  return type.displayName ?? type.name;
+  return Object.prototype.hasOwnProperty.call(type, 'displayName')
+    ? type.displayName
+    : type.name;
 }
 
 function normalizePrimitive(
@@ -61,11 +69,19 @@ function normalizePrimitive(
       return typeof value === 'string' && /^\d{4}-\d\d-\d\d$/.test(value)
         ? value
         : refuse('a date as YYYY-MM-DD');
-    case 'datetime':
+    case 'datetime': {
       if (value instanceof Date) return value.toISOString();
-      return typeof value === 'string' && !Number.isNaN(Date.parse(value))
-        ? new Date(value).toISOString()
-        : refuse('an ISO date and time');
+      // An ISO time, read as UTC when it names no zone, as the realm reads a
+      // line's `at`: never in the browser's own zone, and never text such as
+      // "March 7" that `Date.parse` would guess at.
+      let iso =
+        typeof value === 'string' ? ISO_DATE_TIME.exec(value.trim()) : null;
+      if (!iso) return refuse('an ISO date and time');
+      let ms = Date.parse(iso[1] ? iso[0] : `${iso[0]}Z`);
+      return Number.isNaN(ms)
+        ? refuse('an ISO date and time')
+        : new Date(ms).toISOString();
+    }
     case 'big-integer':
       return (typeof value === 'string' && /^-?\d+$/.test(value)) ||
         (typeof value === 'number' && Number.isInteger(value)) ||

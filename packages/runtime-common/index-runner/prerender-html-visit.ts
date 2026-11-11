@@ -1,4 +1,5 @@
 // Isomorphic UUID — matches IndexRunner's batch-id minting.
+import { isLogFileURL } from '../log-line-index.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { heartbeatJob } from '../queue.ts';
 
@@ -1056,14 +1057,27 @@ async function visitForPrerenderedHtml({
   // time the visits began. A URL the index holds as a tombstone is one the
   // index pass took as removed, and this pass takes it as removed too, so the
   // two channels agree.
-  let fileRef = batch.indexHoldsTombstone(url.href)
-    ? (await readFile()).file
-    : await writtenFileRereads.readVisitedFile(readFile, {
-        recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
-        label: `${jobIdentity(jobInfo)} file ${url.href}`,
-        ifMissing: 'rendering nothing for it',
-        log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
-      });
+  // A log's render needs none of its bytes here (see `renderFileForIndexing`):
+  // only its modification time, from a one-byte range.
+  let logMeta =
+    isLogFileURL(url.href) &&
+    reader.readRange &&
+    !batch.indexHoldsTombstone(url.href)
+      ? await reader.readRange(url, 0, 1)
+      : undefined;
+  let fileRef = logMeta
+    ? {
+        content: '',
+        lastModified: logMeta.lastModified ?? unixTime(Date.now()),
+      }
+    : batch.indexHoldsTombstone(url.href)
+      ? (await readFile()).file
+      : await writtenFileRereads.readVisitedFile(readFile, {
+          recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
+          label: `${jobIdentity(jobInfo)} file ${url.href}`,
+          ifMissing: 'rendering nothing for it',
+          log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
+        });
   if (!fileRef) {
     // Unreadable file — the same outcome as the index visit's
     // missing-file handling: write nothing, so the up-front tombstone
