@@ -42,11 +42,14 @@ export function setupQUnit() {
   //   render. That cost stays allocated for the rest of the shard, so the
   //   next module to render the same surface pays nothing for it. A module's
   //   `delta` therefore depends on which modules ran before it in its shard.
-  // - `steady` spans from the end of the module's first test to the module's
-  //   end. A module's first test renders the surfaces the module exercises,
-  //   so their one-time cost lands before this window opens, while memory the
-  //   module keeps retaining test after test still lands inside it. `steady`
-  //   is `na` for a module with a single test.
+  // - `steady` spans from the end of the module's first test that ran (not
+  //   skipped) to the module's end. The one-time cost of the surfaces that
+  //   first test renders lands before this window opens, while memory the
+  //   module keeps retaining test after test lands inside it. This takes most
+  //   of the shard-order dependence out, not all of it: a surface the module
+  //   first renders in a later test — and no earlier module in the shard
+  //   rendered — still pays its one-time cost inside the window. `steady` is
+  //   `na` for a module with fewer than two tests that ran.
   //
   // We run several gc() cycles with a microtask yield between each call so
   // V8 can drain its FinalizationRegistry queue and finish generational
@@ -84,15 +87,6 @@ export function setupQUnit() {
     usedAtModuleStart = readUsedHeap();
     usedAfterFirstTest = null;
     testsDoneInModule = 0;
-  });
-  // Counts tests anywhere inside the top-level module, nested modules
-  // included, and takes the `steady` window's opening reading after the first.
-  QUnit.testDone(async () => {
-    if (moduleDepth < 1) return;
-    testsDoneInModule++;
-    if (testsDoneInModule !== 1) return;
-    await settledGc();
-    usedAfterFirstTest = readUsedHeap();
   });
   QUnit.moduleDone(async (details) => {
     if (moduleDepth === 1) {
@@ -194,5 +188,20 @@ export function setupQUnit() {
         /* ignore */
       }
     }
+  });
+
+  // Takes the `steady` window's opening reading after the first test that ran
+  // anywhere inside the top-level module, nested modules included. QUnit runs
+  // testDone callbacks one after another in registration order, so this one is
+  // registered after the sweep above: the opening reading then sees the heap
+  // with destroyed ApplicationInstances released, like the module-end reading
+  // does. A skipped test renders nothing, so it neither counts nor opens the
+  // window.
+  QUnit.testDone(async (details) => {
+    if (moduleDepth < 1 || details.skipped) return;
+    testsDoneInModule++;
+    if (testsDoneInModule !== 1) return;
+    await settledGc();
+    usedAfterFirstTest = readUsedHeap();
   });
 }

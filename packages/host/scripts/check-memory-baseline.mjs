@@ -9,13 +9,16 @@
 //   depends on which modules ran before it — every re-split of the shards moves
 //   it. It only ever warns.
 // - `steady_mb`, the growth from the end of the module's first test to the
-//   module's end, which leaves those one-time costs out. This is the reading
-//   that blocks: exit 1 when it clears the module's recent steady ceiling by
-//   more than the larger of +50MB, 100% of the steady baseline, or the steady
-//   window's own demonstrated run-to-run noise band.
+//   module's end, which leaves out the one-time cost of the surfaces that
+//   first test renders. This is the reading that blocks: exit 1 when it clears
+//   the module's recent steady ceiling by more than the larger of +50MB, 100%
+//   of the steady baseline, or the steady window's own demonstrated run-to-run
+//   noise band.
 //
-// A module without a steady window yet (newly baselined, or a one-test module
-// with no steady reading) only warns. Exits 0 on pass/warn.
+// A module that is not in the baseline is listed, not gated. A baselined module
+// whose entry has no steady samples (a baseline written before the steady
+// reading existed, or a module that never reported two tests that ran) or whose
+// report has no steady reading only warns. Exits 0 on pass/warn.
 //
 // Usage: node check-memory-baseline.mjs <reports-dir> <baseline-json>
 //
@@ -78,29 +81,27 @@ const baselineMean = (samples) =>
     ? samples.reduce((a, b) => a + b, 0) / samples.length
     : undefined;
 
-// The largest delta the module has produced in the recent window. The hard
-// (build-blocking) gate measures the regression from this ceiling, not the
-// mean: some modules legitimately swing run-to-run by >100MB because their
-// post-GC boundary delta depends on whether the settle-GC fully drains a large
-// transient before the measurement. Such a module must not hard-fail on a value
-// it has already exhibited — only on one that clears its observed ceiling by the
-// hard threshold. When a module's variance is low (ceiling ≈ mean) this is
-// equivalent to the mean-based gate.
+// The largest reading the module has produced in the recent window. Both
+// readings are differences of two post-GC heap readings, and some modules swing
+// run-to-run by >100MB because the settle-GC drains a large transient before one
+// of the two readings on some runs and after it on others. A threshold measured
+// from this ceiling, not the mean, never flags a value the module has already
+// exhibited — only one that clears its observed ceiling. When a module's
+// variance is low (ceiling ≈ mean) this is equivalent to the mean.
 const baselineCeiling = (samples) =>
   samples.length > 0 ? Math.max(...samples) : undefined;
 
 // The module's demonstrated run-to-run noise band: the span from the lowest
 // recent sample up to the recent ceiling, with the ceiling floored at zero the
-// same way the hard gate floors it. This is the swing the module has already
-// exhibited with no code change — the post-GC boundary delta moves run-to-run
-// because the settle-GC drains large transients on one side of the module
-// boundary on some runs and the other side on others.
+// same way the ceiling is floored. This is the swing the module has already
+// exhibited with no code change: the settle-GC drains large transients on one
+// side of a reading on some runs and the other side on others.
 //
 // A negative sample is pure drain-timing noise (a module cannot net-free
 // memory it never retained), and the slosh it measures is directionally
-// symmetric: garbage that drained 90MB late into this module's window (a -90
-// reading) can just as easily linger past the module's end boundary and land
-// as a comparable positive reading. So an all-negative window like
+// symmetric: garbage that drained 90MB late into the measured window (a -90
+// reading) can just as easily linger past the window's end and land as a
+// comparable positive reading. So an all-negative window like
 // [-50.7, -58.6, -90.9, -69.8, -69.8] demonstrates a ~91MB noise band, and a
 // +72.8 reading is inside the module's own swing, not a regression — even
 // though it clears the floored-at-zero ceiling by more than the absolute
@@ -110,7 +111,7 @@ const baselineCeiling = (samples) =>
 // reduces to the plain peak-to-peak spread. Modules with a tight window are
 // unaffected — the absolute/relative terms govern. Zero until the window
 // holds at least two samples: a single reading demonstrates no run-to-run
-// swing, so a newly baselined module stays behind the absolute threshold
+// swing, so a window with a single sample stays behind the absolute threshold
 // until it has real history. Also zero for a legacy single-value baseline
 // that carries no sample window at all.
 const baselineNoiseBand = (samples) =>
@@ -129,9 +130,8 @@ const assess = (current, samples) => {
   const baseMean = baselineMean(samples);
   if (current == null || baseMean == null) return null;
 
-  // A negative baseline means the prior module's garbage was reclaimed
-  // partway through this module's window, not that this module actually freed
-  // memory. Treat it as noise: floor at 0 so the comparison falls back to the
+  // A negative baseline means earlier garbage was reclaimed partway through
+  // the measured window, not that this module actually freed memory. Treat it as noise: floor at 0 so the comparison falls back to the
   // absolute thresholds rather than a bogus relative budget sized to |noise|.
   const effectiveBase = Math.max(baseMean, 0);
   const diff = current - effectiveBase;
@@ -153,7 +153,7 @@ const assess = (current, samples) => {
   // The hard threshold also absorbs the module's demonstrated noise band.
   // When a module's recent window is entirely negative, its mean baseline and
   // its ceiling both floor to zero, so the +50MB absolute term alone would
-  // block any single reading over 50MB — even from a module that routinely
+  // flag any single reading over 50MB — even from a module that routinely
   // swings by >100MB and merely landed positive this run. Sizing the threshold
   // to the noise band means a run has to clear the recent ceiling by more than
   // the module's own run-to-run range before it blocks; tighter-window modules
@@ -296,7 +296,8 @@ if (failures.length > 0) {
 }
 
 if (warnings.length > 0) {
+  const warnedModules = new Set(warnings.map((w) => w.mod)).size;
   console.log(
-    `\nWARN: ${warnings.length} module(s) exceeded soft memory threshold.`,
+    `\nWARN: ${warnedModules} module(s) exceeded a soft memory threshold (${warnings.length} reading(s)).`,
   );
 }
