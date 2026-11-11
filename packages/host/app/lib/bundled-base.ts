@@ -339,6 +339,8 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/components/icon-button'),
   'components/password-managers': () =>
     import('@cardstack/base/components/password-managers'),
+  'components/resize-handle': () =>
+    import('@cardstack/base/components/resize-handle'),
   'components/sidebar': () => import('@cardstack/base/components/sidebar'),
   'components/time-ago': () => import('@cardstack/base/components/time-ago'),
   'components/timeline': () => import('@cardstack/base/components/timeline'),
