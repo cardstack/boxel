@@ -29,6 +29,27 @@ module('Pretui | components/field', function (hooks) {
     assert.strictEqual(control.labels?.[0]?.textContent?.trim(), 'Name', 'the control is named by the label');
   });
 
+  test('@required marks the field after its label, leaving the label text alone', async function (assert) {
+    await render(
+      <template>
+        <Field @label='Name' @required={{true}} as |controlId|>
+          <input id={{controlId}} required data-test-control />
+        </Field>
+        <Field @label='Nickname' as |controlId|>
+          <input id={{controlId}} />
+        </Field>
+      </template>,
+    );
+    assert.dom('[data-test-pretui-field-required]').exists({ count: 1 });
+    assert.dom('[data-test-pretui-field-required]').hasAttribute('aria-hidden', 'true');
+    let control = document.querySelector('[data-test-control]') as HTMLInputElement;
+    assert.strictEqual(
+      control.labels?.[0]?.textContent?.trim(),
+      'Name',
+      'the control is still named by the label alone',
+    );
+  });
+
   test('horizontal puts the label and its icon in a column of their own', async function (assert) {
     await render(
       <template>
