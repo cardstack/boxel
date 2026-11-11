@@ -431,7 +431,7 @@ export class RoutingRuleField extends FieldDef {
 
   @field card = contains(StringField, {
     description:
-      'Card id pattern the path resolves to, e.g. "./Person/:person_id"; each `:name` takes the value of the path parameter with that name',
+      'Card id pattern the path resolves to, e.g. `./Person/:person_id`; each `:name` takes the value of the path parameter with that name',
   });
 
   @field type = contains(CodeRefField, {
