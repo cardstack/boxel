@@ -75,6 +75,7 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
       credit_amount: number;
       credit_type: 'daily_credit';
       subscription_cycle_id: null;
+      charge_kind: 'grant';
     }[] = [];
     for (let row of rows) {
       let creditAmount = Number(row.credit_amount ?? 0);
@@ -87,6 +88,7 @@ const dailyCreditGrant: Task<DailyCreditGrantArgs, void> = ({
         credit_amount: creditAmount,
         credit_type: 'daily_credit',
         subscription_cycle_id: null,
+        charge_kind: 'grant',
       });
       grantedCount++;
     }

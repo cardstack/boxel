@@ -6,6 +6,7 @@ import { logger } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import type { Server } from 'http';
 import { createPrerenderHttpServer } from './prerender-app.ts';
+import { checkPricingAtStartup } from '../lib/pricing.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -20,6 +21,7 @@ writeSync(
 );
 
 let log = logger('prerender-server');
+checkPricingAtStartup('prerender');
 
 let { port, count } = yargs(process.argv.slice(2))
   .usage('Start prerender server')
