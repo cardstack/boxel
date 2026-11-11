@@ -25,6 +25,7 @@
   ],
   "tests": {
     "host": [
+      "Acceptance | code submode | automation script editor",
       "Integration | realm policy",
       "Integration | realm config policy standing",
       "Integration | policy-scoped search",
