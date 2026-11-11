@@ -13,7 +13,10 @@ export type Truth = 't' | 'f' | 'u';
 export interface VectorCard {
   id: string;
   type: string;
+  // the search doc, as an index running in UTC writes it
   doc: Record<string, unknown>;
+  // the card JSON's attributes, where they are spelled otherwise than `doc`
+  attrs?: Record<string, unknown>;
 }
 
 export interface VectorCase {
@@ -25,10 +28,13 @@ export interface VectorCase {
   // evaluator to; the server must refuse it.
   refused?: true;
   expect?: string;
+  // the zone the query's calendar is reckoned in, when not UTC
+  timeZone?: string;
 }
 
-// A field: how it holds its value, and of what: `string`, `number`, or a
-// type named in `defs`.
+// A field: how it holds its value, and of what: `string`, a serializer
+// (`number`, `boolean`, `big-integer`, `date`, `datetime`), or a type named
+// in `defs`.
 export interface VectorField {
   type: 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
   of: string;
@@ -45,9 +51,19 @@ export interface Vectors {
   >;
   cards: VectorCard[];
   cases: VectorCase[];
+  // the clock every relative date in the cases is read against
+  now?: string;
 }
 
-export const VECTOR_FILES = ['filters', 'paths'] as const;
+export const VECTOR_FILES = ['filters', 'paths', 'values', 'dates'] as const;
+
+export const SERIALIZED = [
+  'number',
+  'boolean',
+  'big-integer',
+  'date',
+  'datetime',
+] as const;
 
 export function readVectors(name: string = 'filters'): Vectors {
   return JSON.parse(
@@ -56,7 +72,7 @@ export function readVectors(name: string = 'filters'): Vectors {
 }
 
 export const isPrimitive = (field: VectorField) =>
-  field.of === 'string' || field.of === 'number';
+  field.of === 'string' || (SERIALIZED as readonly string[]).includes(field.of);
 export const isPlural = (field: VectorField) =>
   field.type === 'containsMany' || field.type === 'linksToMany';
 

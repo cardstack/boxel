@@ -5,13 +5,15 @@
   "type": "module",
   "exports": {
     "./vectors/filters.json": "./vectors/filters.json",
-    "./conformance": "./src/conformance.ts"
+    "./conformance": "./src/conformance.ts",
+    "./known": "./src/known.ts",
+    "./engine-fixture": "./src/engine-fixture.ts"
   },
   "scripts": {
     "prove": "cd lean && lake build QueryV2 && out=$(lake env lean Audit.lean) && echo \"$out\" && ! echo \"$out\" | grep -q sorryAx",
-    "vectors": "cd lean && lake build vectors && lake exe vectors > ../vectors/filters.json && lake exe vectors grammar > ../vectors/grammar.json && lake exe vectors paths > ../vectors/paths.json",
-    "vectors:check": "cd lean && lake exe vectors | cmp -s - ../vectors/filters.json && lake exe vectors grammar | cmp -s - ../vectors/grammar.json && lake exe vectors paths | cmp -s - ../vectors/paths.json || (echo 'vectors/ is stale: run pnpm vectors' && exit 1)",
-    "test": "node src/check-matcher.ts && node src/check-grammar.ts",
+    "vectors": "cd lean && lake build vectors && lake exe vectors > ../vectors/filters.json && lake exe vectors grammar > ../vectors/grammar.json && lake exe vectors paths > ../vectors/paths.json && lake exe vectors values > ../vectors/values.json && lake exe vectors dates > ../vectors/dates.json",
+    "vectors:check": "cd lean && lake build vectors && lake exe vectors | cmp -s - ../vectors/filters.json && lake exe vectors grammar | cmp -s - ../vectors/grammar.json && lake exe vectors paths | cmp -s - ../vectors/paths.json && lake exe vectors values | cmp -s - ../vectors/values.json && lake exe vectors dates | cmp -s - ../vectors/dates.json || (echo 'vectors/ is stale: run pnpm vectors' && exit 1)",
+    "test": "TZ=UTC node src/check-matcher.ts && TZ=America/New_York node src/check-matcher.ts && node src/check-grammar.ts && node src/check-sqlite.ts",
     "lint": "eslint . --report-unused-disable-directives --cache",
     "lint:fix": "eslint . --report-unused-disable-directives --fix"
   },

@@ -25,15 +25,21 @@ lean/QueryV2/Laws.lean      theorems about filters and lowering
 lean/QueryV2/Grammar.lean   queries as written: spelling, acceptance, refusals
 lean/QueryV2/Doc.lean       nested documents and dotted field paths
 lean/QueryV2/Json.lean      rendering the model's filters as query JSON
+lean/QueryV2/Values.lean    typed values: a calendar, field spellings, their vectors
+lean/QueryV2/Dates.lean     relative dates against a fixed clock, and their vectors
 lean/Main.lean              the vector generator (lake exe vectors)
 lean/Audit.lean             prints the axioms every theorem rests on
-vectors/*.json              generated: filters, grammar, paths
+vectors/*.json              generated: filters, grammar, paths, values, dates
 src/check-matcher.ts        lowerQuery + host matcher, in Node
 src/check-grammar.ts        usesNewSyntax, assertAuthoredQuerySpelling, assertQuery
+src/check-sqlite.ts         the engine on SQLite (node:sqlite), in Node
+src/sqlite-adapter.ts       a DBAdapter over node:sqlite, as the host's over sqlite-wasm
+src/engine-fixture.ts       seeds the vectors into an engine and runs every case
 src/matcher-cards.ts        stand-in card classes the matcher can read
 src/conformance.ts          shared vector types and reporting
+src/known.ts                the known divergences, by evaluator
 ../realm-server/tests/query-verification-conformance-test.ts
-                            the Postgres engine, through the realm server's search
+                            the engine on Postgres, through engine-fixture
 ```
 
 ### The model
@@ -57,6 +63,34 @@ The path model describes a stored search document: nested objects for
 compound fields and link targets, arrays for `containsMany` and
 `linksToMany`. A path fans out through every list it crosses, and a path
 that crosses a list is a list path.
+
+Typed values are integers in the model, so every law above holds for them
+unchanged:
+
+- a decimal is in hundredths and a big integer is itself;
+- a date is days since 1970;
+- a date-time is UTC minutes since 1970;
+- a boolean is 0 or 1.
+
+What differs is only how a value is written. Each field type has its own
+spelling in the search doc and in the card JSON, and the queries write each
+value in several spellings that mean the same value:
+
+- a decimal as a number or as `"2.00"`;
+- a boolean as `true` or `"true"`;
+- a date-time with no zone, with `:00Z`, with `:00.000Z`, with a `+05:30`
+  offset, or as a date.
+
+A shared value with different answers across spellings is a disagreement.
+
+A relative date is resolved in the model against one fixed clock,
+`2000-01-01T00:00:30Z`. That is thirty seconds into a minute a stored
+date-time holds, and the evening before in New York. Moves by `s`, `m` and
+`h` are elapsed time, and moves by `d`, `w`, `M` and `y` and every rounding
+are on the query zone's calendar. The result is then put in the field's
+format: the day it falls on in that zone for a date field, and its UTC
+minute for a date-time field. From there it's an integer like any other
+value, so the same laws hold.
 
 ### The theorems
 
@@ -101,7 +135,7 @@ fails if any proof is unfinished.
 
 ### The vectors
 
-`lake exe vectors` writes three files:
+`lake exe vectors` writes five files:
 
 - `filters.json`: 318 filter cases over 960 cards that cover every
   combination of present, null and absent values on string, number and list
@@ -113,6 +147,17 @@ fails if any proof is unfinished.
 - `paths.json`: 88 cases over 1,050 cards with a compound field, a list of
   compound fields, a `linksTo` and a `linksToMany`, with null, absent, empty
   and populated values at each level.
+- `values.json`: 173 cases over 503 cards. The fields are a boolean, a
+  decimal, a big integer, a date, a date-time, and lists of decimals and
+  date-times. Each card carries its search doc and its card JSON. Three
+  cards of another type hold text under the same field names, for a query on
+  the first type to pass over.
+- `dates.json`: 66 cases over the same cards, with three cards of another
+  type holding `now`, `now-3x` and `abc` as text. It has `range`, `eq` and
+  `in` with relative dates on date, date-time and date-time list fields, in
+  UTC and in New York, plus malformed relative dates, which are refused on a
+  date field and literal on a text field. It names its clock (`now`), and
+  each case names its zone.
 
 Each case carries the model's lowered form and, per card, `t`, `f` or `u`.
 The files are checked in, and CI fails if they are not what the model
@@ -123,18 +168,33 @@ generates.
 - **The host matcher** (`check-matcher.ts`, `check-grammar.ts`) builds
   stand-in card classes from the vectors' schema and runs
   `matchInstanceAgainstFilter` on every card, for the lowered and the older
-  form of every case.
+  form of every case. An instance holds what its card JSON deserializes to
+  through the field's real serializer (a `Date`, a `bigint`). The card API's
+  `getQueryableValue` and `formatQueryValue` go through the same serializers,
+  as `card-api` does. It runs in UTC and in `America/New_York`. For
+  `dates.json` it replaces the global `Date` so that `new Date()` reads the
+  vectors' clock, and it skips a case in another zone, which the host leaves
+  to the server.
 - **The query front end** (`check-grammar.ts`) runs every written query
   through `usesNewSyntax`, then `assertAuthoredQuerySpelling` and
   `assertQuery` (as an author's query is), and `assertQuery` alone (as the
   server's is).
-- **Postgres** (the realm-server test) seeds every card straight into
-  `boxel_index` with a stand-in definition lookup and runs every case through
-  the realm's search, in both spellings and under `not`.
+- **The engine** (`IndexQueryEngine`, through `engine-fixture.ts`) gets
+  every card seeded straight into `boxel_index` with a stand-in definition
+  lookup. It runs every case in both spellings and under `not`, with the
+  vectors' clock as `queryNow` and the case's zone as `timeZone`. It runs
+  twice:
+  - on **Postgres**, in the realm-server test;
+  - on **SQLite**, in `check-sqlite.ts`. That runs on Node's `node:sqlite`
+    with the host's schema, and the SQL goes through the same
+    Postgres-to-SQLite rewrites the host's adapter applies. The check fails
+    if the host's list of rewrites changes, since the copy here would then be
+    stale.
 
-A disagreement the code is known to have is listed with what it does under
-`KNOWN` in the check that finds it. It is reported instead of failing, and a
-`KNOWN` entry that stops occurring fails, so it gets taken off the list.
+A disagreement the code is known to have is listed with what it does, and
+which evaluators have it, in `src/known.ts` (the grammar's in
+`check-grammar.ts`). It is reported instead of failing. An entry that stops
+occurring fails, so it gets taken off the list when the bug is fixed.
 
 ## What it doesn't cover
 
@@ -146,14 +206,21 @@ exercise.
   text) and its modifiers' effect on ranking, `sort`, `page` contents beyond
   their members, `facets`, `collapse`, `rerank`, vector search, and
   query-backed fields.
-- **Value types:** strings and integers only. Boolean, decimal, date and
-  big-integer fields are not in the vectors, so neither is how each is
-  stored, compared or cast.
+- **Value types:** relative dates are covered at one clock and in two zones
+  with fixed offsets. A daylight-saving change, month-end overflow
+  (`now+1M` on 31 January), relative bounds in facets, and `now-1M`-style
+  moves are not covered. `contains` on boolean, date and date-time fields
+  isn't covered either, and nor are the other primitive fields (email,
+  phone, code refs).
 - **Depth:** the vectors compose filters about three levels deep and follow
   paths two segments long. A bug that only appears deeper would not be
   caught.
-- **Engines:** the matcher runs on stand-in card classes rather than real
-  ones, and SQLite (the host's in-browser index) is not exercised.
+- **Engines:** the matcher runs on stand-in card classes, with the real
+  serializers, rather than on real card classes. SQLite runs on Node's
+  build (3.53) rather than the host's sqlite-wasm (3.45), and through a copy
+  of the host adapter's rewrites rather than the adapter itself. The indexer
+  isn't exercised: the vectors say what the search doc holds instead of
+  indexing the card JSON.
 - **Text:** `contains` is modeled with ASCII case folding; the vectors use
   ASCII text only.
 
@@ -168,19 +235,21 @@ cd packages/query-verification
 pnpm prove           # build the model, check every proof, audit axioms
 pnpm vectors         # regenerate vectors/ after a model change
 pnpm vectors:check   # fail if vectors/ is not what the model generates
-pnpm test            # host matcher, lowering, and grammar checks
+pnpm test            # host matcher (UTC and New York), lowering, grammar, SQLite
 pnpm lint
 
 cd ../realm-server   # Postgres; needs `pnpm start:all` running
 MATRIX_REGISTRATION_SHARED_SECRET=unused \
   TEST_FILES=query-verification-conformance-test pnpm test
+# QV_REPORT=/tmp/report.txt also writes every disagreement and known entry
 ```
 
 In CI, the `query-verification-test` job runs `prove`, `vectors:check` and
 `test` whenever this package or the query code changes, and the Postgres
 check runs in the realm-server suite.
 
-To extend it, add a case or card space to `lean/Main.lean` (and, for new
-behavior, a definition and theorem to the model), run `pnpm vectors`, and
-run the checks. A new disagreement is either a bug to fix, a divergence to
-list under `KNOWN` with what the code does, or a mistake in the model.
+To extend it, add a case or card space to `lean/Main.lean`,
+`lean/QueryV2/Values.lean` or `lean/QueryV2/Dates.lean` (and, for new behavior, a definition and theorem
+to the model), run `pnpm vectors`, and run the checks. A new disagreement is
+one of three things: a bug to fix, a divergence to list in `src/known.ts`
+with what the code does, or a mistake in the model.

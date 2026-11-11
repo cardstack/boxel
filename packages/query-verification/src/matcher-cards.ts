@@ -16,29 +16,49 @@ import {
   matchInstanceAgainstFilter,
   type CardAPIForMatching,
 } from '@cardstack/runtime-common/instance-filter-matcher';
+import {
+  getSerializer,
+  type SerializerName,
+} from '@cardstack/runtime-common/serializers';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
 import {
   isPlural,
   isPrimitive,
+  SERIALIZED,
   truthOf,
   type Disagreement,
   type VectorField,
   type Vectors,
 } from './conformance.ts';
 
+const serializerOf = (field: VectorField) =>
+  (SERIALIZED as readonly string[]).includes(field.of)
+    ? getSerializer(field.of as SerializerName)
+    : undefined;
+
 const MODULE = 'http://query-verification/model';
 export const ref = (name: string) => ({ module: MODULE, name });
 
-class Primitive {
-  static baseDef = true;
-  static [primitive] = true;
-}
+const primitives = new Map<string, unknown>();
+const primitiveFor = (of: string) => {
+  if (!primitives.has(of)) {
+    primitives.set(
+      of,
+      class {
+        static baseDef = true;
+        static [primitive] = true;
+        static serializerName = of;
+      },
+    );
+  }
+  return primitives.get(of);
+};
 
 type Instance = { values: Record<string, unknown> };
 type Def = { new (): Instance };
 
-export function matcherFor(vectors: Vectors) {
+export async function matcherFor(vectors: Vectors) {
   let classes = new Map<string, Def>();
 
   let define = (
@@ -67,9 +87,12 @@ export function matcherFor(vectors: Vectors) {
       (get as any)[isField] = {
         name: fieldName,
         get card() {
-          return isPrimitive(field) ? Primitive : classFor(field.of);
+          return isPrimitive(field)
+            ? primitiveFor(field.of)
+            : classFor(field.of);
         },
         fieldType: field.type,
+        vectorField: field,
       };
       Object.defineProperty(C.prototype, fieldName, { get });
     }
@@ -92,32 +115,56 @@ export function matcherFor(vectors: Vectors) {
 
   let fieldsOf = (name: string) => vectors.defs[name]?.fields ?? vectors.fields;
 
-  let build = (type: string, doc: Record<string, unknown>): Instance => {
+  // An instance holds what its card JSON deserializes to (a `Date`, a
+  // `bigint`), as a loaded card does.
+  let build = async (
+    type: string,
+    doc: Record<string, unknown>,
+  ): Promise<Instance> => {
     let inst = new (classFor(type))();
     inst.values = {};
     for (let [name, field] of Object.entries(fieldsOf(type))) {
       let raw = doc[name];
-      let one = (v: unknown) =>
-        isPrimitive(field) || v == null
-          ? v
-          : build(field.of, v as Record<string, unknown>);
+      let serializer = serializerOf(field);
+      let one = async (v: unknown) =>
+        serializer
+          ? await serializer.deserialize.call(undefined as any, v)
+          : isPrimitive(field) || v == null
+            ? v
+            : await build(field.of, v as Record<string, unknown>);
       inst.values[name] = isPlural(field)
         ? Array.isArray(raw)
-          ? raw.map(one)
+          ? await Promise.all(raw.map(one))
           : undefined
-        : one(raw);
+        : await one(raw);
     }
     return inst;
   };
 
+  // `getQueryableValue` and `formatQueryValue` as `card-api` has them: a
+  // primitive's value goes through its serializer's `queryableValue`, and a
+  // query value through its `formatQuery` when it has one.
+  let queryable = (field: VectorField, value: unknown) => {
+    let serializer = serializerOf(field);
+    return serializer && value != null
+      ? (serializer.queryableValue(value, []) ?? null)
+      : (value ?? null);
+  };
   let api: CardAPIForMatching = {
-    getQueryableValue: (field, value) =>
-      field.fieldType === 'containsMany' || field.fieldType === 'linksToMany'
-        ? Array.isArray(value)
-          ? value
-          : []
-        : (value ?? null),
-    formatQueryValue: (_field, value) => value,
+    getQueryableValue: (field, value) => {
+      let vf = (field as any).vectorField as VectorField;
+      if (
+        field.fieldType === 'containsMany' ||
+        field.fieldType === 'linksToMany'
+      ) {
+        return Array.isArray(value) ? value.map((v) => queryable(vf, v)) : [];
+      }
+      return queryable(vf, value);
+    },
+    formatQueryValue: (field, value) => {
+      let serializer = serializerOf((field as any).vectorField);
+      return serializer?.formatQuery?.(value) ?? value;
+    },
     peekAtField: (inst, name) => (inst as unknown as Instance).values[name],
     isQueryTaintedField: () => false,
     isNonPresentLink: () => false,
@@ -126,10 +173,12 @@ export function matcherFor(vectors: Vectors) {
     virtualNetwork: new VirtualNetwork(),
   };
 
-  let instances = vectors.cards.map((card) => ({
-    card,
-    inst: build(card.type, card.doc) as any,
-  }));
+  let instances = await Promise.all(
+    vectors.cards.map(async (card) => ({
+      card,
+      inst: (await build(card.type, { ...card.doc, ...card.attrs })) as any,
+    })),
+  );
 
   // Holds the matcher to `expect` for `filter` on every card; `undefined`
   // when the matcher leaves the filter to the server.

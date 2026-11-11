@@ -1,6 +1,7 @@
 // Holds the host's live-query matcher (`matchInstanceAgainstFilter`) and the
 // lowering (`lowerQuery`) to the Lean model, over every case and card in the
-// filter and path vectors. Runs in Node, with no database.
+// vectors. Runs in Node, with no database, in the process's time zone (run it
+// with `TZ=` set to see the matcher as a browser in that zone does).
 import { isDeepStrictEqual } from 'util';
 
 import { lowerQuery } from '@cardstack/runtime-common/query-syntax';
@@ -12,21 +13,38 @@ import {
   withTypeRefs,
   type Disagreement,
 } from './conformance.ts';
+import { knownFor } from './known.ts';
 import { matcherFor, ref } from './matcher-cards.ts';
 
-// Where the matcher is known to answer otherwise than the model and the
-// Postgres engine, each with what it does. Reported, not failed; one that no
-// longer occurs fails, so that it is taken off this list.
-const KNOWN: {
-  about: string;
-  applies: (d: Disagreement) => boolean;
-  seen: number;
-}[] = [];
+// The matcher reads the clock with `new Date()`; a file's cases hold it to
+// the instant they were written against.
+const RealDate = Date;
+function setClock(now: string | undefined) {
+  if (!now) {
+    globalThis.Date = RealDate;
+    return;
+  }
+  let fixed = new RealDate(now).getTime();
+  class FixedDate extends RealDate {
+    constructor(...args: unknown[]) {
+      if (args.length === 0) super(fixed);
+      else super(...(args as [string | number]));
+    }
+    static now() {
+      return fixed;
+    }
+  }
+  globalThis.Date = FixedDate as DateConstructor;
+}
 
 let failed = false;
+let knownLines: string[] = [];
+console.log(`time zone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
 for (let file of VECTOR_FILES) {
   let vectors = readVectors(file);
-  let check = matcherFor(vectors);
+  setClock(vectors.now);
+  let check = await matcherFor(vectors);
+  let known = knownFor('matcher', file);
   let disagreements: Disagreement[] = [];
   let notEvaluable: string[] = [];
   let loweringDiffs: string[] = [];
@@ -40,14 +58,7 @@ for (let file of VECTOR_FILES) {
       return;
     }
     checked += vectors.cards.length;
-    for (let d of found) {
-      let known = KNOWN.find((k) => k.applies(d));
-      if (known) {
-        known.seen++;
-      } else {
-        disagreements.push(d);
-      }
-    }
+    disagreements.push(...found.filter((d) => !known.answers(d)));
   };
 
   for (let c of vectors.cases) {
@@ -69,6 +80,11 @@ for (let file of VECTOR_FILES) {
     }
     if (!c.expect) {
       refused++;
+      continue;
+    }
+    // the host leaves a search reckoned in another zone to the server
+    if (c.timeZone) {
+      notEvaluable.push(`${c.name} (in ${c.timeZone})`);
       continue;
     }
     run(c.name, 'newer, lowered by lowerQuery', lowered, c.expect);
@@ -100,14 +116,9 @@ for (let file of VECTOR_FILES) {
     console.log(`\nthe matcher disagrees with the model:`);
     console.log(report(disagreements));
   }
-  failed ||= loweringDiffs.length > 0 || disagreements.length > 0;
+  let { lines, stale } = known.summary();
+  knownLines.push(...lines);
+  failed ||= loweringDiffs.length > 0 || disagreements.length > 0 || stale;
 }
-for (let k of KNOWN) {
-  if (k.seen) {
-    console.log(`known divergence, ${k.seen} answer(s): ${k.about}`);
-  } else {
-    console.log(`no longer diverges, take it off the list: ${k.about}`);
-    failed = true;
-  }
-}
+console.log(knownLines.join('\n'));
 process.exitCode = failed ? 1 : 0;

@@ -11,6 +11,8 @@ inductive J where
   | bool (b : Bool)
   | str (s : String)
   | num (n : Int)
+  /-- A number literal as written, such as a decimal (`10.25`). -/
+  | lit (s : String)
   | arr (xs : List J)
   | obj (kvs : List (String × J))
   deriving Inhabited
@@ -28,6 +30,7 @@ partial def J.render : J → String
   | .bool b => if b then "true" else "false"
   | .str s => "\"" ++ escape s ++ "\""
   | .num n => toString n
+  | .lit s => s
   | .arr xs => "[" ++ ",".intercalate (xs.map J.render) ++ "]"
   | .obj kvs =>
     "{" ++ ",".intercalate (kvs.map fun (k, v) => J.render (.str k) ++ ":" ++ v.render) ++ "}"

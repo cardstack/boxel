@@ -40,7 +40,7 @@ const grammar: {
   readFileSync(new URL('../vectors/grammar.json', import.meta.url), 'utf8'),
 );
 const vectors = readVectors();
-const check = matcherFor(vectors);
+const check = await matcherFor(vectors);
 const problems: string[] = [];
 
 const table: Record<string, string[]> = {
