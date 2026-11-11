@@ -139,8 +139,8 @@ catalogs:
       specifier: ^5.0.0
       version: 5.0.1
     '@playwright/test':
-      specifier: ^1.54.0
-      version: 1.61.0
+      specifier: ^1.65.0
+      version: 1.65.0
     '@rollup/plugin-babel':
       specifier: ^6.0.4
       version: 6.1.0
@@ -792,7 +792,7 @@ importers:
         version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
-        version: 1.61.0
+        version: 1.65.0
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
         version: 8.67.0(@typescript-eslint/parser@8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
@@ -858,7 +858,7 @@ importers:
         version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
-        version: 1.61.0
+        version: 1.65.0
       '@types/jsonwebtoken':
         specifier: 'catalog:'
         version: 9.0.10
@@ -1192,7 +1192,7 @@ importers:
         version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
-        version: 1.61.0
+        version: 1.65.0
       '@types/flat':
         specifier: 'catalog:'
         version: 5.0.5
@@ -2104,6 +2104,9 @@ importers:
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
+      content-tag:
+        specifier: 'catalog:'
+        version: 4.2.0
       ember-concurrency:
         specifier: 'catalog:'
         version: 5.2.0(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
@@ -2155,6 +2158,9 @@ importers:
       tracked-built-ins:
         specifier: ^4.1.2
         version: 4.1.2(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
 
   packages/choreo:
     dependencies:
@@ -2546,8 +2552,8 @@ importers:
         specifier: 'catalog:'
         version: 3.2.0(marked@12.0.2)
       playwright:
-        specifier: 1.61.0
-        version: 1.61.0
+        specifier: 1.65.0
+        version: 1.65.0
       prettier:
         specifier: 'catalog:'
         version: 3.8.4
@@ -3024,6 +3030,9 @@ importers:
       '@embroider/macros':
         specifier: ^1.20.5
         version: 1.21.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/reverse-exports':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@embroider/vite':
         specifier: ^1.1.1
         version: 1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@26.1.2)(terser@5.49.0)(yaml@2.9.0))
@@ -3467,7 +3476,7 @@ importers:
         version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
-        version: 1.61.0
+        version: 1.65.0
       '@types/fs-extra':
         specifier: 'catalog:'
         version: 11.0.4
@@ -3668,6 +3677,37 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/realm-historian:
+    dependencies:
+      '@cardstack/postgres':
+        specifier: workspace:*
+        version: link:../postgres
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+    devDependencies:
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
+      '@glint/ember-tsc':
+        specifier: 'catalog:'
+        version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@types/qunit':
+        specifier: 'catalog:'
+        version: 2.19.14
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
+      qunit:
+        specifier: 'catalog:'
+        version: 2.26.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/realm-server:
     dependencies:
       '@aws-sdk/client-kms':
@@ -3685,6 +3725,9 @@ importers:
       morphdom:
         specifier: ^2.7.8
         version: 2.7.8
+      oidc-provider:
+        specifier: 9.13.3
+        version: 9.13.3(supports-color@8.1.1)
       puppeteer:
         specifier: ^25.0.2
         version: 25.2.1
@@ -3785,6 +3828,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@types/oidc-provider':
+        specifier: 9.13.1
+        version: 9.13.1
       '@types/pg':
         specifier: 'catalog:'
         version: 8.20.0
@@ -3842,6 +3888,9 @@ importers:
       ember-template-recast:
         specifier: ^6.1.5
         version: 6.1.5(supports-color@8.1.1)
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.24.2
       eslint:
         specifier: 'catalog:'
         version: 8.57.1(supports-color@8.1.1)
@@ -4350,12 +4399,21 @@ importers:
       '@babel/runtime':
         specifier: 'catalog:'
         version: 7.29.7
+      '@cardstack/boxel-icons':
+        specifier: workspace:*
+        version: link:../boxel-icons
+      '@cardstack/pretui':
+        specifier: workspace:*
+        version: link:../pretui
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.1.1(supports-color@8.1.1)
       decorator-transforms:
         specifier: 'catalog:'
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
+      ember-modifier:
+        specifier: ^4.1.0
+        version: 4.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1)
@@ -4408,6 +4466,9 @@ importers:
       ember-cli:
         specifier: ~6.12.0
         version: 6.12.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/node@24.13.2)(debug@4.4.3(supports-color@8.1.1))(ejs@3.1.10)(handlebars@4.7.9)(supports-color@8.1.1)(underscore@1.13.8)
+      ember-concurrency:
+        specifier: 'catalog:'
+        version: 5.2.0(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
       ember-eslint-parser:
         specifier: 'catalog:'
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(eslint@8.57.1(supports-color@8.1.1)))(@typescript-eslint/parser@8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(typescript@5.9.3)
@@ -4496,7 +4557,7 @@ importers:
         version: 1.14.34
       '@playwright/test':
         specifier: 'catalog:'
-        version: 1.61.0
+        version: 1.65.0
       '@types/fs-extra':
         specifier: 'catalog:'
         version: 11.0.4
@@ -7432,9 +7493,9 @@ packages:
     resolution: {integrity: sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA==}
     engines: {node: ^14.18.0 || >=16.0.0}
 
-  '@playwright/test@1.61.0':
-    resolution: {integrity: sha512-cKA5B6lpFEMyMGjxF54QihfYpB4FkEGH+qZhtArDEG+wezQAJY8Pq6C7T1SjWz+FFzt3TbyoXBQYk/0292TdJA==}
-    engines: {node: '>=18'}
+  '@playwright/test@1.65.0':
+    resolution: {integrity: sha512-iGURLGuKDLakSEl7Pgfv8h7f+XLT+V861Wfhz0zlEl5nyFuKUopdkFBPKqTllTUp06aOwPuH8iuUEb3yp3MpbQ==}
+    engines: {node: '>=20'}
     hasBin: true
 
   '@pnpm/constants@1001.3.1':
@@ -8326,6 +8387,9 @@ packages:
 
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
+
+  '@types/oidc-provider@9.13.1':
+    resolution: {integrity: sha512-RZqzlnjeU1py4ujgP3Q5eZkcGQyyCj4Dt2x8B9rw0QP2u1L4f3xnH8Buj2JyOrbCAdRa2QM6ylmW2TupemjpUQ==}
 
   '@types/pg-pool@2.0.6':
     resolution: {integrity: sha512-TaAUE5rq2VQYxab5Ts7WZhKNmuN78Q6PiFonTDdpbx8a1H0M1vhy3rhiMjl+e2iHmogyMw7jZF4FrE6eJUy5HQ==}
@@ -10051,6 +10115,10 @@ packages:
   content-disposition@0.5.4:
     resolution: {integrity: sha512-FveZTNuGw04cxlAiWbzi6zTAL/lhehaWbTtgluJh4/E95DqMwTmha3KZN1aAWA8cFIhHzMZUvLevkw5Rqk+tSQ==}
     engines: {node: '>= 0.6'}
+
+  content-disposition@1.0.1:
+    resolution: {integrity: sha512-oIXISMynqSqm241k6kcQ5UwttDILMK4BiurCfGEREw6+X9jkkpEe5T9FZaApyLGGOnFuyMWZpdolTXMtvEJ08Q==}
+    engines: {node: '>=18'}
 
   content-disposition@1.1.0:
     resolution: {integrity: sha512-5jRCH9Z/+DRP7rkvY83B+yGIGX96OYdJmzngqnw2SBSxqCFPd0w2km3s5iawpGX8krnwSGmF0FW5Nhr0Hfai3g==}
@@ -12051,11 +12119,6 @@ packages:
   fs.realpath@1.0.0:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
 
-  fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
-    os: [darwin]
-
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -12987,6 +13050,9 @@ packages:
     resolution: {integrity: sha512-2mD929bUVKUhOLQQEVhlf6EZ0Mlo0DeRb5MO7cViR9AXLtBauuccEtB1py9Ocxpo/P7ucnh442iY/iOwrh3IQw==}
     engines: {node: '>= 20'}
 
+  jose@6.2.15:
+    resolution: {integrity: sha512-qdF6ewcZARtef63fJ9AKKZPgxw+t7USH6HLXYcD4CrdmSvDp79rpJSPFEKc90QBeGS63u1KQtN2MZQHC0yDIzA==}
+
   jose@6.2.3:
     resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
@@ -13175,6 +13241,10 @@ packages:
   koa@2.16.4:
     resolution: {integrity: sha512-3An0GCLDSR34tsCO4H8Tef8Pp2ngtaZDAZnsWJYelqXUK5wyiHvGItgK/xcSkmHLSTn1Jcho1mRQs2ehRzvKKw==}
     engines: {node: ^4.8.4 || ^6.10.1 || ^7.10.1 || >= 8.1.4}
+
+  koa@3.3.0:
+    resolution: {integrity: sha512-NdsWJYxVzUuYt718DtEQRhUXqqsAPA4VlaUGrlidjh/T2TP/4OQXqQg4ouUHfHD9f+tgmwLZWPm+JQLgqM9YbA==}
+    engines: {node: '>= 18'}
 
   language-subtag-registry@0.3.23:
     resolution: {integrity: sha512-0K65Lea881pHotoGEa5gDlMxt3pctLi2RplBb7Ezh4rRdLEOtgi7n4EwK9lamnUCkKBqaeKRVebTq6BAxSkpXQ==}
@@ -14138,6 +14208,9 @@ packages:
     resolution: {integrity: sha512-l2q8l9CTCTOlbX+AnK4p3M+4CEpKpyQhle6blQkdFhm0IsBqsxm15bYaSa11G7pWdsYr6epdsRZxJpCyCRbT8A==}
     engines: {node: '>=18'}
 
+  oidc-provider@9.13.3:
+    resolution: {integrity: sha512-WmNDX9dLeItBmIqGqspmX5u6Cc7VVMrKUw2InX2T16+bwUJ8m/N5rJ3Ed+YKxE5aZqLp4YqwEi6kMJx4Ui5ffw==}
+
   on-finished@2.3.0:
     resolution: {integrity: sha512-ikqdkGAAyf/X/gPhXGvfgAytDZtDbr+bkNUJ0N9h5MI/dmdgCs3l6hoHrcUv41sRKew3jIwrp4qQDXiK99Utww==}
     engines: {node: '>= 0.8'}
@@ -14641,14 +14714,14 @@ packages:
     resolution: {integrity: sha512-nDywThFk1i4BQK4twPQ6TA4RT8bDY96yeuCVBWL3ePARCiEKDRSrNGbFIgUJpLp+XeIR65v8ra7WuJOFUBtkMA==}
     engines: {node: '>=8'}
 
-  playwright-core@1.61.0:
-    resolution: {integrity: sha512-caX7TrY3Ml6egyDX0WUcTHDxodl/b51y5wJOdCEA36QviK/s2g081hvmGs8eaE3DWb6NYZQ6BjO/QkNRPenoPA==}
-    engines: {node: '>=18'}
+  playwright-core@1.65.0:
+    resolution: {integrity: sha512-vNSKgH6YqtN7cdT/L334zo0a+YwkrpicyrHJlWWPIm/Q+Nn2SWInil01oT0mbu96U4GgoRtCYQD9CzJQgju+lA==}
+    engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.61.0:
-    resolution: {integrity: sha512-Z+7BeeqQPRRzklHsVFP4KTGIyMxKUmfeRA4WisM6G3/XW6nwGeX6fX9qYaDa+CiUqpOkb2f6X3nar05R3kSuJQ==}
-    engines: {node: '>=18'}
+  playwright@1.65.0:
+    resolution: {integrity: sha512-F3AMWcR44qMBt4kq+6Kb6mX7bjGXshktKFOPULd7reED6ZJWevjbNRqysP7q+AATE9kdPEZBibex1BYsvpVoeA==}
+    engines: {node: '>=20'}
     hasBin: true
 
   pluralize@2.0.0:
@@ -20752,9 +20825,9 @@ snapshots:
 
   '@pkgr/core@0.3.6': {}
 
-  '@playwright/test@1.61.0':
+  '@playwright/test@1.65.0':
     dependencies:
-      playwright: 1.61.0
+      playwright: 1.65.0
 
   '@pnpm/constants@1001.3.1': {}
 
@@ -21700,6 +21773,12 @@ snapshots:
       undici-types: 8.3.0
 
   '@types/normalize-package-data@2.4.4': {}
+
+  '@types/oidc-provider@9.13.1':
+    dependencies:
+      '@types/keygrip': 1.0.6
+      '@types/koa': 2.15.2
+      '@types/node': 24.13.2
 
   '@types/pg-pool@2.0.6':
     dependencies:
@@ -23803,6 +23882,8 @@ snapshots:
   content-disposition@0.5.4:
     dependencies:
       safe-buffer: 5.2.1
+
+  content-disposition@1.0.1: {}
 
   content-disposition@1.1.0: {}
 
@@ -27503,9 +27584,6 @@ snapshots:
 
   fs.realpath@1.0.0: {}
 
-  fsevents@2.3.2:
-    optional: true
-
   fsevents@2.3.3:
     optional: true
 
@@ -28537,6 +28615,8 @@ snapshots:
       '@hapi/topo': 6.0.2
       '@standard-schema/spec': 1.1.0
 
+  jose@6.2.15: {}
+
   jose@6.2.3: {}
 
   js-string-escape@1.0.1: {}
@@ -28812,6 +28892,27 @@ snapshots:
       vary: 1.1.2
     transitivePeerDependencies:
       - supports-color
+
+  koa@3.3.0:
+    dependencies:
+      accepts: 1.3.8
+      content-disposition: 1.0.1
+      content-type: 1.0.5
+      cookies: 0.9.1
+      delegates: 1.0.0
+      destroy: 1.2.0
+      encodeurl: 2.0.0
+      escape-html: 1.0.3
+      fresh: 0.5.2
+      http-assert: 1.5.0
+      http-errors: 2.0.1
+      koa-compose: 4.1.0
+      mime-types: 3.0.2
+      on-finished: 2.4.1
+      parseurl: 1.3.3
+      statuses: 2.0.2
+      type-is: 2.1.0
+      vary: 1.1.2
 
   language-subtag-registry@0.3.23: {}
 
@@ -29775,6 +29876,14 @@ snapshots:
     dependencies:
       jwt-decode: 4.0.0
 
+  oidc-provider@9.13.3(supports-color@8.1.1):
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      jose: 6.2.15
+      koa: 3.3.0
+    transitivePeerDependencies:
+      - supports-color
+
   on-finished@2.3.0:
     dependencies:
       ee-first: 1.1.1
@@ -30275,13 +30384,11 @@ snapshots:
     dependencies:
       find-up: 3.0.0
 
-  playwright-core@1.61.0: {}
+  playwright-core@1.65.0: {}
 
-  playwright@1.61.0:
+  playwright@1.65.0:
     dependencies:
-      playwright-core: 1.61.0
-    optionalDependencies:
-      fsevents: 2.3.2
+      playwright-core: 1.65.0
 
   pluralize@2.0.0: {}
 

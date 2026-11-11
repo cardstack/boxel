@@ -13,6 +13,7 @@ import {
   type RateLimitStore,
   type TokenBucketOutcome,
 } from '@cardstack/runtime-common';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import {
   OperationFailure,
   type AnonymousCallApiCaller,
@@ -43,7 +44,7 @@ import { UserKeyError } from './user-keys.ts';
 // - **What they bound.** A token bucket per caller of each share or key, and a
 //   daily and a monthly budget of calls per share or key, across every caller.
 // - **Interactive calls only.** A call carrying a user's session — a card in
-//   the browser, the AI assistant, the CLI — counts. A pipeline is bounded by
+//   the browser, the AI assistant, the CLI — counts. An automation is bounded by
 //   its schedule's payer, cap and limits, so a nightly sync never fails
 //   because a card got popular, and its calls never spend a budget.
 // - **Counted before anything is sent**, and only once every slot has passed
@@ -681,6 +682,7 @@ async function noticeThresholds(
       for (let writer of await fetchDirectWriters(
         dbAdapter,
         new URL(limited.realmURL),
+        matrixServerNameFromEnv(),
       )) {
         recipients.add(writer);
       }
@@ -850,7 +852,12 @@ export async function setShareLimits(
   ]);
   if (
     share &&
-    (await isDirectWriter(dbAdapter, new URL(share.realm_url as string), user))
+    (await isDirectWriter(
+      dbAdapter,
+      new URL(share.realm_url as string),
+      user,
+      matrixServerNameFromEnv(),
+    ))
   ) {
     throw new UserKeyError(
       403,

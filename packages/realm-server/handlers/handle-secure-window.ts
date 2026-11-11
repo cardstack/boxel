@@ -101,7 +101,14 @@ export function handleSecureWindowRealms(args: CreateRoutesArgs): Handler {
     }
     let found = await (
       ctxt.query.access === 'read' ? readableRealms : writableRealms
-    )({ dbAdapter, findRealm: realmFinder(args) }, user);
+    )(
+      {
+        dbAdapter,
+        findRealm: realmFinder(args),
+        matrixServerName: args.matrixClient.serverName,
+      },
+      user,
+    );
     await sendJSON(ctxt, 200, {
       data: found.map(({ url, name }) => ({
         type: 'secure-window-realm',
@@ -114,8 +121,11 @@ export function handleSecureWindowRealms(args: CreateRoutesArgs): Handler {
 
 // `POST /_secure-window/cards`: the card definitions a realm's cards adopt
 // from that send the user's own key in a request, which the window offers to
-// approve one of the user's keys for. `attributes.{realm}`. Asked with the
-// window's own session.
+// approve one of the user's keys for, or with `slot: 'apiKey'` those that
+// send the realm's key, which it offers to approve one of the user's shares
+// there for. With `key`, one of the user's keys, only those that key can fill
+// (a share holds its key, so the share's key names it for `apiKey`).
+// `attributes.{realm, slot?, key?}`. Asked with the window's own session.
 export function handleSecureWindowCards(args: CreateRoutesArgs): Handler {
   let { dbAdapter, definitionLookup, virtualNetwork } = args;
   return keysHandler(async (ctxt) => {
@@ -142,9 +152,16 @@ export function handleSecureWindowCards(args: CreateRoutesArgs): Handler {
     ) {
       throw new UserKeyError(400, `the resource type is 'secure-window-cards'`);
     }
-    let { realm } = validateContextRequest({
-      realm: (data.attributes ?? {}).realm,
-    });
+    let attributes = data.attributes ?? {};
+    let { realm } = validateContextRequest({ realm: attributes.realm });
+    let slot = attributes.slot ?? 'userKey';
+    if (slot !== 'userKey' && slot !== 'apiKey') {
+      throw new UserKeyError(400, `the slot is 'userKey' or 'apiKey'`);
+    }
+    let keyId = attributes.key;
+    if (keyId !== undefined && typeof keyId !== 'string') {
+      throw new UserKeyError(400, 'the key is a key id');
+    }
     let cards = await realmCardsWithRequests(
       {
         dbAdapter,
@@ -155,6 +172,7 @@ export function handleSecureWindowCards(args: CreateRoutesArgs): Handler {
       },
       user,
       realm!,
+      { slot, keyId },
     );
     await sendJSON(ctxt, 200, {
       data: cards.map((card) => ({

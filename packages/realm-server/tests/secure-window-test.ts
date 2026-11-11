@@ -72,6 +72,37 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           base: 'callApi',
           url: 'https://api.github.com/repos/cities',
         };
+
+        @operation static readSheet = {
+          base: 'callApi',
+          url: 'https://sheets.googleapis.com/v4/spreadsheets/abc',
+          headers: { authorization: 'Bearer {{userKey}}' },
+        };
+
+        @operation static currentWeather = {
+          base: 'callApi',
+          url: 'https://api.weather.co.uk/v3/current',
+          query: { appid: '{{userKey}}' },
+          headers: { authorization: 'Basic {{apiKey:basic|basic}}' },
+        };
+
+        @operation static appendRow = {
+          base: 'callApi',
+          url: 'https://sheets.googleapis.com/v4/spreadsheets/abc:append',
+          json: { values: [] },
+          headers: { authorization: 'Bearer {{userKey}}' },
+          keyKind: 'google-service-account',
+        };
+
+        @operation static mixed = {
+          base: 'callApi',
+          url: 'https://api.example.com/v1/items',
+          headers: {
+            authorization: 'Bearer {{userKey:token}}',
+            'x-tenant': '{{userKey:tenant}}',
+          },
+          keyKind: { token: 'oauth' },
+        };
       }
     `,
     'today.json': {
@@ -130,8 +161,9 @@ module(basename(import.meta.filename), function () {
     const CLOSED = 'https://realms.example.test/closed/';
     const LAZY = 'https://realms.example.test/lazy/';
     const USER = '@someone:example.test';
+    const BOT = '@node-test_realm:example.test';
     const PERMISSIONS: Record<string, Record<string, [boolean, boolean]>> = {
-      [OPEN]: { [USER]: [true, true] },
+      [OPEN]: { [USER]: [true, true], [BOT]: [true, true] },
       [CLOSED]: { '@owner:example.test': [true, true] },
       [LAZY]: { [USER]: [true, true] },
       // A permission row left behind by a realm the server no longer serves.
@@ -362,7 +394,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(mounted, [OPEN, CLOSED], 'listing mounts nothing');
       assert.deepEqual(
-        await writableRealms(deps(), '@node-test_realm:example.test'),
+        await writableRealms(deps(), BOT),
         [],
         'a bot account writes nowhere a key could be shared',
       );
@@ -452,9 +484,54 @@ module(basename(import.meta.filename), function () {
             path: '/v3/forecast/',
             registrableDomain: 'weather.co.uk',
           },
-          slots: [{ name: 'userKey', key: 'userKey' }],
+          slots: [
+            { name: 'userKey', key: 'userKey', kinds: ['static', 'oauth'] },
+          ],
         },
       });
+    });
+
+    test('says which kinds of key fill each slot: as declared, or as can work where it stands', async function (assert) {
+      let kindsOf = async (operation: string) => {
+        let response = await ask(WRITER, {
+          target: { kind: 'instance', url: `${REALM.href}today` },
+          operation,
+        });
+        assert.strictEqual(response.status, 200, response.text);
+        return Object.fromEntries(
+          (
+            response.body.data.attributes.operation.slots as {
+              name: string;
+              kinds: string[];
+            }[]
+          ).map(({ name, kinds }) => [name, kinds]),
+        );
+      };
+      assert.deepEqual(
+        await kindsOf('forecast'),
+        { userKey: ['static', 'oauth'] },
+        'a pasted key or a connected account',
+      );
+      assert.deepEqual(
+        await kindsOf('readSheet'),
+        { userKey: ['static', 'google-service-account', 'oauth'] },
+        'a request to a Google API may also take a service account',
+      );
+      assert.deepEqual(
+        await kindsOf('currentWeather'),
+        { userKey: ['static', 'oauth'], basic: ['static'] },
+        'a minted token fills a slot wherever it stands, but never a Basic one',
+      );
+      assert.deepEqual(
+        await kindsOf('appendRow'),
+        { userKey: ['google-service-account'] },
+        'a declared kind is the only one',
+      );
+      assert.deepEqual(
+        await kindsOf('mixed'),
+        { token: ['oauth'], tenant: ['static', 'oauth'] },
+        'a kind declared for one slot leaves the others as they stand',
+      );
     });
 
     test('describes an operation on a type, labelled by its name when it has no label', async function (assert) {

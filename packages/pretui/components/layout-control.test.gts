@@ -1,7 +1,9 @@
 // Pretui — LayoutControl: the pure chooser, then folding into ⋯ in a render.
 import { module, test } from 'qunit';
-import { render, click, waitUntil } from '@ember/test-helpers';
+import { render, click, fillIn, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
+import { SearchInput } from './search-input';
+import { eq } from '../helpers';
 import { applyHysteresis, chooseForms, HYSTERESIS_PX, LayoutControl } from './layout-control';
 import type { LayoutControlChoice, LayoutControlSlotSpec } from './layout-control';
 
@@ -117,5 +119,146 @@ module('Pretui | components/layout-control | folding', function (hooks) {
         document.querySelector('[data-test-pretui-layout-control-sheet] [data-test-search]'),
     );
     assert.ok(moved, 'the slot’s own block opens in the popover (or sheet)');
+  });
+
+  test('a search slot at its icon form opens a focused field on click and Escape closes it', async function (assert) {
+    const SEARCH = [
+      { name: 'field', minWidth: 40 },
+      { name: 'icon', minWidth: 2 },
+    ];
+    await render(
+      <template>
+        <div style={{NARROW}}>
+          <LayoutControl @label='Candidates' as |lc|>
+            <lc.Slot @id='search' @forms={{SEARCH}} @label='Search' as |form|>
+              {{#if (eq form 'icon')}}
+                <SearchInput @display='collapsed' @placeholder='Search candidates' />
+              {{else}}
+                <SearchInput @placeholder='Search candidates' />
+              {{/if}}
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+      </template>,
+    );
+    let toggle = () => document.querySelector<HTMLElement>('[data-test-pretui-search-toggle]');
+    let input = () => document.querySelector<HTMLInputElement>('[data-test-pretui-search-input] input');
+    await waitUntil(toggle);
+    assert.notOk(input(), 'only the square shows at this width');
+
+    await click(toggle()!);
+    assert.strictEqual(document.activeElement, input(), 'the field opens with focus in it');
+    await fillIn(input()!, 'ada');
+    await triggerKeyEvent(input()!, 'keydown', 'Escape');
+    await waitUntil(() => document.activeElement === toggle());
+    assert.notOk(input(), 'Escape collapses back to the square');
+    assert.strictEqual(document.activeElement, toggle(), 'focus returns to the square');
+  });
+
+  test('a slot folded by a measurement taken mid-resize unfolds when the bar is back at its width', async function (assert) {
+    const WIDE = [
+      { name: 'wide', minWidth: 30 },
+      { name: 'menu', minWidth: 0 },
+    ];
+    const HOST = 'inline-size: 40rem';
+    const CONTENT = 'display: inline-block; flex: none; inline-size: 30rem';
+    await render(
+      <template>
+        <div style={{HOST}} data-test-host>
+          <LayoutControl as |lc|>
+            <lc.Slot @id='wide' @forms={{WIDE}}>
+              <span style={{CONTENT}} data-test-wide>wide</span>
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+      </template>,
+    );
+    let host = document.querySelector<HTMLElement>('[data-test-host]')!;
+    let frames = async (n: number) => {
+      for (let i = 0; i < n; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+    };
+    await waitUntil(() => document.querySelector('[data-test-wide]'));
+    await frames(3);
+    // The bar reports 39rem, then narrows within the same observer delivery.
+    // An observer only hears of a deeper element's resize in that frame, so
+    // the bar's next measuring frame sees the narrow layout before its own
+    // observer reports it, as in a host resize or stack animation.
+    let shrink = new ResizeObserver(() => {
+      shrink.disconnect();
+      host.style.inlineSize = '20rem';
+    });
+    host.style.inlineSize = '39rem';
+    shrink.observe(document.querySelector('[data-test-wide]')!);
+    await waitUntil(() => document.querySelector('[data-test-pretui-layout-control-more]'));
+    await frames(3);
+    // back to the width it was measured at, less than HYSTERESIS_PX above it
+    host.style.inlineSize = '39rem';
+    await frames(10);
+    assert.dom('[data-test-wide]').exists('back at its width, the slot is in the row again');
+    assert.dom('[data-test-pretui-layout-control-more]').doesNotExist();
+  });
+
+  test('children with fractional widths that fit at the bar width stay in the row', async function (assert) {
+    const FORMS = [
+      { name: 'row', minWidth: 1 },
+      { name: 'menu', minWidth: 0 },
+    ];
+    // ten 30.6px children lay out at 306px; rounded one by one they'd sum to 310px
+    const HOST = 'inline-size: 307.5px; --pretui-lc-gap: 0';
+    const CHILD = 'display: inline-block; flex: none; inline-size: 30.6px';
+    const TEN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    await render(
+      <template>
+        <div style={{HOST}}>
+          <LayoutControl as |lc|>
+            <lc.Slot @id='row' @forms={{FORMS}}>
+              {{#each TEN}}<span style={{CHILD}} data-test-child>x</span>{{/each}}
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+      </template>,
+    );
+    await waitUntil(() => document.querySelector('[data-test-child]'));
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    assert.dom('[data-test-child]').exists({ count: 10 }, 'the slot fits, so it stays in the row');
+    assert.dom('[data-test-pretui-layout-control-more]').doesNotExist();
+  });
+
+  test('in a vertical writing mode the bar measures its room along its height', async function (assert) {
+    const FORMS = [
+      { name: 'row', minWidth: 6 },
+      { name: 'menu', minWidth: 0 },
+    ];
+    const PINNED = [{ name: 'label', minWidth: 1 }];
+    // The inline axis runs down: 40rem of room, against a bar 4rem across.
+    // The pinned slot keeps the bar 4rem across whether or not the row folds.
+    const HOST = 'writing-mode: vertical-rl; inline-size: 40rem';
+    const CHILD = 'display: inline-block; flex: none; inline-size: 2rem; block-size: 4rem';
+    const EDGE = 'display: inline-block; flex: none; inline-size: 1rem; block-size: 4rem';
+    const THREE = [0, 1, 2];
+    await render(
+      <template>
+        <div style={{HOST}}>
+          <LayoutControl as |lc|>
+            <lc.Slot @id='row' @forms={{FORMS}}>
+              {{#each THREE}}<span style={{CHILD}} data-test-child></span>{{/each}}
+            </lc.Slot>
+            <lc.Slot @id='edge' @forms={{PINNED}} @pinned={{true}}>
+              <span style={{EDGE}}></span>
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+      </template>,
+    );
+    await waitUntil(() => document.querySelector('[data-test-child]'));
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    assert.dom('[data-test-child]').exists({ count: 3 }, 'the row fits in 40rem, so it stays');
+    assert.dom('[data-test-pretui-layout-control-more]').doesNotExist();
   });
 });

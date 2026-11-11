@@ -35,7 +35,6 @@ import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
-import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -55,7 +54,6 @@ import SectionRail from './dashboard/section-rail';
 import DashboardSections from './dashboard/sections';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
-import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type AssistantQuickLookService from '../../services/assistant-quick-look';
@@ -121,7 +119,6 @@ const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
-  @tracked private topBarCenterElement: Element | null = null;
   @tracked private currentWindowWidth = 0;
 
   private get topBarButtonsCollapsed(): boolean {
@@ -164,11 +161,6 @@ export default class SubmodeLayout extends Component<Signature> {
   private storeExpandedCardHeaderElement(element: Element) {
     this.operatorModeStateService.expandedCardHeaderElement =
       element as HTMLElement;
-  }
-
-  @action
-  private storeTopBarCenterElement(element: Element) {
-    this.topBarCenterElement = element;
   }
 
   @action
@@ -406,12 +398,6 @@ export default class SubmodeLayout extends Component<Signature> {
       workspaceChooserOpened;
   }
 
-  // Read at render time rather than once at module load, so a test can turn
-  // the flag on for its module.
-  private get isDashboardV2Enabled() {
-    return Boolean(ENV.featureFlags?.DASHBOARD_V2);
-  }
-
   @action private toggleWorkspaceChooser() {
     this.operatorModeStateService.workspaceChooserOpened =
       !this.operatorModeStateService.workspaceChooserOpened;
@@ -419,10 +405,6 @@ export default class SubmodeLayout extends Component<Signature> {
 
   // The dashboard's sections, which the section rail lists.
   private dashboardSections = new DashboardSections();
-
-  private get isDashboardShown() {
-    return this.workspaceChooserOpened && this.isDashboardV2Enabled;
-  }
 
   @action private toggleProfileSettings() {
     this.operatorModeStateService.toggleProfileSettings();
@@ -512,12 +494,6 @@ export default class SubmodeLayout extends Component<Signature> {
               data-workspace-chooser-toggle
               data-test-workspace-chooser-toggle
             />
-            {{#if this.workspaceChooserOpened}}
-              <div
-                class='submode-layout-top-bar-center'
-                {{captureElement this.storeTopBarCenterElement}}
-              ></div>
-            {{/if}}
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
@@ -579,18 +555,10 @@ export default class SubmodeLayout extends Component<Signature> {
           </div>
           {{! Ahead of the page, so Tab reaches the rail right after the top
               bar, as it reads. }}
-          {{#if this.isDashboardShown}}
-            <SectionRail @sections={{this.dashboardSections}} />
-          {{/if}}
           {{#if this.workspaceChooserOpened}}
+            <SectionRail @sections={{this.dashboardSections}} />
             <div class='workspace-overlay'>
-              {{#if this.isDashboardV2Enabled}}
-                <Dashboard @sections={{this.dashboardSections}} />
-              {{else}}
-                <WorkspaceChooser
-                  @topBarCenterElement={{this.topBarCenterElement}}
-                />
-              {{/if}}
+              <Dashboard @sections={{this.dashboardSections}} />
             </div>
           {{/if}}
 
@@ -681,12 +649,11 @@ export default class SubmodeLayout extends Component<Signature> {
     />
 
     <style scoped>
-      /* Covers the stacks with whichever of the workspace chooser and the
-         dashboard is shown; the child fills it. */
+      /* Covers the stacks with the dashboard, which fills it. */
       .workspace-overlay {
         display: grid;
-        /* Tracks no bigger than the overlay, so a tall chooser scrolls inside
-           it instead of growing past it. */
+        /* Tracks no bigger than the overlay, so a tall dashboard scrolls
+           inside it instead of growing past it. */
         grid-template: minmax(0, 1fr) / minmax(0, 1fr);
         position: absolute;
         height: 100%;
@@ -743,8 +710,8 @@ export default class SubmodeLayout extends Component<Signature> {
         max-width: 100%;
         container-type: inline-size;
         /* Lock outer box to exactly var(--stack-padding-top) — the
-           same value .operator-mode-stack uses for its padding-top
-           offset. Any content the bar contains (workspace button,
+           same value the stack's cards wrapper (.stack-cards in
+           stack.gts) uses for its top margin. Any content the bar contains (workspace button,
            submode switcher, portaled expanded-card-header pill,
            etc.) renders WITHIN this fixed height; nothing the slot
            contents do can push the bar taller. This is what lets
@@ -759,30 +726,6 @@ export default class SubmodeLayout extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--operator-mode-spacing);
-      }
-
-      .submode-layout-top-bar-center {
-        /* Narrow default: stay in flow as a flex child. `flex: 1` reserves the
-           middle track between the workspace button and the profile controls,
-           so the content can neither slide under those controls nor intercept
-           clicks meant for them — it just sits on the one line between them. */
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        min-width: 0;
-      }
-      /* Wider top bars have room to center the content within the whole bar
-         rather than only within the asymmetric middle track (the 160px
-         workspace button makes the flex track off-centre). Take it out of flow
-         and pin it to the bar's centre; the breakpoint is high enough that the
-         centered content clears the workspace button on the left. */
-      @container (min-width: 60rem) {
-        .submode-layout-top-bar-center {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-        }
       }
 
       /* Slot for the expanded stack-item's CardHeader pill. When a

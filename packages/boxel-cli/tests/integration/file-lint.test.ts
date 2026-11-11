@@ -273,6 +273,7 @@ export class MyCard extends CardDef {
     let source = `import { CardDef } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import { operation, params } from '@cardstack/base/operations';
+import { TOKEN_KIND } from './kinds';
 
 export class Vendor extends CardDef {
   @operation static listItems = {
@@ -328,6 +329,22 @@ export class Vendor extends CardDef {
     base: 'callApi',
     url: 'https://api.example.com/v1/x',
   };
+
+  @operation static unknownKeyKind = {
+    base: 'callApi',
+    label: 'Unknown key kind',
+    url: 'https://api.example.com/v1/x',
+    headers: { authorization: 'Bearer {{userKey}}' },
+    keyKind: 'password',
+  };
+
+  @operation static importedKeyKind = {
+    base: 'callApi',
+    label: 'Imported key kind',
+    url: 'https://api.example.com/v1/x',
+    headers: { authorization: 'Bearer {{userKey}}' },
+    keyKind: { userKey: TOKEN_KIND },
+  };
 }
 `;
     let result = await lintSource(source, 'vendor.gts');
@@ -340,6 +357,7 @@ export class Vendor extends CardDef {
       .map((m) => m.message.split(':')[0]);
     expect(errors.sort()).toEqual(
       [
+        'invalid-request',
         'invalid-request',
         'invalid-slot',
         'slot-out-of-place',
@@ -361,9 +379,12 @@ export class Vendor extends CardDef {
       true,
     );
     expect(advice.some((m) => m.includes('`label`'))).toBe(true);
-    // The well-formed declaration is reported for nothing.
-    let listItemsLine =
-      source.split('\n').indexOf('  @operation static listItems = {') + 1;
-    expect(messages.some((m) => m.line === listItemsLine)).toBe(false);
+    // The well-formed declaration is reported for nothing, and nor is one
+    // whose key kind is a constant the source alone can't settle.
+    for (let name of ['listItems', 'importedKeyKind']) {
+      let line =
+        source.split('\n').indexOf(`  @operation static ${name} = {`) + 1;
+      expect(messages.some((m) => m.line === line)).toBe(false);
+    }
   });
 });

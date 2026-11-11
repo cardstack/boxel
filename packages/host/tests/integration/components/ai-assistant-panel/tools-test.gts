@@ -29,6 +29,7 @@ import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
+  APP_BOXEL_EXTERNAL_FIELDS_KEY,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
@@ -2630,6 +2631,36 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     };
   }
 
+  // The declaring skill loads, but importing the tool's command module
+  // throws, so resolving the tool rejects rather than finding no command.
+  // Patched on the prototype so a loader reset mid-test is covered too.
+  function failCommandModuleImport() {
+    let loaderPrototype = Object.getPrototypeOf(
+      getService('loader-service').loader,
+    );
+    let originalImport = loaderPrototype.import;
+    let importsRefused = 0;
+    loaderPrototype.import = async function (
+      this: unknown,
+      moduleId: string,
+      ...rest: unknown[]
+    ) {
+      if (String(moduleId).includes('read-file-for-ai-assistant')) {
+        importsRefused++;
+        throw new Error('simulated command module load failure');
+      }
+      return originalImport.call(this, moduleId, ...rest);
+    };
+    return {
+      get importsRefused() {
+        return importsRefused;
+      },
+      restore() {
+        loaderPrototype.import = originalImport;
+      },
+    };
+  }
+
   function finalEditWithHostTool(
     streamingEventId: string,
     body: string,
@@ -2951,23 +2982,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
-    // The declaring skill loads, but importing the tool's command module
-    // throws, so resolving the tool rejects rather than finding no command.
-    // Patched on the prototype so a loader reset mid-test is covered too.
-    let loaderPrototype = Object.getPrototypeOf(
-      getService('loader-service').loader,
-    );
-    let originalImport = loaderPrototype.import;
-    loaderPrototype.import = async function (
-      this: unknown,
-      moduleId: string,
-      ...rest: unknown[]
-    ) {
-      if (String(moduleId).includes('read-file-for-ai-assistant')) {
-        throw new Error('simulated command module load failure');
-      }
-      return originalImport.call(this, moduleId, ...rest);
-    };
+    // This test is about the rejection, not the validation timeout. On a busy
+    // runner, loading the declaring skill before the import can take longer
+    // than the 3s test timeout, and then the call fails for the timeout.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
+    let fail = failCommandModuleImport();
     try {
       simulateRemoteMessage(
         roomId,
@@ -2976,7 +2997,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
       await settled();
     } finally {
-      loaderPrototype.import = originalImport;
+      fail.restore();
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
     }
 
     let hostToolResults = getRoomEvents(roomId).filter(
@@ -2999,6 +3021,123 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-tool-call-apply="applying"]')
       .doesNotExist('no tool is left spinning in the applying state');
+  });
+
+  test('a validation that times out and then finds the call invalid leaves only the failed result', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // Hold the skill load past a short validation timeout, so the drain sends
+    // a failed result for the timeout. Then let the resolve continue into an
+    // import that throws, so the validation that kept running finds the call
+    // invalid after the drain has already answered it.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    let hold = holdDiscoveredSkillLoads();
+    toolService.validateTimeoutMs = 200;
+    let fail = failCommandModuleImport();
+    let toolResults = () =>
+      getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === 'slow-host-read',
+      );
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await hold.reached();
+      await waitUntil(() => toolResults().length > 0, {
+        timeout: 5000,
+        timeoutMessage: 'the drain never reported the validation timeout',
+      });
+    } finally {
+      hold.release();
+    }
+    try {
+      // `settled()` does not wait for a validation the drain stopped waiting
+      // for, so wait for it to end explicitly.
+      await waitUntil(() => toolService.validationsInFlight === 0, {
+        timeout: 10_000,
+        timeoutMessage: 'the timed-out validation never finished',
+      });
+      await settled();
+    } finally {
+      fail.restore();
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
+    }
+
+    assert.true(
+      fail.importsRefused > 0,
+      'the timed-out validation went on to the command module import',
+    );
+    assert.deepEqual(
+      toolResults().map((event) => event.content['m.relates_to']?.key),
+      ['failed'],
+      'only the timeout result, no contradictory invalid',
+    );
+  });
+
+  test('a call whose invalid result cannot be sent still gets a failed result', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // The call is invalid because its command module fails to load, and the
+    // send of that invalid result fails.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
+    let matrixService = getService('matrix-service');
+    let originalSend = matrixService.sendToolResultEvent;
+    let refusedSends = 0;
+    (matrixService as any).sendToolResultEvent = async function (
+      params: { status: string },
+      ...rest: unknown[]
+    ) {
+      if (params.status === 'invalid') {
+        refusedSends++;
+        throw new Error('simulated invalid result send failure');
+      }
+      return (originalSend as any).call(matrixService, params, ...rest);
+    };
+    let fail = failCommandModuleImport();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await settled();
+    } finally {
+      fail.restore();
+      (matrixService as any).sendToolResultEvent = originalSend;
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
+    }
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(refusedSends, 1, 'the invalid result was refused');
+    assert.deepEqual(
+      hostToolResults.map((event) => event.content['m.relates_to']?.key),
+      ['failed'],
+      'the call still gets a terminal result',
+    );
+    let failureReason = String(hostToolResults[0]?.content.failureReason);
+    assert.true(
+      failureReason.includes(
+        'could not be prepared (simulated command module load failure)',
+      ),
+      `the reason still says why the call was invalid: ${failureReason}`,
+    );
+    assert.true(
+      failureReason.includes('simulated invalid result send failure'),
+      `the reason names the send failure: ${failureReason}`,
+    );
   });
 
   test("another agent's call that first resolved to no command is resolved again when its request finishes", async function (assert) {
@@ -3127,7 +3266,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       if (!heldToolIds || heldToolIds.includes(messageTool.id ?? '')) {
         await released;
       }
-      return true;
+      return { valid: true };
     };
     let results: Array<{
       toolCallId: string;
@@ -4380,17 +4519,22 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   });
 
   // A tool call the bot already ran, and the result card it stored in the
-  // room for it.
+  // room for it. With `inMedia`, the request is carried in Matrix media, as
+  // an event over the size limit carries it.
   function simulateToolResult(
     roomId: string,
     {
       requestId,
       toolName,
       resultDoc,
+      args = {},
+      inMedia = false,
     }: {
       requestId: string;
       toolName: string;
       resultDoc: LooseSingleCardDocument;
+      args?: Record<string, unknown>;
+      inMedia?: boolean;
     },
   ) {
     let resultUrl = `mxc://mock-server/${requestId}-result`;
@@ -4403,14 +4547,33 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       }
       return resultDoc;
     };
+    let toolRequests = [
+      { id: requestId, name: toolName, arguments: JSON.stringify(args) },
+    ];
+    let requestsField: Record<string, unknown> = {
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
+    };
+    if (inMedia) {
+      let requestsUrl = `mxc://mock-server/${requestId}-requests`;
+      let mediaId = requestsUrl.slice('mxc://mock-server/'.length);
+      let originalFetch =
+        matrixService.fetchMatrixHostedFile.bind(matrixService);
+      matrixService.fetchMatrixHostedFile = async (url) =>
+        url.endsWith(`/${mediaId}`)
+          ? new Response(JSON.stringify(toolRequests))
+          : originalFetch(url);
+      requestsField = {
+        [APP_BOXEL_EXTERNAL_FIELDS_KEY]: {
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: requestsUrl,
+        },
+      };
+    }
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: `Running ${toolName}`,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
-        { id: requestId, name: toolName, arguments: '{}' },
-      ],
+      ...requestsField,
     });
     simulateRemoteMessage(
       roomId,
@@ -4515,6 +4678,101 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-tool-result-container]')
       .doesNotExist('the correctness result card is not rendered');
+  });
+
+  test('a check of several targets lists its errors and counts the rest', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let target = (n: number) => `${testRealmURL}Product/${n}`;
+
+    simulateToolResult(roomId, {
+      requestId: 'batched-correctness-check',
+      toolName: 'checkCorrectness',
+      args: {
+        description: 'Check 3 cards and 1 file',
+        attributes: {
+          targets: [
+            { type: 'file', ref: `${testRealmURL}product.gts` },
+            { type: 'card', ref: target(1) },
+            { type: 'card', ref: target(2) },
+            { type: 'card', ref: target(3) },
+          ],
+        },
+      },
+      resultDoc: baseCommandResultDoc('CorrectnessResultCard', {
+        correct: false,
+        errors: [`${target(2)}: price must be a number`],
+        warnings: [],
+        targetResults: [
+          {
+            targetType: 'card',
+            targetRef: target(2),
+            errors: [`${target(2)}: price must be a number`],
+            warnings: [],
+          },
+        ],
+        checkedCount: 4,
+        passedCount: 3,
+      }),
+    });
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-tool-call-apply="applied-with-error"]',
+    );
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row-toggle]',
+    );
+    await waitFor('[data-test-message-idx="0"] [data-test-check-outcome]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
+      .hasText(
+        'Checked 3 cards and 1 file · errors',
+        'the row counts what it checked',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-check-outcome]')
+      .containsText(
+        `${target(2)}: price must be a number`,
+        'the error is listed',
+      )
+      .containsText(
+        'No errors in the other 2 cards and 1 file',
+        'the passing targets are counted',
+      );
+  });
+
+  test('a check request carried in Matrix media is shown like an inline one', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let target = (n: number) => `${testRealmURL}Product/${n}`;
+
+    simulateToolResult(roomId, {
+      requestId: 'media-correctness-check',
+      toolName: 'checkCorrectness',
+      inMedia: true,
+      args: {
+        description: 'Check 2 cards',
+        attributes: {
+          targets: [
+            { type: 'card', ref: target(1) },
+            { type: 'card', ref: target(2) },
+          ],
+        },
+      },
+      resultDoc: baseCommandResultDoc('CorrectnessResultCard', {
+        correct: true,
+        errors: [],
+        warnings: [],
+        targetResults: [],
+        checkedCount: 2,
+        passedCount: 2,
+      }),
+    });
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row-title]',
+    );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
+      .containsText('Checked 2 cards', 'the request was read from media');
   });
 
   test('a view-visually result shows the image the assistant looked at', async function (assert) {

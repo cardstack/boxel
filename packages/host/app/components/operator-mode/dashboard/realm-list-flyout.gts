@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -18,6 +19,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 
 import HostedPill from './hosted-pill';
+import SectionCount from './section-count';
 
 import type { SectionFlyoutSignature } from './sections';
 
@@ -55,6 +57,12 @@ export default class RealmListFlyout extends Component<Signature> {
   <template>
     <header class='flyout-header'>
       <span class='flyout-title' id={{@titleId}}>{{@title}}</span>
+      {{#if this.realms.length}}
+        <SectionCount
+          @count={{this.realms.length}}
+          data-test-section-rail-flyout-count
+        />
+      {{/if}}
     </header>
     {{#each this.realms key='url' as |realm|}}
       <Button
@@ -88,6 +96,9 @@ export default class RealmListFlyout extends Component<Signature> {
 
     <style scoped>
       .flyout-header {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xs) var(--boxel-sp-xs);
       }
       .flyout-title {
@@ -150,4 +161,22 @@ export default class RealmListFlyout extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+// A section's rail flyout listing the realms the page lists, so it follows
+// the page's filter.
+export function realmListFlyout(
+  title: string,
+  realmURLs: () => string[],
+  emptyMessage: () => string,
+): TemplateOnlyComponent<SectionFlyoutSignature> {
+  return <template>
+    <RealmListFlyout
+      @title={{title}}
+      @titleId={{@titleId}}
+      @close={{@close}}
+      @realmURLs={{(realmURLs)}}
+      @emptyMessage={{(emptyMessage)}}
+    />
+  </template>;
 }

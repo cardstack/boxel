@@ -5,17 +5,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { addPatchTools } from '../tools/utils';
 
 import type CardService from '../services/card-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
-import type RealmService from '../services/realm';
 import type ToolService from '../services/tool-service';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 import type { FileDef } from '@cardstack/base/file-api';
-import type { CardMessageContent, Tool } from '@cardstack/base/matrix-event';
+import type { CardMessageContent } from '@cardstack/base/matrix-event';
 
 export default class SendAiAssistantMessageTool extends HostBaseTool<
   typeof BaseToolModule.SendAiAssistantMessageInput,
@@ -25,9 +23,6 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
   @service declare private toolService: ToolService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private realm: RealmService;
-
-  #cardAPI?: typeof CardAPI;
 
   static actionVerb = 'Send';
 
@@ -39,31 +34,11 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
 
   requireInputFields = ['roomId'];
 
-  async loadCardAPI() {
-    if (!this.#cardAPI) {
-      this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        '@cardstack/base/card-api',
-      );
-    }
-    return this.#cardAPI;
-  }
-
   protected async run(
     input: BaseToolModule.SendAiAssistantMessageInput,
   ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
     let { matrixService, operatorModeStateService } = this;
     let roomId = input.roomId;
-    let requireToolCall = input.requireCommandCall ?? false;
-    let cardAPI = await this.loadCardAPI();
-
-    let patchableCards = input.attachedCards.filter((c) =>
-      this.realm.canWrite(c.id),
-    );
-    let tools: Tool[] = await addPatchTools(
-      this.toolContext,
-      patchableCards,
-      cardAPI,
-    );
 
     let attachedOpenCards: CardAPI.CardDef[] = [];
     if (input.openCardIds) {
@@ -96,8 +71,7 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
     );
 
     context.realmUrl = input.realmIdentifier;
-    context.requireToolCall = requireToolCall;
-    context.tools = tools;
+    context.tools = [];
     context.functions = [];
 
     let { event_id } = await matrixService.sendEvent(roomId, 'm.room.message', {

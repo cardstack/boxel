@@ -21,6 +21,7 @@ import {
   type SplicedSource,
 } from '@cardstack/runtime-common';
 import { CardError } from '@cardstack/runtime-common/error';
+import { MAX_DRAIN_BEFORE_LOCK_ATTEMPTS } from '@cardstack/runtime-common/drain-before-locks';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { RealmIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 import type { Definition } from '@cardstack/runtime-common/definitions';
@@ -65,6 +66,10 @@ interface Stub {
   commits: Commit[];
   lockDepth: () => number;
   drainCount: () => number;
+  // The lock depth each wait on the drain began at.
+  drainLockDepths: () => number[];
+  // How many times the batch took its write locks.
+  locksTaken: () => number;
   readsOutsideLock: () => number;
   // What the batch asked the realm for, in order. Two entries a batch's
   // correctness depends on the order of: the pre-staging drain, and the read
@@ -108,6 +113,13 @@ interface StubOptions {
   // The realm's own settings, as `realmConfig()` resolves them. Absent is a
   // realm that configures none.
   settings?: Record<string, unknown>;
+  // Whether a pass the drain covers is in flight when the batch arrives. The
+  // default is one, so a batch that drains is seen to.
+  indexingInFlight?: boolean;
+  // How many of the batch's lock acquisitions see a new pass register just
+  // before the locks are granted — the window between a drain settling and
+  // the locks being taken.
+  passesRegisteringAtLock?: number;
 }
 
 // The bytes a described content stands for. A realm streams these to disk;
@@ -152,6 +164,11 @@ function stub(opts: StubOptions = {}): Stub {
   let held = 0;
   let maxHeld = 0;
   let drains = 0;
+  let inFlight = opts.indexingInFlight ?? true;
+  let registeringAtLock = opts.passesRegisteringAtLock ?? 0;
+  let locksTaken = 0;
+  // The lock depth each wait on the drain began at.
+  let drainLockDepths: number[] = [];
   let readsOutsideLock = 0;
   let calls: string[] = [];
   let sourceReads = 0;
@@ -161,6 +178,11 @@ function stub(opts: StubOptions = {}): Stub {
   let core: BatchCore = {
     realmURL: REALM,
     async withWriteLocks(localPaths, fn) {
+      locksTaken++;
+      if (registeringAtLock > 0) {
+        registeringAtLock--;
+        inFlight = true;
+      }
       held++;
       maxHeld = Math.max(maxHeld, held);
       lockedPaths = [...localPaths].sort();
@@ -229,9 +251,33 @@ function stub(opts: StubOptions = {}): Stub {
         });
       }
     },
-    async drainIndexing() {
-      drains++;
-      calls.push('drain');
+    // The realm gate's contract: undefined when nothing it covers is in
+    // flight, otherwise a promise that settles once it has. The pending pass
+    // settles while someone waits on it, so a wait is counted — and the pass
+    // settled — when the promise is awaited, not when the gate is asked: a
+    // synchronous re-check reads the answer without waiting on it.
+    drainIndexing() {
+      if (!inFlight) {
+        return undefined;
+      }
+      let lockDepthWhenAsked = held;
+      let settled: Promise<void> | undefined;
+      return {
+        then(
+          onFulfilled?: ((value: void) => unknown) | null,
+          onRejected?: ((reason: unknown) => unknown) | null,
+        ) {
+          if (!settled) {
+            drains++;
+            calls.push('drain');
+            drainLockDepths.push(lockDepthWhenAsked);
+            settled = Promise.resolve().then(() => {
+              inFlight = false;
+            });
+          }
+          return settled.then(onFulfilled, onRejected);
+        },
+      } as unknown as Promise<void>;
     },
     async isIgnored(url) {
       return (opts.ignored ?? []).some((p) => url.href === `${REALM}${p}`);
@@ -311,12 +357,28 @@ function stub(opts: StubOptions = {}): Stub {
     commits,
     lockDepth: () => maxHeld,
     drainCount: () => drains,
+    drainLockDepths: () => [...drainLockDepths],
+    locksTaken: () => locksTaken,
     readsOutsideLock: () => readsOutsideLock,
     calls: () => [...calls],
     sourceReads: () => sourceReads,
     lockedPaths: () => lockedPaths,
     heldNow: () => held,
     lockSpan: () => [...lockSpan],
+  };
+}
+
+function createOne(): BatchEntry {
+  return {
+    op: 'create',
+    lid: 'one',
+    document: {
+      data: {
+        type: 'card',
+        attributes: { firstName: 'One' },
+        meta: { adoptsFrom: PERSON },
+      },
+    },
   };
 }
 
@@ -2929,6 +2991,58 @@ module(basename(import.meta.filename), function () {
         'and the commit is still told not to wait for its own',
       );
     });
+    // The file locks serialize the read-merge-write of the files a batch names.
+    // The drain waits on other writers' indexing, which can take as long as a
+    // module's whole fan-out; waited for under the locks, every other writer
+    // of those files would wait it out too.
+    test('a batch waits for in-flight indexing before it takes its write locks', async function (assert) {
+      let s = stub();
+      await commitBatch(s.core, [createOne()], {});
+      assert.deepEqual(
+        s.drainLockDepths(),
+        [0],
+        'the one wait happens with no lock held',
+      );
+      assert.strictEqual(s.locksTaken(), 1, 'and the locks are taken once');
+      assert.strictEqual(s.commits.length, 1, 'and the batch commits');
+    });
+    test('a pass that registers while the locks are being taken sends the batch back to drain without them', async function (assert) {
+      let s = stub({ passesRegisteringAtLock: 1 });
+      await commitBatch(s.core, [createOne()], {});
+      assert.deepEqual(
+        s.drainLockDepths(),
+        [0, 0],
+        'the pass that slipped in is waited for outside the locks as well',
+      );
+      assert.strictEqual(
+        s.locksTaken(),
+        2,
+        'the locks are handed back and taken again',
+      );
+      assert.strictEqual(s.commits.length, 1, 'and the batch commits once');
+    });
+    test('a batch whose locks keep meeting a new pass stops handing them back', async function (assert) {
+      let s = stub({ passesRegisteringAtLock: Infinity });
+      await commitBatch(s.core, [createOne()], {});
+      assert.strictEqual(
+        s.locksTaken(),
+        MAX_DRAIN_BEFORE_LOCK_ATTEMPTS,
+        'the locks are taken a bounded number of times',
+      );
+      assert.deepEqual(
+        s.drainLockDepths(),
+        [...new Array(MAX_DRAIN_BEFORE_LOCK_ATTEMPTS).fill(0), 1],
+        'and on the last turn what is left is waited for under them, so ' +
+          'staging still sees no pass the drain covers in flight',
+      );
+      assert.strictEqual(s.commits.length, 1, 'and the batch commits once');
+    });
+    test('a batch with nothing in flight takes its locks without waiting', async function (assert) {
+      let s = stub({ indexingInFlight: false });
+      await commitBatch(s.core, [createOne()], {});
+      assert.strictEqual(s.drainCount(), 0, 'nothing is waited for');
+      assert.strictEqual(s.locksTaken(), 1, 'and the locks are taken once');
+    });
     // A caller reporting where its write's time went reads one timeline. The
     // stages the coordinator owns end where the commit's begin, and the commit
     // is several frames away — so what is under test is that they meet: the
@@ -2972,7 +3086,7 @@ module(basename(import.meta.filename), function () {
       // follow it.
       assert.deepEqual(
         Object.keys(stages),
-        ['lock', 'drain', 'stage', 'commit', 'persist'],
+        ['drain', 'lock', 'stage', 'commit', 'persist'],
         'and the timeline reads in the order the write passed through them',
       );
     });
@@ -3016,7 +3130,7 @@ module(basename(import.meta.filename), function () {
       // work inside it finished.
       assert.deepEqual(
         Object.keys(timings.stages()),
-        ['lock', 'drain', 'stage', 'commit'],
+        ['drain', 'lock', 'stage', 'commit'],
         'the stages up to and including the failed commit are attributed',
       );
     });

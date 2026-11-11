@@ -2,7 +2,7 @@
 // on stdin, with a transcript on disk and a stub gh on PATH. Most of the hook
 // is shell parsing (continuations, quoting, heredocs, comments, compound
 // commands), so most cases are a command and the decision it should get.
-//   node --test .claude/hooks/
+//   node --test .claude/hooks/require-skill.test.mjs
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
@@ -164,6 +164,110 @@ test('a review call is refused until the lens skills are loaded', () => {
       'deny',
     ],
     ['gh api repos/cardstack/boxel/pulls/7024/reviews -f body=x', 'deny'],
+    // A reply path in the body doesn't make a new comment a reply.
+    [
+      "gh api repos/cardstack/boxel/pulls/7024/comments -f body='see /pulls/7024/comments/5/replies' -f commit_id=abc -f path=a.gts -F line=1",
+      'deny',
+    ],
+    [
+      "gh api repos/cardstack/boxel/pulls/7024/comments -f body='no in_reply_to here' -f commit_id=abc -f path=a.gts -F line=1",
+      'deny',
+    ],
+    [
+      'gh api -X POST repos/cardstack/boxel/pulls/7024/comments/1/repliesX -f body=x',
+      'deny',
+    ],
+    // Only a new comment can be a reply by its in_reply_to field.
+    [
+      'gh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -f body=x -F in_reply_to=1',
+      'deny',
+    ],
+    // Only digits or a shell variable name a comment to reply to.
+    [
+      'gh api -X POST repos/cardstack/boxel/pulls/7024/comments/?x=/replies -f body=x -f commit_id=abc -f path=a.gts -F line=1',
+      'deny',
+    ],
+    [
+      'gh api -X POST repos/cardstack/boxel/pulls/7024/comments/abc/replies -f body=x',
+      'deny',
+    ],
+    [
+      'gh api -X POST repos/cardstack/boxel/pulls/7024/reviews/$id/replies -f body=x',
+      'deny',
+    ],
+    // Only the endpoint argument counts, not a path in a body before it.
+    [
+      "gh api -f body='see repos/cardstack/boxel/pulls/7024/comments/$id/replies' repos/cardstack/boxel/pulls/7024/comments -f commit_id=abc -f path=a.gts -F line=1",
+      'deny',
+    ],
+    [
+      "gh api -f body='see repos/cardstack/boxel/pulls/7024/comments/5/replies' repos/cardstack/boxel/pulls/7024/comments -f commit_id=abc -f path=a.gts -F line=1",
+      'deny',
+    ],
+    [
+      "gh api -H 'Accept: application/vnd.github+json' --method=POST /repos/cardstack/boxel/pulls/7024/reviews -f body=x",
+      'deny',
+    ],
+    // A short-flag cluster ending in a flag that takes a value.
+    [
+      'gh api -iX POST repos/cardstack/boxel/pulls/7024/reviews -f body=x',
+      'deny',
+    ],
+    [
+      "gh api -iH 'Accept: application/json' repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -f body=x",
+      'deny',
+    ],
+    [
+      'gh api -iXPOST repos/cardstack/boxel/pulls/7024/reviews -f body=x',
+      'deny',
+    ],
+    [
+      'gh api https://api.github.com/repos/cardstack/boxel/pulls/7024/reviews -f body=x',
+      'deny',
+    ],
+    [
+      'gh api -X POST "$API/repos/cardstack/boxel/pulls/7024/reviews" -f body=x -f event=COMMENT',
+      'deny',
+    ],
+    [
+      'gh api -X POST "${API}repos/cardstack/boxel/pulls/7024/reviews" -f body=x -f event=COMMENT',
+      'deny',
+    ],
+    // An expansion or a redirect before the endpoint doesn't hide it.
+    [
+      'gh api $GH_FLAGS repos/cardstack/boxel/pulls/7024/reviews -f body=x -f event=COMMENT',
+      'deny',
+    ],
+    [
+      'gh api 2>/dev/null repos/cardstack/boxel/pulls/7024/reviews -f body=x -f event=COMMENT',
+      'deny',
+    ],
+    [
+      'gh api repos/cardstack/boxel/pulls/7024/reviews > out.json -f body=x -f event=COMMENT',
+      'deny',
+    ],
+    // A command substitution is one word, even with a space or pipe in it.
+    [
+      'gh api -f body=$(cat f) repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT',
+      'deny',
+    ],
+    [
+      'gh api -f body=$(head -1 f | tr a b) repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT',
+      'deny',
+    ],
+    // The method and fields come from the flags, not from a body.
+    [
+      "gh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -f body='run it with -X GET first'",
+      'deny',
+    ],
+    [
+      'gh api -fbody=x -fevent=COMMENT repos/cardstack/boxel/pulls/7024/reviews',
+      'deny',
+    ],
+    [
+      'gh api -X=POST repos/cardstack/boxel/pulls/7024/reviews -f body=x',
+      'deny',
+    ],
     [
       `gh api graphql -f query='mutation { addPullRequestReview(input: {pullRequestId: "PR_kwDOAbcdef1234", body: "ok"}) { clientMutationId } }'`,
       'deny',
@@ -177,7 +281,33 @@ test('a review call is refused until the lens skills are loaded', () => {
       'gh api repos/cardstack/boxel/pulls/7024/comments/1/replies -f body=x',
       'allow',
     ],
+    [
+      'gh api repos/cardstack/boxel/pulls/7024/comments -f body=x -F in_reply_to=1',
+      'allow',
+    ],
+    // A reply whose comment ID is a shell variable, as in a helper that
+    // answers several threads.
+    [
+      'gh api -X POST repos/cardstack/boxel/pulls/7024/comments/$1/replies -f body=x',
+      'allow',
+    ],
+    [
+      'r() { gh api -X POST "repos/cardstack/boxel/pulls/7024/comments/${id}/replies" -f body="$2"; }; r 1 x',
+      'allow',
+    ],
+    [
+      'gh api -X POST repos/cardstack/boxel/pulls/7024/comments/"$id"/replies -f body=x',
+      'allow',
+    ],
+    [
+      'gh api -X POST repos/cardstack/boxel/pulls/7024/comments/1${suffix}/replies -f body=x',
+      'allow',
+    ],
     ['gh api repos/cardstack/boxel/pulls/7024/reviews', 'allow'],
+    [
+      'gh api -iX GET repos/cardstack/boxel/pulls/7024/reviews -f per_page=1',
+      'allow',
+    ],
   ];
   for (let [command, expected] of cases) {
     assert.equal(
@@ -344,6 +474,57 @@ test("a published review has to say which lens skills weren't reviewed", () => {
     [
       `gh api repos/cardstack/boxel/pulls/7024/reviews -f body="${SAID}" -f event=COMMENT`,
       'allow',
+    ],
+    // The body is read from the review, not from replies posted before it.
+    [
+      'for id in 1 2; do gh api -X POST repos/cardstack/boxel/pulls/7024/comments/$id/replies -f body=done; done; gh api repos/cardstack/boxel/pulls/7024/reviews -f body="Looks fine." -f event=COMMENT',
+      'deny',
+    ],
+    [
+      `for id in 1 2; do gh api -X POST repos/cardstack/boxel/pulls/7024/comments/$id/replies -f body=done; done; gh api repos/cardstack/boxel/pulls/7024/reviews -f body="${SAID}" -f event=COMMENT`,
+      'allow',
+    ],
+    [
+      `gh api repos/cardstack/boxel/pulls/7024/comments/1/replies -F body=@- <<'A'\ndone\nA\ngh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -F body=@- <<'B'\n${SAID}\nB`,
+      'allow',
+    ],
+    [
+      `gh api repos/cardstack/boxel/pulls/7024/comments/1/replies -F body=@- <<'A'\n${SAID}\nA\ngh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -F body=@- <<'B'\nLooks fine.\nB`,
+      'deny',
+    ],
+    // A heredoc piped into the call is its input.
+    [
+      `cat <<'B' | gh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -F body=@-\n${SAID}\nB`,
+      'allow',
+    ],
+    [`cat <<'B' | gh pr review 7024 --comment -F -\n${SAID}\nB`, 'allow'],
+    [
+      `cat <<'B' |& gh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -F body=@-\n${SAID}\nB`,
+      'allow',
+    ],
+    // A GraphQL review's body is read from its own call, not a reply after it.
+    [
+      `gh api graphql -f query='mutation { addPullRequestReview(input: {pullRequestId: "PR_kwDOAbcdef1234", event: COMMENT}) { clientMutationId } }'; gh api repos/cardstack/boxel/pulls/7024/comments/1/replies -f body='body: "boxel-ui-guidelines and better-interface were not reviewed."'`,
+      'deny',
+    ],
+    // A heredoc fed to a group the call is in is its input too.
+    [
+      `{ gh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -F body=@-; } <<'B'\n${SAID}\nB`,
+      'allow',
+    ],
+    [`{ gh pr review 7024 --comment -F -; } <<'B'\n${SAID}\nB`, 'allow'],
+    // The & of a redirect doesn't end the command.
+    [
+      `cat <<'B' 2>&1 | gh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -F body=@-\n${SAID}\nB`,
+      'allow',
+    ],
+    [
+      `gh api repos/cardstack/boxel/pulls/7024/reviews -f event=COMMENT -F body=@- 2>&1 <<'B'\n${SAID}\nB`,
+      'allow',
+    ],
+    [
+      `gh pr review 7024 --comment -b "${SAID}"; gh api repos/cardstack/boxel/pulls/7024/reviews -f body="Looks fine." -f event=COMMENT`,
+      'deny',
     ],
     // An inline comment outside a review, or an edit, publishes at once.
     [

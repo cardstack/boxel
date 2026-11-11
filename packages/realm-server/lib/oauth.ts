@@ -802,8 +802,11 @@ export async function listConnectableClients(
     reconnect?: string;
   },
 ): Promise<ConnectableClient[]> {
+  // A client that names no API hosts isn't held to any, as a key's API hosts
+  // aren't when it is sent (`apiHostsOfKeySql`).
   let serves = (apiHosts: string[]) =>
     destination === undefined ||
+    apiHosts.length === 0 ||
     apiHosts.some((host) => destinationCovers(host, destination));
   let platform: ConnectableClient[] = [];
   let shared: ConnectableClient[] = [];
@@ -980,6 +983,72 @@ const CLIENT_RESOLUTION_JOINS = `
   LEFT JOIN oauth_clients shared ON shared.key_id = s.key_id
   LEFT JOIN user_keys sk ON sk.id = shared.key_id
   LEFT JOIN platform_oauth_clients p ON p.id = n.platform_client_id`;
+
+// A scalar SQL expression for the API hosts the key whose id `keyId` names
+// is good at: an OAuth client's own, or an OAuth connection's client's,
+// however the connection names it. Null where that is unrestricted: any
+// other kind of key, or a client that names no API hosts (they are optional,
+// and nothing holds a request to them). Empty for a connection whose client
+// is gone, which mints nothing. Its aliases are its own, so `keyId` may name
+// a column of any outer query.
+export function apiHostsOfKeySql(keyId: string): string {
+  return `COALESCE(
+    (SELECT NULLIF(ah_c.api_hosts, '{}') FROM oauth_clients ah_c WHERE ah_c.key_id = ${keyId}),
+    (SELECT CASE
+              WHEN ah_own.key_id IS NULL AND ah_shared.key_id IS NULL AND ah_p.id IS NULL THEN '{}'
+              ELSE NULLIF(COALESCE(ah_own.api_hosts, ah_shared.api_hosts, ah_p.api_hosts), '{}')
+            END
+       FROM oauth_connections ah_n
+       LEFT JOIN oauth_clients ah_own ON ah_own.key_id = ah_n.client_key_id
+       LEFT JOIN key_shares ah_s ON ah_s.id = ah_n.client_share_id
+       LEFT JOIN oauth_clients ah_shared ON ah_shared.key_id = ah_s.key_id
+       LEFT JOIN platform_oauth_clients ah_p ON ah_p.id = ah_n.platform_client_id
+      WHERE ah_n.key_id = ${keyId}))`;
+}
+
+// A key's API hosts, as `apiHostsOfKeySql` reads them: null for a key that
+// names none, else the hosts, in either form `arrayColumn` takes.
+export function apiHostList(value: unknown): string[] | null {
+  return value === null || value === undefined ? null : arrayColumn(value);
+}
+
+// Whether a key whose API hosts are `apiHosts` (`apiHostList`) has a
+// credential that is good at `destination`. An OAuth connection's tokens, or
+// an OAuth client's own, are good only at the API hosts its client names, as
+// the connect page offers clients for a destination. Any other key's
+// credential is taken wherever it is sent.
+export function apiHostsServe(
+  apiHosts: string[] | null,
+  destination: string,
+): boolean {
+  return (
+    apiHosts === null ||
+    apiHosts.some((host) => destinationCovers(host, destination))
+  );
+}
+
+// An aggregated array column, as the adapter returns it: an array, or
+// Postgres' text form of one.
+export function arrayColumn(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value as string[];
+  }
+  if (typeof value === 'string') {
+    let inner = value.replace(/^\{|\}$/g, '');
+    return inner === ''
+      ? []
+      : inner.split(',').map((item) => item.replace(/^"|"$/g, ''));
+  }
+  return [];
+}
+
+// A SQL condition that the key whose id `keyId` names is a credential a
+// request can send. An OAuth client people sign in through (`authorization_code`)
+// never is: only the connections made through it are, and a share of one is
+// how a realm's people connect their own accounts.
+export function sendableKeySql(keyId: string): string {
+  return `NOT EXISTS (SELECT 1 FROM oauth_clients sk_c WHERE sk_c.key_id = ${keyId} AND sk_c.grant_type <> 'client_credentials')`;
+}
 
 interface ResolvedClient {
   usable: boolean;
@@ -1943,6 +2012,28 @@ async function mintingStatus(
     );
   }
   return { kind: 'oauth-connection', generation: Number(row.generation) };
+}
+
+// Why an OAuth connection or `client_credentials` client can't mint a token
+// now, from what the database records alone: the reason a call would be
+// refused with (`rejected`: a connection its vendor refused, or an
+// access-only token past its expiry; `needs-admin`: a client that is broken,
+// deleted, unshared or suspended), or nothing when it may mint. Opens no key
+// and asks no vendor, so a token endpoint that is failing right now
+// (`unavailable`) shows only when a call asks it.
+export async function mintingRefusal(
+  dbAdapter: DBAdapter,
+  keyId: string,
+): Promise<OAuthTokenFailure | undefined> {
+  try {
+    await mintingStatus(dbAdapter, keyId);
+    return undefined;
+  } catch (error) {
+    if (error instanceof OAuthTokenError) {
+      return error.reason;
+    }
+    throw error;
+  }
 }
 
 class OAuthTokens {

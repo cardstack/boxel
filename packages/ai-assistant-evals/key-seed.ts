@@ -1,6 +1,6 @@
-// Seeds an evaluation's pipeline approvals into a fresh test workspace before
+// Seeds an evaluation's automation approvals into a fresh test workspace before
 // the first prompt: a key, a share when the approval is for one, and an
-// approval of the card type's operation for scheduled pipelines only.
+// approval of the card type's operation for automations only.
 //
 // Keys are changed only through a session signed in on the secure origin, and
 // signing in there takes a person at the secure window. The runner drives the
@@ -18,6 +18,8 @@ import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import jsonwebtoken from 'jsonwebtoken';
+
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 
 import { REALM_SERVER_URL } from './eval-config.ts';
 import { loginWithPassword } from './matrix-api.ts';
@@ -40,20 +42,20 @@ const REALM_SECRET_SEED =
 export const SHARE_OWNER =
   process.env.EVAL_SHARE_OWNER ?? 'ai-assistant-eval-key-sharer';
 
-// What the seeded key holds. The approval is for pipelines only, so an
+// What the seeded key holds. The approval is for automations only, so an
 // invocation from the assistant is refused before any key is read: this value
 // is never sent anywhere.
 const KEY_VALUE = 'eval-placeholder-not-a-real-credential';
 
 const SESSION_SECONDS = 60 * 60;
 
-export interface PipelineApprovalTarget {
+export interface AutomationApprovalTarget {
   realm: string;
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
   operation: string;
   // The copied card, which an operation approved per instance names.
-  instance: string;
+  instance: RealmResourceIdentifier;
   keyFrom: KeyFrom;
 }
 
@@ -145,12 +147,12 @@ async function shareKey(
   return json.data.id;
 }
 
-// Approves one operation for pipelines only, every slot filled with `fill`,
+// Approves one operation for automations only, every slot filled with `fill`,
 // against what the approval window would show: the preview's destination and
 // each slot's fingerprint.
-async function approveForPipelines(
+async function approveForAutomations(
   token: string,
-  target: PipelineApprovalTarget,
+  target: AutomationApprovalTarget,
   fill: { keyId: string } | { shareId: string },
 ) {
   let query = new URLSearchParams({
@@ -218,8 +220,8 @@ async function addWriter(owner: RealmClient, realm: string, user: string) {
 // Seeds every approval into the test workspace. `user` is the eval user the
 // run signs in as (a full Matrix id) and `owner` their realm client; a
 // `share` approval is made by SHARE_OWNER, signed in with `password`.
-export async function seedPipelineApprovals(
-  targets: PipelineApprovalTarget[],
+export async function seedAutomationApprovals(
+  targets: AutomationApprovalTarget[],
   {
     user,
     owner,
@@ -250,9 +252,9 @@ export async function seedPipelineApprovals(
     if (target.keyFrom === 'own-key') {
       userToken ??= await secureSessionToken(user);
       let keyId = await addKey(userToken, keyName);
-      await approveForPipelines(userToken, target, { keyId });
+      await approveForAutomations(userToken, target, { keyId });
       log(
-        `approved ${target.name}.${target.operation} for pipelines only, with ${user}'s own key`,
+        `approved ${target.name}.${target.operation} for automations only, with ${user}'s own key`,
       );
       continue;
     }
@@ -277,9 +279,9 @@ export async function seedPipelineApprovals(
       shareId = await shareKey(sharer.token, keyId, target.realm, 'Team key');
       sharer.shares.set(target.realm, shareId);
     }
-    await approveForPipelines(sharer.token, target, { shareId });
+    await approveForAutomations(sharer.token, target, { shareId });
     log(
-      `approved ${target.name}.${target.operation} for pipelines only, with ${sharer.id}'s share`,
+      `approved ${target.name}.${target.operation} for automations only, with ${sharer.id}'s share`,
     );
   }
 }

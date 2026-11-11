@@ -27,8 +27,10 @@ import { modifier } from 'ember-modifier';
 
 // ── Roving focus ─────────────────────────────────────────────────────────
 
-/** Focuses the element only on the render where it BECAME the keyboard
- * target — never steals focus on a plain re-render. */
+/** Focuses the element whenever the modifier runs with `should` true: when
+ * it's inserted, and whenever `should` is computed again, even when it stays
+ * true (a keyed list redrawn from new objects does this without inserting
+ * anything). Clear the flag once focus has moved on. */
 export const focusWhen = modifier((el: HTMLElement, [should]: [boolean]) => {
   if (should) {
     el.focus();

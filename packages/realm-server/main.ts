@@ -2,6 +2,7 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
+import { readOAuthProviderConfig } from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -19,18 +20,25 @@ import {
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   parseRateLimitSpec,
   markRealmPublishable,
+  ri,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
 import * as Sentry from '@sentry/node';
-import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  SessionProbe,
+  startSessionSampling,
+} from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
+import { PostgresChangeJournal } from './lib/change-journal.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
@@ -134,6 +142,16 @@ if (!GRAFANA_SECRET) {
   process.exit(-1);
 }
 
+// The Grafana whose signing keys verify operator actions proxied through it.
+// Local and test runs work without it, so its absence is a warning, not a
+// startup failure.
+const GRAFANA_URL = process.env.GRAFANA_URL || undefined;
+if (!GRAFANA_URL) {
+  console.warn(
+    `GRAFANA_URL is not set: operator actions proxied through Grafana will be refused`,
+  );
+}
+
 const MATRIX_URL = process.env.MATRIX_URL;
 if (!MATRIX_URL) {
   console.error(
@@ -158,6 +176,12 @@ const MATRIX_REGISTRATION_SHARED_SECRET =
 // nothing, so the pull-model feature stays inert until the secret is
 // provisioned (and rotated, CS-11567) alongside ai-bot.
 const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
+
+// Shared secret the homeserver's invite module presents when it asks
+// `/_invite-check` whether one user may invite another (ADR 011 §1.6). The
+// module reads the same value from its config in homeserver.yaml. Optional:
+// when unset the endpoint responds 503, which the module treats as a denial.
+const MATRIX_INVITE_CHECK_SECRET = process.env.MATRIX_INVITE_CHECK_SECRET;
 
 // Synapse admin credentials. Optional: only consumed by operator-action
 // endpoints that need to admin-impersonate a target user to read or write
@@ -461,6 +485,13 @@ const secureOriginURL =
       ? `${serviceURL(secureServiceName)}/secure`
       : `https://localhost:${secureListenerPort}/secure`);
 
+// Boxel's OAuth provider, on only where BOXEL_OAUTH_PROVIDER_ENABLED=true.
+// Read before anything starts, so a missing or malformed configuration stops
+// the server at boot instead of at the first OAuth request.
+const oauthProvider = readOAuthProviderConfig(process.env, {
+  secureOriginURL,
+});
+
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
 for (let realmURL of publishableRealms) {
@@ -666,8 +697,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // against whether the process's event loop was starved at the time, and heap
   // growth toward the OOM limit is visible (and alertable) on a calm process
   // before a search storm — not only inside saturation windows.
+  // The session table is read on a connection of its own, outside the pool,
+  // so a starved pool cannot silence the reading that explains it.
+  let sessionSampling = startSessionSampling(new SessionProbe());
   let stopHealthSampler = startHealthSampler({
     connectionStats: () => dbAdapter.connectionStats,
+    sessionStats: sessionSampling.latest,
   });
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
@@ -719,6 +754,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // One store shared by every realm this server mounts; the `_capture/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
+  // One journal shared by every realm this server mounts. Each write appends
+  // its change event through it, on the write's own transaction, for the
+  // realms whose recording is on. `REALM_HISTORY_JOURNAL=off` is the kill
+  // switch: no realm gets a journal, so no write touches it.
+  let changeJournal =
+    process.env.REALM_HISTORY_JOURNAL === 'off'
+      ? undefined
+      : new PostgresChangeJournal();
 
   // One card+json response cache for the whole process, shared across every
   // realm it mounts: entries are keyed on absolute card URLs, and the byte
@@ -848,6 +891,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       const reconciledRealm = new Realm(
         {
           url: row.url,
+          // The prefixes are registered from this process's configuration
+          // before any realm is mounted, so a realm's name in them is fixed.
+          canonicalName: ri(virtualNetwork.unresolveURL(row.url)),
           adapter: reconciledAdapter,
           secretSeed: REALM_SECRET_SEED,
           virtualNetwork,
@@ -891,6 +937,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
               : {}),
           }),
           policyWriteAuditor,
+          ...(changeJournal ? { history: { journal: changeJournal } } : {}),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -940,7 +987,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    grafanaURL: GRAFANA_URL,
     aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
+    matrixInviteCheckSecret: MATRIX_INVITE_CHECK_SECRET,
     dbAdapter,
     queue,
     searchCache,
@@ -965,6 +1014,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
+    ...(oauthProvider ? { oauthProvider } : {}),
   });
 
   const secureHttpServer =
@@ -1040,6 +1090,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
           livenessResponder?.stop(),
+          sessionSampling.stop(),
         ]);
         // Stopped only once the responder is gone, never before: the loop is
         // still turning while the shutdown above runs, and a check arriving in

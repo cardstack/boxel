@@ -10,6 +10,7 @@ import {
   isPrefixForm,
   isResolvedCodeRef,
   param,
+  slotKindOfKey,
   query,
   type CodeRef,
   type DBAdapter,
@@ -21,13 +22,21 @@ import {
   type ServedRealm,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
+import {
+  slotKeyKinds,
+  type CallApiKeyKind,
+} from '@cardstack/runtime-common/card-operations';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
 import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
+import { isUUID } from './named-users.ts';
+import { apiHostList, apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
+import { keyOfferedForSlot, type SlotSend } from './slot-fill.ts';
 import {
   bindingType,
   canonicalInstance,
   slotBindings,
+  slotToken,
   type SlotBinding,
 } from './key-bindings.ts';
 
@@ -67,9 +76,15 @@ export interface SecureWindowOperation {
   method?: string;
   destination?: DestinationDisplay;
   // The credentials the request takes: `userKey` for the caller's own,
-  // `apiKey` for one a realm share holds. Asked with `bindings`, each says
-  // what is bound to it (`bound`).
-  slots: { name: string; key: string; bound?: SlotBound | null }[];
+  // `apiKey` for one a realm share holds, each with the kinds of key that
+  // can fill it (`slotKeyKinds`). Asked with `bindings`, each says what is
+  // bound to it (`bound`).
+  slots: {
+    name: string;
+    key: string;
+    kinds: CallApiKeyKind[];
+    bound?: SlotBound | null;
+  }[];
 }
 
 // What fills a slot for the user asking, from the binding a call fills it
@@ -411,6 +426,7 @@ export async function secureWindowContext(
         deps.dbAdapter,
         new URL(realm.url),
         user,
+        deps.matrixServerName,
       ),
       // A policy that can't be read says nothing; the page reads as signed-in
       // only, and a share made then serves signed-in people only.
@@ -441,9 +457,10 @@ export async function secureWindowContext(
     name: request.operation,
     label: operationDisplayLabel(request.operation, operation),
     base: operation.base,
-    slots: (operation.callApi?.slots ?? []).map(({ name, key }) => ({
-      name,
-      key,
+    slots: (operation.callApi?.slots ?? []).map((slot) => ({
+      name: slot.name,
+      key: slot.key,
+      kinds: slotKeyKinds(slot, operation.callApi!),
     })),
     ...(operation.callApi
       ? {
@@ -518,15 +535,19 @@ export interface WritableRealm {
 // the realms they may share a key into, as `isDirectWriter` decides it. None
 // of them is mounted to list it.
 export async function writableRealms(
-  { dbAdapter, findRealm }: Pick<Deps, 'dbAdapter' | 'findRealm'>,
+  {
+    dbAdapter,
+    findRealm,
+    matrixServerName,
+  }: Pick<Deps, 'dbAdapter' | 'findRealm' | 'matrixServerName'>,
   user: string,
 ): Promise<WritableRealm[]> {
-  if (isBotAccount(user)) {
+  if (isBotAccount(user, matrixServerName)) {
     return [];
   }
   return await servedByName(
     findRealm,
-    await fetchDirectWriterRealms(dbAdapter, user),
+    await fetchDirectWriterRealms(dbAdapter, user, matrixServerName),
   );
 }
 
@@ -552,10 +573,14 @@ async function servedByName(
 // realm readable by everyone isn't one of theirs, so it isn't listed. None of
 // them is mounted to list it.
 export async function readableRealms(
-  { dbAdapter, findRealm }: Pick<Deps, 'dbAdapter' | 'findRealm'>,
+  {
+    dbAdapter,
+    findRealm,
+    matrixServerName,
+  }: Pick<Deps, 'dbAdapter' | 'findRealm' | 'matrixServerName'>,
   user: string,
 ): Promise<WritableRealm[]> {
-  if (isBotAccount(user)) {
+  if (isBotAccount(user, matrixServerName)) {
     return [];
   }
   return await servedByName(
@@ -577,15 +602,34 @@ const MAX_LISTED_TYPES = 200;
 // The card definitions the realm's cards adopt from that declare a `callApi`
 // operation sending the caller's own key (`{{userKey}}`), by display name:
 // the cards whose requests one of the user's keys can be approved for there.
-// Each definition is read from the definition cache, and only from a realm
-// the user may read.
+// With `slot: 'apiKey'`, those with an operation sending the realm's key
+// (`{{apiKey}}`) from a slot no share fills yet: the cards a new share in the
+// realm can be approved for. A slot already filled by a share stays with that
+// share, which its own owner keeps up, so a card whose every such slot is
+// filled has nothing for another share. Each definition is read from the
+// definition cache, and only from a realm the user may read.
+//
+// Asked for one of the user's keys (`keyId`), only the cards that key can be
+// approved for are listed: those with a slot the key fills in every operation
+// sending it (`keyOfferedForSlot`), the rule the approval batch names the keys it
+// offers for a slot by. A key that no request can send, such as an OAuth
+// client people only sign in through, fills nothing.
 export async function realmCardsWithRequests(
   deps: Deps,
   user: string,
   realmId: RealmResourceIdentifier,
+  {
+    slot = 'userKey',
+    keyId,
+  }: { slot?: 'userKey' | 'apiKey'; keyId?: string } = {},
 ): Promise<CardWithRequests[]> {
   let { dbAdapter, findRealm, definitionLookup, virtualNetwork } = deps;
   let { realm } = await resolveWindowRequest(deps, user, { realm: realmId });
+  let key =
+    keyId === undefined ? undefined : await keyToFill(dbAdapter, user, keyId);
+  if (key === null) {
+    return [];
+  }
   // One instance per type its cards adopt from, the first in URL order, so the
   // type's module is resolved from a real card's address and the cap keeps
   // the same types every time.
@@ -613,6 +657,28 @@ export async function realmCardsWithRequests(
     );
     if (isResolvedCodeRef(absolute)) {
       types.set(`${absolute.module}#${absolute.name}`, absolute);
+    }
+  }
+  // The realm's slots a share fills, by type, operation and slot, for the
+  // `apiKey` listing. Per-instance operations aren't listed, so only bindings
+  // for a whole type count.
+  let filled = new Set<string>();
+  if (slot === 'apiKey') {
+    let bound = (await query(dbAdapter, [
+      `SELECT definition_url, export_name, operation_name, slot
+         FROM key_bindings
+        WHERE share_id IS NOT NULL AND instance_url IS NULL AND realm_url = `,
+      param(realm.url),
+    ])) as {
+      definition_url: string;
+      export_name: string;
+      operation_name: string;
+      slot: string;
+    }[];
+    for (let b of bound) {
+      filled.add(
+        `${b.definition_url}#${b.export_name}|${b.operation_name}|${b.slot}`,
+      );
     }
   }
   let readable = new Map<string, boolean>();
@@ -646,14 +712,50 @@ export async function realmCardsWithRequests(
     }
     // An operation approved per instance is approved from its card, not from
     // the type the key page approves, so it doesn't count here.
-    let sendsUserKey = Object.values(definition.operations ?? {}).some(
-      (operation) =>
-        operation.base === 'callApi' &&
-        !operation.invalid &&
-        !operation.callApi?.perInstance &&
-        operation.callApi?.slots.some((slot) => slot.key === 'userKey'),
+    let type = bindingType(realm.operationCore, codeRef, new URL(realm.url));
+    // The operations sending each of the card's slots of this kind, by slot,
+    // and whether any of them leaves the slot open: for the `apiKey` slot, one
+    // no share fills yet. Only an open slot puts the card in the list, but the
+    // key is checked against every operation sending it. The approve page
+    // shows an operation a share fills when its request changed or its grant
+    // is gone, and one choice then fills the slot for both.
+    let sentBy = new Map<
+      string,
+      {
+        open: boolean;
+        sends: SlotSend[];
+      }
+    >();
+    for (let [name, operation] of Object.entries(definition.operations ?? {})) {
+      let callApi = operation.callApi;
+      if (
+        operation.base !== 'callApi' ||
+        operation.invalid ||
+        !callApi ||
+        callApi.perInstance
+      ) {
+        continue;
+      }
+      for (let s of callApi.slots) {
+        if (s.key !== slot) {
+          continue;
+        }
+        let token = slotToken(s);
+        let open =
+          slot === 'userKey' ||
+          (type !== undefined &&
+            !filled.has(`${type.module}#${type.name}|${name}|${token}`));
+        let entry = sentBy.get(token) ?? { open: false, sends: [] };
+        entry.open ||= open;
+        entry.sends.push({ slot: s, callApi });
+        sentBy.set(token, entry);
+      }
+    }
+    let sendsKey = [...sentBy.values()].some(
+      ({ open, sends }) =>
+        open && (key === undefined || keyOfferedForSlot(key, sends)),
     );
-    if (sendsUserKey) {
+    if (sendsKey) {
       found.push({
         module: virtualNetwork.unresolveURL(String(codeRef.module)),
         name: codeRef.name,
@@ -667,4 +769,32 @@ export async function realmCardsWithRequests(
       a.module.localeCompare(b.module) ||
       a.name.localeCompare(b.name),
   );
+}
+
+// The user's key `keyId`'s kind and the API hosts its credential is good at
+// (`apiHostsOfKeySql`), or null when no request can send it. A key that isn't
+// the user's is answered as one that doesn't exist.
+async function keyToFill(
+  dbAdapter: DBAdapter,
+  user: string,
+  keyId: string,
+): Promise<{ kind: string; apiHosts: string[] | null } | null> {
+  let [row] = isUUID(keyId)
+    ? await query(dbAdapter, [
+        `SELECT k.kind, ${apiHostsOfKeySql('k.id')} AS api_hosts,
+                ${sendableKeySql('k.id')} AS sendable
+           FROM user_keys k
+          WHERE k.id = `,
+        param(keyId),
+        ` AND k.owner = `,
+        param(user),
+      ])
+    : [];
+  if (!row) {
+    throw new UserKeyError(404, 'no such key');
+  }
+  let kind = row.kind as string;
+  return slotKindOfKey(kind) && row.sendable
+    ? { kind, apiHosts: apiHostList(row.api_hosts) }
+    : null;
 }

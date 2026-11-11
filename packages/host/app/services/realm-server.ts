@@ -111,7 +111,7 @@ interface AvailableRealm {
 
 export type { PublicRealmSummary };
 
-// Display metadata for an archived realm, as returned by the owner-only
+// Display metadata for an archived realm, as returned by the administrator-only
 // `GET /_archived-realms` endpoint. Archived realms are sealed (their `_info`
 // / session endpoints answer 403), so the chooser renders their tiles from
 // this metadata rather than mounting each realm.
@@ -328,7 +328,7 @@ export default class RealmServerService
     }
   }
 
-  // Archive a realm via the owner-only `POST /_archive-realm` endpoint. On
+  // Archive a realm via the administrator-only `POST /_archive-realm` endpoint. On
   // success the realm leaves the active "Your Workspaces" list and joins the
   // archived list, so the chooser reflects the new state without a reload.
   async archiveRealm(realmURL: string) {
@@ -370,7 +370,7 @@ export default class RealmServerService
     }
   }
 
-  // Restore an archived realm via the owner-only `POST /_unarchive-realm`
+  // Restore an archived realm via the administrator-only `POST /_unarchive-realm`
   // endpoint. On success the realm leaves the archived list and returns to the
   // active "Your Workspaces" list.
   async unarchiveRealm(realmURL: string) {
@@ -972,9 +972,9 @@ export default class RealmServerService
     this._ready.fulfill();
   }
 
-  // Fetch the caller's archived realms from the owner-only
+  // Fetch the caller's archived realms from the administrator-only
   // `GET /_archived-realms` endpoint. The endpoint is scoped server-side to
-  // realms the caller owns, so non-owners receive an empty list. Cached after
+  // realms the caller administers, so anyone else receives an empty list. Cached after
   // the first fetch; pass `{ force: true }` to refresh after an
   // archive/restore.
   async fetchArchivedRealms(opts?: { force?: boolean }) {
@@ -1083,8 +1083,8 @@ export default class RealmServerService
     return { data: json.data ?? [], publicReadableRealms };
   }
 
-  // Cards / files / definitions per realm, for the workspace chooser's favorite
-  // tiles. Deliberately separate from `fetchRealmInfos`: the counts are an
+  // Cards / files / definitions per realm, for the dashboard's favorite
+  // desks. Deliberately separate from `fetchRealmInfos`: the counts are an
   // aggregate over every index row in a realm, and only a favorited realm's
   // tile renders them, so callers ask for the handful they need instead of
   // paying it for every realm at boot.

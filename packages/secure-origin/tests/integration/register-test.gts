@@ -266,6 +266,29 @@ module('Integration | register', function (hooks) {
     assert.dom('[data-test-email-validation]').exists('still waiting');
   });
 
+  test('carries no hint that keeps a password manager out of its fields', async function (assert) {
+    servers.realmServer('GET _secure-origin', () => ({
+      data: { attributes: { matrixServerName: 'localhost' } },
+    }));
+    await render(<template><Register @signInURL='sign-in' /></template>);
+    for (let field of [
+      '[data-test-name-field]',
+      '[data-test-email-field]',
+      '[data-test-username-field] input',
+      '[data-test-password-field]',
+      '[data-test-confirm-password-field]',
+    ]) {
+      for (let hint of [
+        'data-1p-ignore',
+        'data-lpignore',
+        'data-form-type',
+        'data-bwignore',
+      ]) {
+        assert.dom(field).doesNotHaveAttribute(hint, `${field} has no ${hint}`);
+      }
+    }
+  });
+
   test('checks each field as it is left', async function (assert) {
     servers.realmServer('GET _secure-origin', () => ({
       data: { attributes: { matrixServerName: 'localhost' } },
@@ -298,10 +321,15 @@ module('Integration | register', function (hooks) {
         described,
         `${value || 'empty'}: the input names a description`,
       );
+      let errorRow = document.getElementById(described!);
+      assert.dom(errorRow).hasText(message);
       assert
-        .dom(document.getElementById(described!))
-        .hasAttribute('aria-live', 'polite')
-        .hasText(message);
+        .dom(errorRow?.closest('[aria-live]') ?? null)
+        .hasAttribute(
+          'aria-live',
+          'polite',
+          'it is shown inside a live region that stays on the page',
+        );
     }
     assert.deepEqual(
       servers.requests('matrix', 'GET register/available').map(() => 'checked'),

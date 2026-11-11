@@ -15,7 +15,7 @@
 #   ./scripts/render-preview.sh --pr <n> --base-ref <ref> [--env <name>]
 #
 # --env defaults to staging and only affects the apply-style template
-# substitutions (REALM_SERVER_URL, GRAFANA_SECRET, __ENV__) — the preview
+# substitutions (REALM_SERVER_URL, __ENV__) — the preview
 # rewrites are env-independent.
 #
 # Scope: dashboards + folders only. Data sources, alert rules, and the home-
@@ -95,11 +95,10 @@ if [[ -z "$changed_paths" ]]; then
 fi
 
 # Per-env substitution defaults mirror apply.sh exactly so the rendered
-# preview matches what `apply.sh --env <env>` would push. The real
-# GRAFANA_SECRET goes in, so the operator buttons on a preview dashboard
-# (Reindex, Add Credit, Grant Permission, Delete Job) behave as they will
-# once the change merges — a preview whose buttons 401 cannot show whether
-# a button change works.
+# preview matches what `apply.sh --env <env>` would push. Operator buttons
+# (Reindex, Add Credit, Grant Permission, Delete Job) call the
+# realm-server-operator datasource proxy, which attaches the realm-server
+# credential inside Grafana, so a preview needs no credential for them.
 #
 # CAUTION: those buttons act on the real environment. A button clicked on a
 # production preview performs the production mutation; it is not a
@@ -115,19 +114,11 @@ case "$env_name" in
     # The docker-compose Grafana has no `Previews` folder, and pushing a
     # child of a missing parent fails.
     preview_parent_folder=""
-    if [[ -n "${GRAFANA_SECRET:-}" ]]; then
-      grafana_secret="$GRAFANA_SECRET"
-    else
-      grafana_secret="shhh! it's a secret"
-    fi
     ;;
   staging | production)
     [[ -n "${REALM_SERVER_URL:-}" ]] \
       || { echo "error: REALM_SERVER_URL not set; required for --env=$env_name (CI fetches it from /${env_name}/boxel-grafana/realm_server_url)" >&2; exit 1; }
-    [[ -n "${GRAFANA_SECRET:-}" ]] \
-      || { echo "error: GRAFANA_SECRET not set; required for --env=$env_name" >&2; exit 1; }
     realm_server_url="$REALM_SERVER_URL"
-    grafana_secret="$GRAFANA_SECRET"
     ;;
   *)
     usage_error "unknown env: $env_name (expected local|staging|production)" ;;
@@ -143,7 +134,7 @@ cp -R ./grafanactl/resources/. "$rendered/"
 # substituted forms (matters in case any of the substituted fields ever
 # overlap with the preview-rewrite jq paths in the future).
 while IFS= read -r -d '' f; do
-  jq --arg url "$realm_server_url" --arg secret "$grafana_secret" --arg envname "$env_name" '
+  jq --arg url "$realm_server_url" --arg envname "$env_name" '
     walk(
       if type == "object"
          and .name? == "realm_server"
@@ -152,13 +143,6 @@ while IFS= read -r -d '' f; do
       then
         .query = $url
         | (if .current then .current.value = $url | .current.text = $url else . end)
-      elif type == "object"
-         and .name? == "grafana_secret"
-         and .type? == "constant"
-         and .query? == "REPLACE_AT_APPLY_TIME"
-      then
-        .query = $secret
-        | (if .current then .current.value = $secret | .current.text = $secret else . end)
       elif type == "object"
          and .name? == "env"
          and .type? == "constant"

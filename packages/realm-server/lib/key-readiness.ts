@@ -2,7 +2,9 @@ import { param, query, type DBAdapter } from '@cardstack/runtime-common';
 import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anonymous-actor';
 import {
   destinationCovers,
+  slotKeyKinds,
   type CallApiReadinessLookup,
+  type CallApiSlot,
   type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
 import {
@@ -12,6 +14,8 @@ import {
   type SlotCheck,
 } from './key-bindings.ts';
 import { limitReadiness } from './key-limits.ts';
+import { apiHostList, apiHostsOfKeySql, sendableKeySql } from './oauth.ts';
+import { keyOfferedForSlot } from './slot-fill.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
@@ -30,7 +34,14 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // `credential-rejected` until its next probe is due, and then as the call
 // would treat it: sent, as that probe. A rejected key, such as a
 // service-account key Google refused, reads as `credential-rejected` whether
-// or not its probe is due: what brings it back is its owner replacing it.
+// or not its probe is due: what brings it back is its owner replacing it. So
+// does an OAuth connection its vendor refused, or one whose access-only token
+// has expired: its owner signs in again. A connection whose client is broken,
+// deleted, unshared or suspended, or a broken `client_credentials` client,
+// reads as `needs-admin` instead: the key is fine, and only an administrator
+// of the client it mints through can bring it back. An automation's admission
+// (`automationAdmission`) refuses the same slots, since it checks them with
+// the same `checkSlots`.
 //
 // Slots that would be filled are then asked about the limits of the share or
 // key filling them, without counting anything: `over-budget` when a budget is
@@ -46,9 +57,11 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // owner, its name and its limits never appear in one, and every way a share
 // slot falls short reads the same, `needs-admin`, to anyone but the owner of
 // the share's key, who is told what they could fix themselves. A caller with
-// an active share of their own in the realm is told `needs-approval` for a
-// share slot with no binding at all: the approve page offers them their
-// shares for it, and approving one fills it. A slot whose binding names
+// an active share of their own in the realm, of the kind of key the slot
+// declares if it declares one, is told `needs-approval` for a share slot with
+// no binding at all: the approve page offers them those shares for it, and
+// approving one fills it. Likewise a `{{userKey}}` slot reads `needs-approval`
+// only when a key of its declared kind may already be sent there. A slot whose binding names
 // someone else's share, or a suspended one, is never offered there, so it
 // stays `needs-admin` to them. The one
 // exception is a key the vendor rejected, at a grant or as a whole, which the
@@ -111,16 +124,36 @@ export async function keyReadiness(
     { ...lookup, caller, instance, mode: 'interactive' },
     { probeIntervalMs },
   );
-  // Read once, and only where a `{{userKey}}` slot has no binding to fill it.
-  let covering: Promise<boolean> | undefined;
-  let callerCovers = () =>
-    (covering ??= callerHasCoveringGrant(dbAdapter, lookup, caller));
-  // Read once, and only where an `{{apiKey}}` slot has no binding.
-  let sharing: Promise<boolean> | undefined;
-  let callerShares = () =>
-    (sharing ??= lookup.caller
-      ? callerHasActiveShare(dbAdapter, lookup.realmURL, lookup.caller)
-      : Promise.resolve(false));
+  // Read once per set of kinds a slot takes, and only where a slot has no
+  // binding to fill it. Only a key the approve page would offer for the slot
+  // counts (`fitsSlot`). Slots that take the same kinds of key are filled by
+  // the same keys, since they're sent to the same destination.
+  let covering = new Map<string, Promise<boolean>>();
+  let callerCovers = (slot: CallApiSlot) => {
+    let kinds = slotKeyKinds(slot, lookup.request);
+    let memo = kinds.join(',');
+    if (!covering.has(memo)) {
+      covering.set(
+        memo,
+        callerHasCoveringGrant(dbAdapter, lookup, caller, slot),
+      );
+    }
+    return covering.get(memo)!;
+  };
+  let sharing = new Map<string, Promise<boolean>>();
+  let callerShares = (slot: CallApiSlot) => {
+    let kinds = slotKeyKinds(slot, lookup.request);
+    let memo = kinds.join(',');
+    if (!sharing.has(memo)) {
+      sharing.set(
+        memo,
+        lookup.caller
+          ? callerHasActiveShare(dbAdapter, lookup, lookup.caller, slot)
+          : Promise.resolve(false),
+      );
+    }
+    return sharing.get(memo)!;
+  };
   let answers: KeyReadiness[] = [];
   for (let check of checks) {
     answers.push(
@@ -160,7 +193,7 @@ function keyRejected(check: SlotCheck): boolean {
 // way it falls short is the caller's to fix.
 async function userKeyReadiness(
   check: SlotCheck,
-  callerCovers: () => Promise<boolean>,
+  callerCovers: (slot: CallApiSlot) => Promise<boolean>,
 ): Promise<KeyReadiness> {
   switch (check.refused) {
     case undefined:
@@ -172,48 +205,81 @@ async function userKeyReadiness(
     case 'anonymous-use-not-approved':
       return 'needs-sign-in';
     case 'credential-rejected':
+      return mintingReadiness(check);
     case 'key-rejected':
       return 'credential-rejected';
     case 'share-suspended':
     case 'binding-not-approved':
       // No binding, or one whose grant is gone: approving one is what fixes
       // it, once a key may be sent where the operation sends.
-      return (await callerCovers()) ? 'needs-approval' : 'needs-connect';
+      return (await callerCovers(check.slot))
+        ? 'needs-approval'
+        : 'needs-connect';
   }
 }
 
-// Whether any of the caller's keys may already be sent where the operation
-// sends, by the rule sending applies (`destinationCovers`).
+// A slot refused `credential-rejected`: a key the vendor rejected, or one that
+// can't mint a token. One whose OAuth client needs its administrator
+// (`reason: 'needs-admin'`) reads as `needs-admin`, since replacing or
+// reconnecting the key itself can't fix it.
+function mintingReadiness(
+  check: Extract<SlotCheck, { refused: 'credential-rejected' }>,
+): KeyReadiness {
+  return check.reason === 'needs-admin' ? 'needs-admin' : 'credential-rejected';
+}
+
+// Whether the key a row reads (its `kind` and `api_hosts`) is one the approve
+// page would offer for the operation's `slot`: one that fills it
+// (`keyOfferedForSlot`), as the approval batch decides.
+function fitsSlot(
+  row: Record<string, unknown>,
+  lookup: CallApiReadinessLookup,
+  slot: CallApiSlot,
+): boolean {
+  return keyOfferedForSlot(
+    { kind: row.kind as string, apiHosts: apiHostList(row.api_hosts) },
+    [{ slot, callApi: lookup.request }],
+  );
+}
+
+// Whether any of the caller's keys that fit the slot (`fitsSlot`) may already
+// be sent where the operation sends, by the rule sending applies
+// (`destinationCovers`).
 async function callerHasCoveringGrant(
   dbAdapter: DBAdapter,
   lookup: CallApiReadinessLookup,
   caller: string,
+  slot: CallApiSlot,
 ): Promise<boolean> {
   let rows = await query(dbAdapter, [
-    `SELECT destination FROM user_key_grants WHERE owner = `,
+    `SELECT g.destination, k.kind, ${apiHostsOfKeySql('k.id')} AS api_hosts FROM user_key_grants g JOIN user_keys k ON k.id = g.key_id WHERE g.owner = `,
     param(caller),
   ]);
-  return rows.some(({ destination }) =>
-    destinationCovers(destination as string, lookup.request.destination),
+  return rows.some(
+    (row) =>
+      fitsSlot(row, lookup, slot) &&
+      destinationCovers(row.destination as string, lookup.request.destination),
   );
 }
 
-// Whether the caller has an active share in the realm: the shares the approve
-// page offers for an `{{apiKey}}` slot, whatever their keys' grants cover,
-// since approving one writes the grant it lacks.
+// Whether the caller has an active share in the realm that the approve page
+// offers for an `{{apiKey}}` slot: one whose key a request can send
+// (`sendableKeySql`) and fits the slot (`fitsSlot`), whatever its grants
+// cover, since approving one writes the grant it lacks.
 async function callerHasActiveShare(
   dbAdapter: DBAdapter,
-  realmURL: string,
+  lookup: CallApiReadinessLookup,
   caller: string,
+  slot: CallApiSlot,
 ): Promise<boolean> {
   let rows = await query(dbAdapter, [
-    `SELECT 1 FROM key_shares WHERE realm_url = `,
-    param(realmURL),
-    ` AND owner = `,
+    `SELECT k.kind, ${apiHostsOfKeySql('s.key_id')} AS api_hosts FROM key_shares s JOIN user_keys k ON k.id = s.key_id WHERE s.realm_url = `,
+    param(lookup.realmURL),
+    ` AND s.owner = `,
     param(caller),
-    ` AND state = 'active' LIMIT 1`,
+    ` AND s.state = 'active' AND ${sendableKeySql('s.key_id')}`,
   ]);
-  return rows.length > 0;
+  return rows.some((row) => fitsSlot(row, lookup, slot));
 }
 
 // An `{{apiKey}}` slot is filled from the realm's share, for every caller. Only
@@ -225,7 +291,7 @@ async function callerHasActiveShare(
 async function shareReadiness(
   check: SlotCheck,
   caller: string,
-  callerShares: () => Promise<boolean>,
+  callerShares: (slot: CallApiSlot) => Promise<boolean>,
 ): Promise<KeyReadiness> {
   if (check.refused === undefined) {
     return keyRejected(check) ? 'credential-rejected' : 'ready';
@@ -243,8 +309,11 @@ async function shareReadiness(
     case 'credential-rejected':
     case 'key-rejected':
       // Every caller is refused `credential-rejected` at the call, so telling
-      // them here gives away nothing more about the share.
-      return 'credential-rejected';
+      // them here gives away nothing more about the share. A broken client
+      // is its administrator's to fix, as any share that falls short is.
+      return check.refused === 'credential-rejected'
+        ? mintingReadiness(check)
+        : 'credential-rejected';
     case 'share-suspended':
       return 'needs-admin';
     case 'binding-not-approved':
@@ -254,6 +323,8 @@ async function shareReadiness(
       if (check.binding) {
         return theirs ? 'needs-approval' : 'needs-admin';
       }
-      return (await callerShares()) ? 'needs-approval' : 'needs-admin';
+      return (await callerShares(check.slot))
+        ? 'needs-approval'
+        : 'needs-admin';
   }
 }

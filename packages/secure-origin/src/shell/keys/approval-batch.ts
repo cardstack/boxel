@@ -5,6 +5,7 @@
 
 import type {
   ApprovalBatch,
+  BatchFillers,
   BatchOperation,
   BatchSlot,
   OperationApproval,
@@ -37,28 +38,40 @@ export interface SlotOption {
   covers: string[];
 }
 
-// Each slot token the batch's operations use, in the order they first appear.
-export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
+// Each slot token the batch's operations use, in the order they first appear,
+// with what can fill it when the batch is approved for `use`.
+export function slotChoices(
+  batch: ApprovalBatch,
+  use: ApprovalUse,
+): SlotChoice[] {
   let choices: SlotChoice[] = [];
   for (let slot of allSlots(batch)) {
     if (choices.some((c) => c.slot === slot.slot)) {
       continue;
     }
     let kind = slot.key;
+    // One choice fills the slot in every ticked operation that sends it, so
+    // it offers only the keys the realm server names as filling each of them
+    // (`withTickedFillers`).
+    let fillers = new Set(batch.fillers[use]?.[slot.slot] ?? []);
     let options: SlotOption[] =
       kind === 'userKey'
-        ? batch.keys.map(({ id, name, covers, state }) => ({
-            id,
-            name,
-            covers,
-            ...(state === 'rejected' ? { rejected: true } : {}),
-          }))
-        : batch.shares.map(({ id, label, keyName, covers }) => ({
-            id,
-            name: label,
-            detail: keyName,
-            covers,
-          }));
+        ? batch.keys
+            .filter((key) => fillers.has(key.id))
+            .map(({ id, name, covers, state }) => ({
+              id,
+              name,
+              covers,
+              ...(state === 'rejected' ? { rejected: true } : {}),
+            }))
+        : batch.shares
+            .filter((share) => fillers.has(share.id))
+            .map(({ id, label, keyName, covers }) => ({
+              id,
+              name: label,
+              detail: keyName,
+              covers,
+            }));
     // Those already allowed where the batch sends come first.
     options = [...options].sort(
       (a, b) =>
@@ -67,6 +80,49 @@ export function slotChoices(batch: ApprovalBatch): SlotChoice[] {
     choices.push({ slot: slot.slot, kind, options });
   }
   return choices;
+}
+
+// The names of the ticked operations, which the realm server weighs a slot's
+// fillers by when an approval covers only some of the batch. Undefined when
+// it covers every operation, or none, as the batch's own `fillers` already
+// answer for every operation. Operations are named, not told apart by card:
+// an operation approved per instance counts every instance in the batch, so
+// the keys offered fit at least what is ticked.
+export function tickedOperationNames(
+  batch: ApprovalBatch,
+  ticked: Set<string>,
+): string[] | undefined {
+  let operations = batch.groups.flatMap((g) => g.operations);
+  let names = new Set(
+    operations.filter((o) => ticked.has(operationKey(o))).map((o) => o.name),
+  );
+  if (names.size === 0 || operations.every((o) => names.has(o.name))) {
+    return undefined;
+  }
+  return [...names];
+}
+
+// The batch with each slot offered what fills it in the ticked operations
+// (`weighed`, the realm server's `fillers` for them), by use. A slot no
+// ticked operation sends keeps the batch's own fillers, which fit every
+// operation that sends it.
+export function withTickedFillers(
+  batch: ApprovalBatch,
+  weighed: BatchFillers | undefined,
+): ApprovalBatch {
+  if (!weighed) {
+    return batch;
+  }
+  return {
+    ...batch,
+    fillers: {
+      interactive: {
+        ...batch.fillers.interactive,
+        ...weighed.interactive,
+      },
+      automations: { ...batch.fillers.automations, ...weighed.automations },
+    },
+  };
 }
 
 function allSlots(batch: ApprovalBatch): BatchSlot[] {
@@ -297,9 +353,9 @@ export function approvalOf(
   );
 }
 
-// Where approved requests may run: only in the card's scheduled pipelines, or
+// Where approved requests may run: only in the card's automations, or
 // also when a card is opened (in the browser, the AI assistant or the CLI).
-export type ApprovalUse = 'pipelines' | 'interactive';
+export type ApprovalUse = 'automations' | 'interactive';
 
 // What the user confirms, once for the batch, when they allow interactive
 // use: one line for their own keys, and one for a workspace's share, whose
@@ -312,8 +368,9 @@ export const INTERACTIVE_CONFIRMATION = {
 } as const;
 
 // The batch as the page shows it for `use`. An operation approved for
-// pipelines only needs approving only for interactive use, so for pipelines
-// it is left out.
+// automations only needs approving only for interactive use, so for automations
+// it is left out. The realm server leaves out the same operations when it
+// names what fills each slot for automations (`fillers.automations`).
 export function batchFor(
   batch: ApprovalBatch,
   use: ApprovalUse,
@@ -327,36 +384,46 @@ export function batchFor(
       .map((group) => ({
         ...group,
         operations: group.operations.filter(
-          (o) => o.status !== 'pipelines-only',
+          (o) => o.status !== 'automations-only',
         ),
       }))
       .filter((group) => group.operations.length > 0),
   };
 }
 
-// Where the choice starts: on pipelines only, unless the CLI asked for
-// interactive use, or the batch holds nothing to approve for pipelines (only
-// operations approved for pipelines already), or every slot that needs
-// approving was last approved for interactive use, so approving it again
-// keeps that. One interactive slot among new ones doesn't count: starting on
-// interactive use would widen the new ones with a single click.
+// Where the choice starts. Opened in the browser, it starts on interactive
+// use, unless every slot that needs approving was last approved for
+// automations only, so approving it again keeps that. Opened by `boxel keys
+// approve`, it follows the CLI's own default: automations only, unless the CLI
+// asked for interactive use, or the batch holds nothing to approve for
+// automations (only operations approved for automations already), or every slot
+// that needs approving was last approved for interactive use. Either way it
+// is only where the choice starts: the confirmation says what interactive use
+// allows before anything is approved.
 export function initialUse(
   batch: ApprovalBatch,
-  { cliInteractive = false }: { cliInteractive?: boolean } = {},
+  {
+    cli = false,
+    cliInteractive = false,
+  }: { cli?: boolean; cliInteractive?: boolean } = {},
 ): ApprovalUse {
-  let needed = allSlots(batchFor(batch, 'pipelines'));
-  if (
-    cliInteractive ||
-    needed.length === 0 ||
-    needed.every((s) => s.approved?.interactive)
-  ) {
+  let needed = allSlots(batchFor(batch, 'automations'));
+  let lastApprovedFor = (interactive: boolean) =>
+    needed.length > 0 &&
+    needed.every(
+      (s) => s.approved !== undefined && s.approved.interactive === interactive,
+    );
+  if (!cli) {
+    return lastApprovedFor(false) ? 'automations' : 'interactive';
+  }
+  if (cliInteractive || needed.length === 0 || lastApprovedFor(true)) {
     return 'interactive';
   }
-  return 'pipelines';
+  return 'automations';
 }
 
 // Whether an operation was last approved for interactive use: approving it
-// again for pipelines only stops it running when a card is opened.
+// again for automations only stops it running when a card is opened.
 export function approvedForOpenCards(operation: BatchOperation): boolean {
   return operation.slots.some((s) => s.approved?.interactive);
 }
@@ -375,11 +442,11 @@ export function approvalScope(
 }
 
 // How many more requests need approving after these, for the choice made:
-// those approved for pipelines only count only for interactive use.
+// those approved for automations only count only for interactive use.
 export function remainingFor(batch: ApprovalBatch, use: ApprovalUse): number {
   return (
     batch.remaining +
-    (use === 'interactive' ? (batch.remainingPipelinesOnly ?? 0) : 0)
+    (use === 'interactive' ? (batch.remainingAutomationsOnly ?? 0) : 0)
   );
 }
 

@@ -3,6 +3,12 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
+  isAbsoluteIdentifier,
+  rri,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common/realm-identifiers';
+
+import {
   allRoomEvents,
   loginWithPassword,
   type MatrixEvent,
@@ -13,17 +19,18 @@ import { grade, type RunResult, type Verdict } from './run-result.ts';
 import {
   RealmClient,
   RealmResponseError,
+  realmPaths,
   type CardDocument,
 } from './realm-api.ts';
 import {
   expectedChangedSeeds,
-  pipelineApprovalTargets,
+  automationApprovalTargets,
   promptCardIds,
   seededCardSeeds,
   prepopulate,
   type EvaluationBundle,
 } from './eval-card.ts';
-import { seedPipelineApprovals } from './key-seed.ts';
+import { seedAutomationApprovals } from './key-seed.ts';
 import { captureWorkspace } from './workspace-snapshot.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
@@ -157,7 +164,7 @@ async function loginViaLocalStorage(page: Page, username: string) {
   await page.goto('/');
   let rendered = page
     .locator(
-      '[data-test-workspace-chooser], [data-test-workspace-chooser-toggle], [data-test-login-form]',
+      '[data-test-dashboard], [data-test-workspace-chooser-toggle], [data-test-login-form]',
     )
     .first();
   // The first tab of a fresh browser context can lose every module load to
@@ -197,18 +204,19 @@ function workspaceEndpoint(modelSlug: string, now: Date) {
 
 async function createWorkspace(
   page: Page,
+  client: RealmClient,
   displayName: string,
   endpoint: string,
 ) {
-  // A fresh login lands on the chooser; a restored session lands in the last
-  // workspace, where the chooser is behind a toggle. Wait for whichever is
-  // there before deciding.
-  let chooser = page.locator('[data-test-workspace-chooser]');
+  // A fresh login lands on the dashboard; a restored session lands in the
+  // last workspace, where the dashboard is behind a toggle. Wait for whichever
+  // is there before deciding.
+  let dashboard = page.locator('[data-test-dashboard]');
   let toggle = page.locator('[data-test-workspace-chooser-toggle]');
-  await expect(chooser.or(toggle).first()).toBeVisible({ timeout: 60_000 });
-  if (!(await chooser.isVisible())) {
+  await expect(dashboard.or(toggle).first()).toBeVisible({ timeout: 60_000 });
+  if (!(await dashboard.isVisible())) {
     await toggle.click();
-    await chooser.waitFor();
+    await dashboard.waitFor();
   }
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(displayName);
@@ -240,12 +248,18 @@ async function createWorkspace(
     .first();
   await indexCard.waitFor({ timeout: 60_000 });
   let indexId = await indexCard.getAttribute('data-test-stack-card');
-  if (!indexId?.endsWith('index')) {
+  // A card id does not say where its realm root is; the realm answers that.
+  let realmUrl = indexId ? await client.realmOf(indexId) : undefined;
+  if (
+    !indexId ||
+    !realmUrl ||
+    realmPaths(realmUrl).local(rri(indexId)) !== 'index'
+  ) {
     throw new Error(
       `expected the workspace index card to open, got ${indexId}`,
     );
   }
-  return indexId.slice(0, -'index'.length);
+  return realmUrl;
 }
 
 async function openRoom(page: Page) {
@@ -374,7 +388,7 @@ async function ensureInsideWorkspace(
   realmUrl: string,
   openCards: string[] = [],
 ) {
-  let chooser = page.locator('[data-test-workspace-chooser]');
+  let dashboard = page.locator('[data-test-dashboard]');
   let indexCard = page.locator(`[data-test-stack-card="${realmUrl}index"]`);
   let missingOpenCard = false;
   for (let id of openCards) {
@@ -383,15 +397,15 @@ async function ensureInsideWorkspace(
     }
   }
   if (
-    (await chooser.count()) > 0 ||
+    (await dashboard.count()) > 0 ||
     (await indexCard.count()) === 0 ||
     missingOpenCard
   ) {
     // Re-enter through the URL rather than the tile, so this works whatever
-    // state the chooser is in.
+    // state the dashboard is in.
     await openStack(page, realmUrl, openCards);
   }
-  await expect(chooser).toHaveCount(0);
+  await expect(dashboard).toHaveCount(0);
   await expect(indexCard).toBeVisible();
 }
 
@@ -521,16 +535,11 @@ async function readActivityOnce(page: Page): Promise<Activity> {
   return page.evaluate(() => {
     let q = (sel: string) => document.querySelectorAll(sel).length;
     let settled = q('[data-test-room-settled]') > 0;
-    // The bar's "new messages" button stays while the panel is not scrolled
-    // to the end, and it takes the place of the bar's other states, the Stop
-    // button among them. Scroll to the last message so the next read sees the
-    // bar's real state; until then the bar counts as busy.
+    // The composer's action bar (its Stop button) shows while the bot works.
+    // The "new messages" chip is not read here: it floats above the bar
+    // without hiding it, and says only where the transcript is scrolled,
+    // which can leave it up in a room that has finished.
     let actionBar = q('[data-test-ai-assistant-action-bar]');
-    let unread = q('[data-test-unread-messages-button]') > 0;
-    if (unread) {
-      let messages = document.querySelectorAll('[data-test-message-idx]');
-      messages[messages.length - 1]?.scrollIntoView({ block: 'end' });
-    }
     // Only a call the host is running. A call still streaming ("preparing")
     // is the model writing, which the stall check below watches instead.
     let applying = q('[data-test-apply-state="applying"]');
@@ -611,8 +620,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     }
     let busy = [
       settled ? '' : 'room not settled',
-      unread ? 'new messages button' : '',
-      actionBar && !unread ? `${actionBar} action bar` : '',
+      actionBar ? `${actionBar} action bar` : '',
       applying ? `${applying} applying` : '',
       preparing ? `${preparing} preparing` : '',
       loading ? 'session preparation' : '',
@@ -643,6 +651,31 @@ async function readActivityOnce(page: Page): Promise<Activity> {
         ),
     };
   });
+}
+
+// The screenshot is judged as what the reader sees at the end of the run, so
+// it should show the transcript's last answer. The transcript can be left
+// scrolled above its end with the "new messages" chip up, even in a finished
+// room. Scroll its scroll area, not the last message: a scroll that lands at
+// the very end is what makes the transcript follow its end again, and a
+// message's own scrollIntoView can stop short of it. Best effort: a page
+// without a transcript is captured as it is.
+async function showTranscriptEnd(page: Page) {
+  try {
+    await page.evaluate(() => {
+      let viewport = document.querySelector<HTMLElement>(
+        '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
+      );
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    });
+    await expect(
+      page.locator('[data-test-unread-messages-button]'),
+    ).toHaveCount(0, { timeout: 2_000 });
+  } catch {
+    // the chip stayed or the page is gone: capture what is there
+  }
 }
 
 async function stopGeneration(page: Page) {
@@ -808,11 +841,16 @@ async function findRenderedCard(
     seeded = [],
     required,
     missingReason = 'no card the assistant produced is rendered, in the stack or the preview panel',
-  }: { seeded?: string[]; required?: string[]; missingReason?: string },
+  }: {
+    seeded?: RealmResourceIdentifier[];
+    required?: RealmResourceIdentifier[];
+    missingReason?: string;
+  },
 ) {
   let excluded = new Set(required ? [] : seeded);
   let counted = required ? new Set(required) : undefined;
-  let cardIds: string[] = [];
+  let realm = realmPaths(realmUrl);
+  let cardIds: RealmResourceIdentifier[] = [];
   try {
     await expect
       .poll(
@@ -842,15 +880,17 @@ async function findRenderedCard(
           cardIds = [
             ...new Set(
               rendered
+                .flatMap(({ id, shown }) =>
+                  id ? [{ id: rri(id), shown }] : [],
+                )
                 .filter(({ id, shown }) =>
                   counted
-                    ? !!id && counted.has(id) && shown
-                    : !!id &&
-                      id.startsWith(realmUrl) &&
-                      !id.endsWith('index') &&
+                    ? counted.has(id) && shown
+                    : realm.inRealm(id) &&
+                      realm.local(id) !== 'index' &&
                       !excluded.has(id),
                 )
-                .map(({ id }) => id as string),
+                .map(({ id }) => id),
             ),
           ];
           return cardIds.length;
@@ -1012,7 +1052,7 @@ function skillsUsed(events: MatrixEvent[]): string[] {
     ...new Set(
       enabled
         .map((f) => f.sourceUrl ?? f.url ?? '')
-        .filter((url) => /^https?:\/\//.test(url)),
+        .filter((id) => isAbsoluteIdentifier(id)),
     ),
   ];
 }
@@ -1204,7 +1244,7 @@ async function runModel(
   // run ends early.
   let realmClient: RealmClient | undefined;
   let expected: ExpectedSeed[] = [];
-  let seededCards: string[] = [];
+  let seededCards: RealmResourceIdentifier[] = [];
   let step = 'start';
   let setStep = (next: string) => {
     step = next;
@@ -1231,6 +1271,7 @@ async function runModel(
     let label = evaluation ? `Eval ${slugify(evaluation.name)}` : 'Models';
     result.realmUrl = await createWorkspace(
       page,
+      realmClient,
       `${label} ${requestedModel} ${stamp}`,
       workspaceEndpoint(slug, now),
     );
@@ -1262,10 +1303,10 @@ async function runModel(
           );
         }
       }
-      if (evaluation.pipelineApprovals?.length) {
-        setStep('approve operations for pipelines only');
-        await seedPipelineApprovals(
-          pipelineApprovalTargets(evaluation, realmUrl),
+      if (evaluation.automationApprovals?.length) {
+        setStep('approve operations for automations only');
+        await seedAutomationApprovals(
+          automationApprovalTargets(evaluation, realmUrl),
           {
             user: credentials.userId,
             owner: client,
@@ -1441,6 +1482,7 @@ async function runModel(
     result.cardRendered = rendered.cardId;
     result.renderedIn = rendered.where;
     result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+    await showTranscriptEnd(page);
     await page.screenshot({ path: result.screenshot, fullPage: false });
 
     let events = await allRoomEvents(result.roomId, credentials.accessToken);
@@ -1481,6 +1523,7 @@ async function runModel(
     );
     try {
       result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+      await showTranscriptEnd(page);
       await page.screenshot({ path: result.screenshot });
     } catch {
       // the page may be gone

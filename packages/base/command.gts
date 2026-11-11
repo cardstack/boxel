@@ -1051,17 +1051,42 @@ export class ViewVisuallyResult extends CardDef {
 // and realm content references these types by name.
 export { CaptureInput as CaptureCardInput, CaptureOutput as CaptureCardOutput };
 
+// One file or card instance a correctness check covers. `attempt` is set only
+// past a target's first automated round.
+export class CorrectnessTargetField extends FieldDef {
+  @field type = contains(StringField);
+  @field ref = contains(StringField);
+  @field lintIssues = containsMany(StringField);
+  @field attempt = contains(NumberField);
+}
+
+// A check names either one target (`targetType` + `targetRef`, the shape
+// older rooms carry) or several (`targets`).
 export class CheckCorrectnessInput extends CardDef {
   @field targetType = contains(StringField);
   @field targetRef = contains(StringField);
   @field roomId = contains(StringField);
   @field lintIssues = containsMany(StringField);
+  @field targets = containsMany(CorrectnessTargetField);
 }
 
+export class CorrectnessTargetResultField extends FieldDef {
+  @field targetType = contains(StringField);
+  @field targetRef = contains(StringField);
+  @field errors = containsMany(StringField);
+  @field warnings = containsMany(StringField);
+}
+
+// `errors` and `warnings` hold every target's lines. A check of several
+// targets also fills `targetResults`, one entry per target that failed or
+// warned (a target without one passed clean), and the counts.
 export class CorrectnessResultCard extends CardDef {
   @field correct = contains(BooleanField);
   @field errors = containsMany(StringField);
   @field warnings = containsMany(StringField);
+  @field targetResults = containsMany(CorrectnessTargetResultField);
+  @field checkedCount = contains(NumberField);
+  @field passedCount = contains(NumberField);
 }
 
 export class CreateAIAssistantRoomInput extends CardDef {
@@ -1136,7 +1161,6 @@ export class UseAiAssistantInput extends CardDef {
   @field prompt = contains(StringField);
   @field clientGeneratedId = contains(StringField);
   @field openCardIds = containsMany(StringField);
-  @field requireCommandCall = contains(BooleanField); // optional: require AI to execute commands
 }
 
 export class SendAiAssistantMessageInput extends CardDef {
@@ -1147,7 +1171,6 @@ export class SendAiAssistantMessageInput extends CardDef {
   @field attachedFileIdentifiers = containsMany(StringField);
   @field realmIdentifier = contains(StringField);
   @field openCardIds = containsMany(StringField);
-  @field requireCommandCall = contains(BooleanField);
 }
 
 export class SendAiAssistantMessageResult extends CardDef {

@@ -9,13 +9,12 @@ import {
   CardURLContextName,
   fieldSerializer,
   CodeRefSerializer,
-  loaderForModule,
   resolveRRIReference,
   rri,
-  type Loader,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import CodeIcon from '@cardstack/boxel-icons/code';
 
 class BaseView extends Component<typeof CodeRefField> {
@@ -42,6 +41,7 @@ class EditView extends Component<typeof CodeRefField> {
       @state={{this.validationState}}
       @onInput={{this.onInput}}
       @disabled={{not @canEdit}}
+      {{ignoredByPasswordManagers}}
     />
   </template>
 
@@ -86,7 +86,9 @@ class EditView extends Component<typeof CodeRefField> {
         // rewritten to the loader when the realm transpiles this file, but when
         // this module is compiled into the host bundle the bundler owns that
         // call instead and the specifier reaches the platform unresolved.
-        let code = (await myLoader().import<Record<string, any>>(module))[name];
+        // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+        let loader = import.meta.loader;
+        let code = (await loader.import<Record<string, any>>(module))[name];
         if (code) {
           this.validationState = 'valid';
           if (!opts?.checkOnly) {
@@ -139,13 +141,6 @@ export default class CodeRefField extends FieldDef {
     }
     <template>{{this.text}}</template>
   };
-}
-
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
 }
 
 export class AbsoluteCodeRefField extends CodeRefField {

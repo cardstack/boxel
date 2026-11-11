@@ -1,11 +1,21 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
+import { basename, dirname, extname, join } from 'path';
 import { createServer, type Server } from 'http';
 import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import puppeteer, { type Browser, type Frame, type Page } from 'puppeteer';
-import { createSecureOrigin, secureOriginGate } from '../lib/secure-origin.ts';
+import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
+import {
+  createSecureOrigin,
+  secureOriginGate,
+  secureOriginHeaders,
+} from '../lib/secure-origin.ts';
 import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 
 // Each page the secure origin serves, loaded from its build in a real browser
@@ -17,7 +27,7 @@ import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 // The built pages are also where the theme's tokens resolve, so this is where
 // the error and muted text colours are checked against WCAG AA contrast, and
 // the key panel's focus rings and choice indicators (the chosen radio tile's
-// ring, a checkbox's edge, a radio's accent) against WCAG's 3:1 for a non-text
+// ring, a checkbox's and a radio's edge) against WCAG's 3:1 for a non-text
 // indicator.
 
 const KEY_ID = '0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c';
@@ -212,6 +222,45 @@ const LEGACY_ADDRESSES: { legacy: string; landed: string; marker: string }[] = [
 // Every form the credential fields present.
 const CREDENTIAL_FORMS = ['change-password', 'confirm-password'];
 
+// The build probe: a page the build makes, and the realm server never serves,
+// that renders a Pret UI component wrapping boxel-ui and a boxel-icons icon.
+// It is served here, from the build's `probe/`, under the origin's headers,
+// as the realm server serves a page, so it is checked under the real policy
+// too.
+const PROBE_PATH = '/probe';
+const requireFromTest = createRequire(import.meta.url);
+const PROBE_DIR = join(
+  dirname(requireFromTest.resolve('@cardstack/secure-origin/package.json')),
+  'dist',
+  'probe',
+);
+const PROBE_CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+};
+
+function probeFiles(): Map<string, { body: string; contentType: string }> {
+  let { base, entries } = JSON.parse(
+    readFileSync(join(PROBE_DIR, 'manifest.json'), 'utf8'),
+  ) as { base: string; entries: Record<string, string[]> };
+  let files = new Map<string, { body: string; contentType: string }>();
+  let serve = (name: string, file: string) =>
+    files.set(`${PROBE_PATH}/${name}`, {
+      body: readFileSync(file, 'utf8').replaceAll(base, `${PROBE_PATH}/`),
+      contentType: PROBE_CONTENT_TYPES[extname(name)],
+    });
+  for (let name of new Set(Object.values(entries).flat())) {
+    serve(name, join(PROBE_DIR, name));
+  }
+  // The tokens the probe links, as the realm server serves them beside a page.
+  serve(
+    'variables.css',
+    requireFromTest.resolve('@cardstack/boxel-ui/styles/variables.css'),
+  );
+  return files;
+}
+
 // Records every policy violation in a frame, from before any of its own
 // script runs.
 function recordViolations() {
@@ -243,6 +292,33 @@ async function close(server: Server | undefined) {
   }
 }
 
+// What the stubbed realm server lists for a signed-in window: one key, and
+// two workspaces to share it into.
+const POLICY_TEST_KEY = {
+  type: 'user-key',
+  id: 'key-1',
+  attributes: {
+    name: 'Weather service',
+    kind: 'static',
+    state: 'active',
+    createdAt: '2026-10-01T12:00:00.000Z',
+    updatedAt: '2026-10-01T12:00:00.000Z',
+    anonymous: false,
+    anonymousDailyCap: null,
+    anonymousMonthlyCap: null,
+    usedWith: [],
+    sharedInto: [],
+  },
+};
+const POLICY_TEST_REALMS = [
+  ['https://realm-server.test/example-user/notes/', 'Notes'],
+  ['https://realm-server.test/example-team/notes/', 'Notes'],
+].map(([id, name]) => ({
+  type: 'secure-window-realm',
+  id,
+  attributes: { name },
+}));
+
 module(basename(import.meta.filename), function (hooks) {
   let browser: Browser;
   let page: Page;
@@ -253,12 +329,41 @@ module(basename(import.meta.filename), function (hooks) {
   let appOrigin: string;
 
   hooks.before(async function () {
-    // The realm server and the Matrix server the pages talk to. Neither has
-    // anything to say: a page that can't reach one still renders, and a
+    // The realm server and the Matrix server the pages talk to. They answer
+    // only what draws the parts of a page that come and go — a key's share
+    // page with its workspaces to pick from, and a username being checked —
+    // and nothing else: a page that can't reach one still renders, and a
     // request to one is within the policy either way.
-    let api = await listen((_req, res) => {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end('{}');
+    let api = await listen((req, res) => {
+      let cors = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers':
+          'authorization, content-type, x-boxel-logging-correlation-id',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      };
+      let answer = (status: number, body?: unknown) => {
+        res.writeHead(status, {
+          ...cors,
+          'Content-Type': 'application/vnd.api+json',
+        });
+        res.end(body === undefined ? '' : JSON.stringify(body));
+      };
+      let { pathname } = new URL(req.url ?? '/', 'http://localhost');
+      if (req.method === 'OPTIONS') {
+        return answer(204);
+      }
+      if (req.method === 'GET' && pathname === '/_user-keys') {
+        return answer(200, { data: [POLICY_TEST_KEY] });
+      }
+      if (req.method === 'GET' && pathname === '/_secure-window/realms') {
+        return answer(200, { data: POLICY_TEST_REALMS });
+      }
+      if (req.method === 'GET' && pathname.endsWith('/register/available')) {
+        // Long enough for the page to show that it is checking.
+        setTimeout(() => answer(200, { available: true }), 3000);
+        return;
+      }
+      answer(404, {});
     });
     apiServer = api.server;
     let apiURL = new URL(`http://localhost:${api.port}/`);
@@ -284,6 +389,18 @@ module(basename(import.meta.filename), function (hooks) {
     let secure = await listen((req, res) => koa.callback()(req, res));
     secureServer = secure.server;
     secureOrigin = `http://127.0.0.1:${secure.port}`;
+    let probe = probeFiles();
+    koa.use(async (ctx, next) => {
+      let file = probe.get(
+        ctx.path === PROBE_PATH ? `${PROBE_PATH}/probe.html` : ctx.path,
+      );
+      if (!file) {
+        return next();
+      }
+      ctx.set(secureOriginHeaders());
+      ctx.type = file.contentType;
+      ctx.body = file.body;
+    });
     koa.use(
       secureOriginGate(
         createSecureOrigin(
@@ -301,8 +418,9 @@ module(basename(import.meta.filename), function (hooks) {
     browser = await puppeteer.launch({
       headless: true,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
+        // The sandbox is off only on Linux, for the reasons
+        // `chromeSandboxEnabled` gives.
+        ...(chromeSandboxEnabled() ? [] : CHROME_NO_SANDBOX_ARGS),
         // Keeps the framed credential fields in the page's own process, so
         // the violation listener is installed in that frame too.
         '--disable-features=IsolateOrigins,site-per-process',
@@ -364,6 +482,29 @@ module(basename(import.meta.filename), function (hooks) {
       assert.ok(true, `${path}: the page rendered`);
       assert.deepEqual(await violationsIn(page), [], `${path}: no violation`);
     }
+  });
+
+  test('the build probe renders Pret UI and boxel-icons under the policy', async function (assert) {
+    let response = await page.goto(`${secureOrigin}${PROBE_PATH}`, {
+      waitUntil: 'networkidle0',
+    });
+    assert.strictEqual(response?.status(), 200, 'status');
+    assert.ok(
+      response
+        ?.headers()
+        ['content-security-policy']?.includes(`default-src 'self'`),
+      'served with the policy',
+    );
+    await page.waitForSelector(
+      '[data-test-build-probe] [data-test-pretui-accordion] [data-test-build-probe-content]',
+      { visible: true, timeout: 10000 },
+    );
+    assert.ok(true, "Pret UI's Accordion rendered its open item");
+    assert.ok(
+      await page.$('svg[data-test-build-probe-icon]'),
+      "boxel-icons' icon rendered",
+    );
+    assert.deepEqual(await violationsIn(page), [], 'no violation');
   });
 
   test('an address naming a page by its `mode` lands on that page', async function (assert) {
@@ -588,6 +729,65 @@ module(basename(import.meta.filename), function (hooks) {
     }
   }
 
+  test('a workspace picker opened and a username being checked run under the policy', async function (assert) {
+    // The workspace list renders in the dropdown's wormhole, and the
+    // username's spinner only while the check is out: neither is on a page
+    // as it loads.
+    await page.goto(`${secureOrigin}/secure?mode=none`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.evaluate(() =>
+      localStorage.setItem(
+        'boxel-secure-session',
+        JSON.stringify({
+          token: 'policy-test',
+          user: '@someone:example.test',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+      ),
+    );
+    await page.goto(`${secureOrigin}/secure/keys/key-1/share`, {
+      waitUntil: 'networkidle0',
+    });
+    let trigger =
+      '[data-test-workspace-dropdown] [data-test-pretui-select-trigger]';
+    await page.waitForSelector(trigger, { timeout: 10000 });
+    await page.click(trigger);
+    await page.waitForSelector('[data-test-pretui-select-search-input]', {
+      timeout: 10000,
+    });
+    await page.type('[data-test-pretui-select-search-input]', 'not');
+    assert.strictEqual(
+      await page.$$eval(
+        '#ember-basic-dropdown-wormhole [role="option"]',
+        (options) => options.length,
+      ),
+      2,
+      'the list is open',
+    );
+    assert.deepEqual(
+      await violationsIn(page),
+      [],
+      'the workspace list open: no violation',
+    );
+    await page.evaluate(() => localStorage.clear());
+
+    await page.goto(`${secureOrigin}/secure/register`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.type('[data-test-username-field] input', 'someone-new');
+    await page.focus('[data-test-name-field]');
+    await page.waitForSelector(
+      '[data-test-username-field] [data-test-loading-indicator]',
+      { timeout: 10000 },
+    );
+    assert.deepEqual(
+      await violationsIn(page),
+      [],
+      'a username being checked: no violation',
+    );
+  });
+
   test('error and muted text on the sign-in pages meet WCAG AA contrast', async function (assert) {
     // Every page's stylesheet ships with the shell, so this one page holds
     // the error rules of all the sign-in pages.
@@ -606,8 +806,8 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('error and muted text on the key pages meet WCAG AA contrast', async function (assert) {
-    // The key pages draw their errors on the key window's own panel, which
-    // has a theme and background of its own.
+    // The key pages draw their errors as Pret UI Alerts on the key window's
+    // own panel, which has a theme and background of its own.
     await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
     });
@@ -615,19 +815,97 @@ module(basename(import.meta.filename), function (hooks) {
     assertContrast(
       assert,
       'key pages',
-      await textColors('[data-test-keys-panel]', /^\.keys-error(\[[^\]]+\])?$/),
+      await textColors(
+        '[data-test-keys-panel]',
+        /^\.pretui-alert(\[[^\]]+\])?$/,
+      ),
     );
+
+    // An Alert's text sits on its own tint, not on the panel, so it is also
+    // measured there: each tone's hue, put through the Alert rule's own
+    // background and color on a probe in the panel. The hues are a copy of
+    // Pret UI's `ALERT_COLORS`, whose comment points back here; the build
+    // exposes no rule that names them.
+    let tinted = await page.evaluate(() => {
+      let panel = document.querySelector('[data-test-keys-panel]')!;
+      let rule: CSSStyleRule | undefined;
+      let visit = (rules: CSSRuleList) => {
+        for (let r of rules) {
+          if (r instanceof CSSGroupingRule) {
+            visit(r.cssRules);
+          } else if (
+            r instanceof CSSStyleRule &&
+            /^\.pretui-alert(\[[^\]]+\])?$/.test(r.selectorText) &&
+            r.style.getPropertyValue('background-color')
+          ) {
+            rule = r;
+          }
+        }
+      };
+      for (let sheet of document.styleSheets) {
+        visit(sheet.cssRules);
+      }
+      if (!rule) {
+        return undefined;
+      }
+      let canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      let context = canvas.getContext('2d', { willReadFrequently: true })!;
+      let toRGB = (color: string) => {
+        context.clearRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      let hues = {
+        info: 'var(--info)',
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        danger: 'var(--destructive)',
+      };
+      return Object.entries(hues).map(([tone, hue]) => {
+        let probe = document.createElement('div');
+        probe.style.setProperty('--pretui-alert-hue', hue);
+        probe.style.setProperty(
+          '--pretui-alert-mix',
+          rule!.style.getPropertyValue('--pretui-alert-mix'),
+        );
+        probe.style.setProperty(
+          'background-color',
+          rule!.style.getPropertyValue('background-color'),
+        );
+        probe.style.setProperty('color', rule!.style.getPropertyValue('color'));
+        panel.append(probe);
+        let style = getComputedStyle(probe);
+        let result = {
+          tone,
+          text: toRGB(style.color),
+          background: toRGB(style.backgroundColor),
+        };
+        probe.remove();
+        return result;
+      });
+    });
+    assert.ok(tinted, "the key pages' stylesheets hold Pret UI's Alert rule");
+    for (let { tone, text, background } of tinted ?? []) {
+      let ratio = contrast(text, background);
+      assert.ok(
+        ratio >= 4.5,
+        `key pages: a ${tone} Alert's text rgb(${text.join(', ')}) on its tint rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+      );
+    }
   });
 
-  test("the chosen radio tile's ring meets WCAG's 3:1 against the key panel, and a hovered tile's is thinner", async function (assert) {
-    // The radio tile's rules ship with the shell, so the signed-out key page
-    // holds them, under the panel whose theme and background the tiles sit
-    // on.
+  test("the chosen radio tile's ring meets WCAG's 3:1 against the key panel, and a hovered tile isn't ringed", async function (assert) {
+    // Pret UI's RadioCard ships with the shell, so the signed-out key page
+    // holds its rules. A tile is drawn under the panel, with the scoping
+    // attribute its rules carry, chosen, and its ring read as the browser
+    // resolves it there.
     await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
     });
     await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
-    let { background, rings } = await page.evaluate(() => {
+    let { background, chosen, hoverRings } = await page.evaluate(() => {
       let panel = document.querySelector('[data-test-keys-panel]')!;
       let canvas = document.createElement('canvas');
       canvas.width = canvas.height = 1;
@@ -640,22 +918,8 @@ module(basename(import.meta.filename), function (hooks) {
         context.fillRect(0, 0, 1, 1);
         return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
       };
-      // A ring is a box shadow with no offset or blur: its spread is its
-      // width, and its colour is resolved under the panel's theme.
-      let ring = (boxShadow: string) => {
-        let probe = document.createElement('span');
-        probe.style.setProperty('box-shadow', boxShadow);
-        panel.append(probe);
-        let computed = getComputedStyle(probe).boxShadow;
-        probe.remove();
-        let [, color, spread] =
-          /^(\w+\([^)]*\)) 0px 0px 0px (\d+(?:\.\d+)?)px$/.exec(computed) ?? [];
-        return color
-          ? { rgb: toRGB(color), width: Number(spread) }
-          : { rgb: [], width: 0 };
-      };
-      let rings: Record<string, ReturnType<typeof ring> & { rule: string }> =
-        {};
+      let scope: string | undefined;
+      let hoverRings: string[] = [];
       let visit = (rules: CSSRuleList) => {
         for (let rule of rules) {
           if (rule instanceof CSSGroupingRule) {
@@ -665,45 +929,162 @@ module(basename(import.meta.filename), function (hooks) {
           if (!(rule instanceof CSSStyleRule)) {
             continue;
           }
-          let state =
-            /^\.radio-tile(?:\[[^\]]+\])*(:hover|:has\(input:checked\))$/.exec(
-              rule.selectorText,
-            )?.[1];
-          let boxShadow = rule.style.getPropertyValue('box-shadow');
-          if (state && boxShadow) {
-            rings[state === ':hover' ? 'hover' : 'chosen'] = {
-              rule: `${rule.selectorText} { box-shadow: ${boxShadow} }`,
-              ...ring(boxShadow),
-            };
+          let selector = rule.selectorText;
+          if (/^\.pretui-optioncard\[data-scopedcss-[\w-]+\]$/.test(selector)) {
+            scope = /\[(data-scopedcss-[\w-]+)\]/.exec(selector)![1];
+          }
+          if (
+            /^\.pretui-optioncard(\[[^\]]+\])*:hover$/.test(selector) &&
+            rule.style.getPropertyValue('box-shadow')
+          ) {
+            hoverRings.push(selector);
           }
         }
       };
       for (let sheet of document.styleSheets) {
         visit(sheet.cssRules);
       }
-      return { background: toRGB(backgroundColor), rings };
+      if (!scope) {
+        return { background: [], chosen: undefined, hoverRings };
+      }
+      let tile = document.createElement('label');
+      tile.className = 'pretui-optioncard';
+      tile.setAttribute(scope, '');
+      tile.dataset.selected = 'true';
+      panel.append(tile);
+      // The first shadow is the ring: no offset or blur, its spread its width.
+      let [, color, spread] =
+        /^(\w+\([^)]*\)) 0px 0px 0px (\d+(?:\.\d+)?)px/.exec(
+          getComputedStyle(tile).boxShadow,
+        ) ?? [];
+      tile.remove();
+      return {
+        background: toRGB(backgroundColor),
+        chosen: color
+          ? { rgb: toRGB(color), width: Number(spread) }
+          : undefined,
+        hoverRings,
+      };
     });
 
-    let { chosen, hover } = rings;
     assert.ok(chosen, "the shell's stylesheets ring a chosen radio tile");
-    assert.ok(hover, "the shell's stylesheets ring a hovered radio tile");
-    let ratio = contrast(chosen.rgb, background);
+    assert.ok(chosen!.width > 0, `the ring is drawn (${chosen!.width}px)`);
+    let ratio = contrast(chosen!.rgb, background);
     assert.ok(
       ratio >= 3,
-      `${chosen.rule}: rgb(${chosen.rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+      `the chosen tile's ring: rgb(${chosen!.rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
     );
-    assert.ok(hover.width > 0, `a hovered tile is ringed (${hover.width}px)`);
+    assert.deepEqual(
+      hoverRings,
+      [],
+      'a hovered tile is filled, never ringed, so it never reads as chosen',
+    );
+  });
+
+  test("a radio on the key panel draws its own face, and a chosen one's fill meets 3:1", async function (assert) {
+    // The shell declares a dark color scheme, under which the browser's own
+    // radio paints an unchosen one as a dark disc on the white panel, so Pret
+    // UI's RadioGroup draws every state itself. A radio is drawn under the
+    // panel, with the scoping attribute its rules carry, and read as the
+    // browser resolves it there.
+    await page.goto(`${secureOrigin}/secure/keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    let { background, colorScheme, unchosen, chosen } = await page.evaluate(
+      () => {
+        let panel = document.querySelector('[data-test-keys-panel]')!;
+        let canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        let context = canvas.getContext('2d', { willReadFrequently: true })!;
+        let backgroundColor = getComputedStyle(panel).backgroundColor;
+        let toRGB = (color: string) => {
+          context.fillStyle = backgroundColor;
+          context.fillRect(0, 0, 1, 1);
+          context.fillStyle = color;
+          context.fillRect(0, 0, 1, 1);
+          return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+        };
+        let scope: string | undefined;
+        let visit = (rules: CSSRuleList) => {
+          for (let rule of rules) {
+            if (rule instanceof CSSGroupingRule) {
+              visit(rule.cssRules);
+            } else if (
+              rule instanceof CSSStyleRule &&
+              /^\.pretui-radio\[data-scopedcss-[\w-]+\]$/.test(
+                rule.selectorText,
+              )
+            ) {
+              scope = /\[(data-scopedcss-[\w-]+)\]/.exec(rule.selectorText)![1];
+            }
+          }
+        };
+        for (let sheet of document.styleSheets) {
+          visit(sheet.cssRules);
+        }
+        if (!scope) {
+          return {
+            background: [],
+            colorScheme: '',
+            unchosen: undefined,
+            chosen: undefined,
+          };
+        }
+        let draw = (checked: boolean) => {
+          let radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.className = 'pretui-radio';
+          radio.setAttribute(scope!, '');
+          radio.checked = checked;
+          panel.append(radio);
+          let style = getComputedStyle(radio);
+          let drawn = {
+            appearance: style.appearance,
+            fill: toRGB(style.backgroundColor),
+          };
+          radio.remove();
+          return drawn;
+        };
+        return {
+          background: toRGB(backgroundColor),
+          // The scheme the page declares to the browser, which paints its own
+          // controls under it.
+          colorScheme:
+            document
+              .querySelector('meta[name="color-scheme"]')
+              ?.getAttribute('content') ?? '',
+          unchosen: draw(false),
+          chosen: draw(true),
+        };
+      },
+    );
+
+    assert.ok(unchosen, "the shell's stylesheets draw Pret UI's radio");
+    assert.ok(chosen, 'and a chosen one');
     assert.ok(
-      hover.width < chosen.width,
-      `a hovered tile's ring (${hover.width}px) is thinner than a chosen one's (${chosen.width}px)`,
+      /dark/.test(colorScheme),
+      `the shell declares a dark color scheme (${colorScheme})`,
+    );
+    assert.strictEqual(
+      unchosen!.appearance,
+      'none',
+      'an unchosen radio is drawn by the page, not the browser',
+    );
+    assert.strictEqual(chosen!.appearance, 'none', 'so is a chosen one');
+    let ratio = contrast(chosen!.fill, background);
+    assert.ok(
+      ratio >= 3,
+      `a chosen radio's fill: rgb(${chosen!.fill.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
     );
   });
 
   test('focus rings and the checkbox and radio indicators on the key panel meet 3:1', async function (assert) {
     // Every stylesheet the shell ships is on the signed-out key page, so this
     // reads every outline a `:focus` or `:focus-visible` rule draws, each
-    // checkbox edge and each accent colour, and resolves each under the panel
-    // the key pages draw their controls on.
+    // checkbox and radio edge, a chosen radio's colour and each accent
+    // colour, and resolves each under the panel the key pages draw their
+    // controls on.
     await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
     });
@@ -738,6 +1119,12 @@ module(basename(import.meta.filename), function (hooks) {
         return color === SENTINEL ? undefined : toRGB(color);
       };
       let indicators: { label: string; rgb: number[] | undefined }[] = [];
+      // A CSS-wide keyword paints no colour of its own: the property takes
+      // its inherited or initial value, which the rules that set it are
+      // measured for. A rule like `all: unset` reports one for every
+      // property it resets.
+      let paintsNothing = (value: string) =>
+        /^(unset|initial|inherit|revert|revert-layer)$/.test(value.trim());
       let visit = (rules: CSSRuleList) => {
         for (let rule of rules) {
           if (rule instanceof CSSGroupingRule) {
@@ -759,7 +1146,11 @@ module(basename(import.meta.filename), function (hooks) {
               let value = style.getPropertyValue(property);
               // An outline drawn transparent on purpose shows nothing to
               // measure.
-              if (value && !/transparent|none|rgba\([^)]*,\s*0\)/.test(value)) {
+              if (
+                value &&
+                !paintsNothing(value) &&
+                !/transparent|none|rgba\([^)]*,\s*0\)/.test(value)
+              ) {
                 indicators.push({
                   label: `${selector} { ${property}: ${value} }`,
                   rgb: paints(property, value, 'outline-color'),
@@ -767,14 +1158,18 @@ module(basename(import.meta.filename), function (hooks) {
               }
             }
           }
-          // An unticked checkbox is drawn by its edge alone, and a ticked one
-          // keeps an edge around its fill.
+          // An unticked checkbox and an unchosen radio are drawn by their edge
+          // alone, and a ticked or chosen one keeps an edge around its fill;
+          // a chosen radio tile is ringed in its tone. Pret UI draws each from
+          // the token the panel sets.
           for (let property of [
-            '--checkbox-border-color',
-            '--checkbox-checked-border-color',
+            '--pretui-control-border',
+            '--pretui-control-checked-border',
+            '--pretui-radio-checked-fill',
+            '--pretui-choice-card-tone',
           ]) {
             let edge = style.getPropertyValue(property);
-            if (edge) {
+            if (edge && !paintsNothing(edge)) {
               indicators.push({
                 label: `${selector} { ${property}: ${edge} }`,
                 rgb: paints('color', edge, 'color'),
@@ -782,7 +1177,7 @@ module(basename(import.meta.filename), function (hooks) {
             }
           }
           let accent = style.getPropertyValue('accent-color');
-          if (accent) {
+          if (accent && !paintsNothing(accent)) {
             indicators.push({
               label: `${selector} { accent-color: ${accent} }`,
               rgb: paints('color', accent, 'color'),
@@ -797,27 +1192,36 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     assert.ok(
-      indicators.some(({ label }) => label.includes('.radio-tile')),
+      indicators.some(({ label }) => label.includes('.pretui-optioncard')),
       "the radio tile's focus ring is among them",
     );
     assert.ok(
-      indicators.some(({ label }) => label.includes('--checkbox-border-color')),
-      "the checkbox's edge is among them",
+      indicators.some(({ label }) =>
+        /^\.pretui-radio(\[[^\]]+\])*:focus/.test(label),
+      ),
+      "the radio's focus ring is among them",
     );
     assert.ok(
       indicators.some(({ label }) =>
-        label.includes('--checkbox-checked-border-color'),
+        /^\.pretui-checkbox(\[[^\]]+\])*:focus/.test(label),
       ),
-      "a ticked checkbox's edge is among them",
+      "the checkbox's focus ring is among them",
     );
     assert.ok(
       indicators.some(({ label }) => /^a:focus /.test(label)),
       'the global link focus outline is among them',
     );
-    assert.ok(
-      indicators.some(({ label }) => label.includes('accent-color')),
-      "the radio choices' accent is among them",
-    );
+    for (let property of [
+      '--pretui-control-border',
+      '--pretui-control-checked-border',
+      '--pretui-radio-checked-fill',
+      '--pretui-choice-card-tone',
+    ]) {
+      assert.ok(
+        indicators.some(({ label }) => label.includes(property)),
+        `${property} is among them`,
+      );
+    }
     for (let { label, rgb } of indicators) {
       if (!rgb) {
         assert.ok(false, `${label}: the colour doesn't resolve on the panel`);

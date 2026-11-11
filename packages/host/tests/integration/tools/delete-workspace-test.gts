@@ -138,15 +138,15 @@ module('Integration | tools | delete-workspace', function (hooks) {
     );
   });
 
-  test('refuses to delete a workspace the user does not own', async function (assert) {
+  test('refuses to delete a workspace the user does not administer', async function (assert) {
     let toolService = getService('tool-service');
     let realmService = getService('realm');
-    realmService.isRealmOwner = () => false;
+    realmService.canAdminister = () => false;
     let tool = new DeleteWorkspaceTool(toolService.toolContext);
 
     await assert.rejects(
       tool.execute({ realmIdentifier: testRealmURL }),
-      /not its owner/,
+      /does not administer it/,
     );
     assert.deepEqual(deleteRealmCalls, [], 'nothing is deleted');
   });

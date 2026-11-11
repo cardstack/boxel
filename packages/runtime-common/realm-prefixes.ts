@@ -8,8 +8,8 @@ import { ri, type RealmIdentifier } from './realm-identifiers.ts';
 
 /**
  * The base realm's canonical RRI prefix. Code refs built from it match what
- * `Loader.identify` / `identifyCard` emit for base-realm classes, which
- * canonicalise through `VirtualNetwork.unresolveURL` to this prefix.
+ * `identify` / `identifyCard` emit for base-realm classes, which are tagged
+ * with the base realm's canonical name.
  */
 export const baseRealmRRI: RealmIdentifier = ri('@cardstack/base/');
 

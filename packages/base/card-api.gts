@@ -14,6 +14,7 @@ import {
   type MenuItemOptions,
   not,
 } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -38,6 +39,7 @@ import {
   hasNothingToShow,
   getSerializer,
   humanReadable,
+  identify,
   identifyCard,
   computeContentHash,
   inferContentType,
@@ -52,8 +54,6 @@ import {
   isRelationship,
   loadCardDef,
   loadCardDocument,
-  Loader,
-  loaderForModule,
   localId,
   meta,
   primitive,
@@ -183,6 +183,7 @@ import {
   type JSONAPISingleResourceDocument,
   type SerializeOpts,
   getCardMeta,
+  unidentifiedDefinitionError,
 } from './card-serialization';
 import {
   assertScalar,
@@ -2489,7 +2490,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    return new WatchedArray(
+    let watched = new WatchedArray(
       (oldValue, value) => {
         applySubscribersToInstanceValue(
           instance,
@@ -2505,6 +2506,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       rawArrayValues(values),
       { hideSlot: isNonPresentLink },
     );
+    // Assigning an empty list empties the field, so it serializes as
+    // `{ self: null }`. Untagged, serialization would drop it as never set,
+    // and the save would keep the old links.
+    markAuthoredEmptyLink(watched);
+    return watched;
   }
 
   captureQueryFieldSeedData(
@@ -3765,6 +3771,7 @@ export class StringField extends FieldDef {
         @value={{@model}}
         @onInput={{@set}}
         @disabled={{not @canEdit}}
+        {{ignoredByPasswordManagers}}
       />
     </template>
   };
@@ -4041,6 +4048,7 @@ export class NumberField extends FieldDef {
         @errorMessage={{this.textInputValidator.errorMessage}}
         @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
         @disabled={{not @canEdit}}
+        {{ignoredByPasswordManagers}}
       />
     </template>
 
@@ -5231,7 +5239,7 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
-  let identity = Loader.identify(ctor);
+  let identity = identify(ctor);
   if (!identity) {
     return;
   }
@@ -5257,7 +5265,8 @@ function trackRuntimeRelationshipModuleDependencies(
   // which is what the tracker records — so they are passed through as they are.
   trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
 
-  let loader = Loader.getLoaderFor(ctor);
+  // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+  let loader = import.meta.loader;
   if (!loader) {
     return;
   }
@@ -5398,7 +5407,8 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     meta: { adoptsFrom },
   } = resource;
   let card: typeof BaseDef | undefined = await loadCardDef(adoptsFrom, {
-    loader: myLoader(),
+    // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+    loader: import.meta.loader,
     relativeTo,
     dependencyTrackingContext: context,
   });
@@ -5474,9 +5484,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!resource) {
     let adoptsFrom = identifyCard(card);
     if (!adoptsFrom) {
-      throw new Error(
-        `bug: could not determine identity for card '${card.name}'`,
-      );
+      throw unidentifiedDefinitionError(card, 'cannot deserialize a card');
     }
     // in this case we are dealing with an empty instance
     resource = { meta: { adoptsFrom } };
@@ -5652,7 +5660,8 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       return false;
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
-      loader: myLoader(),
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      loader: import.meta.loader,
       // A field override's module ref is relative to this resource's own id, the
       // same rule as adoptsFrom; instanceRelativeTo already resolves to the
       // instance's own id when saved, with resource.id as the fallback.
@@ -6346,13 +6355,6 @@ export function resolveRef(
   return resolveRRIReference(reference, relativeTo);
 }
 
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
-}
-
 class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
   #fileMetaInstances: Map<string, FileDef> = new Map();
@@ -6360,7 +6362,8 @@ class FallbackCardStore implements CardStore {
   #loadGeneration = 0; // mirrors host store tracking to detect new loads
 
   #requireVirtualNetwork(): VirtualNetwork {
-    let vn = myLoader().getVirtualNetwork();
+    // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+    let vn = import.meta.loader.getVirtualNetwork();
     if (!vn) {
       throw new Error(
         `FallbackCardStore requires the active Loader to have a VirtualNetwork`,
@@ -6372,7 +6375,8 @@ class FallbackCardStore implements CardStore {
   resolveURL(reference: string, base?: string): URL | undefined {
     let vn: VirtualNetwork | undefined;
     try {
-      vn = myLoader().getVirtualNetwork();
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      vn = import.meta.loader.getVirtualNetwork();
     } catch {
       return undefined;
     }
@@ -6389,7 +6393,8 @@ class FallbackCardStore implements CardStore {
   canonicalizeId(id: string): string {
     let vn: VirtualNetwork | undefined;
     try {
-      vn = myLoader().getVirtualNetwork();
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      vn = import.meta.loader.getVirtualNetwork();
     } catch {
       return id;
     }
@@ -6399,7 +6404,8 @@ class FallbackCardStore implements CardStore {
   realmForId(id: string): string | undefined {
     let vn: VirtualNetwork | undefined;
     try {
-      vn = myLoader().getVirtualNetwork();
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      vn = import.meta.loader.getVirtualNetwork();
     } catch {
       return undefined;
     }
@@ -6409,7 +6415,8 @@ class FallbackCardStore implements CardStore {
   openableURL(id: string): string {
     let vn: VirtualNetwork | undefined;
     try {
-      vn = myLoader().getVirtualNetwork();
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      vn = import.meta.loader.getVirtualNetwork();
     } catch {
       return id;
     }
@@ -6426,7 +6433,8 @@ class FallbackCardStore implements CardStore {
   #storeKey(id: string): string {
     id = id.replace(/\.json$/, '');
     try {
-      let vn = myLoader().getVirtualNetwork();
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      let vn = import.meta.loader.getVirtualNetwork();
       return vn ? vn.toRealURLHref(id) : id;
     } catch {
       return id;

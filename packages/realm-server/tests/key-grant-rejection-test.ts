@@ -26,7 +26,7 @@ import {
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
-import { pipelineAdmission } from '../lib/key-bindings.ts';
+import { automationAdmission } from '../lib/key-bindings.ts';
 import { keyReadiness } from '../lib/key-readiness.ts';
 import { listKeyGrants } from '../lib/user-key-grants.ts';
 import {
@@ -244,10 +244,10 @@ module(basename(import.meta.filename), function (hooks) {
     return response.body.data[0] as { meta: { grant: { id: string } } };
   }
 
-  // Invokes `operation` on the type as a pipeline the realm server runs as
+  // Invokes `operation` on the type as an automation the realm server runs as
   // `user`, asking the vendor to answer `code`.
   async function call(operation: string, code: number, user = OWNER) {
-    let response = (await realm.handlePipeline(
+    let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {
@@ -414,7 +414,7 @@ module(basename(import.meta.filename), function (hooks) {
       1,
       'nothing reached the vendor while the probe was not due',
     );
-    let admission = await pipelineAdmission(dbAdapter, {
+    let admission = await automationAdmission(dbAdapter, {
       core: realm.operationCore,
       realmURL,
       codeRef: INBOX,
@@ -429,7 +429,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     await probeIsDue(grantId);
     assert.strictEqual(
-      await pipelineAdmission(dbAdapter, {
+      await automationAdmission(dbAdapter, {
         core: realm.operationCore,
         realmURL,
         codeRef: INBOX,
@@ -601,12 +601,14 @@ module(basename(import.meta.filename), function (hooks) {
         realm_url: n.realm_url,
         share_id: n.share_id,
       })),
-      (await fetchDirectWriters(dbAdapter, realmURL)).map((recipient) => ({
-        recipient,
-        grant_id: shared.meta.grant.id,
-        realm_url: realmURL.href,
-        share_id: share.id,
-      })),
+      (await fetchDirectWriters(dbAdapter, realmURL, 'localhost')).map(
+        (recipient) => ({
+          recipient,
+          grant_id: shared.meta.grant.id,
+          realm_url: realmURL.href,
+          share_id: share.id,
+        }),
+      ),
       "the owner and the realm's direct writers, and not its readers",
     );
     assert.false(

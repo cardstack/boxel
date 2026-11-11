@@ -25,12 +25,17 @@ export interface UnpublishOptions {
    */
   tolerateMissing?: boolean;
   profileManager?: ProfileManager;
-  /** Seed-mode admin auth — mints an owner-scoped realm-server token. */
+  /** Seed-mode admin auth — mints a realm-server token for `asUser`. */
   realmSecretSeed?: string;
   /** Realm-server origin for seed mode; defaults to the published URL origin. */
   realmServerURL?: string;
-  /** Owner Matrix id for the seed-minted server token (required in seed mode). */
+  /** Matrix id of a source-realm administrator for the seed-minted server token (required in seed mode). */
   asUser?: string;
+  /**
+   * The name of the Matrix server paired with the realm server, for seed
+   * mode. Read from `MATRIX_SERVER_NAME` when absent.
+   */
+  matrixServerName?: string;
 }
 
 export interface UnpublishRealmResult {
@@ -60,7 +65,7 @@ export async function unpublishRealm(
         publishedRealmURL: normalized,
         unpublished: false,
         error:
-          'Seed-mode unpublish requires asUser (the realm owner Matrix id).',
+          'Seed-mode unpublish requires asUser (the Matrix id of a user who administers the source realm).',
       };
     }
     client = buildCliRealmClient({
@@ -68,6 +73,7 @@ export async function unpublishRealm(
       realmServerURL:
         options.realmServerURL ?? deriveRealmServerUrl(normalized),
       asUser: options.asUser,
+      matrixServerName: options.matrixServerName,
     });
   } else {
     let pm = options.profileManager ?? getProfileManager();
@@ -142,11 +148,11 @@ export function registerUnpublishCommand(realm: Command): void {
     )
     .option(
       '--realm-secret-seed',
-      'Administrative auth: prompt for a realm secret seed and mint an owner-scoped JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT for --as-user locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)',
     )
     .option(
       '--as-user <matrix-id>',
-      'Owner Matrix id to authorize as (required with --realm-secret-seed)',
+      'Matrix id of a source-realm administrator to authorize as (required with --realm-secret-seed)',
     )
     .option('--json', 'Output the result as JSON')
     .action(async (publishedRealmURL: string, opts: UnpublishCliOptions) => {

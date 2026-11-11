@@ -671,8 +671,14 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     },
   );
 
-  // Who the reader is to this realm. Asked when the app opens and when the
-  // reader comes back from the secure window.
+  // Who the reader is to this realm, and the realm's shares. Asked when the
+  // app opens and whenever the reader comes back to the page, from the secure
+  // window or from anywhere else: a writer who shares a key from the key page
+  // comes back to a card whose shared calls aren't approved yet. The host asks
+  // readiness again on that return, which then says so (`needs-approval`) and
+  // opens the approval; the shares read here say which share serves the app.
+  // Coming back from a window the app opened also clears the problem that
+  // opened it, so the app tries again.
   watchShares = modifier(() => {
     if (!this.isLive) {
       return;
@@ -683,8 +689,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         this.#openedWindow = false;
         this.#requestedFrom = undefined;
         this.problem = undefined;
-        this.loadShares.perform();
       }
+      this.loadShares.perform();
     };
     window.addEventListener('focus', back);
     return () => window.removeEventListener('focus', back);
@@ -1104,7 +1110,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   }
 
   // A refusal the approve page fixes: an operation whose binding is missing,
-  // approved for pipelines only, or changed since it was approved. The page
+  // approved for automations only, or changed since it was approved. The page
   // gathers every other operation on the card that needs the same.
   get problemNeedsApproval(): boolean {
     let code = this.problem?.code;

@@ -37,6 +37,7 @@ import {
   Theme,
 } from '@cardstack/base/card-api';
 import CodeRefField from '@cardstack/base/code-ref';
+import ColorField from '@cardstack/base/color';
 import DateField from '@cardstack/base/date';
 import DateTimeField from '@cardstack/base/datetime';
 import EmailField from '@cardstack/base/email';
@@ -84,6 +85,10 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../../helpers';
+import {
+  shimTestModule,
+  tagTestModuleExports,
+} from '../../helpers/identity-tags';
 import { mango } from '../../helpers/image-fixture';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
@@ -177,7 +182,11 @@ module('Integration | card-basics', function (hooks) {
         });
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Friend, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Person,
+        Friend,
+        Pet,
+      });
 
       let pet1 = new Pet({ name: 'Mango' });
       let pet2 = new Pet({ name: 'Van Gogh' });
@@ -246,7 +255,11 @@ module('Integration | card-basics', function (hooks) {
         });
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Friend, Pet });
+      shimTestModule(loader, `${testRealmURL}test-cards`, {
+        Person,
+        Friend,
+        Pet,
+      });
 
       let pet1 = new Pet({ name: 'Mango' });
       let friend = new Friend({
@@ -291,7 +304,7 @@ module('Integration | card-basics', function (hooks) {
       @field examples = linksToMany(() => CardDef);
     }
 
-    loader.shimModule(`${testRealmURL}test-cards`, {
+    tagTestModuleExports(`${testRealmURL}test-cards`, {
       Listing,
       DrumKitCard,
       BeatMakerCard,
@@ -325,7 +338,7 @@ module('Integration | card-basics', function (hooks) {
 
     test('"instanceOf()" returns true when provided instance is a direct instance of the provided card class', async function (assert) {
       class Foo extends CardDef {}
-      loader.shimModule(`${testRealmURL}test-cards`, { Foo });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Foo });
 
       assert.true(
         instanceOf(new Foo(), Foo),
@@ -337,7 +350,7 @@ module('Integration | card-basics', function (hooks) {
       class Foo extends CardDef {}
       class Bar extends Foo {}
       class Baz extends Bar {}
-      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
 
       assert.true(
         instanceOf(new Baz(), Foo),
@@ -348,7 +361,7 @@ module('Integration | card-basics', function (hooks) {
     test('"instanceOf()" returns false when instance does not adopt from the provided card class', async function (assert) {
       class Foo extends CardDef {}
       class Bar extends CardDef {}
-      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Foo, Bar });
 
       assert.false(
         instanceOf(new Bar(), Foo),
@@ -360,7 +373,7 @@ module('Integration | card-basics', function (hooks) {
       class Foo extends CardDef {}
       class Bar extends Foo {}
       class Baz extends Bar {}
-      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
 
       getService('loader-service').resetLoader();
 
@@ -379,7 +392,7 @@ module('Integration | card-basics', function (hooks) {
         @field b = contains(StringField);
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { ExteriorField });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { ExteriorField });
       assert.true(instanceOf(new ExteriorField(), FieldDef));
     });
 
@@ -403,7 +416,10 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Gallery,
+        ImageDef,
+      });
 
       let hero = new ImageDef({
         id: 'https://example.com/hero.png',
@@ -444,7 +460,10 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Gallery,
+        ImageDef,
+      });
 
       let attachment1 = new ImageDef({
         id: 'https://example.com/first.png',
@@ -495,7 +514,10 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Gallery,
+        ImageDef,
+      });
 
       let hero = new ImageDef({
         id: 'https://example.com/hero.png',
@@ -533,7 +555,10 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Gallery,
+        ImageDef,
+      });
 
       let attachment1 = new ImageDef({
         id: 'https://example.com/first.png',
@@ -571,7 +596,10 @@ module('Integration | card-basics', function (hooks) {
         @field hero = linksTo(ImageDef as unknown as typeof CardDef);
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Gallery,
+        ImageDef,
+      });
 
       let hero = new ImageDef({
         name: 'hero.png',
@@ -600,7 +628,10 @@ module('Integration | card-basics', function (hooks) {
         @field hero = linksTo(ImageDef as unknown as typeof CardDef);
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Gallery,
+        ImageDef,
+      });
 
       let hero = new ImageDef({
         name: 'hero.png',
@@ -634,7 +665,10 @@ module('Integration | card-basics', function (hooks) {
         @field attachments = linksToMany(ImageDef as unknown as typeof CardDef);
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Gallery,
+        ImageDef,
+      });
 
       let attachment = new ImageDef({
         name: 'first.png',
@@ -663,7 +697,10 @@ module('Integration | card-basics', function (hooks) {
         @field attachments = linksToMany(ImageDef as unknown as typeof CardDef);
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Gallery, ImageDef });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Gallery,
+        ImageDef,
+      });
 
       let attachment = new ImageDef({
         name: 'first.png',
@@ -925,7 +962,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
         cardTitle: 'First Post',
@@ -1021,7 +1058,7 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({ name: 'Mango' });
       let vanGogh = new Pet({ name: 'Van Gogh' });
@@ -1257,7 +1294,7 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Guest, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Guest, Person });
 
       let g1 = new Guest({
         name: 'Madeleine',
@@ -1294,7 +1331,7 @@ module('Integration | card-basics', function (hooks) {
     test('can render a card with an empty field', async function (assert) {
       let EmbeddedViewDriver = fittedViewDriver();
 
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         EmbeddedViewDriver,
       });
 
@@ -1326,7 +1363,7 @@ module('Integration | card-basics', function (hooks) {
 
       let FittedViewDriver = fittedViewDriver();
 
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         Person,
         FittedViewDriver,
       });
@@ -1383,7 +1420,7 @@ module('Integration | card-basics', function (hooks) {
 
       let FittedViewDriver = fittedViewDriver();
 
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         Person,
         FittedViewDriver,
       });
@@ -1433,7 +1470,7 @@ module('Integration | card-basics', function (hooks) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
 
       // deserialize a card with an ID to mark it as "saved"
       let card = new Person({ firstName: 'Mango' });
@@ -2070,7 +2107,7 @@ module('Integration | card-basics', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({
         firstName: 'Mango',
@@ -2156,7 +2193,7 @@ module('Integration | card-basics', function (hooks) {
         @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Pet });
 
       let mango = new Pet({
         firstName: 'Mango',
@@ -2241,7 +2278,7 @@ module('Integration | card-basics', function (hooks) {
         // @ts-expect-error Have to purposefully bypass type-checking in order to get into this runtime error state
         @field pet = linksTo(StringField);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
 
       try {
         new Person({ firstName: 'Hassan', pet: 'Mango' });
@@ -2277,7 +2314,11 @@ module('Integration | card-basics', function (hooks) {
         @field firstName = contains(StringField);
         @field pet = linksTo(Pet);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet, NotAPet });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Person,
+        Pet,
+        NotAPet,
+      });
 
       let door = new NotAPet({ firstName: 'door' });
       try {
@@ -2329,7 +2370,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+      shimTestModule(loader, `${testRealmURL}test-cards`, { Person, Pet });
 
       let vanGogh = new Pet({ firstName: 'Van Gogh' });
       let mango = new Pet({ firstName: 'Mango', friend: vanGogh });
@@ -2374,7 +2415,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
         cardTitle: 'This is My First Post',
@@ -2433,7 +2474,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         Post,
         Person,
         TestNumber,
@@ -2451,7 +2492,7 @@ module('Integration | card-basics', function (hooks) {
 
     test('render card-def instance with no additional fields', async function (assert) {
       class MeetingMinutes extends CardDef {}
-      loader.shimModule(`${testRealmURL}test-cards`, { MeetingMinutes });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { MeetingMinutes });
 
       const name = 'Minutes of Meeting - Project Alpha';
       const summary =
@@ -2940,7 +2981,7 @@ module('Integration | card-basics', function (hooks) {
         @field cardTitle = contains(title);
         @field author = contains(Person);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
         cardTitle: 'First Post',
@@ -2965,7 +3006,7 @@ module('Integration | card-basics', function (hooks) {
           },
         });
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
       let person = new Person({
         firstName: 'Arthur',
         lastName: 'M',
@@ -3009,7 +3050,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
       let helloWorld = new Person({ firstName: 'Arthur', age: 10 });
 
       await renderCard(loader, helloWorld, 'atom');
@@ -3128,7 +3169,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Family, Person });
 
       let abdelRahmans = new Family({
         people: [
@@ -3178,7 +3219,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Family, Person });
 
       let abdelRahmans = new Family({
         people: [
@@ -3234,7 +3275,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Name });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person, Name });
 
       let person = new Person({
         name: new Name({ firstName: 'Arthur', lastName: 'Dent' }),
@@ -3279,7 +3320,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Pet, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Pet, Person });
 
       let mango = new Pet({ name: 'Mango' });
       await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
@@ -3322,7 +3363,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Pet, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Pet, Person });
 
       let squareTheme = new Theme({
         cardInfo: new CardInfoField({ name: 'Square' }),
@@ -3403,7 +3444,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Family, Person });
 
       let abdelRahmans = new Family({
         people: [
@@ -3446,7 +3487,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Family, Person });
       let mango = new Person({
         firstName: 'Mango',
       });
@@ -3499,7 +3540,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Family, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Family, Person });
       let mango = new Person({
         firstName: 'Mango',
       });
@@ -3559,7 +3600,7 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         Person,
         Employee,
         Customer,
@@ -3619,7 +3660,7 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         SpecialStringA,
         SpecialStringB,
         TestCard,
@@ -3794,7 +3835,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         TestCard,
         TestField,
         SubTestField,
@@ -3869,7 +3910,7 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         TestCardWithField,
         TestField,
         TestCard,
@@ -3941,7 +3982,7 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         SpecialStringA,
         SpecialStringB,
         TestCard,
@@ -4130,7 +4171,7 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, {
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
         Pet1,
         Pet1Prime,
         Person1,
@@ -4290,7 +4331,7 @@ module('Integration | card-basics', function (hooks) {
         @field firstName = contains(StringField);
         @field languagesSpoken = containsMany(StringField);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
       assert.throws(
         () => new Person({ languagesSpoken: 'english' }),
         /Expected array for field value of field 'languagesSpoken'/,
@@ -4317,7 +4358,7 @@ module('Integration | card-basics', function (hooks) {
         @field cardTitle = contains(StringField);
         @field author = contains(Person);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
         cardTitle: 'My Post',
@@ -4378,7 +4419,7 @@ module('Integration | card-basics', function (hooks) {
           },
         });
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
 
       let mango = new Person({ firstName: 'Mango', isCool: true });
       let root = await renderCard(loader, mango, 'isolated');
@@ -4388,13 +4429,47 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
+    test('text fields in edit format tell password managers to skip them', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field age = contains(NumberField);
+        @field email = contains(EmailField);
+        @field nicknames = containsMany(StringField);
+        @field favoriteColor = contains(ColorField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        firstName: 'Mango',
+        age: 3,
+        email: 'mango@example.com',
+        nicknames: ['Mangy', 'Mango Bear'],
+        favoriteColor: '#ffaa00',
+      });
+
+      await renderCard(loader, mango, 'edit');
+
+      for (let input of [
+        '[data-test-field="firstName"] input',
+        '[data-test-field="age"] input',
+        '[data-test-field="email"] input',
+        '[data-test-field="nicknames"] [data-test-item="0"] input',
+        '[data-test-field="nicknames"] [data-test-item="1"] input',
+        '[data-test-field="favoriteColor"] [data-test-color-text-input]',
+      ]) {
+        assert.dom(input).hasAttribute('data-1p-ignore', '', input);
+        assert.dom(input).hasAttribute('data-lpignore', 'true', input);
+        assert.dom(input).hasAttribute('data-form-type', 'other', input);
+        assert.dom(input).hasAttribute('data-bwignore', '', input);
+      }
+    });
+
     test('renders boolean edit view', async function (assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
         @field isCool = contains(BooleanField);
         @field isHuman = contains(BooleanField);
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
       let mango = new Person({
         firstName: 'Mango',
         isCool: true,
@@ -4470,7 +4545,7 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
-      loader.shimModule(`${testRealmURL}test-cards`, { Post, Person });
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Post, Person });
 
       let helloWorld = new Post({
         cardTitle: 'First Post',
@@ -4811,7 +4886,10 @@ module('Integration | card-basics', function (hooks) {
         @field favoritePlaces = linksToMany(Country);
       }
 
-      loader.shimModule(`${testRealmURL}test-cards`, { Country, ContactCard });
+      tagTestModuleExports(`${testRealmURL}test-cards`, {
+        Country,
+        ContactCard,
+      });
 
       let us = new Country({ countryName: 'United States', flag: '🇺🇸' });
       let canada = new Country({ countryName: 'Canada', flag: '🇨🇦' });

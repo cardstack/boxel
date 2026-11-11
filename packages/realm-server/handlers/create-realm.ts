@@ -344,7 +344,11 @@ export default function handleCreateRealmRequest(
           `Error creating realm '${json.data.attributes.name}' for user ${ownerUserId}`,
           e,
         );
-        await sendResponseForSystemError(ctxt, `${e.message}: at ${e.stack}`);
+        await sendResponseForSystemError(
+          ctxt,
+          `${e.message}: at ${e.stack}`,
+          e,
+        );
       }
       return;
     } finally {

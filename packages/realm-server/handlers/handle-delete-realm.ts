@@ -3,6 +3,8 @@ import {
   asExpressions,
   dbAdapterQuerier,
   fetchRealmPermissions,
+  isRealmAdministrator,
+  namedRealmUsers,
   notifyAllFileChanges,
   param,
   PUBLISHED_DIRECTORY_NAME,
@@ -22,7 +24,7 @@ import {
   sendResponseForUnprocessableEntity,
   setContextResponse,
 } from '../middleware/index.ts';
-import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { notifyRealmsListUpdated } from './archive-realm-utils.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
@@ -100,11 +102,21 @@ export default function handleDeleteRealm({
       // does the unmount on every instance after the registry DELETE +
       // NOTIFY.
       let sourceRow = (await query(dbAdapter, [
-        `SELECT disk_id FROM realm_registry WHERE url =`,
+        `SELECT disk_id, kind FROM realm_registry WHERE url =`,
         param(realmURL),
-      ])) as { disk_id: string }[];
+      ])) as { disk_id: string; kind: string }[];
       if (sourceRow.length === 0) {
         await sendResponseForNotFound(ctxt, `Realm not found: ${realmURL}`);
+        return;
+      }
+      // Only a source realm is deleted here. A published realm is removed by
+      // unpublishing it, and a bootstrap realm (base, catalog, skills and the
+      // like) is the platform's, whatever writes its permissions grant.
+      if (sourceRow[0].kind === 'bootstrap') {
+        await sendResponseForUnprocessableEntity(
+          ctxt,
+          `Realm ${realmURL} is a bootstrap realm and cannot be deleted`,
+        );
         return;
       }
       let sourceRealmPath = join(realmsRootPath, sourceRow[0].disk_id);
@@ -126,24 +138,12 @@ export default function handleDeleteRealm({
 
       let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
       let { user: ownerUserId } = token;
-      if (!permissions[ownerUserId]?.includes('realm-owner')) {
-        await sendResponseForForbiddenRequest(
-          ctxt,
-          `${ownerUserId} does not have enough permission to delete this realm`,
-        );
-        return;
-      }
-
-      // A realm's namespace is the localpart of an account on this realm
-      // server's Matrix server, so only that account's full id matches it.
-      let ownerNamespace = getRealmNamespace(parsedRealmURL);
       if (
-        !ownerNamespace ||
-        ownerUserId !== `@${ownerNamespace}:${matrixClient.serverName}`
+        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,
-          'You can only delete realms that you created',
+          `${ownerUserId} does not have enough permission to delete this realm`,
         );
         return;
       }
@@ -296,18 +296,18 @@ export default function handleDeleteRealm({
         }),
       );
 
-      // Tell the owner's other sessions their realm list changed so a session
-      // viewing the workspace chooser drops the deleted realm without a reload.
-      // Best-effort: the realm is already gone, so a failed notify must not
-      // turn a successful delete into an error.
+      // Tell everyone the realm named that their realm list changed, so a
+      // session viewing the workspace chooser drops the deleted realm without a
+      // reload. Best-effort: the realm is already gone, so a failed notify must
+      // not turn a successful delete into an error.
       try {
-        await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+        await notifyRealmsListUpdated(sendEvent, namedRealmUsers(permissions));
       } catch (error) {
         Sentry.captureException(error);
       }
     } catch (error: any) {
       Sentry.captureException(error);
-      await sendResponseForSystemError(ctxt, error.message);
+      await sendResponseForSystemError(ctxt, error.message, error);
     }
   };
 }
@@ -328,12 +328,4 @@ function assertIsDeleteRealmJSON(
   if (!('id' in data) || typeof data.id !== 'string') {
     throw new Error('json.data.id is required and must be a string');
   }
-}
-
-function getRealmNamespace(realmURL: URL): string | null {
-  let segments = realmURL.pathname.split('/').filter(Boolean);
-  if (segments.length < 2) {
-    return null;
-  }
-  return segments[segments.length - 2] ?? null;
 }

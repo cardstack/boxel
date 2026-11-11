@@ -40,6 +40,7 @@ import {
 } from './executors.ts';
 import { isSplicedSource, type SplicedSource } from '../spliced-content.ts';
 import { emitOperationPerf } from './telemetry.ts';
+import { withLocksAfterDrain } from '../drain-before-locks.ts';
 import {
   OperationFailure,
   isOperationFailure,
@@ -140,7 +141,11 @@ export interface BatchCore {
   // card's fan-out for nothing. A batch that opts out of waiting for its own
   // indexing skips this too — see `CommitBatchOptions.waitForIndex`, which
   // owns that trade.
-  drainIndexing(): Promise<void>;
+  //
+  // Undefined when nothing it covers is in flight, the realm gate's own
+  // contract, so the coordinator can re-check synchronously once it holds its
+  // locks (see `withLocksAfterDrain`).
+  drainIndexing(): Promise<void> | undefined;
   // Whether the realm's ignore rules exclude this URL. An ignored file is
   // never visited by indexing, so it never gets an index row.
   isIgnored(url: URL): Promise<boolean>;
@@ -341,9 +346,9 @@ export interface CommitBatchOptions {
   // would describe a payload it did not send, and the remedy — name the card
   // by URL, or stop claiming a realm for it — is one only the caller can
   // apply. The card endpoints ask for `leave`, because a `POST` or `PATCH`
-  // carrying such a payload has always stored the card with the edge empty
-  // and answered success: serialization records a link it cannot resolve as
-  // an explicit null.
+  // carrying such a payload has always answered success: serialization
+  // records a link it cannot resolve as an explicit null, and a `PATCH` keeps
+  // a `linksTo` the card already stores there.
   foreignSideLoadLink?: 'refuse' | 'leave';
   // Whether the realm names the cards this batch mints. By default a card the
   // caller names with a `lid` is stored under that id, which is what lets a
@@ -419,10 +424,6 @@ export async function commitBatch(
     // tell every subscriber that something changed.
     return [];
   }
-  // Stamped from outside the lock so the wait for it is its own stage: a batch
-  // queued behind another writer of the files it needs spends its time here,
-  // and from the handler that is indistinguishable from slow indexing.
-  let lockRequestedAt = Date.now();
   let timings = opts.timings;
   let timed = <T>(stage: string, fn: () => Promise<T>): Promise<T> =>
     timings ? timings.time(stage, fn) : fn();
@@ -453,56 +454,72 @@ export async function commitBatch(
   // the only reader in the system that did not.
   let settings: Promise<Record<string, JsonValue>> | undefined;
   let realmConfig = () => (settings ??= core.realmConfig());
-  return await core.withWriteLocks(
-    lockPaths(entries, paths, lids),
-    async (releaseLocks) => {
-      timings?.add('lock', Date.now() - lockRequestedAt);
-      // Drained inside the lock, before anything is staged. Staging serializes
-      // each card against its type's definition, and a module written moments
-      // earlier may still be indexing; without this a batch that follows a
-      // module upload fails to resolve a type the realm already has on disk.
-      //
-      // A batch that does not wait for its own indexing does not wait for
-      // anyone else's either — the same trade the realm's own commit makes at
-      // the same gate, and for the same reason: draining would make each such
-      // write queue behind whatever indexing is still in flight, so a caller
-      // writing a run of files, like a realm push or an editor saving
-      // repeatedly, would pay the previous write's indexing on every one of
-      // them.
-      //
-      // Skipping it does not cost an entry its definitions. Serialization's one
-      // cross-file dependency resolves a definition off disk rather than out of
-      // the index, and a module written in the same commit has its cached
-      // definition dropped as the bytes land — so no indexing-dependent step
-      // stands between a module write and a serialization that follows it. What
-      // the drain guards is narrower than the whole of definition freshness; the
-      // realm states the case at its own card-write gate, which is the place to
-      // read before widening or removing either copy.
-      //
-      // The set it waits on is narrower too: only passes that touched an
-      // executable module or the realm's config document — the two things a
-      // batch resolves out of the index rather than off disk. An instance-only
-      // fan-out moves neither, so no batch has a reason to wait for one, which
-      // is what keeps a hub card's fan-out from gating every other writer in
-      // the realm.
-      //
-      // So this is not reserved for entries that serialize nothing. A caller
-      // whose response does not read indexed state can take it, and a
-      // prerender-originated write *must*: the job it would wait on needs the
-      // render slot that caller is holding, so waiting deadlocks.
-      //
-      // All of that is about the opt-out. The drain is skipped on its own terms
-      // as well, for a batch that stages nothing: a removal names a file and
-      // reads the bytes already there, resolving no definition, so a batch of
-      // removals would wait for indexing it has no use for. That matters
-      // because this wait happens with the batch's file locks held — a removal
-      // issued while a bulk import drains would park here holding them, with
-      // every other writer of those files queued behind. What is left to park
-      // for is another writer's module or config landing, and those are
-      // realm-wide by nature: neither a definition nor a realm setting is any
-      // one file's to hold.
-      if (opts.waitForIndex !== false && entries.some(stagesContent)) {
-        await timed('drain', () => core.drainIndexing());
+  // Drained before anything is staged. Staging serializes each card against
+  // its type's definition, and a module written moments earlier may still be
+  // indexing; without this a batch that follows a module upload fails to
+  // resolve a type the realm already has on disk.
+  //
+  // The wait happens before the write locks are taken, not while holding them
+  // (see `withLocksAfterDrain`): what it waits on is other writers' indexing,
+  // which needs no exclusivity over this batch's files, and a long pass — a
+  // module's fan-out across every card built from it — would otherwise park
+  // every other writer of those files behind this one for as long as it runs.
+  // Inside the locks only a synchronous re-check remains, except on the last
+  // turn `withLocksAfterDrain` allows, where what is still pending is waited
+  // for under them, so the state staging reads is still the state the drain
+  // left.
+  //
+  // A batch that does not wait for its own indexing does not wait for
+  // anyone else's either — the same trade the realm's own commit makes at
+  // the same gate, and for the same reason: draining would make each such
+  // write queue behind whatever indexing is still in flight, so a caller
+  // writing a run of files, like a realm push or an editor saving
+  // repeatedly, would pay the previous write's indexing on every one of
+  // them.
+  //
+  // Skipping it does not cost an entry its definitions. Serialization's one
+  // cross-file dependency resolves a definition off disk rather than out of
+  // the index, and a module written in the same commit has its cached
+  // definition dropped as the bytes land — so no indexing-dependent step
+  // stands between a module write and a serialization that follows it. What
+  // the drain guards is narrower than the whole of definition freshness; the
+  // realm states the case at its own card-write gate, which is the place to
+  // read before widening or removing either copy.
+  //
+  // The set it waits on is narrower too: only passes that touched an
+  // executable module or the realm's config document — the two things a
+  // batch resolves out of the index rather than off disk. An instance-only
+  // fan-out moves neither, so no batch has a reason to wait for one, which
+  // is what keeps a hub card's fan-out from gating every other writer in
+  // the realm.
+  //
+  // So this is not reserved for entries that serialize nothing. A caller
+  // whose response does not read indexed state can take it, and a
+  // prerender-originated write *must*: the job it would wait on needs the
+  // render slot that caller is holding, so waiting deadlocks.
+  //
+  // All of that is about the opt-out. The drain is skipped on its own terms
+  // as well, for a batch that stages nothing: a removal names a file and
+  // reads the bytes already there, resolving no definition, so a batch of
+  // removals would wait for indexing it has no use for. The realm's commit
+  // gate applies the same rule to a commit that only removes files, so such
+  // a batch waits for no indexing at all, inside its locks or out.
+  let drains = opts.waitForIndex !== false && entries.some(stagesContent);
+  let drain = () => (drains ? core.drainIndexing() : undefined);
+  return await withLocksAfterDrain({
+    drain,
+    lock: (fn) => core.withWriteLocks(lockPaths(entries, paths, lids), fn),
+    // Its own stage, so a batch queued behind another writer of the files it
+    // needs is told apart from one waiting on indexing — from the handler the
+    // two are otherwise indistinguishable.
+    onLocked: (waitedMs) => timings?.add('lock', waitedMs),
+    onDrain: (pending) => timed('drain', () => pending),
+    run: async (releaseLocks) => {
+      // What the re-check left: nothing, unless a pass kept registering
+      // between the drain and the locks for every turn the writer was given.
+      let pending = drain();
+      if (pending) {
+        await timed('drain', () => pending);
       }
       // After the drain, so the state a precondition reads is the realm as this
       // batch is about to change it, and before staging, so a refusal costs
@@ -557,7 +574,7 @@ export async function commitBatch(
         cursor?.mark('commit');
       }
     },
-  );
+  });
 }
 
 // Stage a batch the way `commitBatch` does, without taking its write locks or

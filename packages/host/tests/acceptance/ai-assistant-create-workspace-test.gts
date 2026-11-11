@@ -211,13 +211,13 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
       'the new workspace is opened',
     );
 
-    // The chooser lists the new workspace without a reload.
+    // The dashboard lists the new workspace without a reload.
     await click('[data-test-workspace-chooser-toggle]');
     await waitFor(
       '[data-test-workspace-list] [data-test-workspace="Team Space"]',
     );
     assert
       .dom('[data-test-workspace-list] [data-test-workspace="Team Space"]')
-      .exists('the new workspace appears in the workspace chooser');
+      .exists('the new workspace appears on the dashboard');
   });
 });

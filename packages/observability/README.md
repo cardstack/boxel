@@ -39,7 +39,8 @@ grafanactl/
     folders/           # grafanactl push: Grafana folder definitions
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
-  datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
+  datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus,
+                       # and realm-server-operator, which carries operator actions)
   alerting/            # alert rule groups for every env; a rule routes
                        # through Grafana's default notification policy, or
                        # to a contact point by `notification_settings.receiver`
@@ -107,13 +108,13 @@ GITHUB_TOKEN=$(gh auth token) node collectors/actions-queue.ts   # loops, defaul
 
 It emits five event types, all on channel `boxel:actions-queue`:
 
-| `event_type`                             | one line per                   | carries                                                                                                                                                |
-| ---------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step`                                                            |
-| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`                                                                         |
-| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `github_hosted_running_jobs`, `github_hosted_queued_jobs`, `active_runs`, `rate_limit_remaining`        |
-| `spill`                                  | spill decision                 | the pool count, `diverted_jobs`, `pool_complete`, `spill_before`, `spill`, `changed`, `reason`, `mode`, `written`; see [Host CI spill](#host-ci-spill) |
-| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                                                                               |
+| `event_type`                             | one line per                   | carries                                                                                                                                         |
+| ---------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job`                                    | queued, pending or running job | branch, actor, workflow, runner labels, `queued_seconds`, `running_seconds`, `current_step`                                                     |
+| `group`                                  | dimension × key                | `dimension` (branch / actor / workflow), `key`, `queued`, `running`, `pending`                                                                  |
+| `snapshot`                               | sample                         | `queued_jobs`, `running_jobs`, `pending_jobs`, `github_hosted_running_jobs`, `github_hosted_queued_jobs`, `active_runs`, `rate_limit_remaining` |
+| `spill`                                  | spill decision                 | the pool count, `diverted_jobs`, `pool_complete`, `spill_before`, `spill`, `changed`, `reason`, `mode`, `written`; see [CI spill](#ci-spill)    |
+| `collector-error`, `collector-throttled` | failure or skipped sample      | why the series has a gap                                                                                                                        |
 
 GitHub reports a job as `pending` while a concurrency group holds it, and as
 `queued` while it waits for a runner. The two are counted apart, so a
@@ -129,24 +130,26 @@ Two constraints are load-bearing:
 - **It must not run as a scheduled GitHub Actions workflow.** It would queue
   behind the backlog it measures and go blind during the incident it exists
   for. Hosted, it belongs on a schedule outside Actions.
-- **A sample costs one request per active run, plus three.** The hourly spend
-  therefore scales with how busy the repository is, against a token's 5,000
-  requests an hour. At the observed peak of ~50 concurrent runs a 60-second
-  interval spends around 3,200 an hour, which is comfortable; 30 seconds
-  exceeds the budget above roughly forty concurrent runs, so higher resolution
-  needs the per-sample cost reduced rather than the interval shortened.
-  Sampling stops rather than reporting partial depth when the remaining budget
-  nears its reserve.
+- **A sample costs one request per active run whose jobs changed, plus three
+  per repository.** The collector sends each job-list request with the ETag of
+  the last answer, and GitHub does not count a `304 Not Modified` against the
+  token's 5,000 requests an hour. About 45% of the job lists are unchanged
+  between two samples, so a 60-second interval can keep up with about 120
+  active runs for an hour (the busiest hour seen had up to 114). A 30-second
+  interval doubles the cost. Sampling stops rather than reporting partial depth
+  when the remaining budget gets to its reserve.
 
 The dashboard reads `{service="actions-collector", env="$env"}`, so a hosted
 deployment needs to log under that service name.
 
-#### Host CI spill
+#### CI spill
 
 GitHub's hosted runners cost nothing for this public repository, and the
-RunsOn instances in our AWS account do not. So pull request host jobs in
-`ci-host.yaml` use GitHub's runners, and take RunsOn only while the repo
-variable `HOST_TEST_SPILL` is `true`. Pushes to `main` always take RunsOn. Each
+RunsOn instances in our AWS account do not. So the host test jobs in
+`ci-host.yaml` and the Realm Server and Matrix test jobs in `ci.yaml` use
+GitHub's runners, and take RunsOn only while the repo variable `RUNS_ON_SPILL`
+is `true`. The variable `RUNS_ON_SPEC` holds the RunsOn instance spec. CI
+Host's pushes to `main` always take RunsOn; CI's follow the spill. Each
 sample decides what the variable should hold (`collectors/spill.ts`):
 
 - It counts the jobs on GitHub's free pool: those whose label names a standard
@@ -156,7 +159,7 @@ sample decides what the variable should hold (`collectors/spill.ts`):
   The repositories in `SPILL_POOL_REPOS` share the pool and are counted too,
   but emit no lines, so the dashboard still describes `--repo` alone.
 - Demand is the jobs running on the pool plus the RunsOn jobs that the spill
-  moved off it: those not from a push to `main`. Without them, spilling would
+  moved off it: all of them except CI Host's pushes to `main`. Without them, spilling would
   make the pool look quiet, and turning the spill off would bring the same
   load back.
 - It turns the spill on when demand reaches `SPILL_ON_RUNNING`, or a job has
@@ -181,7 +184,7 @@ written.
 | `SPILL_APP_ID`               |                           | the App's ID                                                                 |
 | `SPILL_APP_INSTALLATION_ID`  |                           | its installation on the repository                                           |
 | `SPILL_APP_PRIVATE_KEY`      |                           | its private key (PEM)                                                        |
-| `SPILL_VARIABLE`             | `HOST_TEST_SPILL`         | the repo variable to write, on `--repo`                                      |
+| `SPILL_VARIABLE`             | `RUNS_ON_SPILL`           | the repo variable to write, on `--repo`                                      |
 | `SPILL_POOL_REPOS`           | `cardstack/boxel-catalog` | comma-separated repositories that share the pool                             |
 | `SPILL_ON_RUNNING`           | `48`                      | queue wait rises at about 50 running jobs; below that the median wait is 2 s |
 | `SPILL_ON_QUEUED_SECONDS`    | `60`                      |                                                                              |
@@ -631,21 +634,18 @@ weak credential.** It runs on `pull_request`, and GitHub loads that workflow —
 and every script it calls — from the PR itself. Whatever the assumed role can
 read, a contributor can read. So the preview uses its own IAM role,
 `boxel-observability-preview` (cardstack/infra,
-`configs/boxel-observability-preview/`), granting three parameters per
+`configs/boxel-observability-preview/`). The preview reads two parameters per
 environment:
 
 ```
 /<env>/grafana/preview_grafanactl_token  scoped Grafana service account
 /<env>/boxel-grafana/realm_server_url    fill the realm_server variable
-/<env>/boxel/GRAFANA_SECRET              make the operator buttons work
 ```
 
 Not `boxel-observability-apply`. That role grants the Grafana database
-credentials and, worse, the **Admin** `grafanactl_token`. Nothing in Grafana
-scopes that token to `pr<n>-` UIDs, so a PR holding it could overwrite or
-delete any canonical dashboard — and could read `GRAFANA_SECRET` without being
-granted it, since `apply.sh` substitutes the live secret into six canonical
-dashboards and `cleanup-preview.sh` pulls every dashboard on each PR close.
+credentials, `GRAFANA_SECRET` and, worse, the **Admin** `grafanactl_token`.
+Nothing in Grafana scopes that token to `pr<n>-` UIDs, so a PR holding it could
+overwrite or delete any canonical dashboard.
 
 The preview token therefore belongs to a separate Grafana service account,
 `observability-preview` (cardstack/infra, `configs/grafana/base/main.tf`):
@@ -656,35 +656,37 @@ sufficient — a root-level preview folder is refused.
 What a PR can still do, stated plainly:
 
 - write and delete dashboards and folders **inside `Previews`**
-- read every dashboard, and so read `GRAFANA_SECRET` out of the six carrying it
-- use `GRAFANA_SECRET` to call the realm-server operator endpoints
+- read every dashboard
 
-It **cannot** overwrite or delete a canonical dashboard. That was the
-irreversible risk and it is closed. The read half stays open until operator
-calls move to a Grafana datasource proxy and the secret leaves dashboard
-bodies; the preview grant should be dropped when that lands.
+It **cannot** overwrite or delete a canonical dashboard, and it **cannot**
+perform an operator action. The service account can reach the
+`realm-server-operator` datasource proxy like any Grafana identity, but the
+realm server refuses an operator action that Grafana proxied for a service
+account (see [Operator actions](#operator-actions)).
 
-`role = "None"` would close the read half too, and Grafana enforces the folder
-scope correctly under it — but grafanactl drives the App Platform APIs, which
-403 for an account with no basic role however its folder permissions are set.
-Push, pull and delete all fail, so the preview tooling cannot run under it.
-Only the legacy REST API honours folder scoping.
+`role = "None"` would also stop the account reading canonical dashboards, and
+Grafana enforces the folder scope correctly under it — but grafanactl drives
+the App Platform APIs, which 403 for an account with no basic role however its
+folder permissions are set. Push, pull and delete all fail, so the preview
+tooling cannot run under it. Only the legacy REST API honours folder scoping.
 
 Two mechanisms keep the preview inside its lane, so keep them true:
 
 - **Previews cannot address a canonical dashboard.** `render-preview.sh`
   rewrites every UID it emits, then fails closed unless each dashboard sits in
   this PR's own folder and each preview folder's only parent is `Previews`.
-- **Operator buttons act on the real environment.** A preview carries the real
-  `GRAFANA_SECRET`, so a button clicked on a production preview performs the
-  production mutation. Prefer the staging preview for exercising one.
+- **Operator buttons act on the real environment.** A preview's buttons call
+  the same `realm-server-operator` datasource as the canonical dashboards, so
+  a button clicked on a production preview performs the production mutation.
+  Prefer the staging preview for exercising one.
 
 ## Operator actions
 
-Some dashboards carry buttons that POST to a realm-server operator endpoint —
-reindex a realm, complete a stuck job, grant a permission, add credit. Each one
-is a `volkovlabs-form-panel` button whose `customCode` does the `fetch`; there
-are no plain GET links, and no secret travels in a querystring.
+Some dashboards carry buttons that POST to a realm-server operator endpoint
+(`/_grafana-*`) — reindex a realm, complete a stuck job, grant a permission,
+add credit. Most are `volkovlabs-form-panel` buttons whose `customCode` does
+the `fetch`; a table row's actions (delete a job, grant a permission) are
+Grafana's own `fetch` actions. There are no plain GET links.
 
 **Where they live.** An action goes on the dashboard whose data motivates it,
 rather than in one central console: per-realm reindex on `realms.json`, full
@@ -694,15 +696,49 @@ grants on `realms.json` / `published-realms.json` / `users.json`. An operator
 looking at the numbers that prompted the action finds the button already in
 front of them.
 
-**Auth.** Every call sends `Authorization: Bearer ${grafana_secret}`. That
-variable is a hidden `constant` in each dashboard's `templating.list`, committed
-as the literal `REPLACE_AT_APPLY_TIME` and swapped for the real value by
-`scripts/apply.sh` at apply time from `GRAFANA_SECRET`. The realm-server URL
-works the same way, committed as `__REALM_SERVER_URL__` and filled from
-`REALM_SERVER_URL`. Both substitutions are guarded on the placeholder string, so
-they no-op on any other constant that happens to share the name, and
-`scripts/lint.sh` fails the build if a committed dashboard carries anything but
-the placeholder — a real secret can't be committed by accident.
+**Auth.** Every call goes to Grafana itself, through the datasource proxy:
+
+```
+POST /api/datasources/proxy/uid/realm-server-operator/_grafana-<action>?…
+```
+
+Grafana forwards it to the realm server, adding on its own side the headers
+the `realm-server-operator` datasource
+(`provisioning/datasources/realm-server-operator.yaml`) configures:
+
+- `Authorization: Bearer <GRAFANA_SECRET>`, from the datasource's
+  `secureJsonData`. No dashboard carries the secret, and it never reaches the
+  viewer's browser. `apply-datasources.sh` fills it in from SSM.
+- `X-Boxel-Grafana-Proxy: true`, which marks the request as proxied by
+  Grafana. A caller going through Grafana can't leave it off.
+
+Grafana also adds `X-Grafana-Id`, its signed ID token for whoever clicked.
+Every Grafana identity can reach the datasource proxy (OSS Grafana has no
+per-datasource permissions), so for a request carrying the marker the realm
+server checks that token against Grafana's signing keys
+(`<GRAFANA_URL>/api/signing-keys/keys`) and accepts only a signed-in user with
+the Editor or Admin role. A service account, such as the preview's, is
+refused, and so is a Viewer. Each accepted action is logged on
+`realm:grafana-identity` with the user's login. See `grafanaAuthorization` in
+`packages/realm-server/middleware/index.ts`. A request sent straight to the
+realm server with the secret, as an operator holding it does from a shell,
+needs no token.
+
+This needs three settings outside the dashboards:
+
+- the realm server's `GRAFANA_URL` (the Grafana whose tokens it accepts). Without
+  it, every proxied operator action is refused.
+- Grafana's `[security] actions_allow_post_url`
+  (`GF_SECURITY_ACTIONS_ALLOW_POST_URL`) listing
+  `/api/datasources/proxy/uid/realm-server-operator/*`. Grafana refuses a table
+  panel's action that POSTs to Grafana itself unless its path is listed.
+- Grafana's `root_url` matching the host the browser uses, since a table
+  panel's action resolves its path against it.
+
+Staging and production set these in cardstack/infra; `docker-compose.yml` and
+the dev realm server (`mise-tasks/services/realm-server`) set them locally.
+`scripts/lint.sh` fails the build if a dashboard names `grafana_secret` or
+calls a `_grafana-*` endpoint any other way.
 
 **Writing one.** Three mistakes in `customCode` fail silently, so copy a working
 button rather than starting fresh:
@@ -713,6 +749,9 @@ button rather than starting fresh:
   substitution isn't quoted and produces a syntax error at eval time.
 - Attach `.catch(...)` to the IIFE. A rejection from inside the `catch` handler
   is otherwise unhandled and the click appears to do nothing.
+- `fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-<action>?…', { method: 'POST' })`
+  with no `Authorization` header. The datasource adds it. A table panel's
+  `fetch` action takes the same path as its `url`, with empty `headers`.
 
 Report outcomes through `context.grafana.notifySuccess` /
 `notifyError` and call `context.grafana.refresh()` on success so the panel's own
@@ -774,4 +813,4 @@ adding the AMP scrape pipe (Alloy sidecar, IAM, AMP datasource) is
 - **Decommission the AMG-era `boxel-dashboard/` Terraform** in `cardstack/infra` once a full release cycle has gone by on the new flow. Tracked as CS-10942. After it lands, `configs/boxel-grafana-data-sources/` (in cardstack/infra) becomes the sole owner of the per-env data the boxel CI workflow reads.
 - **Drop the dual-ship to CloudWatch** once Loki has been load-bearing for a release cycle. Until then both backends receive identical lines through the FireLens config in `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`.
 - **CODEOWNERS.** No file in the repo today — if the team wants observability-specific reviewer requirements, file a separate ticket.
-- **Rotate the `grafana_secret`.** An earlier value was baked into Terraform and piped through CI logs, so treat that one as compromised until it has been rotated. Unverified as of this writing — if rotation has already happened, drop this item.
+- **Rotate `GRAFANA_SECRET`.** Dashboards carried it in a template variable that every Grafana viewer could read, and an earlier value was baked into Terraform and piped through CI logs, so treat the current value as disclosed. Rotating it now means updating the SSM parameter, re-running the apply (which re-provisions the `realm-server-operator` datasource) and restarting the realm server.

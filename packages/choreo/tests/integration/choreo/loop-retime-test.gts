@@ -83,6 +83,63 @@ module('Integration | choreo | ambient loop retime', function (hooks) {
     );
   });
 
+  test('a render elsewhere on the page leaves a run of loops playing as it was', async function (assert) {
+    let ctx: ChoreoContext;
+    let app: App;
+    const grab = (c: ChoreoContext) => {
+      ctx = c;
+      return '';
+    };
+    class App extends Component {
+      @tracked elsewhere = 0;
+      @tracked ready = false;
+      constructor(owner: unknown, args: object) {
+        super(owner as never, args);
+        app = this;
+      }
+      <template>
+        <p>{{this.elsewhere}}</p>
+        <Choreo as |c|>
+          {{grab c}}
+          <div data-test-looping {{motion id='looping'}}>●</div>
+          {{#if this.ready}}
+            <c.Tween
+              @of={{c.id 'looping'}}
+              @x={{array 0 100 0}}
+              @duration={{4}}
+              @ease='linear'
+              @repeat={{Infinity}}
+            />
+          {{/if}}
+        </Choreo>
+      </template>
+    }
+    await render(<template><App /></template>);
+    await nextFrame();
+    app!.ready = true;
+    await nextFrame();
+    await nextFrame();
+    const element = find('[data-test-looping]') as HTMLElement;
+    const run = ctx!.run!;
+    const { animation } = loopOn(element);
+    animation.currentTime = 1000;
+
+    app!.elsewhere++;
+    await nextFrame();
+    await nextFrame();
+    assert.strictEqual(ctx!.run, run, 'the run was kept');
+    assert.strictEqual(
+      loopOn(element).animation,
+      animation,
+      'the loop is the same animation',
+    );
+    assert.strictEqual(element.getAnimations().length, 1, 'one loop, not two');
+    assert.ok(
+      Number(animation.currentTime) >= 1000,
+      `the loop went on from where it was (${animation.currentTime})`,
+    );
+  });
+
   test('a loop the new run starts on a different sprite starts from its own beginning', async function (assert) {
     let app: App;
     class App extends Component {

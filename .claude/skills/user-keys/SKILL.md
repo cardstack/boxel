@@ -128,8 +128,10 @@ grant's destination host reduced to its registrable domain (`registrableDomain`
 in `lib/secure-window.ts`, the one the key pages show for a destination), each
 once, sorted. `sharedInto` is the realms the key's shares put it in
 (`listOwnSharedRealms` in `lib/key-shares.ts`), each once as
-`{url, name, shares: [{id, label, state}]}`, sorted by name and then address,
-so a page can unshare it from one realm without asking more. A suspended share
+`{url, name, shares: [{id, label, state, approvedCalls}]}`, sorted by name
+and then address, so a page can unshare it from one realm without asking
+more. `approvedCalls` counts the bindings that send the share (any state); at
+0 no card in the realm calls with it yet, and the key page says so. A suspended share
 still counts: the key is still what it holds. `name` is the realm's indexed
 `realm.json` name, given only while the owner can read the realm by a
 permission row of their own or a public one (`*`, `users`). A share outlives
@@ -453,8 +455,8 @@ the vendor doesn't say which it refused, so both grants are rejected.
   `lib/key-bindings.ts`), except **one probe per grant per interval**: the
   first call after `last_probe_at` plus the interval claims the probe in one
   `UPDATE` (`claimProbe`), so concurrent calls can't both probe. The interval
-  is `KEY_GRANT_PROBE_INTERVAL_SECONDS` (default 900). A pipeline admission
-  (`pipelineAdmission`) admits a run only while a probe is due, and claims
+  is `KEY_GRANT_PROBE_INTERVAL_SECONDS` (default 900). An automation admission
+  (`automationAdmission`) admits a run only while a probe is due, and claims
   nothing.
 - **A probe the vendor answers below 400 clears the grant**; a 401 leaves it
   rejected, and anything else (403, 429, 5xx, a timeout) leaves it as it was,
@@ -507,7 +509,7 @@ leaves the key `active`; a 408 is retried like a 5xx.
   `credential-rejected` (424, `meta.reason: 'rejected'`) by `checkSlots`
   without contacting Google, except **one probe per key per interval**,
   claimed on `user_keys.last_probe_at` in one `UPDATE` (`claimKeyProbe`), with
-  the same `KEY_GRANT_PROBE_INTERVAL_SECONDS`. A pipeline admission admits a
+  the same `KEY_GRANT_PROBE_INTERVAL_SECONDS`. An automation admission admits a
   run only while the probe is due.
 - **A probe that mints clears the key**; one Google refuses again leaves it
   rejected and starts a new interval; one the endpoint fails to answer leaves

@@ -443,7 +443,7 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       assert.dom('[data-test-neighbor-stack-trigger]').exists({ count: 2 });
 
       await click('[data-test-workspace-chooser-toggle]');
-      assert.dom('[data-test-workspace-chooser]').exists();
+      assert.dom('[data-test-dashboard]').exists();
       assert.dom('[data-test-neighbor-stack-trigger]').doesNotExist();
     });
 

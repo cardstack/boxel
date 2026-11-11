@@ -37,6 +37,15 @@ versions may change behavior until `1.0.0`.
 
 ### Fixed
 
+- **A run's tweens start on the frame the run first paints.** motion-dom dates a tween from a
+  clock that holds one reading through a synchronous stretch of work, so a run compiled late in a
+  long render could open its tweens that far in: the first painted frame of a move already showed
+  part of its travel. The run's own clock already started fresh; its tweens now do too, with or
+  without `@maxFrameStep`, and a run resumed from a pause carries them on from where they were held
+  instead of restarting them. A run that replaces one already moving on screen is the exception:
+  its first frame advances like any other, clock and tweens alike, so that motion doesn't stand
+  still for a frame. A run replaced before it painted was never seen moving, and its replacement
+  opens at its start.
 - **Measuring doesn't move the scroll.** A region measures with its runs' values at rest, and a
   translate that reached past the end of its scroller had added to the scroll height, so a reader at
   the end was clamped to the shorter height, and a scroll owner such as a stick-to-bottom transcript

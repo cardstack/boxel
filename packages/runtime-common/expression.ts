@@ -170,12 +170,45 @@ export function separatedByCommas(
 ): CardExpression;
 export function separatedByCommas(expressions: Expression[]): Expression;
 export function separatedByCommas(expressions: unknown[][]): unknown {
-  return expressions.reduce((accum, expression) => {
-    if (accum.length > 0) {
-      accum.push(',');
+  // Appends in place: a multi-row upsert or a long `IN` list joins thousands
+  // of expressions, and copying the accumulated list for each one made
+  // building the statement quadratic.
+  let joined: unknown[] = [];
+  for (let expression of expressions) {
+    if (joined.length > 0) {
+      joined.push(',');
     }
-    return accum.concat(expression);
-  }, []);
+    appendExpression(joined, expression);
+  }
+  return joined;
+}
+
+// `target.concat(expression)`, in place: an array's elements are appended
+// one level deep, and anything else is appended as one element.
+function appendExpression(target: unknown[], expression: unknown) {
+  if (Array.isArray(expression)) {
+    for (let element of expression) {
+      target.push(element);
+    }
+  } else {
+    target.push(expression);
+  }
+}
+
+// The parenthesized expressions joined by `operator`, built in place for the
+// same reason as `separatedByCommas`.
+function joinedBy(operator: string, expressions: unknown[][]): unknown[] {
+  let joined: unknown[] = [];
+  for (let [index, expression] of expressions.entries()) {
+    if (index > 0) {
+      joined.push(operator);
+    }
+    appendExpression(
+      joined,
+      addExplicitParens(expression as Expression | CardExpression),
+    );
+  }
+  return joined;
 }
 
 export function param(value: { pg?: PgPrimitive; sqlite?: PgPrimitive }): Param;
@@ -342,15 +375,7 @@ export function every(expressions: unknown[][]): unknown {
   if (expressions.length === 0) {
     return ['true']; // this is "SQL true", not javascript true
   }
-  return expressions
-    .map((expression) =>
-      addExplicitParens(expression as Expression | CardExpression),
-    )
-    .reduce((accum, expression: Expression | CardExpression) => [
-      ...accum,
-      'AND',
-      ...expression,
-    ]);
+  return joinedBy('AND', expressions);
 }
 
 export function any(expressions: CardExpression[]): CardExpression;
@@ -359,15 +384,7 @@ export function any(expressions: unknown[][]): unknown {
   if (expressions.length === 0) {
     return ['false']; // this is "SQL false", not javascript false
   }
-  return expressions
-    .map((expression) =>
-      addExplicitParens(expression as Expression | CardExpression),
-    )
-    .reduce((accum, expression: Expression | CardExpression) => [
-      ...accum,
-      'OR',
-      ...expression,
-    ]);
+  return joinedBy('OR', expressions);
 }
 
 interface Options {

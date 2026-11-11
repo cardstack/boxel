@@ -85,7 +85,6 @@ export default class SignedIn extends Component {
         <p class='info' data-test-secure-signed-in>You can close this window.</p>
         <div class='button-wrapper'>
           <AuthButton
-            @as='anchor'
             @href={{this.keyPage}}
             @variant='secondary'
             data-test-secure-manage-keys

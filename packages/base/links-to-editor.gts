@@ -19,7 +19,6 @@ import {
   brokenLinkItemType,
   isFileDef,
 } from './card-api';
-import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import {
   chooseCard,
   chooseFile,
@@ -248,7 +247,9 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     }
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     if (this.args.typeConstraint) {
-      type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      let loader = import.meta.loader;
+      type = await getNarrowestType(this.args.typeConstraint, type, loader);
     }
     // Prefer the explicit `@consumingRealm` arg over the
     // `RealmURLContext` consumption, so callers in contexts that don't
@@ -284,11 +285,4 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       }
     }
   });
-}
-
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
 }

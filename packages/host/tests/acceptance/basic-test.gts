@@ -107,7 +107,7 @@ module('Acceptance | basic tests', function (hooks) {
   test('visiting realm root', async function (assert) {
     await visit('/');
 
-    assert.dom('[data-test-workspace-chooser]').exists();
+    assert.dom('[data-test-dashboard]').exists();
     await click('[data-test-workspace-button="Unnamed Workspace"]');
 
     assert
@@ -118,7 +118,7 @@ module('Acceptance | basic tests', function (hooks) {
   test('recovers to the app when postLoginCompleted is cleared after boot', async function (assert) {
     await visit('/');
     assert
-      .dom('[data-test-workspace-chooser]')
+      .dom('[data-test-dashboard]')
       .exists('app booted and rendered before the reset');
 
     // Reproduce the post-boot login-reset race deterministically. The persisted
@@ -148,7 +148,7 @@ module('Acceptance | basic tests', function (hooks) {
         'the index route recovers the session instead of stranding',
       );
     assert
-      .dom('[data-test-workspace-chooser]')
+      .dom('[data-test-dashboard]')
       .exists('recovered back to the booted app');
   });
 

@@ -3,6 +3,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { dirname, join, normalize, resolve } from 'node:path';
 
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import {
@@ -16,6 +17,7 @@ import { listFiles } from '../commands/file/list.ts';
 import { readdirSync } from 'node:fs';
 import { sep } from 'node:path';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
+import { trimExecutableExtension } from '@cardstack/runtime-common/executable-extensions';
 
 // The host rewrites every bare `@cardstack/boxel-icons/<name>` import to
 // a module fetch against `iconsURL`, which the bundled host config points
@@ -515,7 +517,12 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     setHtml(html);
 
     let chromium = await loadChromium();
-    browser = await chromium.launch({ headless: true });
+    // The QUnit page runs card code from a realm. The sandbox is off only on
+    // Linux, for the reasons `chromeSandboxEnabled` gives.
+    browser = await chromium.launch({
+      headless: true,
+      chromiumSandbox: chromeSandboxEnabled(),
+    });
     let page = await browser.newPage();
 
     if (options.debug) {
@@ -1010,7 +1017,14 @@ export async function startTestPageServer(
             try {
               cached = {
                 mtimeMs: stat.mtimeMs,
-                body: await transpileJS(source, '/' + normalized),
+                // The module's URL without its extension is the identifier
+                // its exported classes are tagged with, as a realm-server
+                // tags the modules it serves.
+                body: await transpileJS(source, '/' + normalized, {
+                  moduleIdentifier: trimExecutableExtension(
+                    `${realmUrl}${normalized}`,
+                  ),
+                }),
               };
             } catch (err) {
               let message = err instanceof Error ? err.message : String(err);

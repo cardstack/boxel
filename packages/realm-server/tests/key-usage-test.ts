@@ -51,7 +51,7 @@ import { setKeyLimitDefaults } from '../lib/key-limit-settings.ts';
 // the owner may change its limits; a reader, and an owner who lost write, are
 // told it doesn't exist.
 //
-// The approval API approves a binding for pipelines only, so each test turns
+// The approval API approves a binding for automations only, so each test turns
 // one interactive in the database. The counters run on a clock the test moves.
 // ============================================================================
 
@@ -310,9 +310,9 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
-  // Invokes `operation` as a pipeline the realm server runs as `user`.
-  async function pipelineCall(operation: string, user = OWNER) {
-    let response = (await realm.handlePipeline(
+  // Invokes `operation` as an automation the realm server runs as `user`.
+  async function automationCall(operation: string, user = OWNER) {
+    let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {
@@ -384,7 +384,7 @@ module(basename(import.meta.filename), function (hooks) {
       200,
       'a vendor’s 403 is a response the card reads',
     );
-    assert.strictEqual((await pipelineCall('check')).status, 200);
+    assert.strictEqual((await automationCall('check')).status, 200);
 
     let response = await keyUsage(key.id);
     assert.strictEqual(response.status, 200, response.text);
@@ -394,7 +394,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       [attributes.budgets.day.used, attributes.budgets.month.used],
       [3, 3],
-      'the interactive calls spent the budgets; the pipeline call spent nothing',
+      'the interactive calls spent the budgets; the automation call spent nothing',
     );
     assert.deepEqual(
       [attributes.budgets.day.budget, attributes.budgets.month.budget],
@@ -446,7 +446,7 @@ module(basename(import.meta.filename), function (hooks) {
         ['interactive', 200, `127.0.0.1:${VENDOR_PORT}`],
         ['interactive', 200, `127.0.0.1:${VENDOR_PORT}`],
         ['interactive', 403, `127.0.0.1:${VENDOR_PORT}`],
-        ['pipeline', 200, `127.0.0.1:${VENDOR_PORT}`],
+        ['automation', 200, `127.0.0.1:${VENDOR_PORT}`],
       ],
     );
     assert.notOk(

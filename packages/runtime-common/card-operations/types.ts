@@ -17,6 +17,7 @@ import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from '../prerendered-html-format.ts';
+import type { CallApiKeyKind } from '../call-api-key-kind.ts';
 import type {
   BaseOperationName,
   CallApiMethod,
@@ -977,12 +978,15 @@ export interface OperationSourceResult {
   // opens.
   // `lastModifiedMs` is the opened content's modification time, which tells a
   // facade whether the validators it built from the handle's stat describe
-  // these bytes.
-  openBody?: () => {
-    body: OperationSourceBody;
-    size?: number;
-    lastModifiedMs?: number;
-  };
+  // these bytes. Undefined when the open finds the file gone: another host's
+  // delete can be invisible to the handle's stat until the file is opened.
+  openBody?: () =>
+    | {
+        body: OperationSourceBody;
+        size?: number;
+        lastModifiedMs?: number;
+      }
+    | undefined;
 }
 
 export type OperationSourceBody =
@@ -1490,6 +1494,9 @@ export interface CallApiSlot {
   // The dotted path to the string that carries it — `headers.authorization`,
   // `json.auth.token`.
   at: string;
+  // The kind of key the declaration says fills it. Absent, the kinds that fit
+  // follow from where it stands (`slotKeyKinds`).
+  keyKind?: CallApiKeyKind;
 }
 
 export type CallApiBodyTemplate =
@@ -1712,6 +1719,11 @@ export type OperationErrorCode =
   // caller away rather than let it through uncounted. Nothing was done.
   // Carries a 503 with `Retry-After`, and `meta.retryAfterSeconds`.
   | 'rate-limit-unavailable'
+  // A write that waited longer than the realm server allows for the locks over
+  // the files or realm it writes, because another writer held them. Nothing
+  // was done, and nothing the caller sent is wrong. Carries a 503 with
+  // `Retry-After`, and `meta.retryAfterSeconds`.
+  | 'write-lock-timeout'
   // A `callApi` whose request carries a credential slot that no binding fills:
   // none was approved for the operation in this realm (for the caller, for a
   // `{{userKey}}` slot), or the key or grant it named was removed. Nothing was
@@ -1725,7 +1737,7 @@ export type OperationErrorCode =
   // again.
   | 'binding-needs-reapproval'
   // A `callApi` invoked interactively — from a browser, the AI assistant or
-  // the CLI — whose binding was approved for pipelines only. Nothing was sent.
+  // the CLI — whose binding was approved for automations only. Nothing was sent.
   | 'interactive-use-not-approved'
   // A `callApi` invoked by a caller who isn't signed in, filled from a share
   // whose key doesn't allow anonymous use. Carries a 401:
@@ -1802,6 +1814,82 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
   return err instanceof OperationFailure;
 }
 
+// The answer of a definition read, or undefined when the type cannot be
+// resolved: its module is missing or fails to build, or names no such export.
+// A refusal the read itself raised passes through instead. Such a refusal
+// names its own answer — a definition the realm has not produced yet, to be
+// retried — and an `undefined` in its place would be reported as a type that
+// does not exist.
+export async function unresolvableAsUndefined<T>(
+  read: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await read();
+  } catch (err: unknown) {
+    if (isOperationFailure(err)) {
+      throw err;
+    }
+    return undefined;
+  }
+}
+
+// How long a caller turned away over a definition that is still being built is
+// told to wait before it tries again. A definition render that misses the
+// cache takes a few seconds; longer than that and the caller is only waiting
+// on the queue.
+export const DEFINITION_RETRY_AFTER_SECONDS = 5;
+
+// A refusal over a type definition the realm cannot produce yet: its module is
+// being rebuilt, or its render is queued behind other work and did not finish
+// within the request's deadline. Nothing was done, and nothing the caller sent
+// is wrong, so it carries `target-not-indexed` — the code that says waiting
+// resolves it — as a 503 with `meta.retryAfterSeconds`, which the operations
+// response turns into a `Retry-After`.
+export function definitionNotReady(
+  id: string | undefined,
+  codeRef: unknown,
+  reason = 'is not available yet',
+): OperationFailure {
+  return new OperationFailure({
+    ...(id ? { id } : {}),
+    status: 503,
+    code: 'target-not-indexed',
+    title: 'Definition not ready',
+    detail: `the definition of ${JSON.stringify(codeRef)} ${reason}; retry shortly`,
+    meta: {
+      awaitingIndex: true,
+      retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+    },
+  });
+}
+
+// How long a writer turned away by `WriteLockTimeoutError` is told to wait
+// before it tries again. The writers that wait out the budget are queued
+// behind a holder that is itself slow to finish, so an immediate retry would
+// only join the same queue.
+export const WRITE_LOCK_RETRY_AFTER_SECONDS = 5;
+
+// A writer that could not take its write locks within the realm server's
+// budget, because another writer held them for longer. The database adapter
+// raises it before the write's own work begins, so nothing was written; every
+// HTTP write surface answers it as a 503 with `Retry-After`.
+export class WriteLockTimeoutError extends OperationFailure {
+  constructor(realmUrl: string, waitMs: number) {
+    super({
+      status: 503,
+      code: 'write-lock-timeout',
+      title: 'Write lock unavailable',
+      detail: `another write to ${realmUrl} held the files this write needs for longer than ${waitMs} ms; retry shortly`,
+      meta: { retryAfterSeconds: WRITE_LOCK_RETRY_AFTER_SECONDS },
+    });
+    this.name = 'WriteLockTimeoutError';
+  }
+}
+
+export function isWriteLockTimeout(err: unknown): err is OperationFailure {
+  return isOperationFailure(err) && err.error.code === 'write-lock-timeout';
+}
+
 // A refusal as a caller the realm ACL would not let read the realm is told it.
 //
 // Such a caller is not told which cards exist. A card no grant admits and a
@@ -1820,11 +1908,30 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
 // the predicate throws. A caller who may read the realm is told it as the 500
 // it is.
 //
+// A refusal over something not indexed yet keeps its status and its retry
+// hint and loses the rest: the detail of a definition's names its type, which
+// is the realm's module path and export name, and the id names a card. Such a
+// caller may be told to wait, not what they are waiting for.
+//
 // A refusal of any other kind passes through. Such a caller is refused, as
 // the target is resolved, every invocation the gate did not admit outright, a
 // write whose predicate is still to run included. So nothing past that point
 // is about a target they were not admitted to.
 export function refusalForNonReader(error: OperationError): OperationError {
+  if (error.code === 'target-not-indexed') {
+    let { entry, awaitingIndex, retryAfterSeconds } = error.meta ?? {};
+    return {
+      status: error.status,
+      code: error.code,
+      title: error.title,
+      detail: 'what this request needs is not indexed yet; retry shortly',
+      meta: {
+        ...(entry !== undefined ? { entry } : {}),
+        ...(awaitingIndex !== undefined ? { awaitingIndex } : {}),
+        ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+      },
+    };
+  }
   if (
     error.code !== 'target-not-found' &&
     error.code !== 'operation-not-permitted' &&

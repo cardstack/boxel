@@ -253,7 +253,7 @@ export class Button extends Component<ButtonSignature> {
         title={{this.displayTitle}}
         data-test-pretui-button
         ...attributes
-      ><span class='pretui-btn-label'><ButtonFace
+      ><span class='pretui-btn-label' data-test-pretui-button-label><ButtonFace
             @display={{this.display}}
             @icon={{@icon}}
             @shortLabel={{@shortLabel}}
@@ -277,7 +277,7 @@ export class Button extends Component<ButtonSignature> {
         data-test-pretui-button
         ...attributes
       >
-        <span class='pretui-btn-label'><ButtonFace
+        <span class='pretui-btn-label' data-test-pretui-button-label><ButtonFace
             @display={{this.display}}
             @icon={{@icon}}
             @shortLabel={{@shortLabel}}
@@ -326,7 +326,7 @@ export class Button extends Component<ButtonSignature> {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 0.48em;
+          gap: var(--pretui-button-gap, 0.48em);
           min-height: var(--pretui-button-h, 2.24em);
           min-width: var(--pretui-button-min-w, 0);
           padding: 0.2em var(--pretui-button-px, 0.96em);
@@ -578,12 +578,14 @@ export class Button extends Component<ButtonSignature> {
         /* Busy: the label keeps its box (and its place in the accessible
            name) and the busy layer sits on top of it, so the width never
            changes. fitBusyContent picks what the layer shows. */
-        .pretui-btn-label:has(.pretui-btn-icon) {
+        /* an icon, from @icon or passed as a child, sits on the label's
+           centre line rather than its text baseline */
+        .pretui-btn-label:has(> svg) {
           display: inline-flex;
           align-items: center;
-          gap: 0.48em;
+          gap: var(--pretui-button-gap, 0.48em);
         }
-        .pretui-btn-icon {
+        .pretui-btn-label > svg {
           flex: none;
         }
         /* @display 'icon': the square IconButton draws for a bare icon. Button
@@ -618,7 +620,7 @@ export class Button extends Component<ButtonSignature> {
           order: -1;
         }
         .pretui-btn[data-busy-layout='inline'] .pretui-btn-label {
-          opacity: 0.6;
+          opacity: var(--pretui-button-busy-label-opacity, 0.6);
         }
         .pretui-btn-busy-text {
           position: absolute;

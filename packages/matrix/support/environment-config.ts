@@ -1,9 +1,10 @@
-import { execSync, spawn } from 'child_process';
+import { execSync } from 'child_process';
 import { writeFileSync, renameSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import yaml from 'yaml';
 
 import { sanitizeSlug } from '../../../scripts/env-slug.js';
+import { awaitTraefikRoute } from '../../../scripts/traefik-route.js';
 
 const DOMAIN = 'localhost';
 
@@ -124,6 +125,7 @@ export function registerSynapseWithTraefik(hostPort: number): void {
   let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   let routerKey = `${serviceName}-${slug}`;
   let hostname = `${serviceName}.${slug}.${DOMAIN}`;
+  let serverURL = `http://host.docker.internal:${hostPort}`;
 
   // Mirror dev-service-registry.ts: two routers per service. `websecure`
   // (port 443) terminates TLS at Traefik using the mkcert leaf in
@@ -159,7 +161,7 @@ export function registerSynapseWithTraefik(hostPort: number): void {
       services: {
         [routerKey]: {
           loadBalancer: {
-            servers: [{ url: `http://host.docker.internal:${hostPort}` }],
+            servers: [{ url: serverURL }],
           },
         },
       },
@@ -168,23 +170,7 @@ export function registerSynapseWithTraefik(hostPort: number): void {
 
   atomicWrite(configPath, yaml.stringify(config));
   console.log(`Registered Synapse at ${hostname} -> localhost:${hostPort}`);
-  kickTraefikIfNeeded();
-}
-
-// Bounce Traefik on macOS after a config write — Docker Desktop's bind
-// mounts don't propagate inotify, and Traefik v3 file provider has no
-// polling option. See dev-service-registry.ts for the full rationale.
-function kickTraefikIfNeeded(): void {
-  if (process.platform !== 'darwin') return;
-  let child = spawn('docker', ['restart', 'boxel-traefik'], {
-    stdio: 'ignore',
-    detached: true,
-  });
-  child.on('error', () => {
-    // Docker not running or container missing — readiness probes
-    // through Traefik will surface the underlying problem.
-  });
-  child.unref();
+  void awaitTraefikRoute(routerKey, serverURL);
 }
 
 export function deregisterSynapseFromTraefik(): void {

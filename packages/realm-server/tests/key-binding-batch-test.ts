@@ -23,8 +23,9 @@ import {
   mintKeyWriteTicket,
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
-import { shareKey } from '../lib/key-shares.ts';
-import { pipelineAdmission } from '../lib/key-bindings.ts';
+import { listOwnSharedRealms, shareKey } from '../lib/key-shares.ts';
+import { addOAuthClient } from '../lib/oauth.ts';
+import { automationAdmission } from '../lib/key-bindings.ts';
 import { withinSlotLimit, type BatchGroup } from '../lib/key-binding-batch.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
 
@@ -32,7 +33,7 @@ import { removeGrant } from '../lib/user-key-grants.ts';
 // The batch the secure window approves in one confirmation: every `callApi`
 // operation on a card definition, in a realm, that needs the caller's
 // approval, read through `POST /_key-bindings/batch`, approved through
-// `POST /_key-bindings` as the window does, and checked at a pipeline's
+// `POST /_key-bindings` as the window does, and checked at an automation's
 // admission. Nothing here is sent anywhere, so the destinations name a port
 // nothing listens on.
 // ============================================================================
@@ -58,20 +59,26 @@ const GRAPHQL_OPERATIONS = [
   'listMilestones',
 ];
 
-function graphqlOperation(name: string, document: string) {
+function graphqlOperation(name: string, document: string, keyKind?: string) {
   return `
       @operation static ${name} = {
         base: 'callApi',
         method: 'POST',
         url: '${VENDOR}/graphql',
         headers: { authorization: 'Bearer {{userKey}}' },
-        graphql: { document: '${document}' },
+        graphql: { document: '${document}' },${
+          keyKind
+            ? `
+        keyKind: '${keyKind}',`
+            : ''
+        }
       };`;
 }
 
 function inboxModule({
   listPRsDocument = 'query { viewer { pullRequests { totalCount } } }',
-}: { listPRsDocument?: string } = {}) {
+  listPRsKeyKind,
+}: { listPRsDocument?: string; listPRsKeyKind?: string } = {}) {
   return `
     import { contains, field, CardDef } from "@cardstack/base/card-api";
     import StringField from "@cardstack/base/string";
@@ -85,6 +92,7 @@ function inboxModule({
           name === 'listPRs'
             ? listPRsDocument
             : `query { viewer { ${name} { totalCount } } }`,
+          name === 'listPRs' ? listPRsKeyKind : undefined,
         ),
       ).join('\n')}
 
@@ -144,7 +152,7 @@ const AUTH = { authorization: 'Bearer {{userKey}}' };
 export class PRInbox extends CardDef {
   static displayName = 'PR Inbox';
   @field login = contains(StringField);
-  // Written by the pipeline, read by everyone who opens the inbox.
+  // Written by the automation, read by everyone who opens the inbox.
   @field pullRequests = linksToMany(PullRequest);
 
   @operation static listPRs = {
@@ -293,6 +301,10 @@ module(basename(import.meta.filename), function (hooks) {
     }[];
     keys: { id: string; name: string; covers: string[] }[];
     shares: { id: string; label: string; covers: string[] }[];
+    fillers: Record<
+      'interactive' | 'automations' | 'pipelines',
+      Record<string, string[]>
+    >;
   }
 
   async function batch(
@@ -372,7 +384,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function admission(operation: string, payer = OWNER, codeRef = INBOX) {
     return (
-      await pipelineAdmission(dbAdapter, {
+      await automationAdmission(dbAdapter, {
         core: realm.operationCore,
         realmURL,
         codeRef,
@@ -542,6 +554,260 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a slot that declares its kind of key takes only a key of that kind, and one approved before asks to be approved again', async function (assert) {
+    let key = await addKey();
+    await approveFrom(
+      OWNER,
+      await batchOf(OWNER, onType(INBOX)),
+      GRAPHQL_OPERATIONS,
+      () => ({ keyId: key.id }),
+    );
+    assert.strictEqual(await admission('listPRs'), undefined);
+
+    await realm.write(
+      'inbox.gts',
+      inboxModule({ listPRsKeyKind: 'google-service-account' }),
+    );
+    await realm.indexing();
+    assert.strictEqual(
+      await admission('listPRs'),
+      'binding-needs-reapproval',
+      'the pasted key no longer fills a slot that takes a service account',
+    );
+    assert.strictEqual(
+      await admission('listIssues'),
+      undefined,
+      'a slot that declares no kind still takes it',
+    );
+    let review = await batchOf(OWNER, onType(INBOX), { review: true });
+    let operations = operationsIn(review);
+    assert.deepEqual(
+      operations.map((o) => [o.name, o.status]),
+      [['listPRs', 'changed']],
+      'the slot is reviewed',
+    );
+    assert.notOk(
+      review.fillers.interactive['userKey']!.includes(key.id),
+      'and the pasted key is not offered for a slot that takes a service account',
+    );
+
+    let refused = await approveFrom(OWNER, review, ['listPRs'], () => ({
+      keyId: key.id,
+    }));
+    assert.strictEqual(refused.status, 400, JSON.stringify(refused.body));
+    assert.deepEqual(refused.body.errors, [
+      'operation "listPRs" takes a Google service account in slot userKey, and this key is a key or token sent as it is',
+    ]);
+
+    await realm.write('inbox.gts', inboxModule({ listPRsKeyKind: 'static' }));
+    await realm.indexing();
+    let again = await batchOf(OWNER, onType(INBOX), { review: true });
+    assert.deepEqual(
+      operationsIn(again).map((o) => o.name),
+      ['listPRs'],
+      'a binding asked to be approved again stays so until it is',
+    );
+    assert.deepEqual(
+      again.fillers.interactive['userKey'],
+      [key.id],
+      'and the pasted key is offered for it again',
+    );
+    let reapproved = await approveFrom(OWNER, again, ['listPRs'], () => ({
+      keyId: key.id,
+    }));
+    assert.strictEqual(reapproved.status, 201, JSON.stringify(reapproved.body));
+    assert.strictEqual(
+      await admission('listPRs'),
+      undefined,
+      'a pasted key fills a slot that declares one',
+    );
+  });
+
+  test('each slot names the keys that fill it in every operation sending it', async function (assert) {
+    let pasted = await addKey(OWNER, 'pasted');
+    let robot = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'vendor robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'robot',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'hostless robot',
+      value: 'hostless-secret',
+      oauth: {
+        clientId: 'hostless',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    let signIn = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'other app',
+      value: 'app-secret',
+      oauth: {
+        clientId: 'app',
+        authorizeUrl: `${OTHER_HOST}/authorize`,
+        tokenUrl: `${OTHER_HOST}/token`,
+        apiHosts: [`${OTHER_HOST}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    // A connection made through the sign-in app, stored as signing in
+    // stores one.
+    let connection = '3f9a1c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b';
+    await dbAdapter.execute(
+      `INSERT INTO user_keys
+         SELECT (jsonb_populate_record(k, jsonb_build_object('id', $1::text, 'name', 'other account', 'kind', 'oauth-connection'))).*
+           FROM user_keys k WHERE k.id = $2`,
+      { bind: [connection, robot.id] },
+    );
+    await dbAdapter.execute(
+      `INSERT INTO oauth_connections (key_id, client_kind, client_key_id, token_kind, client_id, token_url)
+         VALUES ($1, 'own', $2, 'refresh', 'app', $3)`,
+      { bind: [connection, signIn.id, `${OTHER_HOST}/token`] },
+    );
+
+    let found = await batchOf(OWNER, onType(INBOX));
+    let destinationOf = (operation: string) =>
+      found.groups.find((g) => g.operations.some((o) => o.name === operation))!
+        .destination.href;
+    let vendor = destinationOf('listPRs');
+    let other = destinationOf('elsewhere');
+    // The names of the keys that fill the user's-key slot for `use`.
+    let names = (batch: Batch, use: 'interactive' | 'automations') =>
+      (batch.fillers[use]['userKey'] ?? [])
+        .map((id) => batch.keys.find((k) => k.id === id)!.name)
+        .sort();
+    assert.deepEqual(
+      names(found, 'interactive'),
+      ['hostless robot', 'pasted'],
+      `the user's-key slot is sent to ${vendor} and ${other}: a pasted key and a client that names no API hosts fill it at both, and neither an OAuth client nor a connection whose client reaches only one of them does`,
+    );
+    assert.notOk(
+      found.keys.some((k) => k.name === 'other app'),
+      'a client people only sign in through is never offered',
+    );
+    assert.deepEqual(
+      found.fillers.automations,
+      found.fillers.interactive,
+      'with nothing approved for automations only, both uses offer the same keys',
+    );
+    assert.deepEqual(
+      found.fillers.pipelines,
+      found.fillers.automations,
+      'a client built before the automations use was named reads the same keys',
+    );
+
+    // Asked for the operations an approval covers, only where those send
+    // counts, and the batch still holds every operation.
+    let scoped = await batchOf(OWNER, onType(INBOX), {
+      operations: ['listPRs'],
+    });
+    assert.deepEqual(
+      names(scoped, 'interactive'),
+      ['hostless robot', 'pasted', 'vendor robot'],
+      `for a call to ${vendor} alone, an OAuth client whose API hosts reach it fills the slot`,
+    );
+    assert.deepEqual(
+      operationsIn(scoped).map((o) => o.name),
+      operationsIn(found).map((o) => o.name),
+    );
+    let malformed = await batch(OWNER, onType(INBOX), {
+      operations: 'listPRs',
+    });
+    assert.strictEqual(malformed.status, 400, JSON.stringify(malformed.body));
+
+    // Approved for automations only, the call to the other host is left out of
+    // what automations approve, so the slot is then sent only to the vendor.
+    let approved = await approveFrom(OWNER, found, ['elsewhere'], () => ({
+      keyId: pasted.id,
+    }));
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    let both = await batchOf(OWNER, onType(INBOX), { interactive: true });
+    assert.strictEqual(
+      operationsIn(both).find((o) => o.name === 'elsewhere')!.status,
+      'automations-only',
+    );
+    assert.deepEqual(
+      names(both, 'interactive'),
+      ['hostless robot', 'pasted'],
+      'for interactive use every operation sending the slot counts',
+    );
+    assert.deepEqual(
+      names(both, 'automations'),
+      ['hostless robot', 'pasted', 'vendor robot'],
+      "for automations only, an OAuth client fills it where its API hosts reach the vendor alone; a connection whose client reaches only the other host doesn't",
+    );
+  });
+
+  test('a share of an OAuth client people only sign in through is not offered for a share slot', async function (assert) {
+    let signIn = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'vendor app',
+      value: 'app-secret',
+      oauth: {
+        clientId: 'app',
+        authorizeUrl: `${VENDOR}/authorize`,
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    let robot = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'other robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'robot',
+        grantType: 'client_credentials',
+        tokenUrl: `${OTHER_HOST}/token`,
+        apiHosts: [`${OTHER_HOST}/`],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    for (let [key, label] of [
+      [signIn, 'sign in here'],
+      [robot, 'other robot'],
+    ] as const) {
+      await shareKey(dbAdapter, {
+        owner: WRITER,
+        keyId: key.id,
+        realm: realmURL.href,
+        label,
+        ticket: await ticket(WRITER, 'share', {
+          keyId: key.id,
+          realm: realmURL,
+        }),
+      });
+    }
+    let found = await batchOf(WRITER, onType(INBOX));
+    let destinationOf = (operation: string) =>
+      found.groups.find((g) => g.operations.some((o) => o.name === operation))!
+        .destination.href;
+    assert.deepEqual(
+      found.shares.map((s) => s.label),
+      ['other robot'],
+      "the sign-in app's share is left out",
+    );
+    assert.notOk(
+      destinationOf('shared').startsWith(OTHER_HOST),
+      'the share slot is sent to the vendor',
+    );
+    assert.deepEqual(
+      found.fillers.interactive['apiKey'],
+      [],
+      "so the robot, whose tokens are good only at the other host, doesn't fill it",
+    );
+  });
+
   test('a second card calling the same host reuses the grant and is a batch of its own', async function (assert) {
     let key = await addKey();
     await approveFrom(
@@ -635,10 +901,56 @@ module(basename(import.meta.filename), function (hooks) {
       found.shares.map((s) => s.label),
       ['vendor'],
     );
+    let approvedCalls = async () =>
+      (
+        await listOwnSharedRealms(dbAdapter, WRITER, {
+          keyId: key.id,
+          matrixServerName: 'localhost',
+        })
+      )
+        .get(key.id)
+        ?.flatMap((realm) => realm.shares.map((s) => s.approvedCalls));
+    let cardsForAShare = async () => {
+      let response = await request
+        .post('/_secure-window/cards')
+        .set('Authorization', await secureSessionAuth(dbAdapter, WRITER))
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'secure-window-cards',
+            attributes: { realm: realmURL.href, slot: 'apiKey' },
+          },
+        });
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+      return response.body.data.map(
+        (c: { attributes: { name: string } }) => c.attributes.name,
+      );
+    };
+    assert.deepEqual(
+      await approvedCalls(),
+      [0],
+      'a share no operation is approved for yet says so',
+    );
+    assert.deepEqual(
+      await cardsForAShare(),
+      ['Inbox'],
+      "a card whose realm's-key slot no share fills is offered to a share",
+    );
     let approved = await approveFrom(WRITER, found, ['shared'], () => ({
       shareId: found.shares[0]!.id,
     }));
     assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    assert.deepEqual(
+      await approvedCalls(),
+      [1],
+      'the key listing counts the bindings that send the share',
+    );
+    assert.deepEqual(
+      await cardsForAShare(),
+      [],
+      'once a share fills the slot, the card has nothing for another share',
+    );
     assert.notOk(
       operationsIn(await batchOf(OWNER, onType(INBOX))).find(
         (o) => o.name === 'shared',
@@ -647,7 +959,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("the card-author skill's PR Inbox is one batch, approved once and admitted as a pipeline", async function (assert) {
+  test("the card-author skill's PR Inbox is one batch, approved once and admitted as an automation", async function (assert) {
     let key = await addKey();
     let found = await batchOf(OWNER, onType(PR_INBOX));
     assert.deepEqual(
@@ -739,28 +1051,28 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(withinSlotLimit(groups, 100).remaining, 0);
 
-    let pipelinesOnly = (name: string, slots: number) => ({
+    let automationsOnly = (name: string, slots: number) => ({
       ...operation(name, slots),
-      status: 'pipelines-only' as const,
+      status: 'automations-only' as const,
     });
     let mixed: BatchGroup[] = [
       {
         destination: destination('a.example'),
-        operations: [pipelinesOnly('approved', 4), operation('pending', 2)],
+        operations: [automationsOnly('approved', 4), operation('pending', 2)],
       },
       {
         destination: destination('b.example'),
-        operations: [pipelinesOnly('alsoApproved', 1)],
+        operations: [automationsOnly('alsoApproved', 1)],
       },
     ];
     let capped = withinSlotLimit(mixed, 5);
     assert.deepEqual(
       capped.kept.map((g) => g.operations.map((o) => o.name)),
       [['pending']],
-      'the one that needs approving comes first; ones approved for pipelines only fill what is left, in order',
+      'the one that needs approving comes first; ones approved for automations only fill what is left, in order',
     );
     assert.strictEqual(capped.remaining, 0);
-    assert.strictEqual(capped.remainingPipelinesOnly, 2);
+    assert.strictEqual(capped.remainingAutomationsOnly, 2);
     assert.deepEqual(
       withinSlotLimit(mixed, 7).kept.map((g) =>
         g.operations.map((o) => o.name),
@@ -832,6 +1144,43 @@ module(basename(import.meta.filename), function (hooks) {
       "the realm's cards' types that send the user's own key",
     );
 
+    let sendingRealmKey = await request
+      .post('/_secure-window/cards')
+      .set('Authorization', auth)
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'secure-window-cards',
+          attributes: { realm: realmURL.href, slot: 'apiKey' },
+        },
+      });
+    assert.strictEqual(
+      sendingRealmKey.status,
+      200,
+      JSON.stringify(sendingRealmKey.body),
+    );
+    assert.deepEqual(
+      sendingRealmKey.body.data.map(
+        (c: { attributes: { name: string } }) => c.attributes.name,
+      ),
+      ['Inbox'],
+      "with the `apiKey` slot, the types that send the realm's key, which a share there is approved for",
+    );
+
+    let unknownSlot = await request
+      .post('/_secure-window/cards')
+      .set('Authorization', auth)
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'secure-window-cards',
+          attributes: { realm: realmURL.href, slot: 'botKey' },
+        },
+      });
+    assert.strictEqual(unknownSlot.status, 400, 'a slot no request sends');
+
     let stranger = await request
       .post('/_secure-window/cards')
       .set(
@@ -851,5 +1200,287 @@ module(basename(import.meta.filename), function (hooks) {
       404,
       'a realm they cannot read is none',
     );
+  });
+
+  test('a realm key slot a share already fills for one operation still needs the key to fit that operation', async function (assert) {
+    const RELAY = { module: rri(`${realmURL.href}relay`), name: 'Relay' };
+    await realm.write(
+      'relay.gts',
+      `
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+        import { operation } from "@cardstack/base/operations";
+
+        export class Relay extends CardDef {
+          @field name = contains(StringField);
+
+          @operation static publish = {
+            base: 'callApi',
+            url: '${VENDOR}/publish',
+            headers: { authorization: 'Bearer {{apiKey}}' },
+          };
+
+          @operation static forward = {
+            base: 'callApi',
+            url: '${OTHER_HOST}/forward',
+            headers: { authorization: 'Bearer {{apiKey}}' },
+          };
+        }
+      `,
+    );
+    await realm.write('relay.json', JSON.stringify(card(RELAY)));
+    await realm.indexing();
+
+    let pasted = await addKey(OWNER, 'pasted');
+    let otherRobot = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'other robot',
+      value: 'other-secret',
+      oauth: {
+        clientId: 'other',
+        grantType: 'client_credentials',
+        tokenUrl: `${OTHER_HOST}/token`,
+        apiHosts: [`${OTHER_HOST}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      keyId: pasted.id,
+      realm: realmURL.href,
+      label: 'pasted',
+      ticket: await ticket(OWNER, 'share', {
+        keyId: pasted.id,
+        realm: realmURL,
+      }),
+    });
+    let cardsFor = async (key: string) => {
+      let response = await request
+        .post('/_secure-window/cards')
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'secure-window-cards',
+            attributes: { realm: realmURL.href, slot: 'apiKey', key },
+          },
+        });
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+      return response.body.data
+        .map((c: { attributes: { name: string } }) => c.attributes.name)
+        .sort();
+    };
+
+    assert.deepEqual(
+      await cardsFor(otherRobot.id),
+      [],
+      "the Relay's realm's-key slot is sent to the vendor too, where the robot's tokens aren't good",
+    );
+
+    let found = await batchOf(OWNER, onType(RELAY));
+    let approved = await approveFrom(
+      OWNER,
+      found,
+      ['publish'],
+      () => ({ shareId: share.id }),
+      RELAY,
+    );
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    assert.deepEqual(
+      await cardsFor(otherRobot.id),
+      [],
+      'a share filling the slot for the vendor request leaves the slot open for the other, but the approve page can show both, so the robot still has to serve the vendor',
+    );
+    assert.deepEqual(
+      await cardsFor(pasted.id),
+      ['Inbox', 'Relay'],
+      'a key that serves both hosts is offered the card whose slot is still open',
+    );
+  });
+
+  test("a key's page lists only the cards that key can fill", async function (assert) {
+    let auth = await secureSessionAuth(dbAdapter, OWNER);
+    let cardsFor = async (key: string, slot?: string) =>
+      await request
+        .post('/_secure-window/cards')
+        .set('Authorization', auth)
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'secure-window-cards',
+            attributes: {
+              realm: realmURL.href,
+              key,
+              ...(slot ? { slot } : {}),
+            },
+          },
+        });
+    let namesFor = async (key: string, slot?: string) => {
+      let response = await cardsFor(key, slot);
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+      return response.body.data
+        .map((c: { attributes: { name: string } }) => c.attributes.name)
+        .sort();
+    };
+
+    let pasted = await addKey(OWNER, 'pasted');
+    let vendorRobot = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'vendor robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'robot',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    let hostless = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'hostless robot',
+      value: 'hostless-secret',
+      oauth: {
+        clientId: 'hostless',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    let signIn = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'vendor app',
+      value: 'app-secret',
+      oauth: {
+        clientId: 'app',
+        authorizeUrl: `${VENDOR}/authorize`,
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    // A connection made through the sign-in app and a service account,
+    // stored as signing in and adding a key file store them.
+    let connection = '3f9a1c2e-5b7d-4e8f-9a0b-1c2d3e4f5a6b';
+    let serviceAccount = '7d2e4f6a-8b0c-4d1e-9f2a-3b4c5d6e7f80';
+    for (let [id, name, kind] of [
+      [connection, 'vendor account', 'oauth-connection'],
+      [serviceAccount, 'service account', 'google-service-account'],
+    ]) {
+      await dbAdapter.execute(
+        `INSERT INTO user_keys
+           SELECT (jsonb_populate_record(k, jsonb_build_object('id', $1::text, 'name', $2::text, 'kind', $3::text))).*
+             FROM user_keys k WHERE k.id = $4`,
+        { bind: [id, name, kind, pasted.id] },
+      );
+    }
+    await dbAdapter.execute(
+      `INSERT INTO oauth_connections (key_id, client_kind, client_key_id, token_kind, client_id, token_url)
+         VALUES ($1, 'own', $2, 'refresh', 'app', $3)`,
+      { bind: [connection, signIn.id, `${VENDOR}/token`] },
+    );
+
+    assert.deepEqual(
+      await namesFor(pasted.id),
+      ['Digest', 'Inbox'],
+      'a pasted key fills every slot that sends the user’s key',
+    );
+    assert.deepEqual(
+      await namesFor(hostless.id),
+      ['Digest', 'Inbox'],
+      'so does a client that names no API hosts',
+    );
+    assert.deepEqual(
+      await namesFor(vendorRobot.id),
+      ['Digest'],
+      "an OAuth client's tokens fill a slot only when every request sending it goes to its API hosts: the Inbox sends the same slot to another host too",
+    );
+    assert.deepEqual(
+      await namesFor(connection),
+      ['Digest'],
+      "a connection's tokens are held to its client's API hosts",
+    );
+    assert.deepEqual(
+      await namesFor(serviceAccount),
+      [],
+      "a service account fills no slot outside Google's services",
+    );
+    assert.deepEqual(
+      await namesFor(signIn.id),
+      [],
+      'a client people only sign in through is never sent',
+    );
+    // The list agrees with the approve page: a card is listed for a key
+    // exactly when the card's batch names that key as filling one of its
+    // slots, the keys the page offers for interactive use.
+    let offeredIn = async (type: typeof INBOX) => {
+      let found = await batchOf(OWNER, onType(type));
+      return new Set(Object.values(found.fillers.interactive).flat());
+    };
+    let offered = {
+      Inbox: await offeredIn(INBOX),
+      Digest: await offeredIn(DIGEST),
+    };
+    for (let key of [
+      pasted.id,
+      hostless.id,
+      vendorRobot.id,
+      connection,
+      serviceAccount,
+      signIn.id,
+    ]) {
+      assert.deepEqual(
+        await namesFor(key),
+        (['Digest', 'Inbox'] as const).filter((name) => offered[name].has(key)),
+        `the list for ${key} is the cards whose approve page offers it`,
+      );
+    }
+
+    assert.deepEqual(
+      await namesFor(pasted.id, 'apiKey'),
+      ['Inbox'],
+      "with the `apiKey` slot, the cards whose realm's-key slot the shared key fills",
+    );
+    let otherRobot = await addOAuthClient(dbAdapter, keyring, {
+      owner: OWNER,
+      name: 'other robot',
+      value: 'other-secret',
+      oauth: {
+        clientId: 'other',
+        grantType: 'client_credentials',
+        tokenUrl: `${OTHER_HOST}/token`,
+        apiHosts: [`${OTHER_HOST}/`],
+      },
+      ticket: await ticket(OWNER, 'add'),
+    });
+    assert.deepEqual(
+      await namesFor(otherRobot.id, 'apiKey'),
+      [],
+      "a shared key whose credential isn't good where the realm's key is sent fills none",
+    );
+
+    let theirs = await addKey(WRITER, 'theirs');
+    for (let [key, what] of [
+      [theirs.id, "another user's key"],
+      ['not-a-key', 'a malformed id'],
+      ['9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b', 'a key that does not exist'],
+    ]) {
+      let response = await cardsFor(key!);
+      assert.strictEqual(response.status, 404, `${what} is no key`);
+    }
+    let wrongType = await request
+      .post('/_secure-window/cards')
+      .set('Authorization', auth)
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'secure-window-cards',
+          attributes: { realm: realmURL.href, key: 7 },
+        },
+      });
+    assert.strictEqual(wrongType.status, 400, 'a key is named by its id');
   });
 });

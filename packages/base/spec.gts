@@ -26,7 +26,6 @@ import {
   BoxelButton,
   BasicFitted,
 } from '@cardstack/boxel-ui/components';
-import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import {
   getMenuItems,
   codeRefWithAbsoluteIdentifier,
@@ -51,6 +50,7 @@ import BookOpenText from '@cardstack/boxel-icons/book-open-text';
 import LayersSubtract from '@cardstack/boxel-icons/layers-subtract';
 import GitBranch from '@cardstack/boxel-icons/git-branch';
 import { DiagonalArrowLeftUp as ExportArrow } from '@cardstack/boxel-ui/icons';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import StackIcon from '@cardstack/boxel-icons/stack';
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
@@ -156,7 +156,8 @@ export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
       try {
         if (this.args.model.ref && this.args.model.id) {
           let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
+            // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+            loader: import.meta.loader,
             relativeTo: this.args.model.id,
           });
           cardDefObj.value = cardDef;
@@ -387,7 +388,8 @@ export class SpecExamplesSection extends GlimmerComponent<SpecExamplesSectionSig
       try {
         if (this.args.model.ref && this.args.model.id) {
           let cardDef = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
+            // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+            loader: import.meta.loader,
             relativeTo: this.args.model.id,
           });
           cardDefObj.value = cardDef;
@@ -740,7 +742,8 @@ class Fitted extends Component<typeof Spec> {
       try {
         if (this.args.model.ref && this.args.model.id) {
           let card = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
+            // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+            loader: import.meta.loader,
             relativeTo: this.args.model.id,
           });
           icon.value = card.icon;
@@ -876,6 +879,7 @@ class SpecTitleField extends StringField {
         @placeholder={{this.placeholder}}
         @disabled={{not @canEdit}}
         class='spec-title-input'
+        {{ignoredByPasswordManagers}}
       />
       <style scoped>
         .spec-title-input {
@@ -913,6 +917,7 @@ class SpecDescriptionField extends StringField {
         @placeholder={{this.placeholder}}
         @disabled={{not @canEdit}}
         class='spec-description-input'
+        {{ignoredByPasswordManagers}}
       />
       <style scoped>
         .spec-description-input {
@@ -1139,11 +1144,4 @@ function getIcon(specType: string) {
     default:
       return;
   }
-}
-
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
 }

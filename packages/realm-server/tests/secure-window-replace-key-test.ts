@@ -295,6 +295,7 @@ module(basename(import.meta.filename), function (hooks) {
       {
         name: 'userKey',
         key: 'userKey',
+        kinds: ['static', 'oauth'],
         bound: {
           rejected: false,
           key: { id: key.id, name: 'mail', kind: 'static' },
@@ -309,6 +310,7 @@ module(basename(import.meta.filename), function (hooks) {
         {
           name: 'userKey',
           key: 'userKey',
+          kinds: ['static', 'oauth'],
           bound: {
             rejected: true,
             key: { id: key.id, name: 'mail', kind: 'static' },
@@ -323,7 +325,14 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       await bound(READER, 'check'),
-      [{ name: 'userKey', key: 'userKey', bound: null }],
+      [
+        {
+          name: 'userKey',
+          key: 'userKey',
+          kinds: ['static', 'oauth'],
+          bound: null,
+        },
+      ],
       'another user’s binding fills nothing for this one',
     );
   });
@@ -341,6 +350,7 @@ module(basename(import.meta.filename), function (hooks) {
       {
         name: 'userKey',
         key: 'userKey',
+        kinds: ['static', 'oauth'],
         bound: {
           rejected: true,
           key: { id: key.id, name: 'mail', kind: 'oauth-connection' },
