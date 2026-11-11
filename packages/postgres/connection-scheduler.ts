@@ -401,18 +401,26 @@ export function isSharedWork(): boolean {
 // can go on working after it gives its connection back — a lock section that
 // releases early continues its write with the locks gone — and that work no
 // longer holds anything a waiter could be deadlocked behind.
-export function markConnectionHeld(): {
+//
+// `{ held: false }` starts the mark off, for a callback that checks its
+// connection out later (a read snapshot opened at its first statement):
+// `hold` turns it on once the connection is checked out.
+export function markConnectionHeld(opts?: { held?: boolean }): {
   run<T>(fn: () => Promise<T>): Promise<T>;
+  hold(): void;
   end(): void;
 } {
   let parent = scopeStorage.getStore();
   let holding: HoldMarker = {
-    held: true,
+    held: opts?.held ?? true,
     ...(parent?.holding ? { parent: parent.holding } : {}),
   };
   let scope: ConnectionScope = { ...parent, holding };
   return {
     run: (fn) => scopeStorage.run(scope, fn),
+    hold: () => {
+      holding.held = true;
+    },
     end: () => {
       holding.held = false;
     },

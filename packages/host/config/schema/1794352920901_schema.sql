@@ -55,6 +55,7 @@
    pattern_text TEXT,
    rank_tsv,
    search_title TEXT,
+   title_sort TEXT,
    PRIMARY KEY ( url, realm_url, type ) 
 );
 

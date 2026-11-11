@@ -6,6 +6,7 @@ import {
   type Querier,
   type TransactionOptions,
   Deferred,
+  SearchBoundError,
   expressionToSql,
   loggableBindings,
   logger,
@@ -208,6 +209,83 @@ function configuredIdleInTransactionTimeoutMs(): number | undefined {
   return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+// The margin a read snapshot's statement timeout allows past its search's
+// deadline (`withReadSnapshot`): the signal cancels a statement first, and
+// Postgres stops it only when that failed. PG_SEARCH_STATEMENT_TIMEOUT_MARGIN_MS
+// overrides it.
+export const STATEMENT_TIMEOUT_MARGIN_MS = 500;
+
+function positiveIntegerEnv(name: string): number | undefined {
+  let raw = process.env[name];
+  if (!raw) return undefined;
+  let value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function statementTimeoutMarginMs(): number {
+  return (
+    positiveIntegerEnv('PG_SEARCH_STATEMENT_TIMEOUT_MARGIN_MS') ??
+    STATEMENT_TIMEOUT_MARGIN_MS
+  );
+}
+
+// A whole number of milliseconds, at least 1 (0 would turn the timeout off).
+export function statementTimeoutFor(
+  deadline: number,
+  now: number = Date.now(),
+): number {
+  return Math.max(1, Math.ceil(deadline - now)) + statementTimeoutMarginMs();
+}
+
+// Planner settings for a search's read snapshot, set with SET LOCAL so they
+// end with its transaction and never reach another caller of the pool (no
+// ALTER ROLE: role names differ per environment).
+//
+// jit_above_cost: Postgres's default (100,000) JIT-compiles any plan its
+// estimate puts above it. A search's estimates are inflated by the
+// set-returning functions it calls (a function scan is guessed at 1,000 rows
+// per row it is called on), so in a realm of a few thousand cards a
+// CASE-heavy expression sort or a list filter crossed it and paid 50-200 ms
+// of compilation to save a few. Ten times the default leaves JIT to plans
+// that really read millions of rows, where compiling pays for itself.
+// PG_SEARCH_JIT_ABOVE_COST overrides it.
+//
+// work_mem: Postgres's default 4 MB spills a facet's value counts and a
+// window sort over tens of thousands of rows to disk. 8 MB holds them. It is
+// per sort or hash node (hash nodes may use twice it), and a search plans a
+// handful: with the pool's 40 connections all running one at once, the
+// worst case stays near 2.5 GB, inside a 6 GB database host, and most
+// searches use a fraction. PG_SEARCH_WORK_MEM_KB overrides it.
+export const SEARCH_JIT_ABOVE_COST = 1_000_000;
+export const SEARCH_WORK_MEM_KB = 8 * 1024;
+
+export function searchSessionSettings(): {
+  jitAboveCost: number;
+  workMemKb: number;
+} {
+  return {
+    jitAboveCost:
+      positiveIntegerEnv('PG_SEARCH_JIT_ABOVE_COST') ?? SEARCH_JIT_ABOVE_COST,
+    workMemKb:
+      positiveIntegerEnv('PG_SEARCH_WORK_MEM_KB') ?? SEARCH_WORK_MEM_KB,
+  };
+}
+
+// Postgres's query_canceled (57014) raised by `statement_timeout`; the same
+// code for a cancel request says "user request".
+function isStatementTimeout(e: any): boolean {
+  return (
+    e?.code === '57014' && /statement timeout/i.test(String(e?.message ?? ''))
+  );
+}
+
+function budgetRefusal() {
+  return new SearchBoundError(
+    408,
+    'search exceeded the request time limit and was stopped by the database; narrow the query or request a smaller page',
+  );
+}
+
 // A checkout that has waited this long for the scheduler is logged once with
 // the scheduler's state, so pool starvation reads as starvation in the logs
 // rather than as a request that never answered.
@@ -295,6 +373,15 @@ function recordConnectionErrors(
 export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
+  // The open read snapshots, by the handle their statements carry through
+  // `execute` (see `withReadSnapshot`).
+  #snapshots = new WeakMap<
+    object,
+    (
+      sql: string,
+      opts?: ExecuteOptions,
+    ) => Promise<Record<string, PgPrimitive>[]>
+  >();
   private pool: Pool;
   // Decides who checks out the pool's connections, and in what order. Every
   // checkout goes through it, and it grants at most the pool's own max at
@@ -783,6 +870,13 @@ export class PgAdapter implements DBAdapter {
     sql: string,
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
+    // A statement of a read snapshot runs on the snapshot's connection.
+    let snapshot = opts?.readSnapshot
+      ? this.#snapshots.get(opts.readSnapshot)
+      : undefined;
+    if (snapshot) {
+      return await snapshot(sql, opts);
+    }
     await this.started;
     // Work whose caller has already gone does not wait for a connection.
     opts?.signal?.throwIfAborted();
@@ -1501,6 +1595,231 @@ export class PgAdapter implements DBAdapter {
         client.release();
       }
       releaseTurn();
+    }
+  }
+
+  // One read snapshot for `fn` (see `DBAdapter.withReadSnapshot`). The
+  // connection is checked out at the first statement rather than here, so the
+  // work a search does before it reads anything (definition lookups, which
+  // may prerender a module) holds no connection, and a search refused before
+  // it reads holds none at all. It is a holding checkout, as `withConnection`'s
+  // is: whatever `fn` checks out through the adapter meanwhile (a write, a
+  // statistics read) is nested work, granted ahead of the queue, so a pool
+  // full of snapshots cannot deadlock on their own nested statements.
+  //
+  // Statements run one at a time on the pinned client, in the order they
+  // arrive: a search's concurrent reads queue here instead of each taking a
+  // connection. A failed statement rolls back to the savepoint taken after
+  // BEGIN, which leaves the snapshot in place (a REPEATABLE READ transaction
+  // keeps the snapshot its first statement took), so a caller that catches
+  // the error reads on as it would have outside a transaction.
+  //
+  // With a `deadline`, the transaction's `statement_timeout` is the time left
+  // when the snapshot opens plus a small margin: a backstop that has Postgres
+  // stop a statement the signal failed to cancel. A statement it stops fails
+  // as the time budget's refusal (`SearchBoundError`, 408).
+  async withReadSnapshot<T>(
+    fn: (reader: DBAdapter) => Promise<T>,
+    opts?: { signal?: AbortSignal; deadline?: number },
+  ): Promise<T> {
+    await this.started;
+    opts?.signal?.throwIfAborted();
+    let snapshotSignal = opts?.signal;
+    let deadline = opts?.deadline;
+    let timeoutSet = false;
+    let adapterIsClosed = () => this.isClosed;
+    let holding = markConnectionHeld({ held: false });
+    let pinned:
+      | {
+          client: PoolClient;
+          releaseTurn: () => void;
+          stopRecording: () => void;
+        }
+      | undefined;
+    // the client cannot be trusted with the next caller's work
+    let broken = false;
+    let ended = false;
+    let tail: Promise<unknown> = Promise.resolve();
+    // Statements, and a savepoint block with its statements, run one after
+    // another: a block's SET LOCAL and its read must not interleave with
+    // another statement of the search.
+    let inTurn = <R>(work: () => Promise<R>): Promise<R> => {
+      let run = tail.then(
+        () => work(),
+        () => work(),
+      );
+      tail = run.catch(() => {});
+      return run;
+    };
+    let raw = async (text: string, values?: unknown[]) =>
+      (await pinned!.client.query({ text, values })).rows as Record<
+        string,
+        PgPrimitive
+      >[];
+    let open = async () => {
+      if (ended) {
+        throw new Error('a read snapshot was used after it ended');
+      }
+      if (!pinned) {
+        let { client, releaseTurn } = await this.#checkout({ holding: true });
+        holding.hold();
+        pinned = {
+          client,
+          releaseTurn,
+          stopRecording: recordConnectionErrors(client, this.url, 'warn'),
+        };
+        try {
+          await raw('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          // before the savepoint, so rolling back to it keeps them; whole
+          // numbers this module computed, so they are written as numbers
+          let { jitAboveCost, workMemKb } = searchSessionSettings();
+          await raw(
+            `SET LOCAL jit_above_cost = ${jitAboveCost}; SET LOCAL work_mem = ${workMemKb}`,
+          );
+          if (deadline !== undefined && Number.isFinite(deadline)) {
+            let ms = statementTimeoutFor(deadline);
+            await raw(`SET LOCAL statement_timeout = ${ms}`);
+            timeoutSet = true;
+          }
+          await raw('SAVEPOINT read_snapshot');
+        } catch (e) {
+          broken = true;
+          throw e;
+        }
+      }
+      if (broken) {
+        throw new Error('the read snapshot was lost to an earlier error');
+      }
+    };
+    // After a failed statement: back to the savepoint, so the transaction
+    // (and its snapshot) takes the next statement.
+    let recover = async () => {
+      if (broken) return;
+      try {
+        await raw('ROLLBACK TO SAVEPOINT read_snapshot');
+      } catch (e) {
+        broken = true;
+        log.warn(`could not recover a read snapshot after an error: ${e}`);
+      }
+    };
+    let signalOf = (own?: AbortSignal) =>
+      own && snapshotSignal && own !== snapshotSignal
+        ? AbortSignal.any([own, snapshotSignal])
+        : (own ?? snapshotSignal);
+    let statement = async (sql: string, execOpts?: ExecuteOptions) => {
+      let signal = signalOf(execOpts?.signal);
+      signal?.throwIfAborted();
+      await open();
+      log.debug(
+        `executing sql in a read snapshot: ${sql}, with bindings: ${loggableBindings(execOpts)}`,
+      );
+      try {
+        return await this.#cancellable(pinned!.client, signal, () =>
+          raw(sql, execOpts?.bind),
+        );
+      } catch (e: any) {
+        await recover();
+        if (signal?.aborted) {
+          throw signal.reason ?? e;
+        }
+        if (timeoutSet && isStatementTimeout(e)) {
+          throw budgetRefusal();
+        }
+        if (execOpts?.redactBindings) {
+          delete e.detail;
+          delete e.where;
+        }
+        console.error(
+          `Error executing SQL ${e.message} (${e.hint}):\n${sql}${
+            execOpts?.bind
+              ? ' with bindings: ' + loggableBindings(execOpts)
+              : ''
+          }`,
+          e,
+        );
+        throw e;
+      }
+    };
+    // The body runs on the snapshot inside a savepoint that is rolled back
+    // when it ends, so its SET LOCALs (a vector read's HNSW settings) end
+    // with it.
+    let block = async <R>(body: (q: Querier) => Promise<R>): Promise<R> => {
+      let signal = signalOf(undefined);
+      signal?.throwIfAborted();
+      await open();
+      await raw('SAVEPOINT read_snapshot_block');
+      let q: Querier = async (expression) => {
+        let sql = expressionToSql('pg', expression);
+        return await this.#cancellable(pinned!.client, signal, () =>
+          raw(sql.text, sql.values),
+        );
+      };
+      let result: R;
+      try {
+        result = await body(q);
+      } catch (e) {
+        try {
+          await raw('ROLLBACK TO SAVEPOINT read_snapshot_block');
+          await raw('RELEASE SAVEPOINT read_snapshot_block');
+        } catch {
+          await recover();
+        }
+        if (signal?.aborted) throw signal.reason ?? e;
+        throw timeoutSet && isStatementTimeout(e) ? budgetRefusal() : e;
+      }
+      await raw('ROLLBACK TO SAVEPOINT read_snapshot_block');
+      await raw('RELEASE SAVEPOINT read_snapshot_block');
+      return result;
+    };
+    // Each statement goes through `execute`, with the handle that runs it on
+    // the snapshot, so whatever wraps `execute` sees it.
+    let handle = {};
+    this.#snapshots.set(handle, statement);
+    let reader: DBAdapter = {
+      kind: 'pg',
+      get isClosed() {
+        return adapterIsClosed();
+      },
+      execute: (sql, execOpts) =>
+        inTurn(() => this.execute(sql, { ...execOpts, readSnapshot: handle })),
+      withTransaction: (body) => inTurn(() => block(body)),
+      withReadSnapshot: (inner) => inner(reader),
+      close: () => this.close(),
+      getColumnNames: (tableName) => this.getColumnNames(tableName),
+      notify: (channel, payload) => this.notify(channel, payload),
+      withWriteLock: (realmUrl, body) => this.withWriteLock(realmUrl, body),
+      withFileWriteLocks: (realmUrl, localPaths, body) =>
+        this.withFileWriteLocks(realmUrl, localPaths, body),
+      withUserCostLock: (matrixUserId, body) =>
+        this.withUserCostLock(matrixUserId, body),
+      withSharedWork: (body) => this.withSharedWork(body),
+    };
+    let failed = false;
+    try {
+      return await holding.run(() => fn(reader));
+    } catch (e) {
+      failed = true;
+      throw e;
+    } finally {
+      // Statements `fn` left running finish (or fail) before the end.
+      await tail;
+      ended = true;
+      holding.end();
+      if (pinned) {
+        let { client, releaseTurn, stopRecording } = pinned;
+        try {
+          if (!broken) {
+            await raw(failed ? 'ROLLBACK' : 'COMMIT');
+          }
+        } catch (e) {
+          broken = true;
+          log.warn(`could not end a read snapshot: ${e}`);
+        } finally {
+          stopRecording();
+          client.release(broken ? true : undefined);
+          releaseTurn();
+        }
+      }
     }
   }
 
