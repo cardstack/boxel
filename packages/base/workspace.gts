@@ -146,6 +146,11 @@ type RailOption = Omit<FilterOption, 'icon'> & {
   icon?: string | typeof SearchIcon;
 };
 
+// A card type's icon is its own SVG markup; a boxel-icon component has none.
+function railIconHtml(option: RailOption): SafeString | undefined {
+  return typeof option.icon === 'string' ? htmlSafe(option.icon) : undefined;
+}
+
 // Job cards carry setup progress (ProcessCard contract fields).
 type JobCard = CardDef & {
   listingName?: string;
@@ -471,9 +476,7 @@ class TypeChip extends GlimmerComponent<{
   Args: { option: RailOption; count: number; onSelect: () => void };
 }> {
   private get iconHtml(): SafeString | undefined {
-    return typeof this.args.option.icon === 'string'
-      ? htmlSafe(this.args.option.icon)
-      : undefined;
+    return railIconHtml(this.args.option);
   }
 
   <template>
@@ -553,8 +556,7 @@ class RailItem extends GlimmerComponent<{
   }
 
   private get iconHtml(): SafeString | undefined {
-    let { icon } = this.args.option;
-    return typeof icon === 'string' ? htmlSafe(icon) : undefined;
+    return railIconHtml(this.args.option);
   }
 
   private get addLabel(): string {
@@ -3195,10 +3197,6 @@ class Isolated extends Component<typeof Workspace> {
     }
     this.activeFilter = option;
     this.segment = 'library';
-  };
-
-  iconHtml = (option: RailOption): SafeString | undefined => {
-    return typeof option.icon === 'string' ? htmlSafe(option.icon) : undefined;
   };
 
   @action private createNew() {
