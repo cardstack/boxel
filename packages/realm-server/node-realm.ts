@@ -104,7 +104,7 @@ function lastModifiedSeconds(stat: Stats): number {
 // A file opened for a whole-body read: the stream over the open descriptor,
 // with the length and modification time that descriptor's stat reports, or
 // the error that shows the file is gone. `size` is absent when the open failed
-// some other way, in which case `content` fails with that error when read.
+// some other way; `content` is then a fresh read of the path, with no length.
 type OpenedFile =
   | { content: Readable; size?: number; lastModifiedMs?: number }
   | { gone: NodeJS.ErrnoException };
@@ -138,8 +138,9 @@ async function openMeasured(absolutePath: string): Promise<OpenedFile> {
 
 // The bytes of a file whose open has not necessarily finished, for a consumer
 // that needs a stream before the open can report anything. A file the open
-// finds gone fails the read with the open's error. Ending the iteration early
-// destroys the opened stream, which closes its descriptor.
+// finds gone fails the read with the open's error. Ending the iteration once
+// it has reached the opened stream destroys that stream, which closes its
+// descriptor.
 async function* readOpened(
   open: () => Promise<OpenedFile>,
 ): AsyncGenerator<Buffer> {
@@ -345,7 +346,20 @@ export class NodeAdapter implements RealmAdapter {
     return {
       path,
       get content() {
-        content ??= Readable.from(readOpened(open), { objectMode: false });
+        if (!content) {
+          let wrapper = Readable.from(readOpened(open), { objectMode: false });
+          // Destroying the wrapper before it reads ends a generator that never
+          // reached the opened stream, so the opened stream is released here
+          // instead. Destroying one that has already ended does nothing.
+          wrapper.once('close', () => {
+            void opening?.then((opened) => {
+              if ('content' in opened) {
+                opened.content.destroy();
+              }
+            });
+          });
+          content = wrapper;
+        }
         return content;
       },
       openContent: async () => {
@@ -354,6 +368,11 @@ export class NodeAdapter implements RealmAdapter {
           return undefined;
         }
         content ??= opened.content;
+        // `content` was handed out and destroyed before this open started, so
+        // nothing will ever read the stream this open created.
+        if (content !== opened.content && content.destroyed) {
+          opened.content.destroy();
+        }
         return {
           content,
           ...(opened.size != null ? { size: opened.size } : {}),

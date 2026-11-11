@@ -677,6 +677,66 @@ module(
       }
     });
 
+    test('content touched first and destroyed unread releases the descriptor its open took', async function (assert) {
+      // Descriptors are read from the process's own fd table, which only
+      // Linux exposes this way.
+      if (fsExtra.existsSync('/proc/self/fd')) {
+        await assertDescriptorReleased(assert);
+      } else {
+        assert.ok(true, 'no /proc fd table on this platform');
+      }
+    });
+
+    async function assertDescriptorReleased(assert: Assert) {
+      let dir = fsExtra.realpathSync(
+        fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-')),
+      );
+      let descriptorsOn = (file: string) =>
+        fsExtra.readdirSync('/proc/self/fd').filter((fd) => {
+          try {
+            return fsExtra.readlinkSync(`/proc/self/fd/${fd}`) === file;
+          } catch {
+            return false;
+          }
+        }).length;
+      let released = async (file: string) => {
+        for (let i = 0; i < 50 && descriptorsOn(file) > 0; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return descriptorsOn(file);
+      };
+      try {
+        let file = join(dir, 'page.html');
+        fsExtra.writeFileSync(file, '<p>hello</p>');
+        let adapter = new NodeAdapter(dir);
+
+        let ref = await adapter.openFile('page.html');
+        let content = ref!.content as NodeJS.ReadableStream & {
+          destroy(): void;
+        };
+        await ref!.openContent!();
+        assert.strictEqual(descriptorsOn(file), 1, 'the open holds one');
+        content.destroy();
+        assert.strictEqual(
+          await released(file),
+          0,
+          'destroying content after the open releases it',
+        );
+
+        ref = await adapter.openFile('page.html');
+        content = ref!.content as NodeJS.ReadableStream & { destroy(): void };
+        content.destroy();
+        await ref!.openContent!();
+        assert.strictEqual(
+          await released(file),
+          0,
+          'an open that starts after content was destroyed releases it',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    }
+
     test('content touched first on a file deleted since the stat fails its read, and openContent reports it gone', async function (assert) {
       let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
       try {
