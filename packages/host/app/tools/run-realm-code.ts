@@ -864,8 +864,9 @@ class RealmFsSession {
         `You can't read this workspace directly; realm.${method} was not run` +
         (this.mayWrite
           ? ''
-          : `. Read the cards and files the realm's policy grants with ` +
-            `realm.cards.get, realm.cards.search or realm.fs.readText`)
+          : `. Read what the realm's policy grants with realm.cards.get ` +
+            `(a read grant), realm.cards.search (a query grant) or ` +
+            `realm.fs.readText (a readSource grant)`)
       );
     }
     return undefined;
@@ -3105,8 +3106,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'the user can only read, reads work and each write is refused, except ' +
     'realm.operations, which the realm allows when its policy grants the ' +
     'operation. In one the realm admits the user to only through its ' +
-    'policy, it serves only the cards and files the policy grants, answers ' +
-    'any other as not found, and lists no folder. To learn whether the realm would allow the user an ' +
+    'policy, each read needs a grant of its own: realm.cards.get a read, ' +
+    "realm.cards.search a query, and realm.fs.readText (a card's .json " +
+    'too) a readSource. The realm answers anything no grant reaches as not ' +
+    'found, and lists no folder. To learn whether the realm would allow the user an ' +
     'operation now, without running it, ask with ' +
     'realm.operations.capabilities([{ path, operation }, { type: { module, ' +
     'name }, operation }]) (a type for a create; module is a URL, a prefix ' +

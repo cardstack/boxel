@@ -747,7 +747,7 @@ return { title: card.attributes.title, refused };`,
       refused,
       [
         "You can't write this workspace directly; realm.fs.writeText was not run. A change the realm's policy grants runs as an operation, with realm.operations.invoke",
-        "You can't read this workspace directly; realm.fs.list was not run. Read the cards and files the realm's policy grants with realm.cards.get, realm.cards.search or realm.fs.readText",
+        "You can't read this workspace directly; realm.fs.list was not run. Read what the realm's policy grants with realm.cards.get (a read grant), realm.cards.search (a query grant) or realm.fs.readText (a readSource grant)",
       ],
       'the write and the listing are refused, each saying what does run',
     );
@@ -755,6 +755,28 @@ return { title: card.attributes.title, refused };`,
       await adapter.openFile('notes.txt'),
       undefined,
       'nothing was written',
+    );
+  });
+
+  test('a Realm Runner script run by a user the realm admits only through its policy reads a card on a read grant, and not its source, which needs a readSource grant', async function (assert) {
+    await setupSchool({ enforcePermissions: true });
+    await signInToSchoolAfresh();
+
+    let { title, source } = await runInSchool(
+      `let card = await realm.cards.get('classrooms/room-204');
+let source;
+try {
+  source = await realm.fs.readText('classrooms/room-204.json');
+} catch (e) {
+  source = e.message;
+}
+return { title: card.attributes.title, source };`,
+    );
+    assert.strictEqual(title, 'Room 204', 'the read grant serves the card');
+    assert.strictEqual(
+      source,
+      `File not found: ${ROOM_204}.json`,
+      'and the realm answers its stored source as not found, since the policy grants no readSource',
     );
   });
 
