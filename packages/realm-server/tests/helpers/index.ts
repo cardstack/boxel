@@ -1958,6 +1958,10 @@ export async function runTestRealmServer({
     domainsForPublishedRealms,
     definitionLookup,
     prerenderer,
+    // The server shares the realm's journal, as the production server shares
+    // one with every realm it mounts, so a realm it creates appends its
+    // `scan` event there.
+    ...(history ? { changeJournal: history.journal } : {}),
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(secureOriginURL ? { secureOriginURL } : {}),
     ...(googleSignIn ? { googleSignIn } : {}),

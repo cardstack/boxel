@@ -8,3 +8,4 @@ export * from './job-tables.ts';
 export * from './job-finalize.ts';
 export * from './pg-queue.ts';
 export * from './pg-transaction-manager.ts';
+export * from './change-journal.ts';
