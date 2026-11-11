@@ -1826,19 +1826,26 @@ export class PgAdapter implements DBAdapter {
           stopRecording: recordConnectionErrors(client, this.url, 'warn'),
         };
         try {
-          await raw('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          // before the savepoint, so rolling back to it keeps them; whole
-          // numbers this module computed, so they are written as numbers
+          // One simple-protocol message, so opening the snapshot costs one
+          // round trip rather than one per statement. The settings come
+          // before the savepoint, so rolling back to it keeps them; they are
+          // whole numbers this module computed, so they are written as
+          // numbers.
           let { jitAboveCost, workMemKb } = searchSessionSettings();
-          await raw(
-            `SET LOCAL jit_above_cost = ${jitAboveCost}; SET LOCAL work_mem = ${workMemKb}`,
-          );
-          if (deadline !== undefined && Number.isFinite(deadline)) {
-            let ms = statementTimeoutFor(deadline);
-            await raw(`SET LOCAL statement_timeout = ${ms}`);
-            timeoutSet = true;
+          let setup = [
+            'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+            `SET LOCAL jit_above_cost = ${jitAboveCost}`,
+            `SET LOCAL work_mem = ${workMemKb}`,
+          ];
+          let withTimeout = deadline !== undefined && Number.isFinite(deadline);
+          if (withTimeout) {
+            setup.push(
+              `SET LOCAL statement_timeout = ${statementTimeoutFor(deadline!)}`,
+            );
           }
-          await raw('SAVEPOINT read_snapshot');
+          setup.push('SAVEPOINT read_snapshot');
+          await raw(setup.join('; '));
+          timeoutSet = withTimeout;
         } catch (e) {
           broken = true;
           throw e;
@@ -1900,6 +1907,9 @@ export class PgAdapter implements DBAdapter {
     // The body runs on the snapshot inside a savepoint that is rolled back
     // when it ends, so its SET LOCALs (a vector read's HNSW settings) end
     // with it.
+    // rolled back and released in one round trip
+    let endBlock =
+      'ROLLBACK TO SAVEPOINT read_snapshot_block; RELEASE SAVEPOINT read_snapshot_block';
     let block = async <R>(body: (q: Querier) => Promise<R>): Promise<R> => {
       let signal = signalOf(undefined);
       signal?.throwIfAborted();
@@ -1916,16 +1926,14 @@ export class PgAdapter implements DBAdapter {
         result = await body(q);
       } catch (e) {
         try {
-          await raw('ROLLBACK TO SAVEPOINT read_snapshot_block');
-          await raw('RELEASE SAVEPOINT read_snapshot_block');
+          await raw(endBlock);
         } catch {
           await recover();
         }
         if (signal?.aborted) throw signal.reason ?? e;
         throw timeoutSet && isStatementTimeout(e) ? budgetRefusal() : e;
       }
-      await raw('ROLLBACK TO SAVEPOINT read_snapshot_block');
-      await raw('RELEASE SAVEPOINT read_snapshot_block');
+      await raw(endBlock);
       return result;
     };
     // Each statement goes through `execute`, with the handle that runs it on
