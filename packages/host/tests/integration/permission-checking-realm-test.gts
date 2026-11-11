@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import {
   CardContextName,
   OperationsError,
+  ri,
   rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -178,8 +179,14 @@ module('Integration | a realm that checks permissions', function (hooks) {
 
   async function setupSchool({
     enforcePermissions,
+    readableByTestUser,
+    policy = classroomPolicy,
   }: {
     enforcePermissions?: true;
+    // Gives the test user read on the school realm, and nothing more.
+    readableByTestUser?: true;
+    // The policy card the school names, or null for a school that names none.
+    policy?: LooseSingleCardDocument | null;
   }): Promise<TestRealmAdapter> {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -196,16 +203,17 @@ module('Integration | a realm that checks permissions', function (hooks) {
       enforcePermissions,
       permissions: {
         [SCHOOL_ADMIN]: ['read', 'write', 'realm-owner'],
+        ...(readableByTestUser ? { [TEST_USER]: ['read'] } : {}),
       },
       contents: {
         'realm.json': realmConfigCardJSON({
           name: 'School',
           iconURL: SCHOOL_ICON,
-          policy: `${SCHOOL}policies/classrooms`,
+          ...(policy ? { policy: `${SCHOOL}policies/classrooms` } : {}),
         }),
         'classrooms/room-204.json': classroom('Room 204', [TEST_USER]),
         'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
-        'policies/classrooms.json': classroomPolicy,
+        ...(policy ? { 'policies/classrooms.json': policy } : {}),
       },
     });
     // Imported through the loader the realm's instances were built by, since
@@ -279,6 +287,141 @@ module('Integration | a realm that checks permissions', function (hooks) {
         `[data-test-stack-card-header] [data-test-card-header-realm-icon="${SCHOOL_ICON}"]`,
       )
       .exists('with the realm’s icon in its header');
+  });
+
+  test('the AI context tells a user who can only read the realm what its policy grants', async function (assert) {
+    await setupSchool({ enforcePermissions: true, readableByTestUser: true });
+    let realmService = getService('realm');
+    assert.true(realmService.canRead(SCHOOL), 'the test user reads the school');
+    assert.false(realmService.canWrite(SCHOOL), 'and cannot write it');
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    let context = await operatorModeState.getSummaryForAIBot();
+    assert.strictEqual(context.realmUrl, SCHOOL, 'the user is in the school');
+    assert.deepEqual(
+      context.realmPolicy,
+      {
+        card: rri(`${SCHOOL}policies/classrooms`),
+        rules: [
+          {
+            targetType: {
+              module: rri(`${DEFINITIONS}classroom`),
+              name: 'Classroom',
+            },
+            grants: [
+              { operation: 'read' },
+              { operation: 'rename', where: TEACHES },
+            ],
+          },
+        ],
+      },
+      'the context carries the rules of the policy the school names',
+    );
+  });
+
+  test('the AI context names a policy whose rules are too large to carry, without them', async function (assert) {
+    // About 24 KB of grants, past what the context may carry with them.
+    let grants = Array.from({ length: 400 }, () => ({
+      operation: 'rename',
+      where: TEACHES,
+    }));
+    await setupSchool({
+      enforcePermissions: true,
+      readableByTestUser: true,
+      policy: {
+        data: {
+          ...classroomPolicy.data,
+          attributes: {
+            cardInfo: { name: 'Classrooms' },
+            rules: [
+              {
+                targetType: {
+                  module: `${DEFINITIONS}classroom`,
+                  name: 'Classroom',
+                },
+                grants,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    let context = await operatorModeState.getSummaryForAIBot();
+    assert.deepEqual(
+      context.realmPolicy,
+      { card: rri(`${SCHOOL}policies/classrooms`), tooLarge: true },
+      'the policy is named, and its rules are left out',
+    );
+  });
+
+  test('the AI context tells a user the realm admits only through its policy that a policy judges them', async function (assert) {
+    await setupSchool({ enforcePermissions: true });
+    // The host asked the school for its info during setup's renders, which
+    // the school answers as its own requests, without asking who sent them.
+    // So the host signs in to it afresh, and the school decides whether to
+    // answer: one whose policy judges the user does.
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await realmService.reauthenticate(SCHOOL);
+    assert.true(
+      realmService.isInfoLoaded(ri(SCHOOL)),
+      'the school answered the user its info',
+    );
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    let context = await operatorModeState.getSummaryForAIBot();
+    assert.strictEqual(context.realmUrl, SCHOOL, 'the user is in the school');
+    assert.deepEqual(
+      context.realmPermissions,
+      { canRead: false, canWrite: false },
+      'the school’s permissions give the user nothing',
+    );
+    assert.deepEqual(
+      context.realmPolicy,
+      {},
+      'and the context says a policy judges them, though not which',
+    );
+  });
+
+  test('the AI context names no policy for a user a realm without one does not let read', async function (assert) {
+    await setupSchool({ enforcePermissions: true, policy: null });
+    // As in the test above, the host signs in to the school afresh, so the
+    // school decides whether to answer its info. A realm with no policy
+    // answers it only to a caller its permissions let read.
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await assert.rejects(
+      realmService.reauthenticate(SCHOOL),
+      /Failed to fetch realm info/,
+      'the school refused the user its info',
+    );
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    let context = await operatorModeState.getSummaryForAIBot();
+    assert.strictEqual(context.realmUrl, SCHOOL, 'the user is in the school');
+    assert.false(
+      realmService.isInfoLoaded(ri(SCHOOL)),
+      'the host still holds no info for the school',
+    );
+    assert.strictEqual(
+      context.realmPolicy,
+      undefined,
+      'and the context claims no policy',
+    );
   });
 
   test('a sign-in that fails is reported, and the next one tries again', async function (assert) {
