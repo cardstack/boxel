@@ -119,6 +119,25 @@ module('scan', (hooks) => {
     ]);
   });
 
+  test('a directory is matched as the realm server registers it, resolved', async (assert) => {
+    let realm = await insertRealm(database.db, {
+      url: 'https://cardstack.com/base/',
+      kind: 'bootstrap',
+      diskId: '/persistent/base',
+    });
+
+    let run = await scan(
+      '--realm=/persistent/./base/:base_realm',
+      '--matrixServerName=stack.cards',
+    );
+
+    assert.strictEqual(run.code, 0, `the script succeeds (log: ${run.log})`);
+    assert.deepEqual(
+      (await events()).map((event) => [event.realmURL, event.author]),
+      [[realm.url, '@base_realm:stack.cards']],
+    );
+  });
+
   test('only the realms whose recording is on get an event', async (assert) => {
     let recording = await insertRealm(database.db, {
       url: 'https://realms.example.test/pretui/',

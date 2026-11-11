@@ -23,6 +23,7 @@
 // and carry on, so history never holds up the realm server.
 
 import '../setup-logger.ts';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { PgAdapter, PostgresChangeJournal } from '@cardstack/postgres';
 import {
@@ -61,7 +62,9 @@ function usage(message: string): never {
 }
 
 // `<directory>` or `<directory>:<bot username>`. A Matrix localpart can't hold
-// a colon, so the last one separates the two.
+// a colon, so the last one separates the two. The realm server registers a
+// bootstrap realm's `disk_id` as its resolved `--path`, so the directory is
+// resolved the same way: a trailing slash or a relative path still names it.
 function parseRealm(value: string): ScannedRealm {
   let separator = value.lastIndexOf(':');
   let directory = separator === -1 ? value : value.slice(0, separator);
@@ -69,6 +72,7 @@ function parseRealm(value: string): ScannedRealm {
   if (!directory) {
     usage(`--realm=${value} names no directory`);
   }
+  directory = resolve(directory);
   return botUsername ? { directory, botUsername } : { directory };
 }
 
