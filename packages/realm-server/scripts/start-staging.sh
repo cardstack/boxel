@@ -20,7 +20,10 @@ pnpm setup:openrouter-in-deployment
 pnpm setup:choreo-gallery-in-deployment
 # The setup steps above write realm content straight onto the realms' disks,
 # outside the realm server, so each rsynced realm gets a scan event that
-# attributes what changed to this deploy in its history.
+# attributes what changed to this deploy in its history. scan-deployed-realms.sh
+# lists those realms with the --path and --username each is mounted with below.
+# A realm added to or dropped from the rsync, or whose --username changes,
+# changes there too: tests/deploy-scan-realms-test.ts fails until it does.
 sh "$SCRIPTS_DIR/scan-deployed-realms.sh" stack.cards
 # The secure origin's pages are served from their build, which the realm
 # server reads once, at startup, and refuses to start without. The image

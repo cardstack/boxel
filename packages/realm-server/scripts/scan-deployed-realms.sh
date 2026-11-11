@@ -11,6 +11,7 @@
 # The realms are the ones the setup steps rsync, each named by the --path and
 # --username the realm server mounts it with. A realm whose setup step only
 # makes its directory isn't here: nothing outside the realm writes its files.
+# tests/deploy-scan-realms-test.ts holds this list to both start scripts.
 # The deployed commit is $BOXEL_COMMIT, which the image is built with, or else
 # the checkout's HEAD.
 #
