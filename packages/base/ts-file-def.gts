@@ -22,6 +22,7 @@ import {
 } from './file-api';
 import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
+import { FILE_CONTENT_MAX_BYTES, headOfText } from './file-content-cap';
 import { highlightTs } from './ts-highlight';
 export { highlightTs } from './ts-highlight';
 
@@ -212,6 +213,11 @@ export class TsFileDef extends FileDef {
   static previewAdapter = 'text';
   static previewSource = 'extracted';
 
+  // At most this many bytes of the file are kept as `content`: its first
+  // whole lines that fit (`file-content-cap.ts`). The file itself is always
+  // served whole from the realm.
+  static contentMaxBytes: number | undefined = FILE_CONTENT_MAX_BYTES;
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
@@ -279,7 +285,7 @@ export class TsFileDef extends FileDef {
       ...base,
       title: fallbackTitle,
       excerpt: truncateExcerpt(source.replace(/\s+/g, ' ').trim()),
-      content: source,
+      content: headOfText(bytes, this.contentMaxBytes).text,
       // Normalize CRLF/CR to LF first so the count is the same across newline
       // styles (and matches the fitted projection); a trailing newline
       // shouldn't inflate the count, and empty content is zero lines.

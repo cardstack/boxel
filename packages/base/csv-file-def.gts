@@ -22,6 +22,7 @@ import {
   type SerializedFile,
 } from './file-api';
 import type { FilePreviewSignature } from './file-formats/file-preview-stage';
+import { FILE_CONTENT_MAX_BYTES, headOfCsv } from './file-content-cap';
 import { fencedCodeBlock } from './markdown-helpers';
 
 const EXCERPT_MAX_LENGTH = 500;
@@ -123,7 +124,13 @@ function tag(name: string, content: string, attrs?: string): string {
     : `<${name}>${content}</${name}>`;
 }
 
-function csvToHtml(content: string, maxRows?: number): string {
+// `totalRows` is the file's row count, which can exceed the rows `content`
+// holds (a CSV keeps only its head as `content`, see `contentMaxRows`).
+function csvToHtml(
+  content: string,
+  maxRows?: number,
+  totalRows?: number,
+): string {
   let rows = parseCsv(content);
   if (rows.length === 0) {
     return '';
@@ -131,12 +138,12 @@ function csvToHtml(content: string, maxRows?: number): string {
 
   let headers = rows[0];
   let bodyRows = rows.slice(1);
-  let truncated = false;
+  let total = Math.max(totalRows ?? 0, bodyRows.length);
 
   if (maxRows !== undefined && bodyRows.length > maxRows) {
     bodyRows = bodyRows.slice(0, maxRows);
-    truncated = true;
   }
+  let truncated = bodyRows.length < total;
 
   let headerCells = headers.map((h) => tag('th', escapeHtml(h))).join('');
   let headRow = tag('tr', headerCells);
@@ -158,7 +165,7 @@ function csvToHtml(content: string, maxRows?: number): string {
   let html = tag('table', thead + tbody);
 
   if (truncated) {
-    let remaining = rows.length - 1 - (maxRows ?? 0);
+    let remaining = total - bodyRows.length;
     html += tag('p', `… ${remaining} more rows`, 'class="csv-truncated"');
   }
 
@@ -201,13 +208,13 @@ class CsvPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   // Embedded shows the head of the table with a "… N more rows" note; isolated
-  // shows every row. `csvToHtml` owns the whole pipeline: it escapes every cell
+  // shows every row `content` holds (the head of a large file, with the note). `csvToHtml` owns the whole pipeline: it escapes every cell
   // first and then assembles the markup, so no second sanitizer pass reparses
   // our own generated HTML during prerender/indexing.
   get tableHtml() {
     let maxRows =
       this.args.format === 'embedded' ? EMBEDDED_MAX_ROWS : undefined;
-    return htmlSafe(csvToHtml(this.content, maxRows));
+    return htmlSafe(csvToHtml(this.content, maxRows, this.rowCount));
   }
 
   <template>
@@ -375,6 +382,13 @@ export class CsvFileDef extends FileDef {
   static previewAdapter = 'data';
   static previewSource = 'extracted';
 
+  // A CSV keeps its header and first rows as `content`, not the whole table:
+  // at most this many data rows, as whole lines, within the byte cap
+  // (`file-content-cap.ts`). `columns` and `rowCount` describe the whole
+  // file, and the file itself is always served whole from the realm.
+  static contentMaxRows = 1000;
+  static contentMaxBytes: number | undefined = FILE_CONTENT_MAX_BYTES;
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
@@ -444,7 +458,7 @@ export class CsvFileDef extends FileDef {
       ...base,
       title: fallbackTitle,
       excerpt: truncateExcerpt(csvText.trim()),
-      content: csvText,
+      content: headOfCsv(bytes, this.contentMaxRows, this.contentMaxBytes).text,
       columns,
       columnCount,
       rowCount,

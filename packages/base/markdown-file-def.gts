@@ -36,6 +36,7 @@ import {
   isKnownFrontmatterKind,
 } from './frontmatter-kinds';
 import { parseFrontmatter } from './frontmatter-parse';
+import { FILE_CONTENT_MAX_BYTES, headOfText } from './file-content-cap';
 
 // Channel for routing per-field meta (e.g. the concrete subclass of a
 // polymorphic field) from `extractAttributes` to the index resource builder,
@@ -179,6 +180,11 @@ export class MarkdownDef extends FileDef {
   static previewAdapter = 'text';
   static previewSource = 'extracted';
 
+  // At most this many bytes of the file's body are kept as `content`: its first
+  // whole lines that fit (`file-content-cap.ts`). The file itself is always
+  // served whole from the realm.
+  static contentMaxBytes: number | undefined = FILE_CONTENT_MAX_BYTES;
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
@@ -315,6 +321,12 @@ export class MarkdownDef extends FileDef {
       );
     }
 
+    // The body as `content`, cut to its first whole lines within the cap;
+    // the links it names are read from what it keeps.
+    let content = headOfText(
+      new TextEncoder().encode(body),
+      this.contentMaxBytes,
+    ).text;
     let attributes: SerializedFile<{
       title: string;
       excerpt: string;
@@ -329,15 +341,15 @@ export class MarkdownDef extends FileDef {
       title: extractTitle(body, fallbackTitle),
       excerpt: extractExcerpt(body),
       // The body with any frontmatter block stripped — what the markdown /
-      // isolated / embedded paths render. The parsed frontmatter lives in
-      // `frontmatter.rawContent`, and the verbatim file is always served from
-      // the realm, so nothing is lost.
-      content: body,
+      // isolated / embedded paths render — up to `contentMaxBytes`. The parsed
+      // frontmatter lives in `frontmatter.rawContent`, and the verbatim file
+      // is always served from the realm, so nothing is lost.
+      content,
       // Counted over the rendered body, not the frontmatter; a trailing newline
       // shouldn't inflate it and empty content is zero lines.
       lineCount: body ? body.replace(/\n$/, '').split('\n').length : 0,
-      cardReferenceUrls: extractCardReferenceUrls(body, url),
-      fileReferenceUrls: extractFileReferenceUrls(body, url),
+      cardReferenceUrls: extractCardReferenceUrls(content, url),
+      fileReferenceUrls: extractFileReferenceUrls(content, url),
     };
 
     // Boxel-specific frontmatter is namespaced under `boxel:`; generic

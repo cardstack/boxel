@@ -20,7 +20,7 @@ import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
 import { uniqueDeps } from './dependency-collections.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { CARD_INSTANCE_FILE_KEY, TYPE_AHEAD_KEY } from '../search-doc-keys.ts';
-import { SEARCH_TEXT_KEY } from '../search-intent.ts';
+import { FILE_PATTERN_FIELDS, SEARCH_TEXT_KEY } from '../search-intent.ts';
 
 export interface FileIndexerOptions {
   path: LocalPath;
@@ -205,7 +205,13 @@ export async function performFileIndexing({
     // title.
     // Its type names ("Markdown", "PDF") are its words too, as a card's are
     // (see the render's `typeWordsOf`).
-    ...searchWordsOfFile(name, extractResult.displayNames ?? []),
+    ...searchWordsOfFile(
+      name,
+      extractResult.displayNames ?? [],
+      FILE_PATTERN_FIELDS.map(
+        (field) => ({ url: fileURL, name })[field] as string | undefined,
+      ),
+    ),
     // Stamp `id` (the file's own URL) so a file row is addressable by
     // `eq: { id }` the same way a card instance row is — `FileDef` already
     // declares an `id` field, the search_doc just never carried it. Placed
@@ -302,23 +308,30 @@ function nameWords(name: string | undefined): string | undefined {
 const GENERIC_FILE_TYPE_NAMES = new Set(['File', 'Base', 'Card', 'Field']);
 
 // A file's type-ahead text and search text: its name's words as its title,
-// its type names (short of the generic roots) at summary weight.
+// its type names (short of the generic roots) at summary weight, and the
+// values `pattern` and `regex` read (its URL and name, one per line), which
+// the index writer keeps as the row's trigram-indexed pattern text.
 function searchWordsOfFile(
   name: string | undefined,
   displayNames: string[],
+  patternValues: (string | undefined)[],
 ): Record<string, unknown> {
   let title = nameWords(name);
   let types = [...new Set(displayNames)]
     .filter((n) => n && !GENERIC_FILE_TYPE_NAMES.has(n))
     .join('\n');
-  if (!title && !types) {
+  let patterns = patternValues.filter(Boolean).join('\n');
+  if (!title && !types && !patterns) {
     return {};
   }
   return {
-    [TYPE_AHEAD_KEY]: [title, types].filter(Boolean).join('\n'),
+    ...(title || types
+      ? { [TYPE_AHEAD_KEY]: [title, types].filter(Boolean).join('\n') }
+      : {}),
     [SEARCH_TEXT_KEY]: {
       ...(title ? { A: title } : {}),
       ...(types ? { B: types } : {}),
+      ...(patterns ? { patterns } : {}),
     },
   };
 }

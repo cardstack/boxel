@@ -22,6 +22,7 @@ import {
 } from './file-api';
 import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
+import { FILE_CONTENT_MAX_BYTES, headOfText } from './file-content-cap';
 
 const EXCERPT_MAX_LENGTH = 500;
 // A very large document would otherwise render into megabytes of tree markup;
@@ -482,6 +483,11 @@ export class JsonFileDef extends FileDef {
   static previewAdapter = 'data';
   static previewSource = 'extracted';
 
+  // At most this many bytes of the file are kept as `content`: its first
+  // whole lines that fit (`file-content-cap.ts`). The file itself is always
+  // served whole from the realm.
+  static contentMaxBytes: number | undefined = FILE_CONTENT_MAX_BYTES;
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
@@ -563,7 +569,7 @@ export class JsonFileDef extends FileDef {
       ...base,
       title: fallbackTitle || 'Untitled JSON',
       excerpt: truncateExcerpt(text.trim()),
-      content: text,
+      content: headOfText(bytes, this.contentMaxBytes).text,
       rootType,
       keyCount,
       // Normalize CRLF/CR to LF first so the count is the same across newline

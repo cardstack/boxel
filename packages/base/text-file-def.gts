@@ -21,6 +21,7 @@ import {
 } from './file-api';
 import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { fencedCodeBlock } from './markdown-helpers';
+import { FILE_CONTENT_MAX_BYTES, headOfText } from './file-content-cap';
 
 const EXCERPT_MAX_LENGTH = 500;
 
@@ -175,6 +176,9 @@ export class TextFileDef extends FileDef {
   // its file meta is re-read on every appended line and the whole log would
   // travel each time; its lines are read from the file itself, by range.
   static contentTailBytes: number | undefined = undefined;
+  // Otherwise at most this many bytes are kept: the first whole lines that
+  // fit (`file-content-cap.ts`). The file is always served whole.
+  static contentMaxBytes: number | undefined = FILE_CONTENT_MAX_BYTES;
 
   // A `.txt` served without (or with an uninformative) content type would route
   // to a generic profile by extension alone, so pin the document axes the four
@@ -219,13 +223,22 @@ export class TextFileDef extends FileDef {
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
-    options: { contentHash?: string } = {},
+    options: {
+      contentHash?: string;
+      contentSize?: number;
+      // Bytes `[start, end)` of the file, where the extractor can read a
+      // range. A class that keeps only a tail (`contentTailBytes`, a log)
+      // then reads its head for the excerpt and its tail for the content,
+      // never the whole file, and leaves `lineCount` to the realm, which
+      // counts a log's lines as it indexes them (`log-line-index.ts`).
+      readRange?: (start: number, end: number) => Promise<Uint8Array>;
+    } = {},
   ): Promise<
     SerializedFile<{
       title: string;
       excerpt: string;
       content: string;
-      lineCount: number;
+      lineCount: number | null;
     }>
   > {
     let extension = extensionOfIdentifier(url);
@@ -233,6 +246,37 @@ export class TextFileDef extends FileDef {
       throw new FileContentMismatchError(
         `Expected text file extension, got "${extension || 'none'}"`,
       );
+    }
+    let tailBytes = this.contentTailBytes;
+    let size = options.contentSize;
+    if (
+      tailBytes !== undefined &&
+      options.readRange &&
+      options.contentHash &&
+      size !== undefined
+    ) {
+      let base = await super.extractAttributes(url, getStream, options);
+      // A head long enough for the excerpt in any encoding of it.
+      let head = new TextDecoder().decode(
+        await options.readRange(0, Math.min(size, EXCERPT_MAX_LENGTH * 4)),
+      );
+      let tailStart = Math.max(0, size - tailBytes);
+      let tail = new TextDecoder().decode(
+        await options.readRange(tailStart, size),
+      );
+      // Whole lines only: a tail that starts mid-line drops that line.
+      if (tailStart > 0) {
+        let firstBreak = tail.indexOf('\n');
+        tail = firstBreak === -1 ? '' : tail.slice(firstBreak + 1);
+      }
+      let fallbackTitle = nameWithoutExtension(base.name ?? '');
+      return {
+        ...base,
+        title: fallbackTitle || 'Untitled text file',
+        excerpt: truncateExcerpt(head.trim()),
+        content: tail,
+        lineCount: null,
+      };
     }
 
     let bytesPromise: Promise<Uint8Array> | undefined;
@@ -250,7 +294,10 @@ export class TextFileDef extends FileDef {
       ...base,
       title: fallbackTitle || 'Untitled text file',
       excerpt: truncateExcerpt(text.trim()),
-      content: tailLines(text, this.contentTailBytes),
+      content:
+        this.contentTailBytes === undefined
+          ? headOfText(bytes, this.contentMaxBytes).text
+          : tailLines(text, this.contentTailBytes),
       // A trailing newline shouldn't inflate the count, and empty content is
       // zero lines rather than one.
       lineCount: text ? text.replace(/\n$/, '').split('\n').length : 0,
