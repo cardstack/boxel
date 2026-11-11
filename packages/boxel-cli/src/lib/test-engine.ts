@@ -408,7 +408,7 @@ function resolveBundledRealms(override: string | undefined): {
   // `bundled-realms/`.
   let packagesDir = resolve(cliRoot, '..');
   let baseDir = join(packagesDir, 'base');
-  let skillsDir = join(packagesDir, 'skills-realm', 'contents');
+  let skillsDir = join(packagesDir, 'skills-realm', 'contents', 'skills');
   let pretuiDir = join(packagesDir, 'pretui');
   if (!dirExists(baseDir)) {
     throw new Error(
