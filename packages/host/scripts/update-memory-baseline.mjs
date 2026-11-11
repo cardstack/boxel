@@ -20,9 +20,10 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// The retained window does double duty: the check script anchors its soft
-// (warning) gate to the window mean and sizes its hard (build-blocking) gate
-// from the window's extremes — the ceiling and the demonstrated noise band.
+// The retained windows do double duty: the check script anchors its soft
+// (warning) gates to each window's mean and sizes its hard (build-blocking)
+// gate from the steady window's extremes — the ceiling and the demonstrated
+// noise band.
 // High-variance modules oscillate between large negative and large positive
 // boundary deltas over a horizon of many builds, so the window must be long
 // enough to span that oscillation: a short window can catch a single-sign
@@ -76,6 +77,14 @@ const priorSamples = (entry) => {
 const modules = { ...prior };
 delete modules.__shard_warmup__;
 
+// The steady window (growth from the end of a module's first test to the
+// module's end) is kept alongside the boundary-delta window. It only grows from
+// runs that report it: a run without a steady reading for a module (a one-test
+// module, or a report from before the reading existed) leaves the module's
+// steady window as it was.
+const priorSteadySamples = (entry) =>
+  Array.isArray(entry?.steady_samples) ? entry.steady_samples : [];
+
 let updated = 0;
 let added = 0;
 for (const [mod, data] of Object.entries(merged)) {
@@ -84,9 +93,21 @@ for (const [mod, data] of Object.entries(merged)) {
   const samples = [...priorSamples(prior[mod]), data.delta_mb]
     .slice(-SAMPLES_WINDOW)
     .map(round1);
+  const steadySamples = [
+    ...priorSteadySamples(prior[mod]),
+    ...(data.steady_mb != null ? [data.steady_mb] : []),
+  ]
+    .slice(-SAMPLES_WINDOW)
+    .map(round1);
   modules[mod] = {
     delta_mb: round1(mean(samples)),
     samples,
+    ...(steadySamples.length > 0
+      ? {
+          steady_mb: round1(mean(steadySamples)),
+          steady_samples: steadySamples,
+        }
+      : {}),
   };
   if (mod in prior) updated++;
   else added++;

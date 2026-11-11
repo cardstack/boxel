@@ -1,9 +1,21 @@
 #!/usr/bin/env node
 
-// Compares per-module memory deltas from a CI run against a committed baseline.
-// Exits 0 on pass/warn, exits 1 on hard failure — when a module's delta clears
-// its recent ceiling by more than the larger of +50MB, 100% of the baseline, or
-// the module's own demonstrated run-to-run noise band.
+// Compares per-module memory readings from a CI run against a committed baseline.
+// Each module reports two readings (see the MEMPROBE_FILE probe in
+// tests/helpers/setup-qunit.js):
+//
+// - `delta_mb`, the whole module's boundary delta. It includes the one-time cost
+//   of every app surface the module is the first in its shard to render, so it
+//   depends on which modules ran before it — every re-split of the shards moves
+//   it. It only ever warns.
+// - `steady_mb`, the growth from the end of the module's first test to the
+//   module's end, which leaves those one-time costs out. This is the reading
+//   that blocks: exit 1 when it clears the module's recent steady ceiling by
+//   more than the larger of +50MB, 100% of the steady baseline, or the steady
+//   window's own demonstrated run-to-run noise band.
+//
+// A module without a steady window yet (newly baselined, or a one-test module
+// with no steady reading) only warns. Exits 0 on pass/warn.
 //
 // Usage: node check-memory-baseline.mjs <reports-dir> <baseline-json>
 //
@@ -46,17 +58,25 @@ const HARD_ABSOLUTE_MB = 50;
 
 const escapeMd = (s) => String(s).replace(/\|/g, '\\|');
 
-// Compare against the rolling-window mean of recent baseline samples so a
-// single noisy build can't trip — or anchor — the budget. Fall back to the
-// pre-rolling-window `delta_mb` shape so this script keeps working against
-// older baseline files until the next main run upgrades them in place.
-const baselineDelta = (entry) => {
-  if (Array.isArray(entry?.samples) && entry.samples.length > 0) {
-    const sum = entry.samples.reduce((a, b) => a + b, 0);
-    return sum / entry.samples.length;
+// A module's recent sample window for one reading. The boundary-delta window
+// falls back to the pre-rolling-window `delta_mb` shape as a one-sample window,
+// so this script keeps working against older baseline files.
+const windowFor = (entry, reading) => {
+  if (reading === 'steady') {
+    return Array.isArray(entry?.steady_samples) ? entry.steady_samples : [];
   }
-  return entry?.delta_mb;
+  if (Array.isArray(entry?.samples) && entry.samples.length > 0) {
+    return entry.samples;
+  }
+  return entry?.delta_mb != null ? [entry.delta_mb] : [];
 };
+
+// Compare against the rolling-window mean of recent baseline samples so a
+// single noisy build can't trip — or anchor — the budget.
+const baselineMean = (samples) =>
+  samples.length > 0
+    ? samples.reduce((a, b) => a + b, 0) / samples.length
+    : undefined;
 
 // The largest delta the module has produced in the recent window. The hard
 // (build-blocking) gate measures the regression from this ceiling, not the
@@ -65,14 +85,9 @@ const baselineDelta = (entry) => {
 // transient before the measurement. Such a module must not hard-fail on a value
 // it has already exhibited — only on one that clears its observed ceiling by the
 // hard threshold. When a module's variance is low (ceiling ≈ mean) this is
-// equivalent to the mean-based gate. Falls back to the pre-rolling-window
-// `delta_mb` shape so older baseline files keep working until main upgrades them.
-const baselineCeiling = (entry) => {
-  if (Array.isArray(entry?.samples) && entry.samples.length > 0) {
-    return Math.max(...entry.samples);
-  }
-  return entry?.delta_mb;
-};
+// equivalent to the mean-based gate.
+const baselineCeiling = (samples) =>
+  samples.length > 0 ? Math.max(...samples) : undefined;
 
 // The module's demonstrated run-to-run noise band: the span from the lowest
 // recent sample up to the recent ceiling, with the ceiling floored at zero the
@@ -98,51 +113,38 @@ const baselineCeiling = (entry) => {
 // swing, so a newly baselined module stays behind the absolute threshold
 // until it has real history. Also zero for a legacy single-value baseline
 // that carries no sample window at all.
-const baselineNoiseBand = (entry) => {
-  if (Array.isArray(entry?.samples) && entry.samples.length > 1) {
-    return Math.max(Math.max(...entry.samples), 0) - Math.min(...entry.samples);
-  }
-  return 0;
-};
+const baselineNoiseBand = (samples) =>
+  samples.length > 1
+    ? Math.max(Math.max(...samples), 0) - Math.min(...samples)
+    : 0;
 
-const fmtSamples = (entry) =>
-  Array.isArray(entry?.samples) && entry.samples.length > 0
-    ? `[${entry.samples.map((s) => s.toFixed(1)).join(', ')}]`
+const fmtSamples = (samples) =>
+  samples.length > 0
+    ? `[${samples.map((s) => s.toFixed(1)).join(', ')}]`
     : null;
 
-const warnings = [];
-const failures = [];
-const newModules = [];
+// Compares one reading against its window. `hard` is true when the reading
+// clears the hard threshold, `soft` when it clears only the soft one.
+const assess = (current, samples) => {
+  const baseMean = baselineMean(samples);
+  if (current == null || baseMean == null) return null;
 
-for (const [mod, data] of Object.entries(current)) {
-  if (mod === '__shard_warmup__') continue;
-  if (data.delta_mb == null) continue;
-
-  const base = baseline.modules?.[mod];
-  if (!base) {
-    newModules.push({ mod, delta: data.delta_mb });
-    continue;
-  }
-
-  const baseDelta = baselineDelta(base);
-  if (baseDelta == null) continue;
-
-  // A negative baseline delta means the prior module's garbage was reclaimed
+  // A negative baseline means the prior module's garbage was reclaimed
   // partway through this module's window, not that this module actually freed
   // memory. Treat it as noise: floor at 0 so the comparison falls back to the
   // absolute thresholds rather than a bogus relative budget sized to |noise|.
-  const effectiveBase = Math.max(baseDelta, 0);
-  const diff = data.delta_mb - effectiveBase;
+  const effectiveBase = Math.max(baseMean, 0);
+  const diff = current - effectiveBase;
   // Only flag increases
-  if (diff <= 0) continue;
+  if (diff <= 0) return null;
 
-  // The soft (warning, non-blocking) gate stays anchored to the mean so a module
-  // trending upward still surfaces early. The hard (build-blocking) gate is
-  // anchored to the recent ceiling: it fires only when the current run clears
-  // the highest recent sample by the hard threshold, so a high-variance module
-  // can't be blocked by a value inside its own observed range.
-  const ceiling = Math.max(baselineCeiling(base) ?? baseDelta, 0);
-  const hardDiff = data.delta_mb - ceiling;
+  // The soft (warning) gate stays anchored to the mean so a module trending
+  // upward still surfaces early. The hard gate is anchored to the recent
+  // ceiling: it fires only when the current run clears the highest recent
+  // sample by the hard threshold, so a high-variance module can't be blocked
+  // by a value inside its own observed range.
+  const ceiling = Math.max(baselineCeiling(samples) ?? baseMean, 0);
+  const hardDiff = current - ceiling;
 
   const softThreshold = Math.max(
     SOFT_ABSOLUTE_MB,
@@ -159,31 +161,48 @@ for (const [mod, data] of Object.entries(current)) {
   const hardThreshold = Math.max(
     HARD_ABSOLUTE_MB,
     effectiveBase * HARD_RELATIVE,
-    baselineNoiseBand(base),
+    baselineNoiseBand(samples),
   );
 
   const pct =
     effectiveBase > 0 ? ((diff / effectiveBase) * 100).toFixed(0) : null;
-  const samples = fmtSamples(base);
+  return {
+    hard: hardDiff >= hardThreshold,
+    soft: diff >= softThreshold,
+    baseline: effectiveBase,
+    current,
+    diff,
+    pct,
+    samples: fmtSamples(samples),
+  };
+};
 
-  if (hardDiff >= hardThreshold) {
-    failures.push({
-      mod,
-      baseline: effectiveBase,
-      current: data.delta_mb,
-      diff,
-      pct,
-      samples,
-    });
-  } else if (diff >= softThreshold) {
-    warnings.push({
-      mod,
-      baseline: effectiveBase,
-      current: data.delta_mb,
-      diff,
-      pct,
-      samples,
-    });
+const warnings = [];
+const failures = [];
+const newModules = [];
+
+for (const [mod, data] of Object.entries(current)) {
+  if (mod === '__shard_warmup__') continue;
+  if (data.delta_mb == null) continue;
+
+  const base = baseline.modules?.[mod];
+  if (!base) {
+    newModules.push({ mod, delta: data.delta_mb });
+    continue;
+  }
+
+  // Only the steady reading can block; its soft threshold still warns.
+  const steady = assess(data.steady_mb, windowFor(base, 'steady'));
+  if (steady?.hard) {
+    failures.push({ mod, reading: 'steady', ...steady });
+  } else if (steady?.soft) {
+    warnings.push({ mod, reading: 'steady', ...steady });
+  }
+
+  // The boundary delta warns at either threshold, never blocks.
+  const delta = assess(data.delta_mb, windowFor(base, 'delta'));
+  if (delta?.hard || delta?.soft) {
+    warnings.push({ mod, reading: 'delta', ...delta });
   }
 }
 
@@ -213,16 +232,18 @@ const baselineHeader =
 
 if (failures.length > 0) {
   lines.push(
-    `### Failures (over recent ceiling by >${HARD_ABSOLUTE_MB}MB, >${HARD_RELATIVE * 100}%, or the demonstrated noise band)\n`,
+    `### Failures (steady reading over recent ceiling by >${HARD_ABSOLUTE_MB}MB, >${HARD_RELATIVE * 100}%, or the demonstrated noise band)\n`,
   );
   lines.push(
-    `| Module | ${baselineHeader} | Current | Change | Recent samples |`,
+    `| Module | Reading | ${baselineHeader} | Current | Change | Recent samples |`,
   );
-  lines.push('|--------|----------|---------|--------|----------------|');
+  lines.push(
+    '|--------|---------|----------|---------|--------|----------------|',
+  );
   for (const f of failures.sort((a, b) => b.diff - a.diff)) {
     const pctStr = f.pct != null ? ` (+${f.pct}%)` : '';
     lines.push(
-      `| ${escapeMd(f.mod)} | ${f.baseline.toFixed(1)} MB | ${f.current.toFixed(1)} MB | +${f.diff.toFixed(1)} MB${pctStr} | ${f.samples ?? '—'} |`,
+      `| ${escapeMd(f.mod)} | ${f.reading} | ${f.baseline.toFixed(1)} MB | ${f.current.toFixed(1)} MB | +${f.diff.toFixed(1)} MB${pctStr} | ${f.samples ?? '—'} |`,
     );
   }
   lines.push('');
@@ -230,16 +251,18 @@ if (failures.length > 0) {
 
 if (warnings.length > 0) {
   lines.push(
-    `### Warnings (>${SOFT_RELATIVE * 100}% + ${SOFT_ABSOLUTE_MB}MB increase)\n`,
+    `### Warnings (>${SOFT_RELATIVE * 100}% + ${SOFT_ABSOLUTE_MB}MB increase; a \`delta\` reading depends on shard order and never blocks)\n`,
   );
   lines.push(
-    `| Module | ${baselineHeader} | Current | Change | Recent samples |`,
+    `| Module | Reading | ${baselineHeader} | Current | Change | Recent samples |`,
   );
-  lines.push('|--------|----------|---------|--------|----------------|');
+  lines.push(
+    '|--------|---------|----------|---------|--------|----------------|',
+  );
   for (const w of warnings.sort((a, b) => b.diff - a.diff)) {
     const pctStr = w.pct != null ? ` (+${w.pct}%)` : '';
     lines.push(
-      `| ${escapeMd(w.mod)} | ${w.baseline.toFixed(1)} MB | ${w.current.toFixed(1)} MB | +${w.diff.toFixed(1)} MB${pctStr} | ${w.samples ?? '—'} |`,
+      `| ${escapeMd(w.mod)} | ${w.reading} | ${w.baseline.toFixed(1)} MB | ${w.current.toFixed(1)} MB | +${w.diff.toFixed(1)} MB${pctStr} | ${w.samples ?? '—'} |`,
     );
   }
   lines.push('');

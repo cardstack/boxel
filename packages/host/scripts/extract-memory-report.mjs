@@ -17,7 +17,7 @@ if (!inputPath || !outputPath) {
 }
 
 const PROBE_RE =
-  /MEMPROBE_FILE module=("(?:[^"\\]|\\.)*"|\S+) tests=(\d+) used=([\d.]+)MB total=([\d.]+)MB delta=([\d.\-]+|na)MB/;
+  /MEMPROBE_FILE module=("(?:[^"\\]|\\.)*"|\S+) tests=(\d+) used=([\d.]+)MB total=([\d.]+)MB delta=([\d.\-]+|na)MB(?: steady=([\d.\-]+|na)MB)?/;
 const JSON_ENVELOPE_RE = /\{"type":"log","text":"(.*?)"\}\s*$/;
 
 const log = readFileSync(inputPath, 'utf8');
@@ -43,11 +43,19 @@ for (const rawLine of log.split('\n')) {
 
   const mod = m[1].startsWith('"') ? JSON.parse(m[1]) : m[1];
   const deltaMb = m[5] === 'na' ? null : parseFloat(m[5]);
+  // Absent from logs that predate the steady reading; `na` for one-test modules.
+  const steadyMb = m[6] == null || m[6] === 'na' ? null : parseFloat(m[6]);
   const usedMb = parseFloat(m[3]);
   const totalMb = parseFloat(m[4]);
   const tests = parseInt(m[2], 10);
 
-  report[mod] = { delta_mb: deltaMb, used_mb: usedMb, total_mb: totalMb, tests };
+  report[mod] = {
+    delta_mb: deltaMb,
+    steady_mb: steadyMb,
+    used_mb: usedMb,
+    total_mb: totalMb,
+    tests,
+  };
 }
 
 writeFileSync(outputPath, JSON.stringify(report, null, 2) + '\n');

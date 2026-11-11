@@ -31,8 +31,22 @@ export function setupQUnit() {
   QUnit.config.autostart = false;
 
   // Per-module memory delta probe — log each test file's contribution to
-  // retained memory, independent of where it falls in shard order. We GC
-  // at module boundaries so the start/end snapshots compare like-for-like.
+  // retained memory. We GC at module boundaries so the start/end snapshots
+  // compare like-for-like.
+  //
+  // Two readings per top-level module:
+  //
+  // - `delta` spans the whole module, start to end. It includes the one-time
+  //   cost of every app surface (code submode, the workspace chooser, a card
+  //   kind's components…) that this module is the first in its shard to
+  //   render. That cost stays allocated for the rest of the shard, so the
+  //   next module to render the same surface pays nothing for it. A module's
+  //   `delta` therefore depends on which modules ran before it in its shard.
+  // - `steady` spans from the end of the module's first test to the module's
+  //   end. A module's first test renders the surfaces the module exercises,
+  //   so their one-time cost lands before this window opens, while memory the
+  //   module keeps retaining test after test still lands inside it. `steady`
+  //   is `na` for a module with a single test.
   //
   // We run several gc() cycles with a microtask yield between each call so
   // V8 can drain its FinalizationRegistry queue and finish generational
@@ -45,7 +59,17 @@ export function setupQUnit() {
   // only the logging-callback API awaits async handlers. Nested modules
   // are tracked with a simple depth counter so we only probe top-level ones.
   let usedAtModuleStart = null;
+  let usedAfterFirstTest = null;
+  let testsDoneInModule = 0;
   let moduleDepth = 0;
+  const readUsedHeap = () => {
+    try {
+      let pm = performance && performance.memory;
+      return pm ? pm.usedJSHeapSize : null;
+    } catch (_) {
+      return null;
+    }
+  };
   async function settledGc() {
     if (typeof globalThis.gc !== 'function') return;
     for (let i = 0; i < 3; i++) {
@@ -57,12 +81,18 @@ export function setupQUnit() {
     moduleDepth++;
     if (moduleDepth !== 1) return;
     await settledGc();
-    try {
-      let pm = performance && performance.memory;
-      usedAtModuleStart = pm ? pm.usedJSHeapSize : null;
-    } catch (_) {
-      usedAtModuleStart = null;
-    }
+    usedAtModuleStart = readUsedHeap();
+    usedAfterFirstTest = null;
+    testsDoneInModule = 0;
+  });
+  // Counts tests anywhere inside the top-level module, nested modules
+  // included, and takes the `steady` window's opening reading after the first.
+  QUnit.testDone(async () => {
+    if (moduleDepth < 1) return;
+    testsDoneInModule++;
+    if (testsDoneInModule !== 1) return;
+    await settledGc();
+    usedAfterFirstTest = readUsedHeap();
   });
   QUnit.moduleDone(async (details) => {
     if (moduleDepth === 1) {
@@ -77,9 +107,13 @@ export function setupQUnit() {
             usedAtModuleStart != null
               ? ((used - usedAtModuleStart) / 1048576).toFixed(1)
               : 'na';
+          let steadyMB =
+            usedAfterFirstTest != null && testsDoneInModule > 1
+              ? ((used - usedAfterFirstTest) / 1048576).toFixed(1)
+              : 'na';
           let tests = details.tests ? details.tests.length : 0;
           console.log(
-            `MEMPROBE_FILE module=${JSON.stringify(details.name)} tests=${tests} used=${usedMB}MB total=${totalMB}MB delta=${deltaMB}MB`,
+            `MEMPROBE_FILE module=${JSON.stringify(details.name)} tests=${tests} used=${usedMB}MB total=${totalMB}MB delta=${deltaMB}MB steady=${steadyMB}MB`,
           );
         }
       } catch (_) {
