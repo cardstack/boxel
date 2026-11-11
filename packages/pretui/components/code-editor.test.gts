@@ -110,13 +110,35 @@ module('Pretui | components/code-editor', function (hooks) {
       </template>,
     );
     assert
-      .dom('.pretui-code-editor')
+      .dom('[data-test-pretui-code-editor]')
       .hasAttribute('data-loaded', 'false')
       .hasAttribute('data-language', 'javascript');
-    assert.dom('.pretui-code-editor .pretui-code').exists('CodeBlock renders');
+    assert.dom('[data-test-pretui-code-editor] [data-test-pretui-code]').exists('CodeBlock renders');
     assert
-      .dom('.pretui-code-editor .pretui-code')
+      .dom('[data-test-pretui-code-editor] [data-test-pretui-code]')
       .includesText('const answer = 42;', 'the code is never blank');
+  });
+
+  test('the fallback is named and described like the editor', async function (assert) {
+    restore();
+    restore = installLoader(undefined);
+    await render(
+      <template>
+        <span id='script-label'>Script</span>
+        <span id='script-hint'>Runs on each trigger</span>
+        <CodeEditor
+          @value={{SOURCE}}
+          @language='javascript'
+          @labelledBy='script-label'
+          @describedBy='script-hint'
+        />
+      </template>,
+    );
+    assert
+      .dom('[data-test-pretui-code-editor] [data-test-pretui-code-body]')
+      .hasAttribute('aria-labelledby', 'script-label')
+      .hasAttribute('aria-describedby', 'script-hint')
+      .doesNotHaveAttribute('aria-label', 'the label element names it');
   });
 
   test('a prerender keeps the read-only fallback', async function (assert) {
@@ -125,9 +147,9 @@ module('Pretui | components/code-editor', function (hooks) {
     try {
       await render(<template><CodeEditor @value={{SOURCE}} /></template>);
       await settled();
-      assert.dom('.pretui-code-editor').hasAttribute('data-loaded', 'false');
+      assert.dom('[data-test-pretui-code-editor]').hasAttribute('data-loaded', 'false');
       assert.dom('[data-test-stub-editor]').doesNotExist();
-      assert.dom('.pretui-code-editor .pretui-code').includesText('answer');
+      assert.dom('[data-test-pretui-code-editor] [data-test-pretui-code]').includesText('answer');
     } finally {
       delete global.__boxelRenderContext;
     }
@@ -138,7 +160,7 @@ module('Pretui | components/code-editor', function (hooks) {
     restore = installLoader(async () => ({ EditorView: StubView }));
     await render(<template><CodeEditor @value={{SOURCE}} /></template>);
     await settled();
-    assert.dom('.pretui-code-editor').hasAttribute('data-loaded', 'false');
+    assert.dom('[data-test-pretui-code-editor]').hasAttribute('data-loaded', 'false');
     assert.dom('[data-test-stub-editor]').doesNotExist();
   });
 
@@ -158,7 +180,7 @@ module('Pretui | components/code-editor', function (hooks) {
       </template>,
     );
     await waitFor('[data-test-stub-editor]');
-    assert.dom('.pretui-code-editor').hasAttribute('data-loaded', 'true');
+    assert.dom('[data-test-pretui-code-editor]').hasAttribute('data-loaded', 'true');
     assert.deepEqual(
       {
         doc: created[0].doc,
@@ -188,7 +210,7 @@ module('Pretui | components/code-editor', function (hooks) {
       <template><CodeEditor @value='x' @language='cobol' /></template>,
     );
     await waitFor('[data-test-stub-editor]');
-    assert.dom('.pretui-code-editor').hasAttribute('data-language', 'plain');
+    assert.dom('[data-test-pretui-code-editor]').hasAttribute('data-language', 'plain');
     assert.strictEqual(created[0].language, 'plain');
   });
 
@@ -246,7 +268,7 @@ module('Pretui | components/code-editor', function (hooks) {
       </template>,
     );
     await waitFor('[data-test-stub-editor]');
-    assert.dom('.pretui-code-editor').hasAttribute('data-read-only', 'true');
+    assert.dom('[data-test-pretui-code-editor]').hasAttribute('data-read-only', 'true');
     assert.dom('[data-test-stub-editor]').hasAttribute('readonly');
 
     state.readOnly = false;
@@ -307,7 +329,7 @@ module('Pretui | components/code-editor', function (hooks) {
         <CodeEditor @value='x' @minLines={{5}} @maxLines={{12}} />
       </template>,
     );
-    let root = document.querySelector('.pretui-code-editor') as HTMLElement;
+    let root = document.querySelector('[data-test-pretui-code-editor]') as HTMLElement;
     assert.strictEqual(
       root.style.getPropertyValue('--pretui-code-editor-min'),
       '5',
@@ -328,7 +350,7 @@ module('Pretui | components/code-editor', function (hooks) {
       </template>,
     );
     await waitFor('[data-test-stub-editor]');
-    assert.dom('.pretui-code-editor').hasAttribute('data-dark', 'true');
+    assert.dom('[data-test-pretui-code-editor]').hasAttribute('data-dark', 'true');
     assert.true(created[0].dark, 'the editor is told its theme is dark');
     let darkTheme = created[0].theme!;
     assert.strictEqual(
@@ -336,7 +358,7 @@ module('Pretui | components/code-editor', function (hooks) {
       'var(--pretui-code-editor-cursor)',
       "the theme reads code mode's colours from the frame",
     );
-    let frame = document.querySelector('.pretui-code-editor') as HTMLElement;
+    let frame = document.querySelector('[data-test-pretui-code-editor]') as HTMLElement;
     assert.strictEqual(
       getComputedStyle(frame).getPropertyValue('--pretui-code-editor-cursor').trim(),
       '#aeafad',
@@ -348,7 +370,7 @@ module('Pretui | components/code-editor', function (hooks) {
     assert.strictEqual(created.length, 2, 'the view is rebuilt');
     assert.false(created[1].dark);
     assert.notStrictEqual(created[1].theme, darkTheme, 'with the light theme');
-    assert.dom('.pretui-code-editor').hasAttribute('data-dark', 'false');
+    assert.dom('[data-test-pretui-code-editor]').hasAttribute('data-dark', 'false');
     assert.dom('[data-test-stub-editor]').hasValue('draft');
   });
 
@@ -379,7 +401,7 @@ module('Pretui | components/code-editor', function (hooks) {
     await render(
       <template><CodeEditor @value='x' @dark={{true}} /></template>,
     );
-    assert.dom('.pretui-code-editor-fallback').exists();
-    assert.dom('.pretui-code-editor').hasAttribute('data-dark', 'true');
+    assert.dom('[data-test-pretui-code-editor] [data-test-pretui-code]').exists();
+    assert.dom('[data-test-pretui-code-editor]').hasAttribute('data-dark', 'true');
   });
 });
