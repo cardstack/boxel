@@ -45,6 +45,8 @@ export interface Config {
   dashboardState?: unknown;
   // Thrown by the server's read of `app.boxel.dashboard`.
   dashboardStateReadError?: Error;
+  // Thrown by the server's write of `app.boxel.dashboard`.
+  dashboardStateWriteError?: Error;
   // While set, sync echoes of raw dashboard writes are held here, in write
   // order, until a test releases them.
   heldDashboardEchoes?: (() => void)[];
