@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'path';
 import Koa from 'koa';
 import supertest from 'supertest';
 import {
@@ -17,7 +18,7 @@ import { createJWT } from '../utils/jwt.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 const { module, test } = QUnit;
 
-module('binary proxy with encrypted database credentials', function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   let vendor: StubVendor;
   setupSecretsKeyring(hooks);

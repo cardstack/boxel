@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'path';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
@@ -250,7 +251,7 @@ async function brokerFixture() {
   };
 }
 
-module('local-identity-store-test.ts', function () {
+module(basename(import.meta.filename), function () {
   test('a verified binding survives restart and resolves offline until the 30-day boundary', async function (assert) {
     const f = await fixture();
     try {
@@ -517,7 +518,7 @@ module('local-identity-store-test.ts', function () {
   });
 });
 
-module('local-identity-store-test.ts > local proof broker', function () {
+module(`${basename(import.meta.filename)} | local proof broker`, function () {
   test('both accounts must be proved before linking, and local-only refresh distinguishes expired from unlinked', async function (assert) {
     const f = await brokerFixture();
     try {
@@ -716,137 +717,144 @@ module('local-identity-store-test.ts > local proof broker', function () {
   });
 });
 
-module('local-identity-store-test.ts > private native listener', function () {
-  test('the listener refuses page-origin, missing-authority, rebinding and oversized requests', async function (assert) {
-    const f = await brokerFixture();
-    const secret = randomBytes(32).toString('hex');
-    const listener = await startLocalIdentityServer({
-      broker: f.broker,
-      hostedLogin: null,
-      secret,
-      port: 0,
-    });
-    const headers = {
-      Authorization: `Bearer ${secret}`,
-      'Content-Type': 'application/json',
-    };
-    try {
-      for (const requestHeaders of [
-        { 'Content-Type': 'application/json' },
-        { ...headers, Origin: 'http://app.default.boxel.localhost:4242' },
-        { ...headers, 'Sec-Fetch-Site': 'same-origin' },
-        { ...headers, Host: 'rebinding.example' },
-      ]) {
-        const status = await new Promise<number | undefined>(
-          (resolve, reject) => {
-            const request = httpRequest(
-              new URL('v1/resolve-verified', listener.url),
-              { method: 'POST', headers: requestHeaders },
-              (response) => {
-                response.resume();
-                resolve(response.statusCode);
-              },
-            );
-            request.once('error', reject);
-            request.end(JSON.stringify({ localUserId: binding.localUserId }));
-          },
-        );
-        assert.strictEqual(status, 401, Object.keys(requestHeaders).join(', '));
-      }
-      for (const [route, body, status] of [
-        ['v1/resolve-verified?proof=not-allowed', '{}', 404],
-        ['v1/resolve-verified', '{', 400],
-        ['v1/resolve-verified', 'x'.repeat(32769), 413],
-        [
-          'v1/resolve-verified',
-          JSON.stringify({
-            localUserId: binding.localUserId,
-            hostedUserId: binding.hostedUserId,
-          }),
-          400,
-        ],
-      ] as const) {
-        const response = await fetch(new URL(route, listener.url), {
+module(
+  `${basename(import.meta.filename)} | private native listener`,
+  function () {
+    test('the listener refuses page-origin, missing-authority, rebinding and oversized requests', async function (assert) {
+      const f = await brokerFixture();
+      const secret = randomBytes(32).toString('hex');
+      const listener = await startLocalIdentityServer({
+        broker: f.broker,
+        hostedLogin: null,
+        secret,
+        port: 0,
+      });
+      const headers = {
+        Authorization: `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+      };
+      try {
+        for (const requestHeaders of [
+          { 'Content-Type': 'application/json' },
+          { ...headers, Origin: 'http://app.default.boxel.localhost:4242' },
+          { ...headers, 'Sec-Fetch-Site': 'same-origin' },
+          { ...headers, Host: 'rebinding.example' },
+        ]) {
+          const status = await new Promise<number | undefined>(
+            (resolve, reject) => {
+              const request = httpRequest(
+                new URL('v1/resolve-verified', listener.url),
+                { method: 'POST', headers: requestHeaders },
+                (response) => {
+                  response.resume();
+                  resolve(response.statusCode);
+                },
+              );
+              request.once('error', reject);
+              request.end(JSON.stringify({ localUserId: binding.localUserId }));
+            },
+          );
+          assert.strictEqual(
+            status,
+            401,
+            Object.keys(requestHeaders).join(', '),
+          );
+        }
+        for (const [route, body, status] of [
+          ['v1/resolve-verified?proof=not-allowed', '{}', 404],
+          ['v1/resolve-verified', '{', 400],
+          ['v1/resolve-verified', 'x'.repeat(32769), 413],
+          [
+            'v1/resolve-verified',
+            JSON.stringify({
+              localUserId: binding.localUserId,
+              hostedUserId: binding.hostedUserId,
+            }),
+            400,
+          ],
+        ] as const) {
+          const response = await fetch(new URL(route, listener.url), {
+            method: 'POST',
+            headers,
+            body,
+          });
+          assert.strictEqual(response.status, status);
+          await response.body?.cancel();
+        }
+        assert.strictEqual(f.requests(), 0);
+        assert.strictEqual(f.localRequests(), 0);
+        const response = await fetch(new URL('v1/link', listener.url), {
           method: 'POST',
           headers,
-          body,
+          body: JSON.stringify(f.request),
         });
-        assert.strictEqual(response.status, status);
-        await response.body?.cancel();
+        assert.strictEqual(response.status, 200);
+        assert.deepEqual(await response.json(), binding);
+        assert.strictEqual(response.headers.get('cache-control'), 'no-store');
+        const resolver = createRealmIdentityResolver({
+          BOXEL_LOCAL_IDENTITY_BROKER_URL: listener.url,
+          BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
+        });
+        await f.closeIssuer();
+        assert.deepEqual(await resolver(binding.localUserId), {
+          user: binding.hostedUserId,
+          matrixUser: binding.localUserId,
+        });
+      } finally {
+        await listener.stop();
+        await f.close();
       }
-      assert.strictEqual(f.requests(), 0);
-      assert.strictEqual(f.localRequests(), 0);
-      const response = await fetch(new URL('v1/link', listener.url), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(f.request),
+    });
+
+    test('incomplete configuration and a dead native listener never fall back to local identity', async function (assert) {
+      const secret = randomBytes(32).toString('hex');
+      for (const env of [
+        { BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://127.0.0.1:1/' },
+        { BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret },
+        {
+          BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://outside.example/',
+          BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
+        },
+        {
+          BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://127.0.0.1:1/?secret=x',
+          BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
+        },
+      ]) {
+        assert.throws(
+          () => createRealmIdentityResolver(env),
+          /Invalid native identity broker configuration/,
+        );
+      }
+      const f = await brokerFixture();
+      const listener = await startLocalIdentityServer({
+        broker: f.broker,
+        hostedLogin: null,
+        secret,
+        port: 0,
       });
-      assert.strictEqual(response.status, 200);
-      assert.deepEqual(await response.json(), binding);
-      assert.strictEqual(response.headers.get('cache-control'), 'no-store');
       const resolver = createRealmIdentityResolver({
         BOXEL_LOCAL_IDENTITY_BROKER_URL: listener.url,
         BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
       });
-      await f.closeIssuer();
-      assert.deepEqual(await resolver(binding.localUserId), {
-        user: binding.hostedUserId,
-        matrixUser: binding.localUserId,
-      });
-    } finally {
       await listener.stop();
-      await f.close();
-    }
-  });
-
-  test('incomplete configuration and a dead native listener never fall back to local identity', async function (assert) {
-    const secret = randomBytes(32).toString('hex');
-    for (const env of [
-      { BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://127.0.0.1:1/' },
-      { BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret },
-      {
-        BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://outside.example/',
-        BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
-      },
-      {
-        BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://127.0.0.1:1/?secret=x',
-        BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
-      },
-    ]) {
-      assert.throws(
-        () => createRealmIdentityResolver(env),
-        /Invalid native identity broker configuration/,
-      );
-    }
-    const f = await brokerFixture();
-    const listener = await startLocalIdentityServer({
-      broker: f.broker,
-      hostedLogin: null,
-      secret,
-      port: 0,
+      try {
+        await assert.rejects(
+          resolver(binding.localUserId),
+          /Native identity resolution unavailable/,
+        );
+        assert.deepEqual(
+          await createRealmIdentityResolver({})(binding.localUserId),
+          { user: binding.localUserId, matrixUser: binding.localUserId },
+        );
+      } finally {
+        await f.close();
+      }
     });
-    const resolver = createRealmIdentityResolver({
-      BOXEL_LOCAL_IDENTITY_BROKER_URL: listener.url,
-      BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
-    });
-    await listener.stop();
-    try {
-      await assert.rejects(
-        resolver(binding.localUserId),
-        /Native identity resolution unavailable/,
-      );
-      assert.deepEqual(
-        await createRealmIdentityResolver({})(binding.localUserId),
-        { user: binding.localUserId, matrixUser: binding.localUserId },
-      );
-    } finally {
-      await f.close();
-    }
-  });
-});
+  },
+);
 
 module(
-  'local-identity-store-test.ts > realm-server sessions',
+  `${basename(import.meta.filename)} | realm-server sessions`,
   function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {
@@ -972,7 +980,7 @@ module(
   },
 );
 
-module('local-identity-store-test.ts > AI delegation', function (hooks) {
+module(`${basename(import.meta.filename)} | AI delegation`, function (hooks) {
   let dbAdapter: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {
@@ -1076,92 +1084,95 @@ module('local-identity-store-test.ts > AI delegation', function (hooks) {
   }
 });
 
-module('local-identity-store-test.ts > native proof privacy', function (hooks) {
-  let dbAdapter: PgAdapter;
-  setupDB(hooks, {
-    beforeEach: async (adapter) => {
-      dbAdapter = adapter;
-    },
-  });
-  for (const mode of ['malformed', 'foreign', 'oversize'] as const) {
-    test(`${mode} OpenID response never exposes the native proof or issues a session`, async function (assert) {
-      const f = await brokerFixture();
-      f.proofResponse(mode);
-      const secret = randomBytes(32).toString('hex');
-      const environment = {
-        BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://127.0.0.1:1/',
-        BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
-        MATRIX_URL: f.matrixURL,
-        MATRIX_SERVER_NAME: f.options.localMatrixServerName,
-      };
-      const matrixClient = new MatrixClient({
-        matrixURL: new URL(f.matrixURL),
-        serverName: f.options.localMatrixServerName,
-        username: 'realm_server',
-        password: 'synthetic-password',
-      });
-      const server = createServer(
-        new Koa()
-          .use(
-            handleCreateSession({
-              dbAdapter,
-              matrixClient,
-              realmSecretSeed: secret,
-              resolveMatrixRealmIdentity:
-                createRealmIdentityResolver(environment),
-              verifyMatrixOpenIdToken:
-                createMatrixOpenIdTokenVerifier(environment),
-            }),
-          )
-          .callback(),
-      );
-      server.listen(0, '127.0.0.1');
-      await once(server, 'listening');
-      const address = server.address();
-      if (!address || typeof address === 'string')
-        throw new Error('Expected privacy test listener');
-      const originalError = console.error;
-      const errors: string[] = [];
-      console.error = (...values: unknown[]) =>
-        errors.push(values.map(String).join(' '));
-      try {
-        const response = await fetch(
-          `http://127.0.0.1:${address.port}/_server-session`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ access_token: f.localProof.openIdToken }),
-          },
-        );
-        assert.strictEqual(response.status, 400);
-        assert.strictEqual(response.headers.get('Authorization'), null);
-        const text = await response.text();
-        for (const value of [
-          f.localProof.openIdToken,
-          f.matrixURL,
-          'openid/userinfo',
-        ]) {
-          assert.false(text.includes(value));
-          assert.false(errors.join('\n').includes(value));
-        }
-        assert.deepEqual(f.invitations, []);
-        assert.strictEqual(
-          await fetchSessionRoom(dbAdapter, binding.localUserId),
-          null,
-        );
-        assert.strictEqual(f.requests(), 0);
-      } finally {
-        console.error = originalError;
-        server.closeAllConnections();
-        await new Promise<void>((resolve, reject) =>
-          server.close((error) => (error ? reject(error) : resolve())),
-        );
-        await f.close();
-      }
+module(
+  `${basename(import.meta.filename)} | native proof privacy`,
+  function (hooks) {
+    let dbAdapter: PgAdapter;
+    setupDB(hooks, {
+      beforeEach: async (adapter) => {
+        dbAdapter = adapter;
+      },
     });
-  }
-});
+    for (const mode of ['malformed', 'foreign', 'oversize'] as const) {
+      test(`${mode} OpenID response never exposes the native proof or issues a session`, async function (assert) {
+        const f = await brokerFixture();
+        f.proofResponse(mode);
+        const secret = randomBytes(32).toString('hex');
+        const environment = {
+          BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://127.0.0.1:1/',
+          BOXEL_LOCAL_IDENTITY_BROKER_SECRET: secret,
+          MATRIX_URL: f.matrixURL,
+          MATRIX_SERVER_NAME: f.options.localMatrixServerName,
+        };
+        const matrixClient = new MatrixClient({
+          matrixURL: new URL(f.matrixURL),
+          serverName: f.options.localMatrixServerName,
+          username: 'realm_server',
+          password: 'synthetic-password',
+        });
+        const server = createServer(
+          new Koa()
+            .use(
+              handleCreateSession({
+                dbAdapter,
+                matrixClient,
+                realmSecretSeed: secret,
+                resolveMatrixRealmIdentity:
+                  createRealmIdentityResolver(environment),
+                verifyMatrixOpenIdToken:
+                  createMatrixOpenIdTokenVerifier(environment),
+              }),
+            )
+            .callback(),
+        );
+        server.listen(0, '127.0.0.1');
+        await once(server, 'listening');
+        const address = server.address();
+        if (!address || typeof address === 'string')
+          throw new Error('Expected privacy test listener');
+        const originalError = console.error;
+        const errors: string[] = [];
+        console.error = (...values: unknown[]) =>
+          errors.push(values.map(String).join(' '));
+        try {
+          const response = await fetch(
+            `http://127.0.0.1:${address.port}/_server-session`,
+            {
+              method: 'POST',
+              body: JSON.stringify({ access_token: f.localProof.openIdToken }),
+            },
+          );
+          assert.strictEqual(response.status, 400);
+          assert.strictEqual(response.headers.get('Authorization'), null);
+          const text = await response.text();
+          for (const value of [
+            f.localProof.openIdToken,
+            f.matrixURL,
+            'openid/userinfo',
+          ]) {
+            assert.false(text.includes(value));
+            assert.false(errors.join('\n').includes(value));
+          }
+          assert.deepEqual(f.invitations, []);
+          assert.strictEqual(
+            await fetchSessionRoom(dbAdapter, binding.localUserId),
+            null,
+          );
+          assert.strictEqual(f.requests(), 0);
+        } finally {
+          console.error = originalError;
+          server.closeAllConnections();
+          await new Promise<void>((resolve, reject) =>
+            server.close((error) => (error ? reject(error) : resolve())),
+          );
+          await f.close();
+        }
+      });
+    }
+  },
+);
 
-module('local-identity-store-test.ts > owner namespaces', function () {
+module(`${basename(import.meta.filename)} | owner namespaces`, function () {
   const environment = {
     BOXEL_LOCAL_IDENTITY_BROKER_URL: 'http://127.0.0.1:1/',
     BOXEL_LOCAL_IDENTITY_BROKER_SECRET: 'a'.repeat(64),

@@ -1,11 +1,12 @@
 import QUnit from 'qunit';
+import { basename } from 'path';
 const { module, test } = QUnit;
 import {
   ensureFullMatrixUserId,
   userIdFromUsername,
 } from '@cardstack/runtime-common/matrix-client';
 
-module('Matrix identity on native transports', function () {
+module(basename(import.meta.filename), function () {
   test('server identity is independent of its loopback connection URL', function (assert) {
     // A native runtime reaches its homeserver on a loopback URL; the user id
     // comes from the configured server name, never from that URL.

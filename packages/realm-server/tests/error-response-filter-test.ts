@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'path';
 import Koa from 'koa';
 import request from 'supertest';
 import { Readable } from 'node:stream';
@@ -22,7 +23,7 @@ function appFor(handler: Koa.Middleware, env: NodeJS.ProcessEnv = settings) {
   return app;
 }
 
-module('native error response filtering', () => {
+module(basename(import.meta.filename), function () {
   test('authenticated JSON errors omit native paths and nested stacks while retaining actionable details', async (assert) => {
     let app = appFor((ctx) => {
       ctx.status = 500;

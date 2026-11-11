@@ -483,6 +483,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
           `GET ${SupportedMimeType.CardJson} /_search`,
           `QUERY ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.JSONL} /_search`,
+          `QUERY ${SupportedMimeType.NDJSON} /_search`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
           `POST ${SupportedMimeType.JSON} /_capabilities`,
@@ -492,7 +494,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.RealmInfo} /_info`,
           'GET * /_scoped-css/*',
         ].sort(),
-        'the consumer set is the card+json read and writes, the search, the operations envelope, the capability check, the realm info and the hashed stylesheet serve',
+        'the consumer set is the card+json read and writes, the card and log searches, the operations envelope, the capability check, the realm info and the hashed stylesheet serve',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -595,6 +597,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `DELETE ${SupportedMimeType.CardJson} /|/.+(?<!.json)`,
           `GET ${SupportedMimeType.CardJson} /_search`,
           `QUERY ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.JSONL} /_search`,
+          `QUERY ${SupportedMimeType.NDJSON} /_search`,
           `POST ${SupportedMimeType.BoxelOperations} /_operations`,
           `POST ${SupportedMimeType.JSONAPI} /_operations`,
           `POST ${SupportedMimeType.JSON} /_capabilities`,
@@ -604,7 +608,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.RealmInfo} /_info`,
           'GET * /_scoped-css/*',
         ].sort(),
-        'the card+json read and writes, the search, the operations envelope, the capability check, the realm info, which applies it by never sealing, and the hashed stylesheet serve',
+        'the card+json read and writes, the card and log searches, the operations envelope, the capability check, the realm info, which applies it by never sealing, and the hashed stylesheet serve',
       );
       assert.deepEqual(
         testRealm
@@ -628,8 +632,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         [
           `GET ${SupportedMimeType.CardJson} /_search`,
           `QUERY ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.JSONL} /_search`,
+          `QUERY ${SupportedMimeType.NDJSON} /_search`,
         ].sort(),
-        'the search, which answers such a user with no rows as a federated search does',
+        'the card and log searches, which answer such a user with no rows as a federated search does',
       );
       assert.deepEqual(
         testRealm

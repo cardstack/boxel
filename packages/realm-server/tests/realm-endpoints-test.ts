@@ -235,8 +235,11 @@ module(basename(import.meta.filename), function () {
       // is the literal `*` for every caller); it is harmless because its
       // value is the same for every request, so it names one variant rather
       // than splitting the population into several.
+      // `Accept-Encoding` joins it when the server compresses: the stored
+      // body differs by encoding, and that header does split the cache
+      // honestly.
       assert.strictEqual(
-        response.headers['vary'],
+        varyWithoutEncoding(response.headers['vary']),
         'Origin',
         'does not vary on Accept, so no Accept spelling can evict the stored entry',
       );
@@ -309,7 +312,7 @@ module(basename(import.meta.filename), function () {
         );
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.strictEqual(
-        response.headers['vary'],
+        varyWithoutEncoding(response.headers['vary']),
         'Accept',
         'module serving negotiates on Accept and says so',
       );
@@ -2047,4 +2050,17 @@ function realmEventIsIndex(
   event: RealmEventContent,
 ): event is IncrementalIndexEventContent {
   return event.eventName === 'index';
+}
+
+// A `Vary` header's names other than `Accept-Encoding`, which response
+// compression adds to anything it may compress.
+function varyWithoutEncoding(vary: string | undefined): string | undefined {
+  if (vary === undefined) {
+    return undefined;
+  }
+  return vary
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name.toLowerCase() !== 'accept-encoding')
+    .join(', ');
 }

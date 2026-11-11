@@ -1,8 +1,9 @@
 import QUnit from 'qunit';
+import { basename } from 'path';
 import { slidingSyncRoomIds } from '@cardstack/runtime-common/sliding-sync-room-ids';
 const { module, test } = QUnit;
 
-module('Sliding Sync room membership formats', function () {
+module(basename(import.meta.filename), function () {
   test('Tuwunel simplified sync classifies rooms without list operations', function (assert) {
     assert.deepEqual(
       slidingSyncRoomIds(

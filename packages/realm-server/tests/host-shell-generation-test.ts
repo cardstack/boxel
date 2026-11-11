@@ -427,18 +427,37 @@ module(basename(import.meta.filename), function (hooks) {
       let plan = await dbAdapter.withConnection(async (query) => {
         await query(['BEGIN']);
         await query(['SET LOCAL enable_seqscan = off']);
+        // Other indexes lead with realm_url too (the search ordering ones), and
+        // on four rows any of them costs the same as the partial index. They
+        // are dropped inside the transaction, which rolls back, so the plan
+        // answers only whether this predicate has an index of its own.
+        let others = (await query([
+          `SELECT indexname FROM pg_indexes
+            WHERE tablename = 'boxel_index'
+              AND indexname <> 'boxel_index_host_shell_generation_index'
+              AND indexname NOT IN (
+                SELECT conname FROM pg_constraint
+                 WHERE conrelid = 'boxel_index'::regclass)`,
+        ])) as { indexname: string }[];
+        for (let { indexname } of others) {
+          await query([`DROP INDEX ${indexname}`]);
+        }
         let rows = await query([
           `EXPLAIN (FORMAT JSON) SELECT url FROM boxel_index WHERE realm_url = `,
           param(REALM),
           ` AND host_shell_generation < `,
           param(2),
         ]);
-        await query(['COMMIT']);
+        await query(['ROLLBACK']);
         return JSON.stringify(rows);
       });
       assert.ok(
         plan.includes('boxel_index_host_shell_generation_index'),
         `the repair's predicate should resolve through the partial index; got: ${plan}`,
+      );
+      assert.ok(
+        /"Index Cond":"[^"]*host_shell_generation/.test(plan),
+        `the generation range is an index condition, not a filter; got: ${plan}`,
       );
     });
   });

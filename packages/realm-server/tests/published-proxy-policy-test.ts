@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+const { module } = QUnit;
 import { basename } from 'node:path';
 import { query, param, insertPermissions } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -22,7 +23,7 @@ const policies = parsePublishedProxyPolicies({
   },
 });
 
-QUnit.module(basename(import.meta.filename), function (hooks) {
+module(basename(import.meta.filename), function (hooks) {
   let db: PgAdapter;
   setupDB(hooks, {
     beforeEach: async (adapter) => {

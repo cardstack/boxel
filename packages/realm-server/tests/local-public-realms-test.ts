@@ -1,9 +1,28 @@
 import QUnit from 'qunit';
+import { basename } from 'path';
+const { module } = QUnit;
 import { Client } from 'pg';
 import { randomUUID } from 'node:crypto';
+import type { PgAdapter } from '@cardstack/postgres';
 import { ensureLocalPublicRealmReads } from '../lib/local-public-realms.ts';
+import {
+  closeTestPgAdapter,
+  createTestPgAdapter,
+  prepareTestDB,
+} from './helpers/index.ts';
 
-QUnit.module('local-public-realms-test.ts', function () {
+module(basename(import.meta.filename), function (hooks) {
+  // A migrated database of its own: PGDATABASE names whichever test database
+  // ran last, which its own test may already have dropped.
+  let adapter: PgAdapter;
+  hooks.beforeEach(async function () {
+    prepareTestDB();
+    adapter = await createTestPgAdapter();
+  });
+  hooks.afterEach(async function () {
+    await closeTestPgAdapter(adapter);
+  });
+
   QUnit.test(
     'bootstrap seeds system owners and public read only without changing private realms',
     async function (assert) {

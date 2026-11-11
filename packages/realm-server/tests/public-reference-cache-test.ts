@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'path';
 import { createServer, type Server } from 'node:http';
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -26,7 +27,7 @@ async function close(server: Server) {
   );
 }
 
-module('persistent public reference cache', (hooks) => {
+module(basename(import.meta.filename), function (hooks) {
   let directory: string;
   let upstream: Server;
   let origin: string;
@@ -296,94 +297,103 @@ module('persistent public reference cache', (hooks) => {
   });
 });
 
-module('public reference fetch boundary', () => {
-  test('preserves canonical response URLs, drops credentials only for public references, and leaves private fetches intact', async (assert) => {
-    let observed: Request[] = [];
-    let fetch = createPublicReferenceFetch(
-      {
-        proxyURL: 'http://cache.localhost/',
-        realmURLs: ['https://public.example/catalog/'],
-      },
-      async (input, init) => {
-        observed.push(new Request(input, init));
-        return new Response('fixture');
-      },
-    );
-    let response = await fetch('https://public.example/catalog/card.gts', {
-      headers: {
-        Authorization: 'Bearer fixture',
-        Cookie: 'fixture=only',
-        Accept: 'application/vnd.card+source',
-      },
+module(
+  `${basename(import.meta.filename)} | public reference fetch boundary`,
+  function () {
+    test('preserves canonical response URLs, drops credentials only for public references, and leaves private fetches intact', async (assert) => {
+      let observed: Request[] = [];
+      let fetch = createPublicReferenceFetch(
+        {
+          proxyURL: 'http://cache.localhost/',
+          realmURLs: ['https://public.example/catalog/'],
+        },
+        async (input, init) => {
+          observed.push(new Request(input, init));
+          return new Response('fixture');
+        },
+      );
+      let response = await fetch('https://public.example/catalog/card.gts', {
+        headers: {
+          Authorization: 'Bearer fixture',
+          Cookie: 'fixture=only',
+          Accept: 'application/vnd.card+source',
+        },
+      });
+      assert.strictEqual(
+        response.url,
+        'https://public.example/catalog/card.gts',
+      );
+      assert.strictEqual(
+        observed[0].url,
+        'http://cache.localhost/catalog/card.gts',
+      );
+      assert.false(observed[0].headers.has('authorization'));
+      assert.false(observed[0].headers.has('cookie'));
+      assert.strictEqual(observed[0].credentials, 'omit');
+      await fetch('https://private.example/workspace/card', {
+        headers: { Authorization: 'Bearer fixture' },
+      });
+      assert.strictEqual(
+        observed[1].url,
+        'https://private.example/workspace/card',
+      );
+      assert.strictEqual(
+        observed[1].headers.get('authorization'),
+        'Bearer fixture',
+      );
+      await fetch('https://public.example/_federated-search', {
+        method: 'QUERY',
+        body: '{"realms":["https://private.example/workspace/"]}',
+      });
+      assert.strictEqual(
+        observed[2].url,
+        'https://public.example/_federated-search',
+      );
     });
-    assert.strictEqual(response.url, 'https://public.example/catalog/card.gts');
-    assert.strictEqual(
-      observed[0].url,
-      'http://cache.localhost/catalog/card.gts',
-    );
-    assert.false(observed[0].headers.has('authorization'));
-    assert.false(observed[0].headers.has('cookie'));
-    assert.strictEqual(observed[0].credentials, 'omit');
-    await fetch('https://private.example/workspace/card', {
-      headers: { Authorization: 'Bearer fixture' },
-    });
-    assert.strictEqual(
-      observed[1].url,
-      'https://private.example/workspace/card',
-    );
-    assert.strictEqual(
-      observed[1].headers.get('authorization'),
-      'Bearer fixture',
-    );
-    await fetch('https://public.example/_federated-search', {
-      method: 'QUERY',
-      body: '{"realms":["https://private.example/workspace/"]}',
-    });
-    assert.strictEqual(
-      observed[2].url,
-      'https://public.example/_federated-search',
-    );
-  });
 
-  test('a published-site cache mount keeps its base path without forwarding credentials', async (assert) => {
-    let observed: Request | undefined;
-    let fetch = createPublicReferenceFetch(
-      {
-        proxyURL: 'https://viewer.example/_reference/',
-        realmURLs: ['https://public.example/skills/'],
-      },
-      async (input, init) => {
-        observed = new Request(input, init);
-        return new Response('fixture');
-      },
-    );
-    let response = await fetch('https://public.example/skills/index.md', {
-      headers: { Authorization: 'Bearer fixture' },
+    test('a published-site cache mount keeps its base path without forwarding credentials', async (assert) => {
+      let observed: Request | undefined;
+      let fetch = createPublicReferenceFetch(
+        {
+          proxyURL: 'https://viewer.example/_reference/',
+          realmURLs: ['https://public.example/skills/'],
+        },
+        async (input, init) => {
+          observed = new Request(input, init);
+          return new Response('fixture');
+        },
+      );
+      let response = await fetch('https://public.example/skills/index.md', {
+        headers: { Authorization: 'Bearer fixture' },
+      });
+      assert.strictEqual(
+        observed?.url,
+        'https://viewer.example/_reference/skills/index.md',
+      );
+      assert.false(observed?.headers.has('authorization'));
+      assert.strictEqual(
+        response.url,
+        'https://public.example/skills/index.md',
+      );
     });
-    assert.strictEqual(
-      observed?.url,
-      'https://viewer.example/_reference/skills/index.md',
-    );
-    assert.false(observed?.headers.has('authorization'));
-    assert.strictEqual(response.url, 'https://public.example/skills/index.md');
-  });
 
-  test('incomplete cache configuration fails rather than using a different transport', (assert) => {
-    assert.throws(() =>
-      publicReferenceFetchFromEnv(
-        { BOXEL_PUBLIC_REFERENCE_CACHE_URL: 'http://cache.localhost/' },
+    test('incomplete cache configuration fails rather than using a different transport', (assert) => {
+      assert.throws(() =>
+        publicReferenceFetchFromEnv(
+          { BOXEL_PUBLIC_REFERENCE_CACHE_URL: 'http://cache.localhost/' },
+          globalThis.fetch,
+        ),
+      );
+      assert.throws(() =>
+        createPublicReferenceFetch({
+          proxyURL: 'http://secret@cache.localhost/',
+          realmURLs: ['https://public.example/catalog/'],
+        }),
+      );
+      assert.strictEqual(
+        publicReferenceFetchFromEnv({}, globalThis.fetch),
         globalThis.fetch,
-      ),
-    );
-    assert.throws(() =>
-      createPublicReferenceFetch({
-        proxyURL: 'http://secret@cache.localhost/',
-        realmURLs: ['https://public.example/catalog/'],
-      }),
-    );
-    assert.strictEqual(
-      publicReferenceFetchFromEnv({}, globalThis.fetch),
-      globalThis.fetch,
-    );
-  });
-});
+      );
+    });
+  },
+);

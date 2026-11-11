@@ -71,44 +71,53 @@ module(basename(import.meta.filename), function () {
   });
 });
 
-module('bootstrap-only indexing skip', function () {
-  for (let kind of ['bootstrap', 'source', 'published'] as const) {
-    test(`${kind} preserves global skip and isolates bootstrap skip`, function (assert) {
-      assert.true(resolveSkipBootIndex(kind, true, false));
-      assert.true(resolveSkipBootIndex(kind, true, true));
-      assert.false(resolveSkipBootIndex(kind, false, false));
-      assert.strictEqual(
-        resolveSkipBootIndex(kind, false, true),
-        kind === 'bootstrap',
+module(
+  `${basename(import.meta.filename)} | bootstrap-only indexing skip`,
+  function () {
+    for (let kind of ['bootstrap', 'source', 'published'] as const) {
+      test(`${kind} preserves global skip and isolates bootstrap skip`, function (assert) {
+        assert.true(resolveSkipBootIndex(kind, true, false));
+        assert.true(resolveSkipBootIndex(kind, true, true));
+        assert.false(resolveSkipBootIndex(kind, false, false));
+        assert.strictEqual(
+          resolveSkipBootIndex(kind, false, true),
+          kind === 'bootstrap',
+        );
+      });
+    }
+  },
+);
+
+module(
+  `${basename(import.meta.filename)} | native worker identity with remote reference realms`,
+  function () {
+    let mappings: [URL | string, URL][] = [
+      [
+        new URL('http://realm.default.boxel.localhost:4242/base/'),
+        new URL('http://127.0.0.1:1234/base/'),
+      ],
+      ['@cardstack/catalog/', new URL('https://app.boxel.ai/catalog/')],
+    ];
+    test('remote reference mappings retain the deployed default', function (assert) {
+      assert.true(workerIsDeployed(mappings, undefined));
+    });
+    test('native identity names an actually served local realm', function (assert) {
+      assert.false(
+        workerIsDeployed(
+          mappings,
+          'http://realm.default.boxel.localhost:4242/',
+        ),
+      );
+      assert.throws(() => workerIsDeployed(mappings, 'https://app.boxel.ai/'));
+      assert.throws(() =>
+        workerIsDeployed(mappings, 'http://other.localhost:4242/'),
+      );
+      assert.throws(() =>
+        workerIsDeployed(
+          mappings,
+          'http://user:password@realm.default.boxel.localhost:4242/',
+        ),
       );
     });
-  }
-});
-
-module('native worker identity with remote reference realms', function () {
-  let mappings: [URL | string, URL][] = [
-    [
-      new URL('http://realm.default.boxel.localhost:4242/base/'),
-      new URL('http://127.0.0.1:1234/base/'),
-    ],
-    ['@cardstack/catalog/', new URL('https://app.boxel.ai/catalog/')],
-  ];
-  test('remote reference mappings retain the deployed default', function (assert) {
-    assert.true(workerIsDeployed(mappings, undefined));
-  });
-  test('native identity names an actually served local realm', function (assert) {
-    assert.false(
-      workerIsDeployed(mappings, 'http://realm.default.boxel.localhost:4242/'),
-    );
-    assert.throws(() => workerIsDeployed(mappings, 'https://app.boxel.ai/'));
-    assert.throws(() =>
-      workerIsDeployed(mappings, 'http://other.localhost:4242/'),
-    );
-    assert.throws(() =>
-      workerIsDeployed(
-        mappings,
-        'http://user:password@realm.default.boxel.localhost:4242/',
-      ),
-    );
-  });
-});
+  },
+);

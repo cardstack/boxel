@@ -1,4 +1,5 @@
 import QUnit from 'qunit';
+import { basename } from 'path';
 import {
   createCipheriv,
   createDecipheriv,
@@ -357,7 +358,7 @@ async function publicFixture(
   };
 }
 
-module('local-hosted-login-test.ts', function () {
+module(basename(import.meta.filename), function () {
   test('hosted password proof creates a persistent link and short-lived local JWT login, returning no hosted credentials', async function (assert) {
     const f = await fixture();
     try {
@@ -491,316 +492,335 @@ module('local-hosted-login-test.ts', function () {
   });
 });
 
-module('local-hosted-login-test.ts > protected sign-in endpoint', function () {
-  test('only the protected password origin can exchange credentials and the page receives only the local session', async function (assert) {
-    const f = await publicFixture();
-    try {
-      const body = JSON.stringify({
-        username: 'teacher',
-        password: 'test-only-password',
-      });
-      for (const origin of [
-        undefined,
-        'http://app.default.boxel.localhost:4242',
-        'http://outside.example',
-      ]) {
-        const response = await fetch(f.publicURL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(origin ? { Origin: origin } : {}),
-          },
-          body,
+module(
+  `${basename(import.meta.filename)} | protected sign-in endpoint`,
+  function () {
+    test('only the protected password origin can exchange credentials and the page receives only the local session', async function (assert) {
+      const f = await publicFixture();
+      try {
+        const body = JSON.stringify({
+          username: 'teacher',
+          password: 'test-only-password',
         });
-        assert.strictEqual(response.status, 403);
-        await response.body?.cancel();
-      }
-      assert.deepEqual(f.loginIdentifiers, []);
-      const response = await fetch(f.publicURL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Origin: f.secureOriginURL.origin,
-        },
-        body,
-      });
-      assert.strictEqual(response.status, 200);
-      assert.strictEqual(response.headers.get('Cache-Control'), 'no-store');
-      const text = await response.text();
-      const auth = JSON.parse(text);
-      assert.strictEqual(auth.user_id, f.localUserId);
-      assert.strictEqual(auth.access_token, f.localToken);
-      for (const value of [
-        f.remoteToken,
-        f.proofToken,
-        f.secret,
-        'test-only-password',
-        f.privateURL,
-      ])
-        assert.false(text.includes(value));
-      assert.strictEqual(f.counters.remoteLogouts, 1);
-    } finally {
-      await f.close();
-    }
-  });
-
-  test('the protected endpoint limits failed sign-ins without exposing upstream error bodies', async function (assert) {
-    const f = await publicFixture();
-    f.mode.rejectPassword = true;
-    try {
-      for (let attempt = 0; attempt < 4; attempt++) {
+        for (const origin of [
+          undefined,
+          'http://app.default.boxel.localhost:4242',
+          'http://outside.example',
+        ]) {
+          const response = await fetch(f.publicURL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(origin ? { Origin: origin } : {}),
+            },
+            body,
+          });
+          assert.strictEqual(response.status, 403);
+          await response.body?.cancel();
+        }
+        assert.deepEqual(f.loginIdentifiers, []);
         const response = await fetch(f.publicURL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Origin: f.secureOriginURL.origin,
           },
-          body: JSON.stringify({
-            username: 'teacher',
-            password: 'test-only-password',
-          }),
+          body,
         });
-        assert.strictEqual(response.status, attempt < 3 ? 401 : 429);
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(response.headers.get('Cache-Control'), 'no-store');
         const text = await response.text();
-        assert.false(text.includes('test-only-password'));
-        if (attempt === 3)
-          assert.true(Number(response.headers.get('Retry-After')) > 0);
+        const auth = JSON.parse(text);
+        assert.strictEqual(auth.user_id, f.localUserId);
+        assert.strictEqual(auth.access_token, f.localToken);
+        for (const value of [
+          f.remoteToken,
+          f.proofToken,
+          f.secret,
+          'test-only-password',
+          f.privateURL,
+        ])
+          assert.false(text.includes(value));
+        assert.strictEqual(f.counters.remoteLogouts, 1);
+      } finally {
+        await f.close();
       }
-      assert.strictEqual(f.loginIdentifiers.length, 3);
-      assert.strictEqual(f.counters.localLogins, 0);
-    } finally {
-      await f.close();
-    }
-  });
-
-  test('the secure frame names only the public sign-in endpoint, while hosted defaults leave the adapter disabled', async function (assert) {
-    const f = await publicFixture();
-    const publicURL = new URL(
-      'http://realm.default.boxel.localhost:4242/_local-identity-login',
-    );
-    const secure = createSecureOrigin(f.secureOriginURL, {
-      matrixURL: new URL(f.options.matrixURL),
-      realmServerURL: new URL('/', publicURL),
-      appOrigins: ['http://app.default.boxel.localhost:4242'],
-      localIdentityLoginURL: publicURL,
     });
-    const server = createServer(
-      new Koa().use(async (ctxt) => secure.handle(ctxt)).callback(),
-    );
-    server.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    const address = server.address();
-    if (!address || typeof address === 'string')
-      throw new Error('Expected secure frame listener');
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${address.port}/secure/credentials`,
-      );
-      const html = await response.text();
-      assert.strictEqual(response.status, 200);
-      assert.true(
-        html
-          .replace(/\s+/g, ' ')
-          .includes(
-            `name="boxel-local-identity-login-url" content="${publicURL.href}"`,
-          ),
-      );
-      assert.true(
-        response.headers
-          .get('Content-Security-Policy')!
-          .includes(publicURL.origin),
-      );
-      assert.false(html.includes(f.secret));
-      assert.false(html.includes(f.privateURL));
-      assert.strictEqual(createLocalHostedLoginClient({}), null);
-    } finally {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
-      await f.close();
-    }
-  });
-});
 
-module('local-hosted-login-test.ts > browser password frame', function () {
-  const browserTest = process.env.BOXEL_TEST_BROWSER_BINARY ? test : test.skip;
-  for (const form of ['login', 'cli-login']) {
-    browserTest(
-      `${form} uses the protected frame and returns only the linked local session`,
-      async function (assert) {
-        let secure: ReturnType<typeof createSecureOrigin> | undefined;
-        const secureServer = createServer(
-          new Koa()
-            .use(async (ctxt) => {
-              if (secure) await secure.handle(ctxt);
-              else ctxt.status = 503;
-            })
-            .callback(),
+    test('the protected endpoint limits failed sign-ins without exposing upstream error bodies', async function (assert) {
+      const f = await publicFixture();
+      f.mode.rejectPassword = true;
+      try {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const response = await fetch(f.publicURL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Origin: f.secureOriginURL.origin,
+            },
+            body: JSON.stringify({
+              username: 'teacher',
+              password: 'test-only-password',
+            }),
+          });
+          assert.strictEqual(response.status, attempt < 3 ? 401 : 429);
+          const text = await response.text();
+          assert.false(text.includes('test-only-password'));
+          if (attempt === 3)
+            assert.true(Number(response.headers.get('Retry-After')) > 0);
+        }
+        assert.strictEqual(f.loginIdentifiers.length, 3);
+        assert.strictEqual(f.counters.localLogins, 0);
+      } finally {
+        await f.close();
+      }
+    });
+
+    test('the secure frame names only the public sign-in endpoint, while hosted defaults leave the adapter disabled', async function (assert) {
+      const f = await publicFixture();
+      const publicURL = new URL(
+        'http://realm.default.boxel.localhost:4242/_local-identity-login',
+      );
+      const secure = createSecureOrigin(f.secureOriginURL, {
+        matrixURL: new URL(f.options.matrixURL),
+        realmServerURL: new URL('/', publicURL),
+        appOrigins: ['http://app.default.boxel.localhost:4242'],
+        localIdentityLoginURL: publicURL,
+      });
+      const server = createServer(
+        new Koa().use(async (ctxt) => secure.handle(ctxt)).callback(),
+      );
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const address = server.address();
+      if (!address || typeof address === 'string')
+        throw new Error('Expected secure frame listener');
+      try {
+        const response = await fetch(
+          `http://127.0.0.1:${address.port}/secure/credentials`,
         );
-        let frameURL = '';
-        const parent = createServer((_request, response) => {
-          response.setHeader('Content-Type', 'text/html');
-          response.end(
-            `<!doctype html><html><head><title>Boxel protected login test</title></head><body><h1>Boxel protected sign-in</h1><iframe title="Password fields" style="width:650px;height:500px;border:0" src="${frameURL.replaceAll('&', '&amp;')}"></iframe><script>window.testMessages=[];window.addEventListener('message',event=>{if(event.source===document.querySelector('iframe').contentWindow)window.testMessages.push(event.data)});</script></body></html>`,
-          );
-        });
-        secureServer.listen(0, '127.0.0.1');
-        parent.listen(0, '127.0.0.1');
-        await Promise.all([
-          once(secureServer, 'listening'),
-          once(parent, 'listening'),
-        ]);
-        const secureAddress = secureServer.address();
-        const parentAddress = parent.address();
-        if (
-          !secureAddress ||
-          typeof secureAddress === 'string' ||
-          !parentAddress ||
-          typeof parentAddress === 'string'
-        )
-          throw new Error('Expected browser fixture listeners');
-        const secureOriginURL = new URL(
-          `http://127.0.0.1:${secureAddress.port}/secure`,
+        const html = await response.text();
+        assert.strictEqual(response.status, 200);
+        assert.true(
+          html
+            .replace(/\s+/g, ' ')
+            .includes(
+              `name="boxel-local-identity-login-url" content="${publicURL.href}"`,
+            ),
         );
-        const parentOrigin = `http://127.0.0.1:${parentAddress.port}`;
-        const f = await publicFixture(secureOriginURL);
-        secure = createSecureOrigin(secureOriginURL, {
-          matrixURL: new URL(f.options.matrixURL),
-          realmServerURL: new URL('/', f.publicURL),
-          appOrigins: [parentOrigin],
-          localIdentityLoginURL: new URL(f.publicURL),
-        });
-        const frame = new URL('credentials', secureOriginURL.href + '/');
-        frame.hash = new URLSearchParams({
-          form,
-          origin: parentOrigin,
-        }).toString();
-        frameURL = frame.href;
-        const browser = await puppeteer.launch({
-          executablePath: process.env.BOXEL_TEST_BROWSER_BINARY,
-          headless: true,
-        });
-        try {
-          const page = await browser.newPage();
-          await page.setViewport({ width: 960, height: 720 });
-          await page.goto(parentOrigin);
-          await page.waitForFunction(
-            "window.testMessages.some(message => message.type === 'ready')",
+        assert.true(
+          response.headers
+            .get('Content-Security-Policy')!
+            .includes(publicURL.origin),
+        );
+        assert.false(html.includes(f.secret));
+        assert.false(html.includes(f.privateURL));
+        assert.strictEqual(createLocalHostedLoginClient({}), null);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+        await f.close();
+      }
+    });
+  },
+);
+
+module(
+  `${basename(import.meta.filename)} | browser password frame`,
+  function () {
+    const browserTest = process.env.BOXEL_TEST_BROWSER_BINARY
+      ? test
+      : test.skip;
+    for (const form of ['login', 'cli-login']) {
+      browserTest(
+        `${form} uses the protected frame and returns only the linked local session`,
+        async function (assert) {
+          let secure: ReturnType<typeof createSecureOrigin> | undefined;
+          const secureServer = createServer(
+            new Koa()
+              .use(async (ctxt) => {
+                if (secure) await secure.handle(ctxt);
+                else ctxt.status = 503;
+              })
+              .callback(),
           );
-          const credentialFrame = page
-            .frames()
-            .find((candidate) =>
-              candidate.url().startsWith(secureOriginURL.href),
+          let frameURL = '';
+          const parent = createServer((_request, response) => {
+            response.setHeader('Content-Type', 'text/html');
+            response.end(
+              `<!doctype html><html><head><title>Boxel protected login test</title></head><body><h1>Boxel protected sign-in</h1><iframe title="Password fields" style="width:650px;height:500px;border:0" src="${frameURL.replaceAll('&', '&amp;')}"></iframe><script>window.testMessages=[];window.addEventListener('message',event=>{if(event.source===document.querySelector('iframe').contentWindow)window.testMessages.push(event.data)});</script></body></html>`,
             );
-          if (!credentialFrame)
-            throw new Error('Protected credential frame missing');
-          await page.evaluate(
-            (origin) =>
-              document.querySelector('iframe')?.contentWindow?.postMessage(
-                {
-                  type: 'style',
-                  properties: {},
-                  inherited: {
-                    color: 'black',
-                    'font-family': 'Arial',
-                    'font-size': '16px',
-                  },
-                  backdrop: 'white',
-                  offset: { x: 0, y: 0 },
-                  width: 650,
-                },
-                origin,
-              ),
-            secureOriginURL.origin,
-          );
-          await credentialFrame.waitForSelector('input[name="username"]', {
-            visible: true,
           });
-          await credentialFrame.type('input[name="username"]', 'teacher');
-          await credentialFrame.type(
-            'input[name="password"]',
-            'test-only-password',
+          secureServer.listen(0, '127.0.0.1');
+          parent.listen(0, '127.0.0.1');
+          await Promise.all([
+            once(secureServer, 'listening'),
+            once(parent, 'listening'),
+          ]);
+          const secureAddress = secureServer.address();
+          const parentAddress = parent.address();
+          if (
+            !secureAddress ||
+            typeof secureAddress === 'string' ||
+            !parentAddress ||
+            typeof parentAddress === 'string'
+          )
+            throw new Error('Expected browser fixture listeners');
+          const secureOriginURL = new URL(
+            `http://127.0.0.1:${secureAddress.port}/secure`,
           );
-          await page.screenshot({
-            path: `/private/tmp/boxel-native-${form}-frame.png`,
-            fullPage: true,
+          const parentOrigin = `http://127.0.0.1:${parentAddress.port}`;
+          const f = await publicFixture(secureOriginURL);
+          secure = createSecureOrigin(secureOriginURL, {
+            matrixURL: new URL(f.options.matrixURL),
+            realmServerURL: new URL('/', f.publicURL),
+            appOrigins: [parentOrigin],
+            localIdentityLoginURL: new URL(f.publicURL),
           });
-          assert.strictEqual(
-            await credentialFrame.$eval('input[name="username"]', (element) =>
-              element instanceof HTMLInputElement ? element.value.length : -1,
-            ),
-            7,
-            'username was typed into the protected frame',
-          );
-          assert.strictEqual(
-            await credentialFrame.$eval('input[name="password"]', (element) =>
-              element instanceof HTMLInputElement ? element.value.length : -1,
-            ),
-            18,
-            'password was typed into the protected frame',
-          );
-          await page.waitForFunction(
-            "window.testMessages.some(message => message.type === 'state' && message.complete)",
-          );
-          assert.true(
+          const frame = new URL('credentials', secureOriginURL.href + '/');
+          frame.hash = new URLSearchParams({
+            form,
+            origin: parentOrigin,
+          }).toString();
+          frameURL = frame.href;
+          const browser = await puppeteer.launch({
+            executablePath: process.env.BOXEL_TEST_BROWSER_BINARY,
+            headless: true,
+          });
+          try {
+            const page = await browser.newPage();
+            await page.setViewport({ width: 960, height: 720 });
+            await page.goto(parentOrigin);
+            await page.waitForFunction(
+              "window.testMessages.some(message => message.type === 'ready')",
+            );
+            const credentialFrame = page
+              .frames()
+              .find((candidate) =>
+                candidate.url().startsWith(secureOriginURL.href),
+              );
+            if (!credentialFrame)
+              throw new Error('Protected credential frame missing');
             await page.evaluate(
-              () => document.querySelector('iframe')?.contentDocument === null,
-            ),
-            'the app cannot read protected password fields',
-          );
-          const id = 1;
-          await page.evaluate(
-            ({ origin, operation }) =>
-              document
-                .querySelector('iframe')
-                ?.contentWindow?.postMessage(
-                  { type: 'submit', id: 1, operation },
+              (origin) =>
+                document.querySelector('iframe')?.contentWindow?.postMessage(
+                  {
+                    type: 'style',
+                    properties: {},
+                    inherited: {
+                      color: 'black',
+                      'font-family': 'Arial',
+                      'font-size': '16px',
+                    },
+                    backdrop: 'white',
+                    offset: { x: 0, y: 0 },
+                    width: 650,
+                  },
                   origin,
                 ),
-            { origin: secureOriginURL.origin, operation: form },
-          );
-          await page.waitForFunction(
-            `window.testMessages.some(message => message.type === 'result' && message.id === ${id})`,
-          );
-          const result: unknown = await page.evaluate(
-            `window.testMessages.find(message => message.type === 'result' && message.id === ${id})`,
-          );
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            !('body' in result) ||
-            !result.body ||
-            typeof result.body !== 'object' ||
-            !('user_id' in result.body) ||
-            !('ok' in result)
-          )
-            throw new Error('Expected frame sign-in result');
-          assert.strictEqual(result.ok, true);
-          assert.strictEqual(result.body.user_id, f.localUserId);
-          const messages: unknown = await page.evaluate('window.testMessages');
-          for (const value of [
-            f.remoteToken,
-            f.proofToken,
-            f.secret,
-            'test-only-password',
-          ])
-            assert.false(JSON.stringify(messages).includes(value));
-          await page.screenshot({
-            path: `/private/tmp/boxel-native-${form}-frame.png`,
-            fullPage: true,
-          });
-        } finally {
-          await browser.close();
-          for (const server of [parent, secureServer]) {
-            server.closeAllConnections();
-            await new Promise<void>((resolve, reject) =>
-              server.close((error) => (error ? reject(error) : resolve())),
+              secureOriginURL.origin,
             );
+            await credentialFrame.waitForSelector('input[name="username"]', {
+              visible: true,
+            });
+            await credentialFrame.type('input[name="username"]', 'teacher');
+            await credentialFrame.type(
+              'input[name="password"]',
+              'test-only-password',
+            );
+            await page.screenshot({
+              path: `/private/tmp/boxel-native-${form}-frame.png`,
+              fullPage: true,
+            });
+            assert.strictEqual(
+              await credentialFrame.$eval(
+                'input[name="username"]',
+                (element) =>
+                  element instanceof HTMLInputElement
+                    ? element.value.length
+                    : -1,
+              ),
+              7,
+              'username was typed into the protected frame',
+            );
+            assert.strictEqual(
+              await credentialFrame.$eval(
+                'input[name="password"]',
+                (element) =>
+                  element instanceof HTMLInputElement
+                    ? element.value.length
+                    : -1,
+              ),
+              18,
+              'password was typed into the protected frame',
+            );
+            await page.waitForFunction(
+              "window.testMessages.some(message => message.type === 'state' && message.complete)",
+            );
+            assert.true(
+              await page.evaluate(
+                () =>
+                  document.querySelector('iframe')?.contentDocument === null,
+              ),
+              'the app cannot read protected password fields',
+            );
+            const id = 1;
+            await page.evaluate(
+              ({ origin, operation }) =>
+                document
+                  .querySelector('iframe')
+                  ?.contentWindow?.postMessage(
+                    { type: 'submit', id: 1, operation },
+                    origin,
+                  ),
+              { origin: secureOriginURL.origin, operation: form },
+            );
+            await page.waitForFunction(
+              `window.testMessages.some(message => message.type === 'result' && message.id === ${id})`,
+            );
+            const result: unknown = await page.evaluate(
+              `window.testMessages.find(message => message.type === 'result' && message.id === ${id})`,
+            );
+            if (
+              !result ||
+              typeof result !== 'object' ||
+              !('body' in result) ||
+              !result.body ||
+              typeof result.body !== 'object' ||
+              !('user_id' in result.body) ||
+              !('ok' in result)
+            )
+              throw new Error('Expected frame sign-in result');
+            assert.strictEqual(result.ok, true);
+            assert.strictEqual(result.body.user_id, f.localUserId);
+            const messages: unknown = await page.evaluate(
+              'window.testMessages',
+            );
+            for (const value of [
+              f.remoteToken,
+              f.proofToken,
+              f.secret,
+              'test-only-password',
+            ])
+              assert.false(JSON.stringify(messages).includes(value));
+            await page.screenshot({
+              path: `/private/tmp/boxel-native-${form}-frame.png`,
+              fullPage: true,
+            });
+          } finally {
+            await browser.close();
+            for (const server of [parent, secureServer]) {
+              server.closeAllConnections();
+              await new Promise<void>((resolve, reject) =>
+                server.close((error) => (error ? reject(error) : resolve())),
+              );
+            }
+            await f.close();
           }
-          await f.close();
-        }
-      },
-    );
-  }
-});
+        },
+      );
+    }
+  },
+);
