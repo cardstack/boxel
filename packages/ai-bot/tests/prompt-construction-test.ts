@@ -419,9 +419,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
       );
       assert.true(
         context.includes(
-          'where the workspace holds no card of that type yet, neither tool can run it',
+          'An operation on a type, such as a create, needs no card of that type: name the type by its module and export',
         ),
-        'and that a create needs an existing card of its type to run through',
+        'and that a create runs on its type where no card of it exists',
       );
     });
 
