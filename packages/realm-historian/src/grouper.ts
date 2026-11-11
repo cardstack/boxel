@@ -272,6 +272,10 @@ function isPush(event: ChangeEvent): boolean {
   return event.pushId !== undefined;
 }
 
+// `occurred_at` is a `timestamptz NOT NULL` that only the database sets, and
+// the reader hands it over as an ISO string. A time that doesn't parse means
+// the events are being read wrongly, not that one row is bad, so the grouper
+// throws rather than group by a time it made up.
 function timeOf(event: ChangeEvent): number {
   let at = Date.parse(event.occurredAt);
   if (Number.isNaN(at)) {
