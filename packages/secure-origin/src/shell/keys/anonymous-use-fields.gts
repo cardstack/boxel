@@ -12,6 +12,7 @@ import { Field } from '@cardstack/pretui/components/field';
 
 import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 
 import { anonymousCapsPhrase, type AnonymousCaps } from './anonymous-caps.ts';
 
@@ -132,6 +133,7 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         @describedBy='anonymous-cap-note'
         inputmode='numeric'
         aria-labelledby={{labelId}}
+        {{ignoredByPasswordManagers}}
         data-test-anonymous-cap-input
       />
       <span id='anonymous-cap-note' class='note cap-note'>How many calls people
@@ -159,6 +161,7 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         @describedBy='anonymous-monthly-cap-note'
         inputmode='numeric'
         aria-labelledby={{labelId}}
+        {{ignoredByPasswordManagers}}
         data-test-anonymous-monthly-cap-input
       />
       <span id='anonymous-monthly-cap-note' class='note cap-note'>How many calls

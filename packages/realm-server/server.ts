@@ -61,6 +61,7 @@ import {
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
@@ -699,6 +700,7 @@ export class RealmServer {
   private realmServerSecretSeed: string;
   private realmSecretSeed: string;
   private grafanaSecret: string;
+  private grafanaIdentity: GrafanaIdentityVerifier | undefined;
   private aiBotDelegationSecret: string | undefined;
   private matrixInviteCheckSecret: string | undefined;
 
@@ -748,6 +750,7 @@ export class RealmServer {
     realmServerSecretSeed,
     realmSecretSeed,
     grafanaSecret,
+    grafanaURL,
     aiBotDelegationSecret,
     matrixInviteCheckSecret,
     realmsRootPath,
@@ -783,6 +786,8 @@ export class RealmServer {
     realmServerSecretSeed: string;
     realmSecretSeed: string;
     grafanaSecret: string;
+    // The Grafana whose ID tokens operator actions are checked against.
+    grafanaURL?: string;
     aiBotDelegationSecret?: string;
     matrixInviteCheckSecret?: string;
     realmsRootPath: string;
@@ -875,6 +880,9 @@ export class RealmServer {
     this.matrixInviteCheckSecret = matrixInviteCheckSecret;
     this.realmServerSecretSeed = realmServerSecretSeed;
     this.grafanaSecret = grafanaSecret;
+    this.grafanaIdentity = grafanaURL
+      ? new GrafanaIdentityVerifier(grafanaURL)
+      : undefined;
     this.realmsRootPath = realmsRootPath;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
@@ -1059,6 +1067,7 @@ export class RealmServer {
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
           grafanaSecret: this.grafanaSecret,
+          grafanaIdentity: this.grafanaIdentity,
           aiBotDelegationSecret: this.aiBotDelegationSecret,
           matrixInviteCheckSecret: this.matrixInviteCheckSecret,
           virtualNetwork: this.virtualNetwork,

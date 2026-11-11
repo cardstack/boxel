@@ -7089,6 +7089,53 @@ module('Integration | serialization', function (hooks) {
       });
     });
 
+    test('an assigned empty linksToMany serializes as an empty relationship', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      await setupIntegrationTestRealm({
+        skipBootIndex: true,
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Person, Pet },
+        },
+      });
+
+      let mango = new Pet({ firstName: 'Mango' });
+      let hassan = new Person({ firstName: 'Hassan', pets: [mango] });
+      hassan.pets = [];
+      assert.deepEqual(
+        serializeCard(hassan, {}).data.relationships,
+        { pets: { links: { self: null } } },
+        'a field that had links',
+      );
+
+      let mariko = new Person({ firstName: 'Mariko' });
+      assert.deepEqual(mariko.pets, [], 'a never-set field reads as empty');
+      assert.strictEqual(
+        serializeCard(mariko, {}).data.relationships?.pets,
+        undefined,
+        'a never-set field that was only read is left out',
+      );
+      mariko.pets = [];
+      assert.deepEqual(
+        serializeCard(mariko, {}).data.relationships,
+        { pets: { links: { self: null } } },
+        'a never-set field',
+      );
+
+      let van = new Person({ firstName: 'Van', pets: [] });
+      assert.deepEqual(
+        serializeCard(van, {}).data.relationships,
+        { pets: { links: { self: null } } },
+        'a card constructed with an empty list',
+      );
+    });
+
     test('can deserialize an empty linksToMany relationship', async function (assert) {
       class Pet extends CardDef {
         @field firstName = contains(StringField);
