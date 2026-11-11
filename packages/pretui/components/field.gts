@@ -305,7 +305,7 @@ export class Field extends Component<FieldSignature> {
           margin-inline-start: calc(
             var(--boxel-sp-6xs) - var(--boxel-sp-xs)
           );
-          color: var(--destructive);
+          color: var(--destructive-ink);
           font-weight: 600;
         }
         .pretui-fieldlabel {
