@@ -241,7 +241,7 @@ module('Pretui | components/data-table', function (hooks) {
       </template>,
     );
     let cell = document.querySelector(
-      '[data-test-pretui-dt-row] td:last-of-type',
+      '[data-test-pretui-dt-row] [data-test-pretui-dt-cell]',
     )!;
     window.getSelection()!.selectAllChildren(cell);
     await click('[data-test-pretui-dt-row]');
