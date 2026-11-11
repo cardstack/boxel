@@ -35,6 +35,7 @@ import {
   type AutomationCaps,
   type AutomationDeclaration,
 } from './automation-declaration.ts';
+import { cancelPendingAutomationRuns } from './automation-runs.ts';
 import {
   computeAutomationSchedule,
   type TriggerRunState,
@@ -43,6 +44,7 @@ import type { DBAdapter } from './db.ts';
 import { isDirectWriterLocked } from './db-queries/realm-permission-queries.ts';
 import { dbAdapterQuerier, param, type Querier } from './expression.ts';
 import type { PgPrimitive } from './index.ts';
+import { RealmPaths } from './paths.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -109,7 +111,7 @@ export interface AutomationRow {
 // automation's realm into the served URL its permission rows are keyed by.
 export interface AutomationActorOptions {
   matrixServerName: string;
-  virtualNetwork: Pick<VirtualNetwork, 'toURL'>;
+  virtualNetwork: Pick<VirtualNetwork, 'toURL' | 'toURLHref'>;
   // Unix seconds; the current time when absent. Where a schedule starts, its
   // `since` and the next run are computed from this.
   now?: number;
@@ -119,11 +121,20 @@ export interface AutomationActorOptions {
 //
 // - `not-a-direct-writer`: the caller isn't a direct writer of the realm.
 // - `missing`: no automation with this id is switched on.
+// - `outside-realm`: switch-on named a realm the automation isn't in.
+// - `other-card`: the declaration given is another card's.
 // - `already-switched-on`: switch-on found the automation on already.
 // - `not-paused`: resume found an automation that isn't paused.
 // - `not-pausable`: pause found an automation that is already paused.
 export type AutomationRefusal =
-  | { ok: false; reason: 'not-a-direct-writer' | 'missing' }
+  | {
+      ok: false;
+      reason:
+        | 'not-a-direct-writer'
+        | 'missing'
+        | 'outside-realm'
+        | 'other-card';
+    }
   | {
       ok: false;
       reason: 'already-switched-on' | 'not-paused' | 'not-pausable';
@@ -146,6 +157,10 @@ export async function getAutomation(
 // of the caps `declaration` sets. Its schedule starts now: the next run is the
 // first slot after now, and an automation whose triggers are all spent
 // already starts *done*.
+//
+// `realm` must contain the automation, and `declaration` must be its card:
+// the row's realm is the one every later direct-writer check asks about, so a
+// writer of one realm can't take on another realm's automation.
 export async function switchOnAutomation(
   dbAdapter: DBAdapter,
   {
@@ -161,6 +176,12 @@ export async function switchOnAutomation(
   },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
+  if (!new RealmPaths(realm, options.virtualNetwork).inRealm(automationId)) {
+    return { ok: false, reason: 'outside-realm' };
+  }
+  if (!isDeclarationOf(declaration, automationId, options)) {
+    return { ok: false, reason: 'other-card' };
+  }
   let now = options.now ?? currentUnixSeconds();
   let schedule = startSchedule(declaration, now, {});
   return await dbAdapter.withTransaction(async (txQuery) => {
@@ -248,6 +269,9 @@ export async function resumeAutomation(
   },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
+  if (!isDeclarationOf(declaration, automationId, options)) {
+    return { ok: false, reason: 'other-card' };
+  }
   let now = options.now ?? currentUnixSeconds();
   return await dbAdapter.withTransaction(async (txQuery) => {
     let found = await lockForDirectWriter(txQuery, automationId, user, options);
@@ -297,7 +321,9 @@ export async function removeAutomation(
     if (!found.ok) {
       return found;
     }
-    await cancelPendingRuns(txQuery, automationId, { canceledBy: user });
+    await cancelPendingAutomationRuns(txQuery, automationId, {
+      canceledBy: user,
+    });
     await txQuery([
       'DELETE FROM automations WHERE automation_id =',
       param(automationId),
@@ -371,19 +397,24 @@ export async function checkAutomationPayer(
   options: Omit<AutomationActorOptions, 'now'>,
 ): Promise<AutomationRow | undefined> {
   return await dbAdapter.withTransaction(async (txQuery) => {
+    let seen = await selectAutomation(txQuery, automationId);
+    if (!seen) {
+      return undefined;
+    }
+    let { realm, payer } = automationFromRow(seen);
+    // The payer's permission row is locked before the automation's row, the
+    // order every change here takes them in.
+    let stillWriter = await isDirectWriterOf(txQuery, realm, payer, options);
     let row = await selectAutomation(txQuery, automationId, { lock: true });
     if (!row) {
       return undefined;
     }
     let automation = automationFromRow(row);
+    // A resume meanwhile made someone else the payer, and checked them.
     if (
+      stillWriter ||
       automation.state === 'paused' ||
-      (await isDirectWriterOf(
-        txQuery,
-        automation.realm,
-        automation.payer,
-        options,
-      ))
+      automation.payer !== payer
     ) {
       return automation;
     }
@@ -409,7 +440,7 @@ async function pause(
     param(automationId),
     'RETURNING *',
   ]);
-  await cancelPendingRuns(
+  await cancelPendingAutomationRuns(
     txQuery,
     automationId,
     pausedBy ? { canceledBy: pausedBy } : { reason },
@@ -417,26 +448,12 @@ async function pause(
   return automationFromRow(row);
 }
 
-// Cancels the automation's runs that haven't started. A running run is left
-// to finish.
-async function cancelPendingRuns(
-  txQuery: Querier,
-  automationId: RealmResourceIdentifier,
-  by: { canceledBy: string } | { reason: AutomationPauseReason },
-): Promise<void> {
-  await txQuery([
-    "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
-    param('canceledBy' in by ? by.canceledBy : null),
-    ', error_reason =',
-    param('reason' in by ? by.reason : null),
-    'WHERE automation_id =',
-    param(automationId),
-    "AND state = 'pending'",
-  ]);
-}
-
 // Locks the automation's row for a change `user` asks for, once it is found
-// and `user` is a direct writer of its realm.
+// and `user` is a direct writer of its realm. The permission row is locked
+// first and the automation's row second, the order switch-on takes them in,
+// so two changes never wait on each other's locks. The unlocked read only
+// finds the realm, which an automation's id decides: switch-on refuses a
+// realm that doesn't contain it.
 async function lockForDirectWriter(
   txQuery: Querier,
   automationId: RealmResourceIdentifier,
@@ -446,15 +463,36 @@ async function lockForDirectWriter(
   | { ok: true; automation: AutomationRow }
   | { ok: false; reason: 'not-a-direct-writer' | 'missing' }
 > {
+  let seen = await selectAutomation(txQuery, automationId);
+  if (!seen) {
+    return { ok: false, reason: 'missing' };
+  }
+  let { realm } = automationFromRow(seen);
+  if (!(await isDirectWriterOf(txQuery, realm, user, options))) {
+    return { ok: false, reason: 'not-a-direct-writer' };
+  }
   let row = await selectAutomation(txQuery, automationId, { lock: true });
   if (!row) {
     return { ok: false, reason: 'missing' };
   }
-  let automation = automationFromRow(row);
-  if (!(await isDirectWriterOf(txQuery, automation.realm, user, options))) {
-    return { ok: false, reason: 'not-a-direct-writer' };
+  return { ok: true, automation: automationFromRow(row) };
+}
+
+// Whether `declaration` was read from the automation's own card. The two may
+// be spelled in different forms, so both are compared as served URLs.
+function isDeclarationOf(
+  declaration: AutomationDeclaration,
+  automationId: RealmResourceIdentifier,
+  { virtualNetwork }: Pick<AutomationActorOptions, 'virtualNetwork'>,
+): boolean {
+  try {
+    return (
+      virtualNetwork.toURLHref(declaration.url) ===
+      virtualNetwork.toURLHref(automationId)
+    );
+  } catch {
+    return false;
   }
-  return { ok: true, automation };
 }
 
 async function isDirectWriterOf(

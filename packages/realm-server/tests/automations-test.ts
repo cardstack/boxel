@@ -27,6 +27,7 @@ import type {
 } from '@cardstack/runtime-common/automation-declaration';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import { setupDB } from './helpers/index.ts';
+import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
 
 const REALM_URL = 'http://127.0.0.1:4444/payroll/';
 const REALM = ri(REALM_URL);
@@ -232,6 +233,110 @@ module(basename(import.meta.filename), function () {
           reason: 'already-switched-on',
           automation,
         });
+      });
+    });
+
+    module("the automation's own realm", function (realmHooks) {
+      const OTHER_REALM_URL = 'http://127.0.0.1:4444/marketing/';
+      const OUTSIDER = '@outsider:localhost';
+
+      realmHooks.beforeEach(async function () {
+        await insertPermissions(dbAdapter, new URL(OTHER_REALM_URL), {
+          [OUTSIDER]: ['read', 'write'],
+        });
+      });
+
+      test('switch-on refuses a realm that does not contain the automation', async function (assert) {
+        let result = await switchOnAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            realm: ri(OTHER_REALM_URL),
+            user: OUTSIDER,
+            declaration: declaration(),
+          },
+          options,
+        );
+        assert.deepEqual(result, { ok: false, reason: 'outside-realm' });
+        assert.strictEqual(
+          await getAutomation(dbAdapter, AUTOMATION),
+          undefined,
+        );
+      });
+
+      test("switch-on and resume refuse another card's declaration", async function (assert) {
+        let other = declaration({ url: `${REALM_URL}Automation/other` });
+        let result = await switchOnAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            realm: REALM,
+            user: OWNER,
+            declaration: other,
+          },
+          options,
+        );
+        assert.deepEqual(result, { ok: false, reason: 'other-card' });
+
+        await switchOn();
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        let resumed = await resumeAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: ADMIN, declaration: other },
+          options,
+        );
+        assert.deepEqual(resumed, { ok: false, reason: 'other-card' });
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.payer,
+          OWNER,
+        );
+      });
+
+      test('a direct writer of another realm cannot pause, resume or remove the automation', async function (assert) {
+        await switchOn();
+        assert.deepEqual(
+          await pauseAutomation(
+            dbAdapter,
+            { automationId: AUTOMATION, user: OUTSIDER },
+            options,
+          ),
+          { ok: false, reason: 'not-a-direct-writer' },
+          'pause',
+        );
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        assert.deepEqual(
+          await resumeAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              user: OUTSIDER,
+              declaration: declaration(),
+            },
+            options,
+          ),
+          { ok: false, reason: 'not-a-direct-writer' },
+          'resume',
+        );
+        assert.deepEqual(
+          await removeAutomation(
+            dbAdapter,
+            { automationId: AUTOMATION, user: OUTSIDER },
+            options,
+          ),
+          { ok: false, reason: 'not-a-direct-writer' },
+          'remove',
+        );
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.payer, OWNER);
+        assert.strictEqual(automation?.pausedBy, OWNER);
       });
     });
 
@@ -460,6 +565,15 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           (await getAutomation(dbAdapter, AUTOMATION))?.state,
           'active',
+        );
+      });
+
+      test('deleting the realm removes its automations, so a realm made at the same URL starts with none on', async function (assert) {
+        await switchOn();
+        await removeRealmDatabaseArtifacts({ dbAdapter, realmURL: REALM });
+        assert.strictEqual(
+          await getAutomation(dbAdapter, AUTOMATION),
+          undefined,
         );
       });
     });

@@ -10,9 +10,10 @@
 // resumed it.
 //
 // `state` is `active`, `paused`, `waiting-for-credits` or `done`. A paused
-// automation has a `pause_reason` code (such as `requested` or
-// `payer-lost-access`) and no other state has one; `paused_by` names the
-// person who paused it, when a person did.
+// automation has a `pause_reason` code (`requested`, `payer-lost-access`,
+// `caps-raised` or `batched-ai-enabled`) and no other state has one;
+// `paused_by` names the person who paused it, and is set only for a
+// `requested` pause.
 //
 // `caps_snapshot` is the card's caps, and whether it turned on `batchedAI`,
 // as they were when the payer switched it on or resumed it: a JSON object
@@ -59,6 +60,11 @@ exports.up = (pgm) => {
         CHECK (state IN ('active', 'paused', 'waiting-for-credits', 'done')),
       CONSTRAINT automations_pause_reason_check
         CHECK ((state = 'paused') = (pause_reason IS NOT NULL)),
+      CONSTRAINT automations_pause_reason_value_check
+        CHECK (pause_reason IS NULL OR pause_reason IN
+          ('requested', 'payer-lost-access', 'caps-raised', 'batched-ai-enabled')),
+      CONSTRAINT automations_paused_by_check
+        CHECK (paused_by IS NULL OR pause_reason = 'requested'),
       CONSTRAINT automations_last_result_check
         CHECK (last_result IS NULL OR last_result IN ('complete', 'error', 'canceled'))
     )
