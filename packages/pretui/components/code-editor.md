@@ -29,7 +29,9 @@ Element: HTMLDivElement
 
 **Read-only looks read-only.** It sits on a muted surface with no current-line mark, so a reader doesn't take it for a field that takes typing, and it is announced through `aria-readonly`.
 
-**`@dark` is code mode's editor.** It takes the colours code mode's Monaco editor uses, so a card that edits code beside code mode's editor can look like it: Monaco's `vs-dark` token colours, gutter, selection and cursor on the background code mode gives Monaco (`#413e4e`, and `#606060` when read-only). These are fixed colours, not theme tokens, because the point is to match that one editor rather than the page. Lezer's tags map onto Monaco's token kinds: keywords, booleans and `null` are Monaco's keyword blue, type and class names its type teal, and names Monaco leaves uncoloured stay the foreground. One difference remains: Monaco colours JSON keys light blue, while the JavaScript grammar that highlights JSON here sees quoted keys as strings.
+**`@dark` is code mode's editor.** It takes the colours code mode's Monaco editor uses, so a card that edits code beside code mode's editor can look like it: Monaco's `vs-dark` token colours, gutter, selection and cursor on the background code mode gives Monaco (`#413e4e`, and `#606060` when read-only). These are fixed colours, not theme tokens, because the point is to match that one editor rather than the page. They are set once, as `--pretui-code-editor-*` properties on the frame, and the CodeMirror theme reads them. Lezer's tags map onto Monaco's token kinds: keywords, booleans and `null` are Monaco's keyword blue, type and class names its type teal, and names Monaco leaves uncoloured stay the foreground. One difference remains: Monaco colours JSON keys light blue, while the JavaScript grammar that highlights JSON here sees quoted keys as strings.
+
+**`@dark` keeps Monaco's contrast, which is below WCAG AA in places.** Measured on the editable surface (`#413e4e`): body text 7.0:1, strings 3.93:1, keywords 3.52:1, line numbers 2.81:1, comments 2.62:1. On the read-only surface (`#606060`): body text 4.24:1, types 3.05:1, strings 2.38:1, keywords 2.13:1, line numbers 1.70:1, comments 1.59:1. These are code mode's own colours; a card that needs AA contrast leaves `@dark` off, and the default theme's colours apply.
 
 **A change of language, read-only, dark, line numbers, id or naming rebuilds the editor, keeping its text.** Those are fixed when CodeMirror makes its state; rebuilding keeps what the user typed rather than reverting to `@value`. A new `@value` that arrives in the same render wins, as it would without the rebuild.
 
@@ -69,7 +71,7 @@ Where it is thinner: no autocompletion, linting, folding, search panel or diff v
 
 Clicking a span label doesn't move focus; the editor takes focus from a click on the code or from Tab.
 
-- **Read-only is announced and enforced.** The content element is not editable and carries `aria-readonly`, and the text can still be selected and copied.
+- **Read-only is announced and enforced.** The editor's state refuses edits and the content element carries `aria-readonly`. The content element still takes keyboard focus, so a keyboard user can move through the code, scroll past the editor's height, and select and copy it, as with the CodeBlock shown before it loads.
 - **Tab is never captured**, so a keyboard user always has a way out.
 - **The gutter is not editable or selectable**, and the fallback's gutter is `aria-hidden`, as CodeBlock's is.
 - **Focus is visible on the whole frame** (`:focus-within`, outlined in `--ring`), since CodeMirror's own focus outline is turned off.
@@ -78,7 +80,7 @@ Clicking a span label doesn't move focus; the editor takes focus from a click on
 
 `--pretui-code-size` and `--pretui-code-leading` (type metrics, shared with CodeBlock; tabs are two columns wide), `--pretui-shadow-card`, and the syntax channel CodeBlock reads: `--pretui-code-keyword`, `--pretui-code-string`, `--pretui-code-number`, `--pretui-code-comment`, `--pretui-code-name`. Code reads the same whether it is being read or edited.
 
-Under `@dark` none of the syntax tokens apply. The frame sets them, along with `--card`, `--foreground` and `--muted-foreground`, to code mode's colours, so the CodeBlock shown before the editor loads comes out close to the editor. It isn't exact, because CodeBlock blends each hue with the foreground.
+Under `@dark` none of the syntax tokens apply. The frame sets them to code mode's colours, and points `--card`, `--foreground` and `--muted-foreground` at code mode's colours on the CodeBlock shown before the editor loads, and nowhere else, so that CodeBlock comes out close to the editor. It isn't exact, because CodeBlock blends each hue with the foreground.
 
 The frame sits in `@layer PretComponent`. CodeMirror's own DOM is styled through an `EditorView.theme` the component hands the editor, because CodeMirror injects its base theme as unlayered CSS that a layered rule can't outrank; the theme's values are the same tokens. `--pretui-code-editor-min` and `--pretui-code-editor-max` (line counts) are set from `@minLines` and `@maxLines`.
 

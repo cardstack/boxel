@@ -8,7 +8,7 @@ import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
 import { fillIn, render, settled, waitFor } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { CodeEditor, MONACO_DARK } from './code-editor';
+import { CodeEditor } from './code-editor';
 
 interface StubOptions {
   doc: string;
@@ -333,8 +333,14 @@ module('Pretui | components/code-editor', function (hooks) {
     let darkTheme = created[0].theme!;
     assert.strictEqual(
       darkTheme['.cm-content'].caretColor,
-      MONACO_DARK.cursor,
-      "the theme takes code mode's colours",
+      'var(--pretui-code-editor-cursor)',
+      "the theme reads code mode's colours from the frame",
+    );
+    let frame = document.querySelector('.pretui-code-editor') as HTMLElement;
+    assert.strictEqual(
+      getComputedStyle(frame).getPropertyValue('--pretui-code-editor-cursor').trim(),
+      '#aeafad',
+      "the frame sets code mode's cursor colour",
     );
 
     state.dark = false;

@@ -1409,8 +1409,10 @@ function createCodeEditorState(
       ? [codeEditorTheme(options.theme, options.dark ?? false)]
       : []),
     EditorState.tabSize.of(2),
+    // Read-only refuses edits through the state but leaves the content
+    // editable, so it still takes keyboard focus: a reader can move through
+    // the code, scroll past the editor's height, and select and copy it.
     EditorState.readOnly.of(readOnly),
-    EditorView.editable.of(!readOnly),
     EditorView.contentAttributes.of(attributes),
     ...(onDocChange
       ? [
