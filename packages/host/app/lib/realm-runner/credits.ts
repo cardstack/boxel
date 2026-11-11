@@ -3,9 +3,13 @@
 // replies reported, as the answer footers add them up. Plan prices are not
 // here: they change, and they belong with the Upgrade page.
 
+import {
+  availableCredits,
+  awaitsDailyGrant,
+  type SubscriptionData,
+} from '../../services/billing-service';
 import { creditsForCost, sessionUsage } from '../format-token-usage';
 
-import type { SubscriptionData } from '../../services/billing-service';
 import type { TokenUsage } from '@cardstack/base/matrix-event';
 
 export interface RoomCredits {
@@ -44,21 +48,18 @@ export function roomCredits(
   >,
   usages: Iterable<TokenUsage | undefined>,
 ): RoomCredits {
-  let creditsLeft =
-    (subscription.creditsAvailableInPlanAllowance ?? 0) +
-    (subscription.extraCreditsAvailableInBalance ?? 0);
   let { lowCreditThreshold, nextDailyCreditGrantAt } = subscription;
   let session = sessionUsage(usages);
   return {
     plan: subscription.plan,
-    creditsLeft,
+    creditsLeft: availableCredits(subscription),
     monthlyCreditsLeft: subscription.creditsAvailableInPlanAllowance,
     monthlyCreditsIncluded: subscription.creditsIncludedInPlanAllowance,
     extraCredits: subscription.extraCreditsAvailableInBalance,
     nextDailyGrant:
+      awaitsDailyGrant(subscription) &&
       lowCreditThreshold != null &&
-      nextDailyCreditGrantAt != null &&
-      creditsLeft < lowCreditThreshold
+      nextDailyCreditGrantAt != null
         ? {
             // The realm server gives the time in seconds.
             at: new Date(nextDailyCreditGrantAt * 1000).toISOString(),

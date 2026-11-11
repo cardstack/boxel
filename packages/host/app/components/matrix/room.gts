@@ -3098,20 +3098,20 @@ export default class Room extends Component<Signature> {
       // Retry, so the turn above never gets shorter when the next one
       // settles (ADR 013 §1.16)
       if (replyIndex >= 0) {
-        let costUsd = 0;
-        let costed = false;
-        for (let message of turn) {
-          if (message.usage?.costUsd != null) {
-            costUsd += message.usage.costUsd;
-            costed = true;
-          }
-        }
+        // the turn's cost on the session total's rule: none when one of its
+        // counted replies reported no cost
+        let { turns: costedReplies, costUsd } = sessionUsage(
+          turn.map((message) => message.usage),
+        );
         let reply = messages[replyIndex]!;
         let diff = this.turnDiff(tools);
         footers.set(replyIndex, {
           diff,
           markdown: reply.body,
-          credits: costed ? formatCredits(costUsd) : undefined,
+          credits:
+            costedReplies > 0 && costUsd != null
+              ? formatCredits(costUsd)
+              : undefined,
           // Retry is for a turn that went wrong: an error, a call that
           // failed or was invalid, a reply that was stopped. A turn that
           // answered needs no second try offered

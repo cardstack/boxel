@@ -2821,7 +2821,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.activity({ message, current, total }) (current is 1-based into the ' +
     'plan; add count and of for progress inside a step, e.g. page 3 of 5), ' +
     'can create workspaces with realm.workspaces.create, ' +
-    'can change the skills and model of this room with room.*, and can ' +
+    'can change the skills and model of this room with room.*, can read ' +
+    "the user's plan, credit balance and this room's spend with " +
+    'room.credits(), and can ' +
     'refresh the index of the workspace with realm.index.*. A card that ' +
     'realm.cards.get reports as not indexed while the workspace is not ' +
     'indexing will not index by waiting: run ' +

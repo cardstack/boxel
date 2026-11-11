@@ -28,6 +28,36 @@ export interface SubscriptionData {
   dailyCreditGrantCount: number;
 }
 
+type Balance = Pick<
+  SubscriptionData,
+  'creditsAvailableInPlanAllowance' | 'extraCreditsAvailableInBalance'
+>;
+
+// Everything the user can spend now: the monthly credits left plus the extra
+// credits. The profile popover and the assistant's `room.credits()` both read
+// the balance through this, so they give the same number.
+export function availableCredits(data: Balance | null | undefined): number {
+  return (
+    (data?.creditsAvailableInPlanAllowance ?? 0) +
+    (data?.extraCreditsAvailableInBalance ?? 0)
+  );
+}
+
+// Whether the next daily grant will top the balance up: it does while the
+// balance is below the grant's level, `lowCreditThreshold`. The popover shows
+// the next grant on the same rule.
+export function awaitsDailyGrant(
+  data:
+    | (Balance & Pick<SubscriptionData, 'lowCreditThreshold'>)
+    | null
+    | undefined,
+): boolean {
+  return (
+    data?.lowCreditThreshold != null &&
+    availableCredits(data) < data.lowCreditThreshold
+  );
+}
+
 export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
   @tracked private _loadingSubscriptionData = false;
@@ -214,11 +244,7 @@ export default class BillingService extends Service {
   }
 
   get availableCredits() {
-    let allAvailableCredits =
-      (this.subscriptionData?.creditsAvailableInPlanAllowance ?? 0) +
-      (this.subscriptionData?.extraCreditsAvailableInBalance ?? 0);
-
-    return allAvailableCredits;
+    return availableCredits(this.subscriptionData);
   }
 
   private async getToken() {
