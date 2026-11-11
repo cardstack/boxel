@@ -19,7 +19,12 @@ BOXEL_PG_CONTAINER=boxel-pg
 # .github/workflows/mirror-test-images.yml,
 # .github/actions/warm-test-images/action.yml and
 # .devcontainer/claude-web-setup.sh.
-BOXEL_PG_IMAGE=postgres:16.3
+# The image is Postgres 16 with the pgvector extension, which vector search
+# (`boxel_index_vectors`) needs. A boxel-pg container created from an older
+# image keeps running without it, and vector search stays disabled there until
+# the container is recreated (`docker rm -f boxel-pg`, then start it again;
+# the databases are re-created and re-indexed).
+BOXEL_PG_IMAGE=pgvector/pgvector:0.8.0-pg16
 
 # max_connections is raised well above postgres's default of 100: a single
 # boxel-pg backs every service in a stack at once — realm servers plus their
@@ -45,7 +50,7 @@ BOXEL_PG_MAX_CONNECTIONS=400
 # a stack that is using postgres from this script's own polls.
 BOXEL_PG_APPNAME=boxel-pg-maint
 
-# Run psql inside the container over TCP. The postgres:16.3 image does not
+# Run psql inside the container over TCP. The postgres image does not
 # always create the /var/run/postgresql unix socket, so a bare `psql -U postgres`
 # can fail on the socket path; postgres listens on *:5432 with trust auth, so
 # TCP works regardless.
