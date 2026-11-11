@@ -38,6 +38,8 @@ import { registerUser } from '../synapse.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
 import { oauthProviderAdapter } from '../lib/oauth-provider/adapter.ts';
 import {
+  boxelDomains,
+  clientIdForLogs,
   clientMetadataDocuments,
   inMetadataDocumentRequest,
 } from '../lib/oauth-provider/client-metadata-document.ts';
@@ -85,6 +87,8 @@ const STUB_ORIGINS = [
   'https://chatgpt.com',
   'https://client.example.test',
   'https://someone.boxel.site',
+  // Beside the secure origin's host, under the same registrable domain.
+  'https://other.oauth-provider.test',
 ];
 
 const ROOMY_LIMIT: NewClientLimit = {
@@ -100,6 +104,8 @@ interface StubAnswer {
   status?: number;
   headers?: Record<string, string>;
   body: string;
+  // Sent without a declared length, so only reading it shows its size.
+  chunked?: boolean;
 }
 
 // Serves each client ID's document by path, as its origin would, and records
@@ -115,12 +121,16 @@ class DocumentServer {
       res.writeHead(404).end();
       return;
     }
-    res
-      .writeHead(answer.status ?? 200, {
-        'content-type': 'application/json',
-        ...answer.headers,
-      })
-      .end(answer.body);
+    res.writeHead(answer.status ?? 200, {
+      'content-type': 'application/json',
+      ...answer.headers,
+    });
+    if (answer.chunked) {
+      res.write(answer.body);
+      res.end();
+    } else {
+      res.end(answer.body);
+    }
   });
 
   async start(): Promise<string> {
@@ -165,6 +175,38 @@ module(basename(import.meta.filename), function () {
       let clients = oauthProviderAdapter(unusedDBAdapter)('Client');
       assert.strictEqual(await clients.find(CLAUDE_CODE.client_id), undefined);
       assert.strictEqual(await clients.find('not-a-registered-id'), undefined);
+    });
+  });
+
+  module('naming a client in logs', function () {
+    test('a document client is named by its host alone', function (assert) {
+      assert.strictEqual(
+        clientIdForLogs(
+          'https://client.example.test/app/client.json?access_token=secret-1',
+        ),
+        'metadata document on client.example.test',
+      );
+      assert.strictEqual(
+        clientIdForLogs('Ab3dE_fGhIjKlMnOpQrStUvWxYz01234'),
+        'Ab3dE_fGhIjKlMnOpQrStUvWxYz01234',
+        'a registered client by its generated ID',
+      );
+    });
+
+    test("Boxel's domains are the registrable domains of its own hosts", function (assert) {
+      assert.deepEqual(
+        [
+          ...boxelDomains(
+            boxelHosts({
+              serverURL: new URL('https://app.boxel.ai/'),
+              secureOriginURL: new URL('https://secure.boxel.ai/secure'),
+              appOrigins: ['https://*.preview.boxel.ai', 'http://127.0.0.1:*'],
+              publishedDomains: ['boxel.site', 'boxel.space'],
+            }),
+          ),
+        ].sort(),
+        ['boxel.ai', 'boxel.site', 'boxel.space'],
+      );
     });
   });
 
@@ -285,6 +327,10 @@ module(basename(import.meta.filename), function () {
         await documents.allowFetch(ctx, CODEX.client_id),
         'a client not accepted before is counted, and refused',
       );
+      assert.false(
+        await documents.allowFetch(ctx, CLAUDE_CODE.client_id),
+        'its free download was not accepted, so the next one counts',
+      );
     });
 
     test('a client ID never accepted is counted on every download', async function (assert) {
@@ -311,11 +357,15 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a client ID refused once in a request is refused again at once, without counting', async function (assert) {
+    test('a client ID gets one download decision per request', async function (assert) {
       let documents = hooksFor(store, ONE_PER_ADDRESS);
       await inMetadataDocumentRequest(CALLER, async () => {
         assert.true(
           await documents.allowFetch(undefined, CLAUDE_CODE.client_id),
+        );
+        assert.false(
+          await documents.allowFetch(undefined, CLAUDE_CODE.client_id),
+          'a second lookup in the request downloads nothing',
         );
         assert.false(
           await documents.allowFetch(undefined, CODEX.client_id),
@@ -554,6 +604,50 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('a log line names a document client by its host, never the rest of its client ID', async function (assert) {
+      let clientId =
+        'https://client.example.test/with-query.json?access_token=secret-token-7f3a';
+      documentServer.answers.set(
+        '/with-query.json?access_token=secret-token-7f3a',
+        {
+          body: JSON.stringify({
+            client_id: clientId,
+            redirect_uris: ['http://127.0.0.1/callback'],
+          }),
+        },
+      );
+      let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+        assertStarted(
+          assert,
+          await authorize(clientId, 'http://127.0.0.1:5000/callback'),
+          'a client ID with a query',
+        );
+        await assertRefused(
+          assert,
+          () => authorize(clientId, 'http://127.0.0.1:5000/elsewhere'),
+          'bad-redirect-uri',
+          'a refused request from it',
+        );
+      });
+      let messages = lines.map(({ message }) => message);
+      assert.true(
+        messages.some((message) =>
+          message.includes(
+            'authorization started: resources http://127.0.0.1:0/mcp, client metadata document on client.example.test',
+          ),
+        ),
+        `named by its host (${messages.join(' | ')})`,
+      );
+      assert.false(
+        messages.some(
+          (message) =>
+            message.includes('secret-token-7f3a') ||
+            message.includes('/with-query.json'),
+        ),
+        'no line carries the rest of the client ID',
+      );
+    });
+
     test("Codex's document is accepted", async function (assert) {
       assertStarted(
         assert,
@@ -609,12 +703,46 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         messages.filter((message) =>
           message.includes(
-            'client metadata document: outcome=refused reason=boxel-host host=someone.boxel.site',
+            'client metadata document: outcome=refused reason=boxel-domain host=someone.boxel.site',
           ),
         ).length,
         1,
         'the refusal is logged once',
       );
+    });
+
+    test("a client ID beside one of Boxel's hosts, under the same registrable domain, is refused before any download", async function (assert) {
+      let clientId = 'https://other.oauth-provider.test/client.json';
+      documentServer.serve({
+        client_id: clientId,
+        redirect_uris: ['http://127.0.0.1/callback'],
+      });
+      let messages = await assertRefused(
+        assert,
+        () => authorize(clientId, 'http://127.0.0.1:5000/callback'),
+        'unknown-client',
+        "a host beside the secure origin's",
+      );
+      assert.deepEqual(documentServer.requested, [], 'nothing is downloaded');
+      assert.true(
+        messages.some((message) =>
+          message.includes(
+            'outcome=refused reason=boxel-domain host=other.oauth-provider.test',
+          ),
+        ),
+        'the refusal is logged',
+      );
+    });
+
+    test('a client ID whose scheme is not written in lower case is refused before any download', async function (assert) {
+      let clientId = CLAUDE_CODE.client_id.replace('https://', 'HTTPS://');
+      await assertRefused(
+        assert,
+        () => authorize(clientId, 'http://localhost:54321/callback'),
+        'unknown-client',
+        'an upper-case scheme',
+      );
+      assert.deepEqual(documentServer.requested, [], 'nothing is downloaded');
     });
 
     test('a client ID on a private address is refused by the outbound guard', async function (assert) {
@@ -658,20 +786,65 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(documentServer.requested, ['/moved.json']);
     });
 
-    test('a document over 5 KB is refused', async function (assert) {
-      let clientId = 'https://client.example.test/large.json';
-      documentServer.serve({
-        client_id: clientId,
+    test('a document refused after it is read is downloaded once in a request', async function (assert) {
+      let large = {
         redirect_uris: ['http://127.0.0.1/callback'],
         client_name: 'Large',
         padding: 'x'.repeat(6 * 1024),
-      });
-      await assertRefused(
-        assert,
-        () => authorize(clientId, 'http://127.0.0.1:5000/callback'),
-        'unknown-client',
-        'a large document',
-      );
+      };
+      let cases: [string, string, StubAnswer][] = [
+        [
+          'over 5 KB, its length declared',
+          'declared.json',
+          {
+            body: JSON.stringify({
+              client_id: 'https://client.example.test/declared.json',
+              ...large,
+            }),
+          },
+        ],
+        [
+          'over 5 KB, its length found only by reading',
+          'chunked.json',
+          {
+            chunked: true,
+            body: JSON.stringify({
+              client_id: 'https://client.example.test/chunked.json',
+              ...large,
+            }),
+          },
+        ],
+        ['not JSON', 'not-json.json', { body: '{"client_id":' }],
+        [
+          'naming another client ID',
+          'mismatched.json',
+          {
+            body: JSON.stringify({
+              client_id: 'https://client.example.test/someone-else.json',
+              redirect_uris: ['http://127.0.0.1/callback'],
+            }),
+          },
+        ],
+      ];
+      for (let [label, path, answer] of cases) {
+        documentServer.answers.set(`/${path}`, answer);
+        let before = documentServer.requested.length;
+        await assertRefused(
+          assert,
+          () =>
+            authorize(
+              `https://client.example.test/${path}`,
+              'http://127.0.0.1:5000/callback',
+            ),
+          'unknown-client',
+          label,
+        );
+        assert.deepEqual(
+          documentServer.requested.slice(before),
+          [`/${path}`],
+          `${label}: downloaded once`,
+        );
+      }
     });
 
     test('downloads count against the new-client limit; cache hits do not', async function (assert) {

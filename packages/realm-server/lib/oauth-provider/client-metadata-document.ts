@@ -8,9 +8,14 @@
 //
 // Boxel's part, in the order a request meets it:
 //
-// 1. `allowFetch`, before a download: a client ID on one of Boxel's own hosts
-//    is refused, and a client ID this process hasn't accepted before counts
-//    against the new-client limit DCR uses. A cache hit never gets here.
+// 1. `allowFetch`, before a download: a client ID under the registrable
+//    domain of any of Boxel's own hosts is refused, since pages name the
+//    client by that domain and anyone with an account can make some Boxel
+//    host serve JSON. So is one whose scheme isn't written `https://`, which
+//    pages wouldn't recognize as a document client. A client ID this process
+//    hasn't accepted before counts against the new-client limit DCR uses; one
+//    it has gets one download free, then counts until it is accepted again.
+//    A cache hit never gets here.
 // 2. `fetch`, the download: through the outbound guard, so a client ID can't
 //    reach a private address, with no redirect followed and at most
 //    `MAX_DOCUMENT_BYTES` read.
@@ -23,11 +28,12 @@
 //    client ID as accepted, and logs a cache hit.
 //
 // Boxel's own checks before the library look a client up too (the start of a
-// flow, the error page), outside the library's handling of a request. Every
-// provider route runs inside `inMetadataDocumentRequest` (`serve.ts`), so the
-// hooks know the caller's address on either path, and a client ID refused once
-// in a request is refused again at once: a request Boxel's check falls through
-// on reaches the library, which looks the client up a second time.
+// flow, the error page, consent), outside the library's handling of a request.
+// Every provider route runs inside `inMetadataDocumentRequest` (`serve.ts`), so
+// the hooks know the caller's address on either path. A request that Boxel's
+// check falls through on reaches the library, which may look the client up
+// twice more (its client check and its error handler), so each client ID gets
+// at most one download decision per request: one download, counted once.
 //
 // Pages name a document client by its client ID's registrable domain
 // (`app-name.ts`), never by what the document says.
@@ -45,9 +51,10 @@ import {
   OutboundTimeoutError,
   outboundFetch,
 } from '../outbound/client.ts';
+import { registrableDomain } from '../secure-window.ts';
 import type { NewClientAlert } from './new-client-limit.ts';
 import { takeNewClient, type NewClientLimit } from './new-client-limit.ts';
-import { isOnBoxelHost, type BoxelHosts } from './redirect-uris.ts';
+import type { BoxelHosts } from './redirect-uris.ts';
 import { checkRegistration } from './registration.ts';
 
 const log = logger('boxel:oauth-provider');
@@ -78,11 +85,30 @@ export function isMetadataDocumentClientId(id: unknown): id is string {
   return typeof id === 'string' && /^https:\/\//i.test(id);
 }
 
+// How a log line names a client: a document client by its client ID's host
+// alone, since the rest of the URL is the client's to choose and can carry
+// anything, a token included; a registered client by its generated ID.
+export function clientIdForLogs(clientId: string): string {
+  if (!isMetadataDocumentClientId(clientId)) {
+    return clientId;
+  }
+  let host = URL.parse(clientId)?.host;
+  return host ? `metadata document on ${host}` : 'a metadata document';
+}
+
+// The registrable domains of Boxel's own hosts, the way pages name a document
+// client (`app-name.ts`).
+export function boxelDomains(hosts: BoxelHosts): ReadonlySet<string> {
+  return new Set(
+    [...hosts.exact, ...hosts.domains].map((host) => registrableDomain(host)),
+  );
+}
+
 interface MetadataDocumentRequest {
   // The `CLIENT_IP_HEADER` value.
   address: string | undefined;
-  // The client IDs refused or failed in this request.
-  refused: Set<string>;
+  // The client IDs a download was decided for in this request.
+  asked: Set<string>;
 }
 
 const currentRequest = new AsyncLocalStorage<MetadataDocumentRequest>();
@@ -93,11 +119,7 @@ export function inMetadataDocumentRequest<T>(
   address: string | undefined,
   handle: () => Promise<T>,
 ): Promise<T> {
-  return currentRequest.run({ address, refused: new Set() }, handle);
-}
-
-function refuseForThisRequest(clientId: string) {
-  currentRequest.getStore()?.refused.add(clientId);
+  return currentRequest.run({ address, asked: new Set() }, handle);
 }
 
 export interface ClientMetadataDocuments {
@@ -139,6 +161,7 @@ export function clientMetadataDocuments({
   // outbound guard. Nothing in production sets it.
   testOnlyDocumentOrigins?: ReadonlyMap<string, string>;
 }): ClientMetadataDocuments {
+  let ownDomains = boxelDomains(hosts);
   let known = new BoundedSet(KNOWN_CLIENT_IDS);
   // The client IDs downloaded and not yet used, so `allowClient` can tell a
   // download from a cache hit. Bounded, since a download that fails after it
@@ -150,19 +173,28 @@ export function clientMetadataDocuments({
     clientId: string,
   ): Promise<boolean> {
     let request = currentRequest.getStore();
-    if (request?.refused.has(clientId)) {
-      return false;
+    if (request) {
+      if (request.asked.has(clientId)) {
+        return false;
+      }
+      request.asked.add(clientId);
     }
     let url = URL.parse(clientId);
     if (!url) {
       return false;
     }
-    if (isOnBoxelHost(url, hosts)) {
-      refuseForThisRequest(clientId);
-      note('refused', url, 'boxel-host');
+    if (!clientId.startsWith('https://')) {
+      note('refused', url, 'scheme-case');
       return false;
     }
-    if (!known.has(clientId)) {
+    if (ownDomains.has(registrableDomain(url.hostname))) {
+      note('refused', url, 'boxel-domain');
+      return false;
+    }
+    // A client accepted before gets this download free. It counts again
+    // until it is accepted again, so a document that stopped loading can't
+    // be downloaded for free over and over.
+    if (!known.delete(clientId)) {
       let header = ctx?.req.headers[CLIENT_IP_HEADER];
       let address = typeof header === 'string' ? header : request?.address;
       let outcome = await takeNewClient(
@@ -172,7 +204,6 @@ export function clientMetadataDocuments({
       );
       alert.note(outcome);
       if (!outcome.admitted) {
-        refuseForThisRequest(clientId);
         note('refused', url, outcome.reason);
         return false;
       }
@@ -219,13 +250,11 @@ export function clientMetadataDocuments({
       });
     } catch (error) {
       downloading.delete(clientId);
-      refuseForThisRequest(clientId);
       note('failed', url, failureReason(error));
       throw error;
     }
     if (response.status !== 200) {
       downloading.delete(clientId);
-      refuseForThisRequest(clientId);
       note('failed', url, `status-${response.status}`);
     } else {
       note('downloaded', url);
@@ -247,7 +276,6 @@ export function clientMetadataDocuments({
     let check = checkRegistration({ ...metadata }, { hosts, scopes });
     if (!check.allowed) {
       downloading.delete(metadata.client_id);
-      refuseForThisRequest(metadata.client_id);
       let url = URL.parse(metadata.client_id);
       if (url) {
         note('refused', url, check.error);
