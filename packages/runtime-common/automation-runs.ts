@@ -85,7 +85,8 @@ export interface NewAutomationRun {
 // - `commit-interrupted`: an earlier attempt claimed the commit and stopped
 //   before recording that it landed, so whether its batch landed is unknown.
 //   Finish the run as an error without running the script, since running it
-//   again could commit twice.
+//   again could commit twice. If the batch lands later after all, recording
+//   it makes the run complete.
 // - `superseded`: a newer attempt owns the run. Stop without touching it.
 // - `over`: the run is complete, errored or canceled, and the attempt doesn't
 //   own it.
@@ -227,22 +228,31 @@ export async function claimAutomationRunCommit(
 
 // Records that the claimed commit's batch has landed. It needs no owner: the
 // batch landed whichever attempt sent it, even one a retry has since
-// replaced.
+// replaced. A batch can land after its run was finished as an error, when a
+// retry found the commit interrupted or the run was abandoned, since nobody
+// knew then whether it would land. That run becomes complete, so a run whose
+// commit landed never reads as an error.
 export async function recordAutomationRunCommitted(
   dbAdapter: DBAdapter,
   id: string,
 ): Promise<AutomationRun | undefined> {
   let [row] = await query(dbAdapter, [
-    'UPDATE automation_runs SET committed_at = now() WHERE id =',
+    'UPDATE automation_runs SET committed_at = now(),',
+    "error_reason = CASE WHEN state = 'error' THEN NULL ELSE error_reason END,",
+    "error_message = CASE WHEN state = 'error' THEN NULL ELSE error_message END,",
+    "state = CASE WHEN state = 'error' THEN 'complete' ELSE state END",
+    'WHERE id =',
     param(id),
-    'AND commit_started_at IS NOT NULL AND committed_at IS NULL RETURNING *',
+    "AND state IN ('running', 'error') AND commit_started_at IS NOT NULL AND committed_at IS NULL RETURNING *",
   ]);
   return row ? runFromRow(row) : undefined;
 }
 
 // Ends a running run that `attempt` owns. A run whose commit was claimed can
 // finish as complete only once the commit has landed, and a run whose commit
-// landed can't finish as an error, since its writes are in the realm.
+// landed can't finish as an error, since its writes are in the realm. (A
+// claimed commit that lands after the run finished as an error makes the run
+// complete; see `recordAutomationRunCommitted`.)
 export async function finishAutomationRun(
   dbAdapter: DBAdapter,
   id: string,

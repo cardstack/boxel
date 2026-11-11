@@ -69,7 +69,8 @@ says why) rather than throwing.
     recorded that it landed, so nobody knows whether the batch landed. Finish
     as an error with reason `commit-interrupted`, without running the script,
     because running it again could commit twice. The next scheduled run
-    compares with the realm and catches up (ADR 027 §1.1).
+    compares with the realm and catches up (ADR 027 §1.1). If the batch lands
+    after all, recording it makes the run complete.
   - `superseded`: a newer attempt owns the run. Stop without touching it.
   - `over`: the run already finished or was canceled.
   - `missing`: no such run.
@@ -80,7 +81,11 @@ says why) rather than throwing.
   **Send the batch only after the claim returns the run**: claiming first is
   what makes a commit happen at most once (ADR 027 §1.4).
 - **`recordAutomationRunCommitted`** records that the batch landed. It doesn't
-  check the owner, because the batch landed whichever attempt sent it.
+  check the owner, because the batch landed whichever attempt sent it. A batch
+  can land after its run finished as an error (a retry found the commit
+  interrupted, or the reconcile pass abandoned the run). Recording it then
+  moves the run to `complete` and clears the error, so a run whose commit
+  landed never reads as an error.
 - **`finishAutomationRun`** ends a running run as `complete` or `error`, owner
   only. A run that claimed its commit can't finish as complete until the
   commit is recorded as landed, and a run whose commit landed can't finish as
@@ -146,8 +151,9 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
 - `commit_started_at` set and `committed_at` null on a finished run: the
   claiming attempt stopped between the claim and the landing. Check the
   realm's files for the batch's writes to see whether it landed.
-- `committed_at` set on an `error` run: the batch landed after a retry or
-  the reconcile pass had already closed the run as an error.
+- `complete` with `committed_at` later than `finished_at`: the batch landed
+  after a retry or the reconcile pass had closed the run as an error, and
+  recording the landing made it complete.
 
 The row holds run state only. A run's log (its console lines and platform
 calls) doesn't go on it.

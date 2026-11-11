@@ -21,7 +21,8 @@
 //
 // The metered counts are for the realm server to add to where it does the
 // work, never taking them from the tab. A deleted realm's runs are deleted
-// with it.
+// with it, found by the `realm` index. The partial index on unfinished runs
+// serves a sweep for runs left pending or running.
 //
 // The table is server-only, and excluded from the SQLite schema dump.
 
@@ -54,6 +55,14 @@ exports.up = (pgm) => {
         CHECK (state IN ('pending', 'running', 'complete', 'error', 'canceled')),
       CONSTRAINT automation_runs_slot_key UNIQUE (automation_id, trigger, slot)
     )
+  `);
+  pgm.sql(
+    `CREATE INDEX IF NOT EXISTS automation_runs_realm_idx ON automation_runs (realm)`,
+  );
+  pgm.sql(`
+    CREATE INDEX IF NOT EXISTS automation_runs_unfinished_idx
+      ON automation_runs (state, created_at)
+      WHERE state IN ('pending', 'running')
   `);
 };
 

@@ -232,6 +232,51 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a replaced attempt whose batch lands after the run errored makes the run complete', async function (assert) {
+      let run = await startedRun(1);
+      await claimAutomationRunCommit(dbAdapter, run.id, 1);
+      let retry = await startAutomationRunAttempt(dbAdapter, run.id, 2);
+      assert.strictEqual(retry.kind, 'commit-interrupted');
+      await finishAutomationRun(dbAdapter, run.id, 2, {
+        state: 'error',
+        reason: 'commit-interrupted',
+      });
+
+      let landed = await recordAutomationRunCommitted(dbAdapter, run.id);
+      assert.strictEqual(landed?.state, 'complete');
+      assert.ok(landed?.committedAt);
+      assert.strictEqual(landed?.errorReason, null);
+      assert.strictEqual(landed?.errorMessage, null);
+      assert.ok(landed?.finishedAt, 'the run keeps the time it finished');
+    });
+
+    test('a claimed batch that lands after the run was abandoned makes the run complete', async function (assert) {
+      let run = await startedRun(1);
+      await claimAutomationRunCommit(dbAdapter, run.id, 1);
+      let abandoned = await abandonAutomationRun(dbAdapter, run.id, 'job-gone');
+      assert.strictEqual(abandoned?.state, 'error');
+
+      let landed = await recordAutomationRunCommitted(dbAdapter, run.id);
+      assert.strictEqual(landed?.state, 'complete');
+      assert.strictEqual(landed?.errorReason, null);
+    });
+
+    test('an errored run that never claimed a commit cannot be recorded as committed', async function (assert) {
+      let run = await startedRun(1);
+      await finishAutomationRun(dbAdapter, run.id, 1, {
+        state: 'error',
+        reason: 'script-error',
+      });
+      assert.strictEqual(
+        await recordAutomationRunCommitted(dbAdapter, run.id),
+        undefined,
+      );
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))?.state,
+        'error',
+      );
+    });
+
     test('a pending run can be canceled, and then never starts', async function (assert) {
       let run = await newRun();
       let canceled = await cancelAutomationRun(dbAdapter, run.id, PAYER);
