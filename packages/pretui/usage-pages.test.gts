@@ -43,6 +43,7 @@ import { DEMOS_CHECKBOX_CARD } from './components/checkbox-card.usage';
 import { DEMOS_CHECKBOX } from './components/checkbox.usage';
 import { DEMOS_CHIP } from './components/chip.usage';
 import { DEMOS_CODE_BLOCK } from './components/code-block.usage';
+import { DEMOS_CODE_EDITOR } from './components/code-editor.usage';
 import { DEMOS_COLLAPSED_TURN } from './components/collapsed-turn.usage';
 import { DEMOS_COLLAPSIBLE } from './components/collapsible.usage';
 import { DEMOS_COLOR_AREA } from './components/color-area.usage';
@@ -340,6 +341,7 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_CHECKBOX,
   DEMOS_CHIP,
   DEMOS_CODE_BLOCK,
+  DEMOS_CODE_EDITOR,
   DEMOS_COLLAPSED_TURN,
   DEMOS_COLLAPSIBLE,
   DEMOS_COLOR_AREA,
@@ -602,9 +604,14 @@ module('Pretui | usage pages', function (hooks) {
         let Demo = registry[name] as AnyComponent;
         assert.ok(Demo, `${name} present`);
         await render(<template><Demo /></template>);
-        assert.ok(document.querySelector('[data-test-pretui-usage]'), `${name} rendered a FreestyleUsage shell`);
         assert.ok(
-          Array.from(document.querySelectorAll('[data-test-pretui-viewport-specimen]')).some(
+          document.querySelector('[data-test-pretui-usage]'),
+          `${name} rendered a FreestyleUsage shell`,
+        );
+        assert.ok(
+          Array.from(
+            document.querySelectorAll('[data-test-pretui-viewport-specimen]'),
+          ).some(
             (s) => s.childElementCount > 0 || Boolean(s.textContent?.trim()),
           ),
           `${name} shows its example`,

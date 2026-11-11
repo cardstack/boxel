@@ -26,8 +26,14 @@ import {
   undo,
   redo,
 } from '@codemirror/commands';
+import { javascript } from '@codemirror/lang-javascript';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { syntaxTree } from '@codemirror/language';
+import {
+  bracketMatching,
+  indentOnInput,
+  syntaxHighlighting,
+  syntaxTree,
+} from '@codemirror/language';
 import {
   EditorState,
   StateEffect,
@@ -37,12 +43,17 @@ import {
 import {
   EditorView,
   Decoration,
+  drawSelection,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  lineNumbers,
   type DecorationSet,
   ViewPlugin,
   type ViewUpdate,
   WidgetType,
   keymap,
 } from '@codemirror/view';
+import { classHighlighter } from '@lezer/highlight';
 
 import {
   type BfmRefFormat,
@@ -1292,10 +1303,95 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
 
 // ── Exported context ────────────────────────────────────────────────────────
 
+// ── Code editor ─────────────────────────────────────────────────────────────
+
+export type CodeEditorLanguage = 'javascript' | 'typescript' | 'json' | 'plain';
+
+export interface CreateCodeEditorStateOptions {
+  doc: string;
+  language?: CodeEditorLanguage;
+  readOnly?: boolean;
+  lineNumbers?: boolean;
+  // Lands on the editable element, so a `<label for>` can name it.
+  controlId?: string;
+  // The accessible name when no label points at the editor.
+  label?: string;
+  // An `EditorView.theme` spec from the component hosting the editor, so it
+  // styles CodeMirror's DOM from its own tokens. A theme takes precedence
+  // over CodeMirror's base theme, which a stylesheet in a cascade layer
+  // can't, since CodeMirror injects its base theme unlayered.
+  theme?: Parameters<typeof EditorView.theme>[0];
+  onDocChange?: (text: string) => void;
+}
+
+function languageExtension(language: CodeEditorLanguage | undefined) {
+  switch (language) {
+    case 'javascript':
+      return [javascript()];
+    case 'typescript':
+      return [javascript({ typescript: true })];
+    // JSON is a JavaScript expression, so the JavaScript grammar highlights
+    // its strings, numbers and literals.
+    case 'json':
+      return [javascript()];
+    default:
+      return [];
+  }
+}
+
+// An editor state for source code. Tokens are tagged with `tok-*` classes
+// (`classHighlighter`) rather than coloured here, so the component that hosts
+// the editor colours them from its theme. Tab is left to move focus, so the
+// editor is never a keyboard trap.
+function createCodeEditorState(
+  options: CreateCodeEditorStateOptions,
+): EditorState {
+  let readOnly = options.readOnly ?? false;
+  let attributes: Record<string, string> = { 'aria-multiline': 'true' };
+  if (options.controlId) {
+    attributes.id = options.controlId;
+  }
+  if (options.label) {
+    attributes['aria-label'] = options.label;
+  }
+  if (readOnly) {
+    attributes['aria-readonly'] = 'true';
+  }
+  let onDocChange = options.onDocChange;
+  let extensions: Extension[] = [
+    ...(options.lineNumbers === false
+      ? []
+      : [lineNumbers(), highlightActiveLineGutter()]),
+    history(),
+    drawSelection(),
+    indentOnInput(),
+    bracketMatching(),
+    highlightActiveLine(),
+    syntaxHighlighting(classHighlighter),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    ...languageExtension(options.language),
+    ...(options.theme ? [EditorView.theme(options.theme)] : []),
+    EditorState.readOnly.of(readOnly),
+    EditorView.editable.of(!readOnly),
+    EditorView.contentAttributes.of(attributes),
+    ...(onDocChange
+      ? [
+          EditorView.updateListener.of((update: ViewUpdate) => {
+            if (update.docChanged) {
+              onDocChange(update.state.doc.toString());
+            }
+          }),
+        ]
+      : []),
+  ];
+  return EditorState.create({ doc: options.doc, extensions });
+}
+
 export interface CodeMirrorContext {
   EditorState: typeof EditorState;
   EditorView: typeof EditorView;
   createEditorState: typeof createEditorState;
+  createCodeEditorState: typeof createCodeEditorState;
   undo: typeof undo;
   redo: typeof redo;
   openCardSearchEffect: typeof openCardSearchEffect;
@@ -1308,6 +1404,7 @@ const codemirrorContext: CodeMirrorContext = {
   EditorState,
   EditorView,
   createEditorState,
+  createCodeEditorState,
   undo,
   redo,
   openCardSearchEffect,
