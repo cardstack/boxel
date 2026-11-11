@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { FG_YELLOW, FG_CYAN, FG_MAGENTA, DIM, BOLD, RESET } from './colors.ts';
 import {
@@ -21,7 +22,13 @@ export interface ProfileManagerDeps {
   matrixLogin?: typeof matrixLogin;
   promptPassword?: (question: string) => Promise<string>;
   isTty?: () => boolean;
+  // Moves the written profiles file into place.
+  renameFile?: (from: string, to: string) => void;
 }
+
+// What a rename over the profiles file throws on Windows while another
+// program has the file open.
+const RENAME_REFUSED_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
@@ -57,6 +64,34 @@ function isJwtNearExpiry(
 
 export const NO_ACTIVE_PROFILE_ERROR =
   'No active profile. Run `boxel profile add` to create one.';
+
+// The error for a profile asked for by name that isn't saved. It lists the
+// saved profiles, as `boxel profile list` would, so the caller can see the
+// right ID without running it.
+export function unknownProfileMessage(
+  profileId: string,
+  savedProfileIds: string[],
+): string {
+  if (savedProfileIds.length === 0) {
+    return `No profile named "${profileId}", and no profiles are saved. Run \`boxel profile add\` to create one.`;
+  }
+  return (
+    `No profile named "${profileId}". Saved profiles: ${savedProfileIds.join(', ')}. ` +
+    `Run \`boxel profile list\` to see your profiles.`
+  );
+}
+
+function noSessionMessage(profileId: string): string {
+  return (
+    `Profile "${profileId}" has no stored Matrix access token. ` +
+    `Run \`boxel profile add\` to re-authenticate.`
+  );
+}
+
+type ProfilesFileRead =
+  | { kind: 'missing' }
+  | { kind: 'ok'; config: ProfilesConfig }
+  | { kind: 'unreadable'; message: string };
 
 /**
  * Bootstrap realms (the base realm) are registered — and tokened by
@@ -161,12 +196,18 @@ export class ProfileManager implements RealmAuthenticator {
   private matrixLoginFn: typeof matrixLogin;
   private promptPasswordFn: (question: string) => Promise<string>;
   private isTtyFn: () => boolean;
+  private renameFileFn: (from: string, to: string) => void;
   // Set when a profiles file exists on disk but couldn't be read as a profiles
   // store (unparseable, or a shape we don't recognize). The manager still
   // starts empty so `profile add` can recover, but discovery callers must be
   // able to tell "couldn't read the store" apart from "no profiles yet" —
   // otherwise an unreadable store reads as an absent profile.
   private loadError: string | null = null;
+  // The profile this process acts as when one was picked for it
+  // (`selectProfile`, which `--profile` and `BOXEL_PROFILE` reach). Never
+  // written to the profiles file: the active profile there stays whatever it
+  // was.
+  private selectedProfileId: string | null = null;
 
   constructor(configDir?: string, deps?: ProfileManagerDeps) {
     this.configDir = configDir || DEFAULT_CONFIG_DIR;
@@ -175,6 +216,7 @@ export class ProfileManager implements RealmAuthenticator {
     this.matrixLoginFn = deps?.matrixLogin ?? matrixLogin;
     this.promptPasswordFn = deps?.promptPassword ?? defaultPromptPassword;
     this.isTtyFn = deps?.isTty ?? (() => Boolean(process.stdin.isTTY));
+    this.renameFileFn = deps?.renameFile ?? fs.renameSync;
   }
 
   private ensureConfigDir(): void {
@@ -183,12 +225,10 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
-  private loadConfig(): ProfilesConfig {
-    const defaultConfig: ProfilesConfig = { profiles: {}, activeProfile: null };
-
+  private readProfilesFile(): ProfilesFileRead {
     // A missing file is the genuine "no profiles yet" case, not a load error.
     if (!fs.existsSync(this.profilesFile)) {
-      return defaultConfig;
+      return { kind: 'missing' };
     }
 
     try {
@@ -210,21 +250,37 @@ export class ProfileManager implements RealmAuthenticator {
             : null;
 
         if (profiles) {
-          return { profiles, activeProfile };
+          return { kind: 'ok', config: { profiles, activeProfile } };
         }
       }
       // The file existed and parsed, but isn't a profiles store we recognize.
-      this.loadError =
-        `Profiles file at ${this.profilesFile} is not a recognizable profiles store; ` +
-        `starting with no profiles.`;
+      return {
+        kind: 'unreadable',
+        message:
+          `Profiles file at ${this.profilesFile} is not a recognizable profiles store; ` +
+          `starting with no profiles.`,
+      };
     } catch (err) {
-      // Unreadable or unparseable. Start empty so `profile add` can recover,
-      // but remember the failure so discovery can report it.
-      this.loadError =
-        `Could not read profiles file at ${this.profilesFile}: ` +
-        `${err instanceof Error ? err.message : String(err)}`;
+      return {
+        kind: 'unreadable',
+        message:
+          `Could not read profiles file at ${this.profilesFile}: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      };
     }
-    return defaultConfig;
+  }
+
+  private loadConfig(): ProfilesConfig {
+    let read = this.readProfilesFile();
+    if (read.kind === 'ok') {
+      return read.config;
+    }
+    if (read.kind === 'unreadable') {
+      // Start empty so `profile add` can recover, but remember the failure so
+      // discovery can report it.
+      this.loadError = read.message;
+    }
+    return { profiles: {}, activeProfile: null };
   }
 
   // Non-null when a profiles file exists but couldn't be loaded — see
@@ -234,15 +290,80 @@ export class ProfileManager implements RealmAuthenticator {
     return this.loadError;
   }
 
-  private saveConfig(): void {
+  // Make a change to the profiles store and save it. The change is applied
+  // twice: to this process's copy, and then to the profiles file as it is now,
+  // re-read, before that is written back. A change touches only the fields it
+  // is about, and decides from what it's applied to, so whatever another
+  // process saved since this one loaded the file is kept: a switch, a
+  // sign-in, a token, a profile it added or removed.
+  //
+  // This process's copy isn't refreshed from the file, so the profile a
+  // running command acts as never changes under it. Nothing locks the file:
+  // two saves that overlap in the moment between one's read and its write can
+  // still lose one of the two changes.
+  private commit(change: (config: ProfilesConfig) => void): void {
+    change(this.config);
     this.ensureConfigDir();
-    fs.writeFileSync(this.profilesFile, JSON.stringify(this.config, null, 2), {
-      mode: 0o600,
+    let read = this.readProfilesFile();
+    let toWrite: ProfilesConfig;
+    if (read.kind === 'unreadable') {
+      // Replaced outright, which is how `profile add` recovers from an
+      // unreadable file.
+      toWrite = this.config;
+    } else {
+      toWrite =
+        read.kind === 'ok'
+          ? read.config
+          : { profiles: {}, activeProfile: null };
+      change(toWrite);
+    }
+    this.writeProfilesFile(toWrite);
+  }
+
+  // Change fields of one saved profile. A profile that another process
+  // removed since this one loaded the file stays removed.
+  private updateProfile(
+    profileId: string,
+    update: (profile: Profile) => void,
+  ): void {
+    this.commit((config) => {
+      let profile = config.profiles[profileId];
+      if (profile) {
+        update(profile);
+      }
     });
+  }
+
+  // Change fields of the profile this process acts as (see
+  // `getActiveProfileId`), when there is one.
+  private updateActiveProfile(update: (profile: Profile) => void): void {
+    let active = this.getActiveProfile();
+    if (active) {
+      this.updateProfile(active.id, update);
+    }
+  }
+
+  // Replace the profiles file by a rename, so a process reading it never sees
+  // it half-written. Where the rename is refused (on Windows, while another
+  // program has the file open) the file is written in place instead. The
+  // temporary file holds tokens, so it doesn't outlive this call.
+  private writeProfilesFile(config: ProfilesConfig): void {
+    let data = JSON.stringify(config, null, 2);
+    let tempFile = `${this.profilesFile}.${process.pid}.${randomUUID()}.tmp`;
     try {
-      fs.chmodSync(this.profilesFile, 0o600);
-    } catch {
-      // Ignore permission errors on Windows
+      // `wx` makes a new file, so `mode` applies: only the owner can read it.
+      fs.writeFileSync(tempFile, data, { mode: 0o600, flag: 'wx' });
+      try {
+        this.renameFileFn(tempFile, this.profilesFile);
+      } catch (err) {
+        let code = (err as NodeJS.ErrnoException).code;
+        if (!code || !RENAME_REFUSED_CODES.has(code)) {
+          throw err;
+        }
+        fs.writeFileSync(this.profilesFile, data, { mode: 0o600 });
+      }
+    } finally {
+      fs.rmSync(tempFile, { force: true });
     }
   }
 
@@ -254,12 +375,36 @@ export class ProfileManager implements RealmAuthenticator {
     return this.config.profiles[profileId];
   }
 
-  getActiveProfileId(): string | null {
-    return this.config.activeProfile;
+  // Act as `profileId` for the rest of this process, whatever the active
+  // profile is. Nothing is written: the active profile in the profiles file,
+  // which every other terminal and session uses, stays as it was. Tokens
+  // minted from here on are saved to this profile's entry.
+  //
+  // Throws, without selecting anything, when the profiles file can't be read,
+  // when no profile has this exact ID, or when it has no stored session.
+  selectProfile(profileId: string): void {
+    if (this.loadError) {
+      throw new Error(this.loadError);
+    }
+    let profile = this.config.profiles[profileId];
+    if (!profile) {
+      throw new Error(unknownProfileMessage(profileId, this.listProfiles()));
+    }
+    if (!profile.matrixAccessToken) {
+      throw new Error(noSessionMessage(profileId));
+    }
+    this.selectedProfileId = profileId;
   }
 
+  // The ID of the profile this process acts as: the one `selectProfile`
+  // picked, or else the active profile from the profiles file.
+  getActiveProfileId(): string | null {
+    return this.selectedProfileId ?? this.config.activeProfile;
+  }
+
+  // The profile this process acts as. See `getActiveProfileId`.
   getActiveProfile(): { id: string; profile: Profile } | null {
-    const id = this.config.activeProfile;
+    const id = this.getActiveProfileId();
     if (!id) return null;
     const profile = this.config.profiles[id];
     if (!profile) return null;
@@ -313,11 +458,8 @@ export class ProfileManager implements RealmAuthenticator {
 
   // Persist a profile from an already-acquired MatrixAuth. The token is
   // stored; the original password (if any) never reaches this function. Used
-  // directly by tests, and as the "store" half of `addProfile`.
-  // When re-authing an existing profile we keep its cached realm tokens \u2014 a
-  // fresh access token doesn't invalidate the realm-server JWT. But if the
-  // matrix or realm-server URL changed, the cached tokens were minted against
-  // the old servers and must be dropped.
+  // directly by tests, and as the "store" half of `addProfile`. The profile
+  // becomes the active one when no profile is.
   async addProfileWithAuth(
     matrixId: string,
     auth: MatrixAuth,
@@ -334,33 +476,34 @@ export class ProfileManager implements RealmAuthenticator {
       realmServerUrl,
     );
 
-    const existing = this.config.profiles[matrixId];
-    const urlsChanged =
-      !!existing &&
-      (existing.matrixUrl !== slots.matrixUrl ||
-        existing.realmServerUrl !== slots.realmServerUrl);
-    const profile: Profile = {
-      displayName: slots.displayName,
-      matrixUrl: slots.matrixUrl,
-      realmServerUrl: slots.realmServerUrl,
-      matrixAccessToken: auth.accessToken,
-      matrixUserId: auth.userId,
-      matrixDeviceId: auth.deviceId,
-      realmTokens: urlsChanged ? undefined : existing?.realmTokens,
-      realmServerToken: urlsChanged ? undefined : existing?.realmServerToken,
-      // The key-management sign-in is for this profile's realm server, so it
-      // carries over a re-authentication against the same one.
-      secureSession:
-        secureSession ?? (urlsChanged ? undefined : existing?.secureSession),
-    };
-
-    this.config.profiles[matrixId] = profile;
-
-    if (!this.config.activeProfile) {
-      this.config.activeProfile = matrixId;
-    }
-
-    this.saveConfig();
+    this.commit((config) => {
+      // When re-authing an existing profile we keep its cached realm tokens \u2014
+      // a fresh access token doesn't invalidate the realm-server JWT. But if
+      // the matrix or realm-server URL changed, the cached tokens were minted
+      // against the old servers and must be dropped.
+      const existing = config.profiles[matrixId];
+      const urlsChanged =
+        !!existing &&
+        (existing.matrixUrl !== slots.matrixUrl ||
+          existing.realmServerUrl !== slots.realmServerUrl);
+      config.profiles[matrixId] = {
+        displayName: slots.displayName,
+        matrixUrl: slots.matrixUrl,
+        realmServerUrl: slots.realmServerUrl,
+        matrixAccessToken: auth.accessToken,
+        matrixUserId: auth.userId,
+        matrixDeviceId: auth.deviceId,
+        realmTokens: urlsChanged ? undefined : existing?.realmTokens,
+        realmServerToken: urlsChanged ? undefined : existing?.realmServerToken,
+        // The key-management sign-in is for this profile's realm server, so
+        // it carries over a re-authentication against the same one.
+        secureSession:
+          secureSession ?? (urlsChanged ? undefined : existing?.secureSession),
+      };
+      if (!config.activeProfile) {
+        config.activeProfile = matrixId;
+      }
+    });
   }
 
   async addProfile(
@@ -406,14 +549,13 @@ export class ProfileManager implements RealmAuthenticator {
       return false;
     }
 
-    delete this.config.profiles[profileId];
-
-    if (this.config.activeProfile === profileId) {
-      const remaining = Object.keys(this.config.profiles);
-      this.config.activeProfile = remaining.length > 0 ? remaining[0] : null;
-    }
-
-    this.saveConfig();
+    this.commit((config) => {
+      delete config.profiles[profileId];
+      if (config.activeProfile === profileId) {
+        const remaining = Object.keys(config.profiles);
+        config.activeProfile = remaining.length > 0 ? remaining[0] : null;
+      }
+    });
     return true;
   }
 
@@ -421,8 +563,11 @@ export class ProfileManager implements RealmAuthenticator {
     if (!this.config.profiles[profileId]) {
       return false;
     }
-    this.config.activeProfile = profileId;
-    this.saveConfig();
+    this.commit((config) => {
+      if (config.profiles[profileId]) {
+        config.activeProfile = profileId;
+      }
+    });
     return true;
   }
 
@@ -430,8 +575,9 @@ export class ProfileManager implements RealmAuthenticator {
     if (!this.config.profiles[profileId]) {
       return false;
     }
-    this.config.profiles[profileId].displayName = displayName;
-    this.saveConfig();
+    this.updateProfile(profileId, (profile) => {
+      profile.displayName = displayName;
+    });
     return true;
   }
 
@@ -447,34 +593,29 @@ export class ProfileManager implements RealmAuthenticator {
     if (!profile) {
       return false;
     }
-    let changed = false;
-    if (urls.matrixUrl && urls.matrixUrl !== profile.matrixUrl) {
-      profile.matrixUrl = urls.matrixUrl;
-      changed = true;
+    let differs = (p: Profile) =>
+      (!!urls.matrixUrl && urls.matrixUrl !== p.matrixUrl) ||
+      (!!urls.realmServerUrl && urls.realmServerUrl !== p.realmServerUrl);
+    if (!differs(profile)) {
+      return false;
     }
-    if (urls.realmServerUrl && urls.realmServerUrl !== profile.realmServerUrl) {
-      profile.realmServerUrl = urls.realmServerUrl;
-      changed = true;
-    }
-    if (changed) {
-      profile.realmTokens = undefined;
-      profile.realmServerToken = undefined;
-      profile.secureSession = undefined;
-      this.saveConfig();
-    }
-    return changed;
+    this.updateProfile(profileId, (p) => {
+      if (!differs(p)) {
+        return;
+      }
+      p.matrixUrl = urls.matrixUrl || p.matrixUrl;
+      p.realmServerUrl = urls.realmServerUrl || p.realmServerUrl;
+      p.realmTokens = undefined;
+      p.realmServerToken = undefined;
+      p.secureSession = undefined;
+    });
+    return true;
   }
 
   setRealmToken(realmUrl: string, token: string): void {
-    let active = this.getActiveProfile();
-    if (!active) {
-      return;
-    }
-    if (!active.profile.realmTokens) {
-      active.profile.realmTokens = {};
-    }
-    active.profile.realmTokens[realmUrl] = token;
-    this.saveConfig();
+    this.updateActiveProfile((profile) => {
+      profile.realmTokens = { ...profile.realmTokens, [realmUrl]: token };
+    });
   }
 
   getRealmToken(realmUrl: string): string | undefined {
@@ -483,12 +624,9 @@ export class ProfileManager implements RealmAuthenticator {
   }
 
   setRealmServerToken(token: string): void {
-    let active = this.getActiveProfile();
-    if (!active) {
-      return;
-    }
-    active.profile.realmServerToken = token;
-    this.saveConfig();
+    this.updateActiveProfile((profile) => {
+      profile.realmServerToken = token;
+    });
   }
 
   getRealmServerToken(): string | undefined {
@@ -497,12 +635,9 @@ export class ProfileManager implements RealmAuthenticator {
   }
 
   setSecureSession(session: SecureSessionRecord): void {
-    let active = this.getActiveProfile();
-    if (!active) {
-      return;
-    }
-    active.profile.secureSession = session;
-    this.saveConfig();
+    this.updateActiveProfile((profile) => {
+      profile.secureSession = session;
+    });
   }
 
   // The active profile's secure session, while it lasts.
@@ -514,13 +649,18 @@ export class ProfileManager implements RealmAuthenticator {
     return session;
   }
 
+  // Forget the secure session this process holds. One that another process
+  // signed in since this one loaded the profiles file is kept.
   clearSecureSession(): void {
-    let active = this.getActiveProfile();
-    if (!active?.profile.secureSession) {
+    let held = this.getActiveProfile()?.profile.secureSession?.token;
+    if (!held) {
       return;
     }
-    active.profile.secureSession = undefined;
-    this.saveConfig();
+    this.updateActiveProfile((profile) => {
+      if (profile.secureSession?.token === held) {
+        profile.secureSession = undefined;
+      }
+    });
   }
 
   // Return the Matrix credentials stored for a profile. Sync — reads only
@@ -528,16 +668,13 @@ export class ProfileManager implements RealmAuthenticator {
   // Throws when the profile has no stored token yet (e.g. a pre-CS-10725
   // profile still on disk from before the password→token swap).
   getStoredMatrixAuth(profileId?: string): MatrixAuth {
-    const targetId = profileId ?? this.config.activeProfile ?? undefined;
+    const targetId = profileId ?? this.getActiveProfileId() ?? undefined;
     const profile = targetId ? this.config.profiles[targetId] : undefined;
     if (!targetId || !profile) {
       throw new Error(NO_ACTIVE_PROFILE_ERROR);
     }
     if (!profile.matrixAccessToken) {
-      throw new Error(
-        `Profile "${targetId}" has no stored Matrix access token. ` +
-          `Run \`boxel profile add\` to re-authenticate.`,
-      );
+      throw new Error(noSessionMessage(targetId));
     }
     return {
       accessToken: profile.matrixAccessToken,
@@ -553,7 +690,7 @@ export class ProfileManager implements RealmAuthenticator {
   // refreshed MatrixAuth. Non-TTY contexts get a clear "re-add the profile"
   // error instead of hanging on a prompt that can never be answered.
   async reAuthenticate(profileId?: string): Promise<MatrixAuth> {
-    const targetId = profileId ?? this.config.activeProfile ?? undefined;
+    const targetId = profileId ?? this.getActiveProfileId() ?? undefined;
     const profile = targetId ? this.config.profiles[targetId] : undefined;
     if (!targetId || !profile) {
       throw new Error(NO_ACTIVE_PROFILE_ERROR);
@@ -580,12 +717,15 @@ export class ProfileManager implements RealmAuthenticator {
       username,
       password,
     );
-    await this.addProfileWithAuth(
-      targetId,
-      auth,
-      profile.displayName,
-      profile.realmServerUrl,
-    );
+    // Only the Matrix session changes. Which profile is active is left alone,
+    // so a command acting as a selected profile doesn't make it the active
+    // one, and so are the profile's realm tokens: a fresh access token
+    // doesn't invalidate them.
+    this.updateProfile(targetId, (p) => {
+      p.matrixAccessToken = auth.accessToken;
+      p.matrixUserId = auth.userId;
+      p.matrixDeviceId = auth.deviceId;
+    });
     return this.getStoredMatrixAuth(targetId);
   }
 
@@ -769,9 +909,22 @@ export class ProfileManager implements RealmAuthenticator {
     // prefetch) or the request got a 401. Refresh everything and retry.
     let active = this.getActiveProfile();
     if (active) {
-      active.profile.realmTokens = {};
-      active.profile.realmServerToken = undefined;
-      this.saveConfig();
+      // Forget the tokens this process holds. Any that another process minted
+      // since this one loaded the profiles file are kept.
+      let heldRealmTokens = { ...active.profile.realmTokens };
+      let heldServerToken = active.profile.realmServerToken;
+      this.updateActiveProfile((profile) => {
+        let realmTokens = { ...profile.realmTokens };
+        for (let [realmUrl, token] of Object.entries(heldRealmTokens)) {
+          if (realmTokens[realmUrl] === token) {
+            delete realmTokens[realmUrl];
+          }
+        }
+        profile.realmTokens = realmTokens;
+        if (profile.realmServerToken === heldServerToken) {
+          profile.realmServerToken = undefined;
+        }
+      });
     }
     await this.fetchAndStoreAllRealmTokens();
     token = this.findRealmTokenForUrl(url);

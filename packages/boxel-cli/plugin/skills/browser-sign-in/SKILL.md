@@ -66,7 +66,7 @@ _Generated from the boxel-cli Commander tree by_ `pnpm build:plugin`. _Edit pros
 
 ### `boxel browse [card-path]`
 
-Open the Boxel app in your browser, already signed in as your active profile (a published-realm card URL opens directly, no sign-in needed)
+Open the Boxel app in your browser, already signed in as your active profile or the one --profile names (a published-realm card URL opens directly, no sign-in needed)
 
 **Arguments:**
 
@@ -74,7 +74,6 @@ Open the Boxel app in your browser, already signed in as your active profile (a 
 
 **Options:**
 
-- `--profile <id>` — Profile to use (default: the active profile)
 - `--host-url <url>` — Override the host app URL the token is redeemed against
 - `--print-url` — Print the authenticated URL instead of opening a browser (for remote shells / agents)
 - `--wait` — If login-token minting is rate-limited (~1/min per account), wait out the reported delay (or a full window when none is reported) and retry once instead of erroring

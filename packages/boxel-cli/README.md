@@ -87,6 +87,16 @@ The other ways in don't open a browser and work as before:
 
 A realm server whose secure origin can't sign the CLI in gets the host app's own `/cli-auth` page instead, and so does `--host-url`, which names the origin whose page to open. Profiles you already have keep working; nothing asks you to sign in again.
 
+### Acting as another profile with `--profile`
+
+The active profile is one setting for the whole machine: `boxel profile switch` changes who every terminal and agent session acts as. To run one command as another saved profile, pass `--profile` with its exact ID instead. That command acts as the profile and saves any token it refreshes to it, and the active profile stays as it was:
+
+```bash
+boxel realm create my-realm "My Realm" --profile @sarah:stack.cards
+```
+
+`BOXEL_PROFILE=<profile-id>` in the environment does the same for every command that runs with it, and `--profile` wins over it. Every command except `boxel profile` accepts either. An ID that isn't saved stops the command and lists the saved profiles.
+
 ### Managing your keys with `boxel keys`
 
 Your keys belong to you, not to a realm, so the key commands name no realm; only the share commands do.
