@@ -29,6 +29,7 @@ import type {
 import type {
   LLMMode,
   RealmResourceIdentifier,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import type { SerializedFile } from './file-api';
 
@@ -191,6 +192,26 @@ export interface BoxelErrorForContext {
   diagnostics?: Record<string, unknown>;
 }
 
+// A realm's policy as the user can read it: the card the realm's config names,
+// and the rules that card holds. Each rule grants operations on cards of its
+// `targetType` and of the types that extend it; a grant with a `where` admits
+// only when that BXL condition holds for the caller and the card. The realm
+// decides each invocation itself, so this says what the policy offers, not
+// what any one call will be allowed.
+export interface RealmPolicyForContext {
+  // Absent when the user can't read the realm's config card, which names it.
+  card?: RealmResourceIdentifier;
+  // Absent when the policy card can't be read, and when `tooLarge` is set.
+  rules?: {
+    targetType: ResolvedCodeRef;
+    grants: { operation: string; where?: string }[];
+  }[];
+  // Set in place of `rules` when they would take the context past what it may
+  // carry: the context rides inline in every message and tool-result event
+  // sent from the realm.
+  tooLarge?: true;
+}
+
 export interface BoxelContext {
   agentId?: string;
   openCardIds?: RealmResourceIdentifier[];
@@ -203,6 +224,15 @@ export interface BoxelContext {
     canRead: boolean;
     canWrite: boolean;
   };
+  // The policy of the realm at `realmUrl`, sent when the user can't write that
+  // realm and the host knows it names one: its grants are what let the user
+  // run operations there anyway. Absent when the realm names no policy, and
+  // when the host can't tell whether it names one. A user whose
+  // `realmPermissions` don't let them read the realm is refused its config
+  // card, so for them it is sent without a `card`, and only where the realm
+  // answered them its info, which it does for such a user only when a policy
+  // judges them.
+  realmPolicy?: RealmPolicyForContext;
   errorsDisplayed?: BoxelErrorForContext[];
   tools?: Tool[];
   toolChoice?: ToolChoice;

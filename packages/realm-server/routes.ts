@@ -1,4 +1,5 @@
 import type {
+  ChangeJournal,
   DBAdapter,
   DefinitionLookup,
   MediaCacheAdapter,
@@ -211,6 +212,9 @@ export type CreateRoutesArgs = {
   // MediaCache object store; absent means the POST capture endpoint
   // captures without persisting (and returns no served URL).
   mediaCacheAdapter?: MediaCacheAdapter;
+  // The change journal create-realm appends a new realm's `scan` event to;
+  // absent, the server records no history.
+  changeJournal?: ChangeJournal;
   // Bounded sync-wait budget for the POST capture endpoint. Defaults to
   // CAPTURE_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the
   // 503 + Retry-After path without holding real time.
@@ -305,6 +309,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     virtualNetwork: args.virtualNetwork,
     realmsRootPath: args.realmsRootPath,
     reconciler: args.reconciler,
+    ...(args.changeJournal ? { changeJournal: args.changeJournal } : {}),
   };
 
   if (args.oauthProvider) {
