@@ -41,7 +41,6 @@ import {
 } from './client-metadata-document.ts';
 import {
   DEFAULT_NEW_CLIENT_LIMIT,
-  NewClientAlert,
   type NewClientLimit,
 } from './new-client-limit.ts';
 import { boxelHosts } from './redirect-uris.ts';
@@ -173,8 +172,6 @@ export function startOAuthProvider({
     publishedDomains,
   });
   let scopes = registryScopes(registry);
-  // One alert for both ways a client arrives, since they share the limit.
-  let alert = new NewClientAlert(newClientLimit);
   let provider = createOAuthProvider({
     issuer,
     config,
@@ -189,7 +186,6 @@ export function startOAuthProvider({
       scopes,
       rateLimitStore,
       newClientLimit,
-      alert,
       testOnlyDocumentOrigins,
     }),
   });
@@ -238,7 +234,6 @@ export function startOAuthProvider({
       scopes,
       rateLimitStore,
       newClientLimit,
-      alert,
     }),
   };
 }

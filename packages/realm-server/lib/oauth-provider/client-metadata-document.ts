@@ -13,8 +13,10 @@
 //    client by that domain and anyone with an account can make some Boxel
 //    host serve JSON. So is one whose scheme isn't written `https://`, which
 //    pages wouldn't recognize as a document client. A client ID this process
-//    hasn't accepted before counts against the new-client limit DCR uses; one
-//    it has gets one download free, then counts until it is accepted again.
+//    hasn't accepted before counts against the caller's address and network
+//    buckets of the new-client limit DCR uses, though not its overall one
+//    (`new-client-limit.ts`); one it has accepted gets one download free, then
+//    counts until it is accepted again.
 //    A cache hit never gets here.
 // 2. `fetch`, the download: through the outbound guard, so a client ID can't
 //    reach a private address, with no redirect followed and at most
@@ -52,8 +54,10 @@ import {
   outboundFetch,
 } from '../outbound/client.ts';
 import { registrableDomain } from '../secure-window.ts';
-import type { NewClientAlert } from './new-client-limit.ts';
-import { takeNewClient, type NewClientLimit } from './new-client-limit.ts';
+import {
+  takeNewClientDownload,
+  type NewClientLimit,
+} from './new-client-limit.ts';
 import type { BoxelHosts } from './redirect-uris.ts';
 import { checkRegistration } from './registration.ts';
 
@@ -148,14 +152,12 @@ export function clientMetadataDocuments({
   scopes,
   rateLimitStore,
   newClientLimit,
-  alert,
   testOnlyDocumentOrigins,
 }: {
   hosts: BoxelHosts;
   scopes: readonly string[];
   rateLimitStore: RateLimitStore;
   newClientLimit: NewClientLimit;
-  alert: NewClientAlert;
   // Tests only: each `https://` origin named here is downloaded from the
   // plain HTTP origin it maps to, a stub on loopback, still through the
   // outbound guard. Nothing in production sets it.
@@ -197,12 +199,11 @@ export function clientMetadataDocuments({
     if (!known.delete(clientId)) {
       let header = ctx?.req.headers[CLIENT_IP_HEADER];
       let address = typeof header === 'string' ? header : request?.address;
-      let outcome = await takeNewClient(
+      let outcome = await takeNewClientDownload(
         rateLimitStore,
         address,
         newClientLimit,
       );
-      alert.note(outcome);
       if (!outcome.admitted) {
         note('refused', url, outcome.reason);
         return false;

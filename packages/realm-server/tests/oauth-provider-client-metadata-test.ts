@@ -44,7 +44,7 @@ import {
   inMetadataDocumentRequest,
 } from '../lib/oauth-provider/client-metadata-document.ts';
 import {
-  NewClientAlert,
+  takeNewClient,
   type NewClientLimit,
 } from '../lib/oauth-provider/new-client-limit.ts';
 import { boxelHosts } from '../lib/oauth-provider/redirect-uris.ts';
@@ -164,7 +164,6 @@ function hooksFor(store: DBRateLimitStore, limit: NewClientLimit) {
     scopes: ['boxel:read', 'boxel:write'],
     rateLimitStore: store,
     newClientLimit: limit,
-    alert: new NewClientAlert(limit, { warn: () => undefined }),
   });
 }
 
@@ -340,6 +339,46 @@ module(basename(import.meta.filename), function () {
       assert.false(
         await documents.allowFetch(ctx, CLAUDE_CODE.client_id),
         'counted again',
+      );
+    });
+
+    test("downloads share each caller's allowance with registration, but take nothing from the ceiling over everyone", async function (assert) {
+      let limit: NewClientLimit = {
+        perAddress: { requests: 2, windowSeconds: 3600 },
+        perNetwork: { requests: 100, windowSeconds: 3600 },
+        overall: { requests: 2, windowSeconds: 3600 },
+        alertAfter: 1,
+      };
+      let documents = hooksFor(store, limit);
+      // Downloads from three networks: more than the overall bucket holds.
+      for (let caller of ['203.0.113.7', '198.51.100.7', '192.0.2.7']) {
+        let ctxFrom = {
+          req: { headers: { [CLIENT_IP_HEADER]: caller } },
+        } as unknown as KoaContextWithOIDC;
+        assert.true(
+          await documents.allowFetch(
+            ctxFrom,
+            `https://client.example.test/${caller}.json`,
+          ),
+          `a download from ${caller}`,
+        );
+      }
+      let registration = await takeNewClient(store, '203.0.113.99', limit);
+      assert.true(
+        registration.admitted,
+        'registration still has the whole overall bucket',
+      );
+      // The first caller's address has one of its two left.
+      assert.true(
+        (await takeNewClient(store, '203.0.113.7', limit)).admitted,
+        "a registration from the first caller takes the address's last",
+      );
+      assert.false(
+        await documents.allowFetch(
+          ctx,
+          'https://client.example.test/next.json',
+        ),
+        'and its next download is refused: they share the allowance',
       );
     });
 

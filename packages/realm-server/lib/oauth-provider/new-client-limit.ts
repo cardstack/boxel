@@ -7,7 +7,11 @@
 //
 // It is a caller limit (`caller-limit.ts`): per address, per network and
 // overall. The overall bucket is a ceiling on how many clients can be stored,
-// sized from storage rather than traffic.
+// sized from storage rather than traffic, so only registration takes from it.
+// A document client is never stored, and a flood of downloads from many
+// networks would otherwise empty it, refusing every registration and every
+// first connection of a document client, for everyone. Downloads share each
+// caller's address and network buckets with registration.
 
 import {
   CallerLimitAlert,
@@ -44,6 +48,18 @@ export function takeNewClient(
   limit: NewClientLimit,
 ): Promise<NewClientOutcome> {
   return takeFromCallerLimit(store, 'oauth-new-client', address, limit);
+}
+
+// Takes one document download from the caller's address and network buckets,
+// the ones registration takes from too, and none from the overall bucket.
+export function takeNewClientDownload(
+  store: RateLimitStore,
+  address: string | undefined,
+  limit: NewClientLimit,
+): Promise<NewClientOutcome> {
+  return takeFromCallerLimit(store, 'oauth-new-client', address, limit, {
+    overall: false,
+  });
 }
 
 export class NewClientAlert extends CallerLimitAlert {
