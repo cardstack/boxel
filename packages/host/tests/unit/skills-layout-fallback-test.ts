@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { otherSkillsLayoutURL } from '@cardstack/host/lib/utils';
+import { otherSkillsLayoutURL } from '@cardstack/host/lib/skills-layout-fallback';
 
 const realm = 'https://example.test/skills/';
 

@@ -5,7 +5,6 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { isSkillCard } from './file-def-manager';
-import { otherSkillsLayoutURL } from './utils';
 
 import type StoreService from '../services/store';
 import type { MarkdownDef } from '@cardstack/base/markdown-file-def';
@@ -84,34 +83,12 @@ export async function loadSkillSource(
   store: StoreService,
   id: string,
 ): Promise<SkillSource | undefined> {
-  return (await resolveSkillSource(store, id))?.source;
-}
-
-// `loadSkillSource`, plus the id the skill actually loaded from. A markdown
-// skill in the skills realm that doesn't load from `id` is tried once more at
-// the same file in the realm's other layout (see `otherSkillsLayoutURL`); the
-// returned `id` is then that other URL, which callers that persist skill ids
-// write back in place of `id`.
-export async function resolveSkillSource(
-  store: StoreService,
-  id: string,
-): Promise<{ source: SkillSource; id: string } | undefined> {
   if (isMarkdownSkillId(id)) {
-    for (let candidate of [id, otherSkillsLayoutURL(id)]) {
-      if (!candidate) {
-        continue;
-      }
-      let fileMeta = await store.get(candidate, { type: 'file-meta' });
-      if (isSkillMarkdown(fileMeta)) {
-        return { source: fileMeta, id: candidate };
-      }
-    }
-    return undefined;
+    let fileMeta = await store.get(id, { type: 'file-meta' });
+    return isSkillMarkdown(fileMeta) ? fileMeta : undefined;
   }
   let card = await store.get(id);
-  return isCardInstance(card) && isSkillCardInstance(card)
-    ? { source: card, id }
-    : undefined;
+  return isCardInstance(card) && isSkillCardInstance(card) ? card : undefined;
 }
 
 // Synchronous, cache-only variant for code paths that already require loaded

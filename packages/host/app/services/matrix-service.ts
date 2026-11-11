@@ -122,7 +122,8 @@ import {
   framing,
   secureSignOutURL,
 } from '../lib/secure-sign-in';
-import { getSkillSourceTools, resolveSkillSource } from '../lib/skill-tools';
+import { getSkillSourceTools } from '../lib/skill-tools';
+import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
 import { skillsIndexId } from '../lib/utils';
 import { importResource } from '../resources/import';
@@ -2156,13 +2157,13 @@ export default class MatrixService extends Service {
         let skillCardsToReupload: SkillModule.Skill[] = [];
         let markdownSkillFileDefs: FileDef[] = [];
         let unchangedMarkdownSkillFileDefs: FileAPI.SerializedFile[] = [];
-        // A skill that loaded from the skills realm's other layout (see
-        // `resolveSkillSource`) is re-uploaded under the URL it loaded from,
-        // so the room's stored id points at a file that exists from now on.
+        // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+        // A skill that loaded from the other layout is re-uploaded under the
+        // URL it loaded from, so the room stores a URL that exists.
         let resolvedSourceUrls = new Map<string, string>();
         await Promise.all(
           enabledSkillCardFileDefs.map(async (storedFileDef) => {
-            let resolved = await resolveSkillSource(
+            let resolved = await loadSkillWithLayoutFallback(
               this.store,
               storedFileDef.sourceUrl,
             );

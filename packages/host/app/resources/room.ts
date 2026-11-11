@@ -55,8 +55,8 @@ import {
   getSkillSourceTools,
   isMarkdownSkillId,
   peekSkillSource,
-  resolveSkillSource,
 } from '../lib/skill-tools';
+import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
 
 import type { Message, MessageCompaction } from '../lib/matrix-classes/message';
 
@@ -800,9 +800,8 @@ export class RoomResource extends Resource<Args> {
         // A skill markdown file loads as a file-meta resource (not a card doc
         // downloaded from Matrix). Keep its instance in the store so the menu
         // pill renders and the room's usable commands resolve.
-        // The id the skill loaded from, which differs from the stored one
-        // when the skill was found in the skills realm's other layout.
-        let resolved = await resolveSkillSource(
+        // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+        let resolved = await loadSkillWithLayoutFallback(
           this.store,
           skillCardFileDef.sourceUrl,
         );
