@@ -6,7 +6,7 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
   SLUG=$(resolve_env_slug)
-  SYNAPSE_DATA_DIR="./synapse-data-${SLUG}"
+  SYNAPSE_DATA_DIR="${SYNAPSE_DATA_DIR:-./synapse-data-${SLUG}}"
 else
   SYNAPSE_DATA_DIR="./synapse-data"
 fi

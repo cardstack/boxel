@@ -61,7 +61,7 @@ NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
   PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-}" \
-  node \
+  node ${PRERENDER_NODE_FLAGS:-} \
   prerender/prerender-server.ts \
   --port="${PRERENDER_PORT}" \
   --count="${PRERENDER_COUNT:-1}" \
