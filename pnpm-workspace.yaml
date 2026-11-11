@@ -53,7 +53,7 @@ catalog:
   "@percy/ember": ^5.0.0
   "@playwright/test": ^1.65.0
   "@rollup/plugin-babel": ^6.0.4
-  "@sentry/node": ^11.9.0
+  "@sentry/node": ^8.31.0
   "@simple-dom/interface": ^1.4.0
   "@simple-dom/parser": ^1.4.0
   "@simple-dom/serializer": ^1.4.0
