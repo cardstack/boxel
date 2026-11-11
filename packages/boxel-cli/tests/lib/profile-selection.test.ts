@@ -178,3 +178,149 @@ describe('selectProfile', () => {
     expect(() => pm.selectProfile(BOB)).toThrow(/Could not read profiles file/);
   });
 });
+
+// Every terminal and agent session on the machine shares the profiles file,
+// and most act as the same profile. A save writes only what it changed, so
+// it keeps what the others saved since this process loaded the file.
+describe('saving alongside other processes', () => {
+  it('keeps a sign-in and the realm tokens another process saved for the same profile', async () => {
+    let running = new ProfileManager(configDir);
+
+    let other = new ProfileManager(configDir);
+    await other.addProfileWithAuth(
+      ALICE,
+      auth(ALICE, 'fresh-alice-token'),
+      'Alice',
+      ALICE_SERVER,
+    );
+    other.setRealmToken(`${ALICE_SERVER}realm2/`, 'Bearer realm2-token');
+
+    running.setRealmToken(`${ALICE_SERVER}realm1/`, 'Bearer realm1-token');
+
+    let alice = readStore().profiles[ALICE];
+    expect(alice.matrixAccessToken).toBe('fresh-alice-token');
+    expect(alice.realmTokens).toEqual({
+      [`${ALICE_SERVER}realm1/`]: 'Bearer realm1-token',
+      [`${ALICE_SERVER}realm2/`]: 'Bearer realm2-token',
+    });
+
+    // A later save from the same process doesn't write its earlier change
+    // over what was saved in between.
+    new ProfileManager(configDir).setRealmServerToken('Bearer other-server');
+    running.setRealmToken(`${ALICE_SERVER}realm3/`, 'Bearer realm3-token');
+
+    alice = readStore().profiles[ALICE];
+    expect(alice.realmServerToken).toBe('Bearer other-server');
+    expect(Object.keys(alice.realmTokens!)).toHaveLength(3);
+  });
+
+  it('keeps a re-sign-in from overwriting what else was saved for the profile', async () => {
+    let pm = new ProfileManager(configDir, {
+      isTty: () => true,
+      promptPassword: async () => 'alice-password',
+      matrixLogin: async () => auth(ALICE, 'fresh-alice-token'),
+    });
+
+    let other = new ProfileManager(configDir);
+    other.updateDisplayName(ALICE, 'Alice (renamed)');
+    other.setRealmServerToken('Bearer other-server');
+
+    await pm.reAuthenticate();
+
+    let alice = readStore().profiles[ALICE];
+    expect(alice.matrixAccessToken).toBe('fresh-alice-token');
+    expect(alice.displayName).toBe('Alice (renamed)');
+    expect(alice.realmServerToken).toBe('Bearer other-server');
+  });
+
+  it('leaves a profile another process removed removed', async () => {
+    let running = new ProfileManager(configDir);
+    running.selectProfile(BOB);
+
+    await new ProfileManager(configDir).removeProfile(BOB);
+
+    running.setRealmServerToken('Bearer bob-server-token');
+    running.setRealmToken(`${BOB_SERVER}bob-realm/`, 'Bearer bob-realm-token');
+
+    let store = readStore();
+    expect(store.profiles[BOB]).toBeUndefined();
+    expect(Object.keys(store.profiles)).toEqual([ALICE]);
+  });
+
+  it('makes an added profile active only when the file has no active profile', async () => {
+    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-add-'));
+    try {
+      let early = new ProfileManager(emptyDir);
+      await new ProfileManager(emptyDir).addProfileWithAuth(
+        ALICE,
+        auth(ALICE),
+        'Alice',
+        ALICE_SERVER,
+      );
+
+      await early.addProfileWithAuth(BOB, auth(BOB), 'Bob', BOB_SERVER);
+
+      let store = JSON.parse(
+        fs.readFileSync(path.join(emptyDir, 'profiles.json'), 'utf-8'),
+      ) as ProfilesConfig;
+      expect(store.activeProfile).toBe(ALICE);
+      expect(Object.keys(store.profiles).sort()).toEqual([ALICE, BOB]);
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true });
+    }
+  });
+
+  it('forgets only the secure session it holds', () => {
+    let session = (token: string) => ({
+      token,
+      userId: ALICE,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    new ProfileManager(configDir).setSecureSession(session('held'));
+    let running = new ProfileManager(configDir);
+    new ProfileManager(configDir).setSecureSession(session('newer'));
+
+    running.clearSecureSession();
+
+    expect(readStore().profiles[ALICE].secureSession?.token).toBe('newer');
+  });
+});
+
+describe('writing the profiles file', () => {
+  function failingRename(code: string) {
+    return () => {
+      throw Object.assign(new Error(`rename failed: ${code}`), { code });
+    };
+  }
+
+  it('removes the temporary file and rethrows when it cannot be moved into place', () => {
+    let before = fs.readFileSync(
+      path.join(configDir, 'profiles.json'),
+      'utf-8',
+    );
+    let pm = new ProfileManager(configDir, {
+      renameFile: failingRename('EXDEV'),
+    });
+
+    expect(() => pm.setRealmServerToken('Bearer alice-server-token')).toThrow(
+      /EXDEV/,
+    );
+    expect(fs.readdirSync(configDir)).toEqual(['profiles.json']);
+    expect(
+      fs.readFileSync(path.join(configDir, 'profiles.json'), 'utf-8'),
+    ).toBe(before);
+  });
+
+  it('writes in place, without leaving the temporary file, when the rename is refused', () => {
+    let pm = new ProfileManager(configDir, {
+      renameFile: failingRename('EPERM'),
+    });
+
+    pm.setRealmServerToken('Bearer alice-server-token');
+
+    expect(fs.readdirSync(configDir)).toEqual(['profiles.json']);
+    expect(readStore().profiles[ALICE].realmServerToken).toBe(
+      'Bearer alice-server-token',
+    );
+  });
+});

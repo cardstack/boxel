@@ -159,6 +159,16 @@ describe('boxel --profile', () => {
     expect(fs.readFileSync(profilesFile, 'utf-8')).toBe(before);
   });
 
+  it('refuses an empty value rather than acting as the active profile', async () => {
+    let res = await runBoxel(['realm', 'list', '--profile', ''], {
+      home: tmpHome,
+      env: { BOXEL_PROFILE: BOB },
+    });
+
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain('--profile was given an empty value');
+  });
+
   it('is accepted before the command as well as after it', async () => {
     let res = await runBoxel(
       ['--profile', '@carol:localhost', 'realm', 'list'],

@@ -44,6 +44,15 @@ function selectInvocationProfile(
     }
     return;
   }
+  // An empty value is usually an unset shell variable (`--profile "$OWNER"`),
+  // and falling back to the active profile would act as the wrong account.
+  // An empty BOXEL_PROFILE counts as not set, so `BOXEL_PROFILE=` clears it.
+  if (flag === '') {
+    fail(
+      '--profile was given an empty value. Pass the ID of a saved profile; ' +
+        '`boxel profile list` shows them.',
+    );
+  }
   let fromEnv = flag === undefined;
   let profileId = flag ?? process.env.BOXEL_PROFILE;
   if (!profileId) {
