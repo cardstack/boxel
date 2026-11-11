@@ -4,7 +4,7 @@ import {
   type PrerenderQueue,
   uuidv4,
 } from '@cardstack/runtime-common';
-import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
+import type { CDPSession, ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
 import { realmAffinityKeyOf } from './affinity.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
@@ -511,6 +511,9 @@ export class PagePool {
   // See `#armTabWaiterRecheck`.
   #tabWaiterRecheck: NodeJS.Timeout | undefined;
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
+  // The `Runtime`-enabled CDP session the exception capture holds on each
+  // tab, reused to clear the tab's console store between renders.
+  #runtimeSessionByPageId = new Map<string, CDPSession>();
   // Per-pageId map of CDP exceptionId -> bucket key, owned alongside
   // the bucket so it's cleared in lockstep on resetConsoleErrors /
   // takeConsoleErrors / page disposal. Lets the runtime-exception
@@ -1086,9 +1089,20 @@ export class PagePool {
     return { totalTabs, totalPending, affinities };
   }
 
+  // Called as each render takes its tab, so it also clears what the tab's
+  // console has retained. While a CDP client has `Runtime` enabled — which a
+  // Puppeteer page always does — V8 keeps the arguments of the last thousand
+  // console messages reachable, so a logged object would otherwise outlive
+  // the render that logged it, by as many renders as the tab serves.
+  // Fire-and-forget: a tab whose renderer has stopped answering must not
+  // hold up the render being handed it.
   resetConsoleErrors(pageId: string): void {
     this.#consoleErrorsByPageId.set(pageId, new Map());
     this.#exceptionKeysByPageId.delete(pageId);
+    void this.#runtimeSessionByPageId
+      .get(pageId)
+      ?.send('Runtime.discardConsoleEntries')
+      .catch(() => {});
   }
 
   takeConsoleErrors(pageId: string): ConsoleErrorEntry[] {
@@ -3754,6 +3768,7 @@ export class PagePool {
     // away, which is exactly when this method runs (regardless of
     // retainConsoleErrors, which is a separate per-render flag).
     this.#affinityKeyByPageId.delete(entry.pageId);
+    this.#runtimeSessionByPageId.delete(entry.pageId);
   }
 
   // Returns a Promise when the release forces a context close —
@@ -3888,7 +3903,7 @@ export class PagePool {
     // even when the page's JS thread is too pegged to answer an
     // in-page diagnostic. Best-effort: attach failures resolve cleanly.
     await attachNetworkInflightTracker(page);
-    await attachRuntimeExceptionCapture({
+    let runtimeSession = await attachRuntimeExceptionCapture({
       page,
       // Resolved at log-emit time so adoption / re-tagging that
       // updates `#affinityKeyByPageId` flows through to the capture's
@@ -3903,6 +3918,9 @@ export class PagePool {
           this.#recordRevokedException(pageId, exceptionId),
       },
     });
+    if (runtimeSession) {
+      this.#runtimeSessionByPageId.set(pageId, runtimeSession);
+    }
   }
 
   // Returns false if the entry could not be recorded (storage at
