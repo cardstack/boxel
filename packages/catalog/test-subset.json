@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "dcd4a6c36f39ff194d02be113fb91ace9e354f68",
+  "revision": "304144f860c73479c7920d1ee9cf2c66275989cf",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -25,6 +25,7 @@
   ],
   "tests": {
     "host": [
+      "Acceptance | automation edit format",
       "Acceptance | code submode | automation script editor",
       "Integration | realm policy",
       "Integration | realm config policy standing",

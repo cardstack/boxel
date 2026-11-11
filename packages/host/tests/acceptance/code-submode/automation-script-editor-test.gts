@@ -60,10 +60,10 @@ function automationJSON(name: string) {
           resolveCalls: 0,
           writes: 1,
           seconds: 60,
+          dailyCredits: 5,
           monthlyCredits: 10,
         },
         params: [],
-        milestones: [],
         batchedAI: false,
       },
       relationships: {
@@ -174,9 +174,11 @@ module(
     test<TestContextWithSave>('the script editor keeps working when code mode edits the card', async function (assert) {
       await openEditFormat();
 
+      // Code mode writes the card's JSON as a source file, so the save names
+      // the file, extension and all.
       let saved = new Promise<void>((resolve) => {
         this.onSave((url) => {
-          if (url.href === `${testRealmURL}automations/nightly`) {
+          if (url.href === `${testRealmURL}automations/nightly.json`) {
             resolve();
           }
         });

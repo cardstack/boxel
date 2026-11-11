@@ -91,11 +91,12 @@ module(basename(import.meta.filename), function (hooks) {
       resolveCalls: 2,
       writes: 5,
       seconds: 300,
+      dailyCredits: 50,
       monthlyCredits: 500,
     },
     params: [{ name: 'owner', value: 'cardstack' }],
-    milestones: ['fetch', 'write'],
-    batchedAI: false,
+    batchedAI: true,
+    batchDeadlineMinutes: 90,
   };
 
   async function writeAutomation(path: string, extra: object = {}) {
@@ -139,8 +140,8 @@ module(basename(import.meta.filename), function (hooks) {
       'triggers',
       'caps',
       'params',
-      'milestones',
       'batchedAI',
+      'batchDeadlineMinutes',
     ] as const) {
       assert.deepEqual(stored[name], attributes[name], `${name} round-trips`);
     }
@@ -221,8 +222,8 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
     assert.deepEqual(declaration.caps, attributes.caps);
     assert.deepEqual(declaration.params, { owner: 'cardstack' });
-    assert.deepEqual(declaration.milestones, ['fetch', 'write']);
-    assert.false(declaration.batchedAI);
+    assert.true(declaration.batchedAI);
+    assert.strictEqual(declaration.batchDeadlineMinutes, 90);
   });
 
   test('an indexed instance with a trigger that fires too often is reported', async function (assert) {

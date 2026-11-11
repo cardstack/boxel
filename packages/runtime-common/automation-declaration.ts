@@ -27,6 +27,12 @@ export const MIN_CRON_INTERVAL_MINUTES = 5;
 // The most a run's `seconds` cap may be: 20 minutes.
 export const MAX_RUN_SECONDS = 20 * 60;
 
+// How long a batch of AI requests may take before its requests are sent again
+// at the normal price: at most 24 hours, and an hour when the card leaves it
+// unset, long enough for nearly every batch to finish.
+export const MAX_BATCH_DEADLINE_MINUTES = 24 * 60;
+export const DEFAULT_BATCH_DEADLINE_MINUTES = 60;
+
 // The time an `untilDate` with no `untilTime` stops at: the end of that day.
 // Cron fires on whole minutes, so 23:59 inclusive is the whole day.
 const END_OF_DAY = '23:59';
@@ -68,7 +74,9 @@ export interface AutomationCaps {
   resolveCalls: number;
   writes: number;
   seconds: number;
-  monthlyCredits: number;
+  // At least one of the two is set; a null one doesn't limit spending.
+  dailyCredits: number | null;
+  monthlyCredits: number | null;
 }
 
 export const AUTOMATION_CAP_NAMES: readonly (keyof AutomationCaps)[] = [
@@ -77,6 +85,7 @@ export const AUTOMATION_CAP_NAMES: readonly (keyof AutomationCaps)[] = [
   'resolveCalls',
   'writes',
   'seconds',
+  'dailyCredits',
   'monthlyCredits',
 ];
 
@@ -89,8 +98,10 @@ export interface AutomationDeclaration {
   operations: AutomationOperationDeclaration[];
   caps: AutomationCaps;
   params: AutomationParams;
-  milestones: string[];
   batchedAI: boolean;
+  // Minutes a batch may take before its requests go again at the normal
+  // price. Read only when `batchedAI` is on.
+  batchDeadlineMinutes: number;
 }
 
 export type AutomationProblemCode =
@@ -110,10 +121,12 @@ export type AutomationProblemCode =
   | 'missing-webhook-path'
   | 'invalid-operation'
   | 'missing-cap'
+  | 'missing-credit-cap'
   | 'invalid-cap'
   | 'seconds-cap-too-high'
+  | 'daily-credits-above-monthly'
   | 'invalid-param'
-  | 'invalid-milestone';
+  | 'invalid-batch-deadline';
 
 export interface AutomationProblem {
   code: AutomationProblemCode;
@@ -160,7 +173,10 @@ export function readAutomationDeclaration(
   let operations = readOperations(attributes.operations, cardURL, report);
   let caps = readCaps(attributes.caps, report);
   let params = readParams(attributes.params, 'params', report);
-  let milestones = readMilestones(attributes.milestones, report);
+  let batchDeadlineMinutes = readBatchDeadline(
+    attributes.batchDeadlineMinutes,
+    report,
+  );
 
   if (problems.length > 0) {
     return { ok: false, problems };
@@ -175,8 +191,8 @@ export function readAutomationDeclaration(
       operations,
       caps: caps!,
       params,
-      milestones,
       batchedAI: attributes.batchedAI === true,
+      batchDeadlineMinutes,
     },
   };
 }
@@ -721,6 +737,10 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
   for (let name of AUTOMATION_CAP_NAMES) {
     let path = `caps.${name}`;
     if (stored[name] === null || stored[name] === undefined) {
+      if (name === 'dailyCredits' || name === 'monthlyCredits') {
+        caps[name] = null;
+        continue;
+      }
       report('missing-cap', path, `An automation must set its ${name} cap`);
       ok = false;
       continue;
@@ -745,6 +765,28 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
       continue;
     }
     caps[name] = value;
+  }
+  // Spending needs a limit, a day's or a month's; either one is enough.
+  if (caps.dailyCredits === null && caps.monthlyCredits === null) {
+    report(
+      'missing-credit-cap',
+      'caps.monthlyCredits',
+      'An automation must set a daily or a monthly credit cap, or both',
+    );
+    ok = false;
+  }
+  if (
+    ok &&
+    typeof caps.dailyCredits === 'number' &&
+    typeof caps.monthlyCredits === 'number' &&
+    caps.dailyCredits > caps.monthlyCredits
+  ) {
+    report(
+      'daily-credits-above-monthly',
+      'caps.dailyCredits',
+      `The daily credit cap (${caps.dailyCredits}) can't be more than the monthly one (${caps.monthlyCredits})`,
+    );
+    ok = false;
   }
   return ok ? (caps as AutomationCaps) : undefined;
 }
@@ -779,29 +821,6 @@ function readParams(
   return params;
 }
 
-function readMilestones(raw: unknown, report: Report): string[] {
-  let milestones: string[] = [];
-  for (let [index, item] of asList(raw).entries()) {
-    let name = text(item);
-    if (name === undefined) {
-      report(
-        'invalid-milestone',
-        `milestones.${index}`,
-        'A milestone needs a name',
-      );
-    } else if (milestones.includes(name)) {
-      report(
-        'invalid-milestone',
-        `milestones.${index}`,
-        `The milestone "${name}" is listed more than once`,
-      );
-    } else {
-      milestones.push(name);
-    }
-  }
-  return milestones;
-}
-
 function asList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
@@ -831,4 +850,27 @@ function number(value: unknown): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function readBatchDeadline(
+  value: unknown,
+  report: (code: AutomationProblemCode, path: string, message: string) => void,
+): number {
+  if (value === undefined || value === null) {
+    return DEFAULT_BATCH_DEADLINE_MINUTES;
+  }
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_BATCH_DEADLINE_MINUTES
+  ) {
+    report(
+      'invalid-batch-deadline',
+      'batchDeadlineMinutes',
+      `The batch deadline must be a whole number of minutes from 1 to ${MAX_BATCH_DEADLINE_MINUTES} (24 hours).`,
+    );
+    return DEFAULT_BATCH_DEADLINE_MINUTES;
+  }
+  return value;
 }

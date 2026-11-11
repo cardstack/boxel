@@ -21,6 +21,7 @@ const CAPS = {
   resolveCalls: 2,
   writes: 5,
   seconds: 300,
+  dailyCredits: 50,
   monthlyCredits: 500,
 };
 
@@ -62,7 +63,6 @@ function entry({
         operations: [],
         caps: CAPS,
         params: [],
-        milestones: [],
         batchedAI: null,
         ...attributes,
       },
@@ -118,7 +118,6 @@ const tests = Object.freeze({
             },
           ],
           params: [{ name: 'owner', value: 'cardstack' }],
-          milestones: ['fetch', 'write'],
           batchedAI: true,
         },
       }),
@@ -166,10 +165,30 @@ const tests = Object.freeze({
       ],
       caps: CAPS,
       params: { owner: 'cardstack' },
-      milestones: ['fetch', 'write'],
       batchedAI: true,
+      batchDeadlineMinutes: 60,
     });
   },
+
+  'a batch deadline is whole minutes from 1 to 24 hours, an hour when unset':
+    async (assert) => {
+      let unset = read(entry({ attributes: { batchedAI: true } }));
+      assert.strictEqual(
+        unset.ok && unset.declaration.batchDeadlineMinutes,
+        60,
+      );
+      let set = read(
+        entry({ attributes: { batchedAI: true, batchDeadlineMinutes: 1440 } }),
+      );
+      assert.strictEqual(set.ok && set.declaration.batchDeadlineMinutes, 1440);
+      for (let bad of [0, 1441, 90.5, '60']) {
+        assert.deepEqual(
+          codes(read(entry({ attributes: { batchDeadlineMinutes: bad } }))),
+          [['invalid-batch-deadline', 'batchDeadlineMinutes']],
+          `${JSON.stringify(bad)} is refused`,
+        );
+      }
+    },
 
   'batchedAI is off unless set to true': async (assert) => {
     let result = read(entry());
@@ -439,8 +458,66 @@ const tests = Object.freeze({
         'missing-cap',
         'missing-cap',
         'missing-cap',
-        'missing-cap',
+        'missing-credit-cap',
       ],
+      'each run limit is required, and one credit limit',
+    );
+  },
+
+  'either credit limit is enough on its own': async (assert) => {
+    for (let [label, caps] of [
+      ['daily only', { ...CAPS, monthlyCredits: null }],
+      ['monthly only', { ...CAPS, dailyCredits: null }],
+    ] as const) {
+      let result = read(entry({ attributes: { caps } }));
+      assert.true(result.ok, label);
+      if (result.ok) {
+        assert.deepEqual(
+          [
+            result.declaration.caps.dailyCredits,
+            result.declaration.caps.monthlyCredits,
+          ],
+          [caps.dailyCredits, caps.monthlyCredits],
+          `${label}: the empty one doesn't limit spending`,
+        );
+      }
+    }
+    assert.deepEqual(
+      codes(
+        read(
+          entry({
+            attributes: {
+              caps: { ...CAPS, dailyCredits: null, monthlyCredits: null },
+            },
+          }),
+        ),
+      ),
+      [['missing-credit-cap', 'caps.monthlyCredits']],
+    );
+  },
+
+  'reports a daily credit cap above the monthly one': async (assert) => {
+    assert.true(
+      read(
+        entry({
+          attributes: {
+            caps: { ...CAPS, dailyCredits: 500, monthlyCredits: 500 },
+          },
+        }),
+      ).ok,
+      'a daily cap equal to the monthly one passes',
+    );
+    assert.deepEqual(
+      codes(
+        read(
+          entry({
+            attributes: {
+              caps: { ...CAPS, dailyCredits: 501, monthlyCredits: 500 },
+            },
+          }),
+        ),
+      ),
+      [['daily-credits-above-monthly', 'caps.dailyCredits']],
     );
   },
 
@@ -505,9 +582,7 @@ const tests = Object.freeze({
     );
   },
 
-  'reports operations, params and milestones it cannot read': async (
-    assert,
-  ) => {
+  'reports operations and params it cannot read': async (assert) => {
     assert.deepEqual(
       codes(
         read(
@@ -525,7 +600,6 @@ const tests = Object.freeze({
                 { name: 'owner', value: 'b' },
                 { name: '', value: 'c' },
               ],
-              milestones: ['fetch', 'fetch', ''],
             },
           }),
         ),
@@ -535,8 +609,6 @@ const tests = Object.freeze({
         ['invalid-operation', 'operations.1.operation'],
         ['invalid-param', 'params.1.name'],
         ['invalid-param', 'params.2.name'],
-        ['invalid-milestone', 'milestones.1'],
-        ['invalid-milestone', 'milestones.2'],
       ],
     );
   },
