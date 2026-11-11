@@ -243,14 +243,15 @@ export interface OperationStoredFile {
   // version of the file the stream does not read. The content returned is
   // the stream `content` yields. Undefined when the open finds the file gone,
   // which the handle's stat can miss when another host deleted it.
-  openContent?: () =>
+  openContent?: () => Promise<
     | {
         content: OperationSourceBody;
         size?: number;
         // The opened content's modification time, in milliseconds.
         lastModifiedMs?: number;
       }
-    | undefined;
+    | undefined
+  >;
 }
 
 export interface OperationStoredFileMeta {

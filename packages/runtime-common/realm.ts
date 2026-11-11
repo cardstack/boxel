@@ -1008,13 +1008,14 @@ export interface FileRef {
   // Undefined when the open finds the file gone, which a stat on a network
   // filesystem can miss: another host's delete is not visible to it until the
   // file is opened.
-  openContent?: () =>
+  openContent?: () => Promise<
     | {
         content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
         size?: number;
         lastModifiedMs?: number;
       }
-    | undefined;
+    | undefined
+  >;
 
   [key: symbol]: object;
 }
@@ -11919,8 +11920,8 @@ export class Realm {
       // the operation that opens them, rather than from either stat.
       ...(source.openBody
         ? {
-            openContent: () => {
-              let opened = source.openBody!();
+            openContent: async () => {
+              let opened = await source.openBody!();
               if (!opened) {
                 return undefined;
               }
@@ -12137,7 +12138,7 @@ export class Realm {
     // larger than the body leaves the client waiting for bytes that never
     // arrive, one that is smaller cuts the body short.
     let opensContent = request.method === 'GET' && ref.openContent != null;
-    let openedContent = opensContent ? ref.openContent!() : undefined;
+    let openedContent = opensContent ? await ref.openContent!() : undefined;
     if (opensContent && !openedContent) {
       // The file was deleted after the stat this ref was built from, so there
       // is nothing to send. Answered here, before a body is committed to,
@@ -12913,7 +12914,7 @@ export class Realm {
         // Opened before it is read, so a file the stat still lists but another
         // host has deleted is answered as missing rather than as a read that
         // fails. The read below consumes the content this opened.
-        if (served.openContent && !served.openContent()) {
+        if (served.openContent && !(await served.openContent())) {
           return (
             notThere ??
             notFound(request, requestContext, `${localName} not found`)

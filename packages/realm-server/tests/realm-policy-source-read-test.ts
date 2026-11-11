@@ -1159,7 +1159,7 @@ module(basename(import.meta.filename), function (hooks) {
         let ref: FileRef | undefined = await openFile(openedPath);
         if (ref?.openContent && openedPath === path) {
           Object.defineProperty(ref, 'openContent', {
-            value: () => undefined,
+            value: async () => undefined,
           });
         }
         return ref;
