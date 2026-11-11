@@ -141,6 +141,20 @@ module(basename(import.meta.filename), function () {
         1 / 48,
       );
     });
+
+    test('28 runs in the coming month is frequent, 27 is averaged', function (assert) {
+      // Noon in November and December only. Days 1–28: Nov 11–28 and
+      // Dec 1–10 make 28 runs, counted as they are, not averaged to 8 × 28 / 48.
+      assert.strictEqual(
+        cronRunsPerMonth('0 12 1-28 11,12 *', CHICAGO, NOW),
+        28,
+      );
+      // Days 1–27 make 27, so the four years' 8 × 27 runs are averaged.
+      assert.strictEqual(
+        cronRunsPerMonth('0 12 1-27 11,12 *', CHICAGO, NOW),
+        (8 * 27) / 48,
+      );
+    });
   });
 
   module('estimateAutomationCost', function () {

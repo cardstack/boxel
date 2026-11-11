@@ -53,7 +53,10 @@ export interface RunCostCaps {
 }
 
 // The most one run's compute, network and AI can cost under its caps, in
-// credits, before rounding.
+// credits, before rounding. This is the one place that ceiling is computed:
+// an automation's minimum balance (ADR 029 §1.5, "the most one of its runs
+// can cost") is meant to come from `runCostCeiling` too, so the balance a run
+// is admitted against and the estimate shown at switch-on can't drift apart.
 export interface RunCostCeiling {
   computeCredits: number;
   networkCredits: number;

@@ -178,7 +178,10 @@ AI      = the run's AI spending cap, already in credits, no margin
 ```
 
 A GB is 2^30 bytes (`BYTES_PER_GB` in `pricing.ts`), the unit AWS bills
-transfer and storage in. Two charges the payer also pays are outside the
+transfer and storage in. Every per-GB quantity in this skill, `downloaded_gb`
+and the GB-months included, is in that unit, and code that meters bytes into
+GB divides by `BYTES_PER_GB` rather than its own constant, or the estimate and
+the charge disagree by about 7%. Two charges the payer also pays are outside the
 estimate, and the result lists them in `uncountedChargeKinds`: run indexing,
 which no cap bounds, and storage, which depends on what the realm keeps
 rather than on any one run.
@@ -329,7 +332,7 @@ Every spend also records how much of each unit it priced, in
 | ---------------------------- | ------------------------------------------ | ------------------------------------------- |
 | `prerender_tab_seconds`      | seconds of a prerender tab                 | `prerenderTabUsdPerSecond`                  |
 | `worker_process_seconds`     | seconds of a worker process                | `workerProcessUsdPerSecond`                 |
-| `downloaded_gb`              | GB downloaded                              | `PRICING_USD_PER_DOWNLOADED_GB`             |
+| `downloaded_gb`              | GB (2^30 bytes) downloaded                 | `PRICING_USD_PER_DOWNLOADED_GB`             |
 | `file_storage_gb_months`     | GB-months of files                         | `PRICING_USD_PER_FILE_STORAGE_GB_MONTH`     |
 | `database_storage_gb_months` | GB-months of index rows                    | `PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH` |
 | `ai_provider_usd`            | the AI provider's reported cost, in USD    | itself, at `CREDITS_PER_USD`, no margin     |
