@@ -58,10 +58,10 @@ import {
 // cancelled. Either way, what was approved is read from the realm server. The
 // terminal never creates a grant on its own.
 //
-// An approval is for the card's pipelines unless `--interactive` also allows
+// An approval is for the card's automations unless `--interactive` also allows
 // it from an open card, the AI assistant and the CLI, which counts as
-// interactive: nothing it invokes runs as a pipeline. With `--interactive` the
-// batch also holds operations approved for pipelines only, and the terminal
+// interactive: nothing it invokes runs as an automation. With `--interactive` the
+// batch also holds operations approved for automations only, and the terminal
 // prints what interactive use allows before asking. A share approved for
 // interactive use for the first time needs its daily budget, from
 // `--daily-budget` in the terminal or asked for in the window. `--anonymous`
@@ -197,19 +197,22 @@ function chosenOperations(
 }
 
 // The hosts the batch sends a slot token to, for `use`: every operation the
-// realm server weighed in naming the token's fillers that sends it.
+// realm server weighed in naming the token's fillers that sends it. The batch
+// was asked for `operation` alone when one is named, so its fillers weigh
+// only that operation.
 function slotHosts(
   batch: ApprovalBatch,
   token: string,
   use: BatchUse,
+  operation: string | undefined,
 ): string[] {
   let hosts = new Set<string>();
   for (let group of batch.groups) {
     for (let op of group.operations) {
-      if (use === 'pipelines' && op.status === 'pipelines-only') {
+      if (use === 'automations' && op.status === 'automations-only') {
         continue;
       }
-      if (batch.fillersFor && !batch.fillersFor.includes(op.name)) {
+      if (operation !== undefined && op.name !== operation) {
         continue;
       }
       if (op.slots.some((s) => s.slot === token)) {
@@ -226,11 +229,11 @@ function slotHosts(
 // slot.
 //
 // A key or share fills a slot only where the batch's `fillers` offer it for
-// `use`, as the secure window's approve page offers only those. Asked for the
-// operations `--operation` names, `fillers` weigh only where those send. One
-// that would fill a slot of its type but isn't offered there is refused,
-// naming the slot and why, rather than approved to send where its credential
-// can't be used.
+// `use`, as the secure window's approve page offers only those. `batch` is
+// asked for `operation` alone when one is named, so its `fillers` weigh only
+// where that operation sends. One that would fill a slot of its type but
+// isn't offered there is refused, naming the slot and why, rather than
+// approved to send where its credential can't be used.
 export function plan(
   batch: ApprovalBatch,
   name: string,
@@ -243,7 +246,7 @@ export function plan(
   let key = batch.keys.find((k) => k.name === name);
   let share = batch.shares.find((s) => s.label === name);
   let offered = (token: string, id: string) =>
-    !batch.fillers || (batch.fillers[use]?.[token] ?? []).includes(id);
+    (batch.fillers[use]?.[token] ?? []).includes(id);
   let refused = new Set<string>();
   let planned: Planned[] = [];
   for (let { operation: op, group } of chosenOperations(batch, operation)) {
@@ -288,18 +291,14 @@ export function plan(
   if (refused.size > 0) {
     let tokens = [...refused];
     let hosts = [
-      ...new Set(tokens.flatMap((token) => slotHosts(batch, token, use))),
+      ...new Set(
+        tokens.flatMap((token) => slotHosts(batch, token, use, operation)),
+      ),
     ];
     let filled = [
       ...new Set(planned.flatMap((p) => p.fills.map((f) => f.slot))),
     ];
     let it = tokens.length === 1 ? 'it' : 'them';
-    // A slot the realm server weighed by every operation of the card, though
-    // the approval covers only one.
-    let batchWide =
-      operation !== undefined && !batch.fillersFor
-        ? ` This realm server offers a key for a slot by every operation of ${batch.card.name} that sends it, not only ${operation}.`
-        : '';
     // `--slot` helps only where what it fills needs no new grant: the secure
     // window approves every slot of an operation.
     let next =
@@ -307,7 +306,7 @@ export function plan(
         ? `Pass --slot ${filled.join(' or --slot ')} to approve only what it fills, or name another key or share`
         : 'Name another key or share';
     throw new Error(
-      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.length === 1 ? hosts[0] : `every one of ${hosts.join(', ')}`}, where ${batch.fillersFor ? 'the operations approved send' : 'the batch sends'} ${it}.${batchWide} ${next}`,
+      `${name} can't fill the ${tokens.length === 1 ? 'slot' : 'slots'} ${tokens.join(', ')} of ${batch.card.name}: it isn't a kind of key ${tokens.length === 1 ? 'that slot takes' : 'those slots take'}, or its credential isn't good at ${hosts.length === 1 ? hosts[0] : `every one of ${hosts.join(', ')}`}, where ${operation !== undefined ? 'the operations approved send' : 'the batch sends'} ${it}. ${next}`,
     );
   }
   return planned;
@@ -378,7 +377,7 @@ function printBatch(
     for (let p of group) {
       say(
         ctx,
-        `    ${p.operation.label}${p.operation.status === 'changed' ? ` ${FG_YELLOW}(changed since it was approved)${RESET}` : p.operation.status === 'pipelines-only' ? ` ${DIM}(approved for pipelines only)${RESET}` : ''}`,
+        `    ${p.operation.label}${p.operation.status === 'changed' ? ` ${FG_YELLOW}(changed since it was approved)${RESET}` : p.operation.status === 'automations-only' ? ` ${DIM}(approved for automations only)${RESET}` : ''}`,
       );
       say(ctx, `      ${p.operation.method} ${p.operation.path}`);
       if (p.operation.instance) {
@@ -448,7 +447,7 @@ function printBatch(
     }
   }
   let remaining =
-    batch.remaining + (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0);
+    batch.remaining + (interactive ? (batch.remainingAutomationsOnly ?? 0) : 0);
   if (remaining > 0) {
     say(ctx, '');
     say(
@@ -611,7 +610,7 @@ export async function keysApprove(
   let planned = plan(batch, name, {
     operation: parsed.operation,
     slot: options.slot,
-    use: options.interactive ? 'interactive' : 'pipelines',
+    use: options.interactive ? 'interactive' : 'automations',
   });
   if (planned.length === 0) {
     let pending = chosenOperations(batch, parsed.operation);
@@ -639,7 +638,7 @@ export async function keysApprove(
     );
   }
   // Approving again sets where a request runs, so an approval made without
-  // --interactive would quietly return a live card's requests to pipelines
+  // --interactive would quietly return a live card's requests to automations
   // only. Asked for in so many words instead.
   let live = planned.filter((p) =>
     p.operation.slots.some(
@@ -648,7 +647,7 @@ export async function keysApprove(
   );
   if (!interactive && live.length > 0) {
     throw new Error(
-      `${live.map((p) => p.operation.label).join(', ')} ${live.length === 1 ? 'is' : 'are'} approved for use in open cards. Pass --interactive to keep that; to run ${live.length === 1 ? 'it' : 'them'} in pipelines only, revoke ${live.length === 1 ? 'it' : 'them'} with \`boxel keys revoke\` and approve again`,
+      `${live.map((p) => p.operation.label).join(', ')} ${live.length === 1 ? 'is' : 'are'} approved for use in open cards. Pass --interactive to keep that; to run ${live.length === 1 ? 'it' : 'them'} in automations only, revoke ${live.length === 1 ? 'it' : 'them'} with \`boxel keys revoke\` and approve again`,
     );
   }
   // The shares this approval allows interactive use of for the first time,

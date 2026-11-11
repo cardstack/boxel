@@ -12,6 +12,8 @@
 // match the server's permissions", which is the single most likely way this
 // goes wrong.
 
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+import type { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
 import type { RawWorkload } from './workload.ts';
 
 export interface CardTypeSummaryEntry {
@@ -29,6 +31,9 @@ export interface CardTypeSummaryEntry {
 
 export interface DeriveOptions {
   realmUrl: string;
+  // The network built from the realm server's prefix map. A type's module can
+  // be in prefix form, and only this network says which realm it names.
+  network: PrefixRealmNetwork;
   // How many types to query. The realm's long tail contributes little load and
   // a lot of noise to the per-shape table.
   top: number;
@@ -103,8 +108,20 @@ function deriveFailureMessage(
 // The highest-count instance types, as a workload.
 export function workloadFromCardTypeSummary(
   entries: CardTypeSummaryEntry[],
-  { realmUrl, top, pageSize }: DeriveOptions,
+  { realmUrl, network, top, pageSize }: DeriveOptions,
 ): RawWorkload {
+  let paths = new RealmPaths(new URL(realmUrl));
+  // The module's path in the realm, or undefined when the module is in
+  // another realm or names a prefix the server does not serve.
+  let localPath = (module: string): string | undefined => {
+    let url: URL;
+    try {
+      url = network.toURL(module);
+    } catch {
+      return undefined;
+    }
+    return paths.inRealm(url) ? paths.local(url) : undefined;
+  };
   let ranked = entries
     // `file` entries are not searchable through `item.on`, which is the only
     // type anchor the entry grammar has.
@@ -133,20 +150,21 @@ export function workloadFromCardTypeSummary(
     );
   }
 
-  let selected = ranked.slice(0, Math.max(1, top)).map(({ entry, anchor }) => ({
-    entry,
-    realmLocal: anchor.module.startsWith(realmUrl),
-    // Written back as `${realm}…`, the same placeholder a hand-written
-    // workload uses. An emitted file is then portable across clones of the
-    // realm instead of pinned to the one it was derived from, and `expand()`
-    // puts the URL back when it is loaded.
-    anchor: {
-      module: anchor.module.startsWith(realmUrl)
-        ? `\${realm}${anchor.module.slice(realmUrl.length)}`
-        : anchor.module,
-      name: anchor.name,
-    },
-  }));
+  let selected = ranked.slice(0, Math.max(1, top)).map(({ entry, anchor }) => {
+    let local = localPath(anchor.module);
+    return {
+      entry,
+      realmLocal: local !== undefined,
+      // Written back as `${realm}…`, the same placeholder a hand-written
+      // workload uses. An emitted file is then portable across clones of the
+      // realm instead of pinned to the one it was derived from, and `expand()`
+      // puts the URL back when it is loaded.
+      anchor: {
+        module: local !== undefined ? `\${realm}${local}` : anchor.module,
+        name: anchor.name,
+      },
+    };
+  });
 
   let labels = new Set<string>();
   let queries = selected.map(({ entry, anchor }) => {

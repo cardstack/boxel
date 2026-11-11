@@ -142,6 +142,16 @@ if (!GRAFANA_SECRET) {
   process.exit(-1);
 }
 
+// The Grafana whose signing keys verify operator actions proxied through it.
+// Local and test runs work without it, so its absence is a warning, not a
+// startup failure.
+const GRAFANA_URL = process.env.GRAFANA_URL || undefined;
+if (!GRAFANA_URL) {
+  console.warn(
+    `GRAFANA_URL is not set: operator actions proxied through Grafana will be refused`,
+  );
+}
+
 const MATRIX_URL = process.env.MATRIX_URL;
 if (!MATRIX_URL) {
   console.error(
@@ -166,6 +176,12 @@ const MATRIX_REGISTRATION_SHARED_SECRET =
 // nothing, so the pull-model feature stays inert until the secret is
 // provisioned (and rotated, CS-11567) alongside ai-bot.
 const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
+
+// Shared secret the homeserver's invite module presents when it asks
+// `/_invite-check` whether one user may invite another (ADR 011 §1.6). The
+// module reads the same value from its config in homeserver.yaml. Optional:
+// when unset the endpoint responds 503, which the module treats as a denial.
+const MATRIX_INVITE_CHECK_SECRET = process.env.MATRIX_INVITE_CHECK_SECRET;
 
 // Synapse admin credentials. Optional: only consumed by operator-action
 // endpoints that need to admin-impersonate a target user to read or write
@@ -971,7 +987,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    grafanaURL: GRAFANA_URL,
     aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
+    matrixInviteCheckSecret: MATRIX_INVITE_CHECK_SECRET,
     dbAdapter,
     queue,
     searchCache,

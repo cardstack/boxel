@@ -406,7 +406,7 @@ type CreateWorkspace = (input: {
   endpoint?: string;
 }) => Promise<{ url: string; name: string }>;
 
-// Deletes a workspace the current user owns and returns its URL.
+// Deletes a workspace the current user administers and returns its URL.
 type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
 
 // The index of the run's realm. Every call acts on the whole realm or on
@@ -419,6 +419,16 @@ interface IndexActions {
 }
 
 const MAX_INVALIDATE_PATHS = 100;
+// The index calls a run may make. Each call starts an index job on the realm
+// server, so a loop must not start many. A reindex or a full reindex covers
+// the whole realm, so a second one in the same run does no more work; a full
+// reindex is the most costly of them.
+const MAX_INDEX_CALLS = {
+  'index.invalidate': 10,
+  'index.reindex': 1,
+  'index.fullReindex': 1,
+} as const;
+type LimitedIndexCall = keyof typeof MAX_INDEX_CALLS;
 
 // Calls that cannot be undone, that spend the user's credit, that change
 // the state of a whole realm for a long time, or that fetch any URL with the
@@ -608,6 +618,9 @@ class RealmFsSession {
   private webCalls = 0;
   private reportedActivities = 0;
   private resolveCalls = 0;
+  private indexCalls = Object.fromEntries(
+    Object.keys(MAX_INDEX_CALLS).map((method) => [method, 0]),
+  ) as Record<LimitedIndexCall, number>;
   private researchBytes = 0;
   private researchSlots = MAX_PARALLEL_RESEARCH;
   private researchWaiters: (() => void)[] = [];
@@ -958,6 +971,32 @@ class RealmFsSession {
         `Firecrawl could not read ${host}: ${coerceErrorMessage(error, 'unknown error')}`,
       );
       throw error;
+    }
+  }
+
+  // Runs an index call that counts toward its limit. The call is counted
+  // before it starts, so calls made at the same time cannot pass the limit.
+  // A call that fails did not start a job, so it gives its slot back and the
+  // script can try again.
+  private async runIndexCall(
+    method: LimitedIndexCall,
+    call: () => Promise<void>,
+  ) {
+    let max = MAX_INDEX_CALLS[method];
+    if (this.indexCalls[method] >= max) {
+      throw new Error(
+        `Realm code may call realm.${method} at most ${max === 1 ? 'once' : `${max} times`} per run` +
+          (method === 'index.invalidate'
+            ? `; pass up to ${MAX_INVALIDATE_PATHS} paths in one call`
+            : ''),
+      );
+    }
+    this.indexCalls[method] += 1;
+    try {
+      await call();
+    } catch (e) {
+      this.indexCalls[method] -= 1;
+      throw e;
     }
   }
 
@@ -1523,20 +1562,20 @@ class RealmFsSession {
           );
         }
         let urls = paths.map((path) => this.resolve(method, path));
-        await this.index.invalidate(urls);
+        await this.runIndexCall(method, () => this.index.invalidate(urls));
         let invalidated = urls.map((url) => this.relative(url));
         this.indexActions.push(`invalidate ${invalidated.join(', ')}`);
         return { invalidated };
       }
       case 'index.reindex':
-        await this.index.reindex();
+        await this.runIndexCall(method, () => this.index.reindex());
         this.indexActions.push('reindex');
         return { reindex: 'started' };
       case 'index.fullReindex':
         if (!this.namedCalls.has('realm.index.fullReindex')) {
           throw notNamedError('realm.index.fullReindex');
         }
-        await this.index.fullReindex();
+        await this.runIndexCall(method, () => this.index.fullReindex());
         this.indexActions.push('fullReindex');
         return { fullReindex: 'started' };
       case 'index.cancelJob':

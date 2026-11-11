@@ -104,7 +104,7 @@ function batchOf(
         dailyBudget: 100,
       },
     ],
-    ...(fillers ? { fillers } : {}),
+    fillers,
   };
 }
 
@@ -112,11 +112,11 @@ describe('boxel keys approve: which slots a named key fills', () => {
   it('fills the slots the batch offers the key and share for', () => {
     let planned = plan(
       batchOf({
-        pipelines: { userKey: [KEY, OTHER_KEY], 'apiKey:team': [SHARE] },
+        automations: { userKey: [KEY, OTHER_KEY], 'apiKey:team': [SHARE] },
         interactive: {},
       }),
       'mine',
-      { use: 'pipelines' },
+      { use: 'automations' },
     );
     expect(planned).toHaveLength(1);
     expect(planned[0]!.fills.map((f) => [f.slot, f.id])).toEqual([
@@ -129,11 +129,11 @@ describe('boxel keys approve: which slots a named key fills', () => {
     expect(() =>
       plan(
         batchOf({
-          pipelines: { userKey: [KEY], 'apiKey:team': [] },
+          automations: { userKey: [KEY], 'apiKey:team': [] },
           interactive: {},
         }),
         'elsewhere',
-        { use: 'pipelines' },
+        { use: 'automations' },
       ),
     ).toThrow(
       "elsewhere can't fill the slot userKey of Service: it isn't a kind of key that slot takes, or its credential isn't good at api.vendor.test, where the batch sends it. Name another key or share",
@@ -144,39 +144,39 @@ describe('boxel keys approve: which slots a named key fills', () => {
     expect(() =>
       plan(
         batchOf({
-          pipelines: { userKey: [KEY], 'apiKey:team': [] },
+          automations: { userKey: [KEY], 'apiKey:team': [] },
           interactive: {},
         }),
         'mine',
-        { use: 'pipelines' },
+        { use: 'automations' },
       ),
     ).toThrow(
       "mine can't fill the slot apiKey:team of Service: it isn't a kind of key that slot takes, or its credential isn't good at api.vendor.test, where the batch sends it. Pass --slot userKey to approve only what it fills, or name another key or share",
     );
     let planned = plan(
       batchOf({
-        pipelines: { userKey: [KEY], 'apiKey:team': [] },
+        automations: { userKey: [KEY], 'apiKey:team': [] },
         interactive: {},
       }),
       'mine',
-      { use: 'pipelines', slot: 'userKey' },
+      { use: 'automations', slot: 'userKey' },
     );
     expect(planned[0]!.fills.map((f) => f.slot)).toEqual(['userKey']);
   });
 
   it("doesn't point at --slot when what it fills needs a new grant, which the secure window approves with every slot", () => {
     let batch = batchOf({
-      pipelines: { userKey: [KEY], 'apiKey:team': [] },
+      automations: { userKey: [KEY], 'apiKey:team': [] },
       interactive: {},
     });
     batch.keys[0]!.covers = [];
-    expect(() => plan(batch, 'mine', { use: 'pipelines' })).toThrow(
+    expect(() => plan(batch, 'mine', { use: 'automations' })).toThrow(
       /where the batch sends it\. Name another key or share$/,
     );
   });
 
   it('names the hosts of only the operations its fillers weigh', () => {
-    let batch = batchOf({ pipelines: { userKey: [] }, interactive: {} }, [
+    let batch = batchOf({ automations: { userKey: [] }, interactive: {} }, [
       {
         host: 'api.vendor.test',
         operations: [operationOf('list', [slotOf('userKey', 'userKey')])],
@@ -186,29 +186,23 @@ describe('boxel keys approve: which slots a named key fills', () => {
         operations: [operationOf('remove', [slotOf('userKey', 'userKey')])],
       },
     ]);
-    expect(() => plan(batch, 'elsewhere', { use: 'pipelines' })).toThrow(
+    expect(() => plan(batch, 'elsewhere', { use: 'automations' })).toThrow(
       "elsewhere can't fill the slot userKey of Service: it isn't a kind of key that slot takes, or its credential isn't good at every one of api.vendor.test, other.vendor.test, where the batch sends it. Name another key or share",
     );
     // Weighed by only the operation approved.
     expect(() =>
-      plan({ ...batch, fillersFor: ['remove'] }, 'elsewhere', {
-        use: 'pipelines',
+      plan(batch, 'elsewhere', {
+        use: 'automations',
         operation: 'remove',
       }),
     ).toThrow(
       "elsewhere can't fill the slot userKey of Service: it isn't a kind of key that slot takes, or its credential isn't good at other.vendor.test, where the operations approved send it. Name another key or share",
     );
-    // Weighed by every operation, though only one is approved.
-    expect(() =>
-      plan(batch, 'elsewhere', { use: 'pipelines', operation: 'remove' }),
-    ).toThrow(
-      'where the batch sends it. This realm server offers a key for a slot by every operation of Service that sends it, not only remove. Name another key or share',
-    );
   });
 
   it('reads the fillers of the use it approves for', () => {
     let fillers = {
-      pipelines: { userKey: [KEY] },
+      automations: { userKey: [KEY] },
       interactive: { userKey: [OTHER_KEY] },
     };
     let batch = batchOf(fillers, [
@@ -222,7 +216,7 @@ describe('boxel keys approve: which slots a named key fills', () => {
           operationOf(
             'remove',
             [slotOf('userKey', 'userKey')],
-            'pipelines-only',
+            'automations-only',
           ),
         ],
       },
@@ -232,21 +226,14 @@ describe('boxel keys approve: which slots a named key fills', () => {
         (p) => p.operation.name,
       ),
     ).toEqual(['list', 'remove']);
-    // For pipelines, an operation approved for pipelines only isn't one the
+    // For automations, an operation approved for automations only isn't one the
     // batch weighs, so its host isn't named.
-    expect(() => plan(batch, 'elsewhere', { use: 'pipelines' })).toThrow(
+    expect(() => plan(batch, 'elsewhere', { use: 'automations' })).toThrow(
       /isn't good at api\.vendor\.test, where/,
     );
     expect(() => plan(batch, 'mine', { use: 'interactive' })).toThrow(
       /isn't good at every one of api\.vendor\.test, other\.vendor\.test, where/,
     );
-  });
-
-  it("fills by type alone from a batch that doesn't name its fillers", () => {
-    let planned = plan(batchOf(undefined), 'elsewhere', { use: 'pipelines' });
-    expect(planned[0]!.fills.map((f) => [f.slot, f.id])).toEqual([
-      ['userKey', OTHER_KEY],
-    ]);
   });
 });
 
@@ -266,37 +253,18 @@ describe('boxel keys approve: asking for the batch an approval covers', () => {
     body: { data: { attributes: { groups: [], keys: [], shares: [] } } },
   };
 
-  it('asks with the operations it covers, and records that its fillers weigh only those', async () => {
+  it('asks with the operations it covers', async () => {
     let { asked, fetchFn } = answering([answer]);
-    let batch = await approvalBatch(
+    await approvalBatch(
       'https://realms.example.test/',
       'token',
       { target, operations: ['list'] },
       fetchFn,
     );
     expect(asked).toEqual([{ target, review: false, operations: ['list'] }]);
-    expect(batch.fillersFor).toEqual(['list']);
   });
 
-  it("asks again without them of a realm server that doesn't take them", async () => {
-    let { asked, fetchFn } = answering([
-      {
-        status: 400,
-        body: { errors: ["'operations' can't be asked about here"] },
-      },
-      answer,
-    ]);
-    let batch = await approvalBatch(
-      'https://realms.example.test/',
-      'token',
-      { target, operations: ['list'] },
-      fetchFn,
-    );
-    expect(asked.map((a) => a.operations)).toEqual([['list'], undefined]);
-    expect(batch.fillersFor).toBeUndefined();
-  });
-
-  it('passes on any other refusal', async () => {
+  it("passes on the realm server's refusal", async () => {
     let { fetchFn } = answering([
       {
         status: 400,

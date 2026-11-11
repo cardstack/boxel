@@ -746,7 +746,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a share bound for pipelines only is not listed, since it never serves a visitor', async function (assert) {
+  test('a share bound for automations only is not listed, since it never serves a visitor', async function (assert) {
     await sharedFor('forecast', {
       owner: OWNER,
       label: 'Forecast key',

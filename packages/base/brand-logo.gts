@@ -27,6 +27,7 @@ import {
   getFieldDescription,
 } from './card-api';
 import { buildCssVariableName } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import { markdownLink } from './markdown-helpers';
 import type {
   CssVariableField,
@@ -334,6 +335,7 @@ class MarkFieldEdit extends Component<typeof MarkField> {
           @onInput={{@set}}
           @disabled={{not @canEdit}}
           @state={{this.validationState}}
+          {{ignoredByPasswordManagers}}
           data-test-mark-url-input
         />
         {{#if @model}}

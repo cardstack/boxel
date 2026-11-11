@@ -356,22 +356,22 @@ export default class GetStarted extends Component<Signature> {
   }
 
   // Why there's nothing to publish. A workspace made before workspaces were
-  // marked publishable isn't, so owning one isn't enough.
+  // marked publishable isn't, so being able to edit one isn't enough.
   private get publishUnavailableNote() {
     return this.realmServer.userRealmIdentifiers.some((url) =>
-      this.realm.isRealmOwner(url),
+      this.realm.canAdminister(url),
     )
       ? 'None of your workspaces can be published. Create a new one to publish it.'
-      : 'Publishing needs a workspace you own. Create one to publish it.';
+      : 'Publishing needs a workspace you can edit. Create one to publish it.';
   }
 
-  // The note waits for the info of every workspace the user owns: until a
+  // The note waits for the info of every workspace the user administers: until a
   // workspace's info loads, it may yet turn out publishable.
   private get showsPublishUnavailableNote() {
     return (
       this.workspacesToPublish.length === 0 &&
       this.realmServer.userRealmIdentifiers
-        .filter((url) => this.realm.isRealmOwner(url))
+        .filter((url) => this.realm.canAdminister(url))
         .every((url) => this.realm.isInfoLoaded(url))
     );
   }
