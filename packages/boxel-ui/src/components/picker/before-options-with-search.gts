@@ -229,6 +229,12 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
     }
   }
 
+  // The search input carries each password manager's own attribute for
+  // skipping a field: 1Password's data-1p-ignore, LastPass's data-lpignore,
+  // Dashlane's data-form-type and Bitwarden's data-bwignore. It filters a
+  // list, so no login belongs in it, and it renders in the dropdown, where
+  // no caller can reach it. Pret UI's ignoredByPasswordManagers modifier sets
+  // the same four; boxel-ui can't import Pret UI, so they are written here.
   <template>
     {{! Keydown lives on the wrapper so navigation works even when the
         search input is hidden — events bubble from the input or the
@@ -251,6 +257,10 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
             @placeholder={{this.searchPlaceholder}}
             @autocomplete='off'
             class='picker-before-options__search-input'
+            data-1p-ignore=''
+            data-lpignore='true'
+            data-form-type='other'
+            data-bwignore=''
             {{autoFocus}}
           />
         </div>
