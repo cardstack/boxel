@@ -2,14 +2,26 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 
-import { assertQuery, type Query } from '@cardstack/runtime-common';
+import {
+  assertQuery,
+  type Query,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
+import {
+  parseSearchEntryQueryFromPayload,
+  searchEntryWireQueryFromQuery,
+} from '@cardstack/runtime-common/search-entry';
+import { lowerQuery } from '@cardstack/runtime-common/query-syntax';
 import {
   applySearchPageBound,
   applyServerSearchPageBound,
   MAX_SEARCH_PAGE_SIZE,
   SERVER_MAX_SEARCH_PAGE_SIZE,
 } from '@cardstack/runtime-common/search-bounds';
-import { usesNewSyntax } from '@cardstack/runtime-common/query-syntax';
+import {
+  assertAuthoredQuerySpelling,
+  usesNewSyntax,
+} from '@cardstack/runtime-common/query-syntax';
 import { internalSortKeyIn } from '@cardstack/runtime-common/internal-sort-keys';
 
 // Queries saved in realms were written against the grammar as it stood before
@@ -18,7 +30,10 @@ import { internalSortKeyIn } from '@cardstack/runtime-common/internal-sort-keys'
 // same way, with no rewrite. A query is added to this table when a spelling
 // is found in a realm; none is ever removed.
 
-const on = { module: 'http://test-realm/person', name: 'Person' };
+const on = {
+  module: 'http://test-realm/person',
+  name: 'Person',
+} as ResolvedCodeRef;
 
 const accepted: [string, Record<string, any>][] = [
   ['every card of a type', { filter: { type: on } }],
@@ -149,5 +164,290 @@ module(basename(import.meta.filename), function () {
     let query = { filter: { type: on }, page: { size: -1 } } as Query;
     assert.strictEqual(applySearchPageBound(query).page?.size, 100);
     assert.strictEqual(applyServerSearchPageBound(query).page?.size, 500);
+  });
+
+  test('the wire translator lowers a newer spelling and leaves an older one as it was', function (assert) {
+    // older: the translator's output is what it always was
+    let older: Query = {
+      filter: { on, eq: { name: 'a' } },
+      sort: [{ on, by: 'age', direction: 'desc' }],
+      page: { size: 5 },
+    };
+    assert.deepEqual(searchEntryWireQueryFromQuery(older), {
+      filter: { 'item.on': on, eq: { 'item.name': 'a' } },
+      sort: [{ by: 'item.age', 'item.on': on, direction: 'desc' }],
+      page: { size: 5 },
+    });
+    // newer: a top-level type and `exists` reach the wire, lowered
+    let newer = {
+      type: on,
+      filter: { exists: 'age' },
+      sort: [{ by: 'age' }],
+    } as unknown as Query;
+    let wire = searchEntryWireQueryFromQuery(newer) as Record<string, any>;
+    assert.deepEqual(
+      wire,
+      searchEntryWireQueryFromQuery(
+        lowerQuery(newer as Record<string, any>).query as Query,
+      ),
+      'the same as wiring the lowered query (lowering twice is lowering once)',
+    );
+    assert.deepEqual(wire.filter['item.on'], on, 'the type anchors the filter');
+    assert.deepEqual(
+      parseSearchEntryQueryFromPayload(wire).itemQuery,
+      parseSearchEntryQueryFromPayload(newer as Record<string, any>).itemQuery,
+      'the server reads the wired query as it reads the newer spelling',
+    );
+    // `select` rides along
+    let selecting = searchEntryWireQueryFromQuery({
+      type: on,
+      select: ['name', { years: 'age' }],
+    } as unknown as Query);
+    assert.deepEqual(selecting.select, ['name', { years: 'age' }]);
+  });
+
+  test('a limit holds the newer spelling; the older one is refused only where the database failed', function (assert) {
+    let code = (query: unknown) => {
+      try {
+        assertQuery(query as Query);
+        return 'accepted';
+      } catch (e: any) {
+        return e.code;
+      }
+    };
+    let values = (n: number) => Array.from({ length: n }, (_, i) => `v${i}`);
+    let sorts = (n: number) =>
+      Array.from({ length: n }, () => ({ on, by: 'age' }));
+    let nested = (depth: number) => {
+      let node: Record<string, any> = { on, eq: { name: 'a' } };
+      for (let i = 0; i < depth; i++) node = { on, every: [node] };
+      return node;
+    };
+    // an `in` list
+    assert.strictEqual(
+      code({ type: on, filter: { in: { name: values(10_001) } } }),
+      'limit-exceeded',
+      'newer: 10,001 values',
+    );
+    assert.strictEqual(
+      code({ filter: { on, in: { name: values(10_001) } } }),
+      'accepted',
+      'older: 10,001 values, as on main',
+    );
+    assert.strictEqual(
+      code({ filter: { on, in: { name: values(65_001) } } }),
+      'limit-exceeded',
+      'older: 65,001 values, past what Postgres binds',
+    );
+    // sort entries
+    assert.strictEqual(
+      code({ type: on, sort: sorts(65) }),
+      'limit-exceeded',
+      'newer: 65 sort entries',
+    );
+    assert.strictEqual(
+      code({ filter: { type: on }, sort: sorts(65) }),
+      'accepted',
+      'older: 65 sort entries',
+    );
+    assert.strictEqual(
+      code({ filter: { type: on }, sort: sorts(801) }),
+      'limit-exceeded',
+      'older: 801 sort entries, past the target list',
+    );
+    // a matches term
+    assert.strictEqual(
+      code({ type: on, filter: { matches: 'w '.repeat(5_001) } }),
+      'limit-exceeded',
+      'newer: a term of 10,002 characters',
+    );
+    assert.strictEqual(
+      code({ filter: { on, matches: 'w '.repeat(5_001) } }),
+      'accepted',
+      'older: a term of 10,002 characters',
+    );
+    assert.strictEqual(
+      code({ filter: { on, matches: 'w '.repeat(50_000) } }),
+      'limit-exceeded',
+      'older: a term of 100,000 characters',
+    );
+    // nesting
+    assert.strictEqual(
+      code({ type: on, filter: nested(300) }),
+      'limit-exceeded',
+      'newer: every 300 deep',
+    );
+    assert.strictEqual(
+      code({ filter: nested(300) }),
+      'accepted',
+      'older: every 300 deep',
+    );
+    assert.strictEqual(
+      code({ filter: nested(1_100) }),
+      'limit-exceeded',
+      'older: every 1,100 deep',
+    );
+  });
+
+  // `main` counted every match of every page (one COUNT(*)), with no cap and
+  // no mode to ask for. A saved query keeps that answer: the older spelling
+  // reaches the engine with no `total`, which the engine counts exactly. The
+  // newer spelling, which has no saved answers, counts to the cap unless it
+  // names a mode: its lowering writes `total: 'capped'`. A counts-only page
+  // (`size: 0`) is counted exactly in both. The counts themselves are pinned
+  // against the database in query-bounds-cases ("page.total").
+  test('a member main never had makes the whole query the newer spelling', function (assert) {
+    // The older spelling is exactly main's grammar (ADR 022 §1.7). `on`
+    // anchors with `facets` beside them are a newer query, read strictly.
+    let mixed = {
+      filter: { on, eq: { name: 'a' } },
+      facets: [{ by: 'name' }],
+      page: { size: 10 },
+    };
+    assert.true(usesNewSyntax(mixed), 'facets: the newer spelling');
+    assert.deepEqual(
+      lowerQuery(mixed).query.page,
+      { size: 10, total: 'capped' },
+      "so its page takes the newer default, `total: 'capped'`",
+    );
+    assert.throws(
+      () =>
+        assertQuery({
+          ...mixed,
+          filter: { on, eq: { name: 'a' }, note: 'x' },
+        }),
+      /unknown member "note"/,
+      'and a member the older spelling would ignore is refused',
+    );
+    assert.throws(
+      () => assertQuery({ ...mixed, page: { size: 10, cursor: 'abc' } }),
+      /unknown member "cursor"/,
+      'a page cursor too',
+    );
+    // the same query rewritten in the newer form is accepted
+    let rewritten = {
+      type: on,
+      filter: { eq: { name: 'a' } },
+      facets: [{ by: 'name' }],
+      page: { size: 10 },
+    };
+    assertQuery(rewritten);
+    assert.deepEqual(
+      lowerQuery(rewritten).query.filter,
+      { on, every: [{ eq: { name: 'a' } }] },
+      'it lowers to the same condition, anchored by the top-level type',
+    );
+    for (let member of [
+      { collapse: 'name' },
+      { let: {} },
+      { explain: true },
+      { timeZone: 'UTC' },
+      { page: { size: 10, total: 'exact' } },
+      { page: { size: 10, exactTotal: true } },
+    ]) {
+      assert.true(
+        usesNewSyntax({ filter: { on, eq: { name: 'a' } }, ...member }),
+        JSON.stringify(member),
+      );
+    }
+    for (let node of [
+      { on, near: { embedding: [1] } },
+      { on, matches: 'a', prefix: true },
+      { on, pattern: { name: 'a*' } },
+    ]) {
+      assert.true(usesNewSyntax({ filter: node }), JSON.stringify(node));
+    }
+    assert.false(
+      usesNewSyntax({ filter: { on, eq: { name: 'a' } }, page: { cursor: 1 } }),
+      'an unknown page member is not a V2 member: main ignored it, and still does',
+    );
+  });
+
+  test('an author naming the type with on beside a V2 member is refused with the rewrite; the server reads the engine form', function (assert) {
+    let mixed = {
+      filter: { on, eq: { name: 'a' } },
+      facets: [{ by: 'name' }],
+    };
+    assert.throws(
+      () => assertAuthoredQuerySpelling(mixed),
+      (err: any) =>
+        err.code === 'mixed-spelling' &&
+        err.message.includes('{ "type": ' + JSON.stringify(on)),
+    );
+    // the engine's form of a newer query is the same shape, so the server
+    // reads it, strictly
+    assertQuery(mixed);
+    assertAuthoredQuerySpelling({ type: on, ...mixed });
+    assertAuthoredQuerySpelling({
+      filter: { every: [{ on, eq: { name: 'a' } }] },
+      facets: [{ by: 'name' }],
+    });
+    assertAuthoredQuerySpelling({ filter: { on, eq: { name: 'a' } } });
+    assert.throws(
+      () =>
+        assertAuthoredQuerySpelling({
+          type: on,
+          let: { $x: { from: mixed, select: 'name' } },
+        }),
+      /let\.\$x\.from/,
+      'a binding is an author query too',
+    );
+  });
+
+  test('a page naming no total: exact in the older spelling, as on main; capped in the newer', function (assert) {
+    let older = { filter: { on, eq: { name: 'a' } }, page: { size: 10 } };
+    assert.deepEqual(
+      parseSearchEntryQueryFromPayload({
+        filter: { 'item.on': on, eq: { 'item.name': 'a' } },
+        page: { size: 10 },
+      }).itemQuery.page,
+      { size: 10 },
+      'an older request reaches the engine with no mode: counted exactly',
+    );
+    assert.deepEqual(
+      searchEntryWireQueryFromQuery(older as Query).page,
+      { size: 10 },
+      'wired as it was written',
+    );
+    let newer = { type: on, filter: { eq: { name: 'a' } }, page: { size: 10 } };
+    assert.deepEqual(
+      lowerQuery(newer).query.page,
+      { size: 10, total: 'capped' },
+      'the newer spelling lowers to a capped count',
+    );
+    assert.deepEqual(
+      parseSearchEntryQueryFromPayload({
+        filter: { 'item.on': on, eq: { 'item.name': 'a' } },
+        sort: [{ blend: [{ by: 'item.name' }] }],
+        page: { size: 10 },
+      }).itemQuery.page,
+      { size: 10, total: 'capped' },
+      'a newer request is capped',
+    );
+    for (let total of ['exact', 'capped', 'none'] as const) {
+      assert.deepEqual(
+        lowerQuery({ ...newer, page: { size: 10, total } }).query.page,
+        { size: 10, total },
+        `newer: a named ${total} wins`,
+      );
+      assert.deepEqual(
+        parseSearchEntryQueryFromPayload({
+          filter: { 'item.on': on },
+          page: { size: 10, total },
+        }).itemQuery.page,
+        { size: 10, total },
+        `older: a named ${total} wins`,
+      );
+    }
+    assert.deepEqual(
+      lowerQuery({ ...newer, page: { size: 10, exactTotal: true } }).query.page,
+      { size: 10, exactTotal: true },
+      'newer: exactTotal still asks for an exact count',
+    );
+    assert.deepEqual(
+      lowerQuery({ ...newer, page: { size: 0 } }).query.page,
+      { size: 0 },
+      'newer: a counts-only page is counted exactly',
+    );
   });
 });

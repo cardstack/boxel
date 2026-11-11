@@ -98,6 +98,18 @@ export interface ErrorEntry {
   types?: string[];
   searchData?: Record<string, any>;
   cardType?: string;
+  // Set on a search the realm refused (a 4xx answer with a JSON error body):
+  // what the realm said, so a consumer can show it rather than no results.
+  refusal?: SearchRefusal;
+}
+
+// A search the realm refused: the HTTP status, the query grammar's code for
+// the mistake when it has one (`unknown-key`, `limit-exceeded`,
+// `invalid-value`, …), and the realm's message.
+export interface SearchRefusal {
+  status: number;
+  code?: string;
+  message: string;
 }
 
 // HTTP statuses a load balancer or proxy returns when it, not the upstream,

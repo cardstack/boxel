@@ -22,6 +22,8 @@
 //   needs-declaration      a field or type lacks a declaration a feature
 //                          needs
 //   expression-placement   an expression placed where it cannot run
+//   expression-unsupported an expression BXL's score profile (SQL) cannot
+//                          express, such as one calling a text function
 //   needs-postgres         a feature this index (SQLite) cannot run
 //   matches-required       a text-relevance sort with no `matches` filter
 //   engine-only            a member only the engine sets

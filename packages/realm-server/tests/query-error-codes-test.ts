@@ -97,7 +97,7 @@ const MISTAKES: [string, unknown, string][] = [
     {
       let: Object.fromEntries(
         [1, 2, 3, 4, 5].map((n) => [
-          `b${n}`,
+          `$b${n}`,
           { from: { filter: { type: on } }, select: 'a' },
         ]),
       ),
@@ -106,12 +106,12 @@ const MISTAKES: [string, unknown, string][] = [
   ],
   [
     'an unknown binding member',
-    { let: { b: { from: { filter: { type: on } }, select: 'a', extra: 1 } } },
+    { let: { $b: { from: { filter: { type: on } }, select: 'a', extra: 1 } } },
     'unknown-key',
   ],
   [
     'a binding with no filter',
-    { let: { b: { from: {}, select: 'a' } } },
+    { let: { $b: { from: {}, select: 'a' } } },
     'missing-member',
   ],
   [
@@ -120,14 +120,29 @@ const MISTAKES: [string, unknown, string][] = [
     'invalid-value',
   ],
   [
-    'an unknown rerank member',
-    { rerank: { expression: 'a', model: 'x' } },
+    'an unknown member of an expression sort entry with top',
+    { sort: [{ expression: 'a', top: 5, model: 'x' }] },
     'unknown-key',
   ],
   [
-    'a rerank top out of range',
-    { rerank: { expression: 'a', top: 10_000 } },
+    'an expression sort entry with top out of range',
+    { sort: [{ expression: 'a', top: 10_000 }] },
     'invalid-value',
+  ],
+  [
+    'a top-level rerank (re-ranking is a sort entry)',
+    { type: on, rerank: { expression: 'a' } },
+    'unknown-key',
+  ],
+  [
+    'an expression with placement',
+    { sort: [{ expression: 'a', placement: 'sql' }] },
+    'unknown-key',
+  ],
+  [
+    'an expression SQL cannot run',
+    { sort: [{ expression: 'LEN(a)' }] },
+    'expression-unsupported',
   ],
   [
     'realm beside realms',

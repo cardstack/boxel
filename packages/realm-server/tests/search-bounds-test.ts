@@ -4,6 +4,11 @@ import { basename } from 'path';
 import {
   applySearchPageBound,
   applyServerSearchPageBound,
+  pageSizeClampWarning,
+  withPageSizeClampWarning,
+  takesDefaultPage,
+  defaultPageTruncationWarning,
+  withDefaultPageTruncation,
   assertRealmsBound,
   isItemLegSearch,
   runWithSearchTimeBudget,
@@ -269,6 +274,112 @@ module(basename(import.meta.filename), function (hooks) {
         size: SERVER_ABSOLUTE_MAX_PAGE_SIZE,
         number: 3,
       });
+    });
+
+    test('a clamped page carries a page-size-clamped notice; a page at the maximum, or one that took the default, carries none', function (assert) {
+      let ask = (size: unknown) => ({ page: { size } }) as unknown as Query;
+      let over = ask(SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1);
+      let notice = pageSizeClampWarning(over, applyServerSearchPageBound(over));
+      assert.strictEqual(notice?.code, 'page-size-clamped');
+      assert.true(
+        notice?.message.includes(String(SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1)),
+        'the notice names the size asked for',
+      );
+      for (let size of [SERVER_ABSOLUTE_MAX_PAGE_SIZE, undefined, -1, 'lots']) {
+        let asked = ask(size);
+        assert.strictEqual(
+          pageSizeClampWarning(asked, applyServerSearchPageBound(asked)),
+          undefined,
+          `page.size ${JSON.stringify(size)}: no notice`,
+        );
+      }
+      let doc = withPageSizeClampWarning(
+        {
+          data: [],
+          meta: { page: { total: 0 }, warnings: [{ code: 'x', message: 'y' }] },
+        },
+        notice,
+      );
+      assert.deepEqual(
+        doc.meta.warnings.map((w) => w.code),
+        ['x', 'page-size-clamped'],
+        'added beside the warnings already there',
+      );
+    });
+
+    test('a default page that left matches out carries a default-page-truncated notice, distinct from page-size-clamped', function (assert) {
+      let ask = (page: unknown) => ({ page }) as unknown as Query;
+      assert.true(takesDefaultPage({} as Query), 'no page');
+      assert.true(
+        takesDefaultPage(ask({ number: 2 })),
+        'a page naming no size',
+      );
+      assert.true(
+        takesDefaultPage(ask({ size: 'lots' })),
+        'an unreadable size',
+      );
+      assert.true(takesDefaultPage(ask({ size: -1 })), 'a negative size');
+      assert.false(takesDefaultPage(ask({ size: 0 })), 'counts-only');
+      assert.false(takesDefaultPage(ask({ size: 10 })), 'a named size');
+
+      let notice = defaultPageTruncationWarning({ size: 100 }, 100, {
+        total: 2596,
+        hasMore: true,
+      });
+      assert.deepEqual(notice, {
+        code: 'default-page-truncated',
+        message:
+          'Returned the first 100 of 2,596 matches; pass page.size or page through the results',
+      });
+      assert.strictEqual(
+        defaultPageTruncationWarning(
+          { size: 100 },
+          100,
+          { total: 1000, hasMore: true },
+          [{ code: 'total-estimated' }],
+        )?.message,
+        'Returned the first 100 of >= 1,000 matches; pass page.size or page through the results',
+        'a capped total is a lower bound',
+      );
+      assert.strictEqual(
+        defaultPageTruncationWarning({ size: 100 }, 100, { total: 100 }),
+        undefined,
+        'every match is on the page',
+      );
+      assert.strictEqual(
+        defaultPageTruncationWarning(undefined, 100, { total: 2596 }),
+        undefined,
+        'a page the caller named is never a default truncation',
+      );
+      assert.true(
+        defaultPageTruncationWarning({ size: 10, number: 1 }, 10, {
+          total: 30,
+        })?.message.startsWith('Returned rows 11-20 of 30 matches'),
+        'a later default page names its rows',
+      );
+
+      type Doc = {
+        data: unknown[];
+        meta: {
+          page: { total: number; hasMore?: boolean };
+          warnings?: { code: string; message: string }[];
+        };
+      };
+      let doc = withDefaultPageTruncation(
+        { data: [1, 2], meta: { page: { total: 5 } } } as Doc,
+        { size: 2 },
+      );
+      assert.true(doc.meta.page.hasMore, 'hasMore is set');
+      assert.deepEqual(
+        doc.meta.warnings?.map((w) => w.code),
+        ['default-page-truncated'],
+      );
+      let whole = { data: [1, 2], meta: { page: { total: 2 } } };
+      assert.strictEqual(
+        withDefaultPageTruncation(whole, { size: 2 }),
+        whole,
+        'unchanged when nothing was left out',
+      );
     });
 
     test('the input query is left unmutated when clamped', function (assert) {

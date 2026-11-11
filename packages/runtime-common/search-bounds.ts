@@ -1,4 +1,5 @@
 import { logger } from './log.ts';
+import { setSignalDeadline } from './db.ts';
 import type { Query } from './query.ts';
 import type { SearchEntryFieldset } from './search-entry.ts';
 
@@ -187,7 +188,7 @@ export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
 );
 
 // The most matches a `page.total: 'capped'` search counts. Past it the
-// search reports this many with `meta.page.totalIsEstimate`, so a page over a
+// search reports this many with the `total-estimated` warning, so a page over a
 // large realm never counts every row to say "more than this".
 export const SEARCH_TOTAL_CAP = parsePositiveInt(
   env.SEARCH_TOTAL_CAP,
@@ -199,7 +200,7 @@ export const SEARCH_TOTAL_CAP = parsePositiveInt(
 // matches more (a word nearly every card holds, like "card") ranks a capped
 // candidate set instead: its best field matches by rank, and that many of the
 // cards that hold it only on their rendered page. The search reports a lower
-// bound for its total with `meta.page.totalIsEstimate`; an exact total
+// bound for its total with the `total-estimated` warning; an exact total
 // (`page.total: 'exact'`, or `page.exactTotal`) counts every match instead.
 // See docs/search.md, "Bounds every query runs under".
 export const SEARCH_MATCH_CANDIDATE_CAP = parsePositiveInt(
@@ -675,10 +676,15 @@ export type SearchBoundStatus = 400 | 408;
 
 export class SearchBoundError extends Error {
   status: SearchBoundStatus;
-  constructor(status: SearchBoundStatus, message: string) {
+  // the grammar's code for a refused page or fan-out (`limit-exceeded`);
+  // a search cut off by the time budget (408) has none
+  code?: string;
+  constructor(status: SearchBoundStatus, message: string, code?: string) {
     super(message);
     this.status = status;
     this.name = 'SearchBoundError';
+    let c = code ?? (status === 400 ? 'limit-exceeded' : undefined);
+    if (c) this.code = c;
   }
 }
 
@@ -833,6 +839,191 @@ export function applyServerSearchPageBound(query: Query): Query {
   );
 }
 
+// The notice a response carries when the server clamped its page: a caller
+// that asked for more rows than a page holds learns it from the answer, not
+// only from a server log. `asked` is the query as the request wrote it and
+// `bounded` what `applyServerSearchPageBound` made of it; an absent or
+// unreadable size took the default and is no clamp.
+export const PAGE_SIZE_CLAMPED = 'page-size-clamped';
+export function pageSizeClampWarning(
+  asked: Query,
+  bounded: Query,
+): { code: string; message: string } | undefined {
+  let written = (asked.page as { size?: unknown } | undefined)?.size;
+  let askedSize = Number(written);
+  let size = Number((bounded.page as { size?: unknown } | undefined)?.size);
+  if (
+    (typeof written !== 'number' && typeof written !== 'string') ||
+    written === '' ||
+    !Number.isFinite(askedSize) ||
+    !Number.isFinite(size) ||
+    askedSize <= size
+  ) {
+    return undefined;
+  }
+  return {
+    code: PAGE_SIZE_CLAMPED,
+    message: `page.size ${askedSize} is more than a page holds, so this page holds at most ${size.toLocaleString('en-US')} rows: page through the rest with page.number`,
+  };
+}
+
+// The caveats a search answer carries in `meta.warnings`, beside the page
+// notices above: each says the answer is usable but not exactly what was
+// asked. `meta` itself holds facts only (the page, totals, the zone, the
+// realms asked); a caveat is never a flag there. docs/search.md lists them
+// under "Warnings".
+//
+// The total is a lower bound, not the match count: a `capped` page stopped
+// counting at SEARCH_TOTAL_CAP, or a broad `matches` term ranked and counted
+// a capped candidate set (SEARCH_MATCH_CANDIDATE_CAP). Show it as "1,000+".
+export const TOTAL_ESTIMATED = 'total-estimated';
+// A merged federated search ordered rows by scores each realm computed over
+// its own matches, so the order across realms is approximate.
+export const APPROXIMATE_ORDER = 'approximate-order';
+// An expression sort's comparison set (`compare`) held more rows than it
+// reads, so `stats.` and `peers.` describe only the first of them.
+export const COMPARE_TRUNCATED = 'compare-truncated';
+// A realm a federated search asked did not answer, so the rows and the total
+// cover only the realms that did. Beside main's `meta.incomplete`, which
+// stays (see docs/search.md, "Warnings").
+export const INCOMPLETE = 'incomplete';
+
+// The `total-estimated` message for each reason the total is a bound.
+export function totalEstimatedMessage(
+  reason: 'capped' | 'candidates' | 'uncounted',
+): string {
+  let fmt = (n: number) => n.toLocaleString('en-US');
+  switch (reason) {
+    case 'capped':
+      return `the total stopped counting at ${fmt(SEARCH_TOTAL_CAP)} matches, so it is a lower bound; page.total: 'exact' counts every match`;
+    case 'candidates':
+      return `a broad matches term matched more than ${fmt(matchCandidateCap())} cards, so only that many candidates were ranked and counted and the total is a lower bound; page.total: 'exact' counts every match`;
+    case 'uncounted':
+      return `page.total: 'none' counts nothing, so the total is the rows through this page; page.hasMore says whether more follow`;
+  }
+}
+
+export function incompleteWarning(): { code: string; message: string } {
+  return {
+    code: INCOMPLETE,
+    message:
+      'a realm the search asked did not answer, so the rows and the total cover only the realms that did; meta.realms says which',
+  };
+}
+
+export function hasWarning(
+  meta: { warnings?: readonly { code: string }[] } | undefined | null,
+  code: string,
+): boolean {
+  return Boolean(meta?.warnings?.some((w) => w.code === code));
+}
+
+// `warnings` with `warning` added, unless one with its code is there.
+export function withWarningOnce<W extends { code: string; message: string }>(
+  warnings: readonly W[] | undefined,
+  warning: W,
+): W[] {
+  let list = [...(warnings ?? [])];
+  if (!list.some((w) => w.code === warning.code)) list.push(warning);
+  return list;
+}
+
+// `doc` with `warning` added to its `meta.warnings`, when there is one.
+export function withPageSizeClampWarning<
+  D extends { meta?: { warnings?: { code: string; message: string }[] } },
+>(doc: D, warning: { code: string; message: string } | undefined): D {
+  if (!warning) return doc;
+  return {
+    ...doc,
+    meta: { ...doc.meta, warnings: [...(doc.meta?.warnings ?? []), warning] },
+  };
+}
+
+// Whether a query takes a default page: it names none, or names one whose size
+// cannot bound a result set (missing, non-numeric, below one) — the cases the
+// page bounds fill with their default. A counts-only `size: 0` names its page.
+export function takesDefaultPage(query: Query): boolean {
+  let page = query.page as { size?: unknown } | undefined | null;
+  if (page == null) return true;
+  if (page.size === 0) return false;
+  let size = Number(page.size);
+  return !Number.isFinite(size) || size < 1;
+}
+
+// The notice a response carries when a page the caller never asked for left
+// matches out: the query named no page, a default one applied, and more rows
+// match than it holds. Distinct from `page-size-clamped`, which answers a size
+// the caller did name. A caller that names a page has said how many rows it
+// wants, so a short page there is the page it asked for and says nothing.
+export const DEFAULT_PAGE_TRUNCATED = 'default-page-truncated';
+
+type PageMeta = {
+  total?: number;
+  hasMore?: boolean;
+};
+
+// `defaultPage` is the page the default gave the query (`{ size, number }`),
+// passed only when the default applied; `rows` is how many rows came back.
+// Undefined when every match is on this page or an earlier one.
+export function defaultPageTruncationWarning(
+  defaultPage: { size?: unknown; number?: unknown } | undefined,
+  rows: number,
+  page: PageMeta | undefined,
+  warnings?: readonly { code: string }[],
+): { code: string; message: string } | undefined {
+  if (!defaultPage) return undefined;
+  let size = Number(defaultPage.size);
+  let number = Number(defaultPage.number ?? 0) || 0;
+  if (!Number.isFinite(size) || size < 1) return undefined;
+  let total = page?.total;
+  let shown = number * size + rows;
+  let more =
+    page?.hasMore === true || (typeof total === 'number' && total > shown);
+  if (!more) return undefined;
+  let fmt = (n: number) => n.toLocaleString('en-US');
+  let of =
+    typeof total === 'number' && total > shown
+      ? hasWarning({ warnings }, TOTAL_ESTIMATED)
+        ? `>= ${fmt(total)}`
+        : fmt(total)
+      : `more than ${fmt(shown)}`;
+  return {
+    code: DEFAULT_PAGE_TRUNCATED,
+    message:
+      number === 0
+        ? `Returned the first ${fmt(rows)} of ${of} matches; pass page.size or page through the results`
+        : `Returned rows ${fmt(number * size + 1)}-${fmt(shown)} of ${of} matches on a default page of ${fmt(size)}; pass page.size or page through the results`,
+  };
+}
+
+// `doc` with the default-page notice added, and `meta.page.hasMore` set, when
+// the default page left matches out (see `defaultPageTruncationWarning`).
+export function withDefaultPageTruncation<
+  D extends {
+    data?: unknown[];
+    meta?: {
+      page?: PageMeta;
+      warnings?: { code: string; message: string }[];
+    };
+  },
+>(doc: D, defaultPage: { size?: unknown; number?: unknown } | undefined): D {
+  let warning = defaultPageTruncationWarning(
+    defaultPage,
+    doc.data?.length ?? 0,
+    doc.meta?.page,
+    doc.meta?.warnings,
+  );
+  if (!warning) return doc;
+  let withWarning = withPageSizeClampWarning(doc, warning);
+  return {
+    ...withWarning,
+    meta: {
+      ...withWarning.meta,
+      page: { ...withWarning.meta?.page, hasMore: true },
+    },
+  };
+}
+
 // When each realm of a federated search must have answered, so one slow
 // realm is reported as a timeout (`meta.realms[url].status`) while the rest
 // answer, inside the request's own budget: the budget less a reserve for
@@ -855,6 +1046,7 @@ export async function runWithSearchTimeBudget<T>(
   budgetMs: number = timeBudgetMs,
 ): Promise<T> {
   let controller = new AbortController();
+  setSignalDeadline(controller.signal, Date.now() + budgetMs);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
