@@ -25,6 +25,7 @@ import {
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
 import { keyReadiness } from '../lib/key-readiness.ts';
+import { addOAuthClient } from '../lib/oauth.ts';
 
 // ============================================================================
 // Readiness through `_capabilities`: what a card learns about a `callApi`
@@ -75,6 +76,20 @@ function inboxModule({ listHeader = 'authorization' } = {}) {
         base: 'callApi',
         url: '${VENDOR}/echo/shared',
         headers: { authorization: 'Bearer {{apiKey}}' },
+      };
+
+      @operation static noteAsAccount = {
+        base: 'callApi',
+        url: '${VENDOR}/echo/note-as-account',
+        headers: { authorization: 'Bearer {{userKey}}' },
+        keyKind: 'oauth',
+      };
+
+      @operation static sharedAsAccount = {
+        base: 'callApi',
+        url: '${VENDOR}/echo/shared-as-account',
+        headers: { authorization: 'Bearer {{apiKey}}' },
+        keyKind: 'oauth',
       };
 
       @operation static ping = {
@@ -284,7 +299,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(
       await readiness(OWNER, 'list'),
       'needs-approval',
-      'approved for pipelines only',
+      'approved for automations only',
     );
     assert.strictEqual(
       await readiness(OWNER, 'note'),
@@ -495,6 +510,94 @@ module(basename(import.meta.filename), function (hooks) {
       await readiness(OWNER, 'shared'),
       'needs-admin',
       'a suspended share is not one its owner can approve',
+    );
+  });
+
+  test('a share of an OAuth client people only sign in through is no share to approve a share slot with', async function (assert) {
+    let signIn = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'vendor app',
+      value: 'app-secret',
+      oauth: {
+        clientId: 'app',
+        authorizeUrl: `${VENDOR}/authorize`,
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    await share(signIn.id, { owner: WRITER, label: 'Sign in here' });
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-admin',
+      'the approve page would offer it nothing, so an administrator needs to set it up',
+    );
+  });
+
+  test('a slot that declares its kind of key counts only keys and shares of that kind as approvable', async function (assert) {
+    let key = await addKey();
+    await approve(OWNER, 'note', { keyId: key.id });
+    assert.strictEqual(
+      await readiness(OWNER, 'note'),
+      'needs-approval',
+      'the pasted key may be sent there',
+    );
+    assert.strictEqual(
+      await readiness(OWNER, 'noteAsAccount'),
+      'needs-connect',
+      'a slot that takes a connected account is not one a pasted key can be approved for',
+    );
+
+    await share(key.id);
+    assert.strictEqual(
+      await readiness(OWNER, 'shared'),
+      'needs-approval',
+      'the share of a pasted key can be approved for a slot that declares no kind',
+    );
+    assert.strictEqual(
+      await readiness(OWNER, 'sharedAsAccount'),
+      'needs-admin',
+      'but not for one that takes a connected account',
+    );
+  });
+
+  test('a share counts only where its OAuth client’s API hosts reach the destination', async function (assert) {
+    let robot = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'elsewhere robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'robot',
+        grantType: 'client_credentials',
+        tokenUrl: 'http://localhost:4524/token',
+        apiHosts: ['http://localhost:4524/'],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    await share(robot.id, { owner: WRITER, label: 'Elsewhere robot' });
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-admin',
+      'its tokens are no good where the slot sends, so the approve page offers it nothing',
+    );
+
+    let vendorRobot = await addOAuthClient(dbAdapter, keyring, {
+      owner: WRITER,
+      name: 'vendor robot',
+      value: 'robot-secret',
+      oauth: {
+        clientId: 'vendor-robot',
+        grantType: 'client_credentials',
+        tokenUrl: `${VENDOR}/token`,
+        apiHosts: [`${VENDOR}/`],
+      },
+      ticket: await ticket(WRITER, 'add'),
+    });
+    await share(vendorRobot.id, { owner: WRITER, label: 'Vendor robot' });
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-approval',
+      'a share whose client serves the destination is one to approve',
     );
   });
 

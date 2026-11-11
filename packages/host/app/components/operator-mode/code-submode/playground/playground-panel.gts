@@ -78,6 +78,7 @@ import type RecentCardsService from '@cardstack/host/services/recent-cards-servi
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
+import type WorkspacePinsService from '@cardstack/host/services/workspace-pins';
 
 import SearchResults from '../../../search/search-results';
 import CardError from '../../card-error';
@@ -136,6 +137,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   @service declare private recentCardsService: RecentCardsService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private store: StoreService;
+  @service declare private workspacePins: WorkspacePinsService;
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fileSearchResults: ReturnType<getCards<FileDef>> | undefined;
@@ -223,6 +225,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         menuContext: 'code-mode-playground',
         toolContext: this.toolService.toolContext,
         format: this.format,
+        workspacePin: this.workspacePins.pinStateFor(rri(cardId)),
       }) || [],
     );
   }
@@ -738,6 +741,9 @@ export default class PlaygroundPanel extends Component<Signature> {
         return;
       }
     }
+    let wasPreviewingCard =
+      selection?.cardId === trimJsonExtension(selectedCardId) &&
+      selection.fieldIndex === undefined;
 
     this.playgroundPanelService.persistSelections(
       this.moduleId,
@@ -747,6 +753,14 @@ export default class PlaygroundPanel extends Component<Signature> {
       // based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
       // a spec instance on playground instead of the field,
     );
+
+    // a field's example belongs to its spec card, a file isn't a card, and a
+    // format change shows the same card again
+    if (index === undefined && !this.args.isFileDef && !wasPreviewingCard) {
+      this.operatorModeStateService.recordPlaygroundCard(
+        trimJsonExtension(selectedCardId),
+      );
+    }
   };
 
   @action private chooseInstance() {

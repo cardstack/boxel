@@ -4,7 +4,7 @@ import { instance, operation } from '@cardstack/base/operations';
 
 // A card whose forecast comes from an outside weather service, sent with the
 // invoking user's own key for it (a `userKey` slot). The evaluations that
-// seed it approve `forecast` for the realm's scheduled pipelines only, so an
+// seed it approve `forecast` for the realm's automations only, so an
 // invocation from the AI assistant is refused "Interactive use not approved".
 export class WeatherStation extends CardDef {
   static displayName = 'Weather Station';

@@ -88,6 +88,12 @@ unlayered and cannot be given a layer, so those imports belong in
 @import url('ember-power-select/vendor/ember-power-select.css') layer(vendor);
 ```
 
+## Side effects
+
+`package.json` declares `"sideEffects": ["**/*.css", "./tests/**"]`: apart from its stylesheets and its own tests, no module in boxel-ui does anything just by being imported. A bundler relies on that to drop every module a consumer doesn't use, so one component imported through the `components` index brings only that component and its imports.
+
+Keep it true. A module under `src/` must not register anything, patch a global, or start work at module scope, and must not import another module only for its effect (lint enforces the import half with `import/no-unassigned-import`). Code like that runs from a function a consumer calls, or the declaration has to name the module.
+
 ## Notes on rebuild scripts
 
 These scripts do not run as part of the build steps above and should be run when changes you have made dictate.

@@ -145,6 +145,9 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
   // How the stand-in approve page ends: approving what the CLI named, or
   // cancelled before approving anything.
   let windowEnds: 'approved' | 'cancelled' = 'approved';
+  // The key the stand-in approve page fills each slot with, when the person
+  // chooses another than the one the CLI named.
+  let windowFillsWith: string | undefined;
 
   async function signInOnSecureOrigin() {
     let response = await fetch(`${realmServerUrl}_secure-session`, {
@@ -266,7 +269,7 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
               o.slots.map((s: any) => [
                 s.slot,
                 {
-                  keyId: fragment.get('key'),
+                  keyId: windowFillsWith ?? fragment.get('key'),
                   expectedFingerprint: s.fingerprint,
                 },
               ]),
@@ -487,7 +490,7 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
       body: { method: 'GET', path: '/echo' },
     });
 
-    // The CLI is interactive, and `list` is approved for pipelines only.
+    // The CLI is interactive, and `list` is approved for automations only.
     let refused = await invokeOperation(`${realm}the-service`, 'list', {
       profileManager: pm,
     });
@@ -564,6 +567,41 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     }
   });
 
+  it('says so when the secure window approves with another key than the one named', async () => {
+    let spare = await keysAdd('spare key', {
+      ...deps,
+      stdin: true,
+      input: stdinWith(`${KEY_VALUE}-spare\n`),
+    });
+    windowFillsWith = spare.id;
+    let log = vi.mocked(console.log);
+    log.mockClear();
+    try {
+      let result = await keysApprove('my key', {
+        ...deps,
+        operation: 'service#Elsewhere.other',
+        realm,
+        yes: true,
+      });
+      expect(result.via).toBe('window');
+      expect(result.approved.map((b) => [b.operation, b.keyId])).toEqual([
+        ['other', spare.id],
+      ]);
+      let printed = log.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(printed).toMatch(
+        /The secure window approved .+ \(userKey\) with spare key, not my key\./,
+      );
+    } finally {
+      windowFillsWith = undefined;
+      await keysRevoke('spare key', {
+        ...deps,
+        operation: 'service#Elsewhere.other',
+        realm,
+        yes: true,
+      });
+    }
+  });
+
   it('opens the secure window on interactive use for --interactive, when the approval needs a new grant', async () => {
     let result = await keysApprove('my key', {
       ...deps,
@@ -580,7 +618,7 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     ]);
 
     // Its request changes. Approving it again without --interactive would
-    // quietly return it to pipelines only, so that is refused, naming what
+    // quietly return it to automations only, so that is refused, naming what
     // to do instead, and --interactive approves it in the terminal.
     await testRealm.write(
       'service.gts',

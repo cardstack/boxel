@@ -66,6 +66,9 @@ export const SECURE_WINDOW_PATH = '/_secure-window';
 // person back to, whose query string carries the authorization code.
 export const OAUTH_PATH = '/_oauth';
 export const LOCAL_IDENTITY_LOGIN_PATH = '/_local-identity-login';
+// Boxel's own OAuth provider, whose requests carry authorization codes, PKCE
+// verifiers and refresh tokens in their query strings and bodies.
+export const OAUTH_PROVIDER_PATH = '/_oauth-provider';
 
 const keyRoutePaths = [
   USER_KEYS_PATH,
@@ -81,6 +84,7 @@ const keyRoutePaths = [
   SECURE_WINDOW_PATH,
   OAUTH_PATH,
   LOCAL_IDENTITY_LOGIN_PATH,
+  OAUTH_PROVIDER_PATH,
 ];
 
 // The operator routes that store a system key, and everything beneath them.
@@ -108,6 +112,8 @@ const credentialHeaders = new Set([
   'set-cookie',
   'x-boxel-worker-request-signature',
   'x-boxel-delegation-signature',
+  // Grafana's ID token for the user behind an operator action.
+  'x-grafana-id',
 ]);
 
 const credentialHeaderName = /signature|token|secret|api-?key/i;

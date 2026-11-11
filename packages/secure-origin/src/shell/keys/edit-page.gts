@@ -1,6 +1,9 @@
 // A key page laid out as a card is in its edit format: a muted header band with
 // the page's title and what it is for, then the page's fields on white, one
-// labelled row each, and the page's buttons under them.
+// labelled row each, and the page's buttons under them. The rows are Pret UI
+// Fields; the panel lays them out with a plain grid, since Pret UI's
+// FormLayout would bring the form machinery it curries into the origin's
+// trusted code for no more than the gap between them.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 interface Signature {
@@ -52,7 +55,10 @@ const EditPage: TemplateOnlyComponent<Signature> = <template>
       color: var(--muted-foreground);
       overflow-wrap: anywhere;
     }
+    /* Each row's label in the panel's text size. */
     .fields {
+      --boxel-ui-label-font-size: var(--boxel-font-size-sm);
+      --boxel-ui-label-line-height: var(--boxel-line-height-sm);
       display: grid;
       gap: var(--boxel-sp-lg);
       padding: var(--boxel-sp-xl);

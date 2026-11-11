@@ -115,7 +115,7 @@ export class IconButtonUsage extends Component {
           @name='label'
           @required={{true}}
           @value={{this.labelText}}
-          @description='Accessible name — rendered as aria-label, and as title unless @tooltip is set.'
+          @description='Accessible name: aria-label, or a matching @tooltip; also the title unless @tooltip is set.'
           @onInput={{this.setLabel}}
         />
         <Args.String
@@ -192,7 +192,7 @@ export class IconButtonUsage extends Component {
         <Args.String
           @name='tooltip'
           @value={{this.tooltip}}
-          @description='Shown in a Tooltip in place of the native title, as the description.'
+          @description='Shown in a Tooltip in place of the native title; names the button when it matches @label, else describes it.'
           @onInput={{this.setTooltip}}
         />
         <Args.Base

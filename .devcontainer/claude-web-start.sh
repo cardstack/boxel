@@ -17,8 +17,6 @@
 #     ensure-synapse only auto-registers in environment mode, so do it here —
 #     BEFORE the stack boots, so the realm-server logs in cleanly. The
 #     registration script is idempotent (skips users that already exist).
-#   - Chromium sandbox: the prerender's headless Chrome can't sandbox as root,
-#     so PUPPETEER_DISABLE_SANDBOX makes its standby probe pass.
 #   - SKIP_CATALOG / SKIP_BOXEL_HOMEPAGE: fit the memory budget and skip the
 #     realm whose content repo this VM can't clone.
 #   - HTTP/2 trailers race: node's h2 compat layer can truncate responses
@@ -106,6 +104,5 @@ echo "[start] it serves at boot; the bare / and /_readiness-check paths 404)."
 exec env \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
-  PUPPETEER_DISABLE_SANDBOX=true \
   ${FULL_INDEX_FLAG} \
   mise run dev-all

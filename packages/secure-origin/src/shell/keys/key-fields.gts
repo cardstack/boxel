@@ -4,13 +4,19 @@
 // using it is approved. An OAuth app's fields go between the two, its client
 // secret being the value. A service account's value is its key file, entered
 // in its own fields, so for one only the name is drawn here.
+//
+// A name beside a masked value is a login form's shape, on the origin where
+// the Boxel login is saved, so each field carries the hints 1Password,
+// LastPass, Dashlane and Bitwarden read to leave a field alone. A browser's
+// own password manager reads none of them.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
-import { autofocus } from '../../modifiers/autofocus.ts';
+import { Field } from '@cardstack/pretui/components/field';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import Tag from '@cardstack/boxel-icons/tag';
+import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface Signature {
   Args: {
@@ -29,44 +35,52 @@ interface Signature {
 
 const KeyFields: TemplateOnlyComponent<Signature> = <template>
   {{#if @onName}}
-    <FieldContainer
-      @tag='label'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label='Name'
       @icon={{Tag}}
       data-test-key-field='name'
+      as |controlId|
     >
-      <BoxelInput
+      <Input
+        @controlId={{controlId}}
         @type='text'
-        @autocomplete='off'
+        autocomplete='off'
         @placeholder='A name you’ll recognize, such as “Weather service”'
         @value={{@name}}
         @onInput={{@onName}}
         name='key-name'
+        {{ignoredByPasswordManagers}}
         data-test-key-name
-        {{autofocus}}
+        {{focusWhen true}}
       />
-    </FieldContainer>
+    </Field>
   {{/if}}
   {{yield to='beforeValue'}}
   {{#if @onValue}}
-    <FieldContainer
-      @tag='label'
+    <Field
+      @reserveMessage={{false}}
+      @orientation='horizontal'
       @label={{if @valueLabel @valueLabel 'Key'}}
       @icon={{KeyRound}}
       data-test-key-field='value'
+      as |controlId|
     >
-      <BoxelInput
+      <Input
+        @controlId={{controlId}}
         @type='password'
-        @autocomplete='off'
+        autocomplete='off'
         @placeholder={{if @valueLabel 'Paste the secret' 'Paste the key'}}
         @value={{@value}}
         @onInput={{@onValue}}
         name='key-value'
         spellcheck='false'
+        {{ignoredByPasswordManagers}}
         data-test-key-value
-        {{autofocus (if @onName false true)}}
+        {{focusWhen (if @onName false true)}}
       />
-    </FieldContainer>
+    </Field>
   {{/if}}
 </template>;
 

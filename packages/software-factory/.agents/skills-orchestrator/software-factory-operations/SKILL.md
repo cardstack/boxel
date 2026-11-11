@@ -27,21 +27,21 @@ Load what the current work touches, nothing more.
 
 ## When you need X, read Y
 
-| Need                                                                                        | read_skill                                 |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Card/field authoring, CardDef/FieldDef syntax, formats                                      | `boxel` (then specific `references/*.md`)  |
-| Fitted-format layout rules                                                                  | `boxel` reference `fitted-formats.md`      |
-| Theme tokens / design-system CSS                                                            | `boxel` reference `theme-design-system.md` |
-| Search query syntax (`boxel search --query`)                                                | `boxel-api`                                |
-| Host commands via `boxel run-command`                                                       | `boxel-command`                            |
-| File-backed fields (images, files, csv)                                                     | `boxel-file-def`                           |
-| Catalog Spec conventions                                                                    | `boxel` reference `spec-usage.md`          |
-| Whether the catalog already has the card, field, component or command                       | `catalog-reuse`                            |
-| Reusable UI components before hand-rolling any UI                                           | `boxel-ui-component-discovery`             |
-| What card code can reach (host tools, boxel-ui, runtime-common, AI services) + import paths | `boxel-runtime-surfaces`                   |
-| Search-driven home/app cards, `searchResultsComponent` wire-query contract, live feeds      | `boxel-live-surfaces`                      |
-| Embedding child cards (`<@fields.X @format=… />`), format choice, container chrome          | `boxel-delegated-render-control`           |
-| fetch/auth from card code (store APIs vs raw fetch vs request-forward proxy)                | `boxel-fetch-contexts`                     |
+| Need                                                                                                          | read_skill                                 |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Card/field authoring, CardDef/FieldDef syntax, formats                                                        | `boxel` (then specific `references/*.md`)  |
+| Fitted-format layout rules                                                                                    | `boxel` reference `fitted-formats.md`      |
+| Theme tokens / design-system CSS                                                                              | `boxel` reference `theme-design-system.md` |
+| Search query syntax (`boxel search --query`)                                                                  | `boxel-api`                                |
+| Host commands via `boxel run-command`                                                                         | `boxel-command`                            |
+| File-backed fields (images, files, csv)                                                                       | `boxel-file-def`                           |
+| Catalog Spec conventions                                                                                      | `boxel` reference `spec-usage.md`          |
+| Whether the catalog already has the card, field, component or command                                         | `catalog-reuse`                            |
+| Reusable UI components before hand-rolling any UI: Pret UI first, found through the catalog's component Specs | `boxel-ui-component-discovery`             |
+| What card code can reach (host tools, Pret UI, runtime-common, AI services) + import paths                    | `boxel-runtime-surfaces`                   |
+| Search-driven home/app cards, `searchResultsComponent` wire-query contract, live feeds                        | `boxel-live-surfaces`                      |
+| Embedding child cards (`<@fields.X @format=… />`), format choice, container chrome                            | `boxel-delegated-render-control`           |
+| fetch/auth from card code (store APIs vs raw fetch vs request-forward proxy)                                  | `boxel-fetch-contexts`                     |
 
 Host-tool imports: the authoritative catalogue is the generated
 `host-tools-import-manifest` skill already in your context — never guess

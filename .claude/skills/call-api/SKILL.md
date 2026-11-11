@@ -57,6 +57,23 @@ refused (`unrunnable-program`): there is no document to run it over.
 on its own (one webhook per channel card): it lowers to
 `OperationCallApi.perInstance`, and a binding for it names the instance.
 
+`keyKind` says what kind of key fills a slot: `static`, `google-service-account`
+or `oauth` (an OAuth connection, or a `client_credentials` client), one kind for
+every slot or one per slot by name (an unnamed slot's name is `userKey` or
+`apiKey`). Lowering (`lowerKeyKind`) refuses an unknown kind, a name the
+request has no slot for, and any kind but `static` on a `|basic` slot
+(`invalid-request`), and keeps the kind on the slot as `CallApiSlot.keyKind`. The kinds live in `runtime-common/call-api-key-kind.ts`,
+which base re-exports; runtime-common takes only types from base, since a value
+import closes a cycle through `card-api`. A declared kind is binding: approval
+refuses a key of another kind (`assertKeyFitsSlot` in `lib/key-bindings.ts`),
+and a binding whose key no longer fits reads as `binding-needs-reapproval` at
+the call and `changed` in the batch. Undeclared, any key fills the slot, and
+`slotKeyKinds` says which kinds the secure window offers for it: every kind,
+less those that can't work there. A `|basic` slot sends a user and password,
+which a minted token isn't; a service account's tokens are only for
+`googleapis.com` and `firebaseio.com`. A minted token goes wherever its slot
+stands, so placement rules out nothing else.
+
 `callApi` is declaration-only (nothing implies it) and is carried only by a
 card def. It is invocable on an instance and on the type: the client puts it
 in both buckets once declared (`carriesMember` in `card-operations/client.ts`).
@@ -108,7 +125,7 @@ both pick it up.
 
 The lowered entry keeps every value as a marker and every slot as the text the
 author wrote, plus `slots: CallApiSlot[]` — `{name, key, transform?,
-placement, at}` — so dispatch knows what a request needs without walking it.
+placement, at, keyKind?}` — so dispatch knows what a request needs without walking it.
 
 ## The destination
 
@@ -178,8 +195,8 @@ refusal also writes a key-use line.
    and no probe is due; see the `user-keys` skill, _Rejected grants_ and
    _Rejected keys_).
    Every invocation off the network is interactive, and is served only by a
-   binding its owner approved for interactive use; a pipeline
-   (`Realm.handlePipeline`) is served by any active binding. An interactive
+   binding its owner approved for interactive use; an automation
+   (`Realm.handleAutomation`) is served by any active binding. An interactive
    call also counts against the key's limits (see the `key-limits` skill). The `binding-not-approved` detail names
    each slot with whose key fills it (`the credential slot "weather" for the
 invoking user's own key`, `… for the realm's key`, from `describeSlots`),
@@ -359,8 +376,8 @@ the operation's destination. A key saved through `enter-key` alone has no
 grant, so readiness stays `needs-connect`. The approve page offers first,
 and starts on, letting the operations run on the schedule and when a card is
 opened, which is what a card calling from its template needs; the user can
-narrow it to scheduled pipelines only. It starts on pipelines only when every
-request it asks about was last approved for pipelines only, and when
+narrow it to automations only. It starts on automations only when every
+request it asks about was last approved for automations only, and when
 `boxel keys approve` opened it without `--interactive`.
 A call that a fix makes ready needs no reload: readiness is asked again when
 the user comes back from the window. Swapping a key into a stopped share is

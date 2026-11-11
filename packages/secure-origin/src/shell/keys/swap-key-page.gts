@@ -21,12 +21,14 @@ import {
   windowContext,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import Tag from '../../components/icons/tag.gts';
-import Users from '../../components/icons/users.gts';
+import { Button } from '@cardstack/pretui/components/button';
+import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
+import Tag from '@cardstack/boxel-icons/tag';
+import HatGlasses from '@cardstack/boxel-icons/hat-glasses';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
+import { pageTitle, withWayBack } from './trail.ts';
 
 import {
   failureMessage,
@@ -39,6 +41,7 @@ import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import { servesVisitors } from './anonymous-use-fields.gts';
+import KeyAudience from './key-audience.gts';
 import KeyPicker from './key-picker.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
@@ -70,7 +73,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Share your key in place of one that stopped working'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -92,11 +95,13 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         <strong>{{this.done.key}}</strong>, and works again.
       </DonePage>
     {{else if this.choosing}}
-      <form novalidate {{on 'submit' this.save}} data-test-swap-key-form>
-        <EditPage
-          @heading='Share your key in place of one that stopped working'
-          data-test-swap-key
-        >
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.save}}
+        data-test-swap-key-form
+      >
+        <EditPage @heading={{this.title}} data-test-swap-key>
           <:intro>This shared key stopped working. Share one of your own keys in
             its place: every request in the workspace that uses this shared key
             then sends your key instead, to wherever that request goes, and runs
@@ -106,31 +111,46 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @context={{this.choosing.context}}
               @reason={{this.opened.reason}}
             />
-            <FieldContainer
-              @tag='div'
+            <KeyAudience
+              @kind='apiKey'
               @label='Shared key'
-              @icon={{Tag}}
-              data-test-swap-share
+              @workspace={{this.choosing.context.realm.name}}
+              @anonymous={{this.keyAllowsAnonymous}}
+              @headline='Shared in {{this.choosing.context.realm.name}}'
+              @line='The key you choose goes into this share, which keeps its label and the calls approved with it.'
+              @headingId='swap-key-audience'
+              data-test-swap-key-audience
             >
-              <div class='share'>
-                <div class='share-label' data-test-swap-share-label>
-                  {{this.choosing.share.label}}
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
+                @label='Shared key'
+                @icon={{Tag}}
+                data-test-swap-share
+              >
+                <div class='share'>
+                  <div class='share-label' data-test-swap-share-label>
+                    {{this.choosing.share.label}}
+                  </div>
+                  <div class='share-state'>Suspended.
+                    {{this.suspendedBecause}}</div>
                 </div>
-                <div class='share-state'>Suspended.
-                  {{this.suspendedBecause}}</div>
-              </div>
-            </FieldContainer>
-            <KeyPicker
-              @keys={{this.form.keys}}
-              @selected={{this.form.selected}}
-              @onSelect={{this.select}}
-              @onGoToKeys={{this.goToKeys}}
-            />
+              </Field>
+              <KeyPicker
+                @keys={{this.form.keys}}
+                @selected={{this.form.selected}}
+                @onSelect={{this.select}}
+                @onGoToKeys={{this.goToKeys}}
+              />
+            </KeyAudience>
             {{#if this.keyAllowsAnonymous}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='People who aren’t signed in'
-                @icon={{Users}}
+                @icon={{HatGlasses}}
                 data-test-swap-key-key-allows
               >
                 <p class='visitors'>This workspace lets people who aren’t signed
@@ -138,12 +158,14 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
                   <strong>they will use this key</strong>{{anonymousCapsClause
                     this.chosenKey
                   }}. It allows them.</p>
-              </FieldContainer>
+              </Field>
             {{else if this.keyRefusesAnonymous}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='People who aren’t signed in'
-                @icon={{Users}}
+                @icon={{HatGlasses}}
                 data-test-swap-key-key-refuses
               >
                 <div class='refuses'>
@@ -152,24 +174,24 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
                     allow them. Allow it on your key page first.</p>
                   <Button
                     type='button'
-                    @kind='secondary'
-                    @size='small'
+                    @variant='secondary'
+                    @size='s'
                     data-test-swap-key-go-to-key
                     {{on 'click' this.goToKeys}}
                   >Go to your keys</Button>
                 </div>
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
             {{#if @api.forCli}}
               <Button
-                @kind='secondary'
+                @variant='secondary'
                 @disabled={{this.form.saving}}
                 data-test-keys-cancel
                 {{on 'click' @api.close}}
@@ -177,7 +199,7 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{/if}}
             <Button
               type='submit'
-              @kind='primary'
+              @variant='primary'
               @disabled={{this.submitDisabled}}
               @loading={{this.form.saving}}
               data-test-swap-key-save
@@ -224,14 +246,10 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
       }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
-      }
     </style>
   </template>
+
+  private title = pageTitle('swap-key');
 
   private opened = openedFor();
   private page = trackedObject<{ state: State }>({
@@ -365,7 +383,8 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private goToKeys = () => navigation.back(pageURL('keys'));
+  // On to the key page, whose trail leads back here.
+  private goToKeys = () => navigation.assign(withWayBack(pageURL('keys')));
 
   private save = async (event: Event) => {
     event.preventDefault();

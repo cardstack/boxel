@@ -11,6 +11,7 @@ import ExternalLink from '@cardstack/boxel-icons/external-link';
 import Settings from '@cardstack/boxel-icons/settings';
 import Undo2 from '@cardstack/boxel-icons/undo-2';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { formatDistanceToNow } from 'date-fns';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -1036,6 +1037,7 @@ export default class PublishRealmModal extends Component<Signature> {
       @isOpen={{@isOpen}}
       @onClose={{this.handleCancel}}
       data-test-publish-realm-modal
+      ...attributes
     >
       <:header>
         <div class='modal-subtitle'>
@@ -1425,6 +1427,7 @@ export default class PublishRealmModal extends Component<Signature> {
                         {{on 'input' this.handleCustomSubdomainInput}}
                         class='custom-subdomain-input'
                         spellcheck='false'
+                        {{ignoredByPasswordManagers}}
                         data-test-custom-subdomain-input
                       >
                         <:after as |Accessories|>
@@ -1454,10 +1457,7 @@ export default class PublishRealmModal extends Component<Signature> {
                     </div>
                   </div>
                 {{else if this.claimedDomain}}
-                  <WithLoadedRealm
-                    @realmURL={{this.currentRealmURL}}
-                    as |realm|
-                  >
+                  <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
                     <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
                       <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
                     </RealmURLTooltip>
@@ -1486,8 +1486,7 @@ export default class PublishRealmModal extends Component<Signature> {
                               {{on
                                 'click'
                                 (fn
-                                  @handleUnpublish
-                                  this.claimedDomainPublishedUrl
+                                  @handleUnpublish this.claimedDomainPublishedUrl
                                 )
                               }}
                               data-test-unpublish-custom-subdomain-button
@@ -1588,7 +1587,6 @@ export default class PublishRealmModal extends Component<Signature> {
                 </div>
               {{/if}}
             </div>
-
           {{/unless}}
 
           {{#if this.shouldShowCustomSubdomainOverride}}

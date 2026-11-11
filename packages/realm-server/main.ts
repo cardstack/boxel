@@ -6,6 +6,7 @@ import { errorResponseFilterFromEnv } from './lib/error-response-filter.ts';
 import { publicReferenceFetchFromEnv } from '@cardstack/runtime-common/public-reference-fetch';
 import { createEnvironmentAwareFetch } from '@cardstack/runtime-common/fetch-node';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
+import { readOAuthProviderConfig } from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -29,7 +30,12 @@ import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
 import * as Sentry from '@sentry/node';
-import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  SessionProbe,
+  startSessionSampling,
+} from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
@@ -96,6 +102,7 @@ import {
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 import { sealLocalVendorKeys } from './lib/local-vendor-keys.ts';
+import { checkPricingAtStartup } from './lib/pricing.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -110,6 +117,7 @@ writeSync(
 );
 
 let log = logger('main');
+checkPricingAtStartup('realm-server');
 const runtimeMetadataFile = process.env.TEST_HARNESS_REALM_SERVER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {
@@ -144,6 +152,16 @@ if (!GRAFANA_SECRET) {
   process.exit(-1);
 }
 
+// The Grafana whose signing keys verify operator actions proxied through it.
+// Local and test runs work without it, so its absence is a warning, not a
+// startup failure.
+const GRAFANA_URL = process.env.GRAFANA_URL || undefined;
+if (!GRAFANA_URL) {
+  console.warn(
+    `GRAFANA_URL is not set: operator actions proxied through Grafana will be refused`,
+  );
+}
+
 const MATRIX_URL = process.env.MATRIX_URL;
 if (!MATRIX_URL) {
   console.error(
@@ -168,6 +186,12 @@ const MATRIX_REGISTRATION_SHARED_SECRET =
 // nothing, so the pull-model feature stays inert until the secret is
 // provisioned (and rotated, CS-11567) alongside ai-bot.
 const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
+
+// Shared secret the homeserver's invite module presents when it asks
+// `/_invite-check` whether one user may invite another (ADR 011 §1.6). The
+// module reads the same value from its config in homeserver.yaml. Optional:
+// when unset the endpoint responds 503, which the module treats as a denial.
+const MATRIX_INVITE_CHECK_SECRET = process.env.MATRIX_INVITE_CHECK_SECRET;
 
 // Synapse admin credentials. Optional: only consumed by operator-action
 // endpoints that need to admin-impersonate a target user to read or write
@@ -475,6 +499,13 @@ const secureOriginURL =
       ? `${serviceURL(secureServiceName)}/secure`
       : `https://localhost:${secureListenerPort}/secure`);
 
+// Boxel's OAuth provider, on only where BOXEL_OAUTH_PROVIDER_ENABLED=true.
+// Read before anything starts, so a missing or malformed configuration stops
+// the server at boot instead of at the first OAuth request.
+const oauthProvider = readOAuthProviderConfig(process.env, {
+  secureOriginURL,
+});
+
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
 for (let realmURL of publishableRealms) {
@@ -681,8 +712,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // against whether the process's event loop was starved at the time, and heap
   // growth toward the OOM limit is visible (and alertable) on a calm process
   // before a search storm — not only inside saturation windows.
+  // The session table is read on a connection of its own, outside the pool,
+  // so a starved pool cannot silence the reading that explains it.
+  let sessionSampling = startSessionSampling(new SessionProbe());
   let stopHealthSampler = startHealthSampler({
     connectionStats: () => dbAdapter.connectionStats,
+    sessionStats: sessionSampling.latest,
   });
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
@@ -975,7 +1010,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    grafanaURL: GRAFANA_URL,
     aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
+    matrixInviteCheckSecret: MATRIX_INVITE_CHECK_SECRET,
     dbAdapter,
     queue,
     searchCache,
@@ -1003,6 +1040,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
+    ...(oauthProvider ? { oauthProvider } : {}),
   });
 
   const secureHttpServer =
@@ -1078,6 +1116,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
           livenessResponder?.stop(),
+          sessionSampling.stop(),
         ]);
         // Stopped only once the responder is gone, never before: the loop is
         // still turning while the shutdown above runs, and a check arriving in

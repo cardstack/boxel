@@ -646,6 +646,15 @@ export async function downloadFile(
   }
 }
 
+// The text of a Matrix media item, fetched from the client's own homeserver.
+export async function downloadMatrixMediaText(
+  client: MatrixClient,
+  mxcUrl: string,
+): Promise<string> {
+  let response = await fetchMatrixMedia(client, mxcUrl);
+  return await response.text();
+}
+
 export async function downloadFileAsBase64DataUrl(
   client: MatrixClient,
   url: string,

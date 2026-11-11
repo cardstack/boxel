@@ -42,7 +42,7 @@ import {
   type SearchIndexEntry,
 } from './index.ts';
 import { moduleFrom } from './code-ref.ts';
-import { baseRealm } from './constants.ts';
+import { baseRRI } from './constants.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -117,9 +117,10 @@ const REMOVAL_READ_CONCURRENCY = 8;
 
 // A module every realm depends on and none owns. When consecutive renders
 // have timed out idle, whether this renders decides between a stack that
-// cannot render anything and cards that happen to hang on their own.
-// eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- names the canary module by the base realm's registered URL
-const CANARY_MODULE_URL = new URL('card-api', baseRealm.url).href;
+// cannot render anything and cards that happen to hang on their own. Named
+// by prefix, which the module route's loader resolves through its
+// VirtualNetwork like any other base-realm import.
+const CANARY_MODULE_ID = baseRRI('card-api');
 
 // Whether a visit's render timed out with nothing in flight. The timeout error
 // carries the diagnostics the prerender server captured as it fired (see
@@ -1222,7 +1223,7 @@ export class IndexRunner {
           if (!canary) {
             this.#log.warn(
               `${jobIdentity(this.#jobInfo)}: ${idleTimeouts.length} consecutive renders timed out idle (${idleTimeouts.join(', ')}) ` +
-                `but ${CANARY_MODULE_URL} renders, so the stack is healthy and these are recorded as the files' own errors`,
+                `but ${CANARY_MODULE_ID} renders, so the stack is healthy and these are recorded as the files' own errors`,
             );
             idleTimeouts = [];
             continue;
@@ -1243,7 +1244,7 @@ export class IndexRunner {
     }
   }
 
-  // Renders CANARY_MODULE_URL on this pass's affinity and reports why it did
+  // Renders CANARY_MODULE_ID on this pass's affinity and reports why it did
   // not render, or undefined when it did. A module render rather than a card
   // render: it needs nothing from this realm but the loader epoch, and it goes
   // through the same page, host bundle, realm-server and icons origins every
@@ -1254,7 +1255,7 @@ export class IndexRunner {
         affinityType: 'realm',
         affinityValue: this.#realmURL.href,
         realm: this.#realmURL.href,
-        url: CANARY_MODULE_URL,
+        url: CANARY_MODULE_ID,
         auth: this.#auth,
         priority: this.#jobPriority,
         renderOptions: { loaderEpoch: this.batch.loaderEpoch },

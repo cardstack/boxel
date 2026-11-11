@@ -6,6 +6,8 @@ import {
   keyOfSharePath,
   keySharePath,
   LEGACY_MODES,
+  movesAsDocument,
+  NEW_PASSWORD_PAGES,
   PAGE_PATHS,
   splitPagePath,
 } from '../src/shell/pages.js';
@@ -48,6 +50,20 @@ describe("the shell's pages", () => {
     for (let mode of LEGACY_MODES) {
       assert.ok(PAGE_PATHS.includes(mode), mode);
     }
+  });
+
+  test('a move to or from a page that makes a new password loads a document', () => {
+    for (let page of NEW_PASSWORD_PAGES) {
+      assert.ok(PAGE_PATHS.includes(page), page);
+    }
+    assert.ok(movesAsDocument('sign-in', 'register'));
+    assert.ok(movesAsDocument('register', 'sign-in'));
+    assert.ok(movesAsDocument('cli-auth', 'register'));
+    assert.ok(movesAsDocument('reset-password', 'sign-in'));
+    assert.ok(!movesAsDocument('sign-in', 'forgot-password'));
+    assert.ok(!movesAsDocument('sign-out', 'sign-in'));
+    assert.ok(!movesAsDocument('', 'keys/add'));
+    assert.ok(!movesAsDocument('keys', `keys/${KEY}/share`));
   });
 
   test('a path splits into the shell and the page beneath it', () => {

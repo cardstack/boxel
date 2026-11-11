@@ -10,7 +10,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import { CreateWorkspaceFlow } from '@cardstack/host/lib/create-workspace-flow';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 
-import { AddWorkspaceModal } from '../workspace-chooser/add-workspace';
+import AddWorkspaceModal from '../dashboard-modals/add-workspace-modal';
 
 import ItemContainer from './item-container';
 

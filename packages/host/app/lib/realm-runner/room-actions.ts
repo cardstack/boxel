@@ -1,7 +1,11 @@
 // The host half of `room.*`: what a run asks to change in the AI assistant
-// room it was called from. The sandbox has no access to Matrix, so a call only
-// records the request, after the host's own checks. The host makes the changes
-// once the script has finished, and only when it finished without an error.
+// room it was called from, and what it reads about the room's user. The
+// sandbox has no access to Matrix, so a change only records the request,
+// after the host's own checks. The host makes the changes once the script has
+// finished, and only when it finished without an error. A read
+// (`room.credits`) answers at once and changes nothing.
+
+import type { RoomCredits } from './credits';
 
 // How many skills one call may name.
 const MAX_SKILLS_PER_CALL = 20;
@@ -11,6 +15,8 @@ export interface RoomActionChecks {
   checkSkill(id: string): Promise<void>;
   // The model ids the room may switch to.
   knownModels(): Promise<string[]>;
+  // The user's plan and balance, read fresh, and the room's session spend.
+  credits(): Promise<RoomCredits>;
 }
 
 export interface RequestedRoomChanges {
@@ -71,6 +77,10 @@ export class RoomActions {
     }
     this.model = model as string;
     return { model, appliedAfterRun: true };
+  }
+
+  async credits(): Promise<RoomCredits> {
+    return await this.checks.credits();
   }
 }
 

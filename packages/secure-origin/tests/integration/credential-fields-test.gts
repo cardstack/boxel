@@ -62,6 +62,14 @@ async function renderForm(formName: keyof typeof FORMS): Promise<Rendered> {
   };
 }
 
+// The attribute each password manager reads to skip a field.
+const HINTS = [
+  'data-1p-ignore',
+  'data-lpignore',
+  'data-form-type',
+  'data-bwignore',
+];
+
 function inputs() {
   return [
     ...document.querySelectorAll<HTMLInputElement>(
@@ -78,9 +86,9 @@ module('Integration | credential fields', function (hooks) {
       await renderForm('change-password');
       assert.dom('#credential-fields').hasClass('layout-settings');
       assert
-        .dom('[data-test-boxel-field]')
+        .dom('[data-test-pretui-field]')
         .exists({ count: 3 })
-        .hasClass('horizontal')
+        .hasAttribute('data-orientation', 'horizontal')
         .hasClass('password-settings-field');
       assert.dom('[data-test-current-password-field]').exists();
       assert.dom('[data-test-new-password-field]').exists();
@@ -105,13 +113,37 @@ module('Integration | credential fields', function (hooks) {
     test('confirm-password: one unlabelled field, as the change-email modal draws it', async function (assert) {
       await renderForm('confirm-password');
       assert.dom('#credential-fields').hasClass('layout-modal');
-      assert.dom('[data-test-boxel-field]').hasClass('vertical');
-      assert.dom('[data-test-boxel-field-label]').doesNotExist();
+      assert
+        .dom('[data-test-pretui-field]')
+        .hasAttribute('data-orientation', 'vertical');
+      assert.dom('[data-test-pretui-field-label]').doesNotExist();
       assert
         .dom('[data-test-password-field]')
         .hasAttribute('autocomplete', 'current-password')
-        .hasAttribute('data-test-boxel-input-validation-state', 'initial');
+        .hasAttribute('data-test-boxel-input-validation-state', 'none');
     });
+  });
+
+  module('password managers', function () {
+    for (let form of ['change-password', 'confirm-password'] as const) {
+      test(`${form}: carries no hint that keeps a password manager out of its fields`, async function (assert) {
+        await renderForm(form);
+        let fields = [
+          ...document.querySelectorAll<HTMLInputElement>(
+            '#credential-fields input',
+          ),
+        ];
+        assert.ok(fields.length > 0, 'the form draws its fields');
+        for (let field of fields) {
+          for (let hint of HINTS) {
+            assert.false(
+              field.hasAttribute(hint),
+              `${field.autocomplete} has no ${hint}`,
+            );
+          }
+        }
+      });
+    }
   });
 
   module('validity', function () {
@@ -134,7 +166,29 @@ module('Integration | credential fields', function (hooks) {
       assert.notOk(JSON.stringify(sent).includes('a-long-password'));
     });
 
-    test('shows an invalid field as BoxelInput does, and clears it on typing', async function (assert) {
+    test('the new password fields state the password rule, and the form posts', async function (assert) {
+      await renderForm('change-password');
+      for (let field of [
+        '[data-test-new-password-field]',
+        '[data-test-confirm-password-field]',
+      ]) {
+        assert
+          .dom(field)
+          .hasAttribute('autocomplete', 'new-password')
+          .hasAttribute('minlength', '8')
+          .hasAttribute('passwordrules', 'minlength: 8; maxlength: 512;')
+          // A browser cuts a pasted password to `maxlength` without a word.
+          .doesNotHaveAttribute('maxlength');
+      }
+      assert
+        .dom('[data-test-current-password-field]')
+        .doesNotHaveAttribute('minlength')
+        .doesNotHaveAttribute('maxlength')
+        .doesNotHaveAttribute('passwordrules');
+      assert.dom('form#credential-fields').hasAttribute('method', 'post');
+    });
+
+    test('shows an invalid field as Pret UI Input does, and clears it on typing', async function (assert) {
       await renderForm('change-password');
       await fillIn('[data-test-new-password-field]', 'short');
       await blur('[data-test-new-password-field]');
@@ -158,7 +212,7 @@ module('Integration | credential fields', function (hooks) {
         .dom('[data-test-new-password-field]')
         .doesNotHaveClass('invalid')
         .doesNotHaveAttribute('aria-invalid')
-        .hasAttribute('data-test-boxel-input-validation-state', 'initial');
+        .hasAttribute('data-test-boxel-input-validation-state', 'none');
       assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
     });
 
@@ -201,7 +255,7 @@ module('Integration | credential fields', function (hooks) {
       assert.ok(labelId, 'the input names its label');
       assert
         .dom(document.getElementById(labelId!))
-        .hasAttribute('data-test-boxel-field-label')
+        .hasAttribute('data-test-pretui-field-label')
         .hasText('New Password');
     });
 
@@ -294,7 +348,7 @@ module('Integration | credential fields', function (hooks) {
       // or the label stacked over the input.
       let tracks = () =>
         getComputedStyle(
-          document.querySelector('[data-test-boxel-field]')!,
+          document.querySelector('[data-test-pretui-field]')!,
         ).gridTemplateColumns.split(' ').length;
       await settled();
       assert.dom('#credential-fields').hasClass('narrow');
@@ -414,7 +468,7 @@ module('Integration | credential fields', function (hooks) {
         LAYOUT_PROPERTY,
         '--boxel-form-control-height',
         '--boxel-field-label-size',
-        '--boxel-label-color',
+        '--boxel-label-font-size',
         '--settings-modal-gap',
         '--destructive',
         '--boxel-sp',
@@ -424,7 +478,7 @@ module('Integration | credential fields', function (hooks) {
       for (let name of [
         '--icon-size',
         '--_icon-full-length',
-        '--boxel-label-letter-spacing',
+        '--pretui-field-label-size',
       ]) {
         assert.false(
           properties.includes(name),

@@ -33,6 +33,19 @@ export const PAGE_PATHS = Object.freeze([
   'review-changes',
 ]);
 
+// The pages whose form makes a new password. A password manager decides what
+// a form is for, and so whether to offer a generated password and what to
+// save, from the form it finds as the page loads; a form replaced by another
+// in place reads to it as the first form with its fields changed. So a move to
+// or from one of these pages loads a new document (`navigation.js`).
+export const NEW_PASSWORD_PAGES = Object.freeze(['register', 'reset-password']);
+
+// Whether a move from the page `from` to the page `to`, each beneath the
+// shell's address, loads a new document whatever its address.
+export function movesAsDocument(from, to) {
+  return NEW_PASSWORD_PAGES.includes(from) || NEW_PASSWORD_PAGES.includes(to);
+}
+
 // The values of the `mode` query parameter that address a page. Earlier CLI
 // releases and emails already sent use them, so the shell maps each to the
 // page of the same name.

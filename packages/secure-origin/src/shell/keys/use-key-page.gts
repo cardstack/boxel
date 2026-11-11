@@ -10,6 +10,9 @@
 // sets that share up instead: the workspace is the share's, the cards are
 // those that send the workspace's key, and the approve page starts with the
 // share chosen.
+//
+// Either way it says whom the key will serve, as the approve page does: the
+// user alone for their own key, everyone in the workspace for a share.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -22,15 +25,16 @@ import {
   type SharedWorkspace,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import LayoutGrid from '../../components/icons/layout-grid.gts';
-import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
-import RadioTile from '../../components/radio-tile.gts';
-import { eq } from '../../helpers/truth-helpers.ts';
+import { Button } from '@cardstack/pretui/components/button';
+import { Field } from '@cardstack/pretui/components/field';
+import { RadioCard } from '@cardstack/pretui/components/radio-card';
+import { Alert } from '@cardstack/pretui/components/alert';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import { navigation } from '../navigation.js';
+import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
   failureMessage,
@@ -41,11 +45,13 @@ import {
 } from './context.ts';
 import type { UserKey } from './context.ts';
 import EditPage from './edit-page.gts';
+import KeyAudience from './key-audience.gts';
 import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import { openedFor } from './opened-for.ts';
-import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
+import WorkspacePicker from './workspace-picker.gts';
+import { addressOf } from './workspaces.ts';
 
 interface Card {
   module: string;
@@ -74,20 +80,18 @@ class UseKey extends Component<{
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Use a key with a card'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
     {{else if this.choosing}}
-      <form novalidate {{on 'submit' this.next}} data-test-use-key-form>
-        <EditPage
-          @heading={{if
-            this.choosing.share
-            'Use a shared key with a card'
-            'Use a key with a card'
-          }}
-          data-test-use-key
-        >
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.next}}
+        data-test-use-key-form
+      >
+        <EditPage @heading={{this.title}} data-test-use-key>
           <:intro>
             {{#if this.choosing.share}}
               Choose a card in this workspace. Next you’ll see every call the
@@ -96,16 +100,27 @@ class UseKey extends Component<{
               once.
             {{else}}
               Choose a workspace and a card there. Next you’ll see every call
-              the card makes with your key, and approve them once.
+              the card makes with your own key, and approve them once.
             {{/if}}
           </:intro>
           <:default>
-            <FieldContainer @tag='div' @label='Key' @icon={{KeyRound}}>
-              <KeyTile @key={{this.choosing.key}} />
-            </FieldContainer>
+            <KeyAudience
+              @kind={{if this.choosing.share 'apiKey' 'userKey'}}
+              @label={{if this.choosing.share 'Shared key' 'Your own key'}}
+              @workspace={{this.choosing.share.workspace.name}}
+              @headingId='use-key-audience'
+              data-test-use-key-audience
+            >
+              <KeyTile
+                @key={{this.choosing.key}}
+                @shared={{if this.choosing.share true false}}
+              />
+            </KeyAudience>
             {{#if this.choosing.share}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Workspace'
                 @icon={{LayoutGrid}}
                 data-test-use-key-share-realm
@@ -120,75 +135,84 @@ class UseKey extends Component<{
                       this.choosing.share.workspace.url
                     }}</span>
                 </p>
-              </FieldContainer>
+              </Field>
             {{else}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Workspace'
                 @icon={{LayoutGrid}}
                 data-test-use-key-realm
-                as |labelId|
+                as |_controlId _messageId labelId|
               >
-                <WorkspaceDropdown
+                <WorkspacePicker
                   @workspaces={{this.form.realms}}
                   @selected={{this.form.realm}}
                   @onSelect={{this.selectRealm}}
                   @labelId={{labelId}}
+                  @emptyMessage='You don’t have access to any workspace to use this key in.'
                 />
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.form.realm}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Card'
                 @icon={{RectangleEllipsis}}
                 data-test-use-key-cards
+                as |_controlId _messageId labelId|
               >
                 {{#if this.form.loadingCards}}
                   <BusyMessage @title='Loading…' />
                 {{else}}
-                  <fieldset class='cards'>
-                    <legend class='visually-hidden'>Card</legend>
-                    {{#each this.form.cards as |card|}}
-                      <RadioTile
-                        @name='card'
-                        @checked={{eq this.form.card card}}
-                        @onChange={{this.selectCard card}}
-                        data-test-use-key-card={{card.name}}
-                      >
-                        <span class='card-name'>{{card.displayName}}</span>
-                      </RadioTile>
-                    {{else}}
-                      <p class='empty' data-test-use-key-no-cards>
-                        {{#if this.choosing.share}}
-                          No card in this workspace sends the workspace’s key in
-                          a request.
-                        {{else}}
-                          No card in this workspace sends a key of yours in a
-                          request.
-                        {{/if}}
-                      </p>
-                    {{/each}}
-                  </fieldset>
+                  {{#if this.form.cards.length}}
+                    <RadioCard
+                      class='cards'
+                      @name='card'
+                      @options={{this.cardChoices}}
+                      @value={{this.chosenCard}}
+                      @onValueChange={{this.selectCard}}
+                      aria-labelledby={{labelId}}
+                      as |choice|
+                    >
+                      <span
+                        class='card-name'
+                        data-test-use-key-card={{this.cardNameOf choice.value}}
+                      >{{choice.title}}</span>
+                    </RadioCard>
+                  {{else}}
+                    <p class='empty' data-test-use-key-no-cards>
+                      {{#if this.choosing.share}}
+                        No card in this workspace sends the workspace’s key in a
+                        request this key works for.
+                      {{else}}
+                        No card in this workspace makes a request this key works
+                        for.
+                      {{/if}}
+                    </p>
+                  {{/if}}
                 {{/if}}
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
             <Button
               type='button'
-              @kind='secondary'
+              @variant='secondary'
               data-test-use-key-cancel
               {{on 'click' this.goToKeys}}
             >Cancel</Button>
             <Button
               type='submit'
-              @kind='primary'
+              @variant='primary'
               @disabled={{this.nextDisabled}}
               data-test-use-key-next
             >Next</Button>
@@ -207,20 +231,7 @@ class UseKey extends Component<{
         margin-top: var(--boxel-sp-xl);
       }
       .cards {
-        margin: 0;
-        padding: 0;
-        border: 0;
-        display: grid;
         gap: var(--boxel-sp-xs);
-        min-width: 0;
-      }
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
       }
       .workspace {
         display: grid;
@@ -236,7 +247,6 @@ class UseKey extends Component<{
       }
       .card-name {
         display: block;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-weight: 600;
         overflow-wrap: anywhere;
       }
@@ -246,14 +256,10 @@ class UseKey extends Component<{
         line-height: var(--boxel-line-height-sm);
         color: var(--muted-foreground);
       }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
-      }
     </style>
   </template>
+
+  private title = pageTitle(keyUsePath(this.args.keyId));
 
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
@@ -353,11 +359,12 @@ class UseKey extends Component<{
     this.form.error = undefined;
     this.form.loadingCards = true;
     try {
-      let cards = await realmCardsWithRequests(
-        this.args.api.config,
-        url,
-        this.choosing?.share ? 'apiKey' : 'userKey',
-      );
+      // A share sends the key it holds, so the cards are those this key can
+      // fill either way.
+      let cards = await realmCardsWithRequests(this.args.api.config, url, {
+        slot: this.choosing?.share ? 'apiKey' : 'userKey',
+        key: this.args.keyId,
+      });
       if (this.form.realm === url) {
         this.form.cards = cards;
         if (cards.length === 1) {
@@ -380,11 +387,27 @@ class UseKey extends Component<{
     }
   };
 
-  private selectCard = (card: Card) => () => {
-    this.form.card = card;
+  // Each card as a tile to choose, by its place in the list, since a card
+  // definition is named by its module and export together.
+  private get cardChoices() {
+    return this.form.cards.map((card, index) => ({
+      value: String(index),
+      title: card.displayName,
+    }));
+  }
+  // '' rather than undefined when no card is chosen, so the tiles stay
+  // controlled: RadioCard takes an undefined @value as uncontrolled and
+  // would keep a pick of its own.
+  private get chosenCard() {
+    let index = this.form.card ? this.form.cards.indexOf(this.form.card) : -1;
+    return index < 0 ? '' : String(index);
+  }
+  private cardNameOf = (index: string) => this.form.cards[Number(index)]?.name;
+  private selectCard = (index: string) => {
+    this.form.card = this.form.cards[Number(index)];
   };
 
-  private goToKeys = () => navigation.back(pageURL('keys'));
+  private goToKeys = () => navigation.back(keyPageURL());
 
   // The approve page reads what it is for from its fragment, so it loads as a
   // document of its own.
@@ -402,7 +425,7 @@ class UseKey extends Component<{
       ...(share ? { share: share.id } : { key: this.args.keyId }),
       then: 'keys',
     });
-    navigation.assign(`${pageURL('approve')}#${fragment}`);
+    navigation.assign(withWayBack(`${pageURL('approve')}#${fragment}`));
   };
 }
 

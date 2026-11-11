@@ -50,7 +50,12 @@ Inspect existing state before making changes; do not guess.
   base realm, not the software-factory realm, not experiments{{#if enableCatalogReuse}}{{else}}, not catalog{{/if}}. Cross-realm
   exploration burns tokens and time without helping. If a pattern isn't
   covered by your skills, write the card using your own knowledge and let
-  validation tell you what to fix.{{#if enableCatalogReuse}}
+  validation tell you what to fix.
+  - **Exception — Pret UI write-ups.** Before you use a Pret UI component,
+    read its contract with
+    `boxel file read @cardstack/pretui/components/<name>.md`. Read only the
+    write-ups of components you use; don't list or search the Pret UI
+    realm.{{#if enableCatalogReuse}}
   - **Exception — the catalog (mandatory).** The catalog realm
     (`@cardstack/catalog/`) is a curated library of work already done, and
     you are required to consult it before authoring. It is searchable four
@@ -65,8 +70,8 @@ Inspect existing state before making changes; do not guess.
 
     Before writing **any** UI in a `.gts` template (button, form input,
     modal, dropdown, pill, menu, tooltip, select, accordion, …) you
-    **must** search for a boxel-ui component Spec and reuse one that
-    matches. Hand-rolling UI when a spec exists is a defect.
+    **must** search the catalog for a component Spec, Pret UI first, and
+    reuse one that matches. Hand-rolling UI when a spec exists is a defect.
 
     The `catalog-reuse` skill has the query shapes, what each `specType`
     entitles you to, and how to judge a hit; `boxel-ui-component-discovery`

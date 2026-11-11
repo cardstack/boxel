@@ -1593,7 +1593,7 @@ module(basename(import.meta.filename), function () {
         let migration = (await import(
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
           // @ts-ignore a CommonJS migration, required for its SQL
-          '../../postgres/migrations/1794253807954_partition-boxel-index-vectors-by-space.js'
+          '../../postgres/migrations/1794379157839_partition-boxel-index-vectors-by-space.js'
         )) as { up: Function; down: Function };
         let run = async (step: Function) => {
           let statements: string[] = [];
@@ -2143,7 +2143,7 @@ module(basename(import.meta.filename), function () {
         let migration = (await import(
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
           // @ts-ignore a CommonJS migration, required for its SQL
-          '../../postgres/migrations/1794254974149_vector-space-hnsw-indexes.js'
+          '../../postgres/migrations/1794379184990_vector-space-hnsw-indexes.js'
         )) as { up: Function; down: Function };
         let run = async (step: Function) => {
           let statements: string[] = [];

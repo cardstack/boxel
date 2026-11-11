@@ -1,6 +1,8 @@
 import { cached } from '@glimmer/tracking';
 
 import {
+  baseRRI,
+  RealmPaths,
   relationshipEntries,
   resolveRRIReference,
   rri,
@@ -14,7 +16,10 @@ import {
 
 import { getSearchEntriesResource } from '@cardstack/host/resources/search-entries';
 
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
+
 const PIN_FIELD = 'entryPoints';
+const WORKSPACE_TYPE = { module: baseRRI('workspace'), name: 'Workspace' };
 
 // A workspace's pins are the `entryPoints` links of its Workspace card, the
 // realm's index card, which its Home shows and lets editors change. They're
@@ -29,10 +34,22 @@ export class WorkspacePins {
     parent: object,
     getRealm: () => { realm: string; realmURL: string } | undefined,
   ) {
-    this.#resource = getSearchEntriesResource(parent, () => {
-      let target = getRealm();
-      return target ? indexCardQuery(target.realm, target.realmURL) : undefined;
-    });
+    this.#resource = getSearchEntriesResource(
+      parent,
+      () => {
+        let target = getRealm();
+        return target
+          ? indexCardQuery(target.realm, target.realmURL)
+          : undefined;
+      },
+      {
+        refreshOn: (event) => {
+          let target = getRealm();
+          return target ? indexCardReindexed(event, target.realmURL) : false;
+        },
+        refreshPromptly: true,
+      },
+    );
   }
 
   // The pinned cards' ids, in the order the workspace lists them, each once.
@@ -41,17 +58,58 @@ export class WorkspacePins {
   get cardIds(): RealmResourceIdentifier[] {
     return pinnedCardIds(this.#resource.entries[0]?.item);
   }
+
+  // Whether the realm's index card is a Workspace, and so can hold pins:
+  // undefined until a search answers.
+  get isWorkspace(): boolean | undefined {
+    if (this.#resource.entries.length > 0) {
+      return true;
+    }
+    return this.#resource.isLoading || this.failed ? undefined : false;
+  }
+
+  // Whether the last search failed with no earlier answer to fall back on.
+  get failed(): boolean {
+    return (
+      !this.#resource.isLoading &&
+      this.#resource.entries.length === 0 &&
+      (this.#resource.errors?.length ?? 0) > 0
+    );
+  }
 }
 
-// The index card alone, with only its pins: a sparse item carries the links
+// The index card alone, when it's a Workspace, with only its pins: a sparse item carries the links
 // without expanding the cards they point to.
 function indexCardQuery(realm: string, realmURL: string): SearchEntryWireQuery {
   return {
     realms: [realm],
-    cardUrls: [new URL('index.json', realmURL).href],
+    cardUrls: [indexCardURL(realmURL)],
+    filter: { 'item.on': WORKSPACE_TYPE },
     scope: 'cards',
     fields: { entry: [`item.${PIN_FIELD}`] },
   };
+}
+
+function indexCardURL(realmURL: string): string {
+  return new RealmPaths(new URL(realmURL)).fileURL('index.json').href;
+}
+
+// Pins can only move when the index card is reindexed: a write to it, which
+// also covers its other fields, or a reindex of the realm that rewrites it.
+// On the split index path, an edit to a pinned card re-renders the index
+// card's HTML without reindexing it, so it isn't one of these. The fused path
+// (SQLite) reindexes it, which only costs an extra search.
+function indexCardReindexed(
+  event: RealmEventContent,
+  realmURL: string,
+): boolean {
+  if (event.eventName !== 'index' || event.indexType !== 'incremental') {
+    return false;
+  }
+  let indexCard = trimJsonExtension(indexCardURL(realmURL));
+  return (event.invalidations ?? []).some(
+    (url) => trimJsonExtension(url) === indexCard,
+  );
 }
 
 function pinnedCardIds(

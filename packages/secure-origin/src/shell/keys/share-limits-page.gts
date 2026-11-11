@@ -26,8 +26,9 @@ import {
   type KeyUsage,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
+import { Button } from '@cardstack/pretui/components/button';
 import { navigation } from '../navigation.js';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
@@ -71,7 +72,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Limits for a shared key'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -93,7 +94,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         <:actions>
           {{#if this.returnsToKeys}}
             <Button
-              @kind='secondary'
+              @variant='secondary'
               data-test-share-limits-back
               {{on 'click' this.backToKeys}}
             >Back to your keys</Button>
@@ -101,11 +102,9 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         </:actions>
       </EditPage>
     {{else if this.editing}}
-      <EditPage
-        @heading='Limits for {{this.editing.share.label}}'
-        data-test-share-limits
-      >
-        <:intro>Your key, shared with
+      <EditPage @heading={{this.title}} data-test-share-limits>
+        <:intro><strong>{{this.editing.share.label}}</strong>, your key shared
+          with
           <strong>{{this.editing.context.realm.name}}</strong>. These limits
           count the calls made with it by every card there, the AI assistant and
           the CLI. What each call costs depends on your plan with the service.</:intro>
@@ -122,8 +121,8 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
                 calls with this key until you approve it for one.</p>
               <Button
                 type='button'
-                @kind='secondary'
-                @size='extra-small'
+                @variant='secondary'
+                @size='xs'
                 data-test-share-limits-approve
                 {{on 'click' this.approveForCard}}
               >Approve for a card…</Button>
@@ -139,7 +138,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         <:actions>
           {{#if this.returnsToKeys}}
             <Button
-              @kind='secondary'
+              @variant='secondary'
               data-test-share-limits-back
               {{on 'click' this.backToKeys}}
             >Back to your keys</Button>
@@ -151,7 +150,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     {{#if this.backBelow}}
       <footer class='back'>
         <Button
-          @kind='secondary'
+          @variant='secondary'
           data-test-share-limits-back
           {{on 'click' this.backToKeys}}
         >Back to your keys</Button>
@@ -185,6 +184,8 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     </style>
   </template>
 
+  private title = pageTitle('share-limits');
+
   private opened = openedFor();
 
   // Opened from the key page, which it goes back to.
@@ -192,7 +193,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     new URLSearchParams(window.location.hash.replace(/^#/, '')).get('then') ===
     'keys';
 
-  private backToKeys = () => navigation.back(pageURL('keys'));
+  private backToKeys = () => navigation.back(keyPageURL());
 
   // A failed load and the needs-admin page draw no buttons of their own.
   private get backBelow() {
@@ -217,10 +218,12 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
       return;
     }
     navigation.assign(
-      `${pageURL(keyUsePath(share.keyId))}#${new URLSearchParams({
-        realm: share.realm,
-        share: share.id,
-      })}`,
+      withWayBack(
+        `${pageURL(keyUsePath(share.keyId))}#${new URLSearchParams({
+          realm: share.realm,
+          share: share.id,
+        })}`,
+      ),
     );
   };
 

@@ -2,6 +2,8 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+
 import { BoxelInput, RealmIcon } from '@cardstack/boxel-ui/components';
 
 import { and, bool, not } from '@cardstack/boxel-ui/helpers';
@@ -63,6 +65,8 @@ export default class CardURLBar extends Component<Signature> {
           @onKeyPress={{this.urlBar.onKeyPress}}
           @onBlur={{this.urlBar.onBlur}}
           @onFocus={{this.urlBar.onFocus}}
+          @autocomplete='off'
+          {{ignoredByPasswordManagers}}
           data-test-card-url-bar-input
         />
       </div>

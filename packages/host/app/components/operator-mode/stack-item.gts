@@ -87,6 +87,7 @@ import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
+import type WorkspacePinsService from '../../services/workspace-pins';
 import type {
   CardContext,
   CardCrudFunctions,
@@ -148,6 +149,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
+  @service declare private workspacePins: WorkspacePinsService;
 
   @tracked private selectedCards = new TrackedSet<string>();
 
@@ -626,6 +628,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         toolContext: this.args.toolContext,
         format: this.cardFormat,
         useBaseTemplate: this.args.item.useBaseTemplate,
+        workspacePin: this.url
+          ? this.workspacePins.pinStateFor(rri(this.url))
+          : undefined,
       }) ?? [],
     );
 
@@ -1114,7 +1119,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       /* When the top card is expanded, fade out the underlying
          buried cards so the user isn't visually distracted by the
          stack history behind the expanded surface. Sibling selector
-         within .operator-mode-stack > .inner; uses :has() to match
+         within the stack's cards wrapper (.stack-cards); uses :has() to match
          buried items that have an expanded sibling AFTER them in the
          DOM (top card = last in DOM order). */
       .item:not(.expanded, .phone-layout):has(~ .item.expanded) {

@@ -57,10 +57,7 @@ export default config as {
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
-  featureFlags?: {
-    AI_PATCHING_CORRECTNESS_CHECKS?: boolean;
-    DASHBOARD_V2?: boolean;
-  };
+  featureFlags?: {};
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSpaceBaseURL?: string;

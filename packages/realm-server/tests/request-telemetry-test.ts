@@ -580,6 +580,29 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test("the OAuth provider's routes keep only their method and path", function (assert) {
+      for (let url of [
+        'https://app.telemetry.test/_oauth-provider/token',
+        'https://app.telemetry.test/_oauth-provider/auth',
+        'https://app.telemetry.test/_OAUTH-PROVIDER/token',
+      ]) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url: `${url}?code=code-marker&code_verifier=verifier-marker`,
+            headers: { host: 'app.telemetry.test' },
+            data: 'grant_type=refresh_token&refresh_token=refresh-marker',
+            query_string: 'code=code-marker&code_verifier=verifier-marker',
+          },
+        });
+        assert.deepEqual(
+          event.request as unknown,
+          { method: 'POST', url },
+          `${url} keeps only its method and path`,
+        );
+      }
+    });
+
     test('a path that only starts with a key route keeps its context', function (assert) {
       let event = scrubRequestTelemetry({
         request: {

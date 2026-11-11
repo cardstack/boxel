@@ -1069,7 +1069,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-close-ai-assistant]');
   });
 
-  test('"Go to current system card" closes the workspace chooser', async function (assert) {
+  test('"Go to current system card" closes the dashboard', async function (assert) {
     await visitOperatorMode({
       workspaceChooserOpened: true,
       stacks: [
@@ -1082,9 +1082,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
 
-    assert
-      .dom('[data-test-workspace-chooser]')
-      .exists('workspace chooser is open');
+    assert.dom('[data-test-dashboard]').exists('dashboard is open');
 
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
@@ -1092,8 +1090,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-go-to-system-card]');
 
     assert
-      .dom('[data-test-workspace-chooser]')
-      .doesNotExist('workspace chooser is closed after going to system card');
+      .dom('[data-test-dashboard]')
+      .doesNotExist('dashboard is closed after going to system card');
     assert
       .dom(`[data-test-stack-card="${testRealmURL}SystemCard/default"]`)
       .exists('the system card is shown on the stack');
@@ -1367,7 +1365,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     mockedFileContent = 'test card content';
 
-    // This is to make sure opening code mode works even if the workspace chooser is open
+    // This is to make sure opening code mode works even if the dashboard is open
     await click('[data-test-workspace-chooser-toggle]');
 
     await click('[data-test-attached-file-dropdown-button="Fadhlan"]');

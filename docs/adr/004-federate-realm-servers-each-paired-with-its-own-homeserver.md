@@ -9,6 +9,8 @@ scope:
   - packages/runtime-common/matrix-backend-authentication.ts
   - packages/runtime-common/matrix-client.ts
   - packages/runtime-common/matrix-server-name.ts
+  - packages/runtime-common/tasks/**
+  - packages/runtime-common/worker.ts
   - packages/runtime-common/realm-permission-checker.ts
   - packages/runtime-common/db-queries/realm-permission-queries.ts
   - packages/runtime-common/realm.ts
@@ -32,8 +34,9 @@ user's own homeserver through Matrix federation. Federation is not built yet,
 and the host still allows only one realm server. This ADR records the target
 design and the rules that keep new code compatible with it. The `users`-row
 rule in §1.4, and §1.5, §1.6, and §1.9, were decided when this ADR was
-recorded, not on its `date`. The second paragraph of §1.3, and the first
-sentence of §1.4, were decided after it was recorded.
+recorded, not on its `date`. The second paragraph of §1.3, the first
+sentence of §1.4, and the third paragraph of §1.4 were decided after it was
+recorded.
 
 ## 1. Decision
 
@@ -74,6 +77,9 @@ A realm MAY limit access by homeserver in its policy, by matching the
 A realm's `users` permission row MUST grant access only to users of the
 paired homeserver. A user of another homeserver MUST be granted access by full
 id or by a policy rule.
+
+The `users` row MUST grant access only to a user who holds a Boxel account on
+the realm server: a row in the realm server's `users` table.
 
 ### 1.5. Realm paths for users of other homeservers
 
@@ -143,6 +149,14 @@ account on the paired homeserver, so opening a realm to the whole federation
 takes an explicit rule [10]. Users of other homeservers get server-qualified
 realm paths because localparts collide [10].
 
+The realm server's `users` table is its record of who holds a Boxel account.
+The realm server writes a row when a person first signs in, after their
+homeserver verifies their OpenID token. It refuses a per-realm session to
+anyone without a row, so the table leaves out no one who could hold a realm
+session [15]. Every process that reaches the database can read the table,
+workers included, so the realm and the realm server's middleware reach the
+same answer [15].
+
 Each server serves its own infrastructure realms [10]. Each VirtualNetwork
 maps the `@cardstack/<realm>/` prefixes to the realms its own environment
 names (ADR 002 §1.4) [9]. That makes card JSON portable between environments,
@@ -182,6 +196,16 @@ to find [10].
   its own copy instead [10].
 - **The home realm server proxies cross-server queries.** This needs
   delegated identity, which does not exist [10].
+- **Take a realm-server session as proof of the account.** A token signed
+  with `REALM_SECRET_SEED` can name any user, and the realm server's own
+  account holds a session without a row. The middleware would also judge a
+  caller differently from the realm, which reads the table [15].
+- **Ask the homeserver for the user's profile, as an authenticated user.**
+  Worker processes hold no Matrix client. Under ADR 011 §1.6 the request
+  succeeds only once the asking account shares a room with the user [15].
+- **Ask the Synapse admin API whether the account exists.** The realm server
+  and its workers hold no admin token. The API also answers a broader
+  question, whether the account exists on the homeserver [15].
 
 ## 4. Consequences
 
@@ -232,6 +256,9 @@ Beyond the gaps under Remediation, federation needs this work:
 13. `docs/realm-resource-identifiers.md`, added in #5720.
 14. #7085, which verifies OpenID tokens with their issuing homeserver, and its
     review, which weighed the allowlist against the outbound guard.
+15. #7087, which reads the `users` row's account check from the realm
+    server's `users` table, the options its description rejects, and its
+    review.
 
 ## 7. Remediation
 

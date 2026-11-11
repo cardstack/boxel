@@ -35,6 +35,7 @@
     "@types/mime-types": "catalog:",
     "@types/ms": "catalog:",
     "@types/node": "catalog:",
+    "@types/oidc-provider": "9.13.1",
     "@types/pg": "catalog:",
     "@types/pluralize": "catalog:",
     "@types/qs": "catalog:",
@@ -54,6 +55,7 @@
     "decorator-transforms": "catalog:",
     "ember-eslint-parser": "catalog:",
     "ember-template-recast": "^6.1.5",
+    "esbuild": "catalog:",
     "eslint": "catalog:",
     "eslint-plugin-qunit": "catalog:",
     "ethers": "catalog:",
@@ -105,6 +107,7 @@
     "bench:realm:check": "LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_REALM_LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_PRERENDER_LOG_LEVELS='*=warn,prerenderer-chrome=none' NODE_NO_WARNINGS=1 node scripts/bench-realm/check.ts",
     "load-harness": "NODE_NO_WARNINGS=1 node scripts/load-harness/run-load.ts",
     "load-harness:setup": "NODE_NO_WARNINGS=1 node scripts/load-harness/setup-realm.ts",
+    "load-harness:bundle": "esbuild scripts/load-harness/run-load.ts --bundle --platform=node --format=esm --target=node22 --outfile=scripts/load-harness/dist/run-load.mjs",
     "migrate": "NODE_NO_WARNINGS=1 node scripts/run-migrations.ts",
     "start:matrix": "./scripts/start-matrix.sh",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",
@@ -154,6 +157,7 @@
     "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-openrouter-models.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest",
     "build:secure-origin": "pnpm --dir=../secure-origin build",
+    "build:secure-origin:if-stale": "pnpm --dir=../secure-origin build:if-stale",
     "test:external-pg": "node tests/index.ts"
   },
   "dependencies": {
@@ -162,6 +166,7 @@
     "@aws-sdk/lib-storage": "^3.1065.0",
     "@cardstack/secure-origin": "workspace:*",
     "morphdom": "^2.7.8",
+    "oidc-provider": "9.13.3",
     "puppeteer": "^25.16.0",
     "tldts": "^6.1.86"
   }

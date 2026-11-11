@@ -14,6 +14,12 @@
 // destination. Opened with `#reconnect=<key id>`, from a connection on the key
 // page, it signs that connection in again under its own name. With no app to
 // offer, it says who can set one up.
+//
+// Reached from an approve page's "Add a new key" (`then=approve` or
+// `then=review-changes`, by way of `enter-key`), it keeps that page for
+// `connected` to go back to once the user has signed in, with the new
+// connection chosen (`approval-return.ts`). An approval `boxel keys approve`
+// opened is still the CLI's here: closing the window cancels it.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -26,14 +32,22 @@ import {
   windowContext,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
-import Button from '../../components/button.gts';
-import FieldContainer from '../../components/field-container.gts';
-import KeyRound from '../../components/icons/key-round.gts';
-import Tag from '../../components/icons/tag.gts';
-import BoxelInput from '../../components/input.gts';
+import { Button } from '@cardstack/pretui/components/button';
+import { Field } from '@cardstack/pretui/components/field';
+import { Alert } from '@cardstack/pretui/components/alert';
+import KeyRound from '@cardstack/boxel-icons/key-round';
+import Tag from '@cardstack/boxel-icons/tag';
+import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { navigation } from '../navigation.js';
-import { pageURL } from '../urls.js';
+import {
+  addressAbove,
+  isKeyPageAddress,
+  keyPageURL,
+  pageTitle,
+} from './trail.ts';
 
+import { approvalPageThen, keepApprovalForSignIn } from './approval-return.ts';
 import ClientPicker from './client-picker.gts';
 import {
   failureMessage,
@@ -48,8 +62,8 @@ import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { contextRequest, openedFor } from './opened-for.ts';
-import { addressOf } from './workspace-dropdown.gts';
+import { cliOpenedFor, contextRequest, openedFor } from './opened-for.ts';
+import { addressOf } from './workspaces.ts';
 
 // The app that starts out chosen: the only one offered, or the one app that
 // is the workspace's or Boxel's, which the realm server lists ahead of the
@@ -87,7 +101,12 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
         @onRetry={{this.load}}
       />
     {{else if this.choosing}}
-      <form novalidate {{on 'submit' this.connect}} data-test-connect-form>
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.connect}}
+        data-test-connect-form
+      >
         <EditPage @heading={{this.heading}} data-test-connect>
           <:intro>You sign in on the site itself, in this window. Boxel keeps
             the sign-in encrypted, and cards can use it only for the requests
@@ -100,14 +119,16 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
               />
             {{/if}}
             {{#if this.choosing.connection}}
-              <FieldContainer
-                @tag='div'
+              <Field
+                @reserveMessage={{false}}
+                @orientation='horizontal'
+                @labelTag='span'
                 @label='Connection'
                 @icon={{KeyRound}}
                 data-test-connect-connection
               >
                 <KeyTile @key={{this.choosing.connection}} />
-              </FieldContainer>
+              </Field>
             {{/if}}
             {{#if this.choosing.clients.length}}
               <ClientPicker
@@ -117,22 +138,26 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
                 @realmName={{this.choosing.context.realm.name}}
               />
               {{#unless this.choosing.connection}}
-                <FieldContainer
-                  @tag='label'
+                <Field
+                  @reserveMessage={{false}}
+                  @orientation='horizontal'
                   @label='Name'
                   @icon={{Tag}}
                   data-test-connect-field='name'
+                  as |controlId|
                 >
-                  <BoxelInput
+                  <Input
+                    @controlId={{controlId}}
                     @type='text'
-                    @autocomplete='off'
+                    autocomplete='off'
                     @placeholder='A name you’ll recognize, such as “Work GitHub”'
                     @value={{this.form.name}}
                     @onInput={{this.setName}}
                     name='connection-name'
+                    {{ignoredByPasswordManagers}}
                     data-test-connect-name
                   />
-                </FieldContainer>
+                </Field>
               {{/unless}}
             {{else}}
               <div class='no-clients' data-test-connect-no-clients>
@@ -151,24 +176,24 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
               </div>
             {{/if}}
             {{#if this.form.error}}
-              <div class='keys-error' role='alert' data-test-keys-error>
-                {{this.form.error}}
-              </div>
+              <Alert @tone='danger' role='alert'>
+                <span data-test-keys-error>{{this.form.error}}</span>
+              </Alert>
             {{/if}}
           </:default>
           <:actions>
-            {{#unless this.choosing.context}}
+            {{#if this.backToKeys}}
               <Button
                 type='button'
-                @kind='secondary'
+                @variant='secondary'
                 data-test-connect-back
                 {{on 'click' this.back}}
               >Back to your keys</Button>
-            {{/unless}}
+            {{/if}}
             {{#if this.choosing.clients.length}}
               <Button
                 type='submit'
-                @kind='primary'
+                @variant='primary'
                 @disabled={{this.submitDisabled}}
                 @loading={{this.form.connecting}}
                 data-test-connect-submit
@@ -198,12 +223,6 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
         line-height: var(--boxel-line-height-sm);
         overflow-wrap: anywhere;
       }
-      .keys-error {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        font-weight: 500;
-      }
     </style>
   </template>
 
@@ -227,9 +246,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
   }
 
   private get heading() {
-    return this.opened.reconnect
-      ? 'Reconnect an account'
-      : 'Connect an account';
+    return pageTitle('connect', Boolean(this.opened.reconnect));
   }
 
   private get loading() {
@@ -343,7 +360,18 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private back = () => navigation.back(pageURL('keys'));
+  private back = () => navigation.back(keyPageURL());
+
+  // Opened for nothing, the page offers the way back to the key page. Reached
+  // from another key page (replacing a key, say), its trail leads back there
+  // instead.
+  private get backToKeys() {
+    let above = addressAbove();
+    return (
+      !this.choosing?.context &&
+      (above === undefined || isKeyPageAddress(above))
+    );
+  }
 
   // Mints the ticket for this sign-in, asks the realm server to start it, and
   // sends the window to the service's sign-in page.
@@ -366,6 +394,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
           ? { client: client.ref, reconnect: choosing.connection.id }
           : { client: client.ref, name: this.form.name.trim() },
       );
+      keepApprovalForSignIn(authorizeUrl);
       navigation.assign(authorizeUrl);
     } catch (e) {
       this.form.connecting = false;
@@ -380,8 +409,15 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
 
 export default class ConnectPage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Your keys' @page='connect' as |api|>
+    <KeysWindow
+      @title='Boxel · Your keys'
+      @page='connect'
+      @cli={{this.cli}}
+      as |api|
+    >
       <Connect @api={{api}} />
     </KeysWindow>
   </template>
+
+  private cli = approvalPageThen() ? cliOpenedFor().cli : undefined;
 }

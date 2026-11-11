@@ -1,16 +1,22 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import FieldContainer from '../components/field-container.gts';
-import BoxelInput from '../components/input.gts';
+import { Field as PretField } from '@cardstack/pretui/components/field';
+import { modifier } from 'ember-modifier';
+
+import { Input } from '@cardstack/pretui/components/input';
 import cn from '../helpers/cn.ts';
-import { modifier, testAttribute } from '../modifiers/modifier.ts';
 import type { CredentialFrame } from '../security/credentials.js';
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_RULES,
+} from '../security/password-rules.js';
 import type { Changes } from './changes.ts';
 
 // The credential fields the app frames, drawn the way the app draws its own:
-// the settings modal's in a horizontal FieldContainer, and the change-email
-// modal's confirmation in a vertical one. What the fields hold,
+// the settings modal's in a horizontal Field, its label in the column the
+// app's FieldContainers give theirs, and the change-email modal's
+// confirmation in a vertical one. What the fields hold,
 // and everything said to the app about them, is the `CredentialFrame`'s; this
 // only draws it and reports to it what is typed.
 
@@ -18,12 +24,13 @@ interface Field {
   name: string;
   label?: string;
   type: 'text' | 'password';
-  id?: string;
   inputName?: string;
   autocomplete: string;
   placeholder?: string;
   testId: string;
   accessibleName?: string;
+  // `new` for a new password and `confirm` for its confirmation. Either one
+  // states the password rule to a password manager.
   validate?: 'new' | 'confirm';
 }
 
@@ -43,11 +50,26 @@ interface FieldView {
 
 // The frame reports the height of the fields whenever their layout changes
 // it.
-const observeSize = modifier((element: HTMLElement, frame: CredentialFrame) => {
-  let observer = new ResizeObserver(() => frame.sendSize());
-  observer.observe(element);
-  return () => observer.disconnect();
-});
+const observeSize = modifier(
+  (element: HTMLElement, [frame]: [CredentialFrame]) => {
+    let observer = new ResizeObserver(() => frame.sendSize());
+    observer.observe(element);
+    return () => observer.disconnect();
+  },
+);
+
+// Gives the element a `data-test-<name>` attribute, for a name a template
+// can't spell out itself because it comes from data.
+const testAttribute = modifier(
+  (element: Element, [name]: [string | undefined]) => {
+    if (!name) {
+      return;
+    }
+    let attribute = `data-test-${name}`;
+    element.setAttribute(attribute, '');
+    return () => element.removeAttribute(attribute);
+  },
+);
 
 export default class CredentialFields extends Component<Signature> {
   private get frame() {
@@ -78,16 +100,6 @@ export default class CredentialFields extends Component<Signature> {
     }));
   }
 
-  // A field with an error is shown invalid, as a BoxelInput given
-  // `@state='invalid'` is. The forms whose fields the app gives a validation
-  // state show the rest as `initial`; the others give them none.
-  private state = (error: string | undefined) => {
-    if (error) {
-      return 'invalid';
-    }
-    return this.frame.form.stateful ? 'initial' : undefined;
-  };
-
   private input = (name: string) => (value: string) =>
     this.frame.input(name, value);
 
@@ -112,7 +124,8 @@ export default class CredentialFields extends Component<Signature> {
   };
 
   // The form is never sent: a request goes when the app asks for it, made
-  // by the frame. It is submitted only so a password manager sees it go.
+  // by the frame. It is submitted only so a password manager sees it go, and
+  // its method is `post`, as a password manager expects of a password form.
   private preventSubmit = (event: Event) => event.preventDefault();
 
   private isLayout = (layout: string) => this.layout === layout;
@@ -125,6 +138,7 @@ export default class CredentialFields extends Component<Signature> {
         (concatLayout this.layout)
         narrow=this.narrow
       }}
+      method='post'
       novalidate
       {{on 'submit' this.preventSubmit}}
       {{observeSize this.frame}}
@@ -147,56 +161,64 @@ export default class CredentialFields extends Component<Signature> {
       {{/if}}
       {{#each this.fields key='name' as |entry|}}
         {{#if (this.isLayout 'settings')}}
-          <FieldContainer
+          <PretField
+            @reserveMessage={{false}}
+            @orientation='horizontal'
             @label={{entry.field.label}}
-            @tag='label'
             class='profile-field password-settings-field'
-            as |labelId|
+            as |controlId _messageId labelId|
           >
-            <BoxelInput
-              @id={{entry.field.id}}
-              @type={{entry.field.type}}
-              @autocomplete={{entry.field.autocomplete}}
-              @placeholder={{entry.field.placeholder}}
-              @value={{entry.value}}
-              @state={{this.state entry.error}}
-              @errorMessage={{entry.error}}
-              @onInput={{this.input entry.name}}
-              @onBlur={{this.blur entry.name}}
-              @onChange={{this.change entry.name}}
-              name={{entry.field.inputName}}
-              aria-labelledby={{labelId}}
-              aria-label={{entry.field.accessibleName}}
-              {{on 'keydown' this.keydown}}
-              {{testAttribute entry.field.testId}}
-            />
-          </FieldContainer>
+            <div class='control'>
+              <Input
+                @controlId={{controlId}}
+                @type={{entry.field.type}}
+                autocomplete={{entry.field.autocomplete}}
+                minlength={{if entry.field.validate MIN_PASSWORD_LENGTH}}
+                passwordrules={{if entry.field.validate PASSWORD_RULES}}
+                placeholder={{entry.field.placeholder}}
+                @value={{entry.value}}
+                @invalid={{if entry.error true false}}
+                @errorMessage={{entry.error}}
+                @onInput={{this.input entry.name}}
+                {{on 'blur' (this.blur entry.name)}}
+                {{on 'change' (this.change entry.name)}}
+                name={{entry.field.inputName}}
+                aria-labelledby={{labelId}}
+                aria-label={{entry.field.accessibleName}}
+                {{on 'keydown' this.keydown}}
+                {{testAttribute entry.field.testId}}
+              />
+            </div>
+          </PretField>
         {{else}}
-          <FieldContainer
+          <PretField
+            @reserveMessage={{false}}
             @label={{entry.field.label}}
-            @tag='label'
-            @vertical={{true}}
             class='profile-field'
-            as |labelId|
+            as |controlId _messageId labelId|
           >
-            <BoxelInput
-              @id={{entry.field.id}}
-              @type={{entry.field.type}}
-              @autocomplete={{entry.field.autocomplete}}
-              @placeholder={{entry.field.placeholder}}
-              @value={{entry.value}}
-              @state={{this.state entry.error}}
-              @errorMessage={{entry.error}}
-              @onInput={{this.input entry.name}}
-              @onBlur={{this.blur entry.name}}
-              @onChange={{this.change entry.name}}
-              name={{entry.field.inputName}}
-              aria-labelledby={{labelId}}
-              aria-label={{entry.field.accessibleName}}
-              {{on 'keydown' this.keydown}}
-              {{testAttribute entry.field.testId}}
-            />
-          </FieldContainer>
+            <div class='control'>
+              <Input
+                @controlId={{controlId}}
+                @type={{entry.field.type}}
+                autocomplete={{entry.field.autocomplete}}
+                minlength={{if entry.field.validate MIN_PASSWORD_LENGTH}}
+                passwordrules={{if entry.field.validate PASSWORD_RULES}}
+                placeholder={{entry.field.placeholder}}
+                @value={{entry.value}}
+                @invalid={{if entry.error true false}}
+                @errorMessage={{entry.error}}
+                @onInput={{this.input entry.name}}
+                {{on 'blur' (this.blur entry.name)}}
+                {{on 'change' (this.change entry.name)}}
+                name={{entry.field.inputName}}
+                aria-labelledby={{labelId}}
+                aria-label={{entry.field.accessibleName}}
+                {{on 'keydown' this.keydown}}
+                {{testAttribute entry.field.testId}}
+              />
+            </div>
+          </PretField>
         {{/if}}
       {{/each}}
     </form>
@@ -262,6 +284,13 @@ export default class CredentialFields extends Component<Signature> {
       }
 
       .credential-fields {
+        /* The fields are the size of the app's own form controls, in the
+           page's type, through Pret UI's field knobs: as tall as
+           --boxel-form-control-height, which the app also sizes the frame
+           by before the fields report their height. */
+        --pretui-field-h: var(--boxel-form-control-height);
+        --pretui-field-font-size: 1em;
+        --pretui-field-message-font-size: var(--boxel-font-size-sm);
         display: flex;
         flex-direction: column;
         margin: 0;
@@ -276,6 +305,32 @@ export default class CredentialFields extends Component<Signature> {
       .layout-settings.narrow .password-settings-field {
         grid-template-columns: 1fr;
         gap: var(--boxel-sp-xs);
+      }
+
+      /* Labelled as the app labels its own fields, which the page's styles
+         say. */
+      .profile-field {
+        --boxel-ui-label-font-size: var(
+          --boxel-label-font-size,
+          var(--boxel-body-font-size)
+        );
+        --boxel-ui-label-font-weight: var(--boxel-label-font-weight, 500);
+        --boxel-ui-label-line-height: var(--boxel-label-line-height, 1.1);
+        --boxel-ui-label-letter-spacing: var(--boxel-lsp-xs);
+        justify-items: stretch;
+      }
+      .password-settings-field {
+        --pretui-field-label-size: var(
+          --boxel-field-label-size,
+          minmax(8rem, 25%)
+        );
+        --pretui-field-column-gap: 0;
+      }
+
+      /* Room for the input's focus outline and invalid ring inside the
+         frame, as the app's FieldContainer keeps around its own inputs. */
+      .control {
+        padding: var(--boxel-outline-width);
       }
 
       /* The settings modal's and the change-email modal's fields show an

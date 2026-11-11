@@ -39,6 +39,7 @@ import compile, { continuation, fadeOn, sameScore } from './compile.ts';
 import {
   join as joinPass,
   leave as leavePass,
+  letGo,
   type Pass,
   setBeforeMeasure,
   setPassScheduler,
@@ -378,6 +379,14 @@ function scrolls(el: Element): boolean {
 /** the nearest ancestor that scrolls vertically: what `@inView` calls the view */
 function scrollerOf(el: Element): HTMLElement | null {
   for (let p = el.parentElement; p; p = p.parentElement) {
+    // while <html> lets its overflow show, <body>'s overflow is the
+    // viewport's: <body> never scrolls, the document does
+    if (
+      p === document.body &&
+      getComputedStyle(document.documentElement).overflowY === 'visible'
+    ) {
+      continue;
+    }
     const overflow = getComputedStyle(p).overflowY;
     if (
       overflow === 'auto' ||
@@ -817,6 +826,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // the arriving scene wants it after the swap renders and BEFORE final
     // bounds are measured, so every landing is measured where it will live
     if (this.args.route && this.arrived.size && this.snapshots.size) {
+      // the hold comes off first, so @scroll reads the page as it is
+      letGo(document.scrollingElement);
       const intent = this.args.scroll ?? 'top';
       const y = intent === 'top' ? 0 : intent();
       window.scrollTo(0, y);
@@ -962,6 +973,21 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     return { claimed, host: this, inserted, kept, removed, root };
   }
 
+  /**
+   * the scroller whose scroll height the barrier holds while this region
+   * measures: the nearest scrolling ancestor, or the document when there is
+   * none
+   */
+  scroller(): HTMLElement | null {
+    if (!this.element) {
+      return null;
+    }
+    return (
+      scrollerOf(this.element) ??
+      (document.scrollingElement as HTMLElement | null)
+    );
+  }
+
   /** phase 3: identities are settled — compile this region's timeline and play it */
   finishPass(pass: Pass) {
     const { claimed, inserted, kept, root } = pass;
@@ -1063,9 +1089,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // nor reasserts the world: the release itself was the snap. A sprite
     // that merely REFLOWED is untouched — it was never driven.
     if (this.run && !this.run.isDone()) {
-      // A sprite the new score already MOVES needs no continuation: its
-      // move starts from the painted box. One the score names only for
-      // something else (a fade, a hold) still needs carrying through space,
+      // A sprite the new score already MOVES or HOLDS in place needs no
+      // continuation: its move starts from the painted box, and its hold
+      // decides where it stands. One the score names only for something
+      // else (a fade, a hold on opacity) still needs carrying through space,
       // or a transform the prior run was tweening (an entrance's scale)
       // would be left where the release put it.
       const scored = new Set(
@@ -1073,7 +1100,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           .filter(
             (c) =>
               c.flight !== undefined ||
-              Object.keys(c.target ?? {}).some((key) => MOVED_KEYS.has(key)),
+              [
+                ...Object.keys(c.target ?? {}),
+                ...Object.keys(c.hold?.values ?? {}),
+              ].some((key) => MOVED_KEYS.has(key)),
           )
           .map((c) => c.sprite.node),
       );
@@ -1118,6 +1148,17 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // a Move that animates sizes translates from where layout puts each
     // box at the flight's start sizes, not from its final box
     correctMovesForLayout(cues, measureZoom);
+    // a value a new tween or spring takes over carries on from where it is
+    // painted: stand it back up where the measure rested it
+    this.run?.restoreRested((ve, key) =>
+      cues.some(
+        (c) =>
+          (c.kind === 'tween' || c.kind === 'spring') &&
+          c.sprite.node.visualElement === ve &&
+          c.target !== undefined &&
+          key in c.target,
+      ),
+    );
     if (!cues.length) {
       // nothing to play: let every leaver go now
       for (const node of claimed) {
@@ -1245,6 +1286,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // rather than sending it back to the top — read before cancel stops them
     const loops = prior?.loopPhases() ?? this.coveredLoops;
     this.coveredLoops = undefined;
+    // a run in flight is motion on screen: its replacement carries that on
+    // through its first frame rather than standing still on it — read
+    // before cancel ends the run
+    const continuing = prior?.inFlight ?? false;
     prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {
@@ -1309,6 +1354,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       },
       raisedLayer: this.raisedLayer,
       tetherLayer: this.tetherLayer,
+      continuing,
       // ember-animated's continuity, in the terms motion-dom offers: it sums a
       // corrective curve onto the one it interrupted, which transfers velocity
       // implicitly; a spring takes a velocity outright, so the run that is
@@ -1426,11 +1472,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * participant standing in the same layout box it compiled in (a REFLOW
    * always replays — it is what a Move is FOR). Anything else takes the
    * full pipeline.
+   *
+   * A run that is nothing but ambient loops counts as in flight after its
+   * clock ends, for as long as the loops go round. A loop lends its run no
+   * length, so a loop-only run ends as soon as it starts, and without this
+   * every later app render would replace the run, cancelling each loop's
+   * animation for a new one. The layout check still applies to such a run.
+   * A loop on a layout property (width, height) changes the boxes
+   * `layoutOf` reads on every frame, so no pass matches the layout the run
+   * compiled in, and each one replaces the run, as it does a Move that
+   * animates size. A score with anything besides loops in it has a
+   * timeline to re-fire (§3.1), so once it ends, a pass takes the full
+   * pipeline.
    */
   private fastKeep(root: HTMLElement): boolean {
     if (
       !this.run ||
-      this.run.isDone() ||
+      (this.run.isDone() && !this.run.isLooping()) ||
       this.claimed.size ||
       this.arrived.size
     ) {

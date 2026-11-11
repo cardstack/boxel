@@ -263,7 +263,8 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
-  fetchRealmOwnerUsername,
+  fetchRealmOwnerUserId,
+  isRealmAdministrator,
   isSessionRevoked,
   isRealmArchived,
   baseRealm,
@@ -328,7 +329,10 @@ import type {
   ReadPlan,
   RunOperationOptions,
 } from './card-operations/dispatch.ts';
-import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   actingUserResolver,
@@ -378,6 +382,7 @@ import {
   type TargetRealm,
 } from './card-operations/explain.ts';
 import type { CallApiSender } from './card-operations/call-api.ts';
+import { withLocksAfterDrain } from './drain-before-locks.ts';
 import { requestDefinitionLookup } from './card-operations/request-definition-lookup.ts';
 import {
   assertTravelsInEnvelope,
@@ -559,6 +564,7 @@ import {
   getMatrixUsername,
   isMatrixUserId,
 } from './matrix-client.ts';
+import { isUserOfMatrixServer } from './matrix-server-name.ts';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
 import RealmPermissionChecker from './realm-permission-checker.ts';
@@ -1035,11 +1041,16 @@ export interface FileRef {
   // opened content. `lastModifiedMs` is the opened content's modification
   // time, at the same precision as the ref's own `lastModifiedMs`, so the two
   // can be compared to tell whether the ref's stat described these bytes.
-  openContent?: () => {
-    content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
-    size?: number;
-    lastModifiedMs?: number;
-  };
+  // Undefined when the open finds the file gone, which a stat on a network
+  // filesystem can miss: another host's delete is not visible to it until the
+  // file is opened.
+  openContent?: () =>
+    | {
+        content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
+        size?: number;
+        lastModifiedMs?: number;
+      }
+    | undefined;
 
   [key: symbol]: object;
 }
@@ -1713,6 +1724,11 @@ export const FILE_META_RESERVED_KEYS = new Set([
   'lastModified',
   'createdAt',
 ]);
+
+// What a request must hold to reach a route. `administer` is the realm's
+// administration: write through the caller's own permission row (see
+// `isRealmAdministrator`). No public row and no policy grant confers it.
+type RequiredPermission = 'read' | 'write' | 'administer';
 
 type CachedSourceFileEntry = {
   type: 'file';
@@ -2938,6 +2954,12 @@ export class Realm {
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
+  // The definition lookup an operation reads through: a cache miss renders at
+  // user priority, ahead of background re-index work, and a render that does
+  // not finish in time refuses with a retryable 503 rather than holding the
+  // request open. See `requestDefinitionLookup`. One instance for the realm's
+  // lifetime, since the gate and the named queries key maps on it.
+  #requestDefinitionLookup: ReturnType<typeof requestDefinitionLookup>;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #directoryViewRefresher = new DirectoryViewRefresher(
     async (directory) => {
@@ -3035,10 +3057,10 @@ export class Realm {
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
   #policyWriteAuditor: PolicyWriteAuditor | undefined;
-  // The requests the realm server handed to `handlePipeline`: runs it makes
+  // The requests the realm server handed to `handleAutomation`: runs it makes
   // on its own, never a request off the network, which is a new object every
   // time and so never in here.
-  #pipelineRequests = new WeakSet<Request>();
+  #automationRequests = new WeakSet<Request>();
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // The change journal every write appends to, and the reader the history
   // operations read from. Absent in a realm that records no history, such as
@@ -3377,6 +3399,9 @@ export class Realm {
 
     // Wrap to retain realm context for definition lookups
     this.#definitionLookup = definitionLookup.forRealm(this);
+    this.#requestDefinitionLookup = requestDefinitionLookup(
+      this.#definitionLookup,
+    );
 
     this.__fetchForTesting = _fetch;
 
@@ -5124,14 +5149,18 @@ export class Realm {
   // already held blocks on its own pinned pool connection. A batch does the
   // same thing one level up, holding the locks across every read it stages
   // from and the commit it hands them to.
+  //
+  // A writer that waits for in-flight indexing before it stages does that wait
+  // before taking the locks, not while holding them (see
+  // `#withFileWriteLocksAfterDrain`).
   async write(
     path: LocalPath,
     contents: string | Uint8Array,
     options?: WriteOptions,
   ): Promise<FileWriteResult> {
-    let results = await this.#dbAdapter.withFileWriteLocks(
-      this.url,
+    let results = await this.#withFileWriteLocksAfterDrain(
       [path],
+      () => options?.waitForIndex !== false,
       (releaseLocks) =>
         this._batchWriteUnlocked(new Map([[path, contents]]), {
           ...options,
@@ -5145,15 +5174,40 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this.#dbAdapter.withFileWriteLocks(
-      this.url,
+    return this.#withFileWriteLocksAfterDrain(
       [...files.keys()],
+      () => options?.waitForIndex !== false,
       (releaseLocks) =>
         this._batchWriteUnlocked(files, {
           ...options,
           onDurable: releaseLocks,
         }),
     );
+  }
+
+  // The file write locks, taken once the indexing the commit's gate would wait
+  // for has settled, when `drains` says the commit will wait for it. `screen`
+  // is `withLocksAfterDrain`'s: a refusal decided under the locks before
+  // anything waits. That gate
+  // runs inside the locks, so on its own it waits there, and a long pass
+  // then parks every other writer of these files behind this one for as long
+  // as it runs. Draining first leaves the gate nothing to wait for in
+  // the common case; see `withLocksAfterDrain` for the re-check that keeps it
+  // so.
+  #withFileWriteLocksAfterDrain<T>(
+    paths: LocalPath[],
+    drains: () => boolean,
+    fn: (releaseLocks: () => void) => Promise<T>,
+    screen?: () => Promise<T | undefined>,
+  ): Promise<T> {
+    return withLocksAfterDrain({
+      drain: () =>
+        drains() ? this.incrementalIndexingAffectingStaging() : undefined,
+      lock: (locked) =>
+        this.#dbAdapter.withFileWriteLocks(this.url, paths, locked),
+      run: fn,
+      screen,
+    });
   }
 
   private async _batchWriteUnlocked(
@@ -5593,14 +5647,26 @@ export class Realm {
     // write below resolves, so an instance-only fan-out — however many cards
     // it invalidates — is not waited for here. That is what keeps one card's
     // fan-out from gating every other card's write in the realm.
+    //
+    // A commit that only removes files writes no bytes to resolve against, so
+    // it skips the gate whatever the caller asked of its own indexing — the
+    // same rule the batch coordinator applies to a batch that stages nothing.
     let stageCursor = options?.stageCursor;
-    if (options?.waitForIndex !== false) {
+    if (
+      options?.waitForIndex !== false &&
+      (files.size > 0 || appends.size > 0)
+    ) {
       await this.incrementalIndexingAffectingStaging();
       // A batch coordinator drains before it stages, and this gate drains
       // again. Both wait on the same set of passes, so they are one stage
       // reached twice rather than two stages, and they accumulate together —
       // a write that queued behind indexing it did not ask for spent that
       // time here however many gates it passed through.
+      //
+      // This gate runs with the write's file locks held. The writers that
+      // reach it drain before taking them (`withLocksAfterDrain`), so what is
+      // left to wait for here is a pass that registered after their last
+      // re-check, not the bulk of a long pass.
       stageCursor?.mark('drain');
     }
     // Audited once the drain has settled what the realm resolves against and
@@ -6901,101 +6967,114 @@ export class Realm {
     // left out rather than refused: the precheck inside the lock is what
     // reports it, and locking nothing for a file this request cannot name
     // excludes nobody.
-    return await this.#dbAdapter.withFileWriteLocks(
-      this.url,
-      atomicWritePaths,
-      async () => {
-        let atomicCheckErrors =
-          await this.checkBeforeAtomicWrite(atomicOperations);
-        if (atomicCheckErrors.length > 0) {
+    //
+    // Everything that can refuse the request is decided off disk, under the
+    // locks, before anything waits: a request that will be refused is answered
+    // without waiting for indexing it would never have used. One that will
+    // write, and asked to wait for indexing, waits before it holds the locks
+    // rather than while it does (see `withLocksAfterDrain`), and is screened
+    // again on the turn that writes, since the files can change between turns.
+    let waitForIndex =
+      new URL(request.url).searchParams.get('waitForIndex') === 'true';
+    let operations = filterAtomicOperations(atomicOperations);
+    let files = new Map<LocalPath, string>();
+    let screen = async (): Promise<Response | undefined> => {
+      let atomicCheckErrors =
+        await this.checkBeforeAtomicWrite(atomicOperations);
+      if (atomicCheckErrors.length > 0) {
+        return createResponse({
+          body: JSON.stringify({ errors: atomicCheckErrors }),
+          init: {
+            status: this.lowestStatusCode(atomicCheckErrors),
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
+
+      files = new Map<LocalPath, string>();
+
+      for (let operation of operations) {
+        let resource = operation.data;
+        let href = operation.href;
+        let localPath = this.paths.local(
+          new URL(this.#resolveAtomicHref(href), this.paths.url),
+        );
+        let exists = await this.#adapter.exists(localPath);
+        if (operation.op === 'add' && exists) {
           return createResponse({
-            body: JSON.stringify({ errors: atomicCheckErrors }),
+            body: JSON.stringify({
+              errors: [
+                {
+                  title: 'Resource already exists',
+                  detail: `Resource ${href} already exists`,
+                  status: 409,
+                },
+              ],
+            }),
             init: {
-              status: this.lowestStatusCode(atomicCheckErrors),
+              status: 409,
               headers: { 'content-type': SupportedMimeType.JSONAPI },
             },
             requestContext,
           });
         }
-
-        let operations = filterAtomicOperations(atomicOperations);
-        let files = new Map<LocalPath, string>();
-        let writeResults: FileWriteResult[] = [];
-
-        for (let operation of operations) {
-          let resource = operation.data;
-          let href = operation.href;
-          let localPath = this.paths.local(
-            new URL(this.#resolveAtomicHref(href), this.paths.url),
-          );
-          let exists = await this.#adapter.exists(localPath);
-          if (operation.op === 'add' && exists) {
-            return createResponse({
-              body: JSON.stringify({
-                errors: [
-                  {
-                    title: 'Resource already exists',
-                    detail: `Resource ${href} already exists`,
-                    status: 409,
-                  },
-                ],
-              }),
-              init: {
-                status: 409,
-                headers: { 'content-type': SupportedMimeType.JSONAPI },
-              },
-              requestContext,
-            });
-          }
-          if (operation.op === 'update' && !exists) {
-            return createResponse({
-              body: JSON.stringify({
-                errors: [
-                  {
-                    title: 'Resource does not exist',
-                    detail: `Resource ${href} does not exist`,
-                    status: 404,
-                  },
-                ],
-              }),
-              init: {
-                status: 404,
-                headers: { 'content-type': SupportedMimeType.JSONAPI },
-              },
-              requestContext,
-            });
-          }
-          if (isModuleResource(resource)) {
-            let content = resource.attributes?.content ?? '';
-            this.assertWriteSize(content, 'file', localPath);
-            files.set(localPath, content);
-          } else if (isCardResource(resource)) {
-            let doc = {
-              data: resource,
-            };
-            let jsonString = JSON.stringify(doc, null, 2);
-            this.assertWriteSize(jsonString, 'card', localPath);
-            files.set(localPath, jsonString);
-          } else {
-            return createResponse({
-              body: JSON.stringify({
-                errors: [
-                  {
-                    status: 400,
-                    title: 'Invalid resource',
-                    detail: `Operation data is not a valid card resource or module resource`,
-                  },
-                ],
-              }),
-              init: {
-                status: 400,
-                headers: { 'content-type': SupportedMimeType.JSONAPI },
-              },
-              requestContext,
-            });
-          }
+        if (operation.op === 'update' && !exists) {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  title: 'Resource does not exist',
+                  detail: `Resource ${href} does not exist`,
+                  status: 404,
+                },
+              ],
+            }),
+            init: {
+              status: 404,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
         }
+        if (isModuleResource(resource)) {
+          let content = resource.attributes?.content ?? '';
+          this.assertWriteSize(content, 'file', localPath);
+          files.set(localPath, content);
+        } else if (isCardResource(resource)) {
+          let doc = {
+            data: resource,
+          };
+          let jsonString = JSON.stringify(doc, null, 2);
+          this.assertWriteSize(jsonString, 'card', localPath);
+          files.set(localPath, jsonString);
+        } else {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  status: 400,
+                  title: 'Invalid resource',
+                  detail: `Operation data is not a valid card resource or module resource`,
+                },
+              ],
+            }),
+            init: {
+              status: 400,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+      }
 
+      return undefined;
+    };
+    return await this.#withFileWriteLocksAfterDrain(
+      atomicWritePaths,
+      () => waitForIndex && files.size > 0,
+      async () => {
+        let writeResults: FileWriteResult[] = [];
         if (files.size > 0) {
           try {
             // /_atomic returns once writes are durable, not once they are
@@ -7012,8 +7091,6 @@ export class Realm {
             // currentWriteType === 'instance'` gate is always awaited,
             // so an instance's fileSerialization sees its module already
             // indexed.
-            let waitForIndex =
-              new URL(request.url).searchParams.get('waitForIndex') === 'true';
             writeResults = await this._batchWriteUnlocked(files, {
               clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
               serializeFile: true,
@@ -7086,6 +7163,7 @@ export class Realm {
           requestContext,
         });
       },
+      screen,
     );
   }
 
@@ -7427,8 +7505,8 @@ export class Realm {
                 ? { duringPrerender: true }
                 : {}),
               ...(definition.base === 'callApi' &&
-              this.#pipelineRequests.has(request)
-                ? { callApiMode: 'pipeline' as const }
+              this.#automationRequests.has(request)
+                ? { callApiMode: 'automation' as const }
                 : {}),
               ...(definition.base === 'callApi'
                 ? this.#callApiAnonymous(requestContext)
@@ -8448,7 +8526,8 @@ export class Realm {
             }
             let checker = new RealmPermissionChecker(
               await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
-              this.#matrixClient,
+              this.#dbAdapter,
+              this.#matrixClient.serverName,
             );
             return (await checker.can(user, 'write'))
               ? { user }
@@ -8594,7 +8673,11 @@ export class Realm {
       if (caller.actor === this.#matrixClientUserId) {
         return { read: true, write: true };
       }
-      let checker = new RealmPermissionChecker(permissions, this.#matrixClient);
+      let checker = new RealmPermissionChecker(
+        permissions,
+        this.#dbAdapter,
+        this.#matrixClient.serverName,
+      );
       may = (action) => checker.can(caller.actor, action);
     } else {
       may = async (action) => Boolean(permissions['*']?.includes(action));
@@ -8929,9 +9012,7 @@ export class Realm {
             writeSizeType(localPath, content),
             localPath,
           ),
-        drainIndexing: async () => {
-          await this.incrementalIndexingAffectingStaging();
-        },
+        drainIndexing: () => this.incrementalIndexingAffectingStaging(),
         isIgnored: (url) => this.isIgnored(url),
         // Narrowed to the two documents a program reads values from, each
         // handed over whole. An error row is reported as no row: it describes
@@ -9112,17 +9193,17 @@ export class Realm {
     return await this.internalHandle(request, false);
   };
 
-  // Handles a request a pipeline makes: an `_operations` batch the realm server
-  // runs on its own, carrying the session of the user it runs as (a
+  // Handles a request an automation makes: an `_operations` batch the realm
+  // server runs on its own, carrying the session of the user it runs as (a
   // schedule's payer, or whoever started the run). It is authorized as that
-  // user's request would be, and a `callApi` in it is a pipeline invocation,
-  // which a binding approved for pipelines only fills. Only code in this
-  // process can call this; nothing that arrives off the network is a pipeline
-  // invocation.
-  handlePipeline = async (
+  // user's request would be, and a `callApi` in it is an automation
+  // invocation, which a binding approved for automations only fills. Only
+  // code in this process can call this; nothing that arrives off the network
+  // is an automation invocation.
+  handleAutomation = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
-    this.#pipelineRequests.add(request);
+    this.#automationRequests.add(request);
     return await this.handle(request);
   };
 
@@ -9202,7 +9283,8 @@ export class Realm {
 
           let userPermissions = await new RealmPermissionChecker(
             permissions,
-            this.#matrixClient,
+            this.#dbAdapter,
+            this.#matrixClient.serverName,
           ).for(user);
           return this.#adapter.createJWT(
             {
@@ -9252,9 +9334,9 @@ export class Realm {
     }
 
     let localPath = this.paths.local(new URL(request.url));
-    let requiredPermission: RealmAction = 'read';
+    let requiredPermission: RequiredPermission = 'read';
     if (localPath === '_permissions') {
-      requiredPermission = 'realm-owner';
+      requiredPermission = 'administer';
     } else if (localPath === CAPABILITIES_PATH) {
       // A `POST` because it carries a body, and the body is a list of
       // questions. It writes nothing, so deriving its permission from the
@@ -9345,12 +9427,12 @@ export class Realm {
       // The terminal assertion: nothing reaches a handler with the ACL's
       // refusal on it unless its route consumes that outcome, so a route that
       // says nothing is refused exactly as the ACL would have refused it. A
-      // refusal of realm-owner authority is never consumed, whichever route
-      // the request lands on: owner authority is the ACL's alone to grant.
+      // refusal of administration is never consumed, whichever route the
+      // request lands on: administration is the ACL's alone to grant.
       if (requestContext.coarseAllowed === false) {
         if (
           !dispatch.consumesCoarseOutcome ||
-          requiredPermission === 'realm-owner' ||
+          requiredPermission === 'administer' ||
           !(await this.#admitsDespiteCoarseRefusal(
             request,
             requestContext,
@@ -9693,7 +9775,7 @@ export class Realm {
   async #recordCoarsePermission(
     request: Request,
     requestContext: RequestContext,
-    requiredPermission: 'read' | 'write' | 'realm-owner',
+    requiredPermission: RequiredPermission,
     dispatch: RequestDispatch,
   ): Promise<void> {
     try {
@@ -9852,7 +9934,7 @@ export class Realm {
   async #refusalUnderPolicy(
     request: Request,
     dispatch: RequestDispatch,
-    requiredPermission: RealmAction,
+    requiredPermission: RequiredPermission,
     requestContext: RequestContext,
   ): Promise<Response | undefined> {
     let refusal = requestContext.coarseRefusal;
@@ -9864,7 +9946,7 @@ export class Realm {
       dispatch.coarseReadOnly === true &&
       requiredPermission === 'read';
     if (
-      requiredPermission === 'realm-owner' ||
+      requiredPermission === 'administer' ||
       !(unauthenticated || unreadable) ||
       (await this.getRealmPolicy()) === undefined
     ) {
@@ -10310,6 +10392,7 @@ export class Realm {
             // than per request (see #fileFingerprint).
             etagBase: await this.#fileFingerprint(fileRef),
             createdAt: source.created,
+            notThere: declinedNotThere,
           },
         ),
       };
@@ -11227,7 +11310,8 @@ export class Realm {
     // through — a principal that can mint here must be able to serve here.
     let permissionChecker = new RealmPermissionChecker(
       requestContext.permissions,
-      this.#matrixClient,
+      this.#dbAdapter,
+      this.#matrixClient.serverName,
     );
     if (
       claims.user !== this.#matrixClientUserId &&
@@ -12162,6 +12246,9 @@ export class Realm {
         ? {
             openContent: () => {
               let opened = source.openBody!();
+              if (!opened) {
+                return undefined;
+              }
               return {
                 content: opened.body as FileRef['content'],
                 ...(opened.size != null ? { size: opened.size } : {}),
@@ -12203,6 +12290,11 @@ export class Realm {
       // an answer — so the key being there at all, rather than its value, is
       // what decides whether this looks the value up itself.
       createdAt?: number | null;
+      // The route's answer for a path with nothing to serve, for a route that
+      // builds one up front (see `#bytesNotThere`). Given when the file turns
+      // out to be gone once it is opened; a route without one gets a plain
+      // not-found.
+      notThere?: Response;
     },
   ): Promise<ResponseWithNodeStream> {
     servedAnonymous(requestContext);
@@ -12374,8 +12466,18 @@ export class Realm {
     // version of the file the stream does not read, and a declared length
     // larger than the body leaves the client waiting for bytes that never
     // arrive, one that is smaller cuts the body short.
-    let openedContent =
-      request.method === 'GET' ? ref.openContent?.() : undefined;
+    let opensContent = request.method === 'GET' && ref.openContent != null;
+    let openedContent = opensContent ? ref.openContent!() : undefined;
+    if (opensContent && !openedContent) {
+      // The file was deleted after the stat this ref was built from, so there
+      // is nothing to send. Answered here, before a body is committed to,
+      // rather than as a body stream that fails once the response is under
+      // way.
+      return (
+        options?.notThere ??
+        notFound(request, requestContext, `${ref.path} not found`)
+      );
+    }
     if (openedContent) {
       if (openedContent.size != null) {
         headers['content-length'] = String(openedContent.size);
@@ -12443,7 +12545,7 @@ export class Realm {
   private async checkPermission(
     request: Request,
     requestContext: RequestContext,
-    requiredPermission: 'read' | 'write' | 'realm-owner',
+    requiredPermission: RequiredPermission,
     {
       probe = false,
       answersWithoutCredentials = false,
@@ -12459,7 +12561,7 @@ export class Realm {
       }
     };
     if (
-      requiredPermission !== 'realm-owner' &&
+      requiredPermission !== 'administer' &&
       (answersWithoutCredentials ||
         (request.method === 'HEAD' && !probe) ||
         // If the realm is public readable or writable, do not require a JWT
@@ -12569,7 +12671,8 @@ export class Realm {
 
       let realmPermissionChecker = new RealmPermissionChecker(
         realmPermissions,
-        this.#matrixClient,
+        this.#dbAdapter,
+        this.#matrixClient.serverName,
       );
 
       let user = token.user;
@@ -12667,7 +12770,15 @@ export class Realm {
         );
       }
 
-      if (!(await realmPermissionChecker.can(user, requiredPermission))) {
+      if (
+        !(requiredPermission === 'administer'
+          ? isRealmAdministrator(
+              realmPermissions,
+              user,
+              this.#matrixClient.serverName,
+            )
+          : await realmPermissionChecker.can(user, requiredPermission))
+      ) {
         warnRefusal(
           `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), for user ${user} permissions insufficient. requires ${requiredPermission}, but user permissions: ${JSON.stringify(userPermissions.sort())}`,
         );
@@ -12832,10 +12943,14 @@ export class Realm {
         // as "send less" rather than as "the realm is broken, try again". So
         // the refusal is carried back across as the error this route has
         // always thrown, keeping the status the batch chose.
-        throw new CardError(err.error.detail ?? err.message, {
+        let cardError = new CardError(err.error.detail ?? err.message, {
           status: err.error.status,
           title: err.error.title,
         });
+        if (err.error.meta) {
+          cardError.meta = err.error.meta;
+        }
+        throw cardError;
       }
       throw err;
     }
@@ -13142,8 +13257,18 @@ export class Realm {
           // into a conditional one this answer's validator would fail.
           ...(unvalidatedRange ? { noStore: true as const } : {}),
           createdAt: source.created,
+          notThere,
         });
       } else {
+        // Opened before it is read, so a file the stat still lists but another
+        // host has deleted is answered as missing rather than as a read that
+        // fails. The read below consumes the content this opened.
+        if (served.openContent && !served.openContent()) {
+          return (
+            notThere ??
+            notFound(request, requestContext, `${localName} not found`)
+          );
+        }
         let cachedRef = await this.materializeFileRef(served);
         // Test-only gate: park here (bytes read, cache not yet written) so the
         // source-cache race test can fire invalidateCache before the set.
@@ -14413,7 +14538,8 @@ export class Realm {
             // below.
             reportStoredContent: true,
             // The same reading a create takes of a side-load claiming another
-            // realm: the edge is stored empty and the patch succeeds.
+            // realm: the patch succeeds, keeping a `linksTo` the card already
+            // stores there and storing the edge empty otherwise.
             foreignSideLoadLink: 'leave',
             timings,
             ...(precondition ? { precondition } : {}),
@@ -14983,6 +15109,7 @@ export class Realm {
         requestContext,
         message: detail,
         status,
+        ...(error.meta ? { meta: error.meta } : {}),
         ...identity,
       });
     }
@@ -17043,10 +17170,16 @@ export class Realm {
           if (!isOperationFailure(err)) {
             throw err;
           }
+          // A definition the policy names that is not indexed yet is told to
+          // this caller, who may not read the realm, without naming it.
+          let error =
+            err.error.code === 'target-not-indexed'
+              ? refusalForNonReader(err.error)
+              : err.error;
           return createResponse({
-            body: JSON.stringify(errorsDocument(err.error), null, 2),
+            body: JSON.stringify(errorsDocument(error), null, 2),
             init: {
-              status: err.error.status,
+              status: error.status,
               headers: { 'content-type': SupportedMimeType.CardJson },
             },
             requestContext,
@@ -18155,13 +18288,20 @@ export class Realm {
       new URL(this.url),
     );
     for (let [user, permissions] of Object.entries(patch)) {
+      // The realm owner is the user the realm is indexed as (ADR 006 §1.2),
+      // so their row keeps `read` and the owner flag. Their `write`, like
+      // anyone's, is the administrators' to change.
       if (currentPermissions[user]?.includes('realm-owner')) {
-        return badRequest({
-          message: `cannot modify permissions of the realm owner ${user}`,
-          requestContext,
-        });
-      }
-      if (permissions?.includes('realm-owner')) {
+        if (!permissions?.includes('read')) {
+          return badRequest({
+            message: `cannot remove read permission from the realm owner ${user}`,
+            requestContext,
+          });
+        }
+        if (!permissions.includes('realm-owner')) {
+          patch[user] = [...permissions, 'realm-owner'];
+        }
+      } else if (permissions?.includes('realm-owner')) {
         return badRequest({
           message: `cannot create new realm owner ${user}`,
           requestContext,
@@ -18173,6 +18313,27 @@ export class Realm {
           requestContext,
         });
       }
+    }
+
+    // Only an administrator can change permissions here, so a change that
+    // leaves the realm with none would leave no one able to change them back.
+    let administers = (permissions: RealmPermissions) =>
+      Object.keys(permissions).some((user) =>
+        isRealmAdministrator(permissions, user, this.#matrixClient.serverName),
+      );
+    let patched: RealmPermissions = { ...currentPermissions };
+    for (let [user, permissions] of Object.entries(patch)) {
+      if (permissions && permissions.length > 0) {
+        patched[user] = permissions;
+      } else {
+        delete patched[user];
+      }
+    }
+    if (administers(currentPermissions) && !administers(patched)) {
+      return badRequest({
+        message: `the realm must keep at least one administrator: a user whose own permissions include write`,
+        requestContext,
+      });
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
@@ -18499,13 +18660,24 @@ export class Realm {
   // card here does. `cardURL` is taken in this realm's own spelling of its
   // URL, which is the one the declaration is resolved against.
   async unshareableFormatsFor(cardURL: URL): Promise<PrerenderedHtmlFormat[]> {
-    let { unshareableFormats } = await readPlan(
-      this.operationCore,
-      cardURL,
-      undefined,
-      this.#readPlanByURL,
-    );
-    return unshareableFormats;
+    try {
+      let { unshareableFormats } = await readPlan(
+        this.operationCore,
+        cardURL,
+        undefined,
+        this.#readPlanByURL,
+      );
+      return unshareableFormats;
+    } catch (err: unknown) {
+      // A type whose definition is not indexed yet withholds every format, as
+      // a type that cannot be resolved does: nothing can say which of its
+      // formats it withholds, and the page is served without markup rather
+      // than refused.
+      if (isOperationFailure(err) && err.error.code === 'target-not-indexed') {
+        return [...PRERENDERED_HTML_FORMATS];
+      }
+      throw err;
+    }
   }
 
   // CS-10054: read host routing rules from the indexed RealmConfig card.
@@ -18709,8 +18881,9 @@ export class Realm {
     }
     let chain: string[];
     try {
-      chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-        .types;
+      chain = (
+        await this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef)
+      ).types;
     } catch {
       return [];
     }
@@ -18783,8 +18956,9 @@ export class Realm {
       let chain = chains.get(key);
       if (!chain) {
         try {
-          chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-            .types;
+          chain = (
+            await this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef)
+          ).types;
         } catch {
           chain = [];
         }
@@ -18874,7 +19048,7 @@ export class Realm {
           : undefined;
       },
       lookupDefinitionEntry: (codeRef) =>
-        this.#definitionLookup.lookupDefinitionEntry(codeRef),
+        this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef),
       toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
       isPolicyCard: (types) => this.#isPolicyCard(types),
       // The index and the definition cache record an adoption chain in this
@@ -18938,13 +19112,29 @@ export class Realm {
   // visited the file: it settles having visited nothing, and its cache waits
   // out the cooldown before asking again.
   async #revisitPolicyCard(file: string, realmURL: string): Promise<void> {
-    let realmUsername =
+    let ownerUserId =
       realmURL === this.url
-        ? await this.getRealmOwnerUsername()
-        : await fetchRealmOwnerUsername(this.#dbAdapter, realmURL);
-    if (!realmUsername) {
+        ? await this.getRealmOwnerUserId()
+        : await fetchRealmOwnerUserId(
+            this.#dbAdapter,
+            realmURL,
+            this.#matrixClient.serverName,
+          );
+    if (!ownerUserId) {
       throw new Error(`the realm ${realmURL} has no owner to index it as`);
     }
+    // An indexing job names the user it runs as by localpart, which the
+    // worker qualifies with its own server name. For an owner on another
+    // homeserver that would name a different account, so the visit is
+    // refused.
+    if (!isUserOfMatrixServer(ownerUserId, this.#matrixClient.serverName)) {
+      throw new Error(
+        `the realm ${realmURL} is owned by ${ownerUserId}, on another homeserver, which an indexing job cannot run as`,
+      );
+    }
+    // The owner is on the worker's server, so the worker qualifies this
+    // localpart back to the owner's id.
+    let realmUsername = getMatrixUsername(ownerUserId);
     let args: IncrementalArgs = {
       realmURL,
       realmUsername,
@@ -19536,7 +19726,7 @@ export class Realm {
   // the same single fetch rather than calling this helper plus a
   // second fetch.
   private async createRequestContext(
-    requiredPermission: RealmAction,
+    requiredPermission: RequiredPermission,
     // Whether this request will go on to ask the ACL about a permission other
     // than the one it is judged by. The world-readable shortcut below answers a
     // read from `*` alone and leaves the realm's own map out, which is

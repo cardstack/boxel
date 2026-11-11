@@ -97,7 +97,9 @@ function stub(opts: StubOptions = {}): {
       return undefined;
     },
     assertWriteSize() {},
-    async drainIndexing() {},
+    drainIndexing() {
+      return undefined;
+    },
     async isIgnored() {
       return false;
     },

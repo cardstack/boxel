@@ -72,6 +72,29 @@ export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
 export WORKER_HIGH_PRIORITY_COUNT="${WORKER_HIGH_PRIORITY_COUNT:-0}"
 export WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-1}"
 
+# Prices for local stacks (ADR 029). Deployed tasks get theirs from their own
+# environment and never source this file. The rates are list prices for x86
+# compute, network, file storage and database storage. The task shapes
+# describe the local processes, so a tab's and a worker's share follow the
+# scaling above: a local stack can run several prerender servers, so its tabs
+# are the server count times the pool's ceiling. Every value can be
+# overridden, for example to try a bad value against the startup check.
+export PRICING_PRERENDER_USD_PER_VCPU_HOUR="${PRICING_PRERENDER_USD_PER_VCPU_HOUR:-0.04048}"
+export PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR="${PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR:-0.004445}"
+export PRICING_PRERENDER_TASK_VCPUS="${PRICING_PRERENDER_TASK_VCPUS:-4}"
+export PRICING_PRERENDER_TASK_MEMORY_GB="${PRICING_PRERENDER_TASK_MEMORY_GB:-16}"
+export PRICING_PRERENDER_TASK_TABS="${PRICING_PRERENDER_TASK_TABS:-$((PRERENDER_COUNT * PRERENDER_PAGE_POOL_MAX))}"
+export PRICING_WORKER_USD_PER_VCPU_HOUR="${PRICING_WORKER_USD_PER_VCPU_HOUR:-0.04048}"
+export PRICING_WORKER_USD_PER_MEMORY_GB_HOUR="${PRICING_WORKER_USD_PER_MEMORY_GB_HOUR:-0.004445}"
+export PRICING_WORKER_TASK_VCPUS="${PRICING_WORKER_TASK_VCPUS:-2}"
+export PRICING_WORKER_TASK_MEMORY_GB="${PRICING_WORKER_TASK_MEMORY_GB:-4}"
+export PRICING_WORKER_TASK_PROCESSES="${PRICING_WORKER_TASK_PROCESSES:-$((WORKER_HIGH_PRIORITY_COUNT + WORKER_ALL_PRIORITY_COUNT))}"
+export PRICING_USD_PER_DOWNLOADED_GB="${PRICING_USD_PER_DOWNLOADED_GB:-0.045}"
+export PRICING_USD_PER_FILE_STORAGE_GB_MONTH="${PRICING_USD_PER_FILE_STORAGE_GB_MONTH:-0.30}"
+export PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH="${PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH:-0.115}"
+export PRICING_MARGIN="${PRICING_MARGIN:-1.5}"
+export PRICING_MINIMUM_BALANCE_FLOOR_CREDITS="${PRICING_MINIMUM_BALANCE_FLOOR_CREDITS:-1000}"
+
 # Echo the first installed system Chrome/Chromium, or nothing. Lets tooling
 # reuse an already-present browser instead of downloading its own. Explicit
 # checks (not a for-loop) so the macOS path's embedded space doesn't get
@@ -258,14 +281,15 @@ else
     # `NODE_EXTRA_CA_CERTS` is tested first, and deliberately. It accepts a
     # single PEM path rather than a list, so a value the developer set already
     # is one to leave alone — they have mkcert's CA in it or know what they are
-    # doing. Testing that before running mkcert, rather than after, is what
-    # keeps the common case free: `mkcert -CAROOT` is a subprocess, and this
-    # file is re-sourced on every shell prompt, because mise reads the
-    # environment back through it and `.mise.toml` pre-exports it. A fork per
-    # prompt per shell is enough to exhaust the process table on a machine with
-    # many worktrees open. _boxel_mkcert_caroot, above, is what keeps the one
-    # lookup that does happen from looping back through this file via a mise
-    # shim.
+    # doing. Testing that before running mkcert, rather than after, keeps the
+    # common case from running mkcert at all. This file is re-sourced on every
+    # shell prompt, because mise reads the environment back through it and
+    # `.mise.toml` pre-exports it, and mkcert is a costly call from here: when
+    # it is a mise shim, it starts a whole mise process, which sources this
+    # file again. _boxel_mkcert_caroot, above, cuts that chain at its second
+    # level, so the one lookup that does happen cannot loop back through this
+    # file. The other short-lived commands this file runs exit at once and do
+    # not accumulate.
     if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
       _BOXEL_MKCERT_CAROOT="$(_boxel_mkcert_caroot)"
       if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
@@ -355,9 +379,10 @@ fi
 # realm-server's startup `getIndexHTML()` smoke-test fetch fails with
 # `TypeError: fetch failed` and `process.exit(-2)` — the visible
 # symptom is realm-server crash-looping and every public URL 502-ing.
-# Tested before the subprocess, for the reason given at the other call site
+# Tested before mkcert runs, for the reasons given at the other call site
 # above: a developer's own value is left alone, and this file is re-sourced per
-# prompt, so a fork here is a fork per prompt per shell.
+# prompt, so an unguarded mkcert, which through a mise shim is a whole mise
+# process, would run on every prompt in every shell.
 if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
   _BOXEL_MKCERT_CAROOT="$(_boxel_mkcert_caroot)"
   if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then

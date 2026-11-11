@@ -23,6 +23,7 @@ import {
   not,
   type NormalizePhoneFormatResult,
 } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import { fieldSerializer, PhoneSerializer } from '@cardstack/runtime-common';
 import { markdownLink } from './markdown-helpers';
 
@@ -62,6 +63,7 @@ class Edit extends Component<typeof PhoneNumberField> {
       @value={{@model}}
       @onChange={{this.handleChange}}
       @disabled={{not @canEdit}}
+      {{ignoredByPasswordManagers}}
     />
   </template>
 

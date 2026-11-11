@@ -7,10 +7,10 @@ import type { Cue } from './types.ts';
  * it translates by `initial − final` and lets the size run alongside. That
  * holds only while the element's layout position does not depend on the
  * sizes in flight. It does wherever layout places a box by its size: a
- * card centred by its parent (`justify-content: center`, auto margins), a
+ * card centered by its parent (`justify-content: center`, auto margins), a
  * box aligned to the right, a sibling pushed along by a box growing before
  * it. Mid-flight the size is not the final one, so layout puts the box
- * somewhere else, and the translate is added on top: a centred card that
+ * somewhere else, and the translate is added on top: a centered card that
  * narrows starts out by half the change. A replacement pass then takes the
  * painted box as its start and adds the same error again, so a run
  * re-passed every frame drives the card off the screen.
@@ -19,7 +19,7 @@ import type { Cue } from './types.ts';
  * START of the flight: every size the moves animate stands at its first
  * value, the boxes are read, and every move's start translate is corrected
  * by the difference from its final box. Layout is affine in the sizes for
- * the usual cases (left, centred, right, flowed after), and every value of
+ * the usual cases (left, centered, right, flowed after), and every value of
  * the moves runs on the same progress, so the correction holds for the
  * whole flight, not just its first frame.
  *

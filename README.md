@@ -57,7 +57,7 @@ The **Cardstack Catalog** (served from [cardstack/boxel-catalog](https://github.
 | --------------------- | --------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **Cardstack Catalog** | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/catalog/` | Official catalog. New listings and community submissions land here via `pr-listing-create` PRs to `cardstack/boxel-catalog`. |
 
-The catalog appears in the workspace chooser by default; setting `SKIP_CATALOG=true` skips its setup and startup.
+The catalog appears on the dashboard by default; setting `SKIP_CATALOG=true` skips its setup and startup.
 
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
@@ -155,7 +155,7 @@ In order to run the realm server hosted app:
 1. `mise run services:host-build` to re-build the host app (this step can be omitted if you do not want host app re-builds)
 2. `mise run dev` to serve the base and experiments realms
 
-The recommended way to view a realm's app is the host vite dev server at `https://localhost:4200` — open it and navigate via the workspace chooser. Both the host (vite) on `:4200` and the realm-server on `:4201` terminate HTTPS+HTTP/2 using the same mkcert leaf (see "Local HTTPS dev access" below for the one-time cert setup), so the in-browser host's realm fetches multiplex per Chrome's HTTP/2 connection rules without any mixed-content concerns. Visiting `https://localhost:4201/<realm>` directly also works.
+The recommended way to view a realm's app is the host vite dev server at `https://localhost:4200` — open it and navigate from the dashboard. Both the host (vite) on `:4200` and the realm-server on `:4201` terminate HTTPS+HTTP/2 using the same mkcert leaf (see "Local HTTPS dev access" below for the one-time cert setup), so the in-browser host's realm fetches multiplex per Chrome's HTTP/2 connection rules without any mixed-content concerns. Visiting `https://localhost:4201/<realm>` directly also works.
 
 Live reloads are not available in this mode, however, if you use start the server with the environment variable `DISABLE_MODULE_CACHING=true` you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 

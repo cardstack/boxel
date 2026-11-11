@@ -51,10 +51,22 @@ const REQUEST_MEMBERS = [
   'json',
   'graphql',
   'perInstance',
+  'keyKind',
 ] as const;
 
 function isUnknown(value: unknown): boolean {
   return value === UNKNOWN;
+}
+
+// A `keyKind` given by slot name holds kinds that are its own members, so a
+// kind source can't settle, such as an imported constant, leaves the whole of
+// it unsettled.
+function keyKindHasUnknown(keyKind: unknown): boolean {
+  return (
+    Boolean(keyKind) &&
+    typeof keyKind === 'object' &&
+    Object.values(keyKind as object).some(isUnknown)
+  );
 }
 
 function keyOf(property: Node): string | undefined {
@@ -275,7 +287,8 @@ function makeRule(check: Check): Rule.RuleModule {
 
           if (
             typeof declaration.url !== 'string' ||
-            REQUEST_MEMBERS.some((member) => isUnknown(declaration[member]))
+            REQUEST_MEMBERS.some((member) => isUnknown(declaration[member])) ||
+            keyKindHasUnknown(declaration.keyKind)
           ) {
             return;
           }

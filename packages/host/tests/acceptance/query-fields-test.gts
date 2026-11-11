@@ -48,6 +48,17 @@ const QUERY_CARD_NESTED_URL = `${testRealmURL}query-card-nested`;
 const QUERY_CARD_MISSING_URL = `${testRealmURL}query-card-missing`;
 const TYPE_FILTER_CARD_URL = `${testRealmURL}type-filter-card`;
 
+// A card's menu looks up its workspace's pins with a search for the realm's
+// index card. These tests count the searches query fields make, so that one
+// is left out.
+async function isQueryFieldSearch(request: Request): Promise<boolean> {
+  if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
+    return false;
+  }
+  let query = await request.clone().json();
+  return query.filter?.['item.on']?.name !== 'Workspace';
+}
+
 module(
   'Acceptance | Query Fields | host respects server-populated results',
   function (hooks) {
@@ -207,8 +218,7 @@ module(
 
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -279,8 +289,7 @@ module(
       let network = getService('network') as NetworkService;
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -329,8 +338,7 @@ module(
       let network = getService('network') as NetworkService;
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -406,8 +414,7 @@ module(
       let network = getService('network') as NetworkService;
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -450,8 +457,7 @@ module(
       let network = getService('network') as NetworkService;
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -467,6 +473,9 @@ module(
         await visitOperatorMode({
           stacks: [[{ id: QUERY_CARD_2_URL, format: 'isolated' }]],
         });
+        await settled();
+        // interact mode keeps the cards in Recents loaded for its New menu
+        getService('recent-cards-service').remove(QUERY_CARD_URL);
         await settled();
 
         let store = getService('store') as StoreService;
@@ -635,10 +644,8 @@ module(
       let modifiedBody = JSON.stringify(cardJson);
 
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-
         // Track client-side search requests
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
 
@@ -726,9 +733,7 @@ module(
       let modifiedBody = JSON.stringify(cardJson);
 
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
 
@@ -783,8 +788,7 @@ module(
       let network = getService('network') as NetworkService;
       let interceptedSearchRequests: string[] = [];
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
         return null;
@@ -860,9 +864,7 @@ module(
       let modifiedBody = JSON.stringify(cardJson);
 
       let handler = async (request: Request) => {
-        let url = new URL(request.url);
-
-        if (url.pathname.endsWith('/_federated-search')) {
+        if (await isQueryFieldSearch(request)) {
           interceptedSearchRequests.push(request.url);
         }
 

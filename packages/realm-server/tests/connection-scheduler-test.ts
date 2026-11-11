@@ -6,6 +6,7 @@ import {
   currentConnectionTenant,
   markConnectionHeld,
   isSharedWork,
+  waitingOnLock,
   withConnectionOrdering,
   withConnectionTenant,
   withSharedWork,
@@ -70,6 +71,29 @@ async function drain(
   for (let acquisition of queued) {
     (await acquisition)();
   }
+}
+
+// Hold a connection across `fn` the way `PgAdapter.withConnection` does: a
+// holding acquisition, with the work inside marked as nested in it.
+async function hold<T>(
+  scheduler: ConnectionScheduler,
+  fn: () => Promise<T>,
+): Promise<T> {
+  let holding = markConnectionHeld();
+  let release = await scheduler.acquire({ hold: holding });
+  try {
+    return await holding.run(fn);
+  } finally {
+    holding.end();
+    release();
+  }
+}
+
+// One statement through the pool: a plain acquisition, given back at once.
+async function statement(scheduler: ConnectionScheduler): Promise<void> {
+  let release = await scheduler.acquire();
+  await wait(1);
+  release();
 }
 
 module(basename(import.meta.filename), function () {
@@ -740,149 +764,6 @@ module(basename(import.meta.filename), function () {
     scheduler.dispose();
   });
 
-  // The pool hang: a burst of cold definition lookups, each winning its own
-  // coalesce lock in a transaction on a pinned connection and then reading
-  // the cache through the adapter, filled the pool with holders that each
-  // waited on a nested checkout no one could grant. Nested priority only
-  // reorders a connection that frees, and none did.
-  test('holders that fill the pool and each need one more connection all finish', async function (assert) {
-    let scheduler = new ConnectionScheduler({ limit: 8, tenantShare: 4 });
-    let holderGranted = 0;
-    let holders = Array.from({ length: 8 }, async () => {
-      let release = await scheduler.acquire({ holding: true });
-      holderGranted++;
-      let holding = markConnectionHeld();
-      try {
-        // Every holder that was let in is holding before any asks for more.
-        await wait(10);
-        await holding.run(async () => {
-          let nested = await scheduler.acquire();
-          nested();
-        });
-      } finally {
-        holding.end();
-        release();
-      }
-    });
-    await wait(5);
-    assert.strictEqual(
-      holderGranted,
-      6,
-      'holders stop at the holder limit, leaving a reserve',
-    );
-    let finished = await settledWithin(Promise.all(holders), 500);
-    assert.true(finished.settled, 'every holder got its nested connection');
-    assert.strictEqual(scheduler.inUse, 0);
-    assert.strictEqual(scheduler.holders, 0);
-    scheduler.dispose();
-  });
-
-  test('a plain checkout is not queued behind a holder waiting at the holder limit', async function (assert) {
-    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 4 });
-    assert.strictEqual(scheduler.holderLimit, 3);
-    let held = await Promise.all(
-      Array.from({ length: 3 }, () => scheduler.acquire({ holding: true })),
-    );
-    let waitingHolder = scheduler.acquire({ holding: true });
-    assert.false(
-      (await settledWithin(waitingHolder, 20)).settled,
-      'a fourth holder waits with a connection still free',
-    );
-    let plain = await settledWithin(scheduler.acquire(), 20);
-    assert.true(plain.settled, 'a plain checkout takes the free connection');
-    (plain as { value: () => void }).value();
-    assert.false(
-      (await settledWithin(waitingHolder, 20)).settled,
-      'a connection freed by plain work does not lift the holder limit',
-    );
-    held.pop()!();
-    assert.true(
-      (await settledWithin(waitingHolder, 20)).settled,
-      'a holder that ends lets the next holder in',
-    );
-    await drain(held, [waitingHolder]);
-    assert.strictEqual(scheduler.inUse, 0);
-    scheduler.dispose();
-  });
-
-  test('plain work queued behind a waiting holder of its own tenant is not stuck there', async function (assert) {
-    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 4 });
-    let a = openScope(REALM_A);
-    let holders = await a.run(() =>
-      Promise.all(
-        Array.from({ length: 3 }, () => scheduler.acquire({ holding: true })),
-      ),
-    );
-    let plain = await a.run(() => scheduler.acquire());
-    assert.strictEqual(scheduler.inUse, 4, 'the pool is full');
-    // Queued in this order in the tenant's one queue.
-    let holderA = a.run(() => scheduler.acquire({ holding: true }));
-    let plainA = a.run(() => scheduler.acquire());
-
-    plain();
-    assert.true(
-      (await settledWithin(plainA, 20)).settled,
-      'the freed connection goes past the holder at the limit to the plain checkout',
-    );
-    assert.false(
-      (await settledWithin(holderA, 20)).settled,
-      'the holder keeps waiting for a holder to end',
-    );
-    (await plainA)();
-    holders.pop()!();
-    assert.true(
-      (await settledWithin(holderA, 20)).settled,
-      'and is let in when one does',
-    );
-    await drain(holders, [holderA]);
-    a.close();
-    await a.closed;
-    assert.strictEqual(scheduler.inUse, 0);
-    scheduler.dispose();
-  });
-
-  test('a holder nested in a hold is not held to the holder limit', async function (assert) {
-    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 4 });
-    let held = await Promise.all(
-      Array.from({ length: 3 }, () => scheduler.acquire({ holding: true })),
-    );
-    let holding = markConnectionHeld();
-    let nestedHolder = await settledWithin(
-      holding.run(() => scheduler.acquire({ holding: true })),
-      20,
-    );
-    assert.true(
-      nestedHolder.settled,
-      'a transaction opened inside a lock section takes the reserve',
-    );
-    holding.end();
-    (nestedHolder as { value: () => void }).value();
-    await drain(held, []);
-    assert.strictEqual(scheduler.inUse, 0);
-    scheduler.dispose();
-  });
-
-  test('the holder limit leaves a quarter of the pool, at least one connection, and at least one holder', function (assert) {
-    for (let [limit, holderLimit] of [
-      [1, 1],
-      [2, 1],
-      [4, 3],
-      [8, 6],
-      [40, 30],
-    ]) {
-      let scheduler = new ConnectionScheduler({ limit, tenantShare: 4 });
-      assert.strictEqual(scheduler.holderLimit, holderLimit, `limit ${limit}`);
-      scheduler.dispose();
-    }
-    let scheduler = new ConnectionScheduler({
-      limit: 8,
-      tenantShare: 4,
-      holderReserve: 0,
-    });
-    assert.strictEqual(scheduler.holderLimit, 8, 'a reserve can be turned off');
-    scheduler.dispose();
-  });
-
   test('counts that are not positive integers are clamped', function (assert) {
     for (let bad of [0, -3, NaN, Infinity]) {
       let scheduler = new ConnectionScheduler({ limit: bad, tenantShare: bad });
@@ -893,6 +774,381 @@ module(basename(import.meta.filename), function () {
     let scheduler = new ConnectionScheduler({ limit: 2.7, tenantShare: 1.2 });
     assert.strictEqual(scheduler.limit, 2);
     assert.strictEqual(scheduler.tenantShare, 1);
+    scheduler.dispose();
+  });
+  test('holds that fill the pool and each need one more connection all finish', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 8, tenantShare: 4 });
+    let peak = 0;
+    let holds = Array.from({ length: 8 }, () =>
+      hold(scheduler, async () => {
+        await wait(10); // every hold is out before any asks for more
+        peak = Math.max(peak, scheduler.holds);
+        await statement(scheduler);
+      }),
+    );
+    let finished = await settledWithin(Promise.all(holds), 1000);
+    assert.true(finished.settled, 'every hold got its nested connection');
+    assert.strictEqual(peak, 8, 'the holds filled the pool between them');
+    assert.strictEqual(scheduler.inUse, 0, 'every connection came back');
+    assert.strictEqual(scheduler.holds, 0);
+    scheduler.dispose();
+  });
+
+  test('holds nested inside holds that fill the pool all finish', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 4 });
+    let holds = Array.from({ length: 4 }, () =>
+      hold(scheduler, async () => {
+        await wait(10);
+        await hold(scheduler, async () => {
+          await statement(scheduler);
+          await statement(scheduler);
+        });
+        await statement(scheduler);
+      }),
+    );
+    let finished = await settledWithin(Promise.all(holds), 1000);
+    assert.true(finished.settled, 'every chain of holds finished');
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('a request arriving while the pool is stuck on holds is answered once they finish, and never takes the overflow', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
+    let resume!: () => void;
+    let gate = new Promise<void>((resolve) => (resume = resolve));
+    let overflowSeen: number[] = [];
+    let holds = Array.from({ length: 2 }, () =>
+      hold(scheduler, async () => {
+        await gate;
+        let release = await scheduler.acquire();
+        overflowSeen.push(scheduler.inUse);
+        await wait(5);
+        release();
+      }),
+    );
+    await wait(5);
+    assert.strictEqual(scheduler.holds, 2, 'both holds have the pool');
+    let request = scheduler.acquire();
+    assert.false(
+      (await settledWithin(request, 20)).settled,
+      'a plain request waits while the pool is full',
+    );
+    resume();
+    let finished = await settledWithin(Promise.all(holds), 1000);
+    assert.true(finished.settled, 'the holds finished');
+    assert.deepEqual(
+      overflowSeen,
+      [3, 2],
+      'the first nested statement went one past the limit once both holds were waiting; the second waited for a connection a finished hold gave back',
+    );
+    let answered = await settledWithin(request, 50);
+    assert.true(answered.settled, 'the waiting request is answered');
+    (answered as { value: () => void }).value();
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('nested work waits within the limit while a plain connection is out', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
+    let plain = await scheduler.acquire();
+    let nestedGranted = false;
+    let holding = hold(scheduler, async () => {
+      let release = await scheduler.acquire();
+      nestedGranted = true;
+      assert.strictEqual(
+        scheduler.inUse,
+        2,
+        'the nested statement took the connection the plain one gave back',
+      );
+      release();
+    });
+    await wait(20);
+    assert.false(
+      nestedGranted,
+      'with a plain connection out the pool is not stuck, so nothing goes past the limit',
+    );
+    plain();
+    assert.true(
+      (await settledWithin(holding, 100)).settled,
+      'the hold finished once the plain connection came back',
+    );
+    scheduler.dispose();
+  });
+
+  test('nested holds run side by side inside one hold are served one after another', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
+    let peak = 0;
+    let observe = async () => {
+      peak = Math.max(peak, scheduler.inUse);
+      await statement(scheduler);
+    };
+    let fanning = hold(scheduler, async () => {
+      await wait(10);
+      await Promise.all([hold(scheduler, observe), hold(scheduler, observe)]);
+    });
+    let other = hold(scheduler, async () => {
+      await wait(10);
+      await observe();
+    });
+    let finished = await settledWithin(Promise.all([fanning, other]), 1000);
+    assert.true(finished.settled, 'every hold finished');
+    assert.true(peak <= 3, `never more than one hold past the limit (${peak})`);
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('a hold fanning out more nested holds than the overflow allows still finishes', async function (assert) {
+    let scheduler = new ConnectionScheduler({
+      limit: 4,
+      tenantShare: 4,
+      overflow: 2,
+    });
+    let holds = Array.from({ length: 4 }, (_, i) =>
+      hold(scheduler, async () => {
+        await wait(10);
+        if (i === 0) {
+          await Promise.all(
+            Array.from({ length: 8 }, () =>
+              hold(scheduler, () => statement(scheduler)),
+            ),
+          );
+        } else {
+          await statement(scheduler);
+        }
+      }),
+    );
+    let finished = await settledWithin(Promise.all(holds), 1000);
+    assert.true(finished.settled, 'every hold finished');
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('a busy hold keeps the pool from counting as wedged', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
+    let finishBusy!: () => void;
+    let busyWork = new Promise<void>((resolve) => (finishBusy = resolve));
+    let busy = hold(scheduler, () => busyWork);
+    let granted = false;
+    let waiting = hold(scheduler, async () => {
+      await wait(5);
+      let release = await scheduler.acquire();
+      granted = true;
+      assert.strictEqual(
+        scheduler.inUse,
+        2,
+        'the statement took the connection the busy hold gave back',
+      );
+      release();
+    });
+    await wait(30);
+    assert.false(
+      granted,
+      'a hold that is not waiting on anything here will give its connection back, so nothing goes past the limit',
+    );
+    finishBusy();
+    let finished = await settledWithin(Promise.all([busy, waiting]), 100);
+    assert.true(finished.settled, 'both holds finished');
+    scheduler.dispose();
+  });
+
+  test('holds waiting on a lock a blocked hold owns count as blocked, so the owner finishes', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 4 });
+    let unlock!: () => void;
+    let lock = new Promise<void>((resolve) => (unlock = resolve));
+    let peak = 0;
+    // The owner takes the lock, then needs one more connection before it can
+    // release it, the way a lifecycle call reads through the adapter.
+    let owner = hold(scheduler, async () => {
+      await wait(10); // every hold is out before the owner asks for more
+      peak = Math.max(peak, scheduler.inUse);
+      await statement(scheduler);
+      unlock();
+    });
+    let waiters = Array.from({ length: 3 }, () =>
+      hold(scheduler, async () => {
+        await waitingOnLock(() => lock);
+        await statement(scheduler);
+      }),
+    );
+    let finished = await settledWithin(Promise.all([owner, ...waiters]), 1000);
+    assert.true(
+      finished.settled,
+      'the owner got its connection, and so did every waiter after it',
+    );
+    assert.strictEqual(
+      peak,
+      4,
+      'the owner and the lock waiters filled the pool',
+    );
+    assert.strictEqual(scheduler.inUse, 0, 'every connection came back');
+    assert.strictEqual(scheduler.holds, 0);
+    scheduler.dispose();
+  });
+
+  test('a lock waiter does not count as blocked once its wait is over', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
+    let unlock!: () => void;
+    let lock = new Promise<void>((resolve) => (unlock = resolve));
+    let finishWork!: () => void;
+    let work = new Promise<void>((resolve) => (finishWork = resolve));
+    // Waits on the lock, then works without asking for anything here.
+    let waiter = hold(scheduler, async () => {
+      await waitingOnLock(() => lock);
+      await work;
+    });
+    let granted = false;
+    let asking = hold(scheduler, async () => {
+      await wait(5);
+      let release = await scheduler.acquire();
+      granted = true;
+      release();
+    });
+    await wait(20);
+    assert.true(
+      granted,
+      'while the other hold waited on the lock, the pool was wedged',
+    );
+    unlock();
+    await wait(5);
+    let second = hold(scheduler, async () => {
+      await statement(scheduler);
+    });
+    let asked = hold(scheduler, async () => undefined);
+    assert.false(
+      (await settledWithin(Promise.all([second, asked]), 30)).settled,
+      'with the lock taken, the waiter is working and nothing goes past the limit',
+    );
+    finishWork();
+    let finished = await settledWithin(
+      Promise.all([waiter, asking, second, asked]),
+      100,
+    );
+    assert.true(finished.settled, 'everything finished once the work did');
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('a lock waiter beside a busy hold does not make the pool wedged', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 3, tenantShare: 3 });
+    let finishBusy!: () => void;
+    let busyWork = new Promise<void>((resolve) => (finishBusy = resolve));
+    let unlock!: () => void;
+    let lock = new Promise<void>((resolve) => (unlock = resolve));
+    let busy = hold(scheduler, () => busyWork);
+    let lockWaiter = hold(scheduler, () => waitingOnLock(() => lock));
+    let granted = false;
+    let asking = hold(scheduler, async () => {
+      await wait(5);
+      let release = await scheduler.acquire();
+      granted = true;
+      release();
+    });
+    await wait(30);
+    assert.false(
+      granted,
+      'the busy hold will give its connection back, so nothing goes past the limit',
+    );
+    assert.strictEqual(scheduler.inUse, 3);
+    finishBusy();
+    unlock();
+    let finished = await settledWithin(
+      Promise.all([busy, lockWaiter, asking]),
+      100,
+    );
+    assert.true(finished.settled, 'every hold finished');
+    assert.true(granted);
+    scheduler.dispose();
+  });
+
+  test('waiting on a lock outside any hold just runs', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 1, tenantShare: 1 });
+    assert.strictEqual(await waitingOnLock(async () => 7), 7);
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('overflow stops at the ceiling', async function (assert) {
+    let scheduler = new ConnectionScheduler({
+      limit: 2,
+      tenantShare: 2,
+      overflow: 1,
+    });
+    assert.strictEqual(scheduler.ceiling, 3);
+    let outer = markConnectionHeld();
+    let releaseOuter = await scheduler.acquire({ hold: outer });
+    let other = markConnectionHeld();
+    let releaseOther = await scheduler.acquire({ hold: other });
+    // The outer hold opens a nested hold; the other hold asks for a statement.
+    let inner = await outer.run(async () => markConnectionHeld());
+    let innerGranted = outer.run(() => scheduler.acquire({ hold: inner }));
+    let otherStatement = other.run(() => scheduler.acquire());
+    let releaseInner = await settledWithin(innerGranted, 20);
+    assert.true(
+      releaseInner.settled,
+      'with both holds waiting, the nested hold goes past the limit',
+    );
+    // The nested hold now needs a statement of its own.
+    let innerStatement = inner.run(() => scheduler.acquire());
+    assert.false(
+      (await settledWithin(innerStatement, 20)).settled,
+      'the pool is at its ceiling, so the nested hold’s statement waits',
+    );
+    assert.strictEqual(scheduler.inUse, 3, 'never past the ceiling');
+
+    releaseOther();
+    let granted = await settledWithin(innerStatement, 20);
+    assert.true(
+      granted.settled,
+      'a connection given back goes to the most deeply nested waiter',
+    );
+    (granted as { value: () => void }).value();
+    (releaseInner as { value: () => void }).value();
+    inner.end();
+    releaseOuter();
+    outer.end();
+    other.end();
+    (await otherStatement)();
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('with overflow off, holds that fill the pool and each need one more connection wait', async function (assert) {
+    let scheduler = new ConnectionScheduler({
+      limit: 2,
+      tenantShare: 2,
+      overflow: 0,
+    });
+    let resume!: () => void;
+    let gate = new Promise<void>((resolve) => (resume = resolve));
+    let holds = Array.from({ length: 2 }, () =>
+      hold(scheduler, async () => {
+        await gate;
+        await statement(scheduler);
+      }),
+    );
+    await wait(5);
+    resume();
+    assert.false(
+      (await settledWithin(Promise.all(holds), 50)).settled,
+      'nothing goes past the limit',
+    );
+    assert.strictEqual(scheduler.inUse, 2);
+    scheduler.dispose();
+  });
+
+  test('overflow defaults to a quarter of the limit, and at least four', function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 40, tenantShare: 8 });
+    assert.strictEqual(scheduler.ceiling, 50);
+    scheduler.dispose();
+    scheduler = new ConnectionScheduler({ limit: 8, tenantShare: 4 });
+    assert.strictEqual(scheduler.ceiling, 12);
+    scheduler.dispose();
+    scheduler = new ConnectionScheduler({
+      limit: 40,
+      tenantShare: 8,
+      overflow: 0,
+    });
+    assert.strictEqual(scheduler.ceiling, 40, 'an overflow of zero is off');
     scheduler.dispose();
   });
 });

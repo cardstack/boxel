@@ -11,6 +11,7 @@ import {
   formatHeapTelemetry,
 } from './prerender/heap-telemetry.ts';
 import { realmEventDispatcher } from './realm-event-dispatcher.ts';
+import type { SessionStats } from '@cardstack/postgres';
 
 // Periodically samples the realm-server process's event-loop health, in-flight
 // search count, and heap usage, emitting a `realm:health` line every interval.
@@ -41,17 +42,25 @@ export interface HealthSamplerOptions {
   // one, and how many of those are held back only by their tenant's share.
   // Waiting alone says the pool is the bottleneck; waiting at share says the
   // scheduler is keeping one realm's searches from crowding out another's.
-  // `holders` is how many of the checked-out connections are pinned by work
-  // that checks out more while it holds them, against `holderLimit`; holders
-  // at their limit with work waiting is the pool's deadlock guard engaging.
+  // Holds are the connections `withConnection` callers keep across other
+  // work; connections in use above the limit are what the scheduler granted
+  // past it once every connection was such a hold waiting on nested work.
+  // The oldest wait is what tells a stuck pool from a busy one: under load the
+  // queue keeps moving and it stays short; with every connection held by work
+  // that is not finishing it climbs for as long as that lasts.
   connectionStats?: () => {
     inUse: number;
+    holds: number;
     limit: number;
-    holders?: number;
-    holderLimit?: number;
     waiting: number;
     waitingAtShare: number;
+    oldestWaitMs: number;
   };
+  // The latest reading of the database's session table (see `SessionProbe`),
+  // or undefined while there is no recent one. Taken on its own interval and
+  // its own connection, since a query would block this synchronous line and a
+  // pooled connection is what a starved pool cannot give it.
+  sessionStats?: () => SessionStats | undefined;
 }
 
 export function startHealthSampler(
@@ -92,6 +101,7 @@ export function startHealthSampler(
     // on the used/limit ratio, which survives a task resize or a Node bump.
     let heap = heapTelemetry();
     let connections = opts.connectionStats?.();
+    let sessions = opts.sessionStats?.();
     // Module compiles finished in this window, with their wall times. A large
     // compile's transform runs on this thread, so lag that matches
     // `transpileMs` was most likely spent compiling, not waiting on searches or
@@ -113,11 +123,16 @@ export function startHealthSampler(
         `realmSearchLoadMax=${(busiest?.sustained ?? 0).toFixed(2)} ` +
         (connections
           ? `dbConnections=${connections.inUse}/${connections.limit} ` +
-            (connections.holders !== undefined
-              ? `dbHolders=${connections.holders}/${connections.holderLimit} `
-              : '') +
             `dbWaiting=${connections.waiting} ` +
-            `dbWaitingAtShare=${connections.waitingAtShare} `
+            `dbWaitingAtShare=${connections.waitingAtShare} ` +
+            `dbOldestWaitMs=${connections.oldestWaitMs.toFixed(0)} ` +
+            `dbHolds=${connections.holds} `
+          : '') +
+        (sessions
+          ? `dbIdleInTx=${sessions.idleInTransaction} ` +
+            `dbIdleInTxMaxMs=${sessions.idleInTransactionMaxMs} ` +
+            `dbAdvisoryWaiters=${sessions.advisoryWaiters} ` +
+            `dbAdvisoryWaitMaxMs=${sessions.advisoryWaitMaxMs} `
           : '') +
         `transpiles=${compiles.count} ` +
         `transpileMs(total/max)=${compiles.totalMs.toFixed(0)}/${compiles.maxMs.toFixed(0)} ` +

@@ -36,12 +36,14 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=job_progress \
   --exclude-table-and-children=job_scoped_search_cache \
   --exclude-table-and-children=job_claim_holds \
+  --exclude-table-and-children=module_populate_leases \
   --exclude-table-and-children=subscription_cycles \
   --exclude-table-and-children=subscriptions \
   --exclude-table-and-children=ai_actions \
   --exclude-table-and-children=users \
   --exclude-table-and-children=plans \
   --exclude-table-and-children=credits_ledger \
+  --exclude-table-and-children=credit_charge_usage \
   --exclude-table-and-children=stripe_events \
   --exclude-table-and-children=ai_bot_event_processing \
   --exclude-table-and-children=proxy_endpoints \

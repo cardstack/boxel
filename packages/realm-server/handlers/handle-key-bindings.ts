@@ -120,7 +120,8 @@ async function readableRealm(
     !target ||
     !(await new RealmPermissionChecker(
       await fetchRealmPermissions(args.dbAdapter, realmURL),
-      args.matrixClient,
+      args.dbAdapter,
+      args.matrixClient.serverName,
     ).can(caller, 'read'))
   ) {
     throw new UserKeyError(404, 'no such realm');
@@ -367,12 +368,19 @@ export function handlePreviewKeyBindings(args: CreateRoutesArgs): Handler {
   });
 }
 
-const BATCH_ATTRIBUTES = new Set(['target', 'review', 'interactive']);
+const BATCH_ATTRIBUTES = new Set([
+  'target',
+  'review',
+  'interactive',
+  'operations',
+]);
 
 // The batch the secure window approves in one confirmation
-// (`lib/key-binding-batch.ts`): `attributes.{target, review?, interactive?}`,
-// where `target` names a card or a card type in its realm as the window's
-// context does. Answers every operation on the card's definition that needs
+// (`lib/key-binding-batch.ts`): `attributes.{target, review?, interactive?,
+// operations?}`, where `target` names a card or a card type in its realm as
+// the window's context does, and `operations` names the operations an
+// approval covers when it covers only some, which the keys offered for each
+// slot then weigh alone. Answers every operation on the card's definition that needs
 // the caller's approval, grouped by destination, with the caller's keys and
 // shares a slot can take. Asked with a session signed in on the secure
 // origin: the window's own, or the CLI's (`boxel keys approve`).
@@ -412,12 +420,22 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be asked about here`);
       }
     }
-    let { review, interactive } = attributes;
+    let { review, interactive, operations } = attributes;
     if (review !== undefined && typeof review !== 'boolean') {
       throw new UserKeyError(400, 'review is true or false');
     }
     if (interactive !== undefined && typeof interactive !== 'boolean') {
       throw new UserKeyError(400, 'interactive is true or false');
+    }
+    if (
+      operations !== undefined &&
+      !(
+        Array.isArray(operations) &&
+        operations.length > 0 &&
+        operations.every((o) => typeof o === 'string' && o !== '')
+      )
+    ) {
+      throw new UserKeyError(400, 'operations is a list of operation names');
     }
     let { target } = validateContextRequest({ target: attributes.target });
     if (!target) {
@@ -436,6 +454,9 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
         target,
         review: review === true,
         interactive: interactive === true,
+        ...(operations !== undefined
+          ? { operations: operations as string[] }
+          : {}),
       },
     );
     await sendJSON(ctxt, 200, {

@@ -9,6 +9,7 @@ import {
   not,
   type EmailFormatValidationError,
 } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import { fieldSerializer } from '@cardstack/runtime-common';
 import { markdownLink } from './markdown-helpers';
 
@@ -29,6 +30,7 @@ class Edit extends Component<typeof EmailField> {
       @value={{@model}}
       @onChange={{this.handleChange}}
       @disabled={{not @canEdit}}
+      {{ignoredByPasswordManagers}}
     />
   </template>
 }

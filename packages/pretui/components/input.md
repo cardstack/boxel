@@ -7,7 +7,7 @@ The kit's single-line text control. Every typed value that is not a picker goes 
 ```
 @value?, @placeholder?, @type? (default 'text'), @invalid?, @disabled?, @controlId?
 @onInput?(value: string)
-@helperText?, @errorMessage?, @required?, @optional?
+@helperText?, @errorMessage?, @describedBy? (ids of elements that describe the input, read with the error and helper lines), @required?, @optional?
 ```
 
 `@onInput` receives the **string value**, not the event. That is the kit-wide convention for controls and it is why call sites never touch `event.target`.
@@ -45,6 +45,8 @@ Input, **Select** and **Autocomplete** share one field look at rest: a `--field`
 The three share their states too. Hover pulls the edge 30% toward `--foreground`, only where the pointer can hover, so the edge doesn't stick after a tap. Invalid is a `--destructive-ink` edge, since the `--destructive` fill misses the 3:1 a field boundary needs; hovering the field (not its message rows) darkens it the same 30% toward `--foreground`, and focus swaps it for the ring, as GOV.UK, Carbon and Primer do. Disabled is 0.45 opacity with the usual edge and no error row, invalid or not, since a disabled field can't be fixed; read-only isn't dimmed, since the field can still be focused and its value copied. Focus is a 2px `--ring` outline.
 
 The dress lives in `internal/field-dress`, which Textarea and the typed inputs (Email, Url, Phone, Number, Password, Search) wear too, so the whole family shares these states. Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-input-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm` (the helper and error rows), `--boxel-sp-xs`, `--boxel-sp-sm`, and the state knobs `--boxel-input-hover-border-color`, `--boxel-input-outline`, `--boxel-input-outline-offset`, `--boxel-input-invalid-color`, `--boxel-input-invalid-box-shadow`, `--boxel-input-invalid-focus-outline`, `--boxel-input-invalid-focus-box-shadow`, `--boxel-input-disabled-opacity` and `--boxel-input-readonly-opacity`. The end inset goes in through `--boxel-input-padding-inline-end`, so while a validation icon shows, BoxelInput can swap it for the icon's column. The dress also sets `--pretui-invalid-border` and `--pretui-invalid-background`, which tell Field how to dress it when the Field has an error.
+
+Three opt-in knobs size the field from a parent: `--pretui-field-h` sets its height, `--pretui-field-font-size` its type size, and `--pretui-field-message-font-size` the type size of its error and helper rows, in place of the 1.75rem, `--boxel-font-size-xs` and `--boxel-font-size-2xs` defaults. Input, Textarea, the typed inputs, InputGroup and Select read them, so a page that wants full-size fields (a sign-in screen beside large buttons) sets them once on a container.
 
 A theme must keep `--field` and `--card` visually distinct or inputs vanish into panels; and must not set `--input` equal to `--border` if it wants controls to read as inset rather than as bordered boxes.
 

@@ -33,11 +33,11 @@
 // read when the fragment names no form.
 
 import { isListedOrigin } from './app-origins.js';
+import { newPasswordError } from './password-rules.js';
 import { redactResponse } from './redact.js';
 import { changePassword, readConfig as readRealmServer } from './session.js';
 
 const MATRIX_CLIENT_PREFIX = '_matrix/client/v3/';
-export const MIN_PASSWORD_LENGTH = 8;
 // A response is checked for the passwords typed here before it goes to the
 // app, so a server that echoed one back couldn't hand it over. A username is
 // no secret, and appears in a response as a matter of course. Passwords
@@ -47,14 +47,10 @@ const MIN_REDACTED_LENGTH = 4;
 
 // The forms the frame shows, by the name the app gives in `form`. Each names
 // its fields and the one request it may make. A field's `validate` is `new`
-// for a new password and `confirm` for its confirmation; a form that is
-// `stateful` shows each field's validation state, as a BoxelInput given
-// `@state` does.
+// for a new password and `confirm` for its confirmation.
 export const FORMS = {
   'change-password': {
     layout: 'settings',
-    // Its fields show a validation state, as a BoxelInput given `@state` does.
-    stateful: true,
     operations: ['set-password'],
     hiddenUsername: true,
     fields: [
@@ -85,8 +81,6 @@ export const FORMS = {
   },
   'confirm-password': {
     layout: 'modal',
-    // Its fields show a validation state, as a BoxelInput given `@state` does.
-    stateful: true,
     operations: ['add-threepid'],
     fields: [
       {
@@ -291,10 +285,9 @@ export class CredentialFrame {
       return;
     }
     if (entry.field.validate === 'new') {
-      if (!entry.value) {
-        this.setError(name, 'Password is missing');
-      } else if (entry.value.length < MIN_PASSWORD_LENGTH) {
-        this.setError(name, 'Password must be at least 8 characters long');
+      let error = newPasswordError(entry.value);
+      if (error) {
+        this.setError(name, error);
       }
     } else if (entry.field.validate === 'confirm') {
       if (entry.value !== this.value('password')) {

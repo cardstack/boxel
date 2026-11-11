@@ -42,11 +42,16 @@ export interface SeedRealmClientConfig {
   /** Realm-server origin (trailing slash), e.g. `https://host/`. */
   realmServerURL: string;
   /**
-   * Matrix user id to put in the realm-server token. Owner-gated admin
-   * endpoints (realm publish) require the realm owner, so callers pass the
-   * source realm's owner.
+   * Matrix user id to put in the realm-server token. Admin endpoints (realm
+   * publish) require a user who administers the source realm, one whose own
+   * permission row grants write, so callers pass such a user.
    */
   asUser: string;
+  /**
+   * The name of the Matrix server the realm server's own account is on, for
+   * the per-realm token. Read from `MATRIX_SERVER_NAME` when absent.
+   */
+  matrixServerName?: string;
 }
 
 function isSeedConfig(
@@ -58,13 +63,16 @@ function isSeedConfig(
 export function buildCliRealmClient(
   auth: ProfileManager | SeedRealmClientConfig = getProfileManager(),
 ): RealmClient {
-  // Seed mode: mint an owner-scoped realm-server token locally for realm-server
+  // Seed mode: mint a realm-server token for `asUser` locally for realm-server
   // endpoints, and use a seed-minted realm token for per-realm endpoints — no
   // Matrix profile required.
   if (isSeedConfig(auth)) {
     let realmServerURL = ensureTrailingSlash(auth.realmServerURL);
     let serverToken = mintRealmServerToken(auth.realmSecretSeed, auth.asUser);
-    let seedAuth = new SeedAuthenticator({ seed: auth.realmSecretSeed });
+    let seedAuth = new SeedAuthenticator({
+      seed: auth.realmSecretSeed,
+      matrixServerName: auth.matrixServerName,
+    });
     return {
       realmServerURL,
       config: { spaceDomain: '', siteDomain: '' },

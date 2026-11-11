@@ -3,7 +3,9 @@
 // password, and the password set. They hold no state and send nothing; the
 // caller decides what each control does. The new password fields are the
 // caller's, in the reset form's block: on the secure origin its own inputs, in
-// the app the credential frame.
+// the app the credential frame. Each form's method is `post`, as a password
+// manager expects, so a submit the caller doesn't prevent puts no field in the
+// address.
 //
 // Each control carries the test attributes of both origins' suites.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -11,9 +13,9 @@ import { on } from '@ember/modifier';
 
 import AuthButton from '../components/auth-button.gts';
 import AuthFormField from '../components/auth-form-field.gts';
-import BoxelInput from '../components/input.gts';
+import { Input } from '@cardstack/pretui/components/input';
 import optional from '../helpers/optional.ts';
-import { autofocus } from '../modifiers/autofocus.ts';
+import { focusWhen } from '@cardstack/pretui/focus';
 
 interface ForgotPasswordFormSignature {
   Args: {
@@ -33,6 +35,7 @@ export const ForgotPasswordForm: TemplateOnlyComponent<ForgotPasswordFormSignatu
   <template>
     <form
       class='step'
+      method='post'
       novalidate
       data-test-forgot-password-form
       {{on 'submit' @onSubmit}}
@@ -42,19 +45,20 @@ export const ForgotPasswordForm: TemplateOnlyComponent<ForgotPasswordFormSignatu
       <AuthFormField
         @label='Email Address'
         data-test-secure-field='email'
-        as |labelId|
+        as |labelId controlId|
       >
-        <BoxelInput
+        <Input
+          @controlId={{controlId}}
           aria-labelledby={{labelId}}
           data-test-email-field
           name='email'
           autocomplete='email'
           @type='text'
           @errorMessage={{@emailError}}
-          @state={{if @emailError 'invalid' 'initial'}}
+          @invalid={{if @emailError true false}}
           @value={{@email}}
           @onInput={{@onEmailInput}}
-          {{autofocus (if @autofocus true false)}}
+          {{focusWhen (if @autofocus true false)}}
         />
       </AuthFormField>
       <div class='button-wrapper'>
@@ -170,6 +174,7 @@ export const ResetPasswordForm: TemplateOnlyComponent<ResetPasswordFormSignature
   <template>
     <form
       class='step'
+      method='post'
       novalidate
       data-test-reset-password-form
       {{on 'submit' @onSubmit}}

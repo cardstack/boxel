@@ -34,7 +34,7 @@ const partitionNameSql = `'boxel_log_lines_'
 
 // Autovacuum and analyze for a realm's partition: a partitioned parent
 // can't hold storage parameters, so each leaf gets them when it is made (as
-// migration 1794348725000 gives the partitions that existed before it). An
+// migration 1794379443002 gives the partitions that existed before it). An
 // append-mostly table needs its insert threshold low to be analyzed often
 // enough for its plans to keep up.
 const PARTITION_STORAGE = `autovacuum_vacuum_scale_factor = 0.05, autovacuum_vacuum_threshold = 500, autovacuum_analyze_scale_factor = 0.02, autovacuum_analyze_threshold = 500, autovacuum_vacuum_insert_scale_factor = 0.05`;

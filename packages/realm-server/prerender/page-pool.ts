@@ -266,6 +266,11 @@ const DEFAULT_AFFINITY_TEARDOWN_WAIT_MS = 10_000;
 // and without the deadline each new affinity on the server would wait on it
 // while other affinities' tabs sit idle.
 const DEFAULT_STANDBY_REFILL_WAIT_MS = 5000;
+
+// How many visits of a realm must finish in time, one after another, before
+// a file-admission cap that its timeouts lowered goes up by one. See
+// `recordVisitOutcome`.
+const ADMISSION_RECOVERY_VISITS = 3;
 // How often callers parked on a spent pool budget re-select even without an
 // event waking them; see `#armTabWaiterRecheck`.
 const TAB_WAITER_RECHECK_MS = 1_000;
@@ -547,6 +552,22 @@ export class PagePool {
   // that runs under realm authority, on another of the realm's affinities,
   // and the headroom the cap holds back has to cover that render too.
   #fileAdmission = new Map<string, AsyncSemaphore>();
+  // A realm's file-admission cap after its visits timed out, keyed like
+  // `#fileAdmission`. A realm whose renders time out is usually loading the
+  // realm server that its own renders fetch from, and every render it keeps
+  // in flight adds to that load. So a timeout halves the realm's cap, and
+  // the cap comes back one step at a time as visits finish in time. A realm
+  // with no entry has `#fileAdmissionCap`. Kept apart from `#fileAdmission`
+  // because that semaphore is dropped whenever the realm goes idle, and a
+  // reduced cap must outlive the gap between one index pass and the next.
+  // `generation` names this cap; see `recordVisitOutcome`.
+  #reducedFileAdmission = new Map<
+    string,
+    { cap: number; generation: number; visitsInTime: number }
+  >();
+  // The last generation given to a reduced cap. A realm at its full cap is
+  // at generation 0.
+  #lastFileAdmissionGeneration = 0;
   // Effective per-affinity file-admission capacity.
   //
   // Under the legacy fixed-pool config (MIN === MAX), the default is
@@ -1136,6 +1157,9 @@ export class PagePool {
       tabProbeMs: number;
     };
     pageId: string;
+    // The generation of the realm's file-admission cap that admitted this
+    // file render. Pass it back to `recordVisitOutcome`.
+    fileAdmissionGeneration?: number;
     release: () => void;
   }> {
     let signal = opts?.signal;
@@ -1154,6 +1178,7 @@ export class PagePool {
     // waiting on.
     let releaseAdmission: (() => void) | undefined;
     let admissionMs = 0;
+    let fileAdmissionGeneration: number | undefined;
     if (queue === 'file') {
       let admissionStart = Date.now();
       releaseAdmission = await this.#acquireFileAdmission(
@@ -1162,6 +1187,9 @@ export class PagePool {
         priority,
       );
       admissionMs = Date.now() - admissionStart;
+      fileAdmissionGeneration = this.#fileAdmissionGenerationOf(
+        realmAffinityKeyOf(affinityKey),
+      );
     }
     // Every release path (success + the error paths below) funnels
     // through `releaseAdmission?.()`, which already runs idle cleanup
@@ -1320,6 +1348,9 @@ export class PagePool {
       reused,
       launchMs: Date.now() - t0,
       waits: { semaphoreMs, admissionMs, tabQueueMs, tabStartupMs, tabProbeMs },
+      ...(fileAdmissionGeneration !== undefined
+        ? { fileAdmissionGeneration }
+        : {}),
       release,
     };
   }
@@ -1546,6 +1577,7 @@ export class PagePool {
     this.#sharedContexts.clear();
     this.#lru.clear();
     this.#fileAdmission.clear();
+    this.#reducedFileAdmission.clear();
     this.#unresponsiveTabSwaps.clear();
     this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
@@ -2162,7 +2194,7 @@ export class PagePool {
     let admissionKey = realmAffinityKeyOf(affinityKey);
     let semaphore = this.#fileAdmission.get(admissionKey);
     if (!semaphore) {
-      semaphore = new AsyncSemaphore(this.#fileAdmissionCap);
+      semaphore = new AsyncSemaphore(this.#fileAdmissionCapOf(admissionKey));
       this.#fileAdmission.set(admissionKey, semaphore);
     }
     let rawRelease = await semaphore.acquire(signal, priority);
@@ -2176,6 +2208,91 @@ export class PagePool {
       rawRelease();
       this.#maybeDropIdleFileAdmission(admissionKey);
     };
+  }
+
+  #fileAdmissionCapOf(admissionKey: string): number {
+    return (
+      this.#reducedFileAdmission.get(admissionKey)?.cap ??
+      this.#fileAdmissionCap
+    );
+  }
+
+  #fileAdmissionGenerationOf(admissionKey: string): number {
+    return this.#reducedFileAdmission.get(admissionKey)?.generation ?? 0;
+  }
+
+  // How a visit of the affinity's realm ended. A visit that timed out halves
+  // the realm's file-admission cap, down to one. Visits already admitted keep
+  // their tabs; the realm's waiting visits are admitted under the new cap.
+  // After `ADMISSION_RECOVERY_VISITS` visits in a row finish in time, the cap
+  // goes up by one, until it is back at `#fileAdmissionCap`. A visit that
+  // ended another way (cancelled, failed before it rendered, or wedged by the
+  // card it rendered) says nothing about the realm's load, and callers don't
+  // report it.
+  //
+  // Only a visit admitted under the realm's current cap moves it:
+  // `admissionGeneration` is the `fileAdmissionGeneration` of the visit's
+  // lease, and each change of cap starts a new generation. When the realm
+  // server is slow, a realm's visits in flight usually time out together, and
+  // the first of them halves the cap once for all of them. A visit admitted
+  // before the cap went down did not run under the lower cap, so its finishing
+  // in time doesn't count toward raising it.
+  recordVisitOutcome(
+    affinityKey: string,
+    outcome: 'in-time' | 'timed-out',
+    admissionGeneration: number,
+  ) {
+    if (this.#disableFileAdmission) {
+      return;
+    }
+    let admissionKey = realmAffinityKeyOf(affinityKey);
+    if (admissionGeneration !== this.#fileAdmissionGenerationOf(admissionKey)) {
+      return;
+    }
+    let reduced = this.#reducedFileAdmission.get(admissionKey);
+    let cap = reduced?.cap ?? this.#fileAdmissionCap;
+    let nextCap: number;
+    if (outcome === 'timed-out') {
+      nextCap = Math.max(1, Math.floor(cap / 2));
+      this.#reducedFileAdmission.set(admissionKey, {
+        cap: nextCap,
+        generation: ++this.#lastFileAdmissionGeneration,
+        visitsInTime: 0,
+      });
+    } else {
+      if (!reduced) {
+        return;
+      }
+      let visitsInTime = reduced.visitsInTime + 1;
+      if (visitsInTime < ADMISSION_RECOVERY_VISITS) {
+        reduced.visitsInTime = visitsInTime;
+        return;
+      }
+      nextCap = Math.min(cap + 1, this.#fileAdmissionCap);
+      if (nextCap >= this.#fileAdmissionCap) {
+        this.#reducedFileAdmission.delete(admissionKey);
+      } else {
+        this.#reducedFileAdmission.set(admissionKey, {
+          cap: nextCap,
+          generation: ++this.#lastFileAdmissionGeneration,
+          visitsInTime: 0,
+        });
+      }
+    }
+    if (nextCap === cap) {
+      return;
+    }
+    this.#fileAdmission.get(admissionKey)?.setCapacity(nextCap);
+    let message = `file-queue admission for ${admissionKey}: cap ${cap} -> ${nextCap} (full cap=${this.#fileAdmissionCap}) after ${
+      outcome === 'timed-out'
+        ? 'a visit timed out'
+        : `${ADMISSION_RECOVERY_VISITS} visits in time`
+    }`;
+    if (outcome === 'timed-out') {
+      log.warn(message);
+    } else {
+      log.info(message);
+    }
   }
 
   // Called after each file release. Drops the semaphore entry for

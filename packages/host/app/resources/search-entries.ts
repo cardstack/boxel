@@ -115,6 +115,15 @@ interface Args {
     // The realm a no-realm card search targets (the realm the `@context` was
     // provided with). Only meaningful with `cardInitiated`.
     getDefaultRealm?: () => string | undefined;
+    // Narrows the realm events that can re-run this query, for a caller that
+    // can tell from an event alone that it leaves the results as they are.
+    // An event it accepts is handled as any other.
+    refreshOn?: (event: RealmEventContent) => boolean;
+    // Re-runs without the refresh window, keeping only a short jitter. For a
+    // query whose triggering events are few, as `refreshOn` can make them.
+    // Like the args above, `refreshOn` and `refreshPromptly` keep their last
+    // value when a later pass omits them, so neither can be unset.
+    refreshPromptly?: boolean;
   };
 }
 
@@ -208,6 +217,8 @@ export class SearchEntriesResource extends Resource<Args> {
   #previousRealms: string[] | undefined;
   #cardInitiated = false;
   #getDefaultRealm: (() => string | undefined) | undefined;
+  #refreshOn: ((event: RealmEventContent) => boolean) | undefined;
+  #refreshPromptly = false;
   #idleClearScheduled = false;
   #log = runtimeLogger('search-entries-resource');
   // Kept private for tests/internal load bookkeeping.
@@ -270,7 +281,8 @@ export class SearchEntriesResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { query, cardInitiated, getDefaultRealm } = named;
+    let { query, cardInitiated, getDefaultRealm, refreshOn, refreshPromptly } =
+      named;
 
     // Keep the previously provided values when optional args are omitted on
     // subsequent modify() calls (mirrors how the query is re-read each pass).
@@ -279,6 +291,12 @@ export class SearchEntriesResource extends Resource<Args> {
     }
     if (getDefaultRealm !== undefined) {
       this.#getDefaultRealm = getDefaultRealm;
+    }
+    if (refreshOn !== undefined) {
+      this.#refreshOn = refreshOn;
+    }
+    if (refreshPromptly !== undefined) {
+      this.#refreshPromptly = refreshPromptly;
     }
 
     if (query === undefined) {
@@ -364,6 +382,9 @@ export class SearchEntriesResource extends Resource<Args> {
           if (this.#previousQuery === undefined) {
             return;
           }
+          if (this.#refreshOn && !this.#refreshOn(event)) {
+            return;
+          }
           // Two triggers re-run a subscribed search: an incremental index
           // event (the search doc — and so membership — changed) and a
           // prerender_html event (fresh HTML / corrected full-text membership
@@ -410,7 +431,7 @@ export class SearchEntriesResource extends Resource<Args> {
               `prerender_html event on ${realm}; scheduling selective per-member refresh`,
             );
             this.#recordSelectiveRefresh(event);
-            this.#refreshScheduler.schedule();
+            this.#refreshScheduler.schedule({ prompt: this.#refreshPromptly });
             return;
           }
 
@@ -418,7 +439,7 @@ export class SearchEntriesResource extends Resource<Args> {
             `${event.eventName === 'prerender_html' ? 'prerender_html' : 'incremental index'} event on ${realm}; scheduling partial refresh`,
           );
           this.realmsNeedingRefresh.add(realm);
-          this.#refreshScheduler.schedule();
+          this.#refreshScheduler.schedule({ prompt: this.#refreshPromptly });
         }),
       }));
     }
@@ -1189,6 +1210,8 @@ export function getSearchEntriesResource(
     // callers leave these unset and keep the all-realms default.
     cardInitiated?: boolean;
     getDefaultRealm?: () => string | undefined;
+    refreshOn?: (event: RealmEventContent) => boolean;
+    refreshPromptly?: boolean;
   },
 ) {
   return SearchEntriesResource.from(parent, () => ({
@@ -1196,6 +1219,8 @@ export function getSearchEntriesResource(
       query: getQuery(),
       cardInitiated: opts?.cardInitiated,
       getDefaultRealm: opts?.getDefaultRealm,
+      refreshOn: opts?.refreshOn,
+      refreshPromptly: opts?.refreshPromptly,
     },
   })) as SearchEntriesResource;
 }

@@ -51,7 +51,7 @@ catalog:
   "@opentelemetry/api": ^1.9.0
   "@percy/cli": ^1.32.11
   "@percy/ember": ^5.0.0
-  "@playwright/test": ^1.54.0
+  "@playwright/test": ^1.65.0
   "@rollup/plugin-babel": ^6.0.4
   "@sentry/node": ^11.9.0
   "@simple-dom/interface": ^1.4.0

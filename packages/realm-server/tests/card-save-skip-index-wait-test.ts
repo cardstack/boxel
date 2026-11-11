@@ -5,6 +5,7 @@ import type { SuperTest, Test } from 'supertest';
 import {
   Deferred,
   SKIP_INDEX_WAIT_HEADER,
+  SupportedMimeType,
   rri,
   type Realm,
 } from '@cardstack/runtime-common';
@@ -230,6 +231,258 @@ module(basename(import.meta.filename), function () {
         );
       } finally {
         gate.fulfill();
+        restore();
+      }
+    });
+
+    test('a PATCH waiting for in-flight indexing does not hold its file locks', async function (assert) {
+      assert.timeout(15000);
+      // The wait is for other writers' indexing, which needs no exclusivity
+      // over this card's file. Another writer of the same file — one that
+      // does not wait — gets through while the first is still waiting, and the
+      // first then stages over what it wrote.
+      let gate = new Deferred<void>();
+      let drained = false;
+      gate.promise.then(() => (drained = true));
+      let restore = stubGate(
+        realm,
+        'incrementalIndexingAffectingStaging',
+        () => (drained ? undefined : gate.promise),
+      );
+      try {
+        let firstAnswered = false;
+        let waitingPatch = request
+          .patch('/person-1')
+          .send({
+            data: {
+              type: 'card',
+              attributes: { lastName: 'Waited' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .then((response) => {
+            firstAnswered = true;
+            return response;
+          });
+        await resolveAfter(WAIT_OBSERVATION_MS);
+
+        let otherPatch = request
+          .patch('/person-1')
+          .send({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Durian' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set(SKIP_INDEX_WAIT_HEADER, 'true')
+          .then((response) => response);
+        // Raced against a deadline rather than awaited, so a writer queued
+        // behind the first one's locks fails here instead of hanging the test.
+        let other = await Promise.race([
+          otherPatch,
+          resolveAfter(WAIT_OBSERVATION_MS * 5).then(() => undefined),
+        ]);
+        assert.ok(
+          other,
+          'the other writer of the file is answered without waiting for the indexing',
+        );
+        assert.strictEqual(
+          other?.status,
+          200,
+          `with a 200 — ${JSON.stringify(other?.body)}`,
+        );
+        assert.false(
+          firstAnswered,
+          'while the first writer is still waiting for the indexing',
+        );
+
+        gate.fulfill();
+        await otherPatch;
+        let response = await waitingPatch;
+        assert.strictEqual(
+          response.status,
+          200,
+          `HTTP 200 once the indexing settled — ${JSON.stringify(response.body)}`,
+        );
+        assert.deepEqual(
+          [
+            response.body.data.attributes?.firstName,
+            response.body.data.attributes?.lastName,
+          ],
+          ['Durian', 'Waited'],
+          'and the waiting write staged over the bytes the other one wrote',
+        );
+      } finally {
+        gate.fulfill();
+        restore();
+      }
+    });
+
+    test('an /_atomic write waiting for in-flight indexing does not hold its file locks', async function (assert) {
+      assert.timeout(15000);
+      // The same rule as a PATCH, through the endpoint that takes its locks
+      // itself: a caller asking for a synchronous response waits for the
+      // indexing before it holds the files, so another writer of the same
+      // file is answered meanwhile.
+      let gate = new Deferred<void>();
+      let drained = false;
+      gate.promise.then(() => (drained = true));
+      let restore = stubGate(
+        realm,
+        'incrementalIndexingAffectingStaging',
+        () => (drained ? undefined : gate.promise),
+      );
+      try {
+        let atomicAnswered = false;
+        let atomic = request
+          .post('/_atomic?waitForIndex=true')
+          .set('Accept', SupportedMimeType.JSONAPI)
+          .send(
+            JSON.stringify({
+              'atomic:operations': [
+                {
+                  op: 'update',
+                  href: 'person-1.json',
+                  data: {
+                    type: 'card',
+                    attributes: { firstName: 'Mango', lastName: 'Atomic' },
+                    meta: {
+                      adoptsFrom: { module: rri('./person'), name: 'Person' },
+                    },
+                  },
+                },
+              ],
+            }),
+          )
+          .then((response) => {
+            atomicAnswered = true;
+            return response;
+          });
+        await resolveAfter(WAIT_OBSERVATION_MS);
+
+        let otherPatch = request
+          .patch('/person-1')
+          .send({
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Durian' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          })
+          .set('Accept', 'application/vnd.card+json')
+          .set(SKIP_INDEX_WAIT_HEADER, 'true')
+          .then((response) => response);
+        let other = await Promise.race([
+          otherPatch,
+          resolveAfter(WAIT_OBSERVATION_MS * 5).then(() => undefined),
+        ]);
+        assert.ok(
+          other,
+          'the other writer of the file is answered without waiting for the indexing',
+        );
+        assert.strictEqual(
+          other?.status,
+          200,
+          `with a 200 — ${JSON.stringify(other?.body)}`,
+        );
+        assert.false(
+          atomicAnswered,
+          'while the /_atomic write is still waiting for the indexing',
+        );
+
+        gate.fulfill();
+        await otherPatch;
+        let response = await atomic;
+        assert.strictEqual(
+          response.status,
+          201,
+          `the /_atomic write lands once the indexing settled — ${response.text}`,
+        );
+      } finally {
+        gate.fulfill();
+        restore();
+      }
+    });
+
+    test('an /_atomic write its precheck refuses is answered without waiting for in-flight indexing', async function (assert) {
+      assert.timeout(15000);
+      // The refusal is decided off disk, so a request that asked for a
+      // synchronous response has nothing to wait for before it is refused.
+      let restore = stubGate(
+        realm,
+        'incrementalIndexingAffectingStaging',
+        () => NEVER,
+      );
+      try {
+        let response = await Promise.race([
+          request
+            .post('/_atomic?waitForIndex=true')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .send(
+              JSON.stringify({
+                'atomic:operations': [
+                  {
+                    op: 'add',
+                    href: 'person-1.json',
+                    data: {
+                      type: 'card',
+                      attributes: { firstName: 'Duplicate' },
+                      meta: {
+                        adoptsFrom: { module: rri('./person'), name: 'Person' },
+                      },
+                    },
+                  },
+                ],
+              }),
+            )
+            .then((r) => r),
+          resolveAfter(WAIT_OBSERVATION_MS * 5).then(() => undefined),
+        ]);
+        assert.ok(response, 'the request is answered');
+        assert.strictEqual(
+          response?.status,
+          409,
+          `refused as already existing — ${response?.text}`,
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test('a card DELETE does not wait for in-flight indexing', async function (assert) {
+      assert.timeout(15000);
+      // A removal resolves no definition, so it has nothing to wait for — and
+      // waiting would hold the card's locks, queueing every other writer of
+      // it behind indexing the removal never used.
+      let restore = stubGate(
+        realm,
+        'incrementalIndexingAffectingStaging',
+        () => NEVER,
+      );
+      try {
+        let response = await Promise.race([
+          request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .then((r) => r),
+          resolveAfter(WAIT_OBSERVATION_MS * 5).then(() => undefined),
+        ]);
+        assert.ok(response, 'the removal is answered');
+        assert.strictEqual(
+          response?.status,
+          204,
+          `HTTP 204 — ${response?.text}`,
+        );
+      } finally {
         restore();
       }
     });

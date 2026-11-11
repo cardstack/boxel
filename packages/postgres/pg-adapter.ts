@@ -12,6 +12,7 @@ import {
   logger,
   param,
 } from '@cardstack/runtime-common';
+import { WriteLockTimeoutError } from '@cardstack/runtime-common/card-operations/types';
 import { createHash } from 'crypto';
 import nodePgMigrate, { type RunnerOption } from 'node-pg-migrate';
 import { join } from 'path';
@@ -20,9 +21,11 @@ import { Pool, Client, type PoolClient, type Notification } from 'pg';
 import {
   ConnectionScheduler,
   markConnectionHeld,
+  type ConnectionHold,
+  waitingOnLock,
   withSharedWork,
 } from './connection-scheduler.ts';
-import { postgresConfig } from './pg-config.ts';
+import { boxelDatabaseConfig, postgresConfig } from './pg-config.ts';
 import migrationNameFixes from './scripts/migration-name-fixes.cjs';
 
 // node-pg-migrate is CJS and exposes the runner as its default export. Under
@@ -114,6 +117,34 @@ const RETRYABLE_TRANSACTION_SQLSTATES = new Set(['40P01', '40001']);
 // the channel name: filtering for this signal means matching the content.
 const lockLog = logger('realm:write-lock');
 
+// The longest a writer waits for its write locks before it gives up and its
+// request is answered 503. A waiter sits in postgres with a pool connection
+// checked out and a transaction open, so an unbounded wait lets one long
+// holder — or a realm-lifecycle caller queued behind one — gather a pooled
+// connection from every writer that arrives after it, until the replica has
+// none left for the work the holder itself needs to finish. A bounded wait
+// gives each of those connections back on its own.
+//
+// Sized from the lock's own telemetry: deployed writers wait a fraction of a
+// second at the 99th percentile, and the waits past a minute are the ones
+// queued behind a holder that is itself stuck. Override with
+// PG_WRITE_LOCK_WAIT_MS.
+const DEFAULT_WRITE_LOCK_WAIT_MS = 60_000;
+function configuredWriteLockWaitMs(): number {
+  let rawValue = process.env.PG_WRITE_LOCK_WAIT_MS;
+  if (!rawValue) {
+    return DEFAULT_WRITE_LOCK_WAIT_MS;
+  }
+  let value = Number(rawValue);
+  return Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_WRITE_LOCK_WAIT_MS;
+}
+
+// lock_not_available: a lock statement waited out the transaction's
+// `lock_timeout`.
+const LOCK_NOT_AVAILABLE_SQLSTATE = '55P03';
+
 type MigrationNameFixes = {
   migrationRenames: Array<[string, string]>;
   buildUpdateMigrationSql: (mapping: Array<[string, string]>) => string;
@@ -123,9 +154,7 @@ const { migrationRenames, buildUpdateMigrationSql } =
   migrationNameFixes as MigrationNameFixes;
 
 function config() {
-  return postgresConfig({
-    database: 'boxel',
-  });
+  return boxelDatabaseConfig();
 }
 
 type Config = ReturnType<typeof config>;
@@ -190,23 +219,20 @@ function configuredPoolTenantShare(): number {
     : DEFAULT_POOL_TENANT_SHARE;
 }
 
-// Postgres' `idle_in_transaction_session_timeout` for the pool's sessions, in
-// milliseconds, when set: a session that sits in an open transaction with no
-// statement running for longer than this is terminated by the server, and the
-// server log says so. Off by default, because some holders legitimately keep
-// a transaction open across slow non-database work (a lock section waiting
-// on its index pass, a coordinated populate waiting on its prerender), so a
-// value has to sit above the longest of those. It is a backstop and a signal,
-// not a fix for a deadlock in this process: a holder blocked waiting for a
-// second checkout is not in a query, so its terminated session only surfaces
-// when it next uses the connection.
-function configuredIdleInTransactionTimeoutMs(): number | undefined {
-  let rawValue = process.env.PG_IDLE_IN_TRANSACTION_TIMEOUT_MS;
+// How many connections past `PG_POOL_MAX` the scheduler may grant to unwedge
+// a pool whose every connection is held by work waiting on a nested checkout
+// (see `ConnectionScheduler`). Unset, it is the scheduler's default: a quarter
+// of the pool's max, and at least four. What a wedge needs is how deep holds
+// nest, not how many there are, so this rarely needs raising; set it when a
+// fixed connection budget has to cover `PG_POOL_MAX + PG_POOL_OVERFLOW` for
+// every process. `0` turns it off, leaving a wedged pool wedged.
+function configuredPoolOverflow(): number | undefined {
+  let rawValue = process.env.PG_POOL_OVERFLOW;
   if (!rawValue) {
     return undefined;
   }
   let value = Number(rawValue);
-  return Number.isInteger(value) && value > 0 ? value : undefined;
+  return Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 // The margin a read snapshot's statement timeout allows past its search's
@@ -285,11 +311,6 @@ function budgetRefusal() {
     'search exceeded the request time limit and was stopped by the database; narrow the query or request a smaller page',
   );
 }
-
-// A checkout that has waited this long for the scheduler is logged once with
-// the scheduler's state, so pool starvation reads as starvation in the logs
-// rather than as a request that never answered.
-const SLOW_CHECKOUT_WARN_MS = 30_000;
 
 export type NotificationHandler = (notification: Notification) => void;
 
@@ -418,8 +439,17 @@ export class PgAdapter implements DBAdapter {
   // pins a pool connection while it waits, and two writers aimed at different
   // cards never meet here at all. See withFileWriteLocks.
   #fileWriteQueue = new Map<string, Promise<void>>();
+  readonly #writeLockWaitMs: number;
 
-  constructor(opts?: { autoMigrate?: boolean; migrationLogging?: boolean }) {
+  constructor(opts?: {
+    autoMigrate?: boolean;
+    migrationLogging?: boolean;
+    // How long a writer may wait for its write locks; see
+    // DEFAULT_WRITE_LOCK_WAIT_MS.
+    writeLockWaitMs?: number;
+  }) {
+    this.#writeLockWaitMs =
+      opts?.writeLockWaitMs ?? configuredWriteLockWaitMs();
     if (opts?.autoMigrate) {
       this.started = this.migrateDb(opts.migrationLogging !== false);
     } else {
@@ -431,19 +461,19 @@ export class PgAdapter implements DBAdapter {
     this.#scheduler = new ConnectionScheduler({
       limit: max,
       tenantShare: configuredPoolTenantShare(),
+      overflow: configuredPoolOverflow(),
     });
     log.debug(`connecting to DB ${this.url}`);
-    let idleInTransactionTimeoutMs = configuredIdleInTransactionTimeoutMs();
     this.pool = new Pool({
       user,
       host,
       database,
       password,
       port,
-      max,
-      ...(idleInTransactionTimeoutMs
-        ? { idle_in_transaction_session_timeout: idleInTransactionTimeoutMs }
-        : {}),
+      // Room for the overflow the scheduler grants past `max` once every
+      // connection is held by a hold waiting on nested work. It never grants
+      // more than this, so the pool's own queue still never forms.
+      max: this.#scheduler.ceiling,
     });
     // An idle client whose connection dies — a failover, a restart, an
     // administrator terminating the backend — emits `error` on the pool, and
@@ -472,23 +502,27 @@ export class PgAdapter implements DBAdapter {
   }
 
   // The connection scheduler's state when read, for the health sampler:
-  // connections checked out against the pool's max, acquisitions waiting,
-  // and how many of those wait only because their tenant is at its share.
+  // connections checked out against the pool's max, how many of those are
+  // held by `withConnection` callers, acquisitions waiting, how many of those
+  // wait only because their tenant is at its share, and how long the
+  // longest-waiting of them has waited. `inUse` above `limit` is the overflow
+  // granted once every connection was held by a hold waiting on nested work or
+  // on a lock.
   get connectionStats(): {
     inUse: number;
+    holds: number;
     limit: number;
-    holders: number;
-    holderLimit: number;
     waiting: number;
     waitingAtShare: number;
+    oldestWaitMs: number;
   } {
     return {
       inUse: this.#scheduler.inUse,
+      holds: this.#scheduler.holds,
       limit: this.#scheduler.limit,
-      holders: this.#scheduler.holders,
-      holderLimit: this.#scheduler.holderLimit,
       waiting: this.#scheduler.waiting,
       waitingAtShare: this.#scheduler.waitingAtShare,
+      oldestWaitMs: this.#scheduler.oldestWaitMs,
     };
   }
 
@@ -972,27 +1006,13 @@ export class PgAdapter implements DBAdapter {
 
   // Wait for the scheduler's go-ahead, then check a client out of the pool.
   // The turn is handed back by the caller after the client is released, or
-  // here if the checkout itself fails. `holding` is for a caller that keeps
-  // the client while it checks out more (see `ConnectionScheduler`).
+  // here if the checkout itself fails. `hold` is for a checkout kept across
+  // the caller's other work rather than given back once one statement
+  // returns (see `ConnectionScheduler`).
   async #checkout(opts?: {
-    holding?: boolean;
+    hold?: ConnectionHold;
   }): Promise<{ client: PoolClient; releaseTurn: () => void }> {
-    let started = Date.now();
-    let slow = setTimeout(() => {
-      let stats = this.connectionStats;
-      log.warn(
-        `a ${opts?.holding ? 'holding ' : ''}checkout has waited ${Date.now() - started}ms for a connection: ` +
-          `inUse=${stats.inUse}/${stats.limit} holders=${stats.holders}/${stats.holderLimit} ` +
-          `waiting=${stats.waiting} waitingAtShare=${stats.waitingAtShare}`,
-      );
-    }, SLOW_CHECKOUT_WARN_MS);
-    slow.unref?.();
-    let releaseTurn: () => void;
-    try {
-      releaseTurn = await this.#scheduler.acquire(opts);
-    } finally {
-      clearTimeout(slow);
-    }
+    let releaseTurn = await this.#scheduler.acquire(opts);
     try {
       return { client: await this.pool.connect(), releaseTurn };
     } catch (e) {
@@ -1083,11 +1103,25 @@ export class PgAdapter implements DBAdapter {
   // out an additional pool client briefly. Under N concurrent same-URL
   // writers, N-1 block on the advisory lock before doing anything — so
   // this method does not itself amplify pool pressure. Under N concurrent
-  // different-URL writers, each pins one client; if the pool ceiling is
-  // less than realistic write concurrency, callbacks that need additional
-  // pool clients could deadlock waiting on the pool. For current scope
-  // (low realistic write concurrency, pool size >= concurrent writers +
-  // headroom) this is acceptable.
+  // different-URL writers, each pins one client, and a callback that needs
+  // another waits for it behind the rest of the pool's demand. When every
+  // connection is held either way — a holder waiting on its nested checkout,
+  // or a writer waiting on the advisory lock — the connection scheduler
+  // grants the nested checkout past the pool's limit. That is bounded by the
+  // scheduler's overflow, though, and it cannot see a holder waiting on
+  // anything but a checkout or this lock. A callback that keeps its DB work on
+  // the pinned querier needs none of it, and that is still the way to write
+  // one.
+  //
+  // Bounded wait: a caller waits at most the adapter's write-lock budget for
+  // the lock (see DEFAULT_WRITE_LOCK_WAIT_MS) and then rejects with
+  // `WriteLockTimeoutError`, giving its pooled connection back. That matters
+  // here more than anywhere: while this exclusive caller waits on a realm
+  // whose files are being written, postgres queues every later file writer of
+  // the realm behind it, each holding a pooled connection, so an unbounded
+  // wait turns one slow writer into a replica with no connections left. The
+  // bound covers only the wait for the lock — once it is held, `fn`'s own
+  // statements on the pinned querier wait as long as they need.
   //
   // Re-entrancy: callers MUST NOT re-enter the lock for the same URL while
   // already holding it — a second `pg_advisory_xact_lock` on the same key
@@ -1101,7 +1135,12 @@ export class PgAdapter implements DBAdapter {
     fn: (txQuerier: Querier | undefined) => Promise<T>,
   ): Promise<T> {
     const lockKey = hashRealmUrlForAdvisoryLock(realmUrl);
-    return await this.#runWithAdvisoryXactLock(lockKey, realmUrl, fn);
+    return await this.#runWithAdvisoryXactLock(
+      lockKey,
+      realmUrl,
+      fn,
+      Date.now() + this.#writeLockWaitMs,
+    );
   }
 
   // Serialize the writers of a set of files, rather than the writers of a
@@ -1245,12 +1284,36 @@ export class PgAdapter implements DBAdapter {
     // that holds to the end and different for one that releases early, and the
     // queue below has to chain on the first of them while the caller waits on
     // the second.
+    // Outcome-erased: a prior caller's failure must not cascade — the next
+    // writer of these files still gets its turn at the lock.
+    const previousDone = previous.then(
+      () => undefined,
+      () => undefined,
+    );
     const myTurn = (async (): Promise<{ work: Promise<T> }> => {
-      try {
-        await previous;
-      } catch {
-        // A prior caller's failure must not cascade — the next writer of
-        // these files still gets its turn at the lock.
+      // The wait is bounded from the call, not from the turn: time spent
+      // chained here behind a same-file writer counts against it. So the turn
+      // is raced against what is left of the budget, and a writer whose budget
+      // runs out here gives up then — without waiting for the holder ahead of
+      // it, and without checking out a connection at all.
+      const deadline = enqueuedAt + this.#writeLockWaitMs;
+      let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+      const budgetSpent = new Promise<'spent'>((resolve) => {
+        budgetTimer = setTimeout(
+          () => resolve('spent'),
+          Math.max(0, deadline - Date.now()),
+        );
+      });
+      const outcome = await Promise.race([
+        previousDone.then(() => 'turn' as const),
+        budgetSpent,
+      ]);
+      clearTimeout(budgetTimer);
+      if (outcome === 'spent' || Date.now() >= deadline) {
+        lockLog.warn(
+          `writeLock realm=${realmUrl} waitMs=${Date.now() - enqueuedAt} holdMs=0 files=${fileKeys.length} scope=${bulk ? 'realm' : 'files'} timedOut=true`,
+        );
+        throw new WriteLockTimeoutError(realmUrl, this.#writeLockWaitMs);
       }
       return await this.#runWithAdvisoryXactLocks(
         lockPlan,
@@ -1265,10 +1328,19 @@ export class PgAdapter implements DBAdapter {
     // early release removes in postgres — the next writer would sit here for
     // the duration of this one's index wait, on this replica, having been let
     // through by every other replica.
-    const myCompletion: Promise<void> = myTurn.then(
-      () => undefined,
-      () => undefined,
-    );
+    //
+    // It also waits for the writer ahead of this one. A caller whose budget ran
+    // out in the queue gives up before its predecessor is done, and a
+    // successor that chained on that alone would go straight to postgres and
+    // wait there behind the same holder, with a connection checked out —
+    // exactly what the queue keeps to one per file set.
+    const myCompletion: Promise<void> = Promise.all([
+      previousDone,
+      myTurn.then(
+        () => undefined,
+        () => undefined,
+      ),
+    ]).then(() => undefined);
     this.#fileWriteQueue.set(queueKey, myCompletion);
     // Compact the map once the chain is idle. Only delete if no later caller
     // has overwritten the tail — otherwise the chain is unlinked and a
@@ -1388,18 +1460,25 @@ export class PgAdapter implements DBAdapter {
     fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<{ work: Promise<T> }> {
     let work: Promise<T> | undefined;
+    const deadline = context.enqueuedAt + this.#writeLockWaitMs;
     await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
       let holdStart: number | undefined;
+      let timedOut = false;
       try {
-        for (const { key, mode } of lockPlan) {
-          await queryFn([
-            mode === 'shared'
-              ? `SELECT pg_advisory_xact_lock_shared(`
-              : `SELECT pg_advisory_xact_lock(`,
-            param(key),
-            `::bigint)`,
-          ]);
+        try {
+          for (const { key, mode } of lockPlan) {
+            await this.#takeAdvisoryXactLock(
+              queryFn,
+              key,
+              mode,
+              deadline,
+              context.realmUrl,
+            );
+          }
+        } catch (err: unknown) {
+          timedOut = err instanceof WriteLockTimeoutError;
+          throw err;
         }
         holdStart = Date.now();
         const releasedEarly = new Deferred<void>();
@@ -1459,9 +1538,13 @@ export class PgAdapter implements DBAdapter {
             : context.fileCount === 0
               ? 'guard'
               : 'files';
-        lockLog.info(
-          `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${scope}`,
-        );
+        // A writer that gave up is a refused request, so it logs at warn.
+        let line = `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${scope}`;
+        if (timedOut) {
+          lockLog.warn(`${line} timedOut=true`);
+        } else {
+          lockLog.info(line);
+        }
       }
     });
     // Only reachable once the transaction ended without the section having
@@ -1469,19 +1552,30 @@ export class PgAdapter implements DBAdapter {
     return { work: work! };
   }
 
+  // `deadline`, when given, bounds the wait for the lock (see
+  // `#takeAdvisoryXactLock`). The callback is handed this transaction's
+  // querier, so the bound is lifted again once the lock is held: it is a limit
+  // on queueing for the lock, not on the row locks the callback's own
+  // statements wait for.
   async #runWithAdvisoryXactLock<T>(
     lockKey: string,
     contextLabel: string,
     fn: (txQuerier: Querier) => Promise<T>,
+    deadline?: number,
   ): Promise<T> {
     return await this.withConnection(async (queryFn) => {
       await queryFn(['BEGIN']);
       try {
-        await queryFn([
-          `SELECT pg_advisory_xact_lock(`,
-          param(lockKey),
-          `::bigint)`,
-        ]);
+        let timeoutSet = await this.#takeAdvisoryXactLock(
+          queryFn,
+          lockKey,
+          'exclusive',
+          deadline,
+          contextLabel,
+        );
+        if (timeoutSet) {
+          await queryFn(['SET LOCAL lock_timeout TO DEFAULT']);
+        }
         const result = await fn(queryFn);
         await queryFn(['COMMIT']);
         return result;
@@ -1500,6 +1594,68 @@ export class PgAdapter implements DBAdapter {
         throw err;
       }
     });
+  }
+
+  // Take one transaction-scoped advisory lock on `queryFn`'s open
+  // transaction. With a `deadline`, the statement waits no later than it:
+  // `lock_timeout` is set to what remains of the budget before each lock, so a
+  // plan of several keys shares one budget rather than getting a fresh one per
+  // key. A lock not granted in time rejects with `WriteLockTimeoutError`, and
+  // the caller's ROLLBACK releases whatever this transaction did take.
+  //
+  // A bounded lock is tried without waiting first. Most are uncontended, and
+  // one that is granted straight away costs the single statement it always
+  // did; only one that has to wait pays for setting the timeout. Resolves to
+  // whether it set `lock_timeout` on the transaction.
+  async #takeAdvisoryXactLock(
+    queryFn: (e: Expression) => Promise<Record<string, PgPrimitive>[]>,
+    key: string,
+    mode: 'shared' | 'exclusive',
+    deadline: number | undefined,
+    realmUrl: string,
+  ): Promise<boolean> {
+    if (deadline !== undefined) {
+      let [tried] = await queryFn([
+        mode === 'shared'
+          ? `SELECT pg_try_advisory_xact_lock_shared(`
+          : `SELECT pg_try_advisory_xact_lock(`,
+        param(key),
+        `::bigint) AS granted`,
+      ]);
+      if (tried?.granted === true) {
+        return false;
+      }
+      let remainingMs = Math.ceil(deadline - Date.now());
+      if (remainingMs <= 0) {
+        throw new WriteLockTimeoutError(realmUrl, this.#writeLockWaitMs);
+      }
+      // An integer this process computed, never caller input, so it is safe
+      // to interpolate; SET takes no bind parameters.
+      await queryFn([`SET LOCAL lock_timeout = ${remainingMs}`]);
+    }
+    try {
+      // The blocking form waits in postgres, so the hold is counted as blocked
+      // on a lock while it does (see `waitingOnLock`). The try above never
+      // waits and needs no such marking.
+      await waitingOnLock(() =>
+        queryFn([
+          mode === 'shared'
+            ? `SELECT pg_advisory_xact_lock_shared(`
+            : `SELECT pg_advisory_xact_lock(`,
+          param(key),
+          `::bigint)`,
+        ]),
+      );
+    } catch (err: unknown) {
+      if (
+        deadline !== undefined &&
+        (err as { code?: unknown })?.code === LOCK_NOT_AVAILABLE_SQLSTATE
+      ) {
+        throw new WriteLockTimeoutError(realmUrl, this.#writeLockWaitMs);
+      }
+      throw err;
+    }
+    return deadline !== undefined;
   }
 
   // One transaction on one pinned pool connection: BEGIN, `fn`, COMMIT, with
@@ -1553,7 +1709,11 @@ export class PgAdapter implements DBAdapter {
   ): Promise<T> {
     await this.started;
 
-    let { client, releaseTurn } = await this.#checkout({ holding: true });
+    // `fn` runs holding this client, so any connection it checks out through
+    // the adapter is one it needs before it can give this one back. The hold
+    // is made before the checkout so the scheduler knows it as a hold.
+    let holding = markConnectionHeld();
+    let { client, releaseTurn } = await this.#checkout({ hold: holding });
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
@@ -1561,9 +1721,6 @@ export class PgAdapter implements DBAdapter {
       let { rows } = await client.query(sql);
       return rows;
     };
-    // `fn` runs holding this client, so any connection it checks out through
-    // the adapter is one it needs before it can give this one back.
-    let holding = markConnectionHeld();
     let released = false;
     try {
       return await holding.run(() => fn(query));
@@ -1661,7 +1818,7 @@ export class PgAdapter implements DBAdapter {
         throw new Error('a read snapshot was used after it ended');
       }
       if (!pinned) {
-        let { client, releaseTurn } = await this.#checkout({ holding: true });
+        let { client, releaseTurn } = await this.#checkout({ hold: holding });
         holding.hold();
         pinned = {
           client,

@@ -19,6 +19,21 @@ trap 'exit 0' INT TERM
 # loki.source.file. Alloy's Docker discovery doesn't see native processes.
 LOG_TEE="../observability/scripts/dev-log-tee.sh"
 
+# With no installed Chrome (`PUPPETEER_EXECUTABLE_PATH` unset; see
+# lib/env-vars.sh), Puppeteer launches the Chrome for Testing build that the
+# repo-root `.puppeteerrc.cjs` pins. Puppeteer's postinstall fetches that build
+# only when Puppeteer itself is installed, so a checkout whose install predates
+# a change to the pin is missing it. `browsers install chrome` fetches the
+# pinned build when it is absent and returns without touching the network when
+# it is present. Only `chrome`: Puppeteer's `headless: true` launches run the
+# full Chrome binary, not `chrome-headless-shell`. The install's own output is
+# dropped, so a notice comes first: fetching a missing build is a large
+# download, and without it the task is silent until the prerenderer logs.
+if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
+  echo "[prerender] Ensuring the pinned Chrome for Testing build is installed…"
+  pnpm exec puppeteer browsers install chrome >/dev/null || exit $?
+fi
+
 if [ -n "$ENV_MODE" ]; then
   DEFAULT_HOST_URL="${HOST_URL}"
 else

@@ -2,6 +2,7 @@ import type { ResolvedCodeRef } from '../code-ref.ts';
 import { isResolvedCodeRef } from '../card-document-shape.ts';
 import type { Definition, FieldDefinition } from '../definitions.ts';
 import { routesForField } from '../searchable-routes.ts';
+import { isOperationFailure } from './types.ts';
 
 // ============================================================================
 // Which tier a policy predicate reads.
@@ -1094,7 +1095,12 @@ class TierWalk {
     let key = `${resolved.module}#${resolved.name}`;
     let found = this.#definitions.get(key);
     if (!found) {
-      found = this.#env.lookupDefinition(resolved).catch(() => undefined);
+      found = this.#env.lookupDefinition(resolved).catch((err: unknown) => {
+        if (isOperationFailure(err)) {
+          throw err;
+        }
+        return undefined;
+      });
       this.#definitions.set(key, found);
     }
     return found;

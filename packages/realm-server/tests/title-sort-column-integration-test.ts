@@ -238,7 +238,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let migration = (await import(
       // @ts-ignore a CommonJS migration, required for its SQL
-      '../../postgres/migrations/1794351846317_add-boxel-index-title-sort.js'
+      '../../postgres/migrations/1794379316236_add-boxel-index-title-sort.js'
     )) as { up: Function; down: Function };
     let run = async (step: Function) => {
       let statements: string[] = [];

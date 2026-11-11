@@ -1662,7 +1662,6 @@ async function setupTestRealm({
         dbAdapter,
         new URL(realmURL),
         user,
-        baseTestMatrix.url.href,
         baseTestMatrix.serverName,
       );
     setupAuthEndpoints({ [realmURL]: await sessionFor(TEST_MATRIX_USER) });

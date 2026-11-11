@@ -1,4 +1,8 @@
 import { logger } from '@cardstack/runtime-common';
+import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -21,15 +25,6 @@ const execFileAsync = promisify(execFile);
 export class BrowserManager {
   #browser: Browser | null = null;
   #browserUserDataDir: string | undefined;
-  readonly #enableSandbox: boolean;
-
-  constructor(env: NodeJS.ProcessEnv = process.env) {
-    let sandbox = env.PRERENDER_CHROME_SANDBOX ?? 'false';
-    if (sandbox !== 'true' && sandbox !== 'false') {
-      throw new Error('PRERENDER_CHROME_SANDBOX must be true or false');
-    }
-    this.#enableSandbox = sandbox === 'true';
-  }
 
   async getBrowser(): Promise<Browser> {
     if (this.#browser) {
@@ -38,11 +33,15 @@ export class BrowserManager {
     await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
-    // Hosted container deployments retain their existing sandbox setting.
-    // Native launchers enable Chromium's sandbox explicitly; a local renderer
-    // does not have the ECS task isolation assumed by the container path.
-    if (!this.#enableSandbox) {
-      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    // The renderer runs card code from any realm, so the sandbox stays on
+    // except in two cases:
+    // - On Linux, for the reasons `chromeSandboxEnabled` gives. The deployed
+    //   prerenderer is a Linux ECS task, and there the boundary is the task
+    //   itself: a separate ECS task, isolated from the realm-server.
+    // - Whenever the V8 `--prof` diagnostic is on. The renderer has to write its
+    //   log to disk, which the sandbox blocks.
+    if (!chromeSandboxEnabled() || v8ProfEnabled()) {
+      launchArgs.push(...CHROME_NO_SANDBOX_ARGS);
     }
 
     // When the realm-server speaks HTTPS (local dev with a mkcert leaf

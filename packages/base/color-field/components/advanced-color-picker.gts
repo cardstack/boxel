@@ -22,6 +22,7 @@ import {
   rgbaToHsv,
   rgbaToRgbaString,
 } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from '../../components/password-managers';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import { setupElement } from '../modifiers/setup-element-modifier';
 
@@ -621,6 +622,8 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onBlur={{this.handleCssBlur}}
             @onKeyPress={{this.handleCssKeyPress}}
             @disabled={{not @canEdit}}
+            {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{else if (eq this.outputFormat 'rgb')}}
           <BoxelInput
@@ -631,6 +634,8 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onBlur={{this.handleColorBlur}}
             @onKeyPress={{this.handleColorKeyPress}}
             @disabled={{not @canEdit}}
+            {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{else if (eq this.outputFormat 'hsl')}}
           <BoxelInput
@@ -641,6 +646,8 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onBlur={{this.handleColorBlur}}
             @onKeyPress={{this.handleColorKeyPress}}
             @disabled={{not @canEdit}}
+            {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{else if (eq this.outputFormat 'hsb')}}
           <BoxelInput
@@ -651,6 +658,8 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onBlur={{this.handleColorBlur}}
             @onKeyPress={{this.handleColorKeyPress}}
             @disabled={{not @canEdit}}
+            {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{else}}
           <BoxelInput
@@ -661,6 +670,8 @@ export default class AdvancedColorPicker extends Component<ColorFieldSignature> 
             @onBlur={{this.handleHexBlur}}
             @onKeyPress={{this.handleHexKeyPress}}
             @disabled={{not @canEdit}}
+            {{ignoredByPasswordManagers}}
+            data-test-color-text-input
           />
         {{/if}}
       </div>

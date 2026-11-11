@@ -406,7 +406,7 @@ export const EXPLAIN_KEY = '_explain';
 // vector is `to_tsvector('boxel_english', markdown_search_text(markdown))`,
 // the accent-folding English configuration every stemmed text vector uses.
 // That vector is stored in `prerendered_html.markdown_tsv` (kept current by a
-// trigger, migration 1793936584288) and GIN-indexed there, so `matches` and
+// trigger, migration 1794378861227) and GIN-indexed there, so `matches` and
 // relevance read the column: a phrase recheck, a rank, or a key-probe filter
 // is a detoast rather than a regex over up to 400 KB of markdown.
 // What a filter compiles inside: whether it sits under an `any` (where a

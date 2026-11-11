@@ -90,7 +90,7 @@ export async function allRoomEvents(
   return events;
 }
 
-// The realm URLs the workspace chooser lists for a user live in matrix
+// The realm URLs the dashboard lists for a user live in matrix
 // account data. Creating a realm through the realm server does not add it
 // there; the app does that itself, so a script that creates one must too.
 export async function addRealmToAccountData(

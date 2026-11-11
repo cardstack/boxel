@@ -5,6 +5,7 @@ import {
   query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import type {
   CallApiSlotLookup,
   CallApiUse,
@@ -27,7 +28,7 @@ import { UserKeyError } from './user-keys.ts';
 // writers.
 //
 // A use is one `callApi` invocation whose binding resolved to the share or
-// key: from a browser, the AI assistant, the CLI or a pipeline, whether the
+// key: from a browser, the AI assistant, the CLI or an automation, whether the
 // vendor answered or the call was refused. Each share and key the call's
 // slots were filled from records it (`key_uses`). A call that was sent, or
 // failed, is a row of its own. A refusal is collapsed into the row of the
@@ -450,7 +451,12 @@ export async function shareUsage(
   ]);
   if (
     !share ||
-    !(await isDirectWriter(dbAdapter, new URL(share.realm_url as string), user))
+    !(await isDirectWriter(
+      dbAdapter,
+      new URL(share.realm_url as string),
+      user,
+      matrixServerNameFromEnv(),
+    ))
   ) {
     throw noSuchShare();
   }

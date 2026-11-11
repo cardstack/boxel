@@ -20,15 +20,21 @@ export const LIVE_SEARCH_REFRESH_WINDOW_MS = isTesting() ? 10 : 2000;
 // against the search endpoints.
 export const LIVE_SEARCH_REFRESH_MAX_JITTER_MS = isTesting() ? 0 : 1000;
 
+// The spread for a prompt flush: no window, only enough jitter that the
+// clients holding the same query don't all search at once.
+export const LIVE_SEARCH_PROMPT_REFRESH_MAX_JITTER_MS = isTesting() ? 0 : 250;
+
 // Coalesces schedule() calls into one deferred flush: the first call of a
 // burst arms the timer, later calls ride the armed flush, and the timer is
 // never extended — a continuous event stream still flushes once per window
-// rather than starving. The caller accumulates *what* to refresh (realm
-// sets, invalidation maps) in its own state; this class only owns *when* the
-// refresh runs. A test waiter spans arm-to-flush so `settled()` waits out
-// the window.
+// rather than starving. A prompt schedule() skips the window, and pulls an
+// already-armed flush earlier rather than waiting it out. The caller
+// accumulates *what* to refresh (realm sets, invalidation maps) in its own
+// state; this class only owns *when* the refresh runs. A test waiter spans
+// arm-to-flush so `settled()` waits out the window.
 export class LiveSearchRefreshScheduler {
   #timer: ReturnType<typeof setTimeout> | undefined;
+  #dueAt: number | undefined;
   #token: unknown;
   #flush: () => void;
 
@@ -36,16 +42,24 @@ export class LiveSearchRefreshScheduler {
     this.#flush = flush;
   }
 
-  schedule(): void {
+  schedule(opts?: { prompt?: boolean }): void {
+    let delay = opts?.prompt
+      ? Math.random() * LIVE_SEARCH_PROMPT_REFRESH_MAX_JITTER_MS
+      : LIVE_SEARCH_REFRESH_WINDOW_MS +
+        Math.random() * LIVE_SEARCH_REFRESH_MAX_JITTER_MS;
+    let dueAt = Date.now() + delay;
     if (this.#timer !== undefined) {
-      return;
+      if (this.#dueAt !== undefined && this.#dueAt <= dueAt) {
+        return;
+      }
+      clearTimeout(this.#timer);
+    } else {
+      this.#token = waiter.beginAsync();
     }
-    this.#token = waiter.beginAsync();
-    let delay =
-      LIVE_SEARCH_REFRESH_WINDOW_MS +
-      Math.random() * LIVE_SEARCH_REFRESH_MAX_JITTER_MS;
+    this.#dueAt = dueAt;
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
+      this.#dueAt = undefined;
       let token = this.#token;
       this.#token = undefined;
       // A page nobody can see doesn't re-run its searches: the refresh waits
@@ -99,6 +113,7 @@ export class LiveSearchRefreshScheduler {
     }
     clearTimeout(this.#timer);
     this.#timer = undefined;
+    this.#dueAt = undefined;
     waiter.endAsync(this.#token as Parameters<typeof waiter.endAsync>[0]);
     this.#token = undefined;
   }

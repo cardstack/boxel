@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
@@ -11,18 +12,21 @@ import ChevronDown from '@cardstack/boxel-icons/chevron-down';
 import ChevronUp from '@cardstack/boxel-icons/chevron-up';
 import { Button } from '@cardstack/pretui/components/button';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
+import { Menu } from '@cardstack/pretui/components/menu';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { didCancel, dropTask, task, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
 
-import { logger } from '@cardstack/runtime-common';
+import { logger, type RealmIdentifier } from '@cardstack/runtime-common';
 
+import { realmIdentifierSegments } from '@cardstack/host/lib/realm-utils';
 import { isHostedRealm } from '@cardstack/host/lib/workspace-list';
 import { NEW_SESSION_NAME } from '@cardstack/host/services/ai-assistant-panel-service';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
+import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -30,6 +34,9 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import { AGENT_KINDS, usesCodingAgent } from './agent-kinds';
+import { sortByUpdatedAtDesc } from './workspace-layout';
+
+import type { MenuEntry } from '@cardstack/pretui/internal/menu';
 
 const log = logger('component:dashboard/get-started');
 
@@ -83,6 +90,10 @@ interface Signature {
   };
 }
 
+function countOf<T>(values: T[], value: T) {
+  return values.filter((other) => other === value).length;
+}
+
 // The dashboard's onboarding checklist. Every tick comes from something the
 // user has actually done, read from state the host already keeps, so the list
 // can't drift from what happened. A button in the page's header opens and
@@ -93,6 +104,7 @@ export default class GetStarted extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private hostModeService: HostModeService;
   @service declare private recentCardsService: RecentCardsService;
 
   // The open list and the dismissed note each hold only for the dismissal
@@ -331,6 +343,73 @@ export default class GetStarted extends Component<Signature> {
     }
   }
 
+  // The workspaces the user can publish, most recently updated first.
+  // Read several times a render.
+  @cached
+  private get workspacesToPublish() {
+    return sortByUpdatedAtDesc(
+      this.realmServer.userRealmIdentifiers.filter((url) =>
+        this.realm.canPublish(url),
+      ),
+      this.realm.info,
+    );
+  }
+
+  // Why there's nothing to publish. A workspace made before workspaces were
+  // marked publishable isn't, so being able to edit one isn't enough.
+  private get publishUnavailableNote() {
+    return this.realmServer.userRealmIdentifiers.some((url) =>
+      this.realm.canAdminister(url),
+    )
+      ? 'None of your workspaces can be published. Create a new one to publish it.'
+      : 'Publishing needs a workspace you can edit. Create one to publish it.';
+  }
+
+  // The note waits for the info of every workspace the user administers: until a
+  // workspace's info loads, it may yet turn out publishable.
+  private get showsPublishUnavailableNote() {
+    return (
+      this.workspacesToPublish.length === 0 &&
+      this.realmServer.userRealmIdentifiers
+        .filter((url) => this.realm.canAdminister(url))
+        .every((url) => this.realm.isInfoLoaded(url))
+    );
+  }
+
+  // With one workspace to publish the button opens it in host mode to
+  // publish; with more, a menu asks which.
+  private get onlyWorkspaceToPublish() {
+    let [only, ...rest] = this.workspacesToPublish;
+    return rest.length === 0 ? only : undefined;
+  }
+
+  // Workspaces that share a name are told apart by the last segment of
+  // their address, or by the whole address when that segment is shared too.
+  private get publishMenuItems(): MenuEntry[] {
+    let workspaces = this.workspacesToPublish;
+    let names = workspaces.map((url) => this.realm.info(url).name);
+    let withSegment = workspaces.map((url, index) => {
+      let segment = realmIdentifierSegments(url).at(-1);
+      return segment ? `${names[index]} (${segment})` : undefined;
+    });
+    return workspaces.map((url, index) => {
+      let label = names[index];
+      if (countOf(names, label) > 1) {
+        let short = withSegment[index];
+        label =
+          short && countOf(withSegment, short) === 1
+            ? short
+            : `${label} (${this.realm.realmURLTextOf(url) ?? url})`;
+      }
+      return { label, onSelect: () => this.openToPublish(url) };
+    });
+  }
+
+  // Publishing happens in host mode, which shows the site it publishes.
+  @action private openToPublish(workspace: RealmIdentifier) {
+    this.hostModeService.openToPublishTask.perform(workspace);
+  }
+
   @action private async askBoxelAi() {
     await this.aiAssistantPanelService.openNewSession();
   }
@@ -420,8 +499,66 @@ export default class GetStarted extends Component<Signature> {
                       {{/if}}
                     </span>
                     <span class='step-hint'>{{step.hint}}</span>
+                    {{#if (eq step.id 'publish')}}
+                      {{#unless step.done}}
+                        {{#if this.showsPublishUnavailableNote}}
+                          <span
+                            class='step-note'
+                            data-test-get-started-publish-unavailable
+                          >{{this.publishUnavailableNote}}</span>
+                        {{/if}}
+                      {{/unless}}
+                    {{/if}}
                   </span>
-                  {{#unless step.done}}
+                  {{! Publishing again stays a step away once one workspace
+                      is on the web. }}
+                  {{#if (eq step.id 'publish')}}
+                    {{#if this.onlyWorkspaceToPublish}}
+                      <Button
+                        class='step-action'
+                        @appearance='outlined'
+                        @size='s'
+                        {{on
+                          'click'
+                          (fn this.openToPublish this.onlyWorkspaceToPublish)
+                        }}
+                        data-test-get-started-action={{step.id}}
+                      >Publish a workspace</Button>
+                    {{else if this.workspacesToPublish.length}}
+                      <Menu
+                        class='step-action'
+                        @items={{this.publishMenuItems}}
+                        @label='Workspaces to publish'
+                        @align='end'
+                      >
+                        <:trigger as |isMenuOpen toggle|>
+                          <Button
+                            @appearance='outlined'
+                            @size='s'
+                            {{on 'click' toggle}}
+                            data-test-get-started-action={{step.id}}
+                          >Publish a workspace
+                            {{#if isMenuOpen}}
+                              <ChevronUp
+                                width='14'
+                                height='14'
+                                class='publish-chevron'
+                                aria-hidden='true'
+                                data-test-get-started-publish-chevron='up'
+                              />
+                            {{else}}
+                              <ChevronDown
+                                width='14'
+                                height='14'
+                                class='publish-chevron'
+                                aria-hidden='true'
+                                data-test-get-started-publish-chevron='down'
+                              />
+                            {{/if}}</Button>
+                        </:trigger>
+                      </Menu>
+                    {{/if}}
+                  {{else if (not step.done)}}
                     {{#if (eq step.id 'open-card')}}
                       {{#if this.realmServer.userRealmIdentifiers.length}}
                         <Button
@@ -449,7 +586,7 @@ export default class GetStarted extends Component<Signature> {
                         data-test-get-started-action={{step.id}}
                       >Set up an agent</Button>
                     {{/if}}
-                  {{/unless}}
+                  {{/if}}
                 </li>
               {{/each}}
             </ol>
@@ -560,9 +697,14 @@ export default class GetStarted extends Component<Signature> {
         color: var(--muted-foreground);
         font-weight: 500;
       }
-      .step-hint {
+      .step-hint,
+      .step-note {
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
+      }
+      /* Keeps its size when the label runs short of room. */
+      .publish-chevron {
+        flex: none;
       }
       .get-started-dismissed {
         display: flex;
@@ -617,9 +759,12 @@ export default class GetStarted extends Component<Signature> {
         .get-started-step {
           grid-template-columns: var(--_get-started-tick-size) minmax(0, 1fr);
         }
+        /* The action takes the whole row, tick column included: the text
+           column alone is narrower than a labeled button. It stays at the
+           row's end, as in the wide layout. */
         .step-action {
-          grid-column: 2;
-          justify-self: start;
+          grid-column: 1 / -1;
+          justify-self: end;
         }
       }
     </style>

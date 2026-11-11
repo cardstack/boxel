@@ -20,8 +20,8 @@ live in a workspace of the person running them, not in a shared realm:
 "AI Assistant Evaluations", for the writer user (the same create-realm call
 the app's "new workspace" dialog makes) and pushes everything under
 `eval-realm/` into it. Locally the writer is `user`, so the workspace is
-`https://localhost:4201/user/evals/` and shows up in that account's workspace
-chooser under that name. Setup can run again at any time; it writes every file
+`https://localhost:4201/user/evals/` and shows up on that account's dashboard
+under that name. Setup can run again at any time; it writes every file
 over, and it reapplies the display name, so `--name` renames a workspace that
 already exists. `--endpoint` only takes effect on a new one, since the
 endpoint is the URL.
@@ -41,15 +41,16 @@ endpoint is the URL.
   runner brings it to the top of the stack before that prompt, since only a
   stack's top card goes into the message context),
   `secondsPerPrompt` replacing the default 200 s time target for each prompt,
-  `pipelineApprovals` naming operations of seeded cards to approve for
-  scheduled pipelines only before the first prompt (each with `card`, one of
+  `automationApprovals` naming operations of seeded cards to approve for
+  automations only before the first prompt (each with `card`, one of
   `initialCards`, its `operation`, and `keyFrom`: `own-key` for the eval
   user's own key, or `share` for a key `EVAL_SHARE_OWNER` shares into the test
   workspace; the assistant's invocation of the operation is then refused
   "Interactive use not approved"), `expectsNoWrites` marking a
   conversation-only evaluation (the run passes when every prompt was sent and
   nothing was written, with no card to render; any write fails it, as does a
-  seeded card that no longer holds its seed data), and a query-backed
+  seeded card that no longer holds its seed data), `seedScript` naming a seed
+  script whose cards are copied in too (see below), and a query-backed
   `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
   mechanical fields (verdict, turns, cost, caching rate, start and end, tool
@@ -99,19 +100,26 @@ prompt in a single session. `bulk-vendors-invoices` sets all 45 vendors to
 NET 30 (6 already are) past customer cards with the same field, lists the
 unpaid invoices more than 60 days overdue as of a date the prompt names, and
 makes every vendor adopt from a subclass, which takes more files than one
-`run-realm-code` call can write. `bulk-records` raises the variant prices of 60 coffee products, more
-than a search returns when it names no page size, and reassigns a leaving
-agent's open tickets, which is a link change. Their seeds live under
-`eval-realm/bulk-operations/`. Their `expectedChangedCards` list a sample of
-each task's targets, and the judge checks the rest from the workspace
-snapshot. Keep a bulk task under about 100 changed cards: each card a run
-changes adds a correctness check to one Matrix event, and about 100 take that
-event past Matrix's 64 KB limit, which breaks the room.
+`run-realm-code` call can write. `bulk-records` raises the variant prices of 110 coffee products, more
+than two pages of what a search returns when it names no page size, and
+reassigns a leaving agent's open tickets, which is a link change. Their
+definitions live under `eval-realm/bulk-operations/`, with the vendors and
+invoices beside them; `bulk-records` builds its 159 cards from a seed script.
+Their `expectedChangedCards` list a sample of each task's targets, and the
+judge checks the rest from the workspace snapshot.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
 puts it in `initialCards` / `initialFiles`; the runner copies those in before
-the prompt.
+the prompt. A set too large to keep as fixtures comes from a seed script
+instead: a module in `eval-seeds/`, registered in `eval-seeds/index.ts`, that
+builds card documents by path from the realm root, the way host tests hand a
+realm its `contents`, and names which of them are initial, prompt and
+expected changed cards. The evaluation names it in `seedScript`. The runner
+builds the cards when a run starts and copies them in with the rest, and the
+run's `evaluation.json` records them as the seeds the judge compares against.
+A seed script never uses a random source: criteria quote its counts and
+values, so every run must start from the same bytes.
 
 A skill change that targets a core use case adds an evaluation that shows the
 problem it fixes; the `skill-change-eval` skill in `.claude/skills` covers how.
@@ -144,8 +152,7 @@ where setup creates the workspace.
 ## Run
 
 Start the dev stack first (`mise run dev-all` with `OPENROUTER_API_KEY` set for
-the ai-bot), with a host built without `DASHBOARD_V2`: the runner drives the
-workspace chooser, which the dashboard replaces. Then, from `packages/ai-assistant-evals`:
+the ai-bot). Then, from `packages/ai-assistant-evals`:
 
 ```sh
 EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models
@@ -174,11 +181,11 @@ every model as a tab of one headed browser and runs them at once.
   can land in the other model's room. A run that puts more models than users
   on screen at once stops before it opens a browser.
 - `EVAL_SHARE_OWNER` — the local matrix user whose share fills a
-  `pipelineApprovals` entry with `keyFrom: share`, made a writer of the test
+  `automationApprovals` entry with `keyFrom: share`, made a writer of the test
   workspace to share into it. Default `ai-assistant-eval-key-sharer`;
   `pnpm eval:users` registers it with the eval users.
 - `EVAL_PG_CONTAINER`, `EVAL_PG_DATABASE`, `EVAL_REALM_SECRET_SEED` — where
-  the runner writes the secure-origin session it seeds `pipelineApprovals`
+  the runner writes the secure-origin session it seeds `automationApprovals`
   with, and the seed it signs that session's token with. Default `boxel-pg`,
   `boxel`, and the local stack's seed.
 - `EVAL_HOST_URL`, `EVAL_MATRIX_URL` — default `https://localhost:4200`,

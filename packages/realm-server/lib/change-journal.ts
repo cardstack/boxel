@@ -8,9 +8,10 @@
 // it is not published and `realm_history_state.enabled` is true, inserts the
 // event from that row, and inserts the path rows from the event's `seq`. A
 // realm the statement doesn't take gets no row, so there is no per-realm flag
-// to cache or to refresh. The insert then notifies `realm_change_events`,
-// which Postgres delivers when the transaction commits, so realm-historian
-// wakes for an event it can already see.
+// to cache or to refresh. The insert then notifies `realm_change_events` with
+// the realm's id, which Postgres delivers when the transaction commits, so
+// realm-historian wakes for an event it can already see, and only the task
+// whose shard holds the realm.
 
 import {
   param,
@@ -74,7 +75,7 @@ export class PostgresChangeJournal implements ChangeJournal {
       ')',
       'SELECT seq, pg_notify(',
       param(REALM_CHANGE_EVENTS_CHANNEL),
-      ", '') FROM event",
+      ', realm_id::text) FROM event',
     ];
     let rows = await querier(expression);
     return rows.length > 0;

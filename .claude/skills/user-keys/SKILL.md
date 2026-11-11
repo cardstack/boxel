@@ -455,8 +455,8 @@ the vendor doesn't say which it refused, so both grants are rejected.
   `lib/key-bindings.ts`), except **one probe per grant per interval**: the
   first call after `last_probe_at` plus the interval claims the probe in one
   `UPDATE` (`claimProbe`), so concurrent calls can't both probe. The interval
-  is `KEY_GRANT_PROBE_INTERVAL_SECONDS` (default 900). A pipeline admission
-  (`pipelineAdmission`) admits a run only while a probe is due, and claims
+  is `KEY_GRANT_PROBE_INTERVAL_SECONDS` (default 900). An automation admission
+  (`automationAdmission`) admits a run only while a probe is due, and claims
   nothing.
 - **A probe the vendor answers below 400 clears the grant**; a 401 leaves it
   rejected, and anything else (403, 429, 5xx, a timeout) leaves it as it was,
@@ -509,7 +509,7 @@ leaves the key `active`; a 408 is retried like a 5xx.
   `credential-rejected` (424, `meta.reason: 'rejected'`) by `checkSlots`
   without contacting Google, except **one probe per key per interval**,
   claimed on `user_keys.last_probe_at` in one `UPDATE` (`claimKeyProbe`), with
-  the same `KEY_GRANT_PROBE_INTERVAL_SECONDS`. A pipeline admission admits a
+  the same `KEY_GRANT_PROBE_INTERVAL_SECONDS`. An automation admission admits a
   run only while the probe is due.
 - **A probe that mints clears the key**; one Google refuses again leaves it
   rejected and starts a new interval; one the endpoint fails to answer leaves

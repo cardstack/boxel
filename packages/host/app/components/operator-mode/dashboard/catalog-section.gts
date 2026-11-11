@@ -9,7 +9,7 @@ import type { RealmIdentifier } from '@cardstack/runtime-common';
 
 import { catalogRealmURL } from '@cardstack/host/lib/utils';
 
-import ManageCatalogs from '../workspace-chooser/manage-catalogs';
+import ManageCatalogs from '../dashboard-modals/manage-catalogs';
 
 import CatalogShelf from './catalog-shelf';
 import SectionHead from './section-head';

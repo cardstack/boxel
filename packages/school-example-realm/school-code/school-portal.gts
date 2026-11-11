@@ -3,11 +3,12 @@ import LayoutDashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import { operations } from '@cardstack/base/operations';
+import { resolveRRIReference, rri } from '@cardstack/runtime-common';
 
 import { ServicePlanSchedule } from './service-plan-schedule';
 
 class PortalIsolated extends Component<typeof SchoolPortal> {
-  // The Education realm, resolved against this card's own URL. The portal
+  // The Education realm, resolved against this card's own id. The portal
   // ships beside the code it uses, so a relative `educationRealm` keeps one
   // copy of it working wherever the three realms are mounted side by side.
   get educationRealm(): string | undefined {
@@ -15,7 +16,7 @@ class PortalIsolated extends Component<typeof SchoolPortal> {
     if (!educationRealm || !id) {
       return undefined;
     }
-    return new URL(educationRealm, id).href;
+    return resolveRRIReference(educationRealm, rri(id));
   }
 
   // `listMySchedules` is a saved search on `ServicePlanSchedule`. A provider

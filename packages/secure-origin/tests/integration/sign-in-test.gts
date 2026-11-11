@@ -245,6 +245,25 @@ module('Integration | sign-in', function (hooks) {
       });
     });
 
+    test('carries no hint that keeps a password manager out of its fields', async function (assert) {
+      serve(NO_GOOGLE);
+      visitShell('sign-in');
+      await render(SignInPage);
+      await waitFor('[data-test-secure-sign-in-form]');
+      for (let field of ['username', 'password']) {
+        for (let hint of [
+          'data-1p-ignore',
+          'data-lpignore',
+          'data-form-type',
+          'data-bwignore',
+        ]) {
+          assert
+            .dom(`[data-test-secure-${field}]`)
+            .doesNotHaveAttribute(hint, `${field} has no ${hint}`);
+        }
+      }
+    });
+
     test('Sign In waits for both fields', async function (assert) {
       serve(NO_GOOGLE);
       visitShell('sign-in');
@@ -1306,7 +1325,7 @@ module('Integration | sign-in', function (hooks) {
         .dom('[data-test-secure-signing-out]')
         .hasText('Signing you out…', 'says so as the app’s own page does');
       assert
-        .dom('[data-test-secure-signing-out] [data-test-loading-indicator]')
+        .dom('[data-test-secure-signing-out] [data-test-pretui-spinner]')
         .exists('with the same spinner');
       assert.deepEqual(
         navigations,
