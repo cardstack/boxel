@@ -69,7 +69,7 @@ Where it is thinner: no autocompletion, linting, folding, search panel or diff v
 
 Clicking a span label doesn't move focus; the editor takes focus from a click on the code or from Tab.
 
-- **Read-only is announced and enforced.** The content element is not editable and carries `aria-readonly`, and the text can still be selected and copied.
+- **Read-only is announced and enforced.** The editor's state refuses edits and the content element carries `aria-readonly`. The content element still takes keyboard focus, so a keyboard user can move through the code, scroll past the editor's height, and select and copy it, as with the CodeBlock shown before it loads.
 - **Tab is never captured**, so a keyboard user always has a way out.
 - **The gutter is not editable or selectable**, and the fallback's gutter is `aria-hidden`, as CodeBlock's is.
 - **Focus is visible on the whole frame** (`:focus-within`, outlined in `--ring`), since CodeMirror's own focus outline is turned off.

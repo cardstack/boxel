@@ -56,10 +56,17 @@ module('Integration | pretui code editor', function (hooks) {
         element.querySelector('.tok-keyword'),
         'JavaScript tokens are tagged for the host component to colour',
       );
+      let content = element.querySelector<HTMLElement>('.cm-content');
       assert.strictEqual(
-        element.querySelector('.cm-content')?.getAttribute('contenteditable'),
-        'false',
-        'a read-only editor is not editable',
+        content?.getAttribute('aria-readonly'),
+        'true',
+        'a read-only editor is announced as read-only',
+      );
+      content?.focus();
+      assert.strictEqual(
+        document.activeElement,
+        content,
+        'a read-only editor still takes keyboard focus',
       );
     } finally {
       view.destroy();
@@ -248,8 +255,13 @@ module('Integration | pretui code editor', function (hooks) {
     assert.true(view.state.readOnly);
     assert
       .dom('[data-test-pretui-code-editor-host] .cm-content')
-      .hasAttribute('contenteditable', 'false')
       .hasAttribute('aria-readonly', 'true');
+    view.contentDOM.focus();
+    assert.strictEqual(
+      document.activeElement,
+      view.contentDOM,
+      'the keyboard can reach a read-only editor, to scroll, select and copy',
+    );
     await assert.rejects(
       setCodeEditorContent('[data-test-pretui-code-editor]', 'changed'),
       /read-only/,
