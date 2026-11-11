@@ -189,7 +189,7 @@ class CodeEditorUsage extends Component {
           @value={{this.language}}
           @options={{this.languageOptions}}
           @defaultValue='plain'
-          @description='javascript, typescript, json or plain. Anything else is plain.'
+          @description='javascript, typescript, json or plain, or a file extension: js and gjs are javascript, ts and gts are typescript. A card definition reads as its script. Anything else is plain.'
           @onInput={{this.setLanguage}}
         />
         <Args.Bool

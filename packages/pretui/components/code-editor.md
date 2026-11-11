@@ -7,7 +7,8 @@ Source code you can edit: a CodeMirror editor with a language mode, line numbers
 ```
 @value?       — the source text
 @onInput?     — fires with the whole text after every edit
-@language?    — 'javascript' | 'typescript' | 'json' | 'plain' (default); anything else is plain
+@language?    — 'javascript' | 'typescript' | 'json' | 'plain' (default), or an alias:
+                js, gjs → javascript; ts, gts → typescript; anything else is plain
 @readOnly?    — the code can be read, selected and copied, but not changed
 @dark?        — code mode's colours: Monaco's dark theme, whatever the page's theme
 @lineNumbers? — the gutter (default true)
@@ -42,7 +43,7 @@ Element: HTMLDivElement
 
 Where Pretui is better: the echo rule and the read-only fallback. Wrappers commonly reset the caret when the parent passes the typed value back, and commonly render nothing until the editor loads.
 
-Where it is thinner: no autocompletion, linting, folding, search panel or diff view, and three languages. Monaco, in code mode, is the full IDE; this is the editor a card can carry.
+Where it is thinner: no autocompletion, linting, folding, search panel or diff view, and three languages. A card definition (`.gts`) highlights as TypeScript, so its `<template>` body gets the script grammar's approximation rather than a template grammar. Monaco, in code mode, is the full IDE; this is the editor a card can carry.
 
 ## Accessibility
 
