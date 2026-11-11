@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "909cfc4ebdf3aca5660af31fa0f0a087f20385fe",
+  "revision": "dcd4a6c36f39ff194d02be113fb91ace9e354f68",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -13,6 +13,14 @@
     {
       "path": "automation/automation.gts",
       "reason": "Automation: the automation definition the server reads from the index as data (its script, triggers, callApi operations, caps, params, milestones and batchedAI)"
+    },
+    {
+      "path": "automation/describe-cron.ts",
+      "reason": "describeCron: the plain-words reading of a cron trigger that Automation's views show; imported by automation/automation.gts"
+    },
+    {
+      "path": "fields/code/code.gts",
+      "reason": "CodeField, CodeView and CodeEdit: how Automation shows and edits its script; imported by automation/automation.gts"
     }
   ],
   "tests": {

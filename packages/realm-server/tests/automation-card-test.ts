@@ -45,10 +45,10 @@ module(basename(import.meta.filename), function (hooks) {
         expression: '30 2 * * *',
         timeZone: 'America/Chicago',
         untilDate: '2026-12-31',
-        untilTime: { value: '06:00' },
+        untilTime: '06:00',
         count: 30,
         date: null,
-        time: { value: null },
+        time: null,
         webhookPath: null,
         params: [{ name: 'mode', value: 'full' }],
       },
@@ -58,10 +58,10 @@ module(basename(import.meta.filename), function (hooks) {
         expression: null,
         timeZone: 'America/Chicago',
         untilDate: null,
-        untilTime: { value: null },
+        untilTime: null,
         count: null,
         date: '2026-11-20',
-        time: { value: '15:00' },
+        time: '15:00',
         webhookPath: null,
         params: [],
       },
@@ -71,10 +71,10 @@ module(basename(import.meta.filename), function (hooks) {
         expression: null,
         timeZone: null,
         untilDate: null,
-        untilTime: { value: null },
+        untilTime: null,
         count: null,
         date: null,
-        time: { value: null },
+        time: null,
         webhookPath: 'github-push',
         params: [],
       },
@@ -137,7 +137,6 @@ module(basename(import.meta.filename), function (hooks) {
     let stored = doc.doc.data.attributes!;
     for (let name of [
       'triggers',
-      'operations',
       'caps',
       'params',
       'milestones',
@@ -145,6 +144,16 @@ module(basename(import.meta.filename), function (hooks) {
     ] as const) {
       assert.deepEqual(stored[name], attributes[name], `${name} round-trips`);
     }
+    assert.deepEqual(
+      stored.operations,
+      [
+        {
+          targetType: { module: `${testRealm.url}github/repo`, name: 'Repo' },
+          operation: 'openIssues',
+        },
+      ],
+      'operations round-trip, with the code ref resolved against the card',
+    );
     assert.strictEqual(
       (doc.doc.data.relationships?.script as { links: { self: string } })?.links
         ?.self,

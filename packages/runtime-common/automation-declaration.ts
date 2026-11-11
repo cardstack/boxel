@@ -583,7 +583,7 @@ function readCron(
 
   let until: number | undefined;
   let untilDate = text(trigger.untilDate);
-  let untilTime = text(asRecord(trigger.untilTime).value);
+  let untilTime = text(trigger.untilTime);
   if (untilDate === undefined && untilTime !== undefined) {
     report(
       'invalid-date-time',
@@ -622,7 +622,7 @@ function readOnce(
 ): { at: number; timeZone: string } | undefined {
   let timeZone = readTimeZone(trigger, path, report);
   let date = text(trigger.date);
-  let time = text(asRecord(trigger.time).value);
+  let time = text(trigger.time);
   if (date === undefined || time === undefined) {
     report(
       'invalid-date-time',

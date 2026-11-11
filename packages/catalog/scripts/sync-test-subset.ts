@@ -64,6 +64,7 @@ const ALLOWED_PREFIXES = [
   '@cardstack/base/',
   '@cardstack/boxel-icons/',
   '@cardstack/boxel-ui/',
+  '@cardstack/pretui/',
 ];
 
 interface Manifest {
@@ -205,8 +206,10 @@ function shimmedModules() {
 }
 
 // Every import a subset definition makes has to resolve in a test stack that
-// serves only the subset: a sibling subset file, the base realm, or a module
-// the host shims. Anything else would load in a full catalog and fail here.
+// serves only the subset: a sibling subset file, the base realm, Pret UI, or a
+// module the host shims. Every stack that serves base serves Pret UI too,
+// since base imports it. Anything else would load in a full catalog and fail
+// here.
 function checkClosure(contents: Map<string, string>) {
   let shims = shimmedModules();
   let problems: string[] = [];
