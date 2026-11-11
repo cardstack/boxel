@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -182,9 +182,33 @@ transfer and storage in. Every per-GB quantity in this skill, `downloaded_gb`
 and the GB-months included, is in that unit, and code that meters bytes into
 GB divides by `BYTES_PER_GB` rather than its own constant, or the estimate and
 the charge disagree by about 7%. Two charges the payer also pays are outside the
-estimate, and the result lists them in `uncountedChargeKinds`: run indexing,
-which no cap bounds, and storage, which depends on what the realm keeps
-rather than on any one run.
+estimate, and the result lists them in `uncountedChargeKinds`: run indexing
+and storage, which depends on what the realm keeps rather than on any one run.
+
+**Indexing is outside the ceiling** (ADR 029 §1.5). The index and prerender
+time a run's writes cause includes re-indexing every card that links to what
+the run wrote, so it depends on the realm's links and templates, not on
+anything the author sets. The `writes` cap limits files written, not that
+time, and the caps have no indexing cap: choosing one would mean guessing at
+the index's internals. So `runCostCeiling` prices compute, network and AI
+only, and the minimum balance built on it doesn't cover indexing either. The
+`run_indexing` charge is priced as measured when the index pass completes,
+and `spendCredits` draws only what the balance holds then, so a large pass
+can go partly unpaid. The charge records its full usage regardless, so the
+unpaid part is its usage at its pricing version less the credits it drew:
+
+```sql
+-- A run's indexing: credits drawn beside the usage they priced.
+SELECT l.charge_id, l.pricing_version, -SUM(l.credit_amount) AS credits,
+       (SELECT json_object_agg(unit, quantity) FROM credit_charge_usage u
+        WHERE u.charge_id = l.charge_id) AS usage
+FROM credits_ledger l
+WHERE l.run_id = '<run id>' AND l.charge_kind = 'run_indexing'
+GROUP BY l.charge_id, l.pricing_version;
+```
+
+A balance that held nothing at all records no charge and no usage
+(`nothing-to-charge`), so that run shows no `run_indexing` row.
 
 **The runs counted in a month.** The ceiling is multiplied by:
 

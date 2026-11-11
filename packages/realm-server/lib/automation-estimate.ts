@@ -13,9 +13,9 @@ import { BYTES_PER_GB, type Pricing } from './pricing.ts';
 // Each run is priced at the most its caps let it spend on compute, network
 // and AI, the charges a run's caps bound. Two charges the payer also pays
 // are outside the estimate, listed in `uncountedChargeKinds`: the indexing a
-// run's writes cause, which no cap bounds, and the daily storage of the files
-// its runs create, which depends on what the realm keeps rather than on any
-// one run.
+// run's writes cause, which no cap bounds and which ADR 029 §1.5 keeps out of
+// the per-run cost, and the daily storage of the files its runs create, which
+// depends on what the realm keeps rather than on any one run.
 //
 // The runs counted in a month are:
 //
@@ -57,6 +57,12 @@ export interface RunCostCaps {
 // an automation's minimum balance (ADR 029 §1.5, "the most one of its runs
 // can cost") is meant to come from `runCostCeiling` too, so the balance a run
 // is admitted against and the estimate shown at switch-on can't drift apart.
+//
+// The ceiling leaves out the indexing the run's writes cause (ADR 029 §1.5).
+// That time depends on how many cards link to what the run wrote, which no
+// cap an author sets can bound, so neither the estimate nor the minimum
+// balance covers it, and an index pass that costs more than the balance holds
+// goes partly unpaid.
 export interface RunCostCeiling {
   computeCredits: number;
   networkCredits: number;
