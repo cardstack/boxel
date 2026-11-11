@@ -18,6 +18,7 @@ import {
 } from '../../src/shell/keys/approve-page.gts';
 import KeyPage from '../../src/shell/keys/key-page.gts';
 import UseKeyPage from '../../src/shell/keys/use-key-page.gts';
+import { assertNoLoginForm } from '../helpers/password-managers.ts';
 import {
   setupTelemetrySecretsCheck,
   stringsIn,
@@ -2322,6 +2323,9 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-budget="Team GitHub"] input')
       .hasValue('2400');
+    assertNoLoginForm(assert, '[data-test-approve-form]', [
+      '[data-test-approve-budget="Team GitHub"] input',
+    ]);
     let input = find('[data-test-approve-budget="Team GitHub"] input')!;
     let name = input
       .getAttribute('aria-labelledby')!

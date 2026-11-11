@@ -225,6 +225,7 @@ class SlotPanel extends Component<{
         </Field>
         <form
           novalidate
+          data-form-type='other'
           {{on 'submit' this.save}}
           data-replace-key-form
           data-test-replace-key-form

@@ -313,7 +313,11 @@ Sandboxing card code per realm origin is what would close it.
 Before a run starts, `automationAdmission(dbAdapter, {core, realmURL, codeRef,
 operation, instance?, payer})` answers the refusal the call would get (or
 nothing), without opening any key, so a missing or changed approval stops the
-run up front.
+run up front. It checks each slot with `checkSlots`, the check every call and
+readiness make. So a slot is refused `credential-rejected` when its OAuth
+connection or `client_credentials` client can't mint a token, with `reason`
+`rejected` or `needs-admin` (see the `oauth-connections` skill). A rejected
+grant or service-account key admits the run only while its probe is due.
 
 ## Anonymous use
 
