@@ -196,7 +196,8 @@ const TOOL_CALL_CHANNELS: ReadonlySet<WriteChannel> = new Set([
 ]);
 
 // Time is checked first, so that the reason is the one the clock would have
-// given had it closed the group before the event arrived.
+// given had it closed the group before the event arrived. A group an intent
+// event opened is never open here: that event closes it after itself.
 function closesBefore(
   group: OpenGroup,
   event: ChangeEvent,
@@ -206,7 +207,7 @@ function closesBefore(
   if (timeOf(event) >= due.at) {
     return due.reason;
   }
-  if (group.first.intent || event.intent) {
+  if (event.intent) {
     return 'intent';
   }
   return writerChange(group.first, event);

@@ -470,10 +470,11 @@ module('grouper', (hooks) => {
     });
 
     test('a group opened by an intent event takes no other event', (assert) => {
-      let group = openGroup(event(0, { intent: { kind: 'delete-realm' } }));
-      assert.deepEqual(reasons(group, event(0.5), LIMITS), {
-        closeBefore: 'intent',
-      });
+      let events = [event(0, { intent: { kind: 'delete-realm' } }), event(0.5)];
+      assert.deepEqual(runGrouper(events, 'live'), [
+        { seqs: [1], reason: 'intent' },
+        { seqs: [2], reason: 'quiet-period' },
+      ]);
     });
 
     test('an intent event after the deadline closes the group for the time, as the clock would', (assert) => {
