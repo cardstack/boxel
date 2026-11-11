@@ -426,7 +426,7 @@ export class RoutingRuleField extends FieldDef {
 
   @field name = contains(StringField, {
     description:
-      'Name of the route, unique among its siblings. A child route refers to its parent by this name',
+      'Optional name of the route, unique in the realm. Card templates use it to link to the route by name',
   });
 
   @field card = contains(StringField, {
@@ -451,7 +451,7 @@ export class RoutingRuleField extends FieldDef {
 
   @field parent = contains(StringField, {
     description:
-      "Name of the link field from a child route's card type to its parent route's card type",
+      "Name of the link field that connects a child route's card type and its parent route's card type: a linksTo on the child or a linksToMany on the parent. Optional when exactly one such link exists",
   });
 
   // A thunk, because the field contains itself. `containsMany` resolves a

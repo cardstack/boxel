@@ -872,8 +872,10 @@ export type RealmIndexCounts = {
 // what realm.json says: `instance` is the linked card as the search document
 // flattens it (`{ id, ...its searchable fields }`, `id` absolute), and `type`
 // is a code ref whose module is absolute (the search document stores it as
-// one `module/name` string, which the read splits back).
+// one `module/name` string, which the read splits back). Any other field the
+// search document holds comes through under its own name.
 export interface RawHostRoutingRule {
+  [field: string]: unknown;
   path?: unknown;
   name?: unknown;
   card?: unknown;
@@ -906,23 +908,11 @@ function readRawRoutingRuleList(value: unknown): RawHostRoutingRule[] {
   );
 }
 
-const RAW_ROUTING_RULE_FIELDS = [
-  'path',
-  'name',
-  'card',
-  'where',
-  'match',
-  'parent',
-  'instance',
-  'redirectTo',
-  'statusCode',
-] as const;
-
 function readRawRoutingRule(rule: Record<string, unknown>): RawHostRoutingRule {
   let raw: RawHostRoutingRule = {};
-  for (let key of RAW_ROUTING_RULE_FIELDS) {
-    if (rule[key] != null) {
-      raw[key] = rule[key];
+  for (let [key, value] of Object.entries(rule)) {
+    if (value != null && key !== 'type' && key !== 'routes') {
+      raw[key] = value;
     }
   }
   let type = rule.type;
