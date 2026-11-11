@@ -1,5 +1,5 @@
 /* eslint-env browser */
-import { isPagePath, splitPagePath } from './pages.js';
+import { isPagePath, movesAsDocument, splitPagePath } from './pages.js';
 import { flushTelemetry } from './telemetry.ts';
 
 // Where the shell's pages send the window: another of the shell's pages,
@@ -12,7 +12,9 @@ import { flushTelemetry } from './telemetry.ts';
 // browser's back button returns to the page it came from. An address with a
 // query string or a fragment is told something the page reads as it starts,
 // so it, like the page the window is already on and any address off the
-// shell, loads as a new document.
+// shell, loads as a new document. So does a move to or from a page whose form
+// makes a new password (`movesAsDocument` in `pages.js`), so a password
+// manager finds that form as its own page loads.
 
 let router;
 let rootURL;
@@ -43,7 +45,22 @@ function inAppPath(url) {
     return undefined;
   }
   let page = target.pathname.slice(rootURL.length);
-  return isPagePath(page) ? `/${page}` : undefined;
+  if (!isPagePath(page) || movesAsDocument(shownPage(), page)) {
+    return undefined;
+  }
+  return `/${page}`;
+}
+
+// The page the window shows, beneath the shell's address. That is the
+// router's page, not the address: a page that replaces the window's address
+// as it ends, such as a sign-up leaving the window signed in at `sign-in`,
+// stays on its route. Before the document's first transition ends the router
+// has no page, and the address is the page loading.
+function shownPage() {
+  if (router.currentURL == null) {
+    return splitPagePath(window.location.pathname).page;
+  }
+  return router.currentURL.replace(/[?#].*$/, '').replace(/^\//, '');
 }
 
 export const navigation = {

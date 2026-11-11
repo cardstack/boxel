@@ -7,6 +7,8 @@
 // sets the intro's type and the space around it. It holds no state and sends
 // nothing; the caller decides what each control does. On the secure origin
 // the fields are its own inputs; in the app they are the credential frame.
+// The form's method is `post`, as a password manager expects of a sign-in
+// form, so a submit the caller doesn't prevent puts no field in the address.
 //
 // Each control carries the test attributes of both origins' suites.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -51,6 +53,7 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       yet.</p>
   {{/if}}
   <form
+    method='post'
     novalidate
     {{on 'submit' @onSubmit}}
     data-test-login-form
