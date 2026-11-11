@@ -2582,3 +2582,4 @@ export {
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
 export * from './automation-runs.ts';
+export * from './automations.ts';
