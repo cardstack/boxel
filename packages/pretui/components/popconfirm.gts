@@ -311,6 +311,9 @@ export class Popconfirm extends Component<PopconfirmSignature> {
           display: inline-flex;
         }
         .pretui-pc-panel {
+          /* the panel's own Buttons keep their size inside a sized
+             LayoutControl row, which sets --pretui-row-h on the bar */
+          --pretui-row-h: initial;
           background: var(--popover);
           color: var(--popover-foreground);
           border-radius: var(--radius-surface, 10px);
