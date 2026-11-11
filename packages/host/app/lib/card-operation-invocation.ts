@@ -116,12 +116,17 @@ function own(
 // declared on `CardDef` itself, so a type that does not set one of its own
 // reports as "Card", which tells a caller nothing about the card they named.
 export function defNameOf(card: CardDef): string {
-  return typeNameOf(card.constructor as typeof CardDef);
+  return typeNameOf(card.constructor as typeof CardDef, 'this card');
 }
 
-export function typeNameOf(type: typeof BaseDef): string {
+// A type as a refusal names it, by the same reading. The fallback describes
+// what the call was reached through: a card, or a type with no card at all.
+export function typeNameOf(
+  type: typeof BaseDef,
+  fallback: 'this card' | 'this type' = 'this type',
+): string {
   let owner = type as { displayName?: string; name?: string };
-  return owner.name || owner.displayName || 'this card';
+  return owner.name || owner.displayName || fallback;
 }
 
 // An operation that acts on the card it is invoked on, as its type declares
