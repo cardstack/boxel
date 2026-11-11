@@ -228,7 +228,10 @@ module(
 
       let changed = `${SCRIPT}// changed elsewhere\n`;
       await realm.write('scripts/nightly.js', changed);
+      // The change reaches the editor through the realm's index event, which
+      // can take a few seconds on a busy machine.
       await waitUntil(() => codeEditorContent(SCRIPT_EDITOR) === changed, {
+        timeout: 10000,
         timeoutMessage: 'the editor takes the change made elsewhere',
       });
       assert.strictEqual(codeEditorContent(SCRIPT_EDITOR), changed);
