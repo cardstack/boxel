@@ -169,8 +169,8 @@ export async function readSourceOperation(
     },
     ...(openContent
       ? {
-          openBody: () => {
-            let opened = openContent();
+          openBody: async () => {
+            let opened = await openContent();
             if (!opened) {
               return undefined;
             }

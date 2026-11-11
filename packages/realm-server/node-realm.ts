@@ -40,10 +40,8 @@ const {
   createWriteStream,
   renameSync,
   removeSync,
-  openSync,
-  fstatSync,
-  closeSync,
 } = fsExtra;
+import { open as openHandle, stat, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'path';
 import { Duplex, Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -77,9 +75,13 @@ const realmEventsLog = logger('realm:events');
 // raw ENOENT escape. ENOTDIR is the same story via a different route: probing
 // a path nested under a regular file (e.g. `some.txt/nested`) throws it, and
 // such a path likewise just doesn't exist.
-function statIfExists(absolutePath: string): Stats | undefined {
+//
+// Asynchronous because it runs on the request path: on a network filesystem a
+// stat is a round trip, and a synchronous one holds the event loop for its
+// whole duration.
+async function statIfExists(absolutePath: string): Promise<Stats | undefined> {
   try {
-    return statSync(absolutePath);
+    return await stat(absolutePath);
   } catch (err: any) {
     if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
       return undefined;
@@ -97,6 +99,55 @@ function statIfExists(absolutePath: string): Stats | undefined {
 // write's reported time, `lastModified`, and a read of the file agree.
 function lastModifiedSeconds(stat: Stats): number {
   return unixTime(stat.mtimeMs);
+}
+
+// A file opened for a whole-body read: the stream over the open descriptor,
+// with the length and modification time that descriptor's stat reports, or
+// the error that shows the file is gone. `size` is absent when the open failed
+// some other way, in which case `content` fails with that error when read.
+type OpenedFile =
+  | { content: Readable; size?: number; lastModifiedMs?: number }
+  | { gone: NodeJS.ErrnoException };
+
+async function openMeasured(absolutePath: string): Promise<OpenedFile> {
+  let handle: FileHandle | undefined;
+  try {
+    handle = await openHandle(absolutePath, 'r');
+    let { size, mtimeMs: lastModifiedMs } = await handle.stat();
+    if (size === 0) {
+      await handle.close();
+      return { content: Readable.from([]), size, lastModifiedMs };
+    }
+    // The stream owns the handle from here and closes it when it ends, fails
+    // or is destroyed.
+    return {
+      content: handle.createReadStream({ start: 0, end: size - 1 }),
+      size,
+      lastModifiedMs,
+    };
+  } catch (err: any) {
+    await handle?.close().catch(() => undefined);
+    if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
+      return { gone: err };
+    }
+    // Any other failure to open surfaces as the stream's own error when it is
+    // read. No length is claimed for it.
+    return { content: createReadStream(absolutePath) };
+  }
+}
+
+// The bytes of a file whose open has not necessarily finished, for a consumer
+// that needs a stream before the open can report anything. A file the open
+// finds gone fails the read with the open's error. Ending the iteration early
+// destroys the opened stream, which closes its descriptor.
+async function* readOpened(
+  open: () => Promise<OpenedFile>,
+): AsyncGenerator<Buffer> {
+  let opened = await open();
+  if ('gone' in opened) {
+    throw opened.gone;
+  }
+  yield* opened.content;
 }
 
 export class NodeAdapter implements RealmAdapter {
@@ -244,7 +295,7 @@ export class NodeAdapter implements RealmAdapter {
 
   async lastModified(path: string): Promise<number | undefined> {
     let absolutePath = this.pathInRealm(path);
-    let stat = statIfExists(absolutePath);
+    let stat = await statIfExists(absolutePath);
     // The directory check covers case-insensitive file systems
     if (!stat || stat.isDirectory()) {
       return undefined;
@@ -255,7 +306,7 @@ export class NodeAdapter implements RealmAdapter {
 
   async openFile(path: string): Promise<FileRef | undefined> {
     let absolutePath = this.pathInRealm(path);
-    let stat = statIfExists(absolutePath);
+    let stat = await statIfExists(absolutePath);
     // The directory check covers case-insensitive file systems
     if (!stat || stat.isDirectory()) {
       return undefined;
@@ -279,61 +330,37 @@ export class NodeAdapter implements RealmAdapter {
     // the open finds otherwise. That open settles it, so `openContent` reports
     // the file gone and a response can answer not-found before it commits to
     // a body. `content` has no such answer to give, so it yields a stream
-    // whose read fails as a vanished file's does, which is where its
-    // consumers handle one.
-    let opened:
-      | { content: Readable; size?: number; lastModifiedMs?: number }
-      | 'gone'
-      | undefined;
-    let goneContent: Readable | undefined;
-    let open = () => {
-      if (opened === undefined) {
-        let fd: number | undefined;
-        try {
-          fd = openSync(absolutePath, 'r');
-          let { size, mtimeMs: lastModifiedMs } = fstatSync(fd);
-          if (size === 0) {
-            closeSync(fd);
-            opened = { content: Readable.from([]), size, lastModifiedMs };
-          } else {
-            opened = {
-              content: createReadStream(absolutePath, {
-                fd,
-                start: 0,
-                end: size - 1,
-              }),
-              size,
-              lastModifiedMs,
-            };
-          }
-        } catch (err: any) {
-          if (fd !== undefined) {
-            closeSync(fd);
-          }
-          if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
-            opened = 'gone';
-          } else {
-            // Any other failure to open surfaces as the stream's own error
-            // when it is read. No length is claimed for it.
-            opened = { content: createReadStream(absolutePath) };
-          }
-        }
-      }
-      return opened;
-    };
+    // whose read fails with the open's error, which is where its consumers
+    // handle a vanished file.
+    //
+    // `content` and `openContent` share one open, so whichever is touched
+    // first starts it and both hand out the same stream. The open, and the
+    // descriptor stat after it, are asynchronous like the path stat above.
+    // `content` is a synchronous getter, so when it is touched first it
+    // returns a stream that waits for the open and then delivers what the
+    // opened descriptor reads.
+    let opening: Promise<OpenedFile> | undefined;
+    let open = () => (opening ??= openMeasured(absolutePath));
+    let content: Readable | undefined;
     return {
       path,
       get content() {
-        let result = open();
-        if (result === 'gone') {
-          goneContent ??= createReadStream(absolutePath);
-          return goneContent;
-        }
-        return result.content;
+        content ??= Readable.from(readOpened(open), { objectMode: false });
+        return content;
       },
-      openContent: () => {
-        let result = open();
-        return result === 'gone' ? undefined : result;
+      openContent: async () => {
+        let opened = await open();
+        if ('gone' in opened) {
+          return undefined;
+        }
+        content ??= opened.content;
+        return {
+          content,
+          ...(opened.size != null ? { size: opened.size } : {}),
+          ...(opened.lastModifiedMs != null
+            ? { lastModifiedMs: opened.lastModifiedMs }
+            : {}),
+        };
       },
       lastModified: lastModifiedSeconds(stat),
       lastModifiedMs: stat.mtimeMs,

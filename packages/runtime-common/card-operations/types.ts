@@ -980,13 +980,14 @@ export interface OperationSourceResult {
   // facade whether the validators it built from the handle's stat describe
   // these bytes. Undefined when the open finds the file gone: another host's
   // delete can be invisible to the handle's stat until the file is opened.
-  openBody?: () =>
+  openBody?: () => Promise<
     | {
         body: OperationSourceBody;
         size?: number;
         lastModifiedMs?: number;
       }
-    | undefined;
+    | undefined
+  >;
 }
 
 export type OperationSourceBody =
