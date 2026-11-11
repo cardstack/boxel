@@ -591,6 +591,7 @@ import type {
   FileWatcherEventContent,
   IncrementalIndexEventContent,
   RealmEventContent,
+  RealmWideIncrementalIndexEventContent,
   UpdateRealmEventContent,
 } from '@cardstack/base/matrix-event';
 import type {
@@ -1467,13 +1468,14 @@ function makeInvalidatedTypeAccumulator() {
 }
 
 // What this field may add to an event, encoded. It bounds this member's own
-// contribution and nothing else: `invalidations` carries no ceiling, so it is
-// what decides whether a large fan-out's event is deliverable at all, and a
-// budget here neither helps nor hurts that. What it buys is that a realm whose
-// pass touches a pathological number of distinct types — where the set has
-// stopped being selective enough to be worth carrying — drops the member
-// instead of adding to the bulk, and its subscribers take the unconditional
-// re-run they would have taken without it.
+// contribution and nothing else: `invalidations` is what decides whether a
+// large fan-out's pass can be announced by name at all — past the whole-event
+// budget it goes out realm-wide instead — and a budget here neither helps nor
+// hurts that. What it buys is that a realm whose pass touches a pathological
+// number of distinct types — where the set has stopped being selective enough
+// to be worth carrying — drops the member instead of adding to the bulk, and
+// its subscribers take the unconditional re-run they would have taken without
+// it.
 const MAX_BROADCAST_INVALIDATED_TYPES_BYTES = 8 * 1024;
 
 function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
@@ -1497,9 +1499,9 @@ function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
 //
 // A per-member budget is the wrong instrument here, and measuring one in
 // isolation is what makes it wrong: a bulk commit's URLs appear in the event
-// three times over — once in `invalidations`, which has no ceiling at all,
-// again in `clientAuthored` for a caller that asks for authorship, and again in
-// `versions`. A member that fits its own allowance can still be the increment
+// three times over — once in `invalidations`, whose own overflow sends the
+// pass realm-wide instead, again in `clientAuthored` for a caller that asks
+// for authorship, and again in `versions`. A member that fits its own allowance can still be the increment
 // that carries the total past the 65536 bytes the Matrix specification allows
 // an event, and a rejected event is not a degraded one: `sendEvent` throws,
 // `broadcastRealmEvent` logs it and moves to the next room, and subscribers get
@@ -1547,8 +1549,98 @@ function withVersionsIfItFits(
 
 // Measure what goes on the wire — the JSON encoding of the whole content, not
 // the character count of the keys and values inside one member.
-function encodedSize(content: IncrementalIndexEventContent): number {
+function encodedSize(content: RealmEventContent): number {
   return new TextEncoder().encode(JSON.stringify(content)).length;
+}
+
+// The completion for a pass whose invalidations will not fit in an event:
+// no list, so every subscriber reloads what it holds of the realm. See
+// `RealmWideIncrementalIndexEventContent`. Returns the event with a note on
+// what it had to leave out, for the sender to log.
+//
+// Which modules moved goes in first: without it every tab that loaded code
+// from the realm rebuilds. Authorship is then kept in the most specific form
+// that fits. The writer's own `clientAuthored` first, which spares its tab a
+// re-read of the cards it sent. Then the same request ids with
+// `clientAuthored` emptied, which still lets the writer recognize its write —
+// a wait keyed on the id hears the pass land — while re-reading every card,
+// the cautious reading an empty list carries. Shared-pass writers keep only
+// their ids, with `changed: null`, since the cards each changed are exactly
+// what does not fit. Only when none of that fits does authorship go entirely.
+export function realmWideCompletion(
+  content: IncrementalIndexEventContent,
+  coalescedWrites: CoalescedIndexWrite[] | undefined = content.coalescedWrites,
+): { event: RealmWideIncrementalIndexEventContent; warning: string } {
+  let bare: RealmWideIncrementalIndexEventContent = {
+    eventName: 'index',
+    indexType: 'incremental',
+    realmWide: true,
+    ...(content.generation !== undefined
+      ? { generation: content.generation }
+      : {}),
+    realmURL: content.realmURL,
+  };
+  let withModules: RealmWideIncrementalIndexEventContent = {
+    ...bare,
+    invalidatedModules: content.invalidations.filter(hasExecutableExtension),
+  };
+  let realmWide =
+    encodedSize(withModules) <= MAX_EVENT_CONTENT_BYTES ? withModules : bare;
+  let requestIds = {
+    ...(Object.prototype.hasOwnProperty.call(content, 'clientRequestId')
+      ? { clientRequestId: content.clientRequestId }
+      : {}),
+    ...(coalescedWrites
+      ? {
+          coalescedWrites: coalescedWrites.map(({ clientRequestId }) => ({
+            clientRequestId,
+            changed: null,
+          })),
+        }
+      : {}),
+  };
+  let candidates: RealmWideIncrementalIndexEventContent[] = [
+    {
+      ...realmWide,
+      ...requestIds,
+      ...(content.clientAuthored
+        ? { clientAuthored: content.clientAuthored }
+        : {}),
+    },
+    {
+      ...realmWide,
+      ...requestIds,
+      ...(content.clientAuthored ? { clientAuthored: [] } : {}),
+    },
+  ];
+  let reason = `its ${content.invalidations.length} invalidations encode to ${encodedSize(content)} bytes, over the ${MAX_EVENT_CONTENT_BYTES}-byte budget, so every subscriber reloads the realm's cards and searches${realmWide === bare ? '; its invalidated modules would not fit either' : ''}`;
+  for (let candidate of candidates) {
+    if (encodedSize(candidate) <= MAX_EVENT_CONTENT_BYTES) {
+      return {
+        event: candidate,
+        warning: `(request ${content.clientRequestId ?? 'none'}) goes out realm-wide: ${reason}`,
+      };
+    }
+  }
+  return {
+    event: realmWide,
+    warning: `goes out realm-wide without its writers' request ids, which would not fit either: ${reason}`,
+  };
+}
+
+// The incremental completion as it can be sent: itself when it fits in an
+// event, its realm-wide form when it does not. For a sender that assembles the
+// listed form whole, with nothing optional to shed first.
+export function incrementalCompletionThatFits(
+  content: IncrementalIndexEventContent,
+): {
+  event: IncrementalIndexEventContent | RealmWideIncrementalIndexEventContent;
+  warning?: string;
+} {
+  if (encodedSize(content) <= MAX_EVENT_CONTENT_BYTES) {
+    return { event: content };
+  }
+  return realmWideCompletion(content);
 }
 
 // The versions a shared pass's announcer may report: those of the cards no
@@ -4489,15 +4581,25 @@ export class Realm {
         ...(clientAuthored ? { clientAuthored } : {}),
       });
     }
+    let delivery = opts?.recipients
+      ? { recipients: opts.recipients }
+      : undefined;
+    // Everything past this point is optional and degrades to fit, so whether
+    // the pass can be announced by name is settled here: a list the event
+    // cannot carry goes out as a realm-wide completion instead, and the
+    // homeserver never sees an event it would reject.
+    if (encodedSize(content) > MAX_EVENT_CONTENT_BYTES) {
+      let { event, warning } = realmWideCompletion(content, coalescedWrites);
+      this.#log.warn(`index event for ${this.url} ${warning}`);
+      this.broadcastRealmEvent(event, delivery);
+      return;
+    }
     let versions = opts?.versions;
     if (coalescedWrites) {
       versions = versionsOnlyThisWriterChanged(passes, versions);
       content = this.#withCoalescedWrites(content, coalescedWrites);
     }
-    this.broadcastRealmEvent(
-      withVersionsIfItFits(content, versions),
-      opts?.recipients ? { recipients: opts.recipients } : undefined,
-    );
+    this.broadcastRealmEvent(withVersionsIfItFits(content, versions), delivery);
   }
 
   // `coalescedWrites` on a shared pass's event, as much of it as fits.
