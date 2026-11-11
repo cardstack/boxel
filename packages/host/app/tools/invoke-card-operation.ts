@@ -16,10 +16,10 @@ import { isWrite } from '@cardstack/runtime-common/card-operations';
 import {
   BATCH_MEMBER,
   assertPayloadSuppliesParams,
-  assertTypeOperation,
   baseOf,
   defNameOf,
   invocableNames,
+  invokeOnType,
   loadOperationType,
   offeredHere,
   type OperationsBucket,
@@ -207,38 +207,23 @@ A write answers the card it wrote and the version that card now holds; a read an
       input.realm,
       this.loaderService.loader,
     );
-
-    let operationsModule = await this.loadOperationsModule();
-    let base = assertTypeOperation(operationsModule, Type, name);
-    let declarations = operationsModule.getDeclaredOperations(Type);
-    let mintsACard = base === 'create' && !declarations[name];
-    if (input.relationships && !mintsACard) {
-      throw new Error(
-        `"${name}" is not the plain "create", so it has no new card for "relationships" to describe. A declared operation takes the cards it links to among its params, in "payload".`,
-      );
-    }
-
-    let payload = payloadOf(input);
-    assertPayloadSuppliesParams(name, declarations[name], payload);
-
-    let bucket = (
-      operationsModule.operations as (
-        target: unknown,
-        opts?: { skipIndexWait?: boolean },
-      ) => OperationsBucket
-    )(Type, input.skipIndexWait ? { skipIndexWait: true } : undefined);
-    let member = bucket[name] as (
-      payload?: unknown,
-      opts?: unknown,
-    ) => Promise<OperationWriteResult | Record<string, unknown> | null>;
-    let relationships = mintsACard
-      ? (input.relationships as Record<string, unknown> | undefined)
-      : undefined;
-    let answer = await member(payload, {
-      realm: input.realm,
-      ...(relationships ? { relationships } : {}),
-    });
-    return await this.resultOf(answer, base);
+    let { base, answer } = await invokeOnType(
+      await this.loadOperationsModule(),
+      Type,
+      name,
+      payloadOf(input),
+      {
+        realm: input.realm,
+        relationships: input.relationships as
+          | Record<string, unknown>
+          | undefined,
+        skipIndexWait: input.skipIndexWait,
+      },
+    );
+    return await this.resultOf(
+      answer as OperationWriteResult | Record<string, unknown> | null,
+      base,
+    );
   }
 
   private async resultOf(

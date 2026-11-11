@@ -184,24 +184,38 @@ export async function loadOperationType(
   }
 }
 
-// An operation that acts on a type rather than on one of its cards, invoked
-// through the class itself: the plain `create`, and a declared operation the
-// type carries in that scope, such as a declared create. Refuses what
-// `assertInstanceOperation` refuses, listing the names the type carries in
-// this scope. Answers the base, as `assertInstanceOperation` does.
+// Invokes an operation on a type rather than on one of its cards, through the
+// class itself as card code's `operations(Class)` does: the plain `create`, or
+// a declared operation the type carries in that scope, such as a declared
+// create. It runs in `realm`, since a type names no card whose realm it could
+// take.
 //
-// The bucket is built here, from the class, and building it names the class
-// by its module and export, so a class no module exports is refused by
-// `operations()` itself.
-export function assertTypeOperation(
+// Refuses what `assertInstanceOperation` refuses, listing the names the type
+// carries in this scope, and a payload missing a declared param.
+// `relationships` is read for the plain `create` alone, the one operation with
+// a new card for it to describe. Answers the base beside the answer, so the
+// caller knows whether the answer is a write or a document.
+//
+// Building the bucket names the class by its module and export, so a class no
+// module exports is refused by `operations()` itself.
+export async function invokeOnType(
   operationsModule: typeof OperationsModule,
   type: typeof BaseDef,
   name: string,
-): BaseOperation {
+  payload: Record<string, unknown> | undefined,
+  opts: {
+    realm: string;
+    relationships?: Record<string, unknown>;
+    skipIndexWait?: boolean;
+  },
+): Promise<{ base: BaseOperation; answer: unknown }> {
   let declarations = operationsModule.getDeclaredOperations(type);
   let bucket = (
-    operationsModule.operations as (target: unknown) => OperationsBucket
-  )(type);
+    operationsModule.operations as (
+      target: unknown,
+      opts?: { skipIndexWait?: boolean },
+    ) => OperationsBucket
+  )(type, opts.skipIndexWait ? { skipIndexWait: true } : undefined);
   let base = baseOf(name, declarations);
   if (declarations[name] && base === 'query') {
     throw new Error(
@@ -226,5 +240,20 @@ export function assertTypeOperation(
       }`,
     );
   }
-  return base;
+  let mintsACard = base === 'create' && !declarations[name];
+  if (opts.relationships && !mintsACard) {
+    throw new Error(
+      `"${name}" is not the plain "create", so it has no new card for "relationships" to describe. A declared operation takes the cards it links to among its params, in "payload".`,
+    );
+  }
+  assertPayloadSuppliesParams(name, declarations[name], payload);
+  let member = bucket[name] as (
+    payload?: unknown,
+    opts?: unknown,
+  ) => Promise<unknown>;
+  let answer = await member(payload, {
+    realm: opts.realm,
+    ...(opts.relationships ? { relationships: opts.relationships } : {}),
+  });
+  return { base, answer };
 }

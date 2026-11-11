@@ -46,7 +46,7 @@ import {
   BATCH_MEMBER,
   assertInstanceOperation,
   assertPayloadSuppliesParams,
-  assertTypeOperation,
+  invokeOnType,
   loadOperationType,
   type OperationsBucket,
 } from '../lib/card-operation-invocation';
@@ -3936,19 +3936,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
       realmURL,
       this.loaderService.loader,
     );
-    let base = assertTypeOperation(operationsModule, Type, operation);
-    assertPayloadSuppliesParams(
+    let { base, answer } = await invokeOnType(
+      operationsModule,
+      Type,
       operation,
-      operationsModule.getDeclaredOperations(Type)[operation],
       payload,
+      { realm: realmURL },
     );
-    let member = (
-      operationsModule.operations as (target: unknown) => OperationsBucket
-    )(Type)[operation] as (
-      payload?: unknown,
-      opts?: { realm: string },
-    ) => Promise<unknown>;
-    return operationAnswer(await member(payload, { realm: realmURL }), base);
+    return operationAnswer(answer, base);
   }
 
   private async readCard(id: string, realmURL: string): Promise<CardRead> {
