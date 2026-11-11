@@ -282,4 +282,56 @@ module('Integration | pretui code editor', function (hooks) {
       parent.remove();
     }
   });
+  test("dark takes code mode's editor colours", async function (assert) {
+    await renderComponent(
+      class Driver extends GlimmerComponent {
+        <template>
+          <CodeEditor @value={{SOURCE}} @language='javascript' @dark={{true}} />
+        </template>
+      },
+    );
+    await waitForCodeEditor();
+    let color = (selector: string) =>
+      getComputedStyle(
+        document.querySelector(
+          `[data-test-pretui-code-editor-host] ${selector}`,
+        )!,
+      ).color;
+    assert.strictEqual(
+      getComputedStyle(document.querySelector('.pretui-code-editor')!)
+        .backgroundColor,
+      'rgb(65, 62, 78)',
+      "the surface is code mode's editor background",
+    );
+    assert.strictEqual(color('.tok-keyword'), 'rgb(86, 156, 214)');
+    assert.strictEqual(color('.tok-comment'), 'rgb(96, 139, 78)');
+    assert.strictEqual(color('.tok-string'), 'rgb(206, 145, 120)');
+    assert.strictEqual(color('.cm-gutters'), 'rgb(133, 133, 133)');
+  });
+
+  test('read-only marks no current line', async function (assert) {
+    await renderComponent(
+      class Driver extends GlimmerComponent {
+        <template>
+          <CodeEditor
+            @value={{SOURCE}}
+            @language='javascript'
+            @readOnly={{true}}
+          />
+        </template>
+      },
+    );
+    await waitForCodeEditor();
+    let line = document.querySelector(
+      '[data-test-pretui-code-editor-host] .cm-activeLine',
+    );
+    if (line) {
+      assert.strictEqual(
+        getComputedStyle(line).backgroundColor,
+        'rgba(0, 0, 0, 0)',
+      );
+    } else {
+      assert.ok(true, 'no current line is drawn');
+    }
+  });
 });

@@ -8,7 +8,7 @@ import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
 import { fillIn, render, settled, waitFor } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { CodeEditor } from './code-editor';
+import { CodeEditor, MONACO_DARK } from './code-editor';
 
 interface StubOptions {
   doc: string;
@@ -19,6 +19,8 @@ interface StubOptions {
   label?: string;
   labelledBy?: string;
   describedBy?: string;
+  dark?: boolean;
+  theme?: Record<string, Record<string, string>>;
   onDocChange?: (text: string) => void;
 }
 
@@ -298,5 +300,64 @@ module('Pretui | components/code-editor', function (hooks) {
       root.style.getPropertyValue('--pretui-code-editor-max'),
       '12',
     );
+  });
+  test('dark reaches the editor with a dark theme, and changing it rebuilds', async function (assert) {
+    class State {
+      @tracked dark = true;
+    }
+    let state = new State();
+    await render(
+      <template>
+        <CodeEditor @value='draft' @dark={{state.dark}} />
+      </template>,
+    );
+    await waitFor('[data-test-stub-editor]');
+    assert.dom('.pretui-code-editor').hasAttribute('data-dark', 'true');
+    assert.true(created[0].dark, 'the editor is told its theme is dark');
+    let darkTheme = created[0].theme!;
+    assert.strictEqual(
+      darkTheme['.cm-content'].caretColor,
+      MONACO_DARK.cursor,
+      "the theme takes code mode's colours",
+    );
+
+    state.dark = false;
+    await settled();
+    assert.strictEqual(created.length, 2, 'the view is rebuilt');
+    assert.false(created[1].dark);
+    assert.notStrictEqual(created[1].theme, darkTheme, 'with the light theme');
+    assert.dom('.pretui-code-editor').hasAttribute('data-dark', 'false');
+    assert.dom('[data-test-stub-editor]').hasValue('draft');
+  });
+
+  test('each of light, dark, read-only and dark read-only has its own theme', async function (assert) {
+    await render(
+      <template>
+        <CodeEditor @value='a' />
+        <CodeEditor @value='b' @readOnly={{true}} />
+        <CodeEditor @value='c' @dark={{true}} />
+        <CodeEditor @value='d' @dark={{true}} @readOnly={{true}} />
+      </template>,
+    );
+    await waitFor('[data-test-stub-editor]');
+    let themes = new Set(created.map((options) => options.theme));
+    assert.strictEqual(created.length, 4);
+    assert.strictEqual(themes.size, 4, 'four distinct themes');
+    let readOnly = created.find((o) => o.readOnly && !o.dark)!.theme!;
+    assert.strictEqual(
+      readOnly['.cm-activeLine, .cm-activeLineGutter'].backgroundColor,
+      'transparent',
+      'read-only marks no current line',
+    );
+  });
+
+  test('without a loader, dark keeps its colours on the fallback', async function (assert) {
+    restore();
+    restore = installLoader(undefined);
+    await render(
+      <template><CodeEditor @value='x' @dark={{true}} /></template>,
+    );
+    assert.dom('.pretui-code-editor-fallback').exists();
+    assert.dom('.pretui-code-editor').hasAttribute('data-dark', 'true');
   });
 });

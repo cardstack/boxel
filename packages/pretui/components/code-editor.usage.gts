@@ -45,11 +45,23 @@ const SAMPLES: Record<string, string> = {
   ].join('\n'),
 };
 
+const LONG_SAMPLE = Array.from(
+  { length: 40 },
+  (_value, index) =>
+    'export const step' + index + ' = { at: ' + index + ', ok: true };',
+).join('\n');
+
 class CodeEditorUsage extends Component {
   @tracked language = 'javascript';
   @tracked value = SAMPLES.javascript;
   @tracked readOnly = false;
+  @tracked dark = false;
   @tracked lineNumbers = true;
+  // The secondary examples keep their own text, so each one can be edited.
+  @tracked readOnlyValue = SAMPLES.javascript;
+  @tracked darkValue = SAMPLES.typescript;
+  @tracked jsonValue = SAMPLES.json;
+  @tracked longValue = LONG_SAMPLE;
   @tracked minLines = 3;
   @tracked maxLines = 12;
 
@@ -61,6 +73,10 @@ class CodeEditorUsage extends Component {
   };
   setValue = (value: string) => (this.value = value);
   setReadOnly = (value: boolean) => (this.readOnly = value);
+  setDark = (value: boolean) => (this.dark = value);
+  setDarkValue = (value: string) => (this.darkValue = value);
+  setJsonValue = (value: string) => (this.jsonValue = value);
+  setLongValue = (value: string) => (this.longValue = value);
   setLineNumbers = (value: boolean) => (this.lineNumbers = value);
   setMinLines = (value: number) => (this.minLines = value);
   setMaxLines = (value: number) => (this.maxLines = value);
@@ -79,6 +95,7 @@ class CodeEditorUsage extends Component {
       '@describedBy={{describedBy}}',
     ];
     if (this.readOnly) bits.push('@readOnly={{true}}');
+    if (this.dark) bits.push('@dark={{true}}');
     if (!this.lineNumbers) bits.push('@lineNumbers={{false}}');
     bits.push(`@maxLines={{${this.maxLines}}}`);
     bits.push('@onInput={{this.setSource}}');
@@ -103,6 +120,7 @@ class CodeEditorUsage extends Component {
               @value={{this.value}}
               @language={{this.language}}
               @readOnly={{this.readOnly}}
+              @dark={{this.dark}}
               @lineNumbers={{this.lineNumbers}}
               @minLines={{this.minLines}}
               @maxLines={{this.maxLines}}
@@ -112,6 +130,47 @@ class CodeEditorUsage extends Component {
               @onInput={{this.setValue}}
             />
           </Field>
+
+          <p class='pretui-codeeditor-cap'>Read-only</p>
+          <CodeEditor
+            @value={{this.readOnlyValue}}
+            @language='javascript'
+            @readOnly={{true}}
+            @maxLines={{8}}
+            @label='Read-only script'
+          />
+          <p class='pretui-codeeditor-note'>
+            A muted surface and no current-line mark, so it doesn't pass for a
+            field that takes typing.
+          </p>
+
+          <p class='pretui-codeeditor-cap'>Dark, in code mode's colours</p>
+          <CodeEditor
+            @value={{this.darkValue}}
+            @language='typescript'
+            @dark={{true}}
+            @maxLines={{10}}
+            @label='TypeScript in code mode colours'
+            @onInput={{this.setDarkValue}}
+          />
+
+          <p class='pretui-codeeditor-cap'>JSON</p>
+          <CodeEditor
+            @value={{this.jsonValue}}
+            @language='json'
+            @maxLines={{8}}
+            @label='JSON'
+            @onInput={{this.setJsonValue}}
+          />
+
+          <p class='pretui-codeeditor-cap'>An editor past its ceiling</p>
+          <CodeEditor
+            @value={{this.longValue}}
+            @language='typescript'
+            @maxLines={{8}}
+            @label='A long file'
+            @onInput={{this.setLongValue}}
+          />
         </div>
       </:example>
       <:api as |Args|>
@@ -139,6 +198,13 @@ class CodeEditorUsage extends Component {
           @defaultValue={{false}}
           @description='The code can be read, selected and copied, but not changed. Announced through aria-readonly.'
           @onInput={{this.setReadOnly}}
+        />
+        <Args.Bool
+          @name='dark'
+          @value={{this.dark}}
+          @defaultValue={{false}}
+          @description="Code mode's colours: Monaco's dark theme on code mode's editor background, whatever the page's theme. Fixed colours, not tokens, so the editor matches code mode exactly. The read-only CodeBlock shown before the editor loads takes the same colours through its tokens."
+          @onInput={{this.setDark}}
         />
         <Args.Bool
           @name='lineNumbers'
@@ -198,10 +264,34 @@ class CodeEditorUsage extends Component {
           @description='Line height, shared with CodeBlock.'
         />
         <Css.Basic
+          @name='pretui-code-string'
+          @type='color'
+          @defaultValue='var(--chart-1)'
+          @description='The hue for string literals, shared with CodeBlock, so code reads the same read or edited.'
+        />
+        <Css.Basic
           @name='pretui-code-keyword'
           @type='color'
           @defaultValue='var(--chart-4)'
-          @description='The hue for keywords. The string, number, comment and name hues are CodeBlock’s too, so code reads the same read or edited.'
+          @description='The hue for keywords.'
+        />
+        <Css.Basic
+          @name='pretui-code-name'
+          @type='color'
+          @defaultValue='var(--chart-2)'
+          @description='The hue for type names, property names and definitions.'
+        />
+        <Css.Basic
+          @name='pretui-code-number'
+          @type='color'
+          @defaultValue='var(--chart-3)'
+          @description='The hue for numbers, booleans and null.'
+        />
+        <Css.Basic
+          @name='pretui-code-comment'
+          @type='color'
+          @defaultValue='var(--muted-foreground)'
+          @description="The hue for comments. Under @dark none of these apply: the editor takes code mode's colours."
         />
       </:cssVars>
     </FreestyleUsage>
@@ -210,6 +300,18 @@ class CodeEditorUsage extends Component {
         display: grid;
         gap: var(--space-3, 8px);
         max-width: 620px;
+      }
+      .pretui-codeeditor-note {
+        margin: 0;
+        font-size: var(--text-ui-sm, 11.5px);
+        color: var(--muted-foreground);
+      }
+      .pretui-codeeditor-cap {
+        margin: var(--space-3, 8px) 0 0;
+        font-size: var(--text-ui-xs, 10.5px);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
       }
     </style>
   </template>
