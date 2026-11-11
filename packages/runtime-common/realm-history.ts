@@ -223,8 +223,7 @@ export function writeContextFromHeaders(headers: {
 // doesn't control (the OAuth client a connector acts for names itself), so
 // every free-text field passes the same check a header value does, and a
 // field that fails it is dropped. A channel the event can't name is `api`.
-// The intent is kept as set: it names a revision and a realm path, which its
-// writer resolved itself.
+// An intent is checked too (`eventIntent`).
 export function writeContextForEvent(context: WriteContext): WriteContext {
   let channel: WriteChannel = WRITE_CHANNELS.includes(context.channel)
     ? context.channel
@@ -234,6 +233,7 @@ export function writeContextForEvent(context: WriteContext): WriteContext {
   let operationId = contextValue(context.operationId);
   let correlationId = contextValue(context.correlationId);
   let pushId = contextValue(context.pushId);
+  let intent = eventIntent(context.intent);
   return {
     channel,
     ...(agent ? { agent } : {}),
@@ -242,8 +242,54 @@ export function writeContextForEvent(context: WriteContext): WriteContext {
     ...(correlationId ? { correlationId } : {}),
     ...(pushId ? { pushId } : {}),
     ...(pushId && context.pushFinal ? { pushFinal: true } : {}),
-    ...(context.intent ? { intent: context.intent } : {}),
+    ...(intent ? { intent } : {}),
   };
+}
+
+// A string in an intent reaches the revision message, as `Boxel-Revert-Of`
+// and in the subject. A realm path may legally hold a line break, and git
+// can't carry one there, or a NUL anywhere in a message.
+const CONTROL_CHARACTER = /\p{Cc}/u;
+
+function intentString(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !CONTROL_CHARACTER.test(value)
+  );
+}
+
+// The intent a change event records: one of the known kinds, rebuilt from
+// its own fields. An intent whose kind is unknown, or one of whose strings
+// is empty or holds a control character, is dropped whole, and its event
+// records an ordinary write.
+function eventIntent(
+  intent: ChangeIntent | undefined,
+): ChangeIntent | undefined {
+  switch (intent?.kind) {
+    case 'revert':
+      return intentString(intent.revision) && intentString(intent.path)
+        ? {
+            kind: 'revert',
+            revision: intent.revision,
+            path: intent.path,
+            forced: intent.forced === true,
+          }
+        : undefined;
+    case 'scan':
+      return (intent.source === undefined || intentString(intent.source)) &&
+        (intent.commit === undefined || intentString(intent.commit))
+        ? {
+            kind: 'scan',
+            ...(intent.source !== undefined ? { source: intent.source } : {}),
+            ...(intent.commit !== undefined ? { commit: intent.commit } : {}),
+          }
+        : undefined;
+    case 'delete-realm':
+      return { kind: 'delete-realm' };
+    default:
+      return undefined;
+  }
 }
 
 // What the write path hands the journal for one write. `author` is the

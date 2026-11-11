@@ -764,5 +764,67 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(unnamed.channel, 'api', 'a channel no event names');
     });
+
+    test('an intent the revision message cannot carry is dropped, and the write is still recorded', async function (assert) {
+      let cases: { name: string; intent: ChangeIntent; kept: boolean }[] = [
+        {
+          name: 'a scan',
+          intent: { kind: 'scan', source: 'catalog', commit: '1a2b3c4' },
+          kept: true,
+        },
+        {
+          name: 'a revert of a path with a line break',
+          intent: {
+            kind: 'revert',
+            revision: '1a2b3c4',
+            path: 'notes/a.md\nBoxel-Author: @mallory:localhost',
+            forced: false,
+          },
+          kept: false,
+        },
+        {
+          name: 'a revert naming no revision',
+          intent: {
+            kind: 'revert',
+            revision: '',
+            path: 'notes/',
+            forced: true,
+          },
+          kept: false,
+        },
+        {
+          name: 'a scan whose commit holds a NUL',
+          intent: { kind: 'scan', source: 'catalog', commit: '1a2b\u0000' },
+          kept: false,
+        },
+        {
+          name: 'an unknown kind',
+          intent: { kind: 'purge' } as unknown as ChangeIntent,
+          kept: false,
+        },
+      ];
+      for (let [n, { name, intent, kept }] of cases.entries()) {
+        let [event] = await eventsOf(async () => {
+          await commitBatch(
+            testRealm.batchCore,
+            [
+              {
+                op: 'update',
+                href: `${realmHref}notes/intent-${n}.md`,
+                content: `# ${name}`,
+                rawSource: true,
+              },
+            ],
+            {
+              clientRequestId: `intent-${n}`,
+              actor: writer,
+              history: { channel: 'host', intent },
+            },
+          );
+        });
+        assert.deepEqual(event.intent, kept ? intent : null, name);
+        assert.strictEqual(event.channel, 'host', `${name}: still recorded`);
+      }
+    });
   });
 });
