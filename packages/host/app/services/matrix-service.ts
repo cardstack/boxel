@@ -123,7 +123,10 @@ import {
   secureSignOutURL,
 } from '../lib/secure-sign-in';
 import { getSkillSourceTools } from '../lib/skill-tools';
-import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
+import {
+  loadSkillWithLayoutFallback,
+  skillIdToStore,
+} from '../lib/skills-layout-fallback';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
 import { skillsIndexId } from '../lib/utils';
 import { importResource } from '../resources/import';
@@ -2241,7 +2244,18 @@ export default class MatrixService extends Service {
         );
         return {
           enabledSkillCards: orderedSkillFileDefs,
-          disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
+          // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+          // Disabled skills move to the URL that loads too, so enabling one
+          // later doesn't depend on the fallback.
+          disabledSkillCards: await Promise.all(
+            (
+              (currentSkillsConfig?.disabledSkillCards ??
+                []) as FileAPI.SerializedFile[]
+            ).map(async (fileDef) => ({
+              ...fileDef,
+              sourceUrl: await skillIdToStore(this.store, fileDef.sourceUrl),
+            })),
+          ),
           toolDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
             fileDef.serialize(),
           ),

@@ -56,7 +56,10 @@ import {
   isMarkdownSkillId,
   peekSkillSource,
 } from '../lib/skill-tools';
-import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
+import {
+  loadSkillWithLayoutFallback,
+  skillIdToStore,
+} from '../lib/skills-layout-fallback';
 
 import type { Message, MessageCompaction } from '../lib/matrix-classes/message';
 
@@ -838,8 +841,21 @@ export class RoomResource extends Resource<Args> {
     }
     // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
     // The skill pills and `tools` read the room state's URLs, so a skill that
-    // loaded from the other URL is written back to the state now rather than
-    // on the next send. The state update reloads the room with the new URLs.
+    // loads from the other URL, enabled or disabled, is written back to the
+    // state now rather than on the next send. The state update reloads the
+    // room with the new URLs.
+    for (let fileDef of this.matrixRoom?.skillsConfig.disabledSkillCards ??
+      []) {
+      if (hasMovedSkill) {
+        break;
+      }
+      if (
+        (await skillIdToStore(this.store, fileDef.sourceUrl)) !==
+        fileDef.sourceUrl
+      ) {
+        hasMovedSkill = true;
+      }
+    }
     if (hasMovedSkill && this.roomId && !this.#rewritingSkillUrls) {
       this.#rewritingSkillUrls = true;
       this.matrixService

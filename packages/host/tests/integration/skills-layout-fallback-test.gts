@@ -54,20 +54,27 @@ module('Integration | skills layout fallback', function (hooks) {
     });
   }
 
-  function setEnabledSkills(sourceUrls: string[]) {
+  function skillFile(sourceUrl: string) {
+    return {
+      sourceUrl,
+      url: 'mxc://example/stale',
+      name: 'SKILL.md',
+      contentType: 'text/markdown',
+    } as SerializedFile;
+  }
+
+  function setEnabledSkills(sourceUrls: string[], disabledUrls: string[] = []) {
     mockMatrixUtils.setRoomState(roomId, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE, {
-      enabledSkillCards: sourceUrls.map(
-        (sourceUrl) =>
-          ({
-            sourceUrl,
-            url: 'mxc://example/stale',
-            name: 'SKILL.md',
-            contentType: 'text/markdown',
-          }) as SerializedFile,
-      ),
-      disabledSkillCards: [],
+      enabledSkillCards: sourceUrls.map(skillFile),
+      disabledSkillCards: disabledUrls.map(skillFile),
       toolDefinitions: [],
     });
+  }
+
+  function disabledSkillUrls(): string[] {
+    return mockMatrixUtils
+      .getRoomState(roomId, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE)
+      .disabledSkillCards.map((file: SerializedFile) => file.sourceUrl);
   }
 
   function enabledSkillUrls(): string[] {
@@ -125,5 +132,26 @@ module('Integration | skills layout fallback', function (hooks) {
     await getService('matrix-service').updateSkillsAndToolsIfNeeded(roomId);
 
     assert.deepEqual(enabledSkillUrls(), [`${skillsRealmURL}boxel/SKILL.md`]);
+  });
+
+  test('disabled skills are rewritten too, and kept when they load from neither URL', async function (assert) {
+    await setupSkillsRealm({
+      'boxel/SKILL.md': skillMarkdown('boxel'),
+      'catalog-listing/SKILL.md': skillMarkdown('catalog-listing'),
+    });
+    setEnabledSkills(
+      [`${skillsRealmURL}boxel/SKILL.md`],
+      [
+        `${skillsRealmURL}skills/catalog-listing/SKILL.md`,
+        `${skillsRealmURL}skills/does-not-exist/SKILL.md`,
+      ],
+    );
+
+    await getService('matrix-service').updateSkillsAndToolsIfNeeded(roomId);
+
+    assert.deepEqual(disabledSkillUrls(), [
+      `${skillsRealmURL}catalog-listing/SKILL.md`,
+      `${skillsRealmURL}skills/does-not-exist/SKILL.md`,
+    ]);
   });
 });

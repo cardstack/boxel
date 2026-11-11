@@ -4,13 +4,13 @@
 // (`<realm>/boxel/SKILL.md`). Until production syncs that layout it serves them
 // one level down (`<realm>/skills/boxel/SKILL.md`), and AI rooms enabled
 // against that layout store skill ids in the nested form. This module lets a
-// skill load from either layout, and its two callers (the room resource and
-// `MatrixService.updateSkillsAndToolsIfNeeded`) write the id that loaded back
-// to the room, so the rooms in use move to the root form on their next send.
+// skill load from either layout. The room resource and
+// `MatrixService.updateSkillsAndToolsIfNeeded` use it to write the id that
+// loads back to the room, for enabled and disabled skills alike, so a room
+// moves to the root form when it is opened.
 //
-// Remove this module, and switch its two callers back to `loadSkillSource`,
-// once production serves the root layout and the rooms in use have rewritten
-// their skill ids.
+// Remove this module, and every block marked with its name, once production
+// serves the root layout and the rooms in use have rewritten their skill ids.
 
 import { isMarkdownSkillId, loadSkillSource } from './skill-tools';
 import { skillsRealmURL } from './utils';
@@ -53,4 +53,17 @@ export async function loadSkillWithLayoutFallback(
   }
   source = await loadSkillSource(store, otherId);
   return source ? { source, id: otherId } : undefined;
+}
+
+// The id to store for a skill a room holds: the id it loads from, or the
+// stored id unchanged when it loads from neither layout (it then stays
+// unavailable, as any skill that no longer loads does).
+export async function skillIdToStore(
+  store: StoreService,
+  id: string,
+): Promise<string> {
+  if (!isMarkdownSkillId(id)) {
+    return id;
+  }
+  return (await loadSkillWithLayoutFallback(store, id))?.id ?? id;
 }
