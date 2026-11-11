@@ -83,12 +83,12 @@ module('Pretui | components/layout-control | folding', function (hooks) {
     await render(
       <template>
         <LayoutControl @label='Sized' @controlHeight='2rem' data-test-sized as |lc|>
-          <lc.Slot @id='add' @forms={{PIN}} @pinned={{true}}>
+          <lc.Slot @id='sized-add' @forms={{PIN}} @pinned={{true}}>
             <button type='button'>Add</button>
           </lc.Slot>
         </LayoutControl>
         <LayoutControl @label='Plain' data-test-plain as |lc|>
-          <lc.Slot @id='add' @forms={{PIN}} @pinned={{true}}>
+          <lc.Slot @id='plain-add' @forms={{PIN}} @pinned={{true}}>
             <button type='button'>Add</button>
           </lc.Slot>
         </LayoutControl>
