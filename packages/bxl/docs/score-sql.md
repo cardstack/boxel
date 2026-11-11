@@ -1,9 +1,9 @@
 # Score Profile SQL Compiler
 
-The score profile is a spreadsheet formula over one record's fields, lowered to a SQL number so a database can rank every row by it. A Boxel search uses it as the `_expr` sort:
+The score profile is a spreadsheet formula over one record's fields, lowered to a SQL number so a database can rank every row by it. A Boxel search uses it for a sort entry's `expression` (the engine's `_expr` form), after the [`query` profile](./profiles.md#query) has checked what the expression may contain:
 
 ```json
-{ "by": "_expr", "expr": "rating / LN(priceMin + 1)" }
+{ "sort": [{ "expression": "rating / LN(priceMin + 1)" }] }
 ```
 
 It is the part of Excel that Postgres can compute per row, and the only place a query expression runs: an expression outside it is refused (`expression-unsupported`). A query's comparison set reaches it as `peers.<field>` (a list) and `stats.<field>.<aggregate>` (docs/search.md, "Ranking by an expression").

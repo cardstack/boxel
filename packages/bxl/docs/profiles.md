@@ -9,7 +9,8 @@ type BxlProfile =
   | 'authorization'
   | 'predicate'
   | 'derive'
-  | 'mutation';
+  | 'mutation'
+  | 'query';
 ```
 
 Use `compileBxl(expression, { target: 'ast', profile })` or `parseBxlAst(expression, { profile })` to collect `profileIssues`. Use `assertValidBxlProfile(ast, { profile })` when a caller should reject invalid expressions.
@@ -328,9 +329,79 @@ result.params;
 
 See [`predicate-sql.md`](./predicate-sql.md) for the detailed SQL compiler contract and the pushdown sweet spots that remain in the profile.
 
+## `query`
+
+`query` is for an expression a Boxel search query carries: a sort entry's `expression` (with or without its `top` window and `compare` set) and a blend's expression signal. It computes one value from one row, so a database can rank every row by it. It is new with Query V2. The search engine checks every such expression against it before the query runs (`queryExpressionIssues`), and then lowers it to SQL through the score compiler (below).
+
+Use it for:
+
+- ranking a search by a formula over each result's fields
+- re-ranking the top of a result against its comparison set (`peers.<field>`, `stats.<field>.<aggregate>`)
+- a blend's expression signal
+
+It allows the spreadsheet language: numbers, field names and paths, arithmetic, comparisons, `AND`/`OR`/`NOT`, the spreadsheet functions, names bound inside the expression (`LET`), and a `let` binding of the query as `$name.path`. `NOW()` and `TODAY()` stay: a query reads the clock once, so every row sees the same instant. A bare name is a field, as in a spreadsheet, so `input * 2` reads a field called `input`.
+
+It refuses what is not one value computed from the row:
+
+- jq pipes, streams, commas, object constructors and string interpolation
+- `def`, `reduce`/`foreach`, updates, `try`, `label`/`break`, formats and recursive descent (the sandbox bans every non-`compute` profile shares)
+- free variables (`$ENV`, `$__loc__`) and request or environment context paths (`@User`, `@Env`)
+- calls that read the runtime, the request or the environment, have a side effect, or consult authorization (`env`, `input`, `inputs`, `debug`, `error`, `params`, `actor`, …)
+- `import` and `include`
+
+Each refusal is a `query-…-banned` profile issue whose message names the construct, such as `query-operator-banned`, `query-stream-banned`, `query-object-banned`, `query-variable-banned`, `query-context-banned`, `query-call-banned` and `query-module-banned`. A Boxel search refuses the query with `invalid-expression` and that message.
+
+Allowed examples:
+
+```bxl
+rating / LN(priceMin + 1)
+```
+
+```bxl
+IFERROR(rating / LN(priceMin + 1), 0)
+```
+
+```bxl
+PERCENTRANK_INC(peers.price, price)
+```
+
+```bxl
+(price - stats.price.mean) / stats.price.stddev
+```
+
+```bxl
+DAYS(NOW(), publishedAt)
+```
+
+Invalid in `query`:
+
+```bxl
+.price | . * 2
+```
+
+A jq pipe (`query-operator-banned`).
+
+```bxl
+.tags[]
+```
+
+A stream, which yields many values (`query-stream-banned`).
+
+```bxl
+OwnerID = @User.ID
+```
+
+A request context path (`query-context-banned`). Filtering by the caller is a `predicate` and a realm policy's job, not a ranking's.
+
+### Relation to `score` and `predicate`
+
+`query` decides what may be written in a query at all. The score compiler decides what runs in SQL, and every expression in a query runs there. Some expressions the profile admits, the compiler cannot lower: `LET`, text values and text functions (`LEN`, `TEXT`), regression and other statistics outside its list (`LINEST`, `CONFIDENCE.NORM`), `&` outside a `COUNTIF` criterion, and `peers.` in arithmetic. A Boxel search refuses those with `expression-unsupported`, naming the reason.
+
+`predicate` is the boolean side of a query: filters a planner can serve. `query` computes the value a row is ranked by.
+
 ## `score` (SQL lowering)
 
-A numeric formula over one record, compiled to SQL so a database ranks every row by it: the `_expr` sort of a Boxel search. Arithmetic, comparisons and the Excel functions Postgres can compute per row (`IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, …); Excel errors become NULL. The compiler enforces the profile itself and refuses anything else with the reason. See [Score Profile SQL Compiler](./score-sql.md).
+Not a parse profile: the subset of `query` that `compileBxlScoreToSql` lowers to SQL, a numeric formula over one record, so a database ranks every row by it. This is the Boxel search's `expression` sort (the engine's `_expr` form). It covers arithmetic, comparisons and the Excel functions Postgres can compute per row (`IF`, `IFERROR`, `ROUND`, `LN`, `LOG10`, `SQRT`, `POWER`, `MIN`, `MAX`, `AVERAGE`, `DAYS`, …). A blank is SQL NULL and an Excel error is NaN. The compiler enforces the subset itself and refuses anything else with the reason. See [Score Profile SQL Compiler](./score-sql.md).
 
 ## `derive`
 
