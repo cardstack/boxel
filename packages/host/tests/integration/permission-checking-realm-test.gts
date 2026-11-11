@@ -595,6 +595,55 @@ module('Integration | a realm that checks permissions', function (hooks) {
     );
   });
 
+  test('a Realm Runner script is told a create the policy grants on a condition is conditional', async function (assert) {
+    await setupSchool({
+      enforcePermissions: true,
+      readableByTestUser: true,
+      policy: {
+        data: {
+          ...classroomPolicy.data,
+          attributes: {
+            cardInfo: { name: 'Classrooms' },
+            rules: [
+              {
+                targetType: {
+                  module: `${DEFINITIONS}classroom`,
+                  name: 'Classroom',
+                },
+                grants: [
+                  { operation: 'read' },
+                  { operation: 'create', where: TEACHES },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    let toolService = getService('tool-service');
+    let result = await new RunRealmCodeTool(toolService.toolContext).execute({
+      realm: SCHOOL,
+      roomId: '!room:example.com',
+      code: `return await realm.operations.capabilities([
+  { type: { module: ${JSON.stringify(`${DEFINITIONS}classroom`)}, name: 'Classroom' }, operation: 'create' },
+]);`,
+    });
+
+    assert.deepEqual(
+      JSON.parse(result.scriptResult!),
+      [
+        {
+          type: { module: `${DEFINITIONS}classroom`, name: 'Classroom' },
+          operation: 'create',
+          allowed: true,
+          conditional: true,
+        },
+      ],
+      'the grant matches, and its condition is judged against the classroom the create makes',
+    );
+  });
+
   test('a realm set up alone serves its policy card to its owner', async function (assert) {
     // No realm is set up before this one, so the matrix boot asks this realm
     // for the default system card, which lives at its URL. Answering for the
