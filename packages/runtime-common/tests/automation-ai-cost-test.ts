@@ -11,23 +11,27 @@ const PRICE: AIModelPrice = {
   promptUsdPerToken: 0.000003,
   completionUsdPerToken: 0.000015,
   requestUsd: 0,
-  imageUsd: 0.0048,
-  webSearchUsd: 0.02,
-  maxCompletionTokens: 64_000,
   contextLength: 1_000_000,
 };
+
+const MESSAGES = [{ role: 'user', content: 'Summarize this week’s cards' }];
 
 function bytes(text: string): number {
   return new TextEncoder().encode(text).length;
 }
 
 function ceilingOf(request: object, price: AIModelPrice = PRICE) {
-  let body = JSON.stringify(request);
+  let body = JSON.stringify({ model: price.modelId, ...request });
   let result = aiRequestCostCeiling(body, price);
   if (!result.ok) {
     throw new Error(`expected a ceiling, got ${result.reason}`);
   }
   return { body, ceiling: result.ceiling };
+}
+
+function refusalOf(request: object, price: AIModelPrice = PRICE) {
+  let result = aiRequestCostCeiling(JSON.stringify(request), price);
+  return result.ok ? 'priced' : result.reason;
 }
 
 function close(assert: Assert, actual: number, expected: number, msg: string) {
@@ -41,11 +45,7 @@ const tests = Object.freeze({
   'prices the input at a token per byte and the output at its limit': async (
     assert,
   ) => {
-    let { body, ceiling } = ceilingOf({
-      model: PRICE.modelId,
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: 'Summarize this week’s cards' }],
-    });
+    let { body, ceiling } = ceilingOf({ max_tokens: 1000, messages: MESSAGES });
     assert.strictEqual(
       ceiling.inputTokens,
       bytes(body),
@@ -62,61 +62,84 @@ const tests = Object.freeze({
       (bytes(body) * 0.000003 + 1000 * 0.000015) * 1000,
       'credits are the listed USD price at 1,000 credits to the dollar',
     );
+    let withRequestPrice = ceilingOf(
+      { max_tokens: 1000, messages: MESSAGES },
+      { ...PRICE, requestUsd: 0.001 },
+    );
+    close(
+      assert,
+      withRequestPrice.ceiling.credits,
+      ceiling.credits + 1,
+      'the per-request price adds to it',
+    );
   },
 
-  'max_completion_tokens wins over max_tokens, and the model limit caps both':
-    async (assert) => {
-      assert.strictEqual(
-        ceilingOf({
-          max_completion_tokens: 500,
-          max_tokens: 2000,
-          messages: [],
-        }).ceiling.outputTokens,
-        500,
-      );
-      assert.strictEqual(
-        ceilingOf({ max_tokens: 200_000, messages: [] }).ceiling.outputTokens,
-        64_000,
-        'a request asking for more than the model returns is priced at the model limit',
-      );
-    },
-
-  'a request without an output limit is priced at the model’s': async (
+  'the request’s own output limit is priced, up to the context window': async (
     assert,
   ) => {
     assert.strictEqual(
-      ceilingOf({ messages: [] }).ceiling.outputTokens,
-      64_000,
-      'the listed output limit',
+      ceilingOf({
+        max_completion_tokens: 500,
+        max_tokens: 2000,
+        messages: MESSAGES,
+      }).ceiling.outputTokens,
+      500,
+      'max_completion_tokens wins over max_tokens',
     );
     assert.strictEqual(
-      ceilingOf({ messages: [] }, { ...PRICE, maxCompletionTokens: null })
-        .ceiling.outputTokens,
+      ceilingOf(
+        { max_tokens: 128_000, messages: MESSAGES },
+        { ...PRICE, contextLength: 200_000 },
+      ).ceiling.outputTokens,
+      128_000,
+      'a limit within the context window is priced in full, whatever one provider lists',
+    );
+    assert.strictEqual(
+      ceilingOf(
+        { max_tokens: 500_000, messages: MESSAGES },
+        { ...PRICE, contextLength: 200_000 },
+      ).ceiling.outputTokens,
+      200_000,
+      'no request returns more than the context window',
+    );
+    assert.strictEqual(
+      ceilingOf({
+        max_tokens: 1000,
+        reasoning: { max_tokens: 4000 },
+        messages: MESSAGES,
+      }).ceiling.outputTokens,
+      5000,
+      'a reasoning budget counts as output too',
+    );
+  },
+
+  'a request without an output limit is priced at the context window': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      ceilingOf({ messages: MESSAGES }).ceiling.outputTokens,
       1_000_000,
-      'the context length when no output limit is listed',
     );
-  },
-
-  'a request nothing bounds is refused': async (assert) => {
-    let result = aiRequestCostCeiling(JSON.stringify({ messages: [] }), {
-      ...PRICE,
-      maxCompletionTokens: null,
-      contextLength: null,
-    });
-    assert.false(result.ok);
     assert.strictEqual(
-      result.ok ? undefined : result.reason,
+      refusalOf(
+        { model: PRICE.modelId, messages: MESSAGES },
+        { ...PRICE, contextLength: null },
+      ),
       'unbounded-output',
+      'nothing bounds a request with no limit to a model with no listed window',
     );
-    let set = aiRequestCostCeiling(
-      JSON.stringify({ max_tokens: 10, messages: [] }),
-      { ...PRICE, maxCompletionTokens: null, contextLength: null },
+    assert.strictEqual(
+      refusalOf(
+        { model: PRICE.modelId, max_tokens: 10, messages: MESSAGES },
+        { ...PRICE, contextLength: null },
+      ),
+      'priced',
+      'the request’s own limit bounds it',
     );
-    assert.true(set.ok, 'the request’s own limit bounds it');
   },
 
-  'a body that isn’t a JSON object is refused': async (assert) => {
-    for (let body of ['not json', '[]', 'null']) {
+  'a body that isn’t a chat request is refused': async (assert) => {
+    for (let body of ['not json', '[]', 'null', '{"model":"x"}']) {
       let result = aiRequestCostCeiling(body, PRICE);
       assert.strictEqual(
         result.ok ? undefined : result.reason,
@@ -126,57 +149,77 @@ const tests = Object.freeze({
     }
   },
 
-  'images, the request price and web search add to the ceiling': async (
+  'a request naming another model, or fallbacks, is refused': async (
     assert,
   ) => {
-    let request = {
-      max_tokens: 100,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'What is in these?' },
+    assert.strictEqual(
+      refusalOf({ model: 'openai/gpt-5', messages: MESSAGES }),
+      'model-mismatch',
+    );
+    assert.strictEqual(
+      refusalOf({ messages: MESSAGES }),
+      'model-mismatch',
+      'a request that names no model',
+    );
+    assert.strictEqual(
+      refusalOf({
+        model: PRICE.modelId,
+        models: [PRICE.modelId, 'openai/gpt-5'],
+        messages: MESSAGES,
+      }),
+      'model-mismatch',
+      'fallback models could be billed at another price',
+    );
+  },
+
+  'web search and non-text input are refused': async (assert) => {
+    let base = { model: PRICE.modelId, max_tokens: 100 };
+    assert.strictEqual(
+      refusalOf({ ...base, plugins: [{ id: 'web' }], messages: MESSAGES }),
+      'unpriced-input',
+      'the web plugin',
+    );
+    assert.strictEqual(
+      refusalOf({ ...base, web_search_options: {}, messages: MESSAGES }),
+      'unpriced-input',
+      'web search options',
+    );
+    assert.strictEqual(
+      refusalOf(
+        { ...base, model: `${PRICE.modelId}:online`, messages: MESSAGES },
+        { ...PRICE, modelId: `${PRICE.modelId}:online` },
+      ),
+      'unpriced-input',
+      'an :online model',
+    );
+    for (let part of [
+      { type: 'image_url', image_url: { url: 'https://example.com/a.png' } },
+      { type: 'file', file: { filename: 'a.pdf', file_data: 'x' } },
+      { type: 'input_audio', input_audio: { data: 'x', format: 'wav' } },
+    ]) {
+      assert.strictEqual(
+        refusalOf({
+          ...base,
+          messages: [
             {
-              type: 'image_url',
-              image_url: { url: 'https://example.com/a.png' },
-            },
-            {
-              type: 'image_url',
-              image_url: { url: 'https://example.com/b.png' },
+              role: 'user',
+              content: [{ type: 'text', text: 'What is this?' }, part],
             },
           ],
-        },
-      ],
-    };
-    let plain = ceilingOf(request, { ...PRICE, webSearchUsd: 0 });
-    assert.strictEqual(plain.ceiling.images, 2);
-    assert.false(plain.ceiling.webSearch);
-    let base =
-      (bytes(plain.body) * 0.000003 + 100 * 0.000015 + 2 * 0.0048) * 1000;
-    close(assert, plain.ceiling.credits, base, 'each image at the image price');
-
-    let withRequestPrice = ceilingOf(request, {
-      ...PRICE,
-      webSearchUsd: 0,
-      requestUsd: 0.001,
-    });
-    close(
-      assert,
-      withRequestPrice.ceiling.credits,
-      base + 1,
-      'the per-request price',
-    );
-
-    let plugin = ceilingOf({ ...request, plugins: [{ id: 'web' }] });
-    assert.true(plugin.ceiling.webSearch, 'the web plugin searches');
-    let online = ceilingOf({ ...request, model: `${PRICE.modelId}:online` });
-    assert.true(online.ceiling.webSearch, 'an :online model searches');
-    close(
-      assert,
-      online.ceiling.credits,
-      (bytes(online.body) * 0.000003 + 100 * 0.000015 + 2 * 0.0048 + 0.02) *
-        1000,
-      'a search adds the web search price',
+        }),
+        'unpriced-input',
+        part.type,
+      );
+    }
+    assert.strictEqual(
+      refusalOf({
+        ...base,
+        messages: [
+          { role: 'user', content: [{ type: 'text', text: 'Text parts' }] },
+        ],
+      }),
+      'priced',
+      'text parts are priced',
     );
   },
 
@@ -192,37 +235,42 @@ const tests = Object.freeze({
           image: '0',
           webSearch: '0.01',
         },
-        topProvider: { contextLength: 400000, maxCompletionTokens: 128000 },
+        topProvider: { contextLength: 128000, maxCompletionTokens: 64000 },
       }),
       {
         modelId: 'openai/gpt-5-nano',
         promptUsdPerToken: 0.00000005,
         completionUsdPerToken: 0.0000004,
         requestUsd: 0,
-        imageUsd: 0,
-        webSearchUsd: 0.01,
-        maxCompletionTokens: 128000,
         contextLength: 400000,
       },
+      'the model’s own context window, not one provider’s',
     );
     assert.strictEqual(
       readOpenRouterModelPrice({
-        modelId: 'openrouter/auto',
-        pricing: { prompt: '-1', completion: '-1' },
-      }),
-      undefined,
-      'a price that isn’t a number 0 or more can’t bound a request',
+        modelId: 'x/y',
+        pricing: { prompt: '0', completion: '0' },
+        topProvider: { contextLength: 8192 },
+      })?.contextLength,
+      8192,
+      'the top provider’s window when the card lists none of its own',
     );
+    for (let [label, pricing] of [
+      ['no pricing', undefined],
+      ['no prompt price', { completion: '0.00001' }],
+      ['no completion price', { prompt: '0.00001' }],
+      ['a variable price', { prompt: '-1', completion: '-1' }],
+    ] as const) {
+      assert.strictEqual(
+        readOpenRouterModelPrice({ modelId: 'x/y', pricing }),
+        undefined,
+        `${label} can’t bound a request`,
+      );
+    }
     assert.strictEqual(
-      readOpenRouterModelPrice({ pricing: { prompt: '0' } }),
+      readOpenRouterModelPrice({ pricing: { prompt: '0', completion: '0' } }),
       undefined,
       'a card without a model id',
-    );
-    assert.strictEqual(
-      readOpenRouterModelPrice({ modelId: 'x/y', contextLength: 8192 })
-        ?.contextLength,
-      8192,
-      'the card’s context length when the top provider lists none',
     );
   },
 }) as SharedTests<{}>;

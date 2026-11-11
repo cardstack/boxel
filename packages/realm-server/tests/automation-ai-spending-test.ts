@@ -15,6 +15,7 @@ import type { AIModelPrice } from '@cardstack/runtime-common/automation-ai-cost'
 import { setupDB } from './helpers/index.ts';
 import {
   admitAutomationRunAIRequest,
+  BATCHED_AI_RESERVE_FACTOR,
   settleAutomationRunAIRequest,
   type AutomationRunAIAdmission,
 } from '../lib/automation-ai-spending.ts';
@@ -30,9 +31,6 @@ const PRICE: AIModelPrice = {
   promptUsdPerToken: 0.000001,
   completionUsdPerToken: 0.00001,
   requestUsd: 0,
-  imageUsd: 0,
-  webSearchUsd: 0,
-  maxCompletionTokens: 100_000,
   contextLength: 200_000,
 };
 
@@ -70,11 +68,15 @@ module(basename(import.meta.filename), function () {
     });
 
     async function runningRun(): Promise<AutomationRun> {
+      return await runningRunFor('2026-11-10T05:30:00.000Z');
+    }
+
+    async function runningRunFor(slot: string): Promise<AutomationRun> {
       let run = await createAutomationRun(dbAdapter, {
         automationId: AUTOMATION,
         realm: REALM,
         trigger: 'nightly',
-        slot: '2026-11-10T05:30:00.000Z',
+        slot,
         actsAs: PAYER,
       });
       let start = await startAutomationRunAttempt(dbAdapter, run.id, 1);
@@ -222,6 +224,39 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a batched request reserves twice its worst case', async function (assert) {
+      let run = await runningRun();
+      let body = request(1000);
+      let each = worstCase(body);
+      let admission = admitted(
+        await admitAutomationRunAIRequest(dbAdapter, {
+          runId: run.id,
+          aiCreditsCap: Math.ceil(each * BATCHED_AI_RESERVE_FACTOR),
+          body,
+          price: PRICE,
+          batched: true,
+        }),
+      );
+      close(
+        assert,
+        admission.reservedCredits,
+        each * 2,
+        'once for the batch and once for its normal-price fallback',
+      );
+      let refused = await admitAutomationRunAIRequest(dbAdapter, {
+        runId: (await runningRunFor('2026-11-11T05:30:00.000Z')).id,
+        aiCreditsCap: Math.ceil(each * 1.5),
+        body,
+        price: PRICE,
+        batched: true,
+      });
+      assert.strictEqual(
+        refused.kind === 'refused' ? refused.reason : refused.kind,
+        'over-cap',
+        'a cap that holds one worst case but not two refuses a batched request',
+      );
+    });
+
     test('a request whose cost is never learned spends its whole reservation', async function (assert) {
       let run = await runningRun();
       let body = request(500);
@@ -313,8 +348,8 @@ module(basename(import.meta.filename), function () {
       let admission = await admitAutomationRunAIRequest(dbAdapter, {
         runId: run.id,
         aiCreditsCap: 50,
-        body: JSON.stringify({ messages: [] }),
-        price: { ...PRICE, maxCompletionTokens: null, contextLength: null },
+        body: JSON.stringify({ model: PRICE.modelId, messages: [] }),
+        price: { ...PRICE, contextLength: null },
       });
       assert.strictEqual(
         admission.kind === 'refused' ? admission.reason : admission.kind,

@@ -8,6 +8,7 @@ import {
   aiRequestCostCeiling,
   type AIModelPrice,
   type AIRequestCostCeiling,
+  type AIRequestCostRefusal,
 } from '@cardstack/runtime-common/automation-ai-cost';
 
 // A run's AI spending cap, enforced before each AI request is sent
@@ -17,6 +18,12 @@ import {
 // The reservation counts against the cap until the request's actual cost
 // replaces it, so requests in flight at once can't between them pass the cap.
 //
+// A batched request reserves twice its worst case (ADR 030 §1.4): once for
+// the batch and once for the normal-price request it falls back to when the
+// batch misses its deadline. The factor bounds spending; the charge is still
+// what each was actually billed.
+export const BATCHED_AI_RESERVE_FACTOR = 2;
+
 // A request that's admitted must be settled exactly once, whatever happens
 // to it: with its cost once the AI provider reports it, with 0 when it was
 // never sent, or with no cost when the cost can't be learned, which settles
@@ -32,13 +39,12 @@ export type AutomationRunAIAdmission =
   | {
       kind: 'refused';
       // `over-cap`: the run's AI spending plus this request's worst case
-      // would pass the cap. `unbounded-output` and `invalid-request`: the
-      // request's worst case can't be priced (`aiRequestCostCeiling`).
-      // `run-not-running` and `missing-run`: the run can't make requests.
+      // would pass the cap. An `AIRequestCostRefusal`: the request's worst
+      // case can't be priced (`aiRequestCostCeiling`). `run-not-running` and
+      // `missing-run`: the run can't make requests.
       reason:
         | 'over-cap'
-        | 'unbounded-output'
-        | 'invalid-request'
+        | AIRequestCostRefusal
         | 'run-not-running'
         | 'missing-run';
       message: string;
@@ -51,6 +57,7 @@ export async function admitAutomationRunAIRequest(
     aiCreditsCap,
     body,
     price,
+    batched = false,
   }: {
     runId: string;
     // The automation's `aiCredits` cap.
@@ -58,6 +65,8 @@ export async function admitAutomationRunAIRequest(
     // The request body as it will be sent.
     body: string;
     price: AIModelPrice;
+    // Sent as part of a batch (the automation's `batchedAI`).
+    batched?: boolean;
   },
 ): Promise<AutomationRunAIAdmission> {
   let priced = aiRequestCostCeiling(body, price);
@@ -65,22 +74,25 @@ export async function admitAutomationRunAIRequest(
     return { kind: 'refused', reason: priced.reason, message: priced.message };
   }
   let { ceiling } = priced;
+  let credits = batched
+    ? ceiling.credits * BATCHED_AI_RESERVE_FACTOR
+    : ceiling.credits;
   let reservation = await reserveAutomationRunAICredits(
     dbAdapter,
     runId,
-    ceiling.credits,
+    credits,
     aiCreditsCap,
   );
   switch (reservation.kind) {
     case 'reserved':
-      return { kind: 'admitted', reservedCredits: ceiling.credits, ceiling };
+      return { kind: 'admitted', reservedCredits: credits, ceiling };
     case 'over-cap': {
       let { aiCreditsSpent, aiCreditsReserved } = reservation.run;
       return {
         kind: 'refused',
         reason: 'over-cap',
         message:
-          `This AI request could cost up to ${formatCredits(ceiling.credits)} credits. ` +
+          `This AI request could cost up to ${formatCredits(credits)} credits${batched ? ' (twice its most, since it is batched)' : ''}. ` +
           `The run has spent ${formatCredits(aiCreditsSpent)} and holds ` +
           `${formatCredits(aiCreditsReserved)} for requests in flight, ` +
           `against an AI spending cap of ${aiCreditsCap} credits`,

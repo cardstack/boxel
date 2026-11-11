@@ -709,7 +709,7 @@ module('Acceptance | automation edit format', function (hooks) {
           callApiCalls: 10,
           responseBytes: 5_000_000,
           resolveCalls: 5,
-          aiCredits: 100,
+          aiCredits: 300,
           writes: 50,
           seconds: 300,
           dailyCredits: 500,
