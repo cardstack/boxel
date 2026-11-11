@@ -809,6 +809,8 @@ export default class GetStarted extends Component<Signature> {
         .get-started-error {
           grid-area: error;
         }
+        /* An empty row would still add a gap, so the row exists only while
+           an error shows. Keep this map in step with the one above. */
         .get-started-body:has(.get-started-error) {
           grid-template-areas:
             'title dismiss actions'

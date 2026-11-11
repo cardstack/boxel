@@ -566,6 +566,39 @@ module('Acceptance | dashboard get started', function (hooks) {
     );
   });
 
+  test('a card opened after a failed recording records it', async function (assert) {
+    await visitAsNewUser();
+    let recentCards = getService('recent-cards-service') as any;
+
+    mockMatrixUtils.setDashboardStateWriteError(new Error('offline'));
+    recentCards.add(`${realmURL}index`);
+    await settled();
+    mockMatrixUtils.setDashboardStateWriteError();
+    recentCards.add(`${realmURL}index`);
+    await settled();
+
+    assert.true((mockMatrixUtils.getDashboardState() as any).openedCard);
+  });
+
+  test('recording an opened card stops after two failed writes in a session', async function (assert) {
+    await visitAsNewUser();
+    let recentCards = getService('recent-cards-service') as any;
+
+    mockMatrixUtils.setDashboardStateWriteError(new Error('offline'));
+    recentCards.add(`${realmURL}index`);
+    await settled();
+    recentCards.add(`${realmURL}index`);
+    await settled();
+    mockMatrixUtils.setDashboardStateWriteError();
+    recentCards.add(`${realmURL}index`);
+    await settled();
+
+    assert.notOk(
+      (mockMatrixUtils.getDashboardState() as any)?.openedCard,
+      'a homeserver rejecting writes is not asked again on every card opened',
+    );
+  });
+
   test('cards this browser opened before login tick the step here but are not recorded on the account', async function (assert) {
     setRecentCards([[`${realmURL}index`, Date.now()]]);
     await visitOperatorMode({ workspaceChooserOpened: true });
