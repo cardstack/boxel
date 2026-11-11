@@ -19,6 +19,8 @@ A highlighted source block with a header, a gutter, a copy control and a scroll 
 @maxLines?   — scroll ceiling, in lines
 @noCopy?     — hide the copy button
 @label?      — the region's accessible name; defaults to the filename or language
+@labelledBy? — the id of an element that names the region (aria-labelledby); wins over @label
+@describedBy? — the id of an element that describes the region (aria-describedby)
 @binary?     — the content is not text; renders an explanation instead of mojibake
 @maxHighlightBytes? — above this, highlighting switches itself off
 ```

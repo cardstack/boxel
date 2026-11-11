@@ -1,5 +1,6 @@
 import '../helpers/setup-realm-server.ts';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import jwt from 'jsonwebtoken';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -7,6 +8,7 @@ import {
   reloadProfile,
   setupTestProfile,
   uniqueRealmName,
+  TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
 import { runBoxel } from '../helpers/run-boxel.ts';
 
@@ -77,5 +79,67 @@ describe('realm create (integration)', () => {
       url.includes(realmName),
     )?.[1];
     expect(storedToken).toBeDefined();
+  });
+});
+
+describe('realm create --profile (integration)', () => {
+  // The profiles file holds an active profile for one account and a second
+  // profile for the account that should own the realm. `--profile` makes
+  // the command act as the second, for that command only.
+  const DECOY = '@cli-decoy:localhost';
+  let profileHome: string;
+  let cleanupProfileHome: () => void;
+  let ownerId: string;
+
+  beforeAll(async () => {
+    let testHome = createTestHome();
+    profileHome = testHome.home;
+    cleanupProfileHome = testHome.cleanup;
+    // Added first, so it is the active profile. Its Matrix token is never
+    // valid, so a request made as it would fail.
+    await testHome.profileManager.addProfileWithAuth(
+      DECOY,
+      {
+        accessToken: 'decoy-access-token',
+        userId: DECOY,
+        deviceId: 'DECOY_DEVICE',
+        matrixUrl: 'http://localhost:8008',
+      },
+      'Decoy',
+      `${TEST_REALM_SERVER_URL}/`,
+    );
+    ownerId = await setupTestProfile(testHome.profileManager);
+  });
+
+  afterAll(() => {
+    cleanupProfileHome?.();
+  });
+
+  it('creates the realm as the named profile and leaves the active profile alone', async () => {
+    let realmName = uniqueRealmName();
+
+    let res = await runBoxel(
+      ['realm', 'create', realmName, `Test ${realmName}`, '--profile', ownerId],
+      { home: profileHome },
+    );
+    expect(res.ok, res.stderr).toBe(true);
+
+    let pm = reloadProfile(profileHome);
+    expect(pm.getActiveProfileId()).toBe(DECOY);
+
+    let realmToken = Object.entries(
+      pm.getProfile(ownerId)!.realmTokens ?? {},
+    ).find(([url]) => url.includes(realmName))?.[1];
+    expect(realmToken).toBeDefined();
+    let claims = jwt.decode(realmToken!.replace(/^Bearer\s+/i, '')) as {
+      user: string;
+      permissions: string[];
+    };
+    expect(claims.user).toBe(ownerId);
+    expect(claims.permissions).toContain('realm-owner');
+
+    let decoy = pm.getProfile(DECOY)!;
+    expect(decoy.realmTokens).toBeUndefined();
+    expect(decoy.realmServerToken).toBeUndefined();
   });
 });
