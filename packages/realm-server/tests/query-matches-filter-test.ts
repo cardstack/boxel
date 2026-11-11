@@ -66,7 +66,7 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(queryMatchesFilterTests, assert, {});
     });
 
-    test('assertQuery accepts a typeahead filter and rejects a non-string one', async function (assert) {
+    test('assertQuery accepts type-ahead as a title-scoped prefix matches and refuses typeahead', async function (assert) {
       await runSharedTest(queryMatchesFilterTests, assert, {});
     });
 

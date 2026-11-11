@@ -4,6 +4,7 @@ import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  hasWarning,
   IndexQueryEngine,
   param,
   query,
@@ -11,6 +12,9 @@ import {
   resetSearchBoundsForTests,
   setSearchBoundsForTests,
   VirtualNetwork,
+  backfillFacetValues,
+  facetFieldSpecsOf,
+  type Definition,
   type DefinitionLookup,
   type Filter,
 } from '@cardstack/runtime-common';
@@ -60,11 +64,14 @@ async function seedRow(
     // The card's own field words (its role-weighted `search_tsv`). By default
     // the markdown's words, as for a card whose page renders its fields.
     fieldText = markdown,
+    // The card's type and its ancestors' (internal keys), own type first.
+    types = [],
   }: {
     url: string;
     markdown: string | null;
     searchDoc?: Record<string, unknown>;
     fieldText?: string | null;
+    types?: string[];
   },
 ) {
   await query(dbAdapter, [
@@ -87,7 +94,8 @@ async function seedRow(
     `,`,
     `'[]'::jsonb`,
     `,`,
-    `'[]'::jsonb`,
+    param(JSON.stringify(types)),
+    `::jsonb`,
     `,`,
     param(false),
     `,`,
@@ -581,7 +589,7 @@ module(basename(import.meta.filename), function () {
       await row('lamp', 'Lamp');
       assert.deepEqual(
         await relevanceUrls({
-          filter: { typeahead: 'lamp' },
+          filter: { prefix: true, scope: 'title', matches: 'lamp' },
           sort: [{ by: '_matchRelevance', direction: 'desc' }],
         }),
         [
@@ -595,7 +603,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         (
           await relevanceUrls({
-            filter: { typeahead: 'lamps' },
+            filter: { prefix: true, scope: 'title', matches: 'lamps' },
             sort: [{ by: '_matchRelevance', direction: 'desc' }],
           })
         )[0],
@@ -617,7 +625,7 @@ module(basename(import.meta.filename), function () {
       await row('alias', 'Ferris the Crab', 'Ferris the Crab\nRust mascot');
       assert.deepEqual(
         await relevanceUrls({
-          filter: { typeahead: 'rust' },
+          filter: { prefix: true, scope: 'title', matches: 'rust' },
           sort: [{ by: '_matchRelevance', direction: 'desc' }],
         }),
         [
@@ -628,7 +636,9 @@ module(basename(import.meta.filename), function () {
         ],
       );
       assert.deepEqual(
-        await relevanceUrls({ filter: { typeahead: 'rust in' } }),
+        await relevanceUrls({
+          filter: { prefix: true, scope: 'title', matches: 'rust in' },
+        }),
         [`${testRealmURL}production.json`],
         'every word must match',
       );
@@ -662,7 +672,9 @@ module(basename(import.meta.filename), function () {
       }
       for (let typeahead of ['creme', 'crème', 'brule', 'brûl', 'BRU']) {
         assert.deepEqual(
-          await relevanceUrls({ filter: { typeahead } }),
+          await relevanceUrls({
+            filter: { prefix: true, scope: 'title', matches: typeahead },
+          }),
           tea,
           `type-ahead "${typeahead}" finds Crème Brûlée`,
         );
@@ -826,9 +838,13 @@ module(basename(import.meta.filename), function () {
       });
     };
     let typeAheadUrls = async (typeahead: string) =>
-      (await relevanceUrls({ filter: { typeahead } })).sort();
+      (
+        await relevanceUrls({
+          filter: { prefix: true, scope: 'title', matches: typeahead },
+        })
+      ).sort();
 
-    test('typeahead matches every word as a prefix of the type-ahead text', async function (assert) {
+    test('type-ahead (matches, prefix, title scope) matches every word as a prefix of the type-ahead text', async function (assert) {
       await seedTypeAheadRows();
       assert.deepEqual(
         await typeAheadUrls('kleppm'),
@@ -897,41 +913,104 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('typeahead composes in an indexed union', async function (assert) {
+    test('type-ahead (matches, prefix, title scope) composes in an indexed union', async function (assert) {
       await seedTypeAheadRows();
       assert.deepEqual(
         (
           await relevanceUrls({
-            filter: { any: [{ typeahead: 'kleppm' }, { matches: 'puppy' }] },
+            filter: {
+              any: [
+                { prefix: true, scope: 'title', matches: 'kleppm' },
+                { matches: 'puppy' },
+              ],
+            },
           })
         ).sort(),
         [`${testRealmURL}kleppmann.json`, `${testRealmURL}mango.json`],
       );
       assert.deepEqual(
-        (await relevanceUrls({ filter: { not: { typeahead: 'kleppm' } } }))
-          .length,
+        (
+          await relevanceUrls({
+            filter: {
+              not: { prefix: true, scope: 'title', matches: 'kleppm' },
+            },
+          })
+        ).length,
         6,
         'negated, it keeps every other row',
       );
     });
 
     test('facets count a field over every match, list fields per element', async function (assert) {
+      // Facets count declared fields: the talks' type declares both, and
+      // their facet rows are written from the seeded search docs, as a
+      // declaration change writes them (`backfillFacetValues`).
+      let talkRef = { module: `${testRealmURL}talk`, name: 'Talk' } as const;
+      let talkKey = `${testRealmURL}talk/Talk`;
+      let stringRef = { module: '@cardstack/base/string', name: 'default' };
+      let talkDef = {
+        type: 'card-def',
+        codeRef: talkRef,
+        displayName: 'Talk',
+        fields: { category: 'f0', concepts: 'f1' },
+        fieldDefs: {
+          f0: {
+            type: 'contains',
+            isPrimitive: true,
+            isComputed: false,
+            fieldOrCard: stringRef,
+            search: { facet: true },
+          },
+          f1: {
+            type: 'containsMany',
+            isPrimitive: true,
+            isComputed: false,
+            fieldOrCard: stringRef,
+            search: { facet: true },
+          },
+        },
+      } as unknown as Definition;
+      let talkLookup = {
+        ...stubDefinitionLookup,
+        async lookupDefinition(ref: { module: string; name: string }) {
+          if (ref.module === talkRef.module && ref.name === talkRef.name) {
+            return talkDef;
+          }
+          throw new Error(`unexpected definition lookup: ${ref.module}`);
+        },
+      } as unknown as DefinitionLookup;
+      let talkEngine = new IndexQueryEngine(
+        dbAdapter,
+        talkLookup,
+        new VirtualNetwork(),
+      );
       await seedRow(dbAdapter, {
         url: `${testRealmURL}talk-1.json`,
         markdown: 'a talk about clocks',
         searchDoc: { category: 'Systems', concepts: ['clocks', 'consensus'] },
+        types: [talkKey],
       });
       await seedRow(dbAdapter, {
         url: `${testRealmURL}talk-2.json`,
         markdown: 'a talk about clocks and queues',
         searchDoc: { category: 'Systems', concepts: ['clocks', 'queues'] },
+        types: [talkKey],
       });
       await seedRow(dbAdapter, {
         url: `${testRealmURL}talk-3.json`,
         markdown: 'a talk about voting',
         searchDoc: { category: 'Society', concepts: ['voting'] },
+        types: [talkKey],
       });
-      let { meta } = await engine.search(
+      await backfillFacetValues(
+        dbAdapter,
+        testRealmURL,
+        talkKey,
+        await facetFieldSpecsOf(talkDef, (ref) =>
+          talkLookup.lookupDefinition(ref as never),
+        ),
+      );
+      let { meta } = await talkEngine.search(
         new URL(testRealmURL),
         {
           filter: { matches: 'talk' },
@@ -1237,9 +1316,8 @@ module(basename(import.meta.filename), function () {
       test('the top rows are the same, and the total is a flagged lower bound', async function (assert) {
         let exact = await lanternSearch({ size: 2, exactTotal: true });
         assert.strictEqual(exact.meta.page.total, 10, 'every match counted');
-        assert.strictEqual(
-          exact.meta.page.totalIsEstimate,
-          undefined,
+        assert.false(
+          hasWarning(exact.meta, 'total-estimated'),
           'an exact total carries no flag',
         );
 
@@ -1253,7 +1331,10 @@ module(basename(import.meta.filename), function () {
           `${testRealmURL}lantern-alpha.json`,
           `${testRealmURL}lantern-beta.json`,
         ]);
-        assert.true(capped.meta.page.totalIsEstimate, 'flagged an estimate');
+        assert.true(
+          hasWarning(capped.meta, 'total-estimated'),
+          'flagged an estimate',
+        );
         assert.true(
           capped.meta.page.total >= 3,
           `at least the cap's candidates; got ${capped.meta.page.total}`,
@@ -1289,7 +1370,7 @@ module(basename(import.meta.filename), function () {
           exact.results.map((r) => r.url),
           'the same first page',
         );
-        assert.true(capped.meta.page.totalIsEstimate);
+        assert.true(hasWarning(capped.meta, 'total-estimated'));
         assert.true(capped.meta.page.total < 10);
       });
 
@@ -1355,10 +1436,10 @@ module(basename(import.meta.filename), function () {
           );
         let exact = await shed({ size: 2, exactTotal: true });
         assert.strictEqual(exact.meta.page.total, 8, 'every shed counted');
-        assert.strictEqual(exact.meta.page.totalIsEstimate, undefined);
+        assert.false(hasWarning(exact.meta, 'total-estimated'));
         let capped = await shed({ size: 2 });
         assert.strictEqual(capped.meta.page.total, 3, 'at most the cap');
-        assert.true(capped.meta.page.totalIsEstimate);
+        assert.true(hasWarning(capped.meta, 'total-estimated'));
         assert.strictEqual(capped.results.length, 2);
         let alone = await engine.search(
           new URL(testRealmURL),
@@ -1367,7 +1448,7 @@ module(basename(import.meta.filename), function () {
           { kind: 'dataOnly' },
         );
         assert.strictEqual(alone.meta.page.total, 3, 'on its own too');
-        assert.true(alone.meta.page.totalIsEstimate);
+        assert.true(hasWarning(alone.meta, 'total-estimated'));
 
         let sheet = await engine.search(
           new URL(testRealmURL),
@@ -1385,7 +1466,7 @@ module(basename(import.meta.filename), function () {
           { kind: 'dataOnly' },
         );
         assert.true(
-          sheet.meta.page.totalIsEstimate,
+          hasWarning(sheet.meta, 'total-estimated'),
           "the search sheet's one-letter query is capped",
         );
         assert.ok(
@@ -1408,7 +1489,7 @@ module(basename(import.meta.filename), function () {
           { kind: 'dataOnly' },
         );
         assert.strictEqual(narrow.meta.page.total, 1, 'within the cap: exact');
-        assert.strictEqual(narrow.meta.page.totalIsEstimate, undefined);
+        assert.false(hasWarning(narrow.meta, 'total-estimated'));
       });
 
       test('a term within the cap is exact and unflagged', async function (assert) {
@@ -1419,7 +1500,7 @@ module(basename(import.meta.filename), function () {
           { kind: 'dataOnly' },
         );
         assert.strictEqual(meta.page.total, 2);
-        assert.strictEqual(meta.page.totalIsEstimate, undefined);
+        assert.false(hasWarning(meta, 'total-estimated'));
       });
 
       test('a broad term under not is never capped', async function (assert) {

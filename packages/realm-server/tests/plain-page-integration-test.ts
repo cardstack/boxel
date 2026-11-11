@@ -4,6 +4,7 @@ import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  hasWarning,
   IndexQueryEngine,
   assertQuery,
   internalKeyFor,
@@ -205,8 +206,12 @@ module(basename(import.meta.filename), function () {
       );
       assert.true(meta.page.hasMore, 'more notes follow');
       assert.true(
-        meta.page.totalIsEstimate,
+        hasWarning(meta, 'total-estimated'),
         "total: 'none' reports a lower bound",
+      );
+      assert.false(
+        'totalIsEstimate' in meta.page,
+        'a caveat is a warning, not a flag on the page',
       );
       let keyPass = searchSql().find((sql) => /LIMIT 3 OFFSET 0/.test(sql));
       assert.ok(keyPass, 'the key pass reads one row past the page');
@@ -217,7 +222,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(countStatements(), 0, "total: 'none' counts nothing");
     });
 
-    test('the default total is capped: exact under the cap, counted by a bounded pass', async function (assert) {
+    test('an older-spelling page naming no total counts exactly, as it always did', async function (assert) {
       let { cards, meta } = await search({
         filter: { type: noteRef },
         sort: newestFirst,
@@ -225,11 +230,20 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(cards.length, 2);
       assert.strictEqual(meta.page.total, 5, 'all five notes are counted');
-      assert.notOk(
-        meta.page.totalIsEstimate,
-        'under the cap the total is exact',
-      );
+      assert.notOk(hasWarning(meta, 'total-estimated'), 'the total is exact');
       assert.true(meta.page.hasMore);
+      let counts = searchSql().filter((sql) => /SELECT COUNT\(\*\)/.test(sql));
+      assert.strictEqual(counts.length, 1, 'one count statement ran');
+      assert.false(/AS capped/.test(counts[0]), 'and it has no cap');
+    });
+
+    test('a capped total is counted by a bounded pass', async function (assert) {
+      let { meta } = await search({
+        filter: { type: noteRef },
+        sort: newestFirst,
+        page: { size: 2, total: 'capped' },
+      });
+      assert.strictEqual(meta.page.total, 5, 'exact under the cap');
       let counts = searchSql().filter((sql) => /SELECT COUNT\(\*\)/.test(sql));
       assert.strictEqual(counts.length, 1, 'one count statement ran');
       assert.true(/AS capped/.test(counts[0]), 'and it stops at the cap');
@@ -253,7 +267,7 @@ module(basename(import.meta.filename), function () {
         page: { size: 2, total: 'capped' },
       });
       assert.strictEqual(meta.page.total, 5);
-      assert.notOk(meta.page.totalIsEstimate);
+      assert.notOk(hasWarning(meta, 'total-estimated'));
     });
 
     test('the last page is counted from its own rows', async function (assert) {
@@ -269,7 +283,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.false(meta.page.hasMore, 'nothing follows the last page');
       assert.strictEqual(meta.page.total, 5, 'and the total is exact');
-      assert.notOk(meta.page.totalIsEstimate);
+      assert.notOk(hasWarning(meta, 'total-estimated'));
       assert.strictEqual(countStatements(), 0, 'without a count statement');
     });
 

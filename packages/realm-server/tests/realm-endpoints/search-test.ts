@@ -383,6 +383,64 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
+    test('a default page that leaves matches out says so: default-page-truncated, hasMore and the total', async function (assert) {
+      // The page bound fills a page the request never named, and a short
+      // answer from it must not read as a short match set.
+      setSearchBoundsForTests({ serverMaxPageSize: 1 });
+      try {
+        let unpaged = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+        });
+        assert.strictEqual(unpaged.status, 200);
+        assert.strictEqual(unpaged.body.data.length, 1, 'the default page');
+        assert.strictEqual(unpaged.body.meta.page.total, 2, 'the total');
+        assert.true(unpaged.body.meta.page.hasMore, 'hasMore');
+        let notice = (unpaged.body.meta.warnings ?? []).find(
+          (w: { code: string }) => w.code === 'default-page-truncated',
+        );
+        assert.deepEqual(
+          notice,
+          {
+            code: 'default-page-truncated',
+            message:
+              'Returned the first 1 of 2 matches; pass page.size or page through the results',
+          },
+          'the notice names the rows returned and the match count',
+        );
+
+        // A page the request named is the page it asked for: no notice, and
+        // none of `page-size-clamped` either, since it is within the maximum.
+        let named = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          page: { size: 1 },
+        });
+        assert.strictEqual(named.body.data.length, 1);
+        assert.true(named.body.meta.page.hasMore);
+        assert.deepEqual(
+          (named.body.meta.warnings ?? []).map((w: { code: string }) => w.code),
+          [],
+          'a named page carries no notice',
+        );
+      } finally {
+        resetSearchBoundsForTests();
+      }
+
+      // A default page that holds every match leaves nothing out.
+      let whole = await postSearch({
+        filter: personFilter(),
+        fields: { entry: ['item'] },
+      });
+      assert.strictEqual(whole.body.data.length, 2);
+      assert.false(
+        (whole.body.meta.warnings ?? []).some(
+          (w: { code: string }) => w.code === 'default-page-truncated',
+        ),
+        'no notice when the default page holds every match',
+      );
+    });
+
     test('the prerendered (html) leg is exempt from the page ceiling', async function (assert) {
       // The ceiling bounds the live item leg only. The default/html fieldset is
       // the cheap precomputed path and runs as asked even below the ceiling.

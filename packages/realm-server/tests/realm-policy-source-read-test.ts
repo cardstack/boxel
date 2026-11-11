@@ -917,9 +917,18 @@ module(basename(import.meta.filename), function (hooks) {
     }
 
     // Every header but the date, which differs between any two responses.
+    // A compressed body's length is how well its text compresses, and the
+    // two answers repeat back different paths, so a compressed answer's
+    // `content-length` is left out: the body, compared decompressed below,
+    // is the same one. (The realm compresses a text response of 1 KB or
+    // more, which a 404's error document with its stack is.)
     function headersOf(response: Response) {
+      let compressed = Boolean(response.headers['content-encoding']);
       return Object.entries(response.headers as Record<string, string>)
-        .filter(([name]) => name !== 'date')
+        .filter(
+          ([name]) =>
+            name !== 'date' && !(compressed && name === 'content-length'),
+        )
         .sort(([a], [b]) => a.localeCompare(b));
     }
 

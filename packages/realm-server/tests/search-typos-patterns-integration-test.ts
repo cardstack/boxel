@@ -276,24 +276,50 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('typeahead with typos: a misspelt title word still suggests the card', async function (assert) {
+  test('type-ahead (prefix, title scope) with typos: a misspelt title word still suggests the card', async function (assert) {
     assert.deepEqual(
-      await ids({ filter: { on, typeahead: 'ownrship' } }),
+      await ids({
+        filter: { on, prefix: true, scope: 'title', matches: 'ownrship' },
+      }),
       [],
       'without the flag a misspelling suggests nothing',
     );
     assert.deepEqual(
-      await ids({ filter: { on, typeahead: 'ownrship', typos: true } }),
+      await ids({
+        filter: {
+          on,
+          prefix: true,
+          scope: 'title',
+          matches: 'ownrship',
+          typos: true,
+        },
+      }),
       ['rust.json'],
       'a fully typed misspelling is corrected',
     );
     assert.deepEqual(
-      await ids({ filter: { on, typeahead: 'ownrship in prac', typos: true } }),
+      await ids({
+        filter: {
+          on,
+          prefix: true,
+          scope: 'title',
+          matches: 'ownrship in prac',
+          typos: true,
+        },
+      }),
       ['rust.json'],
       'the last word still matches as a prefix',
     );
     assert.deepEqual(
-      await ids({ filter: { on, typeahead: 'concurency', typos: true } }),
+      await ids({
+        filter: {
+          on,
+          prefix: true,
+          scope: 'title',
+          matches: 'concurency',
+          typos: true,
+        },
+      }),
       ['go.json'],
       'concurrency patterns, and not the cryptocurrency card',
     );
@@ -349,8 +375,18 @@ module(basename(import.meta.filename), function (hooks) {
         `"${partial}" matches exactly as without typos`,
       );
       assert.deepEqual(
-        await ids({ filter: { on, typeahead: partial, typos: true } }),
-        await ids({ filter: { on, typeahead: partial } }),
+        await ids({
+          filter: {
+            on,
+            prefix: true,
+            scope: 'title',
+            matches: partial,
+            typos: true,
+          },
+        }),
+        await ids({
+          filter: { on, prefix: true, scope: 'title', matches: partial },
+        }),
         `type-ahead "${partial}" matches exactly as without typos`,
       );
     }
@@ -369,7 +405,15 @@ module(basename(import.meta.filename), function (hooks) {
       'a finished word is corrected; a short partial stays a prefix',
     );
     assert.deepEqual(
-      await ids({ filter: { on, typeahead: 'concurency', typos: true } }),
+      await ids({
+        filter: {
+          on,
+          prefix: true,
+          scope: 'title',
+          matches: 'concurency',
+          typos: true,
+        },
+      }),
       ['go.json'],
     );
   });

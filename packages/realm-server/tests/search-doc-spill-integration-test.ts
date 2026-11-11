@@ -25,6 +25,7 @@ import {
   prepareTestDB,
   testRealm,
 } from './helpers/index.ts';
+import { withFacetFields } from './helpers/facet-fields.ts';
 
 // Spilling end to end on Postgres: a large search doc is promoted with its
 // large values spilled into `boxel_index_spill`, and every query answers
@@ -72,7 +73,7 @@ const talkDef: Definition = {
   fields: {
     title: 'f0',
     text: 'f0',
-    summary: 'f0',
+    summary: 'f6',
     hnScore: 'f1',
     isDuplicate: 'f2',
     tags: 'f3',
@@ -82,8 +83,13 @@ const talkDef: Definition = {
   fieldDefs: {
     f0: primitive(stringRef),
     f1: primitive(numberRef, 'number'),
-    f2: primitive(booleanRef, 'boolean'),
-    f3: primitive(stringRef, undefined, 'containsMany'),
+    // The facets count `tags`, `isDuplicate` and `summary`, so they are
+    // declared, as a facet must be.
+    f2: { ...primitive(booleanRef, 'boolean'), search: { facet: true } },
+    f3: {
+      ...primitive(stringRef, undefined, 'containsMany'),
+      search: { facet: true },
+    },
     f4: {
       type: 'containsMany',
       isPrimitive: false,
@@ -91,6 +97,7 @@ const talkDef: Definition = {
       fieldOrCard: segmentRef,
     },
     f5: primitive(vectorRef, 'vector'),
+    f6: { ...primitive(stringRef), search: { facet: true } },
   },
 } as Definition;
 
@@ -225,7 +232,14 @@ module(basename(import.meta.filename), function (hooks) {
         },
         lastModified: Date.now(),
         resourceCreatedAt: Date.now(),
-        searchData,
+        // Stamped with the type's facet fields, as the render stamps them:
+        // the writer builds the facet rows from this staged doc, before
+        // its large values spill.
+        searchData: await withFacetFields(
+          searchData,
+          talkDef,
+          makeDefinitionLookup(),
+        ),
         markdown: String(searchData.text ?? ''),
         deps: new Set(),
         displayNames: ['Talk'],
@@ -433,14 +447,13 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok((await spillRows('rust')).length > 0, 'other cards keep theirs');
   });
 
-  test("a paged search counts facets in its own statement, with the per-facet queries' answers", async function (assert) {
+  test('a paged search counts the same facets as an unpaged one, spilled values included', async function (assert) {
     await index(corpus, { spill: true });
     let realm = new URL(testRealm);
     let facets = [
       { by: 'tags', size: 4 },
       { by: 'isDuplicate' },
       { by: 'summary', size: 2 },
-      { by: 'nowhere' },
     ];
     for (let filter of [
       { type: talkRef },
@@ -473,6 +486,20 @@ module(basename(import.meta.filename), function (hooks) {
         unpaged.meta.page.total,
         unpaged.cards.length,
         'an unpaged total is its row count',
+      );
+    }
+    // docs/search.md (Refusals): a facet on a name the query's type lacks,
+    // that no card of the type holds, is unknown-field, paged or not. (Only
+    // a query anchored on no type, or on the base card type, reads any name.)
+    for (let page of [undefined, { size: 1, number: 0 }]) {
+      await assert.rejects(
+        engine.searchCards(realm, {
+          filter: { type: talkRef },
+          facets: [{ by: 'nowhere' }],
+          ...(page ? { page } : {}),
+        }),
+        (e: any) => e?.code === 'unknown-field',
+        `a facet on a field Talk lacks is unknown-field (${page ? 'paged' : 'unpaged'})`,
       );
     }
     let { meta } = await engine.searchCards(realm, {

@@ -833,6 +833,7 @@ module(basename(import.meta.filename), function (hooks) {
         deferPrerenderHtml: false,
         carriedPrerenderHtmlChanges: [],
         readsOwnWrite: false,
+        withoutDependents: false,
         realmEvents,
       };
     }

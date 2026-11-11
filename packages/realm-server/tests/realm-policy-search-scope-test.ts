@@ -60,10 +60,11 @@ const MODULE = `
   }
   export class Article extends CardDef {
     @field headline = contains(StringField);
-    @field status = contains(StringField);
+    @field status = contains(StringField, { search: { facet: true } });
     @field views = contains(NumberField);
     @field section = linksTo(() => Section, {
-      search: { facet: true, include: ['name'] },
+      searchable: true,
+      search: { facet: true },
     });
     @field related = linksToMany(() => Article, { searchable: true });
   }
@@ -265,12 +266,12 @@ module(basename(import.meta.filename), function (hooks) {
     return {
       rows: data.map(({ id, meta: m }) => [
         id.replace(NEWSROOM, ''),
-        m?._rerank ?? null,
+        m?._window ?? null,
         m?._blendScore ?? null,
       ]),
       total: meta.page?.total,
       facets: meta.facets,
-      rerank: meta.rerank,
+      rerank: meta.window,
     };
   }
 
@@ -338,6 +339,7 @@ module(basename(import.meta.filename), function (hooks) {
       filter: { 'item.on': Article, eq: { 'item.status': 'published' } },
       facets: [{ by: 'item.status', own: 'ignore' }, { by: 'item.section' }],
       sort: [
+        { expression: 'views / stats.views.median', top: 10 },
         {
           blend: [
             { by: 'item.views', 'item.on': Article, weight: 1 },
@@ -346,7 +348,6 @@ module(basename(import.meta.filename), function (hooks) {
           k: 60,
         },
       ],
-      rerank: { expression: 'views / stats.views.median', top: 10 },
       fields: { entry: ['item.headline'] },
     };
     let before = await search(body);
@@ -428,7 +429,7 @@ module(basename(import.meta.filename), function (hooks) {
   test("a caller's binding and linkedFrom each keep their meaning under the policy", async function (assert) {
     let body = {
       let: {
-        __linkedFrom0: {
+        $__linkedFrom0: {
           from: {
             filter: {
               'item.on': Article,
@@ -442,7 +443,7 @@ module(basename(import.meta.filename), function (hooks) {
         every: [
           {
             'item.on': Article,
-            in: { 'item.status': { $let: '__linkedFrom0' } },
+            in: { 'item.status': '$__linkedFrom0' },
           },
           {
             // a's related articles: c, and the draft d the grant hides
@@ -541,7 +542,8 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(answer.lines, [
         { id: 'articles/b', headline: 'B', views: 30 },
         { id: 'articles/c', headline: 'C', views: 20 },
-        { meta: { page: { total: 3 } } },
+        // the last line is the JSON answer's meta: 2 of 3 rows, more follow
+        { meta: { page: { total: 3, hasMore: true } } },
       ]);
     }
   });
@@ -550,7 +552,7 @@ module(basename(import.meta.filename), function (hooks) {
     let codes: Record<string, unknown> = {};
     for (let [why, columns, extra] of [
       ['no such field', ['subtitle'], {}],
-      ['a linked field the link does not carry', ['section.audience'], {}],
+      ['a linked field the link does not carry', ['related.section.name'], {}],
       ['beside fields', ['headline'], { fields: { entry: ['item.headline'] } }],
       ['named id', [{ id: 'headline' }], {}],
     ] as const) {

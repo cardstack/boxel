@@ -13,12 +13,11 @@ import {
   combineSearchEntryResults,
   internalKeyFor,
   setCompareRowLimitForTests,
-  setRerankScorer,
-  setRerankTimeBudgetForTests,
   parseSearchEntryQueryFromPayload,
   policyScopedQuery,
   resolveRelativeDate,
   searchEntryWireQueryFromQuery,
+  hasWarning,
   rri,
   type Definition,
   type DefinitionLookup,
@@ -32,7 +31,7 @@ import {
   prepareTestDB,
   testRealm,
 } from './helpers/index.ts';
-import { RerankPool } from '@cardstack/runtime-common/rerank-pool';
+import { withFacetFields } from './helpers/facet-fields.ts';
 
 const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
 
@@ -89,7 +88,7 @@ const talkDef: Definition = {
       isComputed: false,
       fieldOrCard: numberRef,
       serializerName: 'number',
-      search: { facet: 'date' },
+      search: { facet: true },
     },
     f4: {
       type: 'contains',
@@ -262,7 +261,11 @@ module(basename(import.meta.filename), function (hooks) {
         },
         lastModified: Date.now(),
         resourceCreatedAt: Date.now(),
-        searchData,
+        searchData: await withFacetFields(
+          searchData,
+          talkDef,
+          makeDefinitionLookup(),
+        ),
         markdown: String(searchData.title),
         deps: new Set(),
         displayNames: ['Talk'],
@@ -748,37 +751,37 @@ module(basename(import.meta.filename), function (hooks) {
     let saved = await addSavedList();
     let { titles, meta } = await search({
       let: {
-        saved: { from: { filter: { eq: { id: saved } } }, select: 'items.id' },
+        $saved: { from: { filter: { eq: { id: saved } } }, select: 'items.id' },
       },
-      filter: { every: [{ type: on }, { in: { id: { $let: 'saved' } } }] },
+      filter: { every: [{ type: on }, { in: { id: '$saved' } }] },
       sort: byScore,
     });
     assert.deepEqual(titles, ['d', 'b', 'f']);
-    assert.deepEqual(meta.lets, { saved: { strategy: 'join' } });
+    assert.deepEqual(meta.lets, { $saved: { strategy: 'join' } });
   });
 
   test('a let binding runs its query first and passes the values on', async function (assert) {
     // The channels of talks scoring 40 or more, then every talk on them.
     let { titles, meta } = await search({
       let: {
-        hot: {
+        $hot: {
           from: { filter: { on, range: { hnScore: { gte: 40 } } } },
           select: 'channel',
         },
       },
       filter: {
-        every: [{ type: on }, { on, in: { channel: { $let: 'hot' } } }],
+        every: [{ type: on }, { on, in: { channel: '$hot' } }],
       },
       sort: byScore,
     });
     assert.deepEqual(titles, ['d', 'e']);
-    assert.deepEqual(meta.lets, { hot: { strategy: 'list', values: 1 } });
+    assert.deepEqual(meta.lets, { $hot: { strategy: 'list', values: 1 } });
 
     // A card's links read some other way than by id fall back to a list.
     let saved = await addSavedList();
     let listed = await search({
       let: {
-        saved: {
+        $saved: {
           from: { filter: { eq: { id: saved } } },
           select: 'items.id',
         },
@@ -786,7 +789,7 @@ module(basename(import.meta.filename), function (hooks) {
       filter: {
         every: [
           { type: on },
-          { not: { in: { id: { $let: 'saved' } } } },
+          { not: { in: { id: '$saved' } } },
           { on, range: { hnScore: { gte: 10 } } },
         ],
       },
@@ -817,11 +820,11 @@ module(basename(import.meta.filename), function (hooks) {
       },
       lastModified: Date.now(),
       resourceCreatedAt: Date.now(),
-      // a panel of 1,001 speakers, past the 1,000 values a list holds
+      // a panel of 10,001 speakers, past the 10,000 values a list holds
       searchData: {
         title: 'H',
         hnScore: 2,
-        speakers: Array.from({ length: 1001 }, (_, i) => `Speaker ${i}`),
+        speakers: Array.from({ length: 10_001 }, (_, i) => `Speaker ${i}`),
       },
       markdown: 'H',
       deps: new Set(),
@@ -832,21 +835,21 @@ module(basename(import.meta.filename), function (hooks) {
     await batch.done();
     let { titles, meta } = await search({
       let: {
-        names: { from: { filter: { type: on } }, select: 'speakers' },
+        $names: { from: { filter: { type: on } }, select: 'speakers' },
       },
-      filter: { on, in: { speakers: { $let: 'names' } } },
+      filter: { on, in: { speakers: '$names' } },
       sort: byScore,
     });
-    assert.deepEqual(titles, ['a', 'h'], 'the query ran with the first 1,000');
+    assert.deepEqual(titles, ['a', 'h'], 'the query ran with the first 10,000');
     assert.deepEqual(meta.lets, {
-      names: { strategy: 'list', values: 1000, truncated: true },
+      $names: { strategy: 'list', values: 10_000 },
     });
     assert.deepEqual(
       meta.warnings?.map((w) => w.code),
       ['binding-truncated'],
     );
     assert.ok(
-      /"names" found more than 1,000 values/.test(meta.warnings![0].message),
+      /"\$names" found more than 10,000 values/.test(meta.warnings![0].message),
       meta.warnings![0].message,
     );
   });
@@ -854,7 +857,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('a let binding reaches a _when signal, and an empty list matches nothing', async function (assert) {
     let { titles } = await search({
       let: {
-        loop: {
+        $loop: {
           from: { filter: { on, eq: { channel: 'Strange Loop' } } },
           select: 'channel',
         },
@@ -867,7 +870,7 @@ module(basename(import.meta.filename), function (hooks) {
             { on, by: 'hnScore' },
             {
               by: '_when',
-              when: { on, in: { channel: { $let: 'loop' } } },
+              when: { on, in: { channel: '$loop' } },
               weight: 3,
             },
           ],
@@ -877,18 +880,18 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(titles, ['b', 'c', 'a', 'd', 'e', 'f', 'g']);
     let none = await search({
       let: {
-        nobody: {
+        $nobody: {
           from: { filter: { on, eq: { channel: 'Nowhere' } } },
           select: 'channel',
         },
       },
       filter: {
-        every: [{ type: on }, { on, in: { channel: { $let: 'nobody' } } }],
+        every: [{ type: on }, { on, in: { channel: '$nobody' } }],
       },
     });
     assert.deepEqual(none.titles, []);
     assert.deepEqual(none.meta.lets, {
-      nobody: { strategy: 'list', values: 0 },
+      $nobody: { strategy: 'list', values: 0 },
     });
   });
 
@@ -899,20 +902,18 @@ module(basename(import.meta.filename), function (hooks) {
         (err: unknown) =>
           err instanceof InvalidQueryError && pattern.test(err.message),
       );
+    // a name no binding declares is text, and an `in` takes a list
+    bad({ filter: { in: { id: '$missing' } } }, /in values must be arrays/);
+    bad({ let: { $x: { select: 'a' } } }, /from must be a query/);
     bad(
-      { filter: { in: { id: { $let: 'missing' } } } },
-      /names no binding in let/,
-    );
-    bad({ let: { x: { select: 'a' } } }, /from must be a query/);
-    bad(
-      { let: { x: { from: { filter: { type: on } }, select: 'a b' } } },
+      { let: { $x: { from: { filter: { type: on } }, select: 'a b' } } },
       /select must be a field path/,
     );
     bad(
       {
         let: {
-          x: {
-            from: { filter: { type: on }, page: { size: 5000 } },
+          $x: {
+            from: { filter: { type: on }, page: { size: 10_001 } },
             select: 'a',
           },
         },
@@ -922,35 +923,37 @@ module(basename(import.meta.filename), function (hooks) {
     bad(
       {
         let: {
-          x: { from: { filter: { in: { id: { $let: 'y' } } } }, select: 'a' },
-          y: { from: { filter: { type: on } }, select: 'a' },
+          $x: { from: { filter: { in: { id: '$y' } } }, select: 'a' },
+          $y: { from: { filter: { type: on } }, select: 'a' },
         },
       },
       /cannot use another binding/,
     );
     let parsed = parseSearchEntryQueryFromPayload({
       let: {
-        hot: {
+        $hot: {
           from: {
             filter: { 'item.on': on, range: { 'item.hnScore': { gte: 40 } } },
           },
           select: 'item.channel',
         },
       },
-      filter: { 'item.on': on, in: { 'item.channel': { $let: 'hot' } } },
+      filter: { 'item.on': on, in: { 'item.channel': '$hot' } },
     });
     assert.deepEqual(parsed.itemQuery.let, {
-      hot: {
+      $hot: {
         from: { filter: { on, range: { hnScore: { gte: 40 } } } },
         select: 'channel',
       },
     });
+    // `let` makes the request the newer spelling, so it arrives lowered:
+    // the reference is interned as the engine reads it
     assert.deepEqual(parsed.itemQuery.filter, {
       on,
-      in: { channel: { $let: 'hot' } },
+      in: { channel: { $let: '$hot' } },
     });
     let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
-    assert.strictEqual((wire.let as any).hot.select, 'item.channel');
+    assert.strictEqual((wire.let as any).$hot.select, 'item.channel');
   });
 
   test('a list binding goes only as the one value of an in', async function (assert) {
@@ -960,53 +963,54 @@ module(basename(import.meta.filename), function (hooks) {
     };
     let refused = (filter: unknown, why: string) =>
       assert.throws(
-        () => assertQuery({ let: { hot }, filter }),
+        () => assertQuery({ let: { $hot: hot }, filter }),
         (err: unknown) =>
           err instanceof InvalidQueryError &&
           err.code === 'binding-kind' &&
           /only as the one value of an `in`/.test(err.message),
         why,
       );
-    refused({ on, eq: { channel: { $let: 'hot' } } }, 'an eq value');
+    refused({ on, eq: { channel: '$hot' } }, 'an eq value');
     refused(
-      { on, in: { channel: { $let: 'hot' }, title: ['A'] } },
+      { on, in: { channel: '$hot', title: ['A'] } },
       'an in with another entry',
     );
-    refused({ on, in: { channel: [{ $let: 'hot' }] } }, 'inside an in list');
-    refused(
-      { on, range: { hnScore: { gte: { $let: 'hot' } } } },
-      'a range bound',
-    );
+    refused({ on, in: { channel: ['$hot'] } }, 'inside an in list');
+    refused({ on, range: { hnScore: { gte: '$hot' } } }, 'a range bound');
     assert.throws(
       () =>
         assertQuery({
-          let: { hot },
+          let: { $hot: hot },
           filter: { type: on },
-          sort: [{ on, by: 'hnScore' }],
-          rerank: {
-            expression: 'hnScore',
-            compare: { filter: { on, eq: { channel: { $let: 'hot' } } } },
-          },
+          sort: [
+            {
+              expression: 'hnScore',
+              compare: { filter: { on, eq: { channel: '$hot' } } },
+            },
+            { on, by: 'hnScore' },
+          ],
         }),
       (err: unknown) =>
         err instanceof InvalidQueryError && err.code === 'binding-kind',
-      "a rerank's comparison filter is checked too",
+      "a sort entry's comparison filter is checked too",
     );
     // The one place it goes still runs, in the filter and in a comparison set.
     let { titles } = await search({
-      let: { hot },
-      filter: { on, in: { channel: { $let: 'hot' } } },
+      let: { $hot: hot },
+      filter: { on, in: { channel: '$hot' } },
       sort: byScore,
     });
     assert.deepEqual(titles, ['d', 'e']);
-    let compared: Query = {
-      let: { hot },
+    let compared: Record<string, any> = {
+      let: { $hot: hot },
       filter: { type: on },
-      sort: byScore,
-      rerank: {
-        expression: 'stats.hnScore.max',
-        compare: { filter: { on, in: { channel: { $let: 'hot' } } } },
-      },
+      sort: [
+        {
+          expression: 'stats.hnScore.max',
+          compare: { filter: { on, in: { channel: '$hot' } } },
+        },
+        ...byScore,
+      ],
     };
     assertQuery(compared);
     let { rows } = await reranked(compared);
@@ -1022,7 +1026,7 @@ module(basename(import.meta.filename), function (hooks) {
     let scoped = policyScopedQuery(
       parseSearchEntryQueryFromPayload({
         let: {
-          hot: {
+          $hot: {
             from: {
               filter: { 'item.on': on, range: { 'item.hnScore': { gte: 40 } } },
             },
@@ -1031,7 +1035,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         filter: {
           every: [
-            { 'item.on': on, in: { 'item.channel': { $let: 'hot' } } },
+            { 'item.on': on, in: { 'item.channel': '$hot' } },
             { linkedFrom: { card: `${testRealm}List/saved`, field: 'items' } },
           ],
         },
@@ -1039,10 +1043,10 @@ module(basename(import.meta.filename), function (hooks) {
       [grant],
     );
     let lets = scoped.itemQuery.let!;
-    assert.deepEqual(lets.hot.from.filter, {
+    assert.deepEqual(lets.$hot.from.filter, {
       every: [{ on, range: { hnScore: { gte: 40 } } }, { any: [grant] }],
     });
-    assert.deepEqual(lets.__linkedFrom0, {
+    assert.deepEqual(lets.$__linkedFrom0, {
       from: {
         filter: {
           every: [{ eq: { id: `${testRealm}List/saved` } }, { any: [grant] }],
@@ -1088,7 +1092,7 @@ module(basename(import.meta.filename), function (hooks) {
       JSON.stringify(boosted.itemQuery).includes('"linkedFrom":'),
       'no direct read is left in the query',
     );
-    assert.deepEqual(boosted.itemQuery.let?.__linkedFrom0?.from.filter, {
+    assert.deepEqual(boosted.itemQuery.let?.$__linkedFrom0?.from.filter, {
       every: [{ eq: { id: `${testRealm}List/saved` } }, { any: [grant] }],
     });
     let { results } = await engine.search(
@@ -1103,21 +1107,23 @@ module(basename(import.meta.filename), function (hooks) {
     refused(
       {
         let: {
-          mine: { from: { filter: saved }, select: 'item.channel' },
+          $mine: { from: { filter: saved }, select: 'item.channel' },
         },
-        filter: { 'item.on': on, in: { 'item.channel': { $let: 'mine' } } },
+        filter: { 'item.on': on, in: { 'item.channel': '$mine' } },
       },
-      /^\/let\/mine\/from\/filter:/,
+      /^\/let\/\$mine\/from\/filter:/,
     );
     refused(
       {
         filter: { 'item.on': on, range: { 'item.hnScore': { gte: 0 } } },
-        rerank: {
-          expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
-          compare: { filter: saved },
-        },
+        sort: [
+          {
+            expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+            compare: { filter: saved },
+          },
+        ],
       },
-      /^\/rerank\/compare\/filter:/,
+      /^\/sort\/0\/compare\/filter:/,
     );
   });
 
@@ -1131,12 +1137,12 @@ module(basename(import.meta.filename), function (hooks) {
     };
     let scoped = policyScopedQuery(
       parseSearchEntryQueryFromPayload({
-        let: { __linkedFrom0: mine },
+        let: { $__linkedFrom0: mine },
         filter: {
           every: [
             {
               'item.on': on,
-              in: { 'item.channel': { $let: '__linkedFrom0' } },
+              in: { 'item.channel': '$__linkedFrom0' },
             },
             { linkedFrom: { card: `${testRealm}List/saved`, field: 'items' } },
           ],
@@ -1146,11 +1152,11 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let lets = scoped.itemQuery.let!;
     assert.deepEqual(
-      lets.__linkedFrom0?.select,
+      lets.$__linkedFrom0?.select,
       'channel',
       "the caller's binding keeps its name and its query",
     );
-    let added = Object.keys(lets).filter((n) => n !== '__linkedFrom0');
+    let added = Object.keys(lets).filter((n) => n !== '$__linkedFrom0');
     assert.strictEqual(
       added.length,
       1,
@@ -1159,7 +1165,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(lets[added[0]].select, 'items.id');
     let text = JSON.stringify(scoped.itemQuery.filter);
     assert.true(
-      text.includes('"$let":"__linkedFrom0"'),
+      text.includes(':"$__linkedFrom0"'),
       'the caller still reads its own',
     );
     assert.true(
@@ -1175,7 +1181,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
     let lets = Object.fromEntries(
       [1, 2, 3, 4].map((n) => [
-        `b${n}`,
+        `$b${n}`,
         {
           from: {
             filter: { 'item.on': on, range: { 'item.hnScore': { gte: n } } },
@@ -1398,7 +1404,7 @@ module(basename(import.meta.filename), function (hooks) {
         assertQuery({
           sort: [{ by: '_expr', on, expr: 'rating', near: [1] }],
         } as any),
-      /an expression sort takes by, expr, on, direction and weight/,
+      /unknown expression sort member "near"/,
     );
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },
@@ -1425,49 +1431,48 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  async function reranked(query: Query) {
+  // A query in the newer spelling (an expression sort entry), as the engine
+  // takes it.
+  async function reranked(query: Record<string, any>) {
     let { results, meta } = await engine.search(
       new URL(testRealm),
-      query,
+      query as Query,
       {},
       { kind: 'renderSet' },
     );
     return {
       rows: results.map((r: any) => [
         r.url.replace(`${testRealm}Talk/`, '').replace('.json', ''),
-        r._rerank == null ? null : Number(Number(r._rerank).toFixed(3)),
+        r._window == null ? null : Number(Number(r._window).toFixed(3)),
       ]),
       meta,
     };
   }
   const byScoreDesc = [{ on, by: 'hnScore', direction: 'desc' as const }];
 
-  test('rerank orders the top of a result by any Excel formula', async function (assert) {
-    // A text function the score profile refuses: Strange Loop talks first.
+  test('an expression with top orders the top of a result', async function (assert) {
+    // The talks scored 10 to 30 first (b, c, a), each group keeping the
+    // query order.
     let { rows, meta } = await reranked({
       filter: { type: on },
-      sort: byScoreDesc,
-      // `title` beside the engine's synthetic `_title`, as every card has.
-      rerank: {
-        expression:
-          'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
-      },
+      sort: [
+        { expression: 'IF(AND(hnScore >= 10, hnScore <= 30), 1, 0)', top: 100 },
+        ...byScoreDesc,
+      ],
     });
     assert.deepEqual(
       rows.map((r) => r[0]),
       ['b', 'c', 'a', 'd', 'e', 'f', 'g'],
       'matching rows lead, each group keeping the query order',
     );
-    // A SEARCH that finds nothing is #VALUE!, which ISNUMBER reads as FALSE,
-    // as in Excel: every talk gets a value.
-    assert.deepEqual(meta.rerank, { window: 7, scored: 7, ran: 'thread' });
+    // every talk gets a value
+    assert.deepEqual(meta.window, { rows: 7, scored: 7 });
     assert.strictEqual(meta.page.total, 7);
 
     let windowed = await reranked({
       filter: { type: on },
-      sort: byScoreDesc,
+      sort: [{ expression: '100 - hnScore', top: 4 }, ...byScoreDesc],
       page: { number: 0, size: 3 },
-      rerank: { expression: '100 - hnScore', top: 4 },
     });
     assert.deepEqual(
       windowed.rows,
@@ -1480,9 +1485,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let past = await reranked({
       filter: { type: on },
-      sort: byScoreDesc,
+      sort: [{ expression: '100 - hnScore', top: 4 }, ...byScoreDesc],
       page: { number: 1, size: 4 },
-      rerank: { expression: '100 - hnScore', top: 4 },
     });
     assert.deepEqual(
       past.rows.map((r) => r[0]),
@@ -1491,13 +1495,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a page that runs past the rerank window is filled in the query order', async function (assert) {
+  test('a page that runs past the window of an expression with top is filled in the query order', async function (assert) {
     let pageOf = (number: number) =>
       reranked({
         filter: { type: on },
-        sort: byScoreDesc,
+        sort: [{ expression: '100 - hnScore', top: 4 }, ...byScoreDesc],
         page: { number, size: 3 },
-        rerank: { expression: '100 - hnScore', top: 4 },
       });
     let straddling = await pageOf(1);
     assert.deepEqual(
@@ -1518,14 +1521,14 @@ module(basename(import.meta.filename), function (hooks) {
       ['c', 'b', 'e', 'd', 'a', 'f', 'g'],
       'every match once, with no gap after the window',
     );
-    assert.strictEqual(straddling.meta.rerank?.window, 4);
-    assert.true(straddling.meta.rerank?.truncated);
+    assert.strictEqual(straddling.meta.window?.rows, 4);
+    assert.true(straddling.meta.window?.truncated);
   });
 
   test('a reranked page keeps what the query computed for each row', async function (assert) {
-    let page = async (query: Query, opts = {}) =>
+    let page = async (query: Record<string, any>, opts = {}) =>
       (
-        await engine.search(new URL(testRealm), query, opts, {
+        await engine.search(new URL(testRealm), query as Query, opts, {
           kind: 'renderSet',
         })
       ).results as Record<string, any>[];
@@ -1533,10 +1536,12 @@ module(basename(import.meta.filename), function (hooks) {
       {
         filter: { type: on },
         explain: true,
-        sort: [{ by: '_blend', of: [{ on, by: 'hnScore' }] }],
+        sort: [
+          { expression: '100 - hnScore', top: 4 },
+          { blend: [{ on, by: 'hnScore' }] },
+        ],
         collapse: { by: 'channel', on },
         page: { number: 0, size: 3 },
-        rerank: { expression: '100 - hnScore', top: 4 },
       },
       { exposeSortValues: true },
     );
@@ -1556,7 +1561,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.ok(Number(row._collapseSize) >= 1, `${row.url} keeps its size`);
       assert.deepEqual(
         row._sortValues.slice(0, 1),
-        [row._rerank],
+        [row._window],
         `${row.url} sorts by its rerank value first, for a merge`,
       );
       assert.strictEqual(
@@ -1571,74 +1576,64 @@ module(basename(import.meta.filename), function (hooks) {
       'two talks with no channel, then Strange Loop',
     );
 
-    // A SQL expression sort keeps its own values and report beside a rerank.
+    // An expression sort over every match keeps its own values beside the
+    // window's.
     let both = await engine.search(
       new URL(testRealm),
       {
         filter: { type: on },
-        sort: [{ by: '_expr', on, expr: 'hnScore * 2' }],
-        rerank: { expression: '100 - hnScore', top: 3 },
-      },
-      {},
-      { kind: 'renderSet' },
-    );
-    assert.deepEqual(both.meta.expression, { placement: 'sql' });
-    let d = both.results.find((r: any) => r.url === url('d')) as any;
-    assert.strictEqual(Number(d._expression), 100, "the sort's value");
-    assert.strictEqual(Number(d._rerank), 50, "the rerank's value");
-
-    // A rerank alone is not an expression of the query's.
-    let alone = await engine.search(
-      new URL(testRealm),
-      {
-        filter: { type: on },
-        sort: byScore,
-        rerank: { expression: '100 - hnScore', top: 3 },
-      },
-      {},
-      { kind: 'renderSet' },
-    );
-    assert.strictEqual(alone.meta.expression, undefined);
-    assert.ok(alone.meta.rerank, 'the rerank reports itself');
-    assert.notOk(
-      alone.results.some((r: any) => '_expression' in r),
-      'no row carries an expression value',
-    );
-
-    // An expression placed over the top window still says so.
-    let top = await engine.search(
-      new URL(testRealm),
-      {
-        filter: { type: on },
-        sort: [{ expression: '100 - hnScore', placement: 'top' }],
-        type: on,
+        sort: [
+          { expression: '100 - hnScore', top: 3 },
+          { expression: 'hnScore * 2' },
+        ],
       } as unknown as Query,
       {},
       { kind: 'renderSet' },
     );
-    assert.strictEqual(top.meta.expression?.placement, 'top');
-    assert.ok(
-      top.results.every((r: any) => r._expression === r._rerank),
-      "each row's expression value is its rerank value",
+    let d = both.results.find((r: any) => r.url === url('d')) as any;
+    assert.strictEqual(Number(d._expression), 100, "the sort's value");
+    assert.strictEqual(Number(d._window), 50, "the window's value");
+
+    // The window's expression alone gives no row an `_expression`.
+    let alone = await engine.search(
+      new URL(testRealm),
+      {
+        filter: { type: on },
+        sort: [{ expression: '100 - hnScore', top: 3 }, ...byScore],
+      } as unknown as Query,
+      {},
+      { kind: 'renderSet' },
+    );
+    assert.ok(alone.meta.window, 'the window reports itself');
+    assert.notOk(
+      alone.results.some((r: any) => '_expression' in r),
+      'no row carries an expression value',
     );
   });
 
-  test('a rerank says when its window or its comparison set was cut short', async function (assert) {
+  test('an expression with top says when its window or its comparison set was cut short', async function (assert) {
     let whole = await reranked({
       filter: { type: on },
-      sort: byScoreDesc,
-      rerank: { expression: 'hnScore / stats.hnScore.median' },
+      sort: [
+        { expression: 'hnScore / stats.hnScore.median', top: 100 },
+        ...byScoreDesc,
+      ],
     });
-    assert.notOk(whole.meta.rerank?.truncated, 'a window holding every match');
-    assert.notOk(whole.meta.rerank?.compareTruncated, 'a whole comparison set');
+    assert.notOk(whole.meta.window?.truncated, 'a window holding every match');
+    assert.false(
+      hasWarning(whole.meta, 'compare-truncated'),
+      'a whole comparison set',
+    );
 
     let top = await reranked({
       filter: { type: on },
-      sort: byScoreDesc,
-      rerank: { expression: 'hnScore / stats.hnScore.median', top: 4 },
+      sort: [
+        { expression: 'hnScore / stats.hnScore.median', top: 4 },
+        ...byScoreDesc,
+      ],
     });
     assert.true(
-      top.meta.rerank?.truncated,
+      top.meta.window?.truncated,
       'seven matches, four re-ranked: the rest keep the query order',
     );
 
@@ -1646,27 +1641,36 @@ module(basename(import.meta.filename), function (hooks) {
     try {
       let capped = await reranked({
         filter: { type: on },
-        sort: byScoreDesc,
-        rerank: { expression: 'hnScore / stats.hnScore.median' },
+        sort: [
+          { expression: 'hnScore / stats.hnScore.median', top: 100 },
+          ...byScoreDesc,
+        ],
       });
       assert.deepEqual(
-        capped.meta.rerank?.compareTruncated,
-        { rows: 3, total: 7 },
+        capped.meta.warnings?.find((w) => w.code === 'compare-truncated')
+          ?.message,
+        'the comparison set held 7 rows, more than the 3 it reads, so stats. and peers. describe the first 3',
         'the set read three of its seven rows, and says so',
+      );
+      assert.false(
+        'compareTruncated' in (capped.meta.window ?? {}),
+        'a caveat is a warning, not a flag on meta.window',
       );
     } finally {
       setCompareRowLimitForTests(undefined);
     }
   });
 
-  test('rerank compares each row with its peers', async function (assert) {
+  test('an expression with compare compares each row with its peers', async function (assert) {
     let { rows } = await reranked({
       filter: { type: on },
-      sort: byScoreDesc,
-      rerank: {
-        expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
-        compare: { by: 'channel' },
-      },
+      sort: [
+        {
+          expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+          compare: { by: 'channel' },
+        },
+        ...byScoreDesc,
+      ],
     });
     assert.deepEqual(
       rows,
@@ -1683,11 +1687,14 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let ratio = await reranked({
       filter: { type: on },
-      sort: byScoreDesc,
-      rerank: {
-        expression: 'hnScore / stats.hnScore.median',
-        direction: 'asc',
-      },
+      sort: [
+        {
+          expression: 'hnScore / stats.hnScore.median',
+          direction: 'asc',
+          top: 100,
+        },
+        ...byScoreDesc,
+      ],
     });
     assert.deepEqual(
       ratio.rows,
@@ -1704,10 +1711,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let against = await reranked({
       filter: { on, eq: { channel: 'GOTO' } },
-      rerank: {
-        expression: '(hnScore - stats.hnScore.avg) / stats.hnScore.stdev',
-        compare: { filter: { type: on } },
-      },
+      sort: [
+        {
+          expression: '(hnScore - stats.hnScore.avg) / stats.hnScore.stdev',
+          compare: { filter: { type: on } },
+        },
+      ],
     });
     assert.deepEqual(
       against.rows.map((r) => r[0]),
@@ -1720,28 +1729,39 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('rerank is checked, travels the wire, and a policy scopes its comparison set', function (assert) {
+  test('an expression with top is checked, travels the wire, and a policy scopes its comparison set', function (assert) {
     assert.throws(
-      () => assertQuery({ rerank: { expression: 'x', top: 501 } } as any),
-      /top must be an integer from 1 to 500/,
+      () => assertQuery({ sort: [{ expression: 'x', top: 501 }] } as any),
+      /top is a whole number from 1 to 500/,
     );
     assert.throws(
       () =>
         assertQuery({
-          rerank: { expression: 'x', compare: { by: 'a b' } },
+          sort: [{ expression: 'x', compare: { by: 'a b' } }],
         } as any),
       /by must be a field path/,
     );
+    assert.throws(
+      () =>
+        parseSearchEntryQueryFromPayload({
+          filter: { 'item.on': on },
+          rerank: { expression: 'hnScore' },
+        }),
+      (e: any) => e.queryCode === 'unknown-key' && /sort entry/.test(e.message),
+      'the wire has no rerank member',
+    );
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },
-      rerank: {
-        expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
-        top: 50,
-        compare: {
-          filter: { 'item.on': on, eq: { 'item.channel': 'GOTO' } },
-          by: 'item.channel',
+      sort: [
+        {
+          expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
+          top: 50,
+          compare: {
+            filter: { 'item.on': on, eq: { 'item.channel': 'GOTO' } },
+            by: 'item.channel',
+          },
         },
-      },
+      ],
     });
     assert.deepEqual(parsed.itemQuery.rerank, {
       expression: 'PERCENTRANK_INC(peers.hnScore, hnScore)',
@@ -1763,7 +1783,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('look-alike comparisons are checked, travel the wire, and a policy scopes them', function (assert) {
     let bad = (compare: Record<string, unknown>, pattern: RegExp) =>
       assert.throws(
-        () => assertQuery({ rerank: { expression: 'x', compare } } as any),
+        () => assertQuery({ sort: [{ expression: 'x', compare }] } as any),
         pattern,
       );
     bad({ near: 'embedding', by: 'channel' }, /near or by, not both/);
@@ -1773,10 +1793,12 @@ module(basename(import.meta.filename), function (hooks) {
     bad({ near: 'a b' }, /near names a vector field/);
     let parsed = parseSearchEntryQueryFromPayload({
       filter: { 'item.on': on },
-      rerank: {
-        expression: 'priceMin / stats.priceMin.median',
-        compare: { near: 'item.imageEmbedding', k: 20, minSimilarity: 0.8 },
-      },
+      sort: [
+        {
+          expression: 'priceMin / stats.priceMin.median',
+          compare: { near: 'item.imageEmbedding', k: 20, minSimilarity: 0.8 },
+        },
+      ],
     });
     assert.deepEqual(parsed.itemQuery.rerank!.compare, {
       near: 'imageEmbedding',
@@ -1785,8 +1807,9 @@ module(basename(import.meta.filename), function (hooks) {
     });
     let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
     assert.strictEqual(
-      (wire.rerank as any).compare.near,
+      (wire.sort as any)[0].compare.near,
       'item.imageEmbedding',
+      'the window goes out as the leading sort entry',
     );
     let grant = { on, eq: { channel: 'GOTO' } };
     let scoped = policyScopedQuery(parsed, [grant]);
@@ -1797,25 +1820,32 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a rerank formula that does not compile is refused', async function (assert) {
+  test('an expression with top that does not compile is refused', async function (assert) {
     await assert.rejects(
       engine.search(
         new URL(testRealm),
-        { filter: { type: on }, rerank: { expression: 'IF(' } },
+        {
+          filter: { type: on },
+          sort: [{ expression: 'IF(', top: 10 }],
+        } as unknown as Query,
         {},
         { kind: 'renderSet' },
       ),
-      /rerank: the formula does not compile/,
+      (e: any) =>
+        e instanceof InvalidQueryError &&
+        ['invalid-expression', 'expression-unsupported'].includes(e.code),
     );
   });
 
-  test('a rerank formula SQL can run is scored in Postgres', async function (assert) {
+  test('an expression with top is scored in Postgres', async function (assert) {
     let { rows, meta } = await reranked({
       filter: { type: on },
-      sort: byScoreDesc,
-      rerank: { expression: 'IFERROR(100 / (hnScore - 30), -1)', top: 4 },
+      sort: [
+        { expression: 'IFERROR(100 / (hnScore - 30), -1)', top: 4 },
+        ...byScoreDesc,
+      ],
     });
-    assert.strictEqual(meta.rerank?.ran, 'sql', 'it ran in Postgres');
+    assert.deepEqual(meta.window, { rows: 4, scored: 4, truncated: true });
     assert.deepEqual(
       rows.slice(0, 4),
       [
@@ -1828,86 +1858,33 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a rerank formula SQL cannot run is scored on the thread pool', async function (assert) {
-    let pool = new RerankPool(1);
-    setRerankScorer(pool.scorer);
-    try {
-      let { rows, meta } = await reranked({
-        filter: { type: on },
-        sort: byScoreDesc,
-        rerank: {
-          expression:
-            'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
-        },
-      });
-      assert.deepEqual(
-        rows.map((r) => r[0]),
-        ['b', 'c', 'a', 'd', 'e', 'f', 'g'],
-        'the same order as in this thread',
-      );
-      assert.deepEqual(meta.rerank, { window: 7, scored: 7, ran: 'thread' });
-      assert.strictEqual(pool.running, 1, 'one thread scored it');
+  test('an expression SQL cannot run is refused, with or without top', async function (assert) {
+    for (let entry of [
+      {
+        expression:
+          'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
+      },
+      {
+        expression: 'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0)',
+        top: 100,
+      },
+    ]) {
       await assert.rejects(
         engine.search(
           new URL(testRealm),
-          { filter: { type: on }, rerank: { expression: 'IF(' } },
+          {
+            filter: { type: on },
+            sort: [entry, ...byScoreDesc],
+          } as unknown as Query,
           {},
           { kind: 'renderSet' },
         ),
-        /rerank: the formula does not compile/,
-        "a formula the thread cannot compile is the caller's error",
+        (e: any) =>
+          e instanceof InvalidQueryError &&
+          e.code === 'expression-unsupported' &&
+          /SEARCH|ISNUMBER|LEN/.test(e.message),
+        JSON.stringify(entry),
       );
-    } finally {
-      setRerankScorer(undefined);
-      await pool.terminate();
-    }
-  });
-
-  test('a rerank out of time keeps the query order and says so', async function (assert) {
-    setRerankTimeBudgetForTests(0);
-    try {
-      let { rows, meta } = await reranked({
-        filter: { type: on },
-        sort: byScoreDesc,
-        rerank: {
-          expression:
-            'IF(ISNUMBER(SEARCH("loop", channel)), 1, 0) + LEN(title) * 0',
-        },
-      });
-      assert.deepEqual(
-        rows,
-        ['d', 'e', 'b', 'c', 'a', 'f', 'g'].map((k) => [k, null]),
-        "the query's own order (by score), with no row scored",
-      );
-      assert.deepEqual(meta.rerank, { window: 7, scored: 0, ran: 'thread' });
-      assert.deepEqual(
-        meta.warnings?.map((w) => w.code),
-        ['rerank-timeout'],
-      );
-    } finally {
-      setRerankTimeBudgetForTests(undefined);
-    }
-  });
-
-  test('the rerank pool stops a thread still scoring at its deadline', async function (assert) {
-    let pool = new RerankPool(1);
-    try {
-      let past = await pool.scorer('1', [{}], Date.now() - 1);
-      assert.deepEqual(past, { values: [], timedOut: true }, 'already late');
-      assert.strictEqual(pool.running, 0, 'and no thread was started');
-      // A new thread loads BXL before it scores, which takes far longer than
-      // this: it is stopped at the deadline rather than left running.
-      let late = await pool.scorer('1 + 1', [{}], Date.now() + 5);
-      assert.true(late.timedOut, 'the slow start times out');
-      assert.strictEqual(pool.running, 0, 'and its thread is gone');
-      let fine = await pool.scorer(
-        'rating * 2',
-        [{ rating: 3 }, {}],
-        Date.now() + 30_000,
-      );
-      assert.deepEqual(fine, { values: [6, 0], timedOut: false });
-    } finally {
-      await pool.terminate();
     }
   });
 
@@ -1976,19 +1953,19 @@ module(basename(import.meta.filename), function (hooks) {
       one: true as const,
     };
     let same = await search({
-      let: { top },
-      filter: { on, eq: { channel: { $let: 'top', path: 'channel' } } },
+      let: { $top: top },
+      filter: { on, eq: { channel: '$top.channel' } },
       sort: byScore,
     });
     assert.deepEqual(same.titles, ['d', 'e'], "an eq reads the card's channel");
     assert.deepEqual(same.meta.lets, {
-      top: { strategy: 'card', found: true },
+      $top: { strategy: 'card', found: true },
     });
     let lower = await search({
-      let: { top },
+      let: { $top: top },
       filter: {
         on,
-        range: { hnScore: { lt: { $let: 'top', path: 'hnScore' } } },
+        range: { hnScore: { lt: '$top.hnScore' } },
       },
       sort: byScore,
     });
@@ -1998,10 +1975,12 @@ module(basename(import.meta.filename), function (hooks) {
       'a range bound reads its score',
     );
     let { rows } = await reranked({
-      let: { top },
+      let: { $top: top },
       filter: { type: on },
-      sort: byScoreDesc,
-      rerank: { expression: 'top.hnScore - hnScore', direction: 'asc' },
+      sort: [
+        { expression: '$top.hnScore - hnScore', direction: 'asc', top: 100 },
+        ...byScoreDesc,
+      ],
     });
     assert.deepEqual(
       rows.slice(0, 3),
@@ -2010,35 +1989,35 @@ module(basename(import.meta.filename), function (hooks) {
         ['e', 10],
         ['b', 20],
       ],
-      'a rerank formula reads the card under its name',
+      'an expression reads the card under its name',
     );
   });
 
-  test('a one-card binding that finds nothing reads null', async function (assert) {
+  test('a one-card binding that finds nothing matches nothing, as $this does', async function (assert) {
     let none = {
       from: { filter: { on, eq: { title: 'Z' } } },
       one: true as const,
     };
     let bounded = await search({
-      let: { none },
+      let: { $none: none },
       filter: {
         on,
-        range: { hnScore: { lt: { $let: 'none', path: 'hnScore' } } },
+        range: { hnScore: { lt: '$none.hnScore' } },
       },
     });
     assert.deepEqual(bounded.titles, [], 'a null bound matches nothing');
     assert.deepEqual(bounded.meta.lets, {
-      none: { strategy: 'card', found: false },
+      $none: { strategy: 'card', found: false },
     });
     let missing = await search({
-      let: { none },
-      filter: { on, eq: { channel: { $let: 'none', path: 'channel' } } },
+      let: { $none: none },
+      filter: { on, eq: { channel: '$none.channel' } },
       sort: byScore,
     });
     assert.deepEqual(
       missing.titles,
-      ['f', 'g'],
-      'eq null finds the cards with no value',
+      [],
+      'no card, so no value to compare: no rows, not the cards with no channel',
     );
   });
 
@@ -2050,19 +2029,16 @@ module(basename(import.meta.filename), function (hooks) {
           err instanceof InvalidQueryError && pattern.test(err.message),
       );
     let top = { from: { filter: { type: on } }, one: true };
-    bad({ let: { top: { ...top, select: 'a' } } }, /or \{ from, one: true \}/);
-    bad({ let: { top: { ...top, one: 1 } } }, /or \{ from, one: true \}/);
-    bad(
-      { let: { top }, filter: { in: { id: { $let: 'top' } } } },
-      /is one card/,
-    );
+    bad({ let: { $top: { ...top, select: 'a' } } }, /or \{ from, one: true \}/);
+    bad({ let: { $top: { ...top, one: 1 } } }, /or \{ from, one: true \}/);
+    bad({ let: { $top: top }, filter: { in: { id: '$top' } } }, /is one card/);
     bad(
       {
         let: {
-          top,
-          x: {
+          $top: top,
+          $x: {
             from: {
-              filter: { on, eq: { channel: { $let: 'top', path: 'channel' } } },
+              filter: { on, eq: { channel: '$top.channel' } },
             },
             select: 'a',
           },
@@ -2071,11 +2047,11 @@ module(basename(import.meta.filename), function (hooks) {
       /cannot use another binding/,
     );
     assertQuery({
-      let: { top },
+      let: { $top: top },
       filter: {
         every: [
-          { on, eq: { channel: { $let: 'top', path: 'channel' } } },
-          { on, range: { hnScore: { lt: { $let: 'top', path: 'hnScore' } } } },
+          { on, eq: { channel: '$top.channel' } },
+          { on, range: { hnScore: { lt: '$top.hnScore' } } },
         ],
       },
       sort: [{ on, by: 'hnScore', direction: 'desc' }],
@@ -2083,21 +2059,21 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(true, 'references pass where values go');
     let parsed = parseSearchEntryQueryFromPayload({
       let: {
-        top: {
+        $top: {
           from: { filter: { 'item.on': on, eq: { 'item.title': 'D' } } },
           one: true,
         },
       },
       filter: {
         'item.on': on,
-        range: { 'item.hnScore': { lt: { $let: 'top', path: 'hnScore' } } },
+        range: { 'item.hnScore': { lt: '$top.hnScore' } },
       },
     });
     assert.deepEqual(parsed.itemQuery.let, {
-      top: { from: { filter: { on, eq: { title: 'D' } } }, one: true },
+      $top: { from: { filter: { on, eq: { title: 'D' } } }, one: true },
     });
     let wire = searchEntryWireQueryFromQuery(parsed.itemQuery);
-    assert.deepEqual((wire.let as any).top, {
+    assert.deepEqual((wire.let as any).$top, {
       from: { filter: { 'item.on': on, eq: { 'item.title': 'D' } } },
       one: true,
     });
@@ -2128,7 +2104,7 @@ module(basename(import.meta.filename), function (hooks) {
     let bound = parseSearchEntryQueryFromPayload({
       type: on,
       let: {
-        top: {
+        $top: {
           from: {
             type: on,
             filter: { eq: { channel: 'GOTO' } },
@@ -2137,10 +2113,10 @@ module(basename(import.meta.filename), function (hooks) {
           one: true,
         },
       },
-      filter: { range: { hnScore: { lte: { $let: 'top', path: 'hnScore' } } } },
+      filter: { range: { hnScore: { lte: '$top.hnScore' } } },
     });
     assert.deepEqual(
-      (bound.itemQuery.let as any).top.from,
+      (bound.itemQuery.let as any).$top.from,
       {
         filter: { on, every: [{ eq: { channel: 'GOTO' } }] },
         sort: [{ by: 'hnScore', direction: 'desc', on }],
@@ -2149,12 +2125,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let topWindow = parseSearchEntryQueryFromPayload({
       type: on,
-      sort: [{ expression: 'IF(ISNUMBER(SEARCH("a", title)), 1, 0)' }],
+      sort: [{ expression: 'hnScore * 2', top: 50 }],
     });
-    assert.strictEqual(
-      topWindow.itemQuery.rerank?.expression,
-      'IF(ISNUMBER(SEARCH("a", title)), 1, 0)',
-      'a formula outside the score profile runs over the top window',
+    assert.deepEqual(
+      topWindow.itemQuery.rerank,
+      { expression: 'hnScore * 2', top: 50 },
+      'an expression with top lowers to the engine form of a window',
     );
     assert.throws(
       () =>
@@ -2177,48 +2153,58 @@ module(basename(import.meta.filename), function (hooks) {
       /non-empty string/,
     );
     refused(
-      { type: on, sort: [{ expression: 'hnScore', placement: 'gpu' }] },
-      'invalid-expression',
-      /"sql" or "top"/,
+      { type: on, sort: [{ expression: 'hnScore', placement: 'sql' }] },
+      'unknown-key',
+      /placement.*every expression runs in SQL/,
     );
     refused(
-      { type: on, sort: [{ expression: textual, placement: 'sql' }] },
-      'expression-placement',
-      /cannot run as SQL/,
-    );
-    refused(
-      { type: on, sort: [{ by: 'hnScore' }, { expression: textual }] },
-      'expression-placement',
-      /must be the first sort key/,
-    );
-    refused(
-      { type: on, sort: [{ expression: textual }], collapse: 'channel' },
-      'expression-placement',
-      /collapse/,
+      { type: on, sort: [{ expression: textual }] },
+      'expression-unsupported',
+      /cannot run in a query/,
     );
     refused(
       {
         type: on,
-        sort: [{ expression: textual }],
-        rerank: { expression: 'hnScore', top: 50 },
+        sort: [{ by: 'hnScore' }, { expression: 'hnScore', top: 5 }],
       },
       'expression-placement',
-      /already has a rerank/,
+      /first sort entry/,
+    );
+    refused(
+      {
+        type: on,
+        sort: [{ expression: 'hnScore', top: 5 }],
+        rerank: { expression: 'hnScore', top: 50 },
+      },
+      'unknown-key',
+      /sort entry/,
     );
     refused(
       {
         type: on,
         sort: [{ blend: [{ by: 'hnScore' }, { expression: textual }] }],
       },
+      'expression-unsupported',
+      /cannot run in a query/,
+    );
+    refused(
+      {
+        type: on,
+        sort: [
+          { blend: [{ by: 'hnScore' }, { expression: 'hnScore', top: 5 }] },
+        ],
+      },
+      'invalid-nesting',
+      /takes no top/,
+    );
+    refused(
+      { type: on, sort: [{ expression: 'hnScore / stats.hnScore.median' }] },
       'expression-placement',
-      /in a blend runs as SQL/,
+      /only a sort entry with top/,
     );
     let sqlPlaced = parseSearchEntryQueryFromPayload({
       type: on,
-      sort: [
-        { by: 'hnScore' },
-        { expression: 'hnScore * 2', placement: 'sql' },
-      ],
+      sort: [{ by: 'hnScore' }, { expression: 'hnScore * 2' }],
     });
     assert.strictEqual(
       (sqlPlaced.itemQuery.sort as any)[1].by,
@@ -2235,87 +2221,182 @@ module(basename(import.meta.filename), function (hooks) {
       (e: any) => e.code === 'unknown-field' && /channel/.test(e.message),
     );
   });
-  test('a formula that overflows in SQL runs over the top window instead', async function (assert) {
+  test('a formula that overflows in SQL is refused with limit-exceeded', async function (assert) {
     let plain = await search({
       filter: { type: on },
       sort: [{ by: '_expr', expr: 'hnScore * 2', direction: 'desc' }],
     } as Query);
-    assert.strictEqual(plain.meta.expression?.placement, 'sql');
-    // 1e300 squared is past a double: Postgres raises, JavaScript gives #NUM!
-    let { titles, meta } = await search({
-      filter: { type: on },
-      sort: [
-        {
-          by: '_expr',
-          expr: 'IF(hnScore > 25, 1e300 * 1e300, hnScore)',
-          direction: 'desc',
-        },
-      ],
-      facets: [{ by: 'channel', measure: { max: 'hnScore' } }],
-    } as Query);
-    assert.strictEqual(meta.expression?.placement, 'top');
-    assert.ok(/overflows/.test(meta.expression?.reason ?? ''), 'it says why');
-    assert.ok(titles.length > 0, 'the search still answers');
-    assert.ok(
-      meta.facets?.channel?.some((v: any) => v.measure),
-      'a measured facet survives the fallback',
+    assert.ok(plain.titles.length > 0, 'a formula in range answers');
+    // 1e300 squared is past a double: Postgres raises, and there is nowhere
+    // else an expression runs
+    await assert.rejects(
+      search({
+        filter: { type: on },
+        sort: [
+          {
+            by: '_expr',
+            expr: 'IF(hnScore > 25, 1e300 * 1e300, hnScore)',
+            direction: 'desc',
+          },
+        ],
+        facets: [{ by: 'channel', measure: { max: 'hnScore' } }],
+      } as Query),
+      (e: any) =>
+        e instanceof InvalidQueryError &&
+        e.code === 'limit-exceeded' &&
+        /overflows/.test(e.message),
     );
   });
 
+  // A failed assert.throws whose callback did not throw crashes QUnit 2.26's
+  // TAP reporter (it prints an undefined `actual`), ending the whole run.
+  // These read the outcome themselves, so a failure is one failed assertion.
+  function refusal(run: () => unknown): { code?: string; message: string } {
+    try {
+      run();
+    } catch (e: any) {
+      return {
+        code: e instanceof InvalidQueryError ? e.code : e?.queryCode,
+        message: String(e?.message ?? e),
+      };
+    }
+    return { message: 'accepted' };
+  }
+
   test('unknown members are refused with a code and the nearest name', function (assert) {
-    let refused = (query: unknown, code: string, pattern?: RegExp) =>
-      assert.throws(
-        () => assertQuery(query),
-        (e: any) =>
-          e instanceof InvalidQueryError &&
-          e.code === code &&
-          (!pattern || pattern.test(e.message)),
-      );
-    refused({ fliter: { type: on } }, 'unknown-key', /did you mean "filter"/);
+    let refused = (
+      run: () => unknown,
+      code: string,
+      pattern: RegExp | undefined,
+      label: string,
+    ) => {
+      let got = refusal(run);
+      assert.strictEqual(got.code, code, `${label}: ${got.message}`);
+      if (pattern) {
+        assert.true(pattern.test(got.message), `${label}: ${got.message}`);
+      }
+    };
+    let accepted = (run: () => unknown, label: string) => {
+      let got = refusal(run);
+      assert.strictEqual(got.message, 'accepted', label);
+    };
+    let typed = (q: Record<string, unknown>) => () =>
+      assertQuery({ type: on, ...q });
+    // an unknown top-level member is refused in both spellings
     refused(
-      { sort: [{ on, by: 'hnScore', order: 'desc' }] },
+      () => assertQuery({ fliter: { type: on } }),
+      'unknown-key',
+      /did you mean "filter"/,
+      'the top level, older spelling',
+    );
+    refused(
+      typed({ fliter: { eq: { title: 'A' } } }),
+      'unknown-key',
+      /did you mean "filter"/,
+      'the top level, newer spelling',
+    );
+    // the newer spelling refuses an unknown member of a sort entry, a
+    // filter node and the page, naming the nearest real one
+    refused(
+      typed({ sort: [{ by: 'hnScore', order: 'desc' }] }),
       'unknown-key',
       /order/,
+      'a sort entry',
     );
     refused(
-      { sort: [{ on, by: 'hnScore', directon: 'desc' }] },
+      typed({ sort: [{ by: 'hnScore', directon: 'desc' }] }),
       'unknown-key',
       /did you mean "direction"/,
+      'a misspelled direction',
     );
     refused(
-      { filter: { on, eq: { title: 'A' }, colour: 'red' } },
+      typed({ filter: { eq: { title: 'A' }, colour: 'red' } }),
       'unknown-key',
       /colour/,
+      'a filter node',
     );
     refused(
-      { filter: { type: on }, page: { size: 10, cursor: 'x' } },
+      typed({ page: { size: 10, cursor: 'x' } }),
       'unknown-key',
       /cursor/,
+      'the page',
     );
-    refused({ filter: { type: on }, page: { size: -1 } }, 'invalid-page');
     refused(
-      { filter: { type: on }, page: { size: 10, number: -1 } },
+      typed({ page: { size: -1 } }),
       'invalid-page',
+      undefined,
+      'a negative size, newer spelling',
     );
-    assertQuery({ filter: { type: on }, page: { size: 0 } });
-    assert.ok(true, 'size 0 still asks for counts only');
-    assert.throws(
+    // the older spelling reads them as it always did: ignored
+    accepted(
+      () => assertQuery({ sort: [{ on, by: 'hnScore', order: 'desc' }] }),
+      'a sort entry, older spelling',
+    );
+    accepted(
+      () => assertQuery({ sort: [{ on, by: 'hnScore', directon: 'desc' }] }),
+      'a misspelled direction, older spelling',
+    );
+    accepted(
+      () => assertQuery({ filter: { on, eq: { title: 'A' }, colour: 'red' } }),
+      'a filter node, older spelling',
+    );
+    accepted(
+      () =>
+        assertQuery({ filter: { type: on }, page: { size: 10, cursor: 'x' } }),
+      'the page, older spelling',
+    );
+    accepted(
+      () => assertQuery({ filter: { type: on }, page: { size: -1 } }),
+      'a negative size is read as the default, older spelling',
+    );
+    refused(
+      () =>
+        assertQuery({ filter: { type: on }, page: { size: 10, number: -1 } }),
+      'invalid-page',
+      undefined,
+      'a negative page number',
+    );
+    accepted(
+      () => assertQuery({ filter: { type: on }, page: { size: 0 } }),
+      'size 0 still asks for counts only',
+    );
+    // the wire refuses an unknown sort member in both spellings, as it
+    // always has
+    refused(
       () =>
         parseSearchEntryQueryFromPayload({
           filter: { 'item.on': on },
           sort: [{ by: 'item.hnScore', 'item.on': on, ordr: 'desc' }],
         }),
-      (e: any) => e.queryCode === 'unknown-key',
+      'unknown-key',
+      /ordr/,
+      'the wire, older spelling',
+    );
+    refused(
+      () =>
+        parseSearchEntryQueryFromPayload({
+          type: on,
+          sort: [{ by: 'item.hnScore', ordr: 'desc' }],
+        }),
+      'unknown-key',
+      /did you mean "order"|ordr/,
+      'the wire, newer spelling',
     );
   });
 
   test('a blend or a near sort refuses a member it does not have', function (assert) {
-    let refused = (payload: Record<string, unknown>, pattern: RegExp) =>
-      assert.throws(
-        () => parseSearchEntryQueryFromPayload(payload),
-        (e: any) => e.queryCode === 'unknown-key' && pattern.test(e.message),
-        pattern.source,
+    let refused = (payload: Record<string, unknown>, pattern: RegExp) => {
+      let got = refusal(() => parseSearchEntryQueryFromPayload(payload));
+      assert.strictEqual(
+        got.code,
+        'unknown-key',
+        `${pattern.source}: ${got.message}`,
       );
+      assert.true(
+        pattern.test(got.message),
+        `${pattern.source}: ${got.message}`,
+      );
+    };
     let signals = [{ by: 'item.hnScore', 'item.on': on }];
     refused(
       {
@@ -2333,21 +2414,27 @@ module(basename(import.meta.filename), function (hooks) {
       /did you mean "method"/,
     );
     let near = { by: 'embedding', on, near: [1, 0] };
-    assert.throws(
-      () => assertQuery({ sort: [{ ...near, directon: 'asc' }] }),
-      (e: any) =>
-        e instanceof InvalidQueryError &&
-        e.code === 'unknown-key' &&
-        /did you mean "direction"/.test(e.message),
-      'a near sort entry',
+    let nearSort = refusal(() =>
+      assertQuery({ sort: [{ ...near, directon: 'asc' }] }),
     );
-    assert.throws(
-      () =>
-        assertQuery({
-          sort: [{ by: '_blend', of: [{ ...near, zzz: 1 }] }],
-        }),
-      (e: any) => e instanceof InvalidQueryError && e.code === 'unknown-key',
-      'a near signal in a blend',
+    assert.strictEqual(
+      nearSort.code,
+      'unknown-key',
+      `a near sort entry: ${nearSort.message}`,
+    );
+    assert.true(
+      /did you mean "direction"/.test(nearSort.message),
+      nearSort.message,
+    );
+    let nearSignal = refusal(() =>
+      assertQuery({
+        sort: [{ by: '_blend', of: [{ ...near, zzz: 1 }] }],
+      }),
+    );
+    assert.strictEqual(
+      nearSignal.code,
+      'unknown-key',
+      `a near signal in a blend: ${nearSignal.message}`,
     );
     assertQuery({ sort: [{ ...near, direction: 'asc' }] });
     assertQuery({
@@ -2402,16 +2489,22 @@ module(basename(import.meta.filename), function (hooks) {
     let wire = searchEntryWireQueryFromQuery(parsed.itemQuery) as any;
     assert.deepEqual(wire.sort[0].relevance, { text: 1, popularity: 0 });
     assert.strictEqual(wire.sort[1].blend[0].by, 'item.textRelevance');
-    for (let by of ['item._relevance', 'item._matchRelevance']) {
-      assert.throws(
-        () =>
-          parseSearchEntryQueryFromPayload({
-            filter: { 'item.on': on, matches: 'talk' },
-            sort: [{ by, 'item.on': on }],
-          }),
-        (e: any) =>
-          /is not a sort key/.test(e.message) && e.queryCode === 'unknown-key',
-      );
-    }
+    let internal = refusal(() =>
+      parseSearchEntryQueryFromPayload({
+        filter: { 'item.on': on, matches: 'talk' },
+        sort: [{ by: 'item._relevance', 'item.on': on }],
+      }),
+    );
+    assert.strictEqual(internal.code, 'unknown-key', internal.message);
+    assert.true(/is not a sort key/.test(internal.message), internal.message);
+    // `_matchRelevance` was the text-relevance key before `textRelevance`,
+    // and queries saved in realms name it: an older spelling still read
+    let older = refusal(() =>
+      parseSearchEntryQueryFromPayload({
+        filter: { 'item.on': on, matches: 'talk' },
+        sort: [{ by: 'item._matchRelevance', 'item.on': on }],
+      }),
+    );
+    assert.strictEqual(older.message, 'accepted', 'item._matchRelevance');
   });
 });

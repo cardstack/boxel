@@ -82,13 +82,20 @@ const entryDef: Definition = {
   type: 'card-def',
   codeRef: entryRef,
   displayName: 'Entry',
-  fields: { title: 'f0' },
+  fields: { title: 'f0', rank: 'f1' },
   fieldDefs: {
     f0: {
       type: 'contains',
       isPrimitive: true,
       isComputed: false,
       fieldOrCard: stringRef,
+    },
+    f1: {
+      type: 'contains',
+      isPrimitive: true,
+      isComputed: false,
+      fieldOrCard: ref('@cardstack/base/number', 'default'),
+      serializerName: 'number',
     },
   },
 };
@@ -149,7 +156,9 @@ async function seedEntry(dbAdapter: PgAdapter, url: string) {
     `,`,
     param(JSON.stringify({ id: url, type: 'card' })),
     `::jsonb,`,
-    param(JSON.stringify({ title: titles.get(url) })),
+    param(
+      JSON.stringify({ title: titles.get(url), rank: lastModified.get(url) }),
+    ),
     `::jsonb,`,
     `'[]'::jsonb,`,
     `'[]'::jsonb,`,
@@ -164,17 +173,19 @@ async function seedEntry(dbAdapter: PgAdapter, url: string) {
   ]);
 }
 
-// The wrapped order — each sort value exposed as an inner aliased column, the
-// ORDER BY applied against those aliases — is what a paged, faceted search
-// renders: its narrow pass counts the facets over a materialized match set
-// and orders the page from it. A facet with no filter anchor counts plain
-// values, so `title` takes that path without a card definition.
+// A paged, faceted search. Facets are counted by their own queries over the
+// facet table, so the page itself is the plain ordered LIMIT (`plainTopN`),
+// which renders the direction into its ORDER BY like every other path. (The
+// wrapped order, a materialized match set ordered by inner sort aliases, is
+// now taken only by a page that ranks: relevance, near, blend or an
+// expression.) The facet is an index field (`_realm`), which needs no card
+// definition; these rows record no type.
 function wrappedSearch(engine: IndexQueryEngine, sort: unknown) {
   return engine
     .searchCards(new URL(testRealmURL), {
       sort: sort as Sort,
       page: { number: 0, size: 10 },
-      facets: [{ by: 'title' }],
+      facets: [{ by: '_realm' }],
     })
     .then(({ cards }) => ({
       results: cards.map((card) => ({ url: card.id })),
@@ -323,7 +334,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(orderBySql(), '', 'no ORDER BY was executed at all');
     });
 
-    test('a faceted page orders by its inner sort alias in both directions', async function (assert) {
+    test('a faceted page orders by its sort in both directions', async function (assert) {
       for (let direction of ['asc', 'desc'] as const) {
         let expected = direction === 'asc' ? urls : [...urls].reverse();
         executedSql = [];
@@ -333,22 +344,38 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           results.map((row) => String(row.url)),
           expected,
-          `${direction} orders the rows by the inner sort alias`,
+          `${direction} orders the rows`,
         );
         let sql = orderBySql();
-        // Pin that the search took the wrapped path: the materialized match
-        // set and the inner sort alias only exist on it.
         assert.ok(
+          new RegExp(`\\s${direction}\\s+NULLS LAST`).test(sql),
+          `${direction} reaches the ORDER BY as the keyword:\n${sql}`,
+        );
+      }
+    });
+
+    test('a ranked page orders by its inner sort alias in both directions', async function (assert) {
+      // An expression sort ranks, so the page takes the wrapped order: a
+      // materialized match set ordered by its inner sort aliases.
+      for (let direction of ['asc', 'desc'] as const) {
+        let expected = direction === 'asc' ? urls : [...urls].reverse();
+        executedSql = [];
+        let { results } = await wrappedSearch(engine, [
+          { by: '_expr', expr: 'rank', on: entryRef, direction },
+        ]);
+        assert.deepEqual(
+          results.map((row) => String(row.url)),
+          expected,
+          `${direction} orders the rows`,
+        );
+        let sql = orderBySql();
+        assert.true(
           /WITH m AS MATERIALIZED/.test(sql),
-          `${direction}: the faceted narrow pass was executed:\n${sql}`,
+          `the wrapped order ran:\n${sql}`,
         );
-        assert.ok(
-          /_sort_0/.test(sql),
-          `${direction}: the inner sort alias was projected:\n${sql}`,
-        );
-        assert.ok(
-          new RegExp(`_sort_0\\s+${direction}\\s+NULLS LAST`).test(sql),
-          `${direction} reaches the outer ORDER BY as the keyword:\n${sql}`,
+        assert.true(
+          new RegExp(`_sort_0"?\\s+${direction}`, 'i').test(sql),
+          `${direction} reaches the outer ORDER BY on the inner alias:\n${sql}`,
         );
       }
     });
@@ -465,7 +492,16 @@ module(basename(import.meta.filename), function () {
         executedSql.some((sql) => sql.includes('realm_user_permissions')),
         'no SQL carrying the direction was executed',
       );
-      assert.strictEqual(orderBySql(), '', 'no ORDER BY was executed at all');
+      // The facet's plan reads which types hold its field first (ordered by
+      // type, no sort direction of the query's); the page's own ORDER BY
+      // never ran.
+      assert.strictEqual(
+        executedSql
+          .filter((sql) => /ORDER BY/.test(sql) && !/AS type_key/.test(sql))
+          .join('\n'),
+        '',
+        "the page's ORDER BY was never executed",
+      );
     });
   });
 });

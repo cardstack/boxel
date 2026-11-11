@@ -4,6 +4,8 @@ import { basename } from 'path';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  backfillFacetValues,
+  facetFieldSpecsOf,
   IndexQueryEngine,
   internalKeyFor,
   param,
@@ -104,6 +106,8 @@ function definitionOf(spec: TypeSpec): Definition {
           isComputed: false,
           fieldOrCard: isNumeric(spec.fields[n]) ? numberRef : stringRef,
           ...(isNumeric(spec.fields[n]) ? { serializerName: 'number' } : {}),
+          // every field is a facet: the invariants are about counting
+          search: { facet: true },
         },
       ]),
     ),
@@ -430,6 +434,16 @@ module(basename(import.meta.filename), function () {
         engine = new IndexQueryEngine(dbAdapter, makeDefinitionLookup(), vn);
         for (let row of ROWS) {
           await seed(dbAdapter, vn, row);
+        }
+        // The rows went straight into boxel_index: their facet rows are
+        // written from their search docs, as a declaration change does.
+        for (let spec of TYPES) {
+          await backfillFacetValues(
+            dbAdapter,
+            realm,
+            internalKeyFor(spec.ref, undefined, vn),
+            await facetFieldSpecsOf(definitionOf(spec), async () => undefined),
+          );
         }
       },
     });

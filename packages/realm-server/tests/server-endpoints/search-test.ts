@@ -795,6 +795,31 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
           200,
           'a request naming no page is clamped to the default, not rejected',
         );
+        // Each realm took the default page of 2 and holds 2, so the per-realm
+        // answer left nothing out and carries no notice.
+        let noticeOf = (body: any) =>
+          (body.meta.warnings ?? []).find(
+            (w: { code: string }) => w.code === 'default-page-truncated',
+          );
+        assert.strictEqual(unpaged.body.meta.page.total, 4);
+        assert.strictEqual(unpaged.body.data.length, 4);
+        assert.strictEqual(noticeOf(unpaged.body), undefined, 'no notice');
+        // Merged, the union takes one global default page of 2 of the 4, and
+        // the answer says so.
+        let merged = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          realms: [testRealm.url, secondaryRealm.url],
+          federation: { results: 'merged' },
+        });
+        assert.strictEqual(merged.status, 200);
+        assert.strictEqual(merged.body.data.length, 2);
+        assert.strictEqual(merged.body.meta.page.total, 4);
+        assert.true(merged.body.meta.page.hasMore);
+        assert.strictEqual(
+          noticeOf(merged.body)?.message,
+          'Returned the first 2 of 4 matches; pass page.size or page through the results',
+        );
 
         // A multi-realm request within the ceiling is accepted — the realms
         // fan-out is not capped server-side — and both realms are searched.

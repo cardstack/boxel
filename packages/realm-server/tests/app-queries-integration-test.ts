@@ -5,6 +5,8 @@ import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   IndexQueryEngine,
+  backfillFacetValues,
+  facetFieldSpecsOf,
   internalKeyFor,
   param,
   query,
@@ -88,6 +90,8 @@ function definitionOf(app: App): Definition {
             ...(kind === 'number' || kind === 'boolean'
               ? { serializerName: kind }
               : {}),
+            // Every field of these apps is one their sidebars may count.
+            search: { facet: true },
           },
         ];
       }),
@@ -731,6 +735,15 @@ async function seed(dbAdapter: PgAdapter, vn: VirtualNetwork, app: App) {
       `)`,
     ]);
   }
+  // The rows went in by hand, so their facet rows are derived the way a
+  // declaration-only change derives them: from the search docs.
+  let definition = definitionOf(app);
+  await backfillFacetValues(
+    dbAdapter,
+    realm,
+    typeKey,
+    await facetFieldSpecsOf(definition, async () => undefined),
+  );
 }
 
 function expectedUrls(app: App, intent: Intent): string[] {

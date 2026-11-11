@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
+  hasWarning,
   rri,
   type Query,
   type Realm,
@@ -69,14 +70,15 @@ const momentSource = `
       search: { rank: 'popularity', facet: true },
     });
     @field lastDiscussed = contains(NumberField, {
-      search: { rank: 'recency', facet: 'date' },
+      search: { rank: 'recency', facet: true },
     });
     @field start = contains(NumberField, { search: false });
     @field segments = containsMany(TranscriptSegment, {
       search: { role: 'body' },
     });
     @field concepts = linksToMany(() => Concept, {
-      search: { include: ['name'], facet: true },
+      searchable: true,
+      search: { facet: true },
     });
     @field cardTitle = contains(StringField, {
       computeVia: function (this: Moment) {
@@ -338,7 +340,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('include: a link keeps its id and the included fields only', async function (assert) {
+    test("searchable: a link carries its id and the linked card's own fields", async function (assert) {
       let [row] = (await dbAdapter.execute(
         `SELECT search_doc FROM boxel_index WHERE url = $1 AND type = 'instance'`,
         {
@@ -346,10 +348,22 @@ module(basename(import.meta.filename), function () {
           coerceTypes: { search_doc: 'JSON' },
         },
       )) as { search_doc: Record<string, unknown> }[];
-      assert.deepEqual(row.search_doc.concepts, [
-        { id: `${realmHref}Concept/event-sourcing`, name: 'Event sourcing' },
-        { id: `${realmHref}Concept/crdt`, name: 'CRDT' },
-      ]);
+      let carried = row.search_doc.concepts as Record<string, unknown>[];
+      assert.deepEqual(
+        carried.map(({ id, name, definition }) => ({ id, name, definition })),
+        [
+          {
+            id: `${realmHref}Concept/event-sourcing`,
+            name: 'Event sourcing',
+            definition: 'storing changes as an append-only log of events',
+          },
+          {
+            id: `${realmHref}Concept/crdt`,
+            name: 'CRDT',
+            definition: 'a replicated data type that merges without conflicts',
+          },
+        ],
+      );
     });
 
     test('a positive eq or in through a list is the index match alone, with no list walk', async function (assert) {
@@ -420,7 +434,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(newest.data.length, 1, 'one row on the page');
       assert.true(newest.meta.page.hasMore, 'more follows the first row');
       assert.true(
-        newest.meta.page.totalIsEstimate,
+        hasWarning(newest.meta, 'total-estimated'),
         "total: 'none' reports a lower bound",
       );
       assert.strictEqual(
@@ -429,7 +443,7 @@ module(basename(import.meta.filename), function () {
         'the default total counts every match',
       );
       assert.notOk(
-        exact.meta.page.totalIsEstimate,
+        hasWarning(exact.meta, 'total-estimated'),
         'the default total is exact',
       );
       assert.false(
@@ -467,7 +481,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('include: a filter reads an included field, and nothing else past the link', async function (assert) {
+    test("searchable: a filter reads the linked card's fields, and nothing it does not have", async function (assert) {
       assert.deepEqual(
         (
           await ids({
@@ -476,15 +490,24 @@ module(basename(import.meta.filename), function () {
         ).sort(),
         [idOf('local-first'), idOf('turning-the-database')].sort(),
       );
+      assert.deepEqual(
+        (
+          await ids({
+            filter: {
+              on: moment(),
+              contains: { 'concepts.definition': 'merges' },
+            },
+          })
+        ).sort(),
+        [idOf('local-first'), idOf('turning-the-database')].sort(),
+        'any field of the linked card is answerable',
+      );
       await assert.rejects(
         search({
-          filter: {
-            on: moment(),
-            contains: { 'concepts.definition': 'merges' },
-          },
+          filter: { on: moment(), eq: { 'concepts.nope': 'x' } },
         }),
-        /searchable|not searchable|nonsearchable/i,
-        'a field the link does not include is refused',
+        /nonexistent field|unknown/i,
+        'a field the linked card does not have is refused',
       );
     });
 
@@ -530,7 +553,7 @@ module(basename(import.meta.filename), function () {
           { by: 'channel', own: 'ignore' },
           { by: 'speakers' },
           { by: 'hnScore' },
-          { by: 'lastDiscussed' },
+          { by: 'lastDiscussed', interval: 'month' },
         ],
       });
       assert.strictEqual(meta.page.total, 2, 'two Strange Loop talks');
@@ -570,7 +593,7 @@ module(basename(import.meta.filename), function () {
           { value: '2024-01-01', count: 1 },
           { value: '2024-03-01', count: 1 },
         ],
-        'a declared date facet comes back as a monthly histogram',
+        'a number holding a timestamp counts by month when the query names an interval',
       );
     });
   });

@@ -97,6 +97,21 @@ process.on('unhandledRejection', (reason: unknown) => {
   throw reason;
 });
 
+// QUnit 2.26's TAP reporter crashes the run printing a failed assertion whose
+// actual or expected JSON cannot hold (assert.throws' predicate, undefined).
+const pushResult = QUnit.assert.pushResult;
+QUnit.assert.pushResult = function (result) {
+  if (!result.result) {
+    for (let key of ['actual', 'expected'] as const) {
+      let v = result[key];
+      if (typeof v === 'function' || (v === undefined && key in result)) {
+        result = { ...result, [key]: String(v?.name || v) };
+      }
+    }
+  }
+  return pushResult.call(this, result);
+};
+
 QUnit.config.testTimeout = 60000;
 const testModules = process.env.TEST_MODULES?.trim();
 

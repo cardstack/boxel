@@ -335,6 +335,69 @@ module(basename(import.meta.filename), function () {
         'sort anchor is addressed as item.on',
       );
     });
+
+    // OnTube's transcript-line search, as its shell sends it: a passage
+    // search (`within: 'item.segments'`) under a `blend` sort, which makes it
+    // the newer spelling.
+    test('a newer-spelling passage search names its list through item., as the wire does', function (assert) {
+      let parsed = parseSearchEntryQueryFromPayload(
+        JSON.parse(
+          JSON.stringify({
+            filter: {
+              every: [
+                {
+                  'item.on': authorRef,
+                  matches: 'logical clocks',
+                  within: 'item.segments',
+                },
+                {
+                  not: {
+                    'item.on': authorRef,
+                    eq: { 'item.isDuplicate': true },
+                  },
+                },
+              ],
+            },
+            sort: [
+              {
+                blend: [
+                  { by: 'textRelevance' },
+                  { by: 'item.hnScore', 'item.on': authorRef, weight: 0.5 },
+                ],
+              },
+            ],
+            fields: { entry: ['item.vid', 'item.videoTitle', 'item.channel'] },
+            page: { size: 5, total: 'none' },
+          }),
+        ),
+      );
+      let passage = JSON.stringify(parsed.itemQuery.filter);
+      assert.true(
+        passage.includes('"within":"segments"'),
+        `within reads bare once lowered: ${passage}`,
+      );
+      assert.false(passage.includes('item.'), 'no wire prefix is left');
+      assert.deepEqual(parsed.fieldset.item, {
+        kind: 'sparse',
+        fields: ['vid', 'videoTitle', 'channel'],
+      });
+    });
+
+    test('every field path of a newer-spelling wire query loses its item. prefix', function (assert) {
+      let parsed = parseSearchEntryQueryFromPayload({
+        filter: { 'item.on': authorRef, exists: 'item.title' },
+        sort: [{ blend: [{ by: 'item.title' }] }],
+        facets: [{ by: 'item.status', measure: { sum: 'item.rating' } }],
+        collapse: { by: 'item.status', keep: 2 },
+      } as any);
+      let lowered = JSON.stringify(parsed.itemQuery);
+      assert.false(lowered.includes('item.'), lowered);
+      assert.deepEqual(
+        (parsed.itemQuery as any).facets[0].measure,
+        { sum: 'rating' },
+        "a facet's measure names its field bare",
+      );
+    });
   });
 
   // The single-instance GET's query-string surface: `?format=` / `?renderType=`
@@ -708,11 +771,27 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(parseSearchEntryQueryFromPayload(wire).itemQuery, query);
     });
 
-    test('round-trips a typeahead filter', function (assert) {
-      let query = { filter: { typeahead: 'steve jo' } } as any;
+    test('round-trips a type-ahead (title-scoped prefix) matches filter', function (assert) {
+      let query = {
+        filter: { matches: 'steve jo', prefix: true, scope: 'title' },
+      } as any;
       let wire = searchEntryWireQueryFromQuery(query);
-      assert.deepEqual(wire, { filter: { typeahead: 'steve jo' } });
+      assert.deepEqual(wire, {
+        filter: { matches: 'steve jo', prefix: true, scope: 'title' },
+      });
       assert.deepEqual(parseSearchEntryQueryFromPayload(wire).itemQuery, query);
+    });
+
+    test('refuses a typeahead filter on the wire, naming the matches form', function (assert) {
+      assert.throws(
+        () =>
+          parseSearchEntryQueryFromPayload({
+            filter: { typeahead: 'steve jo' },
+          }),
+        (e: any) =>
+          (e?.queryCode ?? e?.code) === 'unknown-key' &&
+          /matches, prefix: true, scope: 'title'/.test(String(e.message)),
+      );
     });
 
     test('pins the requested sparse fieldset', function (assert) {

@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { execFileSync } from 'child_process';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 
 // Only the index writer writes a promoted search doc, because a
 // spilled doc's markers and its `boxel_index_spill` rows must change together.
@@ -31,9 +31,21 @@ const SQL_WRITE =
 
 module(basename(import.meta.filename), function () {
   test('only the index writer writes search_doc in SQL', function (assert) {
+    // The working tree as it stands: tracked files plus new ones not yet
+    // added (`--others`, minus ignored ones), less any deleted in the tree
+    // and not yet committed, which `ls-files` still lists.
     let files = execFileSync(
       'git',
-      ['ls-files', '--', 'packages/*.ts', 'packages/*.gts', 'packages/*.js'],
+      [
+        'ls-files',
+        '--cached',
+        '--others',
+        '--exclude-standard',
+        '--',
+        'packages/*.ts',
+        'packages/*.gts',
+        'packages/*.js',
+      ],
       { cwd: repoRoot, encoding: 'utf8' },
     )
       .split('\n')
@@ -42,7 +54,8 @@ module(basename(import.meta.filename), function () {
           f &&
           !f.includes('/tests/') &&
           !f.includes('/migrations') &&
-          !f.includes('node_modules'),
+          !f.includes('node_modules') &&
+          existsSync(join(repoRoot, f)),
       );
     let writers = files.filter((file) =>
       SQL_WRITE.test(readFileSync(join(repoRoot, file), 'utf8')),

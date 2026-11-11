@@ -94,7 +94,7 @@ module(basename(import.meta.filename), function () {
         facets: [{ by: '"Units Sold 30d"' }],
       },
       (path, anchor) => {
-        seen.push(`${(anchor as CodeRef)?.name}:${path}`);
+        seen.push(`${(anchor as { name?: string })?.name}:${path}`);
         return path.toLowerCase();
       },
     );
@@ -133,7 +133,7 @@ module(basename(import.meta.filename), function () {
       },
       fieldsAt,
     );
-    assert.deepEqual(saved, {
+    assert.deepEqual(saved as unknown, {
       filter: {
         every: [
           { on: P, range: { priceMin: { lt: 50 } } },
