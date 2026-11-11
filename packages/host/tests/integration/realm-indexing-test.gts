@@ -1116,7 +1116,13 @@ module(`Integration | realm indexing`, function (hooks) {
         isField: false,
         isFile: false,
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -1246,7 +1252,13 @@ module(`Integration | realm indexing`, function (hooks) {
         isField: false,
         isFile: false,
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -1319,7 +1331,13 @@ module(`Integration | realm indexing`, function (hooks) {
           },
         ],
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -1875,7 +1893,13 @@ module(`Integration | realm indexing`, function (hooks) {
       {
         _cardType: 'Person',
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
         firstName: 'Van Gogh',
         id: `${testRealmURL}vangogh`,
         cardTitle: 'Untitled Card',
@@ -2726,7 +2750,13 @@ module(`Integration | realm indexing`, function (hooks) {
         fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       },
       `search doc includes fullName field`,
     );
@@ -2812,7 +2842,13 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         views: 5,
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       },
       `post 1 search doc includes publication relationship`,
     );
@@ -2835,7 +2871,13 @@ module(`Integration | realm indexing`, function (hooks) {
               cardTitle: ' ',
             },
             cardTheme: null,
-            cardInfo: { cardThumbnail: null, theme: null },
+            cardInfo: {
+              cardThumbnail: null,
+              theme: null,
+              alternativeNames: null,
+              keywords: null,
+              metrics: {},
+            },
             id: `${testRealmURL}Post/1`,
             publication: {
               id: `${testRealmURL}Publication/pacific`,
@@ -2850,7 +2892,13 @@ module(`Integration | realm indexing`, function (hooks) {
               cardTitle: ' ',
             },
             cardTheme: null,
-            cardInfo: { cardThumbnail: null, theme: null },
+            cardInfo: {
+              cardThumbnail: null,
+              theme: null,
+              alternativeNames: null,
+              keywords: null,
+              metrics: {},
+            },
             id: `${testRealmURL}Post/2`,
             publication: {
               id: `${testRealmURL}Publication/pacific`,
@@ -2860,7 +2908,13 @@ module(`Integration | realm indexing`, function (hooks) {
           },
         ],
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       },
       `publication search doc includes featuredPosts relationship via its searchable annotation`,
     );
@@ -2957,7 +3011,13 @@ module(`Integration | realm indexing`, function (hooks) {
       isField: false,
       isFile: false,
       cardTheme: null,
-      cardInfo: { cardThumbnail: null, theme: null },
+      cardInfo: {
+        cardThumbnail: null,
+        theme: null,
+        alternativeNames: null,
+        keywords: null,
+        metrics: {},
+      },
     });
     // we should be able to perform a structured clone of the search doc (this
     // emulates the limitations of the postMessage used to communicate between
@@ -3166,7 +3226,13 @@ module(`Integration | realm indexing`, function (hooks) {
             owner: null,
             cardTitle: 'Mango',
             cardTheme: null,
-            cardInfo: { cardThumbnail: null, theme: null },
+            cardInfo: {
+              cardThumbnail: null,
+              theme: null,
+              alternativeNames: null,
+              keywords: null,
+              metrics: {},
+            },
           },
           {
             id: `${testRealmURL}Pet/vanGogh`,
@@ -3174,7 +3240,13 @@ module(`Integration | realm indexing`, function (hooks) {
             owner: null,
             cardTitle: 'Van Gogh',
             cardTheme: null,
-            cardInfo: { cardThumbnail: null, theme: null },
+            cardInfo: {
+              cardThumbnail: null,
+              theme: null,
+              alternativeNames: null,
+              keywords: null,
+              metrics: {},
+            },
           },
         ],
         friend: null,
@@ -3182,7 +3254,13 @@ module(`Integration | realm indexing`, function (hooks) {
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -3281,7 +3359,13 @@ module(`Integration | realm indexing`, function (hooks) {
         cardDescription: 'A person with pets',
         cardThumbnailURL: null,
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -3424,7 +3508,13 @@ module(`Integration | realm indexing`, function (hooks) {
         isField: false,
         isFile: false,
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -4083,10 +4173,22 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/vanGogh`,
           },
           cardTheme: null,
-          cardInfo: { cardThumbnail: null, theme: null },
+          cardInfo: {
+            cardThumbnail: null,
+            theme: null,
+            alternativeNames: null,
+            keywords: null,
+            metrics: {},
+          },
         },
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -4286,11 +4388,23 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           cardDescription: 'Dog friend',
           cardTheme: null,
-          cardInfo: { cardThumbnail: null, theme: null },
+          cardInfo: {
+            cardThumbnail: null,
+            theme: null,
+            alternativeNames: null,
+            keywords: null,
+            metrics: {},
+          },
         },
         cardTitle: 'Hassan',
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -4435,10 +4549,22 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           cardDescription: 'Dog owner',
           cardTheme: null,
-          cardInfo: { cardThumbnail: null, theme: null },
+          cardInfo: {
+            cardThumbnail: null,
+            theme: null,
+            alternativeNames: null,
+            keywords: null,
+            metrics: {},
+          },
         },
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -4557,7 +4683,13 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         cardTitle: 'Hassan',
         cardTheme: null,
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
       });
     } else {
       assert.ok(
@@ -4794,7 +4926,13 @@ module(`Integration | realm indexing`, function (hooks) {
               cardTitle: 'Mango',
               friends: [{ id: hassanID }],
               cardTheme: null,
-              cardInfo: { cardThumbnail: null, theme: null },
+              cardInfo: {
+                cardThumbnail: null,
+                theme: null,
+                alternativeNames: null,
+                keywords: null,
+                metrics: {},
+              },
             },
             {
               id: vanGoghID,
@@ -4802,11 +4940,23 @@ module(`Integration | realm indexing`, function (hooks) {
               friends: [{ id: hassanID }],
               cardTitle: 'Van Gogh',
               cardTheme: null,
-              cardInfo: { cardThumbnail: null, theme: null },
+              cardInfo: {
+                cardThumbnail: null,
+                theme: null,
+                alternativeNames: null,
+                keywords: null,
+                metrics: {},
+              },
             },
           ],
           cardTheme: null,
-          cardInfo: { cardThumbnail: null, theme: null },
+          cardInfo: {
+            cardThumbnail: null,
+            theme: null,
+            alternativeNames: null,
+            keywords: null,
+            metrics: {},
+          },
         },
         'hassan searchData is correct',
       );
@@ -4983,15 +5133,33 @@ module(`Integration | realm indexing`, function (hooks) {
                     },
                   ],
                   cardTheme: null,
-                  cardInfo: { cardThumbnail: null, theme: null },
+                  cardInfo: {
+                    cardThumbnail: null,
+                    theme: null,
+                    alternativeNames: null,
+                    keywords: null,
+                    metrics: {},
+                  },
                 },
               ],
               cardTheme: null,
-              cardInfo: { cardThumbnail: null, theme: null },
+              cardInfo: {
+                cardThumbnail: null,
+                theme: null,
+                alternativeNames: null,
+                keywords: null,
+                metrics: {},
+              },
             },
           ],
           cardTheme: null,
-          cardInfo: { cardThumbnail: null, theme: null },
+          cardInfo: {
+            cardThumbnail: null,
+            theme: null,
+            alternativeNames: null,
+            keywords: null,
+            metrics: {},
+          },
         },
         'mango searchData is correct',
       );
@@ -5159,7 +5327,13 @@ module(`Integration | realm indexing`, function (hooks) {
               friends: [
                 {
                   cardTheme: null,
-                  cardInfo: { cardThumbnail: null, theme: null },
+                  cardInfo: {
+                    cardThumbnail: null,
+                    theme: null,
+                    alternativeNames: null,
+                    keywords: null,
+                    metrics: {},
+                  },
                   firstName: 'Mango',
                   friends: [
                     {
@@ -5172,11 +5346,23 @@ module(`Integration | realm indexing`, function (hooks) {
                 { id: vanGoghID },
               ],
               cardTheme: null,
-              cardInfo: { cardThumbnail: null, theme: null },
+              cardInfo: {
+                cardThumbnail: null,
+                theme: null,
+                alternativeNames: null,
+                keywords: null,
+                metrics: {},
+              },
             },
           ],
           cardTheme: null,
-          cardInfo: { cardThumbnail: null, theme: null },
+          cardInfo: {
+            cardThumbnail: null,
+            theme: null,
+            alternativeNames: null,
+            keywords: null,
+            metrics: {},
+          },
         },
         'vanGogh searchData is correct',
       );

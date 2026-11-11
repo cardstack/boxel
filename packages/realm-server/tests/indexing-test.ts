@@ -1070,6 +1070,9 @@ module(basename(import.meta.filename), function () {
                 cardInfo: {
                   cardThumbnail: null,
                   theme: null,
+                  alternativeNames: null,
+                  keywords: null,
+                  metrics: {},
                 },
               },
               nickName: "Ringo's buddy",
@@ -1077,9 +1080,15 @@ module(basename(import.meta.filename), function () {
               firstName: 'Hassan',
               cardTitle: 'Untitled Card',
               cardTheme: null,
+              // An empty list field is `null` in the doc, and a compound
+              // field whose parts are all empty is `{}`; empty primitives
+              // are left out.
               cardInfo: {
                 cardThumbnail: null,
                 theme: null,
+                alternativeNames: null,
+                keywords: null,
+                metrics: {},
               },
             },
             hassanEntry.searchDoc ?? {},

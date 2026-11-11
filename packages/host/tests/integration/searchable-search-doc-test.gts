@@ -1334,14 +1334,26 @@ module('Integration | searchable search doc', function (hooks) {
       {
         authors: [
           {
-            cardInfo: { cardThumbnail: null, theme: null },
+            cardInfo: {
+              cardThumbnail: null,
+              theme: null,
+              alternativeNames: null,
+              keywords: null,
+              metrics: {},
+            },
             cardTheme: null,
             cardTitle: 'Untitled SimpleAuthor',
             id: `${testRealmURL}SimpleAuthor/sa1`,
             name: 'Plain',
           },
         ],
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: {
+          cardThumbnail: null,
+          theme: null,
+          alternativeNames: null,
+          keywords: null,
+          metrics: {},
+        },
         cardTheme: null,
         cardTitle: 'Untitled ParityArticle',
         id: `${testRealmURL}ParityArticle/pa1`,
