@@ -9,8 +9,10 @@
 // either spelling runs the same SQL.
 //
 // The anchor mistakes that used to return zero rows in silence are errors
-// here, each with a code: an `on` with no predicate, a field sort with no
-// type anywhere, a field the type does not have (with the nearest name).
+// here, each with a code: a field sort with no type anywhere, a field the
+// type does not have (with the nearest name). A bare `{ on }` filter node is
+// not one of them: it is a newer-spelling marker, lowered to `{ type }`, so it
+// matches every card of that type.
 //
 // `lowerQuery` is synchronous and needs nothing but the query.
 // `resolveQueryLabels` reads the type's fields, so it runs where definitions
