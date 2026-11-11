@@ -7,6 +7,7 @@ import {
   clearReplacedArrayFieldMeta,
   coerceErrorMessage,
   ensureTrailingSlash,
+  humanReadable,
   isBinaryContentType,
   isCardInstance,
   isFileDefInstance,
@@ -29,6 +30,7 @@ import {
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Relationship,
+  type ResolvedCodeRef,
   type Saved,
   type SearchEntryWireQuery,
   type BaseOperation,
@@ -39,12 +41,14 @@ import {
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
 import { isWrite } from '@cardstack/runtime-common/card-operations';
+import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   BATCH_MEMBER,
   assertInstanceOperation,
   assertPayloadSuppliesParams,
+  assertTypeOperation,
   type OperationsBucket,
 } from '../lib/card-operation-invocation';
 import {
@@ -160,7 +164,7 @@ import type RecentFilesService from '../services/recent-files-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type Base64ImageFieldType from '@cardstack/base/base64-image';
-import type { CardDef } from '@cardstack/base/card-api';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 import type * as OperationsModule from '@cardstack/base/operations';
 
@@ -382,12 +386,13 @@ type CardRead =
   | { unread: 'indexing' | 'unindexed' | 'not-found' | 'not-a-card' }
   | { unread: 'error' | 'unreadable'; message: string };
 
-// One operation a card's type declares, named by the card it acts on.
-interface OperationEntry {
-  cardId: string;
+// One operation a card's type declares, named by the card it acts on, or by
+// the type itself - its module and export - for an operation that acts on the
+// type, such as a create where the realm holds no card of the type.
+type OperationEntry = {
   operation: string;
   payload: Record<string, unknown> | undefined;
-}
+} & ({ cardId: string } | { type: ResolvedCodeRef });
 
 // What the realm answered for one operation: a write names the card it wrote
 // and the version that card now holds, a read answers the document, and a
@@ -1310,6 +1315,13 @@ class RealmFsSession {
             );
           }
           let { path, operation, payload } = item as Record<string, unknown>;
+          if ('type' in item) {
+            // A batch commits in the realm of the card it is anchored on, and
+            // an operation on a type names no card to anchor it.
+            throw new TypeError(
+              'a realm.operations.invokeBatchOperation entry names a card by its path; run an operation on a type with realm.operations.invoke(type, operation, payload)',
+            );
+          }
           return this.operationEntry(method, path, operation, payload);
         });
         return await this.runOperationEntries(entries);
@@ -1782,7 +1794,9 @@ class RealmFsSession {
     }
   }
 
-  // An operation names the card it acts on by its path, as cards.update does.
+  // An operation names the card it acts on by its path, as cards.update does,
+  // or the type it acts on as { module, name }. A type's module is read from
+  // the realm root, as a path is.
   private operationEntry(
     method: RealmRunnerCallMethod,
     path: unknown,
@@ -1791,7 +1805,7 @@ class RealmFsSession {
   ): OperationEntry {
     if (typeof operation !== 'string' || operation.length === 0) {
       throw new TypeError(
-        `realm.${method} expects a card path and an operation name`,
+        `realm.${method} expects a card path, or a type as { module, name }, and an operation name`,
       );
     }
     if (
@@ -1803,16 +1817,25 @@ class RealmFsSession {
         `realm.${method}: the payload of "${operation}" must be an object`,
       );
     }
+    let given = (payload ?? undefined) as Record<string, unknown> | undefined;
+    if (path !== null && typeof path === 'object') {
+      if (!isResolvedCodeRef(path)) {
+        throw new TypeError(
+          `realm.${method} names a type as { module, name }: the module that exports it, and the export's name`,
+        );
+      }
+      return {
+        type: { module: path.module, name: path.name },
+        operation,
+        payload: given,
+      };
+    }
     let url = this.resolve(method, path);
     let cardId = url.replace(/\.json$/, '');
     // A cards.update of the same card is saved after the script, and would
     // overwrite what the operation did, or be refused for it.
     this.assertNoCardUpdate(`${cardId}.json`);
-    return {
-      cardId,
-      operation,
-      payload: (payload ?? undefined) as Record<string, unknown> | undefined,
-    };
+    return { cardId, operation, payload: given };
   }
 
   // Sends the operations at once, not when the script finishes: the realm
@@ -1848,11 +1871,26 @@ class RealmFsSession {
       throw error;
     }
     return entries.map((entry, index) => {
-      let path = `${this.relative(entry.cardId)}.json`;
-      // The card's text changed on the realm, so this run reads it again.
-      this.known.delete(`${entry.cardId}.json`);
-      this.operationsRun.push(`${entry.operation} on ${path}`);
-      return { path, operation: entry.operation, ...answers[index] };
+      let answer = answers[index]!;
+      // The card an entry on a type wrote is the one it made, which only the
+      // realm's answer names.
+      let written = 'cardId' in entry ? entry.cardId : answer.id;
+      let path = written ? `${this.relative(written)}.json` : undefined;
+      if (written) {
+        // The card's text changed on the realm, so this run reads it again.
+        this.known.delete(`${written}.json`);
+      }
+      this.operationsRun.push(
+        'cardId' in entry
+          ? `${entry.operation} on ${path}`
+          : `${entry.operation} on ${entry.type.name}${path ? `, which wrote ${path}` : ''}`,
+      );
+      return {
+        ...(path ? { path } : {}),
+        ...('type' in entry ? { type: entry.type } : {}),
+        operation: entry.operation,
+        ...answer,
+      };
     });
   }
 
@@ -2848,7 +2886,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'request with realm.operations.invokeBatchOperation([{ path, operation, ' +
     'payload }]) (prefer them over realm.cards.update when the type ' +
     'declares one for the change; each runs at once and answers { path, ' +
-    'operation, id, version } for a write). invoke in a loop sends one ' +
+    'operation, id, version } for a write). To run an operation on a type ' +
+    'itself, such as a create where the workspace holds no card of the ' +
+    'type, pass the type as { module, name } in place of the path (a ' +
+    'relative module is read from the realm root); it runs in this ' +
+    "workspace, and its answer's path is the card it wrote. invoke in a " +
+    'loop sends one ' +
     'request per card, and when one fails the cards before it stay ' +
     'changed; invokeBatchOperation sends all of them in one request that ' +
     'the realm carries out whole or not at all, so use it when the changes ' +
@@ -3077,7 +3120,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         (reference, base) =>
           this.network.virtualNetwork.resolveURL(reference, base).href,
         (id) => this.readCard(id, realmURL),
-        (entries) => this.runOperations(entries),
+        (entries) => this.runOperations(entries, rootURL),
         (query, realms) => this.store.searchEntries(query, realms),
         // Resolved before the search, so the search and its telemetry
         // record name the same realms.
@@ -3777,13 +3820,40 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // request is then built by the operations client, as invoke-card-operation
   // builds it, so the method (QUERY for reads, POST for writes), each entry's
   // data and the decoded answer are the client's and not a copy of them.
+  //
+  // An entry that names a type rather than a card comes alone: the session
+  // sends it through `invoke`, and a batch refuses one. Its class is loaded
+  // from the module it names, read from the realm root, and the operation runs
+  // in the run's realm.
   private async runOperations(
     entries: OperationEntry[],
+    realmURL: string,
   ): Promise<OperationAnswer[]> {
     let operationsModule = await this.loaderService.loader.import<
       typeof OperationsModule
     >('@cardstack/base/operations');
-    let cardIds = [...new Set(entries.map((entry) => entry.cardId))];
+    let [first] = entries;
+    if (entries.length === 1 && first && 'type' in first) {
+      return [
+        await this.runOperationOnType(
+          operationsModule,
+          first.type,
+          first.operation,
+          first.payload,
+          realmURL,
+        ),
+      ];
+    }
+    let cardEntries = entries.filter(
+      (entry): entry is Extract<OperationEntry, { cardId: string }> =>
+        'cardId' in entry,
+    );
+    if (cardEntries.length !== entries.length) {
+      throw new Error(
+        'an operation on a type runs alone, through realm.operations.invoke',
+      );
+    }
+    let cardIds = [...new Set(cardEntries.map((entry) => entry.cardId))];
     let loaded = await Promise.all(
       cardIds.map((id) => this.store.getWithoutCache(id)),
     );
@@ -3791,14 +3861,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     for (let [index, card] of loaded.entries()) {
       let cardId = cardIds[index]!;
       if (!isCardInstance(card)) {
-        let entry = entries.find((one) => one.cardId === cardId)!;
+        let entry = cardEntries.find((one) => one.cardId === cardId)!;
         throw new Error(
           `cannot run "${entry.operation}": ${cardId} did not load: ${card.message}`,
         );
       }
       cards.set(cardId, card);
     }
-    let bases = entries.map((entry) => {
+    let bases = cardEntries.map((entry) => {
       let card = cards.get(entry.cardId)!;
       let base = assertInstanceOperation(
         operationsModule,
@@ -3816,18 +3886,20 @@ export default class RunRealmCodeTool extends HostBaseTool<
       target: unknown,
     ) => OperationsBucket;
     let results: unknown[];
-    if (entries.length === 1) {
-      let [entry] = entries;
+    if (cardEntries.length === 1) {
+      let [entry] = cardEntries;
       let member = bucketFor(cards.get(entry!.cardId)!)[entry!.operation] as (
         payload?: unknown,
       ) => Promise<unknown>;
       results = [await member(entry!.payload)];
     } else {
-      let atomic = bucketFor(cards.get(entries[0]!.cardId)!)[BATCH_MEMBER] as (
+      let atomic = bucketFor(cards.get(cardEntries[0]!.cardId)!)[
+        BATCH_MEMBER
+      ] as (
         build: (builder: { on(card: CardDef): OperationsBucket }) => void,
       ) => Promise<unknown[]>;
       results = await atomic((builder) => {
-        for (let entry of entries) {
+        for (let entry of cardEntries) {
           let member = builder.on(cards.get(entry.cardId)!)[
             entry.operation
           ] as (payload?: unknown) => unknown;
@@ -3838,6 +3910,42 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return results.map((result, index) =>
       operationAnswer(result, bases[index]!),
     );
+  }
+
+  // An operation on a type, which needs no card of the type to reach it: the
+  // class is the subject, as card code's `operations(Class)` makes it, and the
+  // call runs in the run's realm.
+  private async runOperationOnType(
+    operationsModule: typeof OperationsModule,
+    type: ResolvedCodeRef,
+    operation: string,
+    payload: Record<string, unknown> | undefined,
+    realmURL: string,
+  ): Promise<OperationAnswer> {
+    let Type: typeof BaseDef;
+    try {
+      Type = await loadCardDef(type, {
+        loader: this.loaderService.loader,
+        relativeTo: rri(realmURL),
+      });
+    } catch (error) {
+      throw new Error(
+        `cannot run "${operation}": ${humanReadable(type)} did not load: ${coerceErrorMessage(error, 'unknown error')}`,
+      );
+    }
+    let base = assertTypeOperation(operationsModule, Type, operation);
+    assertPayloadSuppliesParams(
+      operation,
+      operationsModule.getDeclaredOperations(Type)[operation],
+      payload,
+    );
+    let member = (
+      operationsModule.operations as (target: unknown) => OperationsBucket
+    )(Type)[operation] as (
+      payload?: unknown,
+      opts?: { realm: string },
+    ) => Promise<unknown>;
+    return operationAnswer(await member(payload, { realm: realmURL }), base);
   }
 
   private async readCard(id: string, realmURL: string): Promise<CardRead> {
