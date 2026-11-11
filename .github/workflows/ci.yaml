@@ -612,12 +612,14 @@ jobs:
       # The browser revision must match the CLI's own @playwright/test pin,
       # so install through the CLI's nested playwright binary.
       - name: Install Chromium
-        # Browser only. `--with-deps` apt-installs fonts and media codecs from
+        # Browser only, with no apt step. `--with-deps` apt-installs Chromium's
+        # shared libraries, xvfb and fonts (CJK and emoji among them) from
         # Ubuntu's archive mirror, so a mirror outage fails the job before any
-        # test runs. These tests neither play media nor render non-Latin text,
-        # and the runner image already carries the libraries Chromium links
-        # against. If a test comes to need either, the failure is a missing
-        # codec or tofu glyphs, not a browser that cannot launch.
+        # test runs. The runner image already carries the libraries Chromium
+        # links against. Some tests type non-Latin text or mount <audio> and
+        # <video>, but none asserts on how a glyph is drawn; a test that comes
+        # to depend on the fonts would see tofu glyphs, not a browser that
+        # cannot launch, and would want a cached deps install.
         #
         # `boxel test` launches headless with no channel, which Playwright
         # resolves to `chromium-headless-shell`, the one binary `--only-shell`
@@ -721,18 +723,9 @@ jobs:
       # The browser revision must match the CLI's own @playwright/test pin,
       # so install through the CLI's playwright binary.
       - name: Install Chromium
-        # Browser only. `--with-deps` apt-installs fonts and media codecs from
-        # Ubuntu's archive mirror, so a mirror outage fails the job before any
-        # test runs. These tests neither play media nor render non-Latin text,
-        # and the runner image already carries the libraries Chromium links
-        # against. If a test comes to need either, the failure is a missing
-        # codec or tofu glyphs, not a browser that cannot launch.
-        #
-        # `boxel test` launches headless with no channel, which Playwright
-        # resolves to `chromium-headless-shell`, the one binary `--only-shell`
-        # fetches. The download comes from Playwright's CDN; a healthy one
-        # takes well under a minute, and the ceiling makes a wedged download
-        # fail the job instead of holding a runner.
+        # Headless shell only, with no apt step, for the reasons the Pret UI
+        # job's "Install Chromium" step gives. The ceiling bounds the download
+        # from Playwright's CDN so a wedged one fails the job.
         timeout-minutes: 5
         run: pnpm exec playwright install --only-shell chromium
         working-directory: packages/boxel-cli
