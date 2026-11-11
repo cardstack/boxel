@@ -7,6 +7,7 @@ import {
 import type { CDPSession, ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
 import { realmAffinityKeyOf } from './affinity.ts';
+import { raceNodeTimeout } from './node-race.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
 import type { BrowserManager } from './browser-manager.ts';
@@ -246,6 +247,10 @@ const STANDBY_CREATION_RETRIES = 3;
 const STANDBY_BACKOFF_MS = 500;
 const STANDBY_BACKOFF_CAP_MS = 4000;
 const CONSOLE_ERROR_LIMIT = 50;
+// How long a console-store discard waits for console messages still being
+// formatted on the tab. Formatting a message is a few CDP round trips; this
+// only bounds a renderer that has stopped answering them.
+const CONSOLE_FORMAT_DRAIN_BUDGET_MS = 2000;
 // How long an awaited `disposeAffinity` waits for its tabs to close before
 // returning. A tab closes only once the render holding it lets go (closing a
 // page under a live render surfaces as a raw protocol error, which the
@@ -514,6 +519,10 @@ export class PagePool {
   // The `Runtime`-enabled CDP session the exception capture holds on each
   // tab, reused to clear the tab's console store between renders.
   #runtimeSessionByPageId = new Map<string, CDPSession>();
+  // Console messages whose arguments are still being read on each tab. A
+  // discard of the console store releases those arguments' handles too, so
+  // it waits for these first.
+  #consoleFormatsByPageId = new Map<string, Set<Promise<unknown>>>();
   // Per-pageId map of CDP exceptionId -> bucket key, owned alongside
   // the bucket so it's cleared in lockstep on resetConsoleErrors /
   // takeConsoleErrors / page disposal. Lets the runtime-exception
@@ -1090,19 +1099,52 @@ export class PagePool {
   }
 
   // Called as each render takes its tab, so it also clears what the tab's
-  // console has retained. While a CDP client has `Runtime` enabled — which a
-  // Puppeteer page always does — V8 keeps the arguments of the last thousand
-  // console messages reachable, so a logged object would otherwise outlive
-  // the render that logged it, by as many renders as the tab serves.
-  // Fire-and-forget: a tab whose renderer has stopped answering must not
-  // hold up the render being handed it.
+  // console has retained since the last render released it.
   resetConsoleErrors(pageId: string): void {
     this.#consoleErrorsByPageId.set(pageId, new Map());
     this.#exceptionKeysByPageId.delete(pageId);
-    void this.#runtimeSessionByPageId
-      .get(pageId)
-      ?.send('Runtime.discardConsoleEntries')
-      .catch(() => {});
+    this.#discardConsoleStore(pageId);
+  }
+
+  // While a CDP client has `Runtime` enabled — which a Puppeteer page always
+  // does — V8 keeps the arguments of the last thousand console messages
+  // reachable, so an object a card logs would otherwise outlive its render,
+  // through every later render on the tab and however long it then sits idle.
+  // This runs when a render releases its tab and again when the next one takes
+  // it.
+  //
+  // `Runtime.discardConsoleEntries` also releases the handles Puppeteer holds
+  // on those arguments, so a message still being formatted for the log would
+  // lose its argument values. The discard therefore waits for formatting in
+  // flight on the tab, bounded so a renderer that has stopped answering
+  // can't hold it forever. Fire-and-forget: nothing a render does waits on it.
+  #discardConsoleStore(pageId: string): void {
+    let session = this.#runtimeSessionByPageId.get(pageId);
+    if (!session) {
+      return;
+    }
+    let inFlight = [...(this.#consoleFormatsByPageId.get(pageId) ?? [])];
+    void (async () => {
+      if (inFlight.length > 0) {
+        await raceNodeTimeout(
+          Promise.allSettled(inFlight),
+          CONSOLE_FORMAT_DRAIN_BUDGET_MS,
+        );
+      }
+      await session.send('Runtime.discardConsoleEntries');
+    })().catch(() => {});
+  }
+
+  #trackConsoleFormat<T>(pageId: string, formatting: Promise<T>): Promise<T> {
+    let set = this.#consoleFormatsByPageId.get(pageId);
+    if (!set) {
+      set = new Set();
+      this.#consoleFormatsByPageId.set(pageId, set);
+    }
+    let tracked = set;
+    tracked.add(formatting);
+    void formatting.finally(() => tracked.delete(formatting)).catch(() => {});
+    return formatting;
   }
 
   takeConsoleErrors(pageId: string): ConsoleErrorEntry[] {
@@ -1336,6 +1378,7 @@ export class PagePool {
       releaseTab();
       entry.currentQueue = undefined;
       entry.lastUsedAt = Date.now();
+      this.#discardConsoleStore(entry.pageId);
       releaseAdmission?.();
       // A caller parked on a spent budget needs this release to turn into a
       // tab: trimming an affinity it left idle frees budget for the refill,
@@ -3769,6 +3812,7 @@ export class PagePool {
     // retainConsoleErrors, which is a separate per-render flag).
     this.#affinityKeyByPageId.delete(entry.pageId);
     this.#runtimeSessionByPageId.delete(entry.pageId);
+    this.#consoleFormatsByPageId.delete(entry.pageId);
   }
 
   // Returns a Promise when the release forces a context close —
@@ -4029,7 +4073,10 @@ export class PagePool {
     page.on('console', async (message: ConsoleMessage) => {
       try {
         let logFn = this.#logMethodForConsole(message.type());
-        let formatted = await this.#formatConsoleMessage(message);
+        let formatted = await this.#trackConsoleFormat(
+          pageId,
+          this.#formatConsoleMessage(message),
+        );
         let location = message.location();
         let locationData = location?.url
           ? {

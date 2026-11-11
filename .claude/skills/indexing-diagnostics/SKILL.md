@@ -1174,6 +1174,11 @@ The log self-contains its `code-creation` records, so `--prof-process` names the
 
 - **Frame / top sample** → the function to fix. Follow the chain: a card computed inside a Glimmer `revalidate → rerender → evaluate` chain is a render-invalidation storm (a computed that dirties tracked state during render → re-render → re-evaluate → …), not a data or serialize cost — and not something the field-getter ceiling or a serialize cycle-guard will catch.
 - **`jsHeapUsedMB`** (on the `pausedStack` line) → flat across the peg is a tight compute / recursion loop; climbing is a combinatorial re-build of shared subtrees (breadth).
+- **Where the memory is**, on the same timeout line. The prerender task's memory can climb by gigabytes during a single pegged render, and the task's ECS `MemoryUtilized` can't say which process holds it. The line carries two readings for that:
+  - `tabJsHeapUsedMB` / `tabJsHeapTotalMB` / `tabDomHeapMB` / `tabBuffersMB` split the tab's own `Runtime.getHeapUsage` reading into the V8 heap, Blink's DOM heap and ArrayBuffer backing stores. They need the renderer to answer, so a hard peg often leaves them out.
+  - `chromeRendererMaxMB` (+ `chromeRendererMaxPid`), `chromeRendererSumMB`, `chromeBrowserMB`, `chromeGpuMB`, `chromeOtherMB` are each process kind's private (`RssAnon`) memory, read from `/proc`. `cgroupWorkingSetMB` / `cgroupAnonMB` / `cgroupFileMB` describe the container. These never ask Chrome, so they are present on a hard peg too, and they are read before the tab is evicted.
+
+  A renderer's V8 heap can't pass about 4 GB, so `chromeRendererMaxMB` far above that (or above the `tab*` figures) means the growth is off the JS heap: DOM, layout or buffers. A large `cgroupFileMB` beside small process figures is shared memory Chrome passes between its processes (it lives in the temp dir under `--disable-dev-shm-usage`). The `visit prerendered` line carries the same fields for every visit, so a card type whose successful renders already grow memory shows up before one tips a task over. A `prerender-chrome-memory` line every 30 s traces the climb while the render is still running.
 
 ### Getting the logs
 

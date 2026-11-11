@@ -136,6 +136,32 @@ aws --profile $PROFILE logs filter-log-events \
 
 The output is a histogram: how many snapshots saw each `(totalTabs, totalPending)` combination. The mode is the typical state during the peak; the max `totalTabs` is what the pool actually grew to.
 
+#### Per-process memory — which part of the task holds it?
+
+CloudWatch's `MemoryUtilization` is the whole task. The prerender server's own lines split it. `prerender-heap` (every 30 s) is Node. `prerender-chrome-memory` (every 30 s) is Chrome's processes, read from `/proc`, plus the container's cgroup:
+
+```
+prerender-chrome-memory chromeBrowserMB=… chromeGpuMB=… chromeOtherMB=… chromeRenderers=N chromeRendererSumMB=… chromeRendererMaxMB=… chromeRendererMaxPid=… cgroupWorkingSetMB=… cgroupAnonMB=… cgroupFileMB=…
+```
+
+Every `visit prerendered` line carries the same fields, plus the visit's tab heap (`tabJsHeapUsedMB`, `tabDomHeapMB`, `tabBuffersMB`).
+
+```sh
+aws --profile $PROFILE logs filter-log-events \
+  --log-group-name ecs-boxel-prerender-server-${ENV} \
+  --start-time $(date -u -d "$PEAK_START" +%s)000 \
+  --end-time $(date -u -d "$PEAK_END" +%s)000 \
+  --filter-pattern '"prerender-chrome-memory"' \
+  --query 'events[*].message' --output text \
+| tr '\t' '\n' | grep -oE 'chromeRenderers=[0-9]+ chromeRendererSumMB=[0-9]+ chromeRendererMaxMB=[0-9]+|cgroupWorkingSetMB=[0-9]+'
+```
+
+Read it before resizing:
+
+- **Memory spread across renderers** (`chromeRendererSumMB` grows with `chromeRenderers`, and `chromeRendererMaxMB` stays near the per-tab average) is pool size. The marginal cost below applies, and sizing is the right lever.
+- **One renderer holding most of it** (`chromeRendererMaxMB` near `cgroupWorkingSetMB`) is a single render, usually one that also logs a render timeout with `mainThreadResponsive=false`. More memory only moves that card's ceiling. Chase it with the `indexing-diagnostics` skill (Mode I) instead of resizing.
+- **A large `cgroupFileMB` beside small process figures** is shared memory Chrome passes between its processes. It lives in the temp dir under `--disable-dev-shm-usage`, so it counts against the task but belongs to no single process.
+
 #### DB — render-timing distribution
 
 Confirms whether the system held under pressure (zero render-timeouts) or was at the edge. Queries the `boxel_index.diagnostics` JSONB column via the `aws-access` skill's port-forward + `claude_readonly_user` flow.
@@ -192,7 +218,7 @@ marginal_per_tab = (peak_memory_bytes − baseline_bytes) / N_at_peak
 
 `peak_memory_bytes` = `peak_memory_pct × allocated_memory`. If the task is 8 GB and peak is 98 %, that's 7.84 GB used.
 
-`baseline_bytes` is approximately 2 GB on the current boxel prerender. If the workload changes substantially (Node major version, Chrome major version, observability instrumentation), measure it directly: tail the prerender server logs at idle and capture the `RSS` of the process after standby refresh has settled and the pool has 0 active tabs.
+`baseline_bytes` is approximately 2 GB on the current boxel prerender. If the workload changes substantially (Node major version, Chrome major version, observability instrumentation), measure it directly: at idle, after standby refresh has settled and the pool has 0 active tabs, add `prerender-heap`'s `rssMB` to `prerender-chrome-memory`'s `chromeBrowserMB + chromeGpuMB + chromeOtherMB`. `chromeRendererSumMB / chromeRenderers` at a busy moment is a direct reading of `marginal_per_tab` to check the derivation below against.
 
 `N_at_peak` is the max `totalTabs` from the queue-snapshot histogram above. Note that this includes standby (the standby contexts also pin memory).
 
