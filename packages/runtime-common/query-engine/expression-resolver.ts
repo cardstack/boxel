@@ -313,7 +313,12 @@ export abstract class ExpressionResolver extends IndexRows {
           if (isFieldPlural(field)) {
             rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
             return [
-              tableValuedTree('search_doc', rootPluralPath, path, 'text_value'),
+              tableValuedTree(
+                'search_doc',
+                rootPluralPath,
+                path,
+                useJsonBValue ? 'jsonb_value' : 'text_value',
+              ),
             ];
           }
           return expression;
