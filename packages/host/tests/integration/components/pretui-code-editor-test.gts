@@ -112,8 +112,12 @@ module('Integration | pretui code editor', function (hooks) {
       @tracked value = SOURCE;
     }
     let state = new State();
+    let reported: string[] = [];
     class Driver extends GlimmerComponent {
-      setValue = (value: string) => (state.value = value);
+      setValue = (value: string) => {
+        reported.push(value);
+        state.value = value;
+      };
       replace = () => (state.value = 'export const replaced = true;');
       <template>
         <CodeEditor
@@ -139,6 +143,11 @@ module('Integration | pretui code editor', function (hooks) {
       codeEditorView(),
       view,
       'the same view took the new text',
+    );
+    assert.deepEqual(
+      reported,
+      [],
+      'replacing the document from outside is not reported as an edit',
     );
   });
 

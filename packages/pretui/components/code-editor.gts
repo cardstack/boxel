@@ -59,7 +59,6 @@ const EDITOR_THEME: Record<string, Record<string, string>> = {
   '.cm-content': {
     paddingBlock: 'var(--boxel-sp-xs)',
     caretColor: 'var(--foreground)',
-    tabSize: 'var(--pretui-code-tab, 2)',
   },
   '.cm-gutters': {
     backgroundColor: 'color-mix(in oklch, var(--muted) 60%, var(--card))',
@@ -181,6 +180,10 @@ export class CodeEditor extends Component<CodeEditorSignature> {
   // passes it back as @value, that is an echo of the user's own typing, not a
   // new value, and the document is left alone.
   private lastReported: string | undefined;
+  // True while the component itself replaces the document with an outside
+  // @value. That change is not the user's, so it is not reported: reporting
+  // it would also write the caller's state in the middle of a render.
+  private applyingValue = false;
 
   constructor(owner: Owner, args: CodeEditorSignature['Args']) {
     super(owner, args);
@@ -262,9 +265,15 @@ export class CodeEditor extends Component<CodeEditorSignature> {
     if (view && element.contains(view.dom) && this.viewConfig === config) {
       let current = view.state.doc.toString();
       if (value !== current && value !== this.lastReported) {
-        view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: value },
-        });
+        this.applyingValue = true;
+        try {
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: value },
+          });
+        } finally {
+          this.applyingValue = false;
+        }
+        this.lastReported = value;
       }
       return;
     }
@@ -282,7 +291,7 @@ export class CodeEditor extends Component<CodeEditorSignature> {
       label: this.args.label,
       theme: readOnly ? READ_ONLY_THEME : EDITOR_THEME,
       onDocChange: (text: string) => {
-        if (isDestroying(this) || isDestroyed(this)) {
+        if (isDestroying(this) || isDestroyed(this) || this.applyingValue) {
           return;
         }
         this.lastReported = text;
