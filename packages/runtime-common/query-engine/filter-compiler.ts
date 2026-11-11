@@ -45,6 +45,7 @@ import {
   type RangeFilter,
   type RangeFilterValue,
   type RangeOperator,
+  spellsAnInstant,
   type RegexFilter,
   type TypeAheadFilter,
   filterOperators,
@@ -1021,6 +1022,12 @@ export abstract class FilterCompiler extends ExpressionResolver {
     if (!values.every((v) => typeof v === 'string')) {
       return undefined;
     }
+    // A date-time with seconds, `Z` or an offset is an instant on a date or
+    // date-time list, which the path test would compare as text: the tree,
+    // which reads the field, compares it.
+    if (values.some(spellsAnInstant)) {
+      return undefined;
+    }
     let segments = key.split('.');
     if (segments.some((x) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(x))) {
       return undefined;
@@ -1238,7 +1245,13 @@ export abstract class FilterCompiler extends ExpressionResolver {
       if (value == null) {
         throw new Error(`'null' is not a permitted value in a 'range' filter`);
       }
-      let v = fieldValue(key, [param(value)], onRef, 'filter');
+      let v = fieldValue(
+        key,
+        [param(value)],
+        onRef,
+        'filter',
+        operator as RangeOperator,
+      );
       bounds.push([query, RANGE_OPERATORS[operator as RangeOperator], v]);
     });
     // One test of the field with every bound in it: on a list, the bounds

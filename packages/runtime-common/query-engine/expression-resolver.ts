@@ -59,6 +59,7 @@ import {
 import { IndexRows } from './index-rows.ts';
 import {
   InvalidQueryError,
+  absoluteDateForField,
   assertRelativeDateWellFormed,
   relativeDateForField,
 } from '../query.ts';
@@ -469,7 +470,7 @@ export abstract class ExpressionResolver extends IndexRows {
     fieldValue: FieldValue,
     ctx?: ReadContext,
   ): Promise<Expression> {
-    let { path, value, type, now } = fieldValue;
+    let { path, value, type, now, bound } = fieldValue;
     let definition = await this.getDefinition(type);
     let exp = await this.makeExpression(value, ctx);
 
@@ -523,10 +524,12 @@ export abstract class ExpressionResolver extends IndexRows {
           assertRelativeDateWellFormed(value.param, path);
         }
         let relative = isParam(value)
-          ? relativeDateForField(value.param, field.serializerName, now)
+          ? (relativeDateForField(value.param, field.serializerName, now) ??
+            absoluteDateForField(value.param, field.serializerName, bound))
           : undefined;
         if (relative !== undefined) {
-          // `now-30d` and the like, as the field's search doc spells a date.
+          // `now-30d` and the like, or an instant (`…T05:30:00+05:30`), as
+          // the field's search doc spells a date.
           queryValue = relative;
         } else if (isParam(value)) {
           queryValue = serializer?.formatQuery?.(value.param) ?? value.param;

@@ -5,6 +5,7 @@ import { flattenDeep } from 'lodash-es';
 import { sqlTextLiteral } from './sql-literal.ts';
 
 import type { CodeRef, DBAdapter, TypeCoercion } from './index.ts';
+import type { RangeOperator } from './query.ts';
 
 export type Expression = (
   | string
@@ -61,6 +62,10 @@ export interface FieldValue {
   // The instant a relative date in the value (`now-30d`) is reckoned from:
   // the query's own clock reading, so every bound of one query agrees.
   now?: Date;
+  // The range bound the value is (`gt`, `gte`, `lt`, `lte`); an `eq` or
+  // `in` value has none. It decides how an absolute date-time bound between
+  // two stored values rounds (see `absoluteDateForField`).
+  bound?: RangeOperator;
 }
 
 // The query's clock reading while a filter compiles. Filter compilation is
@@ -403,6 +408,7 @@ export function fieldValue(
   value: CardExpression,
   type: CodeRef,
   errorHint: string,
+  bound?: RangeOperator,
 ): FieldValue {
   return {
     type,
@@ -411,6 +417,7 @@ export function fieldValue(
     errorHint,
     kind: 'field-value',
     ...(filterNow ? { now: filterNow } : {}),
+    ...(bound ? { bound } : {}),
   };
 }
 

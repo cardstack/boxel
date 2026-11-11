@@ -958,6 +958,60 @@ export function relativeDateForField(
     : when.toISOString().slice(0, 16);
 }
 
+const DATE_TIME_TEXT =
+  /^\s*(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?\s*$/i;
+
+// Whether a string is a date-time spelled with seconds, `Z` or an offset:
+// on a date or date-time field it is an instant, which only a step that
+// knows the field (`absoluteDateForField`) can spell as the search doc does.
+export function spellsAnInstant(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  let match = DATE_TIME_TEXT.exec(value);
+  return Boolean(match && (match[4] || match[6]));
+}
+
+// An absolute date-time bound as a field of `serializerName` spells it in
+// the search doc: the instant it names (UTC when it has no zone), as
+// docs/search.md reads it. Applies on a date-time field to a bound with
+// seconds, `Z` or an offset (a bare `yyyy-MM-ddTHH:mm` is already the
+// stored spelling), and on a date field to any date-time. Undefined
+// otherwise, so the value stays as written.
+//
+// A stored date-time is a whole minute, a stored date the midnight (UTC) that
+// starts its day. A bound between two of those is rounded so the comparison
+// with the stored text stays exact: up for `gte` and `lt`, down for `gt` and
+// `lte`. An `eq` (or `in`) with such a bound holds for no stored value, so it
+// resolves to the bound's full ISO text, which no stored value equals.
+export function absoluteDateForField(
+  value: unknown,
+  serializerName: string | undefined,
+  bound: RangeOperator | 'eq' = 'eq',
+): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  if (serializerName !== 'date' && serializerName !== 'datetime') {
+    return undefined;
+  }
+  let match = DATE_TIME_TEXT.exec(value);
+  if (!match) return undefined;
+  let [, day, hh, mm, seconds, , zone] = match;
+  if (serializerName === 'datetime' && !seconds && !zone) return undefined;
+  let instant = Date.parse(`${day}T${hh}:${mm}${seconds ?? ''}${zone ?? 'Z'}`);
+  if (Number.isNaN(instant)) return undefined;
+  let unit = serializerName === 'date' ? 86_400_000 : 60_000;
+  let floor = Math.floor(instant / unit) * unit;
+  let rounded: number;
+  if (floor === instant) {
+    rounded = instant;
+  } else if (bound === 'eq') {
+    return new Date(instant).toISOString();
+  } else {
+    rounded = bound === 'gte' || bound === 'lt' ? floor + unit : floor;
+  }
+  return new Date(rounded)
+    .toISOString()
+    .slice(0, serializerName === 'date' ? 10 : 16);
+}
+
 export function resolveRelativeDate(
   value: string,
   now = new Date(),

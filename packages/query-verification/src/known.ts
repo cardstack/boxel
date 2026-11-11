@@ -19,16 +19,7 @@ export interface Known {
   when?: () => boolean;
 }
 
-export const KNOWN: Known[] = [
-  {
-    about:
-      'a date-time bound with seconds, `Z` or an offset (`2000-01-01T00:00:00Z`, `…T05:30+05:30`), and a date-time bound on a date field, is compared as text with the stored `yyyy-MM-ddTHH:mm` instead of as the instant it names',
-    evaluators: ['matcher', 'postgres', 'sqlite'],
-    file: 'values',
-    cases: /\(spelling [123]\)$|, as a date-time$|^a date and a date-time$/,
-    kind: 'answers',
-  },
-];
+export const KNOWN: Known[] = [];
 
 // Tracks which known divergences one evaluator hits over one vector file.
 export function knownFor(evaluator: Evaluator, file: string) {

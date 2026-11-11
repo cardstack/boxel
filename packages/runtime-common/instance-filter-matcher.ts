@@ -19,6 +19,7 @@ import {
   type Sort,
   isRelevanceSort,
   isRelativeDate,
+  absoluteDateForField,
   relativeDateForField,
   isExprSort,
 } from './query.ts';
@@ -645,7 +646,7 @@ function matchRange(
       }
       return [
         operator as RangeOperator,
-        formatFilterValue(leafField, bound, api),
+        formatFilterValue(leafField, bound, api, operator as RangeOperator),
       ] as [RangeOperator, any];
     },
   );
@@ -700,10 +701,12 @@ function formatFilterValue(
   leafField: Field<any> | undefined,
   value: any,
   api: CardAPIForMatching,
+  bound?: RangeOperator,
 ): any {
   let serializerName = serializerOf(leafField);
   return (
     relativeDateForField(value, serializerName) ??
+    absoluteDateForField(value, serializerName, bound) ??
     asNumber(serializerName, formatValue(leafField, value, api))
   );
 }
