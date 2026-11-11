@@ -27,6 +27,8 @@ RUN CI=1 pnpm fetch
 FROM base AS boxel-icons
 COPY package.json ./
 COPY packages/boxel-icons ./packages/boxel-icons
+# rollup.config.mjs imports this host build helper
+COPY packages/host/lib/build/public-source-names.mjs ./packages/host/lib/build/
 COPY packages/eslint-plugin-boxel/package.json ./packages/eslint-plugin-boxel/
 COPY packages/local-types/package.json ./packages/local-types/
 RUN CI=1 pnpm install --offline --filter @cardstack/boxel-icons...
