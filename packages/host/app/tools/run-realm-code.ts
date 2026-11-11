@@ -2899,8 +2899,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.operations.invoke (a relative module is read from the realm ' +
     "root); it runs in this workspace, and its answer's path is the card " +
     'it wrote. A batch entry always names a card. invoke in a loop sends ' +
-    'one ' +
-    'request per card, and when one fails the cards before it stay ' +
+    'one request per card, and when one fails the cards before it stay ' +
     'changed; invokeBatchOperation sends all of them in one request that ' +
     'the realm carries out whole or not at all, so use it when the changes ' +
     'must go together or there are many cards. finds ' +
