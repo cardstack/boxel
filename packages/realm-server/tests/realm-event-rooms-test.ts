@@ -140,14 +140,20 @@ module(basename(import.meta.filename), function () {
       );
 
       assert.strictEqual(roomId, '!created-1:localhost');
+      // The dispatcher runs a job's invites as concurrent sends, and the
+      // wrapper above reads the database before each invite is recorded, so
+      // the invites can be recorded in either order. Only the room's creation
+      // comes first, and every grantee is invited before the room is answered.
+      let callOrder = `calls in order: ${JSON.stringify(calls)}`;
+      assert.strictEqual(
+        calls[0],
+        'create !created-1:localhost',
+        `the room is created before any grantee is invited (${callOrder})`,
+      );
       assert.deepEqual(
-        calls,
-        [
-          'create !created-1:localhost',
-          'invite @alice:localhost',
-          'invite @bob:localhost',
-        ],
-        'the grantees are invited before the room is answered',
+        calls.slice(1).sort(),
+        ['invite @alice:localhost', 'invite @bob:localhost'],
+        `the grantees are invited before the room is answered (${callOrder})`,
       );
       assert.deepEqual(
         storedAtInvite,
