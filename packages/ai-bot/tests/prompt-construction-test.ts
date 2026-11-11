@@ -11311,19 +11311,19 @@ module('absolutizeSkillLinks', () => {
   const INDEX = 'https://localhost:4201/skills/index.md';
 
   test('resolves a document-relative link against the skill url', () => {
-    // The skills realm is itself named `skills`, so a link relative to the
-    // index (which lives at the realm root) doubles the segment — the exact
-    // shape the ai-bot used to flatten to a 404.
     assert.strictEqual(
-      absolutizeSkillLinks('See [boxel](skills/boxel/SKILL.md).', INDEX),
-      'See [boxel](https://localhost:4201/skills/skills/boxel/SKILL.md).',
+      absolutizeSkillLinks('See [boxel](boxel/SKILL.md).', INDEX),
+      'See [boxel](https://localhost:4201/skills/boxel/SKILL.md).',
     );
   });
 
-  test('resolves against the skill url, not a shorter prefix', () => {
+  test('resolves a parent-relative link against the skill url', () => {
     assert.strictEqual(
-      absolutizeSkillLinks('[g](skills/glossary.md)', INDEX),
-      '[g](https://localhost:4201/skills/skills/glossary.md)',
+      absolutizeSkillLinks(
+        '[g](../glossary.md)',
+        'https://localhost:4201/skills/boxel/SKILL.md',
+      ),
+      '[g](https://localhost:4201/skills/glossary.md)',
     );
   });
 
@@ -11380,7 +11380,7 @@ module('absolutizeSkillLinks', () => {
   });
 
   test('leaves the body untouched when the id is not an absolute url', () => {
-    let body = '[boxel](skills/boxel/SKILL.md)';
+    let body = '[boxel](boxel/SKILL.md)';
     assert.strictEqual(
       absolutizeSkillLinks(body, '@cardstack/skills/index.md'),
       body,
@@ -11394,14 +11394,12 @@ module('absolutizeSkillLinks', () => {
         id: INDEX,
         attributes: {
           title: 'Index',
-          instructions: 'Read [boxel](skills/boxel/SKILL.md).',
+          instructions: 'Read [boxel](boxel/SKILL.md).',
         },
       },
     ]);
     assert.true(
-      message.includes(
-        '[boxel](https://localhost:4201/skills/skills/boxel/SKILL.md)',
-      ),
+      message.includes('[boxel](https://localhost:4201/skills/boxel/SKILL.md)'),
       'the prompt carries a copy-ready absolute url',
     );
   });
