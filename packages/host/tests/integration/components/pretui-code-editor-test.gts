@@ -99,7 +99,9 @@ module('Integration | pretui code editor', function (hooks) {
     await renderComponent(Driver);
     await waitForCodeEditor();
 
-    assert.dom('.pretui-code-editor').hasAttribute('data-loaded', 'true');
+    assert
+      .dom('[data-test-pretui-code-editor]')
+      .hasAttribute('data-loaded', 'true');
     assert
       .dom(codeEditorContentSelector('[data-test-pretui-code-editor-host]'))
       .hasAttribute('id', 'script-source', 'the label can point at it');
@@ -313,8 +315,9 @@ module('Integration | pretui code editor', function (hooks) {
         )!,
       ).color;
     assert.strictEqual(
-      getComputedStyle(document.querySelector('.pretui-code-editor')!)
-        .backgroundColor,
+      getComputedStyle(
+        document.querySelector('[data-test-pretui-code-editor]')!,
+      ).backgroundColor,
       'rgb(65, 62, 78)',
       "the surface is code mode's editor background",
     );
