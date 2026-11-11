@@ -1,0 +1,89 @@
+name: Query Tests (nightly)
+
+# The query suites carry generated cases that are too slow to run on every
+# pull request at full size. On a PR (ci.yaml's realm-server shards) they run
+# a fixed, seeded sample: the fuzz suite runs a tenth of its database cases
+# plus every input kind that once found a defect, the declarative-order suite
+# one batch of generated queries, the invariants suite its smaller generator,
+# and the bounds suite's read-during-a-rewrite race once. This workflow runs
+# them at full size once a day against main, so a defect only a rare case
+# finds shows up the next morning:
+#
+# - QUERY_TESTS_EXTENDED=1 lifts the samples (packages/realm-server/tests/
+#   helpers/query-extended.ts reads it);
+# - QUERY_RACE_RUNS repeats the race in query-bounds-cases-integration-test.
+#
+# Run it by hand (workflow_dispatch) before a release, or with more race
+# runs to chase a flaky failure.
+
+on:
+  schedule:
+    - cron: "30 7 * * *"
+  workflow_dispatch:
+    inputs:
+      race_runs:
+        description: How many times the bounds suite repeats its race
+        required: false
+        default: "10"
+
+concurrency:
+  group: query-tests-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Lets the warm-test-images step pull the private GHCR mirror packages.
+  packages: read
+
+jobs:
+  test-web-assets:
+    name: Build test web assets
+    if: github.repository == 'cardstack/boxel'
+    uses: ./.github/workflows/test-web-assets.yaml
+    with:
+      caller: query-tests-nightly
+
+  query-tests:
+    name: Query suites at full size
+    needs: test-web-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Warm test Docker images from the GHCR mirror
+        continue-on-error: true
+        uses: ./.github/actions/warm-test-images
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:realm-server | tee -a /tmp/server.log &
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: query suites (extended)
+        run: pnpm test:wait-for-servers
+        working-directory: packages/realm-server
+        env:
+          TEST_FILES: query-fuzz-integration-test,query-declarative-order-integration-test,query-invariants-integration-test,query-bounds-cases-integration-test
+          QUERY_TESTS_EXTENDED: "1"
+          QUERY_RACE_RUNS: ${{ github.event.inputs.race_runs || '10' }}
+          JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/query-tests-nightly.xml
+      - name: Upload junit report
+        uses: ./.github/actions/upload-artifact-retry
+        if: ${{ !cancelled() }}
+        with:
+          name: query-tests-nightly-report
+          path: junit/query-tests-nightly.xml
+          retention-days: 30
+      - name: Print realm server logs
+        if: ${{ !cancelled() }}
+        run: cat /tmp/server.log
