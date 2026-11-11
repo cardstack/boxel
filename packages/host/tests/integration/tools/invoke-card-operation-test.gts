@@ -49,6 +49,13 @@ const REPORT_MODULE = `
 
   export class Activity extends CardDef {
     @field headline = contains(StringField);
+
+    @operation static followUp = {
+      base: 'create',
+      of: () => Activity,
+      params: { headline: StringField },
+      fill: { headline: params('headline') },
+    };
   }
 
   export class Report extends CardDef {
@@ -432,6 +439,35 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
       REALM_NAMED_BY_CALLER,
       'to the realm the caller named, which is neither the realm holding the card nor the one this session writes to by default',
     );
+  });
+
+  test("a create the type declares, reached through a card, runs in that card's realm", async function (assert) {
+    let { sent } = recordingTransport();
+
+    await invoke({
+      cardId: `${testRealmURL}activity-lab-safety`,
+      operation: 'followUp',
+      payload: { headline: 'Next session' },
+    });
+
+    assert.strictEqual(sent.length, 1, 'one batch was sent');
+    assert.strictEqual(
+      sent[0].realmURL,
+      testRealmURL,
+      'to the realm holding the card, not the one this session writes to by default',
+    );
+
+    let message = await refusal({
+      cardId: `${testRealmURL}activity-lab-safety`,
+      operation: 'followUp',
+      payload: { headline: 'Elsewhere' },
+      realm: REALM_NAMED_BY_CALLER,
+    });
+    assert.true(
+      message.includes('runs in the realm that holds it'),
+      `a realm named beside the card is refused rather than dropped: ${message}`,
+    );
+    assert.strictEqual(sent.length, 1, 'and nothing more was sent');
   });
 
   test('a create with no realm is sent to the realm holding the card that named its type', async function (assert) {
