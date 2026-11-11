@@ -153,6 +153,7 @@ import type {
   CoalescedIndexWrite,
   IncrementalIndexEventContent,
   RealmEventContent,
+  RealmWideIncrementalIndexEventContent,
 } from '@cardstack/base/matrix-event';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
@@ -2733,11 +2734,32 @@ export default class StoreService extends Service implements StoreInterface {
     if (event.indexType !== 'incremental') {
       return;
     }
-    let invalidations = event.invalidations as string[];
     let ownWrite = [
       event.clientRequestId,
       ...(event.coalescedWrites ?? []).map((write) => write.clientRequestId),
     ].some((id) => !!id && this.cardService.clientRequestIds.has(id));
+
+    if ('realmWide' in event) {
+      let reloadsTriggered = this.#reloadRealmWide(event);
+      if (telemetry?.isEnabled) {
+        telemetry.recordEvent({
+          event_type: 'realm-event',
+          realm: event.realmURL,
+          index_type: 'incremental',
+          invalidations_count: 0,
+          invalidated_ids: [],
+          reloads_triggered: reloadsTriggered,
+          own_write: ownWrite,
+          processing_ms:
+            processingStart !== undefined
+              ? Math.round(performance.now() - processingStart)
+              : 0,
+          event_args: eventArgs(),
+        });
+      }
+      return;
+    }
+    let invalidations = event.invalidations;
 
     // The invalidation triggers a rebuild when it touches an already-loaded
     // executable module: the loader must be flushed so the updated code is
@@ -2849,13 +2871,109 @@ export default class StoreService extends Service implements StoreInterface {
     return false;
   }
 
+  // A pass too large to name what it invalidated says only that something in
+  // its realm moved, so everything the store holds of that realm counts as
+  // named by it. When a module this tab loaded may be among what moved, the
+  // answer is the coalesced rebuild, which re-fetches every live card — decided
+  // from the event's `invalidatedModules` the way a listed event's executable
+  // invalidations decide it, and, when the event could not carry that list,
+  // from whether the tab loaded any module of the realm at all. Otherwise each
+  // card and file the store holds from the realm goes through the rules a
+  // listed invalidation does — own-write suppression, the generation check,
+  // deferral behind an in-flight read — and every card awaiting its index row
+  // is re-read, as after a full index.
+  #reloadRealmWide(event: RealmWideIncrementalIndexEventContent): number {
+    // Compared as the identifiers `realmOf` answers with, which for a realm
+    // reached through a registered prefix is not the URL the event carries.
+    let realm: string | undefined;
+    try {
+      realm = this.realm.realmOf(new URL(event.realmURL)) ?? event.realmURL;
+    } catch (_e) {
+      realm = event.realmURL;
+    }
+    let inRealm = (id: string | undefined): id is string => {
+      if (!id) {
+        return false;
+      }
+      try {
+        return this.realm.realmOf(rri(id)) === realm;
+      } catch (_e) {
+        return false;
+      }
+    };
+    let modules = event.invalidatedModules;
+    let alreadyFlushed = new Set(
+      (modules ?? []).filter((module) =>
+        this.loaderService.wasModuleFlushedForCodeChange(module),
+      ),
+    );
+    let needsRebuild =
+      modules === undefined
+        ? this.rebuildForCodeChange.isRunning ||
+          this.loaderService.loadedOrFlushedModuleKeys.some(inRealm)
+        : modules.length > 0 &&
+          (this.rebuildForCodeChange.isRunning ||
+            alreadyFlushed.size > 0 ||
+            modules.some((module) =>
+              this.loaderService.loader.isModuleLoaded(module),
+            ));
+    if (needsRebuild) {
+      realmEventsLogger.debug(
+        `rebuilding because a realm-wide index of ${event.realmURL} may have changed a module this tab loaded`,
+      );
+      if (modules && this.#clientTelemetry()?.isEnabled) {
+        this.#accumulatePendingRebuild(event.realmURL, modules, alreadyFlushed);
+      }
+      this.rebuildForCodeChange.perform();
+      return 0;
+    }
+    // Spelled as an index event spells a card — its realm href without
+    // `.json` — so the per-card rules match the event's authorship against
+    // these exactly as they would against a listed event's invalidations.
+    let ids = new Set<string>();
+    let add = (id: string) => {
+      try {
+        ids.add(
+          this.network.virtualNetwork.toURLHref(id).replace(/\.json$/, ''),
+        );
+      } catch (_e) {
+        ids.add(id);
+      }
+    };
+    for (let instance of this.store.allCardInstances()) {
+      if (inRealm(instance.id)) {
+        add(instance.id);
+      }
+    }
+    for (let instance of this.store.allFileMetaInstances()) {
+      if (inRealm(instance.id)) {
+        add(instance.id);
+      }
+    }
+    for (let [id, error] of this.store.cardErrorEntries()) {
+      // Awaiting-index cards are re-read by the sweep below, which also
+      // covers reads still in flight.
+      if (!error.awaitingIndex && inRealm(id)) {
+        add(id);
+      }
+    }
+    realmEventsLogger.debug(
+      `treating ${ids.size} held card(s) and file(s) of ${event.realmURL} as invalidated by a realm-wide index event`,
+    );
+    return (
+      this.#reloadInvalidatedInstances(event, [...ids]) +
+      this.reloadAwaitingIndexInstances(event.realmURL)
+    );
+  }
+
   // Reload the individual cards / file-meta resources named by an incremental
   // invalidation that did not trigger a full rebuild. Returns the number of
   // reloads kicked off (for realm-event telemetry).
   #reloadInvalidatedInstances(
-    event: IncrementalIndexEventContent,
+    event: IncrementalIndexEventContent | RealmWideIncrementalIndexEventContent,
     invalidations: string[],
   ): number {
+    let versions = 'versions' in event ? event.versions : undefined;
     let reloadsTriggered = 0;
     for (let invalidation of invalidations) {
       if (hasExecutableExtension(invalidation)) {
@@ -2968,11 +3086,11 @@ export default class StoreService extends Service implements StoreInterface {
             let target: ReloadTarget | undefined;
             if (
               typeof event.generation === 'number' ||
-              event.versions?.[invalidation] !== undefined
+              versions?.[invalidation] !== undefined
             ) {
               target = {
                 generation: event.generation,
-                version: event.versions?.[invalidation],
+                version: versions?.[invalidation],
               };
               this.#reloadTargets.set(instance[localIdSymbol], target);
             }
@@ -3104,7 +3222,7 @@ export default class StoreService extends Service implements StoreInterface {
   // and carries neither member, so nothing here can suppress the re-read that
   // finds whatever it swapped in.
   #indexStateAlreadyHeld(
-    event: IncrementalIndexEventContent,
+    event: IncrementalIndexEventContent | RealmWideIncrementalIndexEventContent,
     invalidation: string,
     instance: CardDef,
   ): string | undefined {
@@ -3133,7 +3251,8 @@ export default class StoreService extends Service implements StoreInterface {
     // registered-prefix form, which is also what `instance.id` and the
     // identity map carry, so a lookup by `instance.id` would miss on every
     // prefix-mapped realm and pass on the rest.
-    let version = event.versions?.[invalidation];
+    let version =
+      'versions' in event ? event.versions?.[invalidation] : undefined;
     if (
       version !== undefined &&
       (version === held?.version || version === incoming?.version)

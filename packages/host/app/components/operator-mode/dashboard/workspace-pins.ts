@@ -106,6 +106,11 @@ function indexCardReindexed(
   if (event.eventName !== 'index' || event.indexType !== 'incremental') {
     return false;
   }
+  // A pass too large to list what it invalidated may have moved any card of
+  // the realm, the index card among them.
+  if ('realmWide' in event) {
+    return true;
+  }
   let indexCard = trimJsonExtension(indexCardURL(realmURL));
   return (event.invalidations ?? []).some(
     (url) => trimJsonExtension(url) === indexCard,

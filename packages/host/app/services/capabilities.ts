@@ -460,8 +460,10 @@ export default class CapabilitiesService
     if (event.indexType !== 'incremental' && event.indexType !== 'full') {
       return;
     }
+    // A full index and a realm-wide incremental name nothing, so either may
+    // have moved the config.
     let invalidations =
-      event.indexType === 'incremental'
+      event.indexType === 'incremental' && !('realmWide' in event)
         ? new Set(event.invalidations)
         : undefined;
     let configMoved =
