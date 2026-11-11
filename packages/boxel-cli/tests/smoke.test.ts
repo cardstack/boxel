@@ -3,6 +3,7 @@ import * as os from 'os';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 
+import { ProfileManager } from '../src/lib/profile-manager.ts';
 import { runBoxel } from './helpers/run-boxel.ts';
 
 describe('boxel-cli', () => {
@@ -109,5 +110,103 @@ describe('boxel profile add (non-interactive)', () => {
     expect(fs.existsSync(join(tmpHome, '.boxel-cli', 'profiles.json'))).toBe(
       false,
     );
+  });
+});
+
+// `--profile` (and `BOXEL_PROFILE`) pick the profile one invocation acts as.
+// These cover what is decided before any request: which profile is named,
+// and that a bad one stops the command without touching the profiles file.
+// Acting as the selected profile against a realm server is covered in
+// tests/integration/realm-create.test.ts.
+describe('boxel --profile', () => {
+  const ALICE = '@alice:localhost';
+  const BOB = '@bob:localhost';
+  let tmpHome: string;
+  let profilesFile: string;
+
+  beforeEach(async () => {
+    tmpHome = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-smoke-'));
+    profilesFile = join(tmpHome, '.boxel-cli', 'profiles.json');
+    let pm = new ProfileManager(join(tmpHome, '.boxel-cli'));
+    for (let id of [ALICE, BOB]) {
+      await pm.addProfileWithAuth(id, {
+        accessToken: `token-for-${id}`,
+        userId: id,
+        deviceId: 'DEVICE',
+        matrixUrl: 'http://localhost:8008',
+      });
+    }
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  it('refuses a profile that is not saved, naming the saved ones', async () => {
+    let before = fs.readFileSync(profilesFile, 'utf-8');
+
+    let res = await runBoxel(
+      ['realm', 'list', '--profile', '@carol:localhost'],
+      {
+        home: tmpHome,
+      },
+    );
+
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain(
+      `No profile named "@carol:localhost". Saved profiles: ${ALICE}, ${BOB}.`,
+    );
+    expect(fs.readFileSync(profilesFile, 'utf-8')).toBe(before);
+  });
+
+  it('is accepted before the command as well as after it', async () => {
+    let res = await runBoxel(
+      ['--profile', '@carol:localhost', 'realm', 'list'],
+      { home: tmpHome },
+    );
+
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain('No profile named "@carol:localhost"');
+  });
+
+  it('reads BOXEL_PROFILE, and says so when it names no saved profile', async () => {
+    let res = await runBoxel(['realm', 'list'], {
+      home: tmpHome,
+      env: { BOXEL_PROFILE: '@carol:localhost' },
+    });
+
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain('No profile named "@carol:localhost"');
+    expect(res.stderr).toContain('BOXEL_PROFILE is set to "@carol:localhost"');
+  });
+
+  it('prefers --profile over BOXEL_PROFILE', async () => {
+    let res = await runBoxel(
+      ['realm', 'list', '--profile', '@carol:localhost'],
+      { home: tmpHome, env: { BOXEL_PROFILE: BOB } },
+    );
+
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain('No profile named "@carol:localhost"');
+    expect(res.stderr).not.toContain('BOXEL_PROFILE');
+  });
+
+  it('is refused by `boxel profile`, which manages the active profile', async () => {
+    let res = await runBoxel(['profile', 'list', '--profile', BOB], {
+      home: tmpHome,
+    });
+
+    expect(res.exitCode).toBe(1);
+    expect(res.stderr).toContain('boxel profile switch <id>');
+  });
+
+  it('leaves `boxel profile list` showing the active profile under BOXEL_PROFILE', async () => {
+    let res = await runBoxel(['profile', 'list', '--json'], {
+      home: tmpHome,
+      env: { BOXEL_PROFILE: BOB },
+    });
+
+    expect(res.ok).toBe(true);
+    expect(JSON.parse(res.stdout).activeProfile).toBe(ALICE);
   });
 });
