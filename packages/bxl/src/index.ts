@@ -296,6 +296,7 @@ export {
   type SpreadsheetFunction,
   type SpreadsheetValue,
 } from './bxl/sql/formula-eval.ts';
+export { queryExpressionIssues } from './bxl/profiles/query-expression.ts';
 
 export {
   BXL_AUTHORIZATION_IR_SCHEMA,

@@ -6,17 +6,22 @@
 // - `+ - * / %`, unary minus, `^` (POWER)
 // - comparisons and `and` / `or`, inside conditions
 // - IF, IFERROR, IFNA, ISBLANK, AND, OR, NOT, ROUND, ROUNDUP, ROUNDDOWN,
-//   ABS, SIGN, SQRT, POWER, EXP, LN, LOG, LOG10, MIN, MAX, AVERAGE, FLOOR,
-//   CEILING, DAYS, NOW, TODAY
+//   ABS, SIGN, SQRT, POWER, EXP, LN, LOG, LOG10, PI, MIN, MAX, AVERAGE,
+//   FLOOR, CEILING, DAYS, NOW, TODAY
 //
-// Anything else is refused with the reason. Blanks and errors follow Excel,
+// Anything else is refused with the reason, a call the profile does not
+// implement included: `RAND()` is never read as a field named RAND. Blanks and errors follow Excel,
 // and stay apart: a blank (a missing field) is SQL NULL and an error is NaN.
 //
 // - A blank is 0 in arithmetic and in a comparison, so `rating * 2` is 0 and
 //   `rating = 0` is true for a card with no rating. IF on a blank takes the
 //   else branch; NOT of a blank is true.
 // - MIN, MAX and AVERAGE skip blanks, and a field they read directly skips
-//   anything that is not a number, as Excel skips them in a range.
+//   anything that is not a number, as Excel skips them in a range. A list
+//   field they read directly gives each of its numbers.
+// - Dates are instants. A stored date or date-time that names no zone is
+//   read as UTC, and TODAY() is midnight UTC, whatever the database session's
+//   time zone is.
 // - A division by zero, the log of a non-positive number, the root of a
 //   negative one or an overflow is an error, and an error propagates through
 //   arithmetic, comparisons, IF's condition and AND / OR / NOT.
@@ -32,6 +37,13 @@
 // Numbers are inlined (they are checked finite), so the result needs no
 // parameters; fields reach the SQL only through `fieldToSql`.
 import { parseBxlAst, type BxlAstNode } from '../ast/index.ts';
+import { JQ_KEYWORDS } from '../compiler/lexicon.ts';
+import {
+  BXL_COMMA_ARGUMENT_HELPERS,
+  tokenizeReadableSyntax,
+  type ReadableSyntaxToken,
+} from '../compiler/readable-syntax.ts';
+import { resolveBuiltinRegistry } from '../registry/index.ts';
 
 // `number`: a number, NULL for a blank, NaN (an error) for anything else.
 // `aggregate`: a number, NULL for anything else (MIN, MAX and AVERAGE skip it).
@@ -39,13 +51,18 @@ import { parseBxlAst, type BxlAstNode } from '../ast/index.ts';
 // (IFERROR's value keeps text, and text has no score).
 // `compare`: as `number`, but text is +Infinity, since Excel ranks text above
 // every number (and never equal to one) rather than raising an error.
-// `timestamp`: a date, NULL for anything else.
+// `numbers`: a list's numbers as a `double precision[]`; empty (or NULL) for
+// a field that is not a list.
+// `timestamp`: a date as a `timestamptz`, NULL for anything else. A value
+// that names no zone is read as UTC, not in the session's time zone.
 export type BxlScoreSqlUsage =
   | 'number'
   | 'passthrough'
   | 'compare'
   | 'aggregate'
-  | 'timestamp';
+  | 'numbers'
+  | 'timestamp'
+  | 'json';
 
 export interface BxlScoreSqlOptions {
   // The SQL for a field, read as `usage` says.
@@ -85,6 +102,7 @@ export const BXL_SCORE_FUNCTIONS = [
   'LN',
   'LOG',
   'LOG10',
+  'PI',
   'MIN',
   'MAX',
   'AVERAGE',
@@ -93,13 +111,32 @@ export const BXL_SCORE_FUNCTIONS = [
   'DAYS',
   'NOW',
   'TODAY',
+  'NA',
+  'COUNT',
+  'SUM',
+  'MEDIAN',
+  'STANDARDIZE',
+  'PERCENTRANK_INC',
+  'COUNTIF',
 ] as const;
 const FUNCTIONS = new Set<string>(BXL_SCORE_FUNCTIONS);
+// Names that are functions even written without parentheses; any other bare
+// name is a field. The score profile and the spreadsheet interpreter
+// (formula-eval.ts) share the list, so a name is a field in both or neither.
+export const BXL_NULLARY_FUNCTIONS: ReadonlySet<string> = new Set([
+  'NOW',
+  'TODAY',
+  'PI',
+  'RAND',
+  'NA',
+  'TRUE',
+  'FALSE',
+]);
 const FIELD_KEY = /^[A-Za-z_$][\w$]*$/;
 const MAX_SOURCE_LENGTH = 2000;
 const MAX_NODES = 200;
 // IF and the error checks read an argument more than once, so nesting grows
-// the SQL; past this it is refused, and the formula runs over the top window.
+// the SQL; past this it is refused.
 const MAX_SQL_LENGTH = 100_000;
 
 // A formula's syntax tree, with the profile's limits on its size.
@@ -131,7 +168,7 @@ export function compileBxlScoreToSql(
   options: BxlScoreSqlOptions,
 ): BxlScoreSqlResult {
   let body = parseScoreFormula(source);
-  let compiler = new ScoreCompiler(options);
+  let compiler = new ScoreCompiler(options, emptyCallNames(source));
   let value = compiler.number(body);
   // an error has no score, as a blank has none
   let sql = `NULLIF(${value}, ${ERR})`;
@@ -148,8 +185,10 @@ class ScoreCompiler {
   #nodes = 0;
   #memo = new Map<BxlAstNode, Map<BxlScoreSqlUsage, string>>();
   private options: BxlScoreSqlOptions;
-  constructor(options: BxlScoreSqlOptions) {
+  private emptyCalls: ReadonlySet<string>;
+  constructor(options: BxlScoreSqlOptions, emptyCalls: ReadonlySet<string>) {
     this.options = options;
+    this.emptyCalls = emptyCalls;
   }
 
   #visit() {
@@ -389,22 +428,107 @@ class ScoreCompiler {
       case 'MAX':
       case 'AVERAGE': {
         this.#arity(name, args, 1, Infinity);
-        // Excel skips blanks, and a field read directly skips any non-number
-        let xs = args.map((a) => this.number(a, 'aggregate'));
+        // Excel skips blanks, and a field read directly skips any non-number.
+        // Such a field may be a list (the compiler does not know a field's
+        // type): each of its numbers counts, as in a spreadsheet range. `list` is NULL
+        // or empty for a field that is not one.
+        let over = (fn: string, list: string) =>
+          `(SELECT ${fn}(bxl_n) FROM unnest(${list}) AS bxl_n)`;
+        let read = (fn: string) =>
+          args.flatMap((a) => {
+            let field = this.#fieldParts(a);
+            let x = this.number(a, 'aggregate');
+            return field ? [x, over(fn, this.#field(field, 'numbers'))] : [x];
+          });
         if (name === 'AVERAGE') {
           // an error propagates through the sum
-          let count = xs
-            .map((x) => `(CASE WHEN ${x} IS NULL THEN 0 ELSE 1 END)`)
+          let count = args
+            .flatMap((a) => {
+              let field = this.#fieldParts(a);
+              let x = this.number(a, 'aggregate');
+              let one = `(CASE WHEN ${x} IS NULL THEN 0 ELSE 1 END)`;
+              return field
+                ? [
+                    one,
+                    `COALESCE(cardinality(${this.#field(field, 'numbers')}), 0)`,
+                  ]
+                : [one];
+            })
             .join(' + ');
-          let sum = xs.map((x) => `COALESCE(${x}, 0)`).join(' + ');
+          let sum = read('sum')
+            .map((x) => `COALESCE(${x}, 0)`)
+            .join(' + ');
           return `COALESCE((${sum}) / NULLIF(${count}, 0), ${ERR})`;
         }
         // GREATEST skips NULLs and is NaN when any argument is; MIN is the
         // greatest of the negatives, negated
         return name === 'MAX'
-          ? `COALESCE(GREATEST(${xs.join(', ')}), 0)`
-          : `COALESCE(-GREATEST(${xs.map((x) => `-${x}`).join(', ')}), 0)`;
+          ? `COALESCE(GREATEST(${read('max').join(', ')}), 0)`
+          : `COALESCE(-GREATEST(${read('min')
+              .map((x) => `-${x}`)
+              .join(', ')}), 0)`;
       }
+      case 'NA':
+        // #N/A: an error, so the row has no score (IFNA does not tell it
+        // from another error in SQL, where every error is NaN)
+        this.#arity(name, args, 0, 0);
+        return ERR;
+      case 'COUNT':
+      case 'SUM':
+      case 'MEDIAN': {
+        this.#arity(name, args, 1, Infinity);
+        // Over every number the arguments give: a field read directly gives
+        // its number, or each number of a list (a comparison set's `peers.`
+        // list among them). COUNT counts numbers and skips the rest, errors
+        // included; SUM and MEDIAN are the error when an argument is one.
+        let list = this.#numbersOf(args);
+        if (name === 'COUNT') {
+          return `(SELECT count(*) FROM unnest(${list}) AS bxl_n WHERE bxl_n <> ${ERR})::double precision`;
+        }
+        let fn =
+          name === 'SUM'
+            ? 'sum(bxl_n)'
+            : 'percentile_cont(0.5) WITHIN GROUP (ORDER BY bxl_n)';
+        // MEDIAN of no numbers is #NUM!; SUM of none is 0
+        let empty = name === 'SUM' ? '0::double precision' : ERR;
+        return `COALESCE((SELECT CASE WHEN bool_or(bxl_n = ${ERR}) THEN ${ERR} ELSE ${fn} END FROM unnest(${list}) AS bxl_n), ${empty})`;
+      }
+      case 'STANDARDIZE': {
+        this.#arity(name, args, 3, 3);
+        let x = v(0);
+        let mean = v(1);
+        let sd = v(2);
+        return `(CASE WHEN ${isErr(x)} OR ${isErr(mean)} OR ${isErr(sd)} OR ${sd} <= 0 THEN ${ERR} ELSE ${div(`(${x} - ${mean})`, sd)} END)`;
+      }
+      case 'PERCENTRANK_INC': {
+        // PERCENTRANK_INC(list, x): where x falls among the list's numbers,
+        // 0 to 1, interpolated between two of them; #N/A outside them or
+        // over no numbers, 0 over one.
+        this.#arity(name, args, 2, 2);
+        let list = this.#numbersOf([args[0]]);
+        let x = v(1);
+        let below = `count(*) FILTER (WHERE bxl_n < ${x})`;
+        let lo = `max(bxl_n) FILTER (WHERE bxl_n < ${x})`;
+        let hi = `min(bxl_n) FILTER (WHERE bxl_n > ${x})`;
+        return `(CASE WHEN ${isErr(x)} THEN ${ERR} ELSE COALESCE((SELECT CASE WHEN count(*) = 0 OR ${x} < min(bxl_n) OR ${x} > max(bxl_n) THEN ${ERR} WHEN count(*) = 1 THEN 0 WHEN bool_or(bxl_n = ${x}) THEN ${below} / (count(*) - 1)::double precision ELSE (${below} - 1 + (${x} - ${lo}) / (${hi} - ${lo})) / (count(*) - 1)::double precision END FROM unnest(${list}) AS bxl_n WHERE bxl_n <> ${ERR}), ${ERR}) END)`;
+      }
+      case 'COUNTIF': {
+        // COUNTIF(list, criterion): a number (those equal to it), a
+        // comparison and a number as text (">4", or ">" & rating), text
+        // ("Chair", "<>Chair": equal, ignoring case, as Excel matches; no
+        // wildcards), or a field, read as its value: a number counts the
+        // numbers equal to it, text the text equal to it ignoring case (its
+        // text is not read as an operator), a blank the zeros.
+        this.#arity(name, args, 2, 2);
+        let text = this.#textCriterion(args[0], args[1]);
+        if (text) return text;
+        let list = this.#numbersOf([args[0]]);
+        let { op, value } = this.#criterion(args[1]);
+        return `(CASE WHEN ${isErr(value)} THEN ${ERR} ELSE (SELECT count(*) FROM unnest(${list}) AS bxl_n WHERE bxl_n <> ${ERR} AND bxl_n ${op} ${value})::double precision END)`;
+      }
+      case 'PI':
+        this.#arity(name, args, 0, 0);
+        return `(${Math.PI}::double precision)`;
       case 'FLOOR':
       case 'CEILING': {
         this.#arity(name, args, 1, 2);
@@ -434,7 +558,10 @@ class ScoreCompiler {
     if (node.type === 'call' && node.args.length === 0) {
       let name = node.name.toUpperCase();
       if (name === 'NOW') return 'now()';
-      if (name === 'TODAY') return "date_trunc('day', now())";
+      // midnight UTC, not midnight in the session's time zone
+      if (name === 'TODAY') {
+        return "(date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')";
+      }
     }
     let field = this.#fieldParts(node);
     if (field) {
@@ -456,11 +583,20 @@ class ScoreCompiler {
   }
 
   // A field reference: `.a.b`, a bare name that is not a function (`rating`),
-  // or a dotted chain of them (`brand.name`).
+  // or a dotted chain of them (`brand.name`). A name written with
+  // parentheses (`RAND()`) is a call, whether or not the profile has it.
   #fieldParts(node: BxlAstNode): string[] | undefined {
     if (node.type === 'path' && node.root === 'current') {
       if (node.parts.length === 0) return undefined;
       return node.parts.map((p) => {
+        // `."end"` and `.["end"]`: a field whose name is a reserved word
+        if (
+          p.type === 'dynamic-index' &&
+          p.expr.type === 'literal' &&
+          p.expr.valueType === 'string'
+        ) {
+          return p.expr.value;
+        }
         if (p.type !== 'field') {
           throw new BxlScoreSqlError(
             'A field in a score formula is a name; list positions and iterators are not part of the score profile.',
@@ -472,7 +608,9 @@ class ScoreCompiler {
     if (
       node.type === 'call' &&
       node.args.length === 0 &&
-      !FUNCTIONS.has(node.name.toUpperCase())
+      !FUNCTIONS.has(node.name.toUpperCase()) &&
+      !BXL_NULLARY_FUNCTIONS.has(node.name.toUpperCase()) &&
+      !this.emptyCalls.has(node.name)
     ) {
       return [node.name];
     }
@@ -481,6 +619,113 @@ class ScoreCompiler {
       return head ? [...head, node.index] : undefined;
     }
     return undefined;
+  }
+
+  // Every number a function's arguments give, as one `double precision[]`:
+  // a field read directly gives its number or each number of its list (an
+  // error stays NaN only for a computed argument; a field skips what is not
+  // a number, as Excel skips it in a range), and any other argument its
+  // value, a blank skipped.
+  #numbersOf(args: BxlAstNode[]): string {
+    let parts = args.map((a) => {
+      let field = this.#fieldParts(a);
+      if (field) {
+        let one = this.number(a, 'aggregate');
+        return `(ARRAY[${one}]::double precision[] || ${this.#field(field, 'numbers')})`;
+      }
+      return `ARRAY[${this.number(a)}]::double precision[]`;
+    });
+    return `array_remove(${parts.join(' || ')}, NULL)`;
+  }
+
+  // COUNTIF over a field's values (a list, or one value) with a criterion
+  // that may be text: a text literal that is no comparison with a number,
+  // or a field whose value is a number or text only when the row is read.
+  // Undefined for a number criterion, which `#criterion` reads.
+  #textCriterion(listNode: BxlAstNode, node: BxlAstNode): string | undefined {
+    let listField = this.#fieldParts(listNode);
+    let critField = this.#fieldParts(node);
+    let text =
+      node.type === 'literal' && node.valueType === 'string'
+        ? node.value
+        : undefined;
+    let literal =
+      text !== undefined ? /^\s*(<>|=)?(.*)$/s.exec(text)! : undefined;
+    let numeric =
+      text !== undefined &&
+      /^\s*(<=|>=|<>|=|<|>)?\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/.test(
+        text,
+      );
+    if ((!literal || numeric) && !critField) return undefined;
+    if (!listField) {
+      throw new BxlScoreSqlError(
+        'COUNTIF with a text criterion reads a field, such as COUNTIF(peers.kind, kind).',
+      );
+    }
+    if (text !== undefined && /^\s*(<=|>=|<(?!>)|>)/.test(text)) {
+      throw new BxlScoreSqlError(
+        'COUNTIF in a score formula compares text only for equality ("Chair" or "<>Chair").',
+      );
+    }
+    let list = this.#field(listField, 'json');
+    let elements = `jsonb_array_elements(CASE jsonb_typeof(${list}) WHEN 'array' THEN ${list} WHEN 'number' THEN jsonb_build_array(${list}) WHEN 'string' THEN jsonb_build_array(${list}) ELSE '[]'::jsonb END) AS bxl_e`;
+    let isText = `jsonb_typeof(bxl_e) = 'string'`;
+    let isNumber = `jsonb_typeof(bxl_e) = 'number'`;
+    let elementText = `lower(bxl_e #>> '{}')`;
+    if (literal) {
+      let value = literal[2];
+      if (value.includes('\u0000')) {
+        throw new BxlScoreSqlError('A COUNTIF criterion cannot hold a NUL.');
+      }
+      let quoted = `lower('${value.replace(/'/g, "''")}')`;
+      let equal = `(${isText} AND ${elementText} = ${quoted})`;
+      return `(SELECT count(*) FROM ${elements} WHERE ${literal[1] === '<>' ? `NOT ${equal}` : equal})::double precision`;
+    }
+    let crit = this.#field(critField!, 'json');
+    return `(CASE jsonb_typeof(${crit}) WHEN 'number' THEN (SELECT count(*) FROM ${elements} WHERE ${isNumber} AND (bxl_e #>> '{}')::double precision = (${crit} #>> '{}')::double precision) WHEN 'string' THEN (SELECT count(*) FROM ${elements} WHERE ${isText} AND ${elementText} = lower(${crit} #>> '{}')) ELSE (SELECT count(*) FROM ${elements} WHERE ${isNumber} AND (bxl_e #>> '{}')::double precision = 0) END)::double precision`;
+  }
+
+  // A COUNTIF criterion: a number, `">4"`, or `">" & x` (which BXL reads as
+  // `(">" | tostring) + (x | tostring)`).
+  #criterion(node: BxlAstNode): { op: string; value: string } {
+    let toString = (n: BxlAstNode): BxlAstNode | undefined =>
+      n.type === 'binary' &&
+      n.operator === '|' &&
+      n.right.type === 'call' &&
+      n.right.name === 'tostring' &&
+      n.right.args.length === 0
+        ? n.left
+        : undefined;
+    let opOf = (text: string) => {
+      let m = /^\s*(<=|>=|<>|=|<|>)?\s*(.*)$/s.exec(text)!;
+      return { op: m[1] ?? '=', rest: m[2] };
+    };
+    if (node.type === 'literal' && node.valueType === 'string') {
+      let { op, rest } = opOf(node.value);
+      let value = Number(rest);
+      if (rest.trim() === '' || !Number.isFinite(value)) {
+        throw new BxlScoreSqlError(
+          'COUNTIF in a score formula takes a number criterion, such as ">4" or ">" & rating.',
+        );
+      }
+      return { op, value: `(${value}::double precision)` };
+    }
+    if (node.type === 'binary' && node.operator === '+') {
+      let left = toString(node.left);
+      let right = toString(node.right);
+      if (
+        left?.type === 'literal' &&
+        left.valueType === 'string' &&
+        right &&
+        opOf(left.value).rest.trim() === ''
+      ) {
+        return { op: opOf(left.value).op, value: num(this.number(right)) };
+      }
+      throw new BxlScoreSqlError(
+        'COUNTIF in a score formula takes a number criterion, such as ">4" or ">" & rating.',
+      );
+    }
+    return { op: '=', value: num(this.number(node)) };
   }
 
   // Excel's argument list arrives as one array of comma-joined values.
@@ -565,6 +810,98 @@ const isErr = (x: string) => (LITERAL.test(x) ? 'FALSE' : `(${x} = ${ERR})`);
 const mul = (a: string, b: string) => `(${a} * ${b})`;
 const div = (a: string, b: string) => `(${a} / ${b})`;
 const add = (op: '+' | '-', a: string, b: string) => `(${a} ${op} ${b})`;
+
+// BXL's own tokens for a source, so text inside a string literal or a
+// comment is never read as code. Empty when the source does not tokenize
+// (the parser reports that).
+function tokensOf(source: string): ReadableSyntaxToken[] {
+  try {
+    return tokenizeReadableSyntax(source);
+  } catch {
+    return [];
+  }
+}
+
+// The names an expression calls: a name directly followed by `(`, with
+// whether the parentheses are empty.
+function calledNames(
+  tokens: ReadableSyntaxToken[],
+): { name: string; empty: boolean }[] {
+  let calls: { name: string; empty: boolean }[] = [];
+  for (let i = 0; i < tokens.length - 1; i++) {
+    let token = tokens[i];
+    let next = tokens[i + 1];
+    if (token.type !== 'ident' || next.type !== 'punc' || next.value !== '(') {
+      continue;
+    }
+    let name = token.value;
+    // `a.b(` names nothing BXL can call: the dotted name is reported whole
+    for (
+      let j = i;
+      j >= 2 && tokens[j - 1].value === '.' && tokens[j - 2].type === 'ident';
+      j -= 2
+    ) {
+      name = `${tokens[j - 2].value}.${name}`;
+    }
+    let close = tokens[i + 2];
+    calls.push({
+      name,
+      empty: close?.type === 'punc' && close.value === ')',
+    });
+  }
+  return calls;
+}
+
+// The names a formula writes with empty parentheses, such as `RAND()`: each
+// is a call, never a field, though the syntax tree gives a bare name and an
+// empty call the same shape.
+export function emptyCallNames(source: string): ReadonlySet<string> {
+  return new Set(
+    calledNames(tokensOf(source))
+      .filter((c) => c.empty)
+      .map((c) => c.name),
+  );
+}
+
+let jqBuiltins: Set<string> | undefined;
+
+// The functions an expression calls that BXL does not have, upper-cased, for
+// a caller that refuses them before running anything. `formulaFunctions` are
+// the spreadsheet functions (upper case, matched without regard to case);
+// BXL's own helpers (`when`, `between`), jq's builtins and keywords, and a
+// function the expression defines itself are known too.
+export function unknownBxlFunctions(
+  source: string,
+  formulaFunctions: ReadonlySet<string>,
+): string[] {
+  jqBuiltins ??= new Set(
+    resolveBuiltinRegistry(['core']).publicNames.map(
+      (name) => name.split('/')[0],
+    ),
+  );
+  let tokens = tokensOf(source);
+  let defined = new Set(
+    tokens
+      .filter((t, i) => t.type === 'ident' && tokens[i - 1]?.value === 'def')
+      .map((t) => t.value),
+  );
+  let unknown = new Set<string>();
+  for (let { name } of calledNames(tokens)) {
+    if (
+      formulaFunctions.has(name.toUpperCase()) ||
+      // the score profile's own (NA(), say) are functions wherever it runs
+      FUNCTIONS.has(name.toUpperCase()) ||
+      BXL_COMMA_ARGUMENT_HELPERS.has(name) ||
+      JQ_KEYWORDS.has(name) ||
+      jqBuiltins.has(name) ||
+      defined.has(name)
+    ) {
+      continue;
+    }
+    unknown.add(name.toUpperCase());
+  }
+  return [...unknown];
+}
 
 function flattenComma(node: BxlAstNode): BxlAstNode[] {
   if (node.type === 'binary' && node.operator === ',') {

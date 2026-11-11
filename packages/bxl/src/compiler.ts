@@ -46,6 +46,8 @@ export {
   classifyBxlProfileFunction,
 } from './bxl/profiles/function-safety.ts';
 
+export { queryExpressionIssues } from './bxl/profiles/query-expression.ts';
+
 export {
   BxlPredicateSqlError,
   SQL_PREDICATE_MODULE,
@@ -56,6 +58,7 @@ export {
   BXL_SCORE_FUNCTIONS,
   BxlScoreSqlError,
   compileBxlScoreToSql,
+  unknownBxlFunctions,
   type BxlScoreSqlOptions,
   type BxlScoreSqlResult,
   type BxlScoreSqlUsage,

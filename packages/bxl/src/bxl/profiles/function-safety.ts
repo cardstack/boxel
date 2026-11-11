@@ -427,6 +427,24 @@ const AUTHORIZATION_DENIED_CALLS = new Set([
   ...BXL_REQUEST_CONTEXT_CALLS,
 ]);
 
+/**
+ * `query` computes one value from a row inside a query (a sort expression,
+ * with or without `top`, or a blend signal): spreadsheet functions and pure jq builtins stay,
+ * and nothing that reads the runtime, the request or the environment, has a
+ * side effect, or consults authorization. Volatile spreadsheet functions
+ * (`NOW`, `TODAY`) stay: a query reads the clock once, so every row sees the
+ * same instant.
+ */
+export const BXL_QUERY_DENIED_CALLS = names([
+  ...BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
+  ...BXL_METADATA_CALLS,
+  ...BXL_REQUEST_CONTEXT_CALLS,
+  ...BXL_AUTHORIZATION_CALLS,
+  ...BXL_AUTHORIZATION_GRAPH_CALLS,
+  'inputs',
+  '$__loc__',
+]);
+
 export const BXL_PROFILE_FUNCTION_POLICIES: Record<
   Exclude<BxlProfile, 'compute'>,
   BxlProfileFunctionPolicy
@@ -489,6 +507,17 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
       metadata:
         'runtime metadata calls are not stable mutation-plan expressions',
       volatile: 'volatile calls are not repeatable mutation-plan expressions',
+    },
+  },
+  query: {
+    deniedCalls: BXL_QUERY_DENIED_CALLS,
+    denyMessageByCategory: {
+      authorization: 'authorization calls are not part of a value computation',
+      controlOrSideEffect:
+        'control/side-effect and environment calls read the runtime, not the row',
+      metadata: 'runtime metadata calls read the runtime, not the row',
+      requestContext:
+        'request-context calls read a request, not the row being ranked',
     },
   },
   transform: {

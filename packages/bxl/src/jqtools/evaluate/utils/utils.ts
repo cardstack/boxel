@@ -140,16 +140,28 @@ export function isTrue(val: any): boolean {
   return val !== null && val !== false;
 }
 
+// The longest string and the longest array one operation may build. A value
+// past either is refused with an error rather than left to exhaust the heap:
+// an isolate that runs out of memory can take its whole process down with it,
+// worker threads included.
+export const MAX_VALUE_LENGTH = 1 << 24;
+
+export function assertValueLength(length: number, what: 'string' | 'array') {
+  if (!(length <= MAX_VALUE_LENGTH)) {
+    throw new JqEvaluateError(
+      `the ${what} would be longer than the ${MAX_VALUE_LENGTH} ${what === 'string' ? 'characters' : 'elements'} a value may hold`,
+    );
+  }
+}
+
 export function repeatString(str: string, num: number): string | null {
   if (num <= 0) {
     return null;
   }
-  let out = '';
-  for (let i = 0; i < Math.floor(num); i++) {
-    out += str;
-  }
-
-  return out;
+  let times = Math.floor(num);
+  if (!(times > 0) || str.length === 0) return '';
+  assertValueLength(str.length * times, 'string');
+  return str.repeat(times);
 }
 
 export function* recursiveDescent(val: any): IterableIterator<any> {

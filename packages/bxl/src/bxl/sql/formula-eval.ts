@@ -22,7 +22,12 @@
 // refused with `SpreadsheetFormulaUnsupported`, so the caller can run it some
 // other way.
 import type { BxlAstNode } from '../ast/index.ts';
-import { BxlScoreSqlError, parseScoreFormula } from './score.ts';
+import {
+  BXL_NULLARY_FUNCTIONS,
+  BxlScoreSqlError,
+  emptyCallNames,
+  parseScoreFormula,
+} from './score.ts';
 
 export class SpreadsheetError {
   readonly code: string;
@@ -76,7 +81,14 @@ const ERROR_CODE = /#(NULL!|DIV\/0!|VALUE!|REF!|NAME\?|NUM!|N\/A)/;
 // The score profile's bound on exp() and power(), so both sides agree.
 const MAX_EXP = 709;
 const NUMERIC_TEXT = /^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
+// A stored date as the score profile's SQL reads one (formula-sql.ts in
+// runtime-common): the whole value is an ISO date (`yyyy-MM-dd`) or
+// date-time, on a real calendar day. A date-time with `Z` or an offset is
+// that instant; one that names no zone, such as the serializer's local form
+// `yyyy-MM-ddTHH:mm`, is read as UTC, whatever zone the host runs in. Any
+// other text, `2024-02-30` and `2024-01-01 junk` included, is no date.
+const STORED_DATE =
+  /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?:[T ]((?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?)(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?)?$/;
 const DAY_MS = 86_400_000;
 // Excel's day 0 is 1899-12-30.
 const EXCEL_EPOCH = Date.UTC(1899, 11, 30);
@@ -123,10 +135,6 @@ const CORE = new Set([
   'NOW',
   'TODAY',
 ]);
-// Names that are functions even with no arguments; any other bare name is a
-// field.
-const NULLARY = new Set(['NOW', 'TODAY', 'PI', 'RAND', 'NA', 'TRUE', 'FALSE']);
-
 type Compiled = (ctx: Ctx) => SpreadsheetValue;
 interface Ctx {
   record: Record<string, unknown>;
@@ -146,7 +154,7 @@ export function prepareSpreadsheetFormula(
     }
     throw e;
   }
-  let compiled = new Compiler(options).value(body);
+  let compiled = new Compiler(options, emptyCallNames(source)).value(body);
   return {
     evaluate(record, opts = {}) {
       return result(compiled({ record, now: opts.now ?? new Date() }));
@@ -252,12 +260,18 @@ const COMPARISON: Record<string, (c: number) => boolean> = {
 
 class Compiler {
   private options: SpreadsheetFormulaOptions;
-  constructor(options: SpreadsheetFormulaOptions) {
+  // the names written with empty parentheses: calls, never fields
+  private emptyCalls: ReadonlySet<string>;
+  constructor(
+    options: SpreadsheetFormulaOptions,
+    emptyCalls: ReadonlySet<string>,
+  ) {
     this.options = options;
+    this.emptyCalls = emptyCalls;
   }
 
   value(node: BxlAstNode): Compiled {
-    let field = fieldParts(node);
+    let field = fieldParts(node, this.emptyCalls);
     if (field) {
       let parts = field;
       return (ctx) => readField(ctx.record, parts);
@@ -277,9 +291,15 @@ class Compiler {
       case 'unary': {
         let x = this.value(node.expr);
         if (node.operator === '-') {
-          return (ctx) => {
-            let n = toNumber(x(ctx));
+          let negate = (v: SpreadsheetValue) => {
+            let n = toNumber(v);
             return isErr(n) ? n : -n;
+          };
+          return (ctx) => {
+            let v = x(ctx);
+            return Array.isArray(v)
+              ? v.map((e) => negate(e as SpreadsheetValue))
+              : negate(v);
           };
         }
         if (node.operator === '+') return x;
@@ -354,13 +374,17 @@ class Compiler {
     }
     let arith = ARITHMETIC[op];
     if (arith) {
-      return (ctx) => {
-        let x = toNumber(a(ctx));
+      let scalar = (l: SpreadsheetValue, r: SpreadsheetValue) => {
+        let x = toNumber(l);
         if (isErr(x)) return x;
-        let y = toNumber(b(ctx));
+        let y = toNumber(r);
         if (isErr(y)) return y;
         return arith(x, y);
       };
+      // Over a list (a `peers.` list, say) arithmetic runs element by
+      // element, as an Excel array formula does: a list with a number pairs
+      // the number with each element, two lists pair element by element.
+      return (ctx) => elementwise(a(ctx), b(ctx), scalar);
     }
     throw new SpreadsheetFormulaUnsupported(
       `the operator ${op} is not part of a spreadsheet formula`,
@@ -397,7 +421,7 @@ class Compiler {
   // a blank skipped.
   #aggregate(nodes: BxlAstNode[]): (ctx: Ctx) => number[] | SpreadsheetError {
     let parts = nodes.map((n) => {
-      let field = fieldParts(n);
+      let field = fieldParts(n, this.emptyCalls);
       return field
         ? { field, value: undefined }
         : { field: undefined, value: this.value(n) };
@@ -415,6 +439,15 @@ class Compiler {
         }
         let v = p.value!(ctx);
         if (v === null || v === undefined) continue;
+        // a list a formula computed (`peers.a / peers.b`): each of its
+        // numbers, an error among them the result
+        if (Array.isArray(v)) {
+          for (let x of v) {
+            if (isErr(x)) return x;
+            if (typeof x === 'number' && Number.isFinite(x)) out.push(x);
+          }
+          continue;
+        }
         let n = toNumber(v);
         if (isErr(n)) return n;
         out.push(n);
@@ -448,7 +481,7 @@ class Compiler {
       arity(name, argNodes, 1, Infinity);
       // COUNT counts numbers and passes over everything else, errors too
       let args = argNodes.map((n) => {
-        let field = fieldParts(n);
+        let field = fieldParts(n, this.emptyCalls);
         return field ? { field } : { value: this.value(n) };
       });
       return (ctx) => {
@@ -463,7 +496,46 @@ class Compiler {
         return count;
       };
     }
-    let args = argNodes.map((n) => this.value(n));
+    let real = argNodes.map((n) => this.value(n));
+    if (ELEMENTWISE_FUNCTIONS.has(name)) {
+      // A function of single numbers given a list runs element by element
+      // (LN(peers.a + 1)), as an array formula does: each element stands in
+      // for the list, in turn.
+      let slots: SpreadsheetValue[] = [];
+      let scalar = this.#scalarCall(
+        name,
+        argNodes,
+        real.map((_, i) => () => slots[i]),
+      );
+      return (ctx) => {
+        let values = real.map((a) => a(ctx));
+        if (!values.some((v) => Array.isArray(v))) {
+          slots = values;
+          return scalar(ctx);
+        }
+        let length = Math.max(
+          ...values.map((v) => (Array.isArray(v) ? v.length : 0)),
+        );
+        return Array.from({ length }, (_, i) => {
+          slots = values.map((v) =>
+            Array.isArray(v)
+              ? i < v.length
+                ? ((v[i] ?? null) as SpreadsheetValue)
+                : NA
+              : v,
+          );
+          return scalar(ctx);
+        });
+      };
+    }
+    return this.#scalarCall(name, argNodes, real);
+  }
+
+  #scalarCall(
+    name: string,
+    argNodes: BxlAstNode[],
+    args: Compiled[],
+  ): Compiled {
     let n = (ctx: Ctx, i: number) => toNumber(args[i](ctx));
     switch (name) {
       case 'IF':
@@ -611,13 +683,19 @@ class Compiler {
         };
       }
     }
-    let field = fieldParts(node);
+    let field = fieldParts(node, this.emptyCalls);
     if (field) {
       let parts = field;
       return (ctx) => {
         let v = readField(ctx.record, parts);
-        if (typeof v !== 'string' || !ISO_DATE.test(v)) return null;
-        let t = Date.parse(v);
+        let m = typeof v === 'string' ? STORED_DATE.exec(v) : null;
+        if (!m) return null;
+        let [, y, mo, d, time = '00:00', zone = 'Z'] = m;
+        // a day the month does not have is no date (Date.UTC would roll it)
+        if (new Date(Date.UTC(+y, +mo - 1, +d)).getUTCDate() !== +d) {
+          return null;
+        }
+        let t = Date.parse(`${y}-${mo}-${d}T${time}${zone}`);
         return Number.isNaN(t) ? null : t;
       };
     }
@@ -635,12 +713,44 @@ class Compiler {
     }
     let call = fn;
     let args = argNodes.map((n) => this.value(n));
+    let once = (values: unknown[]): SpreadsheetValue => {
+      try {
+        let out = call(values);
+        if (
+          typeof out === 'string' &&
+          ERROR_CODE.test(out) &&
+          out.startsWith('#')
+        ) {
+          return new SpreadsheetError(out);
+        }
+        if (typeof out === 'number' && !Number.isFinite(out)) return NUM;
+        return (out ?? null) as SpreadsheetValue;
+      } catch (e) {
+        let code = ERROR_CODE.exec(String((e as Error)?.message ?? e));
+        return code ? new SpreadsheetError(code[0]) : VALUE;
+      }
+    };
+    // A function of one number given a list (LN(peers.a + 1)) gives the
+    // list of its values, element by element, as an array formula does.
+    let lifts = ELEMENTWISE_FUNCTIONS.has(name);
     return (ctx) => {
       let values: unknown[] = [];
       for (let a of args) {
         let v = a(ctx);
         if (isErr(v)) return v;
         values.push(v ?? null);
+      }
+      if (lifts && values.some((v) => Array.isArray(v))) {
+        let length = Math.max(
+          ...values.map((v) => (Array.isArray(v) ? v.length : 0)),
+        );
+        return Array.from({ length }, (_, i) => {
+          let row = values.map((v) =>
+            Array.isArray(v) ? (i < v.length ? (v[i] ?? null) : NA) : v,
+          );
+          let err = row.find((v) => isErr(v as SpreadsheetValue));
+          return err !== undefined ? (err as SpreadsheetValue) : once(row);
+        });
       }
       try {
         let out = call(values);
@@ -659,6 +769,47 @@ class Compiler {
       }
     };
   }
+}
+
+// Functions of single numbers, which run element by element over a list.
+const ELEMENTWISE_FUNCTIONS = new Set([
+  'ABS',
+  'CEILING',
+  'EXP',
+  'FLOOR',
+  'INT',
+  'LN',
+  'LOG',
+  'LOG10',
+  'MOD',
+  'POWER',
+  'ROUND',
+  'ROUNDDOWN',
+  'ROUNDUP',
+  'SIGN',
+  'SQRT',
+  'TRUNC',
+]);
+
+// A binary operation over values that may be lists: element by element, a
+// scalar paired with each element, a list longer than the other paired with
+// #N/A past the shorter one's end, as Excel pairs arrays of unequal size.
+function elementwise(
+  l: SpreadsheetValue,
+  r: SpreadsheetValue,
+  f: (l: SpreadsheetValue, r: SpreadsheetValue) => SpreadsheetValue,
+): SpreadsheetValue {
+  if (!Array.isArray(l) && !Array.isArray(r)) return f(l, r);
+  let ls = Array.isArray(l) ? l : undefined;
+  let rs = Array.isArray(r) ? r : undefined;
+  let length = Math.max(ls?.length ?? 0, rs?.length ?? 0);
+  return Array.from({ length }, (_, i) => {
+    let x = ls ? (i < ls.length ? (ls[i] as SpreadsheetValue) : NA) : l;
+    let y = rs ? (i < rs.length ? (rs[i] as SpreadsheetValue) : NA) : r;
+    if (isErr(x)) return x;
+    if (isErr(y)) return y;
+    return f(x ?? null, y ?? null);
+  });
 }
 
 const ARITHMETIC: Record<
@@ -738,11 +889,23 @@ function readField(
 }
 
 // A field reference: `.a.b`, a bare name that is not a function (`rating`),
-// or a dotted chain of them (`brand.name`).
-function fieldParts(node: BxlAstNode): string[] | undefined {
+// or a dotted chain of them (`brand.name`). A name written with parentheses
+// (`RAND()`) is a call.
+function fieldParts(
+  node: BxlAstNode,
+  emptyCalls: ReadonlySet<string>,
+): string[] | undefined {
   if (node.type === 'path' && node.root === 'current') {
     if (node.parts.length === 0) return undefined;
     return node.parts.map((p) => {
+      // `."end"` and `.["end"]`: a field whose name is a reserved word
+      if (
+        p.type === 'dynamic-index' &&
+        p.expr.type === 'literal' &&
+        p.expr.valueType === 'string'
+      ) {
+        return p.expr.value;
+      }
       if (p.type !== 'field') {
         throw new SpreadsheetFormulaUnsupported(
           'a list position is not part of a spreadsheet formula',
@@ -754,12 +917,13 @@ function fieldParts(node: BxlAstNode): string[] | undefined {
   if (
     node.type === 'call' &&
     node.args.length === 0 &&
-    !NULLARY.has(node.name.toUpperCase())
+    !BXL_NULLARY_FUNCTIONS.has(node.name.toUpperCase()) &&
+    !emptyCalls.has(node.name)
   ) {
     return [node.name];
   }
   if (node.type === 'index' && typeof node.index === 'string') {
-    let head = fieldParts(node.expr);
+    let head = fieldParts(node.expr, emptyCalls);
     return head ? [...head, node.index] : undefined;
   }
   return undefined;

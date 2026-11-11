@@ -18,6 +18,7 @@ import {
   createCriteriaMatcher,
   matchesCriteria,
 } from '../../formulajs/criteria.ts';
+import { parseExcelDate } from '../../formulajs/dateSerial.ts';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
 import { linest, rsq } from '../../formulajs/linest.ts';
 import { isoWeekNumber } from '../../formulajs/isoWeek.ts';
@@ -228,10 +229,26 @@ function serialToUtcDate(serial: number): Date {
   );
 }
 
+// A stored date or date-time where a serial number is expected, as in
+// `HOUR(updatedAt)`: text that is not a number is read as a date, the way
+// YEAR, MONTH and DAY read it. An ISO value with a zone (`...Z`) is that
+// instant and its parts are read in UTC; a value that names no zone
+// (`yyyy-MM-dd`, or the serializer's local `yyyy-MM-ddTHH:mm`) is read as UTC,
+// whatever zone the host runs in.
+function storedDate(value: unknown): Date | undefined {
+  return typeof value === 'string' &&
+    value.trim() !== '' &&
+    Number.isNaN(Number(value))
+    ? parseExcelDate(value)
+    : undefined;
+}
+
 function weekdayValue(serialDateLike: unknown, returnTypeLike: unknown = 1) {
-  const serial = Math.floor(parseExcelNumber(serialDateLike));
+  const date =
+    storedDate(serialDateLike) ??
+    serialToUtcDate(Math.floor(parseExcelNumber(serialDateLike)));
   const type = Math.floor(parseExcelNumber(returnTypeLike));
-  const dayOfWeek = serialToUtcDate(serial).getUTCDay(); // 0 = Sunday
+  const dayOfWeek = date.getUTCDay(); // 0 = Sunday
   // Every return type says which weekday counts as the first: type 1 starts
   // the week on Sunday, types 2 and 3 and 11 on Monday, and 12 through 17 walk
   // the start forward a day at a time, back around to Sunday. Type 3 is the
@@ -1684,7 +1701,13 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       text.slice(parseExcelNumber(startNum) - 1 + parseExcelNumber(length));
   },
   *'REPT/2'(_input, text, count) {
-    yield new Array(parseExcelNumber(count) + 1).join(parseExcelString(text));
+    // Excel's limit: a text longer than 32,767 characters is #VALUE!.
+    const repeated = parseExcelString(text);
+    const times = Math.floor(parseExcelNumber(count));
+    if (!(times >= 0) || repeated.length * times > 32_767) {
+      throwExcelError(EXCEL_ERROR.value);
+    }
+    yield repeated.repeat(times);
   },
   *'RIGHT/1'(_input, value) {
     const text = parseExcelString(value);
@@ -2539,16 +2562,31 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     yield nowSerial();
   },
   *'HOUR/1'(_input, value) {
+    const date = storedDate(value);
+    if (date) {
+      yield date.getUTCHours();
+      return;
+    }
     const n = parseExcelNumber(value);
     const frac = n - Math.floor(n);
     yield Math.floor(frac * 24) % 24;
   },
   *'MINUTE/1'(_input, value) {
+    const date = storedDate(value);
+    if (date) {
+      yield date.getUTCMinutes();
+      return;
+    }
     const n = parseExcelNumber(value);
     const frac = n - Math.floor(n);
     yield Math.floor(frac * 24 * 60) % 60;
   },
   *'SECOND/1'(_input, value) {
+    const date = storedDate(value);
+    if (date) {
+      yield date.getUTCSeconds();
+      return;
+    }
     const n = parseExcelNumber(value);
     const frac = n - Math.floor(n);
     yield Math.floor(frac * 24 * 60 * 60) % 60;

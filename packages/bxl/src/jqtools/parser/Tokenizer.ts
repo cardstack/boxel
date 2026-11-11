@@ -27,6 +27,21 @@ export const JQ_TOKENIZER_KEYWORDS: ReadonlySet<string> = new Set([
   'try',
 ]);
 
+// Words that are keywords in one position only, and ordinary names (a field,
+// a function) anywhere else: `label` and `break` before a `$name`, `import`
+// and `include` before a path string, `module` before its metadata object.
+// `modulemeta` has no keyword position. Each was a syntax error in any other
+// position (but as an object key, which reads the same either way), so no
+// program that parsed changes meaning.
+const CONTEXTUAL_KEYWORD_FOLLOWERS: Readonly<Record<string, string>> = {
+  label: '$',
+  break: '$',
+  import: '"',
+  include: '"',
+  module: '{',
+  modulemeta: '',
+};
+
 export interface PuncToken {
   type: 'punc';
   value: string;
@@ -274,9 +289,13 @@ export class Tokenizer {
       !this.whitespaceBefore &&
       this.lastToken?.type === 'op' &&
       this.lastToken.value === '.';
+    const follower = CONTEXTUAL_KEYWORD_FOLLOWERS[ident];
+    const keywordHere =
+      follower === undefined ||
+      (follower !== '' && this.nextSignificantChar() === follower);
     return {
       type:
-        Tokenizer.keywords.has(ident) && !fieldAfterDot
+        Tokenizer.keywords.has(ident) && !fieldAfterDot && keywordHere
           ? 'kw'
           : ident.charAt(0) === '@'
             ? 'format'
@@ -285,6 +304,22 @@ export class Tokenizer {
               : 'ident',
       value: ident,
     };
+  }
+
+  // The next character that is not whitespace or a comment, without
+  // consuming anything.
+  private nextSignificantChar(): string {
+    let offset = 0;
+    for (;;) {
+      const c = this.input.peek(offset);
+      if (c === '#') {
+        while (!['', '\n'].includes(this.input.peek(offset))) offset++;
+      } else if (c !== '' && Tokenizer.isWhitespace(c)) {
+        offset++;
+      } else {
+        return c;
+      }
+    }
   }
 
   private interpolationContextJustExited() {

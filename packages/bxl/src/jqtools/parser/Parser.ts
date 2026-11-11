@@ -128,7 +128,31 @@ export class Parser {
     return this.parseTopLevel();
   }
 
+  // A reserved word where a value was expected is most often a field of
+  // that name: say so, with the spelling that reads the field.
+  private reservedWord(word: string) {
+    return this.input.croak(
+      `"${word}" is a reserved word in expressions; write ."${word}" to read the field`,
+    );
+  }
+
+  // After a keyword that opens a construct (`if`, `try`, `reduce`, `foreach`,
+  // `def`): what follows cannot start one, so the word was meant as a name.
+  private reservedUnlessConstructFollows(word: string, name = false) {
+    const next = this.input.peek();
+    const starts = name
+      ? next?.type === 'ident' || next?.type === 'kw'
+      : next !== null &&
+        !(next.type === 'op' && !['-', '.', '..'].includes(next.value)) &&
+        !(
+          next.type === 'punc' && [')', ']', '}', ';', ':'].includes(next.value)
+        );
+    if (!starts) throw this.reservedWord(word);
+  }
+
   private unexpected() {
+    const kw = this.isKw();
+    if (kw) return this.reservedWord(kw.value);
     return this.input.croak(
       `Unexpected ${Tokenizer.stringifyToken(this.input.peek())}`,
     );
@@ -252,6 +276,7 @@ export class Parser {
 
   private parseDef(): DefAst {
     this.skipKw('def');
+    this.reservedUnlessConstructFollows('def', true);
     const nameIdent = this.skipIdent().value;
     const args = this.isPunc('(')
       ? this.delimited('(', ')', ';', () => this.parseArgName())
@@ -683,6 +708,7 @@ export class Parser {
 
   parseIf(): IfAst {
     this.skipKw('if');
+    this.reservedUnlessConstructFollows('if');
     const cond = this.parseExpression();
     this.skipKw('then');
     const then = this.parseExpression();
@@ -712,6 +738,7 @@ export class Parser {
 
   parseTry(): TryAst {
     this.skipKw('try');
+    this.reservedUnlessConstructFollows('try');
     const body = this.parseExpression();
     let catchExpr;
     if (this.isKw('catch')) {
@@ -737,6 +764,7 @@ export class Parser {
 
   parseReduce(): ReduceAst {
     this.skipKw('reduce');
+    this.reservedUnlessConstructFollows('reduce');
     const expr = this.parseAtom(false);
     this.skipKw('as');
     const varName = this.skipVar().value;
@@ -760,6 +788,7 @@ export class Parser {
 
   parseForeach(): ForeachAst {
     this.skipKw('foreach');
+    this.reservedUnlessConstructFollows('foreach');
     const expr = this.parseAtom(false);
     this.skipKw('as');
     const varName = this.skipVar().value;

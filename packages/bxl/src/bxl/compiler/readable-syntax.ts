@@ -2735,7 +2735,11 @@ class Compiler {
     // A bare jq keyword after the dot is the keyword (`. as $x`, `else . end`):
     // a keyword the author glued to the dot as a field name has already been
     // respelled `."label"` and arrives here as a string token.
-    if (token.type === 'ident' && JQ_PARSER_KEYWORDS.has(token.value)) {
+    if (
+      token.type === 'ident' &&
+      JQ_PARSER_KEYWORDS.has(token.value) &&
+      isKeywordHere(token.value, this.tokens[this.index + 1])
+    ) {
       return undefined;
     }
 
@@ -3797,6 +3801,27 @@ export function preprocessReadableSource(source: string): {
 // The jq tokenizer's own keyword set, not the readable dialect's, since
 // this is about what jq's parser would reject after a dot.
 const JQ_PARSER_KEYWORDS = JQ_TOKENIZER_KEYWORDS;
+
+// Whether a reserved word is the keyword where it stands. `label` and `break`
+// are keywords only before a `$name`, `import` and `include` before a path
+// string, `module` before its metadata object and `modulemeta` nowhere, as
+// the jq tokenizer reads them; anywhere else each is an ordinary name.
+function isKeywordHere(word: string, next: Token | undefined): boolean {
+  switch (word) {
+    case 'label':
+    case 'break':
+      return next?.type === 'var';
+    case 'import':
+    case 'include':
+      return next?.type === 'string';
+    case 'module':
+      return next?.value === '{';
+    case 'modulemeta':
+      return false;
+    default:
+      return true;
+  }
+}
 
 export function respellKeywordFields(source: string): string {
   let tokens: Token[];

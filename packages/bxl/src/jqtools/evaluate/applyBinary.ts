@@ -14,6 +14,7 @@ import {
   generateValues,
   isTrue,
   relativizePath,
+  assertValueLength,
   repeatString,
   Type,
   typeOf,
@@ -99,9 +100,12 @@ export function applyNormalBinaryOperator(
       }
       switch (typeOf(left)) {
         case Type.string:
+          assertValueLength(left.length + right.length, 'string');
+          return left + right;
         case Type.number:
           return left + right;
         case Type.array:
+          assertValueLength(left.length + right.length, 'array');
           return [...left, ...right];
         case Type.object:
           return { ...left, ...right };

@@ -29,7 +29,8 @@ export type BxlProfile =
   | 'predicate'
   | 'derive'
   | 'mutation'
-  | 'transform';
+  | 'transform'
+  | 'query';
 
 export type BxlAttachment =
   | 'formula'
@@ -347,7 +348,15 @@ export function validateBxlAst(
     if (options.profile === 'transform') {
       validateTransformNode(node, issues);
     }
+
+    if (options.profile === 'query') {
+      validateQueryNode(node, parent, issues);
+    }
   });
+
+  if (options.profile === 'query') {
+    validateQueryVariables(root, new Set(), issues);
+  }
 
   return issues;
 }
@@ -653,6 +662,135 @@ function validateTransformNode(
   }
 }
 
+// The operators a query expression may use: arithmetic, comparison and
+// logic. `=` and `<>` arrive as `==` and `!=`.
+const QUERY_OPERATORS = new Set([
+  '+',
+  '-',
+  '*',
+  '/',
+  '%',
+  '==',
+  '!=',
+  '<',
+  '<=',
+  '>',
+  '>=',
+  'and',
+  'or',
+]);
+
+// Profile.query: an expression inside a query (a sort `expression`, with
+// or without `top`, or a blend's expression signal) computes one value from
+// a row's fields: spreadsheet functions, arithmetic, comparisons and logic,
+// field paths, and names bound inside it (`LET`). The generic sandbox bans
+// (helpers, loops, assignments, try, label/break, formats, recursive
+// descent) apply as for every non-compute profile; this adds the rest of jq
+// that is not one value computed from the row.
+function validateQueryNode(
+  node: BxlAstNode,
+  parent: BxlAstNode | undefined,
+  issues: BxlProfileIssue[],
+): void {
+  let refuse = (code: string, what: string) =>
+    issues.push({
+      code: `query-${code}-banned`,
+      severity: 'error',
+      message: `${profileMessagePrefix('query')} cannot use ${what}.`,
+      nodeType: node.type,
+    });
+  switch (node.type) {
+    case 'contextPath':
+      refuse('context', `the request or environment context ${node.root}`);
+      break;
+    case 'call': {
+      let decision = classifyBxlProfileFunction('query', node.name);
+      if (decision.safety === 'deny') {
+        refuse(
+          'call',
+          `${node.name}${decision.message ? `: ${decision.message}` : ''}`,
+        );
+      }
+      break;
+    }
+    case 'literal':
+      if (node.valueType === 'interpolated-string') {
+        refuse('interpolation', 'jq string interpolation `\\(…)`');
+      }
+      break;
+    case 'iterator':
+      refuse('stream', 'a jq stream `[]`, which yields many values');
+      break;
+    case 'path':
+      if (node.parts.some((part) => part.type === 'iterator')) {
+        refuse('stream', 'a jq stream `[]`, which yields many values');
+      }
+      break;
+    case 'object':
+      refuse('object', 'an object constructor');
+      break;
+    case 'binary': {
+      if (QUERY_OPERATORS.has(node.operator)) break;
+      if (ASSIGNMENT_OPERATORS.has(node.operator)) break; // sandbox ban
+      if (
+        node.operator === ',' &&
+        (isArrayComma(parent) || parent?.type === 'call')
+      ) {
+        break;
+      }
+      // `a & b` arrives as `(a | tostring) + (b | tostring)`, and `NOT(x)`
+      // as `x | not`: the two pipes the readable syntax writes itself.
+      if (
+        node.operator === '|' &&
+        node.right.type === 'call' &&
+        node.right.args.length === 0 &&
+        (node.right.name === 'tostring' || node.right.name === 'not')
+      ) {
+        break;
+      }
+      refuse(
+        'operator',
+        node.operator === '|'
+          ? 'a jq pipe `|`'
+          : node.operator === ','
+            ? 'a jq comma `,`, which yields several values'
+            : `the operator ${node.operator}`,
+      );
+      break;
+    }
+  }
+}
+
+// A `$name` is read only where a binding inside the expression (`LET`, or
+// `… as $name`) gave it a value; any other (`$ENV`, `$__loc__`) reads the
+// runtime rather than the row.
+function validateQueryVariables(
+  node: BxlAstNode,
+  bound: ReadonlySet<string>,
+  issues: BxlProfileIssue[],
+): void {
+  if (node.type === 'variable' && !bound.has(node.name)) {
+    issues.push({
+      code: 'query-variable-banned',
+      severity: 'error',
+      message: `${profileMessagePrefix('query')} cannot read the variable ${node.name}, which nothing in the expression binds.`,
+      nodeType: node.type,
+    });
+  }
+  if (node.type === 'binding') {
+    validateQueryVariables(node.expr, bound, issues);
+    validateQueryVariables(
+      node.next,
+      new Set([...bound, ...node.names]),
+      issues,
+    );
+    return;
+  }
+  for (let child of childNodes(node)) {
+    validateQueryVariables(child, bound, issues);
+  }
+}
+
 function isArrayComma(parent: BxlAstNode | undefined): boolean {
   return (
     parent?.type === 'array' ||
@@ -685,6 +823,8 @@ function profileMessagePrefix(profile: BxlProfile): string {
       return 'Profile.mutation is for bounded Card/Field write planning and';
     case 'transform':
       return 'Profile.transform shapes a payload or projects a result and';
+    case 'query':
+      return 'Profile.query computes one value from a row in a query and';
   }
 }
 
