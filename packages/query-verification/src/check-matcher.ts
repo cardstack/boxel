@@ -21,17 +21,7 @@ const KNOWN: {
   about: string;
   applies: (d: Disagreement) => boolean;
   seen: number;
-}[] = [
-  {
-    about:
-      'a path through a single compound into a list (`m.rs`) reads as unknown when the compound is absent or null, where the server reads an empty list: `eq` false, its `not` true',
-    applies: (d) =>
-      / m\.rs$/.test(d.case) &&
-      d.actual === 'u' &&
-      ((d.card.doc as Record<string, unknown>).m ?? null) === null,
-    seen: 0,
-  },
-];
+}[] = [];
 
 let failed = false;
 for (let file of VECTOR_FILES) {

@@ -340,6 +340,25 @@ function resolveSyntheticKey(
   return { values: [], leafField: undefined, sawUnresolvable: true };
 }
 
+// Whether `segments`, read from the card class `card`, crosses or ends at a
+// containsMany / linksToMany field, judged from the field definitions alone.
+function pathReachesList(card: typeof BaseDef, segments: string[]): boolean {
+  for (let segment of segments) {
+    let field = getField(card, segment);
+    if (!field) {
+      return false;
+    }
+    if (
+      field.fieldType === 'containsMany' ||
+      field.fieldType === 'linksToMany'
+    ) {
+      return true;
+    }
+    card = field.card;
+  }
+  return false;
+}
+
 function resolvePath(
   instance: BaseDef,
   path: string,
@@ -403,6 +422,13 @@ function resolvePath(
           continue;
         }
         if (element == null) {
+          // Behind an unset compound, a path that reaches a list reads as an
+          // empty list on the server, not a NULL leaf. Decide that from the
+          // field definitions, since there is no instance left to walk.
+          if (!isPlural && pathReachesList(field.card, segments.slice(i + 1))) {
+            plural = true;
+            continue;
+          }
           nullLeafCount++;
           continue;
         }
