@@ -42,7 +42,11 @@ import {
 const SELF = '@realm_server:localhost';
 
 // A matrix client that keeps room memberships in memory and records what it
-// was asked to do.
+// was asked to do. Each call is recorded the moment it is made, so `calls`
+// follows the order the dispatcher starts its sends in. A test that wraps a
+// method and awaits something before passing the call on loses that order,
+// since the dispatcher runs a job's sends concurrently, and has to assert
+// those calls as a set.
 function fakeMatrixClient() {
   let rooms = new Map<string, Map<string, string>>();
   let calls: string[] = [];
