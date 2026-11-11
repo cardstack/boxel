@@ -24,9 +24,9 @@ tick enqueues the runs that are due.
 ### 1.1. The definition is a card
 
 An automation's definition MUST be an instance of the catalog's `Automation`
-card type: its script, triggers, declared operations, caps, params, run
-milestones and `batchedAI`. The definition MUST NOT live in a non-card file or
-only in a server table.
+card type: its script, triggers, declared operations, caps, params and
+`batchedAI`. The definition MUST NOT live in a non-card file or only in a
+server table.
 
 The `Automation` type MUST be a system card in the catalog realm, in the
 catalog test subset, as `RealmPolicy` is. Server code MUST name it by a
