@@ -2,6 +2,7 @@ import type * as JSONTypes from 'json-typescript';
 import { isPlainObject } from 'lodash-es';
 import stringify from 'safe-stable-stringify';
 import { flattenDeep } from 'lodash-es';
+import { sqlTextLiteral } from './sql-literal.ts';
 
 import type { CodeRef, DBAdapter, TypeCoercion } from './index.ts';
 
@@ -57,6 +58,28 @@ export interface FieldValue {
   value: CardExpression;
   errorHint: string;
   kind: 'field-value';
+  // The instant a relative date in the value (`now-30d`) is reckoned from:
+  // the query's own clock reading, so every bound of one query agrees.
+  now?: Date;
+}
+
+// The query's clock reading while a filter compiles. Filter compilation is
+// synchronous, so a value set around it is seen by exactly the field values
+// that compile inside it (see `withFilterNow`).
+let filterNow: Date | undefined;
+
+export function currentFilterNow(): Date | undefined {
+  return filterNow;
+}
+
+export function withFilterNow<T>(now: Date | undefined, build: () => T): T {
+  let outer = filterNow;
+  filterNow = now;
+  try {
+    return build();
+  } finally {
+    filterNow = outer;
+  }
 }
 
 export interface TableValuedTree {
@@ -76,6 +99,14 @@ export interface JsonContainsQuery {
   path: string;
   type: CodeRef;
   value: CardExpression;
+  // An `in`: the path holds any of these values (`value` is the first). On
+  // Postgres it resolves to one test of the row against all of them rather
+  // than one test a value, each of which reads the row's search doc again.
+  anyOf?: CardExpression[];
+  // On Postgres, an `in` that is one SQL/JSON path test of the outer row
+  // when its values allow (see `#containedJsonPath` in the query engine),
+  // and this otherwise.
+  orElse?: CardExpression;
 }
 
 // Resolved (pass-2 input) node describing JSON containment of `column` by the
@@ -142,6 +173,8 @@ export interface FieldArity {
 export interface TypeCondition {
   kind: 'type-condition';
   ref: CodeRef;
+  // The `types` column tested (`i.types` unless a subquery names its own).
+  column?: string;
 }
 
 // The arm of a list-path match that reads lists spilled out of the search
@@ -325,10 +358,11 @@ export function sortDirection(
   };
 }
 
-export function typeCondition(ref: CodeRef): TypeCondition {
+export function typeCondition(ref: CodeRef, column?: string): TypeCondition {
   return {
     kind: 'type-condition',
     ref,
+    ...(column ? { column } : {}),
   };
 }
 
@@ -372,6 +406,7 @@ export function fieldValue(
     value,
     errorHint,
     kind: 'field-value',
+    ...(filterNow ? { now: filterNow } : {}),
   };
 }
 
@@ -619,7 +654,8 @@ export function expressionToSql(
 
         tableValuedFunctions.set(key, {
           name,
-          fn: `jsonb_tree(${column}, '${absolutePath}') as ${name}`,
+          // the path is a field path the query named: quoted, never spliced
+          fn: `jsonb_tree(${column}, ${sqlTextLiteral(absolutePath, dbAdapterKind)}) as ${name}`,
         });
       }
       return `${name}.${treeColumn}`;

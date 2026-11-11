@@ -17,6 +17,7 @@ import {
 import { MAX_REMEMBERED_MS } from './gate.ts';
 import type { SearchPrincipal } from './policy-query.ts';
 import { lowerQueryOperation } from './query.ts';
+import { resolveTypeReferences } from '../type-reference.ts';
 import {
   emitNamedQueryRefusalHidden,
   recordSafely,
@@ -131,10 +132,27 @@ export function searchInvocation(
   let anchors = isPlainRecord(filter)
     ? wireFilterGrantTypes(filter as SearchEntryWireFilter)
     : undefined;
-  return {
-    operation: 'query',
-    types: anchors?.every((anchor) => isCodeRef(anchor)) ? anchors : [],
-  };
+  // A type named once at the top of the query is the type every clause
+  // targets, so its grants apply as an anchor's do.
+  let top =
+    isPlainRecord(payload) && isCodeRef(payload.type) ? [payload.type] : [];
+  if (!anchors?.length) {
+    return { operation: 'query', types: top };
+  }
+  if (!anchors.every((anchor) => isCodeRef(anchor))) {
+    return { operation: 'query', types: [] };
+  }
+  let seen = new Set<string>();
+  let types = [...top, ...anchors].filter((t) => {
+    let key = JSON.stringify([
+      (t as { module?: unknown }).module,
+      (t as { name?: unknown }).name,
+    ]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { operation: 'query', types };
 }
 
 export interface NamedQueryContext {
@@ -388,11 +406,16 @@ async function resolveDeclaredQuery(
   let actor =
     context.principal?.kind === 'user' ? context.principal.user : undefined;
   let definition = await declaredQuery(core, on, operation);
-  let lowered = lowerQueryOperation(definition, {
-    ...(actor === undefined ? {} : { actor }),
-    ...(params === undefined ? {} : { params }),
-    realms: context.realms,
-  });
+  // The declaration's `$REALM/` modules name the realm that holds it, the
+  // realm resolving it, wherever the request searches.
+  let lowered = resolveTypeReferences(
+    lowerQueryOperation(definition, {
+      ...(actor === undefined ? {} : { actor }),
+      ...(params === undefined ? {} : { params }),
+      realms: context.realms,
+    }),
+    { realm: core.realmURL },
+  );
   let permitted = new Set(context.realms.map(ensureTrailingSlash));
   let realms = [
     ...new Set((lowered.realms ?? []).map(ensureTrailingSlash)),

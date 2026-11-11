@@ -1,3 +1,4 @@
+import { logFileSource, type LogFileSource } from './log-line-index.ts';
 import { ignore, type Ignore } from './ignore.ts';
 import {
   cardForVectorSidecar,
@@ -1491,10 +1492,23 @@ export class IndexRunner {
     return true;
   }
 
-  // A log file's text, for its line rows (`log-line-index.ts`).
-  #readLogFile = async (url: string) => {
-    let ref = await this.#reader.readFile(new URL(url));
-    return ref ? { content: ref.content } : undefined;
+  // A log file's bytes, by range, for its line rows (`log-line-index.ts`):
+  // a pass reads only what was appended since the log was last indexed. A
+  // reader that can't read a range is read whole.
+  #readLogFile: LogFileSource = {
+    read: async (url: string, start: number, end?: number) => {
+      if (this.#reader.readRange) {
+        return await this.#reader.readRange(new URL(url), start, end);
+      }
+      let ref = await this.#reader.readFile(new URL(url));
+      return ref
+        ? await logFileSource(async () => ({ content: ref.content })).read(
+            url,
+            start,
+            end,
+          )
+        : undefined;
+    },
   };
 
   // A card's vector sidecar, read by the card's URL.

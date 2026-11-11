@@ -1,7 +1,7 @@
 // Synthetic keys stamped into a row's `search_doc` after render (see
 // index-runner/{card,file}-indexer.ts). They are not real card/file fields, but
-// the query engine (index-query-engine.ts `getField` shim + `fieldEqFilter`),
-// the client-side matcher (instance-filter-matcher.ts), and the search-doc
+// the query engine (query-engine/filter-paths.ts `getField` shim +
+// filter-compiler.ts `fieldEqFilter`), the client-side matcher (instance-filter-matcher.ts), and the search-doc
 // parity differ (searchable-parity.ts) all treat them as addressable so cards
 // and files can be filtered/sorted through one query. Keeping the spellings in
 // one module means a rename is a single-file change rather than a cross-package
@@ -31,7 +31,8 @@ export const CARD_TYPE_KEY = '_cardType';
 export const CARD_INSTANCE_FILE_KEY = '_isCardInstanceFile';
 
 // The card's type-ahead text: its title and `cardInfo.alternativeNames`,
-// one per line, matched by the `typeahead` filter against its own index.
+// one per line, matched by a type-ahead `matches` (`prefix: true, scope: 'title'`)
+// against its own index.
 export const TYPE_AHEAD_KEY = '_typeahead';
 
 // The card's passage fields: the names of its top-level `containsMany` fields

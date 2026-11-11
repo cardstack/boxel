@@ -9,6 +9,7 @@ import {
 } from './index.ts';
 import type { OperationDefinition } from './card-operations/types.ts';
 import type { SerializerName } from './serializers/index.ts';
+import { vectorSpace, type VectorSpaceSource } from './vector-space.ts';
 import type { FieldType, Searchable } from '@cardstack/base/card-api';
 import type { BaseDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -17,6 +18,7 @@ import {
   cardSearchIntentOf,
   type CardSearchIntent,
   type FieldSearchOption,
+  type IndexFieldDeclarations,
 } from './search-intent.ts';
 
 export interface FieldDefinition {
@@ -25,6 +27,11 @@ export interface FieldDefinition {
   isComputed: boolean;
   fieldOrCard: CodeRef;
   serializerName?: SerializerName;
+  // A vector field's declared space (vector-space.ts), worked out from its
+  // type's static vectorizer, provider and size as the type's own `space`
+  // is. A near search compares in this space, whatever spaces the type's
+  // cards are stored in at the moment. Only on vector fields.
+  vectorSpace?: string;
   query?: Query;
   // Raw `searchable` annotation mirrored from the field descriptor (the source
   // of truth in `card-api.gts`). Carried here for the loaderless query compiler
@@ -94,6 +101,39 @@ export interface Definition {
   // The type's `static searchDefaults`, merged up its ancestry; omitted when
   // no class in it declares one.
   search?: CardSearchIntent;
+  // A FieldDef's `static facetValue`: the subfield a compound field declared
+  // `search: { facet: true }` counts by when a facet names the compound
+  // itself (facet-declarations.ts). Omitted when the type names none.
+  facetValue?: string;
+  // A card or file type's `static indexFields` (base's declarations of the
+  // index columns every row has: its type, realm, created and modified
+  // times), with their `search` options. Omitted for a field def.
+  indexFields?: IndexFieldDeclarations;
+}
+
+// The `indexFields` member a definition entry records for `def`.
+export function definitionIndexFields(
+  def: typeof BaseDef,
+): IndexFieldDeclarations | undefined {
+  // A field def is a value inside a card, with no index row of its own.
+  // (BaseDef itself, the root cards and files share, records them.)
+  if ((def as unknown as { isFieldDef?: boolean }).isFieldDef) {
+    return undefined;
+  }
+  let value = (def as unknown as { indexFields?: unknown }).indexFields;
+  return value && typeof value === 'object'
+    ? (JSON.parse(JSON.stringify(value)) as IndexFieldDeclarations)
+    : undefined;
+}
+
+// The `facetValue` member a definition entry records for `def`: a FieldDef's
+// own string `static facetValue`, inherited like any static.
+export function definitionFacetValue(def: typeof BaseDef): string | undefined {
+  if (definitionKind(def) !== 'field-def') {
+    return undefined;
+  }
+  let value = (def as unknown as { facetValue?: unknown }).facetValue;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 // The `search` member a definition entry records for `def`.
@@ -152,15 +192,19 @@ export function getFieldDefinitions(
     let queryDefinition = field.queryDefinition
       ? (JSON.parse(JSON.stringify(field.queryDefinition)) as Query) // ensure this is a plain object
       : undefined;
+    let serializerName =
+      fieldSerializer in field.card
+        ? (field.card[fieldSerializer] as SerializerName)
+        : undefined;
     let def: FieldDefinition = {
       type: field.fieldType,
       isPrimitive,
       isComputed: Boolean(field.computeVia),
       fieldOrCard: identifyCard(field.card)!,
-      serializerName:
-        fieldSerializer in field.card
-          ? (field.card[fieldSerializer] as SerializerName)
-          : undefined,
+      serializerName,
+      ...(serializerName === 'vector'
+        ? { vectorSpace: vectorSpace(field.card as VectorSpaceSource) }
+        : {}),
       query: queryDefinition,
       searchable: field.searchable,
       ...(field.lineOf ? { lineOf: identifyCard(field.lineOf())! } : {}),
@@ -189,11 +233,17 @@ export function getImmediateFieldDef(
   definition: Pick<Definition, 'fields' | 'fieldDefs'>,
   fieldName: string,
 ): FieldDefinition | undefined {
+  // Own names only: `constructor` or `toString` is no field of any type.
+  if (!Object.prototype.hasOwnProperty.call(definition.fields, fieldName)) {
+    return undefined;
+  }
   let id = definition.fields[fieldName];
   if (id === undefined) {
     return undefined;
   }
-  return definition.fieldDefs[id];
+  return Object.prototype.hasOwnProperty.call(definition.fieldDefs, id)
+    ? definition.fieldDefs[id]
+    : undefined;
 }
 
 // Resolve a (possibly dotted) field path on `definition`, traversing

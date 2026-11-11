@@ -157,6 +157,9 @@ export function resolveSearchRequestMethod(request: Request): string {
 // the realm-server handler down to searchCards.
 export type SearchOpts = {
   cacheOnlyDefinitions?: boolean;
+  // The zone a query that names none is reckoned in, ahead of the realm's
+  // default (time-zone.ts). A federated search over several realms sets UTC.
+  timeZone?: string;
   // Prerender searches set this so `searchCardsUncoalesced` skips the
   // `loadLinks` relationship-assembly pass entirely (the host re-resolves
   // every result from card+source and reads only `data[].id`). Live /

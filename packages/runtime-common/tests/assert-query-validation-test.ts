@@ -81,7 +81,7 @@ const tests = Object.freeze({
         }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/range\/b\/bogus: range item must be gt, gte, lt, or lte/.test(
+        /filter\/range\/b: unknown range bound "bogus" \(known: gt, gte, lt, lte\)/.test(
           err.message,
         ),
       'the second field path is rejected, and the pointer names it',
@@ -93,7 +93,7 @@ const tests = Object.freeze({
       () => assertQuery({ filter: { range: { a: { gt: 1, bogus: 2 } } } }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/range\/a\/bogus: range item must be gt, gte, lt, or lte/.test(
+        /filter\/range\/a: unknown range bound "bogus" \(known: gt, gte, lt, lte\)/.test(
           err.message,
         ),
       'an unknown constraint key after a valid one is rejected, and the pointer names it',
@@ -117,7 +117,7 @@ const tests = Object.freeze({
         }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/eq\/title\/b: value not allowed in json/.test(err.message),
+        /filter\/eq\/title\/b: a function is not JSON data/.test(err.message),
       'the second key of a nested object is rejected',
     );
     assert.throws(
@@ -145,7 +145,7 @@ const tests = Object.freeze({
       () => assertQuery({ filter: { eq: { tags: [1, () => {}] } } }),
       (err: Error) =>
         err instanceof InvalidQueryError &&
-        /filter\/eq\/tags\/\[1\]: value not allowed in json/.test(err.message),
+        /filter\/eq\/tags\/1: a function is not JSON data/.test(err.message),
       'the second element of a nested array is rejected',
     );
   },

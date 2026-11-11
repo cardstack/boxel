@@ -1,3 +1,5 @@
+import { isLogFileURL } from '../log-line-index.ts';
+import { LogLineTypeError } from '../log-line-typing.ts';
 import type { Readable } from 'stream';
 import { RealmPaths, ensureTrailingSlash, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
@@ -113,6 +115,12 @@ export interface OperationCore {
   // distinguishes "no such card" from "the write landed and the index row is
   // still coming".
   readFileAsText(localPath: LocalPath): Promise<string | undefined>;
+  // `record`'s `what` for the log at `url`, checked and normalized against
+  // the line type the cards linking the log declare (`log-line-typing.ts`),
+  // or as it was where the log has no one line type. Throws a
+  // `LogLineTypeError` for a line the type refuses. Absent: lines are
+  // checked only by the operations client.
+  typeLogLine?(url: string, what: unknown): Promise<unknown>;
   // The stored bytes at a local path, opened the way the realm's own byte
   // serve opens them, with the realm's own refusals applied: a path it will
   // not serve — the realm root, which is a directory, or a name nothing is
@@ -1422,6 +1430,7 @@ export async function runOperation(
   // `output` was skipped answers with more than its author said it would,
   // which is the one failure a projection must not have.
   refuseAnonymousActor(canonical, definition);
+  canonical = await typedLogLine(core, canonical, definition);
   if (definition.input) {
     canonical = {
       ...canonical,
@@ -1459,6 +1468,48 @@ function refuseAnonymousActor(
       `operation "${request.name}" reads the invoking actor, and this ` +
       `request authenticated nobody`,
   });
+}
+
+// A log's `record`, its `what` held to the log's line type, as the realm
+// works it out (`OperationCore.typeLogLine`). Only the base log types' named
+// `record` (an `appendLine` whose input program composes the line), since
+// that is the one whose `what` is the line's payload.
+async function typedLogLine(
+  core: OperationCore,
+  request: OperationRequest,
+  definition: OperationDefinition,
+): Promise<OperationRequest> {
+  let href = targetId(request.target);
+  let params = request.params as Record<string, unknown> | undefined;
+  if (
+    !core.typeLogLine ||
+    !href ||
+    request.name !== 'record' ||
+    definition.base !== 'appendLine' ||
+    !definition.input ||
+    !isLogFileURL(href) ||
+    !params ||
+    !('what' in params)
+  ) {
+    return request;
+  }
+  try {
+    return {
+      ...request,
+      params: { ...params, what: await core.typeLogLine(href, params.what) },
+    };
+  } catch (e) {
+    if (e instanceof LogLineTypeError) {
+      throw new OperationFailure({
+        id: href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid line',
+        detail: `this log's lines are typed, and this one is refused: ${e.message}`,
+      });
+    }
+    throw e;
+  }
 }
 
 function transformContext(

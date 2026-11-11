@@ -46,6 +46,7 @@ import {
   type VectorSidecarReader,
 } from './vector-index-writer.ts';
 export type { VectorSidecarReader } from './vector-index-writer.ts';
+import { vectorStoreFor } from './vector-store.ts';
 import { syncLogLineIndex, type LogFileReader } from './log-line-index.ts';
 import { collectSearchDocPassages } from './passage-index.ts';
 import type { CaptureManifest } from './capture-spec.ts';
@@ -83,6 +84,10 @@ import {
   spillSearchDoc,
 } from './search-doc-spill.ts';
 import { SEARCH_TEXT_KEY } from './search-intent.ts';
+import {
+  facetValueRowsInsert,
+  facetValueRowsInsertEnd,
+} from './facet-index.ts';
 import { CARD_TITLE_KEY, TYPE_AHEAD_KEY } from './search-doc-keys.ts';
 
 // The two production rows (instance and file) a render visit of `url` reads
@@ -2631,6 +2636,9 @@ export class Batch {
       }
     }
     this.#committedGeneration = this.commitGeneration;
+    // A space that has grown past the exact threshold gets its approximate
+    // index now, in the background (`VectorStore.buildIndexes`).
+    void vectorStoreFor(this.#dbAdapter).buildIndexes();
     let cleanup = await this.clearPendingRows();
 
     let totalIndexEntries = await this.numberOfIndexEntries();
@@ -3481,12 +3489,14 @@ export class Batch {
       pattern_text: _remove7,
       rank_tsv: _remove8,
       search_title: _remove9,
+      title_sort: _remove10,
       ...productionVersion
     } = entry as typeof entry & {
       search_tsv?: unknown;
       pattern_text?: unknown;
       rank_tsv?: unknown;
       search_title?: unknown;
+      title_sort?: unknown;
     };
     return {
       ...productionVersion,
@@ -3880,6 +3890,7 @@ export class Batch {
       });
       await this.#syncVectorIndex();
       await this.#syncPassageIndex();
+      await this.#syncFacetIndex();
       await this.#syncSpillIndex();
       await this.#syncLogLineIndex();
       await this.#syncWordList();
@@ -4034,6 +4045,50 @@ export class Batch {
     }
   }
 
+  // Re-derives `boxel_index_facet_values` for every URL this pass staged:
+  // the URL's old rows go, and each value of each declared facet field its
+  // staged doc names (`_searchText.facets`, stamped by the render from the
+  // type's definition; facet-declarations.ts) is written back, one row per
+  // distinct value. Set-based, inside the swap transaction, so a facet never
+  // pairs a card's new row with its old values. Postgres only: the SQLite
+  // index refuses facets.
+  async #syncFacetIndex() {
+    if (this.#dbAdapter.kind !== 'pg') {
+      return;
+    }
+    let urls = [...this.#invalidations];
+    const CHUNK = 500;
+    for (let start = 0; start < urls.length; start += CHUNK) {
+      let chunk = urls.slice(start, start + CHUNK);
+      await this.#query([
+        'DELETE FROM boxel_index_facet_values WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          this.#stagedInChunk(chunk),
+        ]),
+      ] as Expression);
+      await this.#query([
+        ...facetValueRowsInsert('boxel_index_pending'),
+        'WHERE',
+        ...every([
+          ['p.realm_url =', param(this.realmURL.href)],
+          ['p.staging_id =', param(this.#stagingId)],
+          [
+            'p.url IN',
+            ...addExplicitParens(
+              separatedByCommas(chunk.map((url) => [param(url)])),
+            ),
+          ],
+          any([['p.is_deleted = false'], ['p.is_deleted IS NULL']]),
+          [
+            `jsonb_typeof(p.search_doc -> '${SEARCH_TEXT_KEY}' -> 'facets') = 'object'`,
+          ],
+        ]),
+        ...facetValueRowsInsertEnd,
+      ] as Expression);
+    }
+  }
+
   // Replaces `boxel_index_spill` for every URL this pass staged with the
   // values its rows spilled: the promoted doc's markers
   // and these rows come from one staging, published in one transaction. A
@@ -4144,10 +4199,18 @@ export class Batch {
                   ? `CASE WHEN search_doc ? '${SEARCH_TEXT_KEY}' THEN search_rank_vector(search_doc -> '${SEARCH_TEXT_KEY}') END AS rank_tsv`
                   : 'NULL AS rank_tsv',
               ]
-            : column === 'search_title'
+            : column === 'search_title' || column === 'title_sort'
               ? // The row's display title, lowercased, inline for type-ahead
-                // ranking.
-                [`lower(search_doc ->> '${CARD_TITLE_KEY}') AS search_title`]
+                // ranking; and its `cardTitle` exactly as a title sort reads
+                // it (`spill_text(search_doc -> 'cardTitle')`, a key that
+                // never spills), inline for the sort's index (see the
+                // `add-boxel-index-title-sort` migration). The staged doc is
+                // the unspilled one, so `->>` reads the value itself.
+                [
+                  column === 'search_title'
+                    ? `lower(search_doc ->> '${CARD_TITLE_KEY}') AS search_title`
+                    : `search_doc ->> 'cardTitle' AS title_sort`,
+                ]
               : column === 'pattern_text'
                 ? // The row's pattern-field values, one per line, from the
                   // render's `_searchText` (see `add-typo-words-and-pattern-text`).

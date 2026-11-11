@@ -31,20 +31,23 @@ export const SEARCH_RANK_SIGNALS = [
 ] as const;
 export type SearchRankSignal = (typeof SEARCH_RANK_SIGNALS)[number];
 
-export type SearchFacetShape = true | 'values' | 'range' | 'date';
 export type SearchChunks = 'item' | 'paragraph' | 'heading';
 
 // A field's `search` option. Every member is optional; a field with none
 // takes its type's default.
 export interface FieldSearchIntent {
   role?: SearchRole;
-  facet?: SearchFacetShape;
+  // Opts the field in to facets (docs/search-intent.md, `facet`): a query
+  // may count it with `facets: [{ by }]`, and the index keeps its values in
+  // the facet table. The facet's shape comes from the field's type and the
+  // query. On a compound field it opts in the subfields its FieldDef
+  // declares (or the one its `static facetValue` names); on a link, the
+  // linked cards by id.
+  facet?: boolean;
   rank?: SearchRankSignal;
   typos?: boolean;
   patterns?: boolean;
   chunks?: SearchChunks;
-  // On a link: the linked card's fields that describe this card.
-  include?: string[];
   appendOnly?: boolean;
   language?: string;
   // On a VectorField: index its vectors for nearest-neighbour lookups, so a
@@ -56,6 +59,14 @@ export interface FieldSearchIntent {
 
 // `false` keeps the field out of the search doc.
 export type FieldSearchOption = FieldSearchIntent | false;
+
+// A type's `static indexFields` (declared in base on BaseDef and CardDef):
+// what the index holds for every row beside its fields, by name, with the
+// `search` options a field takes. See facet-declarations.ts.
+export type IndexFieldDeclarations = Record<
+  string,
+  { search?: FieldSearchIntent }
+>;
 
 // A card's `static searchDefaults`: defaults for the whole type. (Not
 // `static search`, which a card may declare as an `@operation`.)
@@ -101,9 +112,34 @@ export type SearchTextTier = 'A' | 'B' | 'C' | 'D';
 // searched by glob or regex (declared `patterns: true`, or an `identifier`
 // or `code` role), one per line, which the writer keeps trigram-indexed.
 export type SearchTextGroup = SearchTextTier | 'typos' | 'patterns';
-export type SearchText = Partial<Record<SearchTextGroup, string>>;
+export type SearchText = Partial<Record<SearchTextGroup, string>> & {
+  // The card's declared facet fields (facet-declarations.ts), by the facet
+  // path a query names, for the index writer's facet table. Rides here so it
+  // leaves the stored doc with the rest of `_searchText`.
+  facets?: FacetFieldSpecs;
+};
+
+// How the index writer reads one declared facet field's values from the
+// search doc: `read` when the values sit at another path than the facet's
+// own (a compound's `facetValue` subfield), `list` when that path crosses a
+// list, `link` when the values are linked cards (counted by id), `date` when
+// they are dates (kept as instants too).
+export interface FacetFieldSpec {
+  read?: string;
+  list?: true;
+  link?: true;
+  date?: true;
+}
+export type FacetFieldSpecs = Record<string, FacetFieldSpec>;
 
 export const SEARCH_TEXT_KEY = '_searchText';
+
+// The fields of a file row that `pattern` and `regex` read: the ones base's
+// FileDef declares `search: { patterns: true }`. The file indexer stamps
+// their values into the row's pattern text (the render stamps a card's), so
+// a file type's other fields are not searched by pattern
+// (`assertNearFilters` refuses them).
+export const FILE_PATTERN_FIELDS: readonly string[] = ['url', 'name'];
 
 // The most characters a tier holds. A title tier is short by nature; the
 // prose tiers are capped so one huge field can't push the vector past
@@ -265,12 +301,9 @@ export function assertFieldSearchOption(
       `${where}: search rank must be one of ${SEARCH_RANK_SIGNALS.join(', ')}`,
     );
   }
-  if (
-    intent.facet !== undefined &&
-    ![true, 'values', 'range', 'date'].includes(intent.facet as never)
-  ) {
+  if (intent.facet !== undefined && typeof intent.facet !== 'boolean') {
     throw new Error(
-      `${where}: search facet must be true, 'values', 'range' or 'date'`,
+      `${where}: search facet must be true or false; a facet's shape (values, ranges, a date histogram) comes from the field's type and the query's facet members`,
     );
   }
   if (
@@ -280,13 +313,6 @@ export function assertFieldSearchOption(
     throw new Error(
       `${where}: search chunks must be 'item', 'paragraph' or 'heading'`,
     );
-  }
-  if (
-    intent.include !== undefined &&
-    (!Array.isArray(intent.include) ||
-      intent.include.some((name) => typeof name !== 'string'))
-  ) {
-    throw new Error(`${where}: search include must be a list of field names`);
   }
   for (let flag of ['typos', 'patterns', 'appendOnly', 'neighbors'] as const) {
     if (intent[flag] !== undefined && typeof intent[flag] !== 'boolean') {
@@ -305,7 +331,6 @@ const FIELD_SEARCH_KEYS = new Set([
   'typos',
   'patterns',
   'chunks',
-  'include',
   'appendOnly',
   'language',
   'neighbors',

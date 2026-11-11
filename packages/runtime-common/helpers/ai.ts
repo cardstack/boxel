@@ -1,3 +1,4 @@
+import { grammarDescription } from '../query-grammar.ts';
 import type * as CardAPI from '@cardstack/base/card-api';
 import { primitive } from '../constants.ts';
 import type { Loader } from '../loader.ts';
@@ -96,7 +97,15 @@ type EnumSchema = {
   examples?: any[];
 };
 
+// A value that may take one of several shapes, such as a type reference
+// written as its "<module>#<Name>" shorthand or as { module, name }.
+type AnyOfSchema = {
+  description?: string;
+  anyOf: AttributesSchema[];
+};
+
 export type AttributesSchema =
+  | AnyOfSchema
   | ArraySchema
   | ObjectSchema
   | DateSchema
@@ -154,6 +163,16 @@ export async function basicMappings(loader: Loader) {
   mappings.set(NumberField, {
     type: 'number',
   });
+  // card-api declares its own NumberField for the fields base cards share
+  // (cardInfo.metrics, an image's width and height); it is a number too.
+  let cardApi: typeof import('@cardstack/base/card-api') = await loader.import(
+    '@cardstack/base/card-api',
+  );
+  if (cardApi.NumberField && cardApi.NumberField !== NumberField) {
+    mappings.set(cardApi.NumberField, {
+      type: 'number',
+    });
+  }
   mappings.set(BigIntegerField, {
     type: 'string',
     pattern: '^-?[0-9]+$',
@@ -181,127 +200,153 @@ export async function basicMappings(loader: Loader) {
     properties: {},
     additionalProperties: true,
   });
+  // The query the assistant's search tools take (docs/search.md). The tools
+  // validate it with `assertQuery` and send it as an entry wire query
+  // (`searchEntryWireQueryFromQuery`), so this describes the spelling that
+  // path carries: a type anchor `on` in each clause and the engine's signal
+  // sort keys. A top-level `type`, `{ blend }`, `{ expression }`,
+  // `{ relevance }`, `exists`/`missing` and `select` do not survive it yet.
+  // A type reference, in either spelling: the "<module>#<Name>" shorthand
+  // or the code ref { module, name } (type-reference.ts).
+  const queryCodeRef = (description: string): AnyOfSchema => ({
+    anyOf: [
+      {
+        type: 'string',
+        pattern: '^[^#\\s]+#[A-Za-z_$][A-Za-z0-9_$]*$',
+        description:
+          'The shorthand "<module>#<Name>", such as "@cardstack/catalog/product#Product", "https://my.realm/product#Product" or "$REALM/product#Product".',
+      },
+      {
+        type: 'object',
+        properties: {
+          module: { type: 'string' },
+          name: { type: 'string' },
+        },
+        required: ['module', 'name'],
+      },
+    ],
+    description,
+  });
+  const nestedFilter = (description: string): ObjectSchema => ({
+    type: 'object',
+    properties: {},
+    description,
+  });
   mappings.set(QueryField, {
     type: 'object',
-    description:
-      'A query to the card search API, supporting searching on fields and types, with pagination and sorting.',
+    description: grammarDescription('query'),
     properties: {
       filter: {
         type: 'object',
-        description:
-          "Filter criteria for the query. Each filter object uses at most one operator — 'eq', 'in', 'contains', 'range', 'matches', 'near', 'any', 'every', or 'not' — optionally alongside 'type' (a CodeRef restricting results to that card type) and/or 'on' (a CodeRef giving the card type its field paths belong to). A filter with only 'type' is valid. Omit every operator you are not using: an empty operator ({}, [] or a CodeRef with empty strings) is not ignored — it changes what the query matches, or is rejected, and a filter carrying more than one operator is rejected. To combine operators, nest one filter per operator under 'every' (all must hold) or 'any' (at least one must hold). Example: { on: <CodeRef>, matches: 'recipe cookbook' }.",
+        description: grammarDescription('query', 'filter'),
         properties: {
-          type: {
-            type: 'object',
-            properties: {
-              module: { type: 'string' },
-              name: { type: 'string' },
-            },
-            required: ['module', 'name'],
-            description:
-              'A CodeRef (module and name) identifying a card type. Used for CardTypeFilter.',
-          },
-          on: {
-            type: 'object',
-            properties: {
-              module: { type: 'string' },
-              name: { type: 'string' },
-            },
-            required: ['module', 'name'],
-            description:
-              "A CodeRef (module and name) identifying a card type. Used as context for filters like 'eq', 'contains', 'range', 'any', 'every', 'not'.",
-          },
+          type: queryCodeRef(grammarDescription('filter', 'type')),
+          on: queryCodeRef(grammarDescription('filter', 'on')),
           any: {
             type: 'array',
-            items: {
-              type: 'object',
-              properties: {},
-              description:
-                'A nested filter object. Refer to Query.Filter documentation.',
-            },
-            description:
-              'An array of filter objects. The condition is true if any filter in the array is true.',
+            items: nestedFilter('A nested filter.'),
+            description: grammarDescription('filter', 'any'),
           },
           every: {
             type: 'array',
-            items: {
-              type: 'object',
-              properties: {},
-              description:
-                'A nested filter object. Refer to Query.Filter documentation.',
-            },
-            description:
-              'An array of filter objects. The condition is true if all filters in the array are true.',
+            items: nestedFilter('A nested filter.'),
+            description: grammarDescription('filter', 'every'),
           },
-          not: {
-            type: 'object',
-            properties: {},
-            description:
-              'A filter object to be negated. Refer to Query.Filter documentation.',
-          },
+          not: nestedFilter(grammarDescription('filter', 'not')),
           eq: {
             type: 'object',
             properties: {},
-            description:
-              "An object where keys are field paths (e.g., 'firstName', 'address.street') and values are the exact criteria to match.",
-          },
-          contains: {
-            type: 'object',
-            properties: {},
-            description:
-              'An object where keys are field paths and values are the criteria to be contained (e.g., for string contains, or array contains element).',
-          },
-          range: {
-            type: 'object',
-            properties: {},
-            description:
-              'An object where keys are field paths. Values are objects specifying range constraints (e.g., { gt: 10, lte: 20 }).',
+            description: grammarDescription('filter', 'eq'),
           },
           in: {
             type: 'object',
             properties: {},
-            description:
-              'An object where keys are field paths and values are arrays of accepted values (e.g., { status: ["open", "closed"] }); a field matches when it equals any of them.',
+            description: grammarDescription('filter', 'in'),
+          },
+          contains: {
+            type: 'object',
+            properties: {},
+            description: grammarDescription('filter', 'contains'),
+          },
+          range: {
+            type: 'object',
+            properties: {},
+            description: grammarDescription('filter', 'range'),
           },
           matches: {
             type: 'string',
-            description:
-              "Full-text search over each result's rendered content. Bare words are ANDed; put OR between alternatives (e.g., 'blog OR article'). Pair it with 'type' to search within one card type, and sort by '_matchRelevance' to put the best matches first.",
+            description: grammarDescription('filter', 'matches'),
+          },
+          prefix: {
+            type: 'boolean',
+            description: grammarDescription('filter', 'prefix'),
+          },
+          typos: {
+            type: 'boolean',
+            description: grammarDescription('filter', 'typos'),
+          },
+          scope: {
+            enum: ['title'],
+            description: grammarDescription('filter', 'scope'),
+          },
+          fields: {
+            type: 'array',
+            items: { type: 'string' },
+            description: grammarDescription('filter', 'fields'),
+          },
+          within: {
+            type: 'string',
+            description: grammarDescription('filter', 'within'),
           },
           near: {
             type: 'object',
             properties: {},
-            description:
-              "Vector similarity on one VectorField (an embedding), keyed by its field path with 'on' naming the card type. The value is { to: [ …numbers… ], minSimilarity?: number }: 'to' has as many numbers as the field has dimensions, and the optional minSimilarity is a cosine threshold from -1 to 1 (1 = same direction). Example: { embedding: { to: [ … ], minSimilarity: 0.6 } }. To get the k most similar cards, sort by the field with 'near' instead and set page.size to k.",
+            description: grammarDescription('filter', 'near'),
+          },
+          pattern: {
+            type: 'object',
+            properties: {},
+            description: grammarDescription('filter', 'pattern'),
+          },
+          regex: {
+            type: 'object',
+            properties: {},
+            description: grammarDescription('filter', 'regex'),
+          },
+          linkedFrom: {
+            type: 'object',
+            properties: {
+              card: { type: 'string' },
+              field: { type: 'string' },
+            },
+            required: ['card', 'field'],
+            description: grammarDescription('filter', 'linkedFrom'),
           },
         },
       },
       sort: {
         type: 'array',
-        description:
-          'An array of sort expressions. Each expression defines a field to sort by and direction.',
+        description: grammarDescription('query', 'sort'),
         items: {
           type: 'object',
           properties: {
             by: {
               type: 'string',
-              description:
-                "Field path to sort by (e.g., 'author.name', with 'on' naming the card type it belongs to), or a general sort key that needs no 'on': 'lastModified', 'createdAt', 'cardURL', '_matchRelevance' or '_blend'. '_matchRelevance' ranks by full-text relevance, defaults to 'desc' (best match first), and requires a 'matches' term in the filter. '_blend' fuses several signals listed in 'of' (reciprocal rank fusion), e.g. text relevance plus vector similarity plus recency plus an engagement count; results carry meta._blendScore.",
+              description: grammarDescription('sortEntry', 'by'),
             },
-            on: {
-              type: 'object',
-              properties: {
-                module: { type: 'string' },
-                name: { type: 'string' },
-              },
-              required: ['module', 'name'],
-              description:
-                "A CodeRef (module and name) naming the card type 'by' is a field of. Required when 'by' is a card field; not needed for a general sort key.",
-            },
+            on: queryCodeRef(grammarDescription('sortEntry', 'on')),
             direction: {
               enum: ['asc', 'desc'],
-              description:
-                "Sort direction: 'asc' for ascending, 'desc' for descending.",
+              description: grammarDescription('sortEntry', 'direction'),
+            },
+            missing: {
+              enum: ['first', 'last'],
+              description: grammarDescription('sortEntry', 'missing'),
+            },
+            near: {
+              type: 'array',
+              items: { type: 'number' },
+              description: grammarDescription('sortEntry', 'near'),
             },
             of: {
               type: 'array',
@@ -309,38 +354,115 @@ export async function basicMappings(loader: Loader) {
                 type: 'object',
                 properties: {},
                 description:
-                  "A sort entry (by, on, direction, near) plus an optional positive 'weight' (default 1).",
+                  "A sort entry (by, on, direction, near), a '_expr' entry, or a boost { by: '_when', when: <filter>, weight }, plus an optional nonzero 'weight' (default 1; negative inverts the signal).",
               },
-              description:
-                "With by '_blend': the signals to fuse, up to 8. Each ranks best first (highest value first unless direction is 'asc'); a card with no value for a signal gets nothing from it. Example: [{ by: '_matchRelevance' }, { by: 'embedding', on: <CodeRef>, near: [ … ], weight: 2 }, { by: 'createdAt' }, { by: 'views', on: <CodeRef>, weight: 0.5 }].",
+              description: grammarDescription('sortEntry', 'of'),
             },
             k: {
               type: 'number',
-              description:
-                "With by '_blend': the rank-fusion constant (default 60). Smaller values favour the top ranks of each signal.",
+              description: grammarDescription('sortEntry', 'k'),
             },
-            near: {
+            weights: {
+              type: 'object',
+              properties: {},
+              description: grammarDescription('sortEntry', 'weights'),
+            },
+            expr: {
+              type: 'string',
+              description: grammarDescription('sortEntry', 'expr'),
+            },
+            expression: {
+              type: 'string',
+              description: grammarDescription('sortEntry', 'expression'),
+            },
+            top: {
+              type: 'integer',
+              description: grammarDescription('sortEntry', 'top'),
+            },
+            compare: {
+              type: 'object',
+              properties: {},
+              description: grammarDescription('sortEntry', 'compare'),
+            },
+          },
+        },
+      },
+      collapse: {
+        type: 'object',
+        properties: {
+          by: { type: 'string' },
+          on: queryCodeRef(grammarDescription('collapse', 'on')),
+          keep: { type: 'integer' },
+        },
+        required: ['by'],
+        description: grammarDescription('query', 'collapse'),
+      },
+      facets: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            by: { type: 'string' },
+            size: { type: 'integer' },
+            own: { enum: ['ignore'] },
+            stats: { type: 'boolean' },
+            ranges: {
               type: 'array',
-              items: { type: 'number' },
-              description:
-                "Rank by cosine similarity between the VectorField named by 'by' (with 'on') and this target vector, most similar first (direction defaults to 'desc'). Each result carries meta._nearSimilarity. Cards without a vector sort last.",
+              items: {
+                type: 'object',
+                properties: {
+                  key: { type: 'string' },
+                  from: { anyOf: [{ type: 'number' }, { type: 'string' }] },
+                  to: { anyOf: [{ type: 'number' }, { type: 'string' }] },
+                },
+              },
+            },
+            interval: {
+              type: 'string',
+              enum: ['day', 'week', 'month', 'year'],
+            },
+            prefix: { type: 'string' },
+            missing: { type: 'boolean' },
+            order: { enum: ['count', 'value', 'measure'] },
+            measure: {
+              type: 'object',
+              properties: {
+                avg: { type: 'string' },
+                min: { type: 'string' },
+                max: { type: 'string' },
+                sum: { type: 'string' },
+              },
             },
           },
           required: ['by'],
         },
+        description: grammarDescription('query', 'facets'),
+      },
+      timeZone: {
+        type: 'string',
+        description: grammarDescription('query', 'timeZone'),
+      },
+      let: {
+        type: 'object',
+        properties: {},
+        description: grammarDescription('query', 'let'),
       },
       page: {
         type: 'object',
         properties: {
-          number: { type: 'integer', description: '0-based page number.' },
-          size: { type: 'integer', description: 'Number of items per page.' },
-          generation: {
+          number: {
             type: 'integer',
-            description:
-              'Optional. Specifies the realm generation for consistent pagination if data can change.',
+            description: grammarDescription('page', 'number'),
+          },
+          size: {
+            type: 'integer',
+            description: grammarDescription('page', 'size'),
+          },
+          total: {
+            enum: ['capped', 'exact', 'none'],
+            description: grammarDescription('page', 'total'),
           },
         },
-        required: ['number', 'size'],
       },
     },
   });

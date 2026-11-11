@@ -86,6 +86,15 @@ export interface CardAPIForMatching {
 // couldn't actually resolve.
 export type MatchResult = 'match' | 'no-match' | 'unresolvable';
 
+// Inside the matcher a comparison has a fourth outcome: `unknown`, SQL's NULL.
+// The server compares a card with no value at a path as neither true nor
+// false, and `not`, `every` and `any` carry that through, so neither
+// `eq: { f: 'x' }` nor `not: { eq: { f: 'x' } }` returns a card with no `f`.
+// A list field is different: its filter holds when SOME element satisfies
+// it, which is plainly true or false, so `not` keeps an empty list. At the
+// top `unknown` is a `no-match`, as a NULL WHERE drops the row.
+type Truth = MatchResult | 'unknown';
+
 const GENERAL_SORT_FIELDS = new Set(['lastModified', 'createdAt', 'cardURL']);
 
 // Operators the matcher can replicate in JS. `matches` (full-text) and any
@@ -171,11 +180,32 @@ function operatorPathsClientEvaluable(
   });
 }
 
+// Whether a filter holds a relative date (`now-1d/d`) anywhere. The matcher
+// reckons one in UTC; a search answered in another zone (`meta.timeZone`)
+// leaves such a filter to the server.
+export function readsRelativeDates(filter: unknown, depth = 0): boolean {
+  if (depth > 64) return false;
+  if (typeof filter === 'string') return isRelativeDate(filter);
+  if (filter == null || typeof filter !== 'object') return false;
+  return Object.values(filter as Record<string, unknown>).some((v) =>
+    readsRelativeDates(v, depth + 1),
+  );
+}
+
 export function matchInstanceAgainstFilter(
   instance: BaseDef,
   filter: Filter,
   api: CardAPIForMatching,
 ): MatchResult {
+  let truth = evaluate(instance, filter, api);
+  return truth === 'unknown' ? 'no-match' : truth;
+}
+
+function evaluate(
+  instance: BaseDef,
+  filter: Filter,
+  api: CardAPIForMatching,
+): Truth {
   // A node may carry an `on`/`type` that gates which instances the predicate
   // applies to, mirroring the server's `every([typeCondition, …])` wrapping.
   // `on` takes precedence over `type` for the gate, matching `filterCondition`.
@@ -197,17 +227,13 @@ export function matchInstanceAgainstFilter(
   }
 
   if (isEveryFilter(filter)) {
-    return combineAnd(
-      filter.every.map((f) => matchInstanceAgainstFilter(instance, f, api)),
-    );
+    return combineAnd(filter.every.map((f) => evaluate(instance, f, api)));
   }
   if (isAnyFilter(filter)) {
-    return combineOr(
-      filter.any.map((f) => matchInstanceAgainstFilter(instance, f, api)),
-    );
+    return combineOr(filter.any.map((f) => evaluate(instance, f, api)));
   }
   if (isNotFilter(filter)) {
-    return negate(matchInstanceAgainstFilter(instance, filter.not, api));
+    return negate(evaluate(instance, filter.not, api));
   }
   if ('eq' in filter) {
     return combineAnd(
@@ -259,6 +285,11 @@ interface PathResolution {
   // `linksToMany` target not in the Store). Lets predicates report
   // `unresolvable` instead of a false `no-match`.
   sawUnresolvable: boolean;
+  // True if the path runs through a list field (containsMany / linksToMany),
+  // at the leaf or before it. A filter on such a path asks whether some
+  // element matches, which is never unknown; on a path with no list a missing
+  // value makes a comparison unknown.
+  plural?: boolean;
 }
 
 // Client-side counterpart to the engine's `getField` synthetic-key shim
@@ -323,6 +354,7 @@ function resolvePath(
 
   // Walk interior segments, descending into contained / linked instances.
   let sawUnresolvable = false;
+  let plural = false;
   // Count branches that bottom out at a null/unset interior segment. The
   // server's JSON-path traversal yields a NULL leaf in that case (e.g.
   // `search_doc -> 'bestFriend' -> 'name'` with `bestFriend` null is SQL
@@ -355,6 +387,9 @@ function resolvePath(
       }
       let isPlural =
         field.fieldType === 'containsMany' || field.fieldType === 'linksToMany';
+      if (isPlural) {
+        plural = true;
+      }
       let isPrimitiveCard = (api.primitive as any) in field.card;
       // Can't traverse deeper into a primitive value.
       if (isPrimitiveCard) {
@@ -407,6 +442,9 @@ function resolvePath(
     let queryable = api.getQueryableValue(field, raw);
     let isPlural =
       field.fieldType === 'containsMany' || field.fieldType === 'linksToMany';
+    if (isPlural) {
+      plural = true;
+    }
     if (isPlural && Array.isArray(queryable)) {
       values.push(...queryable);
     } else {
@@ -414,7 +452,7 @@ function resolvePath(
     }
   }
 
-  return { values, leafField, sawUnresolvable };
+  return { values, leafField, sawUnresolvable, plural };
 }
 
 // Equivalent spellings of a reference value, mirroring the index engine's
@@ -485,12 +523,13 @@ function matchEq(
   path: string,
   value: any,
   api: CardAPIForMatching,
-): MatchResult {
-  let { values, leafField, sawUnresolvable } = resolvePath(instance, path, api);
-  // `eq: null` compiles to `IS NULL` on the server, which matches a field whose
-  // queryable value is null/absent.
+): Truth {
+  let resolution = resolvePath(instance, path, api);
+  let { leafField } = resolution;
+  // `eq: null` (and `missing`) is the card having no value there. It is true
+  // or false, never unknown.
   if (value === null) {
-    return existential(values, sawUnresolvable, (lv) => lv == null);
+    return noValue(resolution);
   }
   let formatted = formatValue(leafField, value, api);
   // Exact match, including for reference (`id`/`url`) leaves: the server's
@@ -498,9 +537,9 @@ function matchEq(
   // served by the `@>` GIN path) and applies canonical-RRI tolerance to `in`
   // filters only. Mirror that here — tolerant `eq` would diverge from the
   // authoritative search response during client reconciliation.
-  return existential(values, sawUnresolvable, (leafValue) =>
-    isEqual(leafValue, formatted),
-  );
+  return existential(resolution, (leafValue) => isEqual(leafValue, formatted), {
+    unknownWhenMissing: true,
+  });
 }
 
 function matchIn(
@@ -508,24 +547,37 @@ function matchIn(
   path: string,
   rawValues: any[],
   api: CardAPIForMatching,
-): MatchResult {
+): Truth {
   // The server compiles an empty `in` list to FALSE.
   if (rawValues.length === 0) {
     return 'no-match';
   }
-  let { values, leafField, sawUnresolvable } = resolvePath(instance, path, api);
+  let resolution = resolvePath(instance, path, api);
+  let { leafField } = resolution;
   let hasNull = rawValues.some((v) => v === null);
   let formatted = rawValues
     .filter((v) => v !== null)
     .map((v) => formatValue(leafField, v, api));
+  if (hasNull && resolution.plural) {
+    // On a list, the null member is "no element has a value", as `eq: null`.
+    return combineOr([
+      noValue(resolution),
+      existential(resolution, (leafValue) =>
+        formatted.some((fv) =>
+          leafMatches(leafValue, fv, path, api.virtualNetwork),
+        ),
+      ),
+    ]);
+  }
   return existential(
-    values,
-    sawUnresolvable,
+    resolution,
     (leafValue) =>
       (hasNull && leafValue == null) ||
       formatted.some((fv) =>
         leafMatches(leafValue, fv, path, api.virtualNetwork),
       ),
+    // With null in the list a missing value is a match, not unknown.
+    { unknownWhenMissing: !hasNull },
   );
 }
 
@@ -534,19 +586,20 @@ function matchContains(
   path: string,
   value: any,
   api: CardAPIForMatching,
-): MatchResult {
-  let { values, leafField, sawUnresolvable } = resolvePath(instance, path, api);
-  // Server treats `contains: null` like `eq: null` (IS NULL).
+): Truth {
+  let resolution = resolvePath(instance, path, api);
+  let { leafField } = resolution;
+  // Server treats `contains: null` like `eq: null`.
   if (value === null) {
-    return existential(values, sawUnresolvable, (lv) => lv == null);
+    return noValue(resolution);
   }
   let formatted = formatValue(leafField, value, api);
   let needle = String(formatted).toLowerCase();
   // Mirrors the server's case-insensitive `ILIKE %value%` substring match.
   return existential(
-    values,
-    sawUnresolvable,
+    resolution,
     (lv) => typeof lv === 'string' && lv.toLowerCase().includes(needle),
+    { unknownWhenMissing: true },
   );
 }
 
@@ -555,8 +608,9 @@ function matchRange(
   path: string,
   constraints: RangeFilterValue,
   api: CardAPIForMatching,
-): MatchResult {
-  let { values, leafField, sawUnresolvable } = resolvePath(instance, path, api);
+): Truth {
+  let resolution = resolvePath(instance, path, api);
+  let { leafField } = resolution;
   let formattedConstraints = Object.entries(constraints).map(
     ([operator, bound]) => {
       if (bound == null) {
@@ -572,14 +626,18 @@ function matchRange(
       ] as [RangeOperator, any];
     },
   );
-  return existential(values, sawUnresolvable, (leafValue) => {
-    if (leafValue == null) {
-      return false;
-    }
-    return formattedConstraints.every(([operator, bound]) =>
-      compareRange(leafValue, operator, bound),
-    );
-  });
+  return existential(
+    resolution,
+    (leafValue) => {
+      if (leafValue == null) {
+        return false;
+      }
+      return formattedConstraints.every(([operator, bound]) =>
+        compareRange(leafValue, operator, bound),
+      );
+    },
+    { unknownWhenMissing: true },
+  );
 }
 
 function compareRange(
@@ -612,45 +670,79 @@ function formatValue(
   return api.formatQueryValue(leafField, value);
 }
 
+// No value at the path, as the server's `eq: null` reads it. On a scalar path
+// the leaf is null or unset. On a path through a list no element holds a
+// value, so an empty list (and a list of nulls) is missing; `exists`, its
+// `not`, is some element having one.
+function noValue(resolution: PathResolution): Truth {
+  if (!resolution.plural) {
+    return existential(resolution, (lv) => lv == null);
+  }
+  if (resolution.values.some((v) => v != null)) {
+    return 'no-match';
+  }
+  return resolution.sawUnresolvable ? 'unresolvable' : 'match';
+}
+
+// `unknownWhenMissing`: the comparison is with a value (`eq: 'x'`, a range),
+// so on a path with no list a card with no value there is unknown rather
+// than a no-match (SQL compares NULL as neither true nor false).
 function existential(
-  values: any[],
-  sawUnresolvable: boolean,
+  resolution: PathResolution,
   predicate: (value: any) => boolean,
-): MatchResult {
+  { unknownWhenMissing = false }: { unknownWhenMissing?: boolean } = {},
+): Truth {
+  let { values, sawUnresolvable, plural } = resolution;
   if (values.some(predicate)) {
     return 'match';
   }
-  return sawUnresolvable ? 'unresolvable' : 'no-match';
+  if (sawUnresolvable) {
+    return 'unresolvable';
+  }
+  if (unknownWhenMissing && !plural && values.every((v) => v == null)) {
+    return 'unknown';
+  }
+  return 'no-match';
 }
 
-function combineAnd(results: MatchResult[]): MatchResult {
+// SQL's AND: false wins, then a value the client cannot read (which may be
+// false), then unknown.
+function combineAnd(results: Truth[]): Truth {
   if (results.some((r) => r === 'no-match')) {
     return 'no-match';
   }
   if (results.some((r) => r === 'unresolvable')) {
     return 'unresolvable';
   }
+  if (results.some((r) => r === 'unknown')) {
+    return 'unknown';
+  }
   return 'match';
 }
 
-function combineOr(results: MatchResult[]): MatchResult {
+// SQL's OR: true wins, then a value the client cannot read, then unknown.
+function combineOr(results: Truth[]): Truth {
   if (results.some((r) => r === 'match')) {
     return 'match';
   }
   if (results.some((r) => r === 'unresolvable')) {
     return 'unresolvable';
   }
+  if (results.some((r) => r === 'unknown')) {
+    return 'unknown';
+  }
   return 'no-match';
 }
 
-function negate(result: MatchResult): MatchResult {
+// NOT of unknown is unknown, as in SQL.
+function negate(result: Truth): Truth {
   if (result === 'match') {
     return 'no-match';
   }
   if (result === 'no-match') {
     return 'match';
   }
-  return 'unresolvable';
+  return result;
 }
 
 function instanceIsType(

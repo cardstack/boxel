@@ -574,7 +574,7 @@ export interface RenderResponse extends PrerenderMeta {
 
 // `ErrorEntry` lives in `./error.ts` alongside the `SerializedError` it wraps;
 // re-exported here so barrel consumers reach it unchanged.
-export type { ErrorEntry } from './error.ts';
+export type { ErrorEntry, SearchRefusal } from './error.ts';
 
 // CS-10872: attached to timeout-class RenderErrors so the persisted
 // error document tells operators *where* the time went. All fields
@@ -1918,6 +1918,7 @@ export {
   VECTOR_SEARCH_DEFAULTS,
   setVectorSearchSettings,
   vectorSearchSettings,
+  vectorStoreFor,
   type VectorSearchSettings,
 } from './vector-store.ts';
 export type { NearReport } from './vector-query.ts';
@@ -1926,6 +1927,7 @@ export * from './vector-sidecar.ts';
 export * from './search-doc-spill.ts';
 export * from './index-structure.ts';
 export * from './db.ts';
+export * from './sql-literal.ts';
 export * from './tasks/index.ts';
 export * from './worker.ts';
 export * from './stream.ts';
@@ -1944,23 +1946,45 @@ export * from './prerender-headers.ts';
 export * from './lint-headers.ts';
 export * from './query.ts';
 export * from './query-signature.ts';
+export * from './type-reference.ts';
 export * from './instance-filter-matcher.ts';
+export * from './time-zone.ts';
 export * from './search-utils.ts';
 export * from './search-shape.ts';
 export * from './search-resource-helpers.ts';
 import type { SearchEntryScope } from './search-entry.ts';
 
 export * from './search-entry.ts';
+export * from './search-entry-union.ts';
+export * from './realm-union.ts';
 export * from './search-bounds.ts';
 export * from './log-query.ts';
 export {
   parseLogLine,
+  parseISOTimeAsUTC,
+  logTimeOrNull,
   syncLogFile,
+  syncLogLineIndex,
+  appendThroughLogIndex,
+  markLogRewritten,
+  logFileSource,
+  logLineSyncStats,
   isLogFileURL,
+  type LogFileReader,
+  type LogFileSource,
   type LogLineIndexHost,
 } from './log-line-index.ts';
-export * from './rerank-score.ts';
-export { barePath, looksLikeLabel, mapQueryPaths } from './query-syntax.ts';
+export * from './card-operations/log-line-policy.ts';
+export { ensureLogPartition, dropLogPartition } from './log-line-partitions.ts';
+export {
+  assertAuthoredQuerySpelling,
+  barePath,
+  looksLikeLabel,
+  lowerQuery,
+  MIXED_SPELLING,
+  mapQueryPaths,
+  usesNewSyntax,
+} from './query-syntax.ts';
 export * from './link-shape-policy.ts';
 export * from './ttl-response-cache.ts';
 export * from './card-document-cache.ts';
@@ -2272,6 +2296,16 @@ export type getCards<T extends CardDef | FileDef = CardDef> = (
   instancesByRealm: { realm: string; cards: T[] }[];
   isLoading: boolean;
   meta: QueryResultsMeta;
+  // How many rows the query matches (`meta.page.total`); `undefined` when no
+  // count is known. Compare it with `instances.length` before reducing.
+  totalMatchCount: number | undefined;
+  // More rows match than `instances` holds: page on with
+  // `page: { size, number }` while it is true.
+  hasMore: boolean;
+  // The rows were cut short by a default page the query never asked for (a
+  // card search naming no page gets the first 100); `meta.warnings` then
+  // holds `default-page-truncated`.
+  isTruncated: boolean;
 };
 
 export interface CreateOptions {
@@ -2602,3 +2636,6 @@ export {
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
 export * from './search-intent.ts';
+export * from './facet-declarations.ts';
+export * from './facet-index.ts';
+export * from './facet-declaration-change.ts';

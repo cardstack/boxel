@@ -191,19 +191,25 @@ const tests = Object.freeze({
       partial: 'crè',
     });
   },
-  'assertQuery accepts a typeahead filter and rejects a non-string one': async (
-    assert,
-  ) => {
-    assertQuery({ filter: { on: sampleRef, typeahead: 'steve jo' } });
-    assert.throws(
-      () => assertQuery({ filter: { typeahead: 3 } }),
-      /typeahead must be a string/,
-    );
-    assert.throws(
-      () => assertQuery({ filter: { typeahead: 'x', matches: 'y' } }),
-      /only one operator/,
-    );
-  },
+  'assertQuery accepts type-ahead as a title-scoped prefix matches and refuses typeahead':
+    async (assert) => {
+      assertQuery({
+        filter: {
+          on: sampleRef,
+          matches: 'steve jo',
+          prefix: true,
+          scope: 'title',
+        },
+      });
+      assert.throws(
+        () => assertQuery({ filter: { on: sampleRef, typeahead: 'steve jo' } }),
+        /"typeahead" is not a filter operator; write type-ahead as \{ matches, prefix: true, scope: 'title' \}/,
+      );
+      assert.throws(
+        () => assertQuery({ filter: { typeahead: 'x', matches: 'y' } }),
+        /"typeahead" is not a filter operator/,
+      );
+    },
 
   'typeAheadWords splits on anything but letters and digits': async (
     assert,

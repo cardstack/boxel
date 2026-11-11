@@ -1,6 +1,14 @@
+import { THIS_BINDING, bindingReference } from './binding-reference.ts';
 import { codeRefWithAbsoluteIdentifier, type CodeRef } from './code-ref.ts';
-import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
+import {
+  isPrefixForm,
+  rri,
+  type RealmResourceIdentifier,
+} from './realm-identifiers.ts';
+import { REALM_TOKEN, resolveTypeReferences } from './type-reference.ts';
 import { CARD_INSTANCE_FILE_KEY } from './search-doc-keys.ts';
+import { normalizeRelationships } from './relationship-utils.ts';
+import { resolveRRIReference } from './url.ts';
 import { queryFieldDefaultPageSize } from './search-bounds.ts';
 import { internalSortKeyIn } from './internal-sort-keys.ts';
 import { InvalidQueryError } from './invalid-query-error.ts';
@@ -12,6 +20,12 @@ import type {
   ResourceID,
 } from './resource-types.ts';
 import {
+  assertAuthoredQuerySpelling,
+  RERANK_REFUSAL,
+  usesNewSyntax,
+} from './query-syntax.ts';
+import {
+  assertQuery,
   buildQueryParamValue,
   isAnyFilter,
   isCardTypeFilter,
@@ -23,9 +37,10 @@ import {
   type QueryWithInterpolations,
 } from './query.ts';
 
-// `near` belongs here too: a `near: '$this.embedding'` sort on a card with no
-// embedding has nothing to rank by, so the field resolves to no cards rather
-// than to an unranked list.
+// An operator whose value an interpolation left empty: the field resolves to
+// no cards, never to every card of its type. `near` belongs here too: a
+// `near: '$this.embedding'` sort on a card with no embedding has nothing to
+// rank by, so the field resolves to no cards rather than to an unranked list.
 const EMPTY_PREDICATE_KEYS = new Set([
   'near',
   'eq',
@@ -34,10 +49,42 @@ const EMPTY_PREDICATE_KEYS = new Set([
   'range',
   'any',
   'every',
+  'matches',
+  'pattern',
+  'regex',
 ]);
 
+// The operators for which an interpolation reading null is the same as one
+// reading nothing. There is no text to search for, no glob to match and no
+// vector to rank by, so the field resolves to no cards. `eq` is not here: an
+// `eq` reading null finds the cards with no value there, as `eq: null` always
+// has (kept for compatibility).
+const NULL_IS_NOTHING_KEYS = new Set(['near', 'matches', 'pattern', 'regex']);
+
+// The filter and sort members that name an operator, so an interpolated value
+// knows which operator it sits under, however deep (`near: { embedding: { to:
+// '$this.embedding' } }` is under `near`).
+const OPERATOR_KEYS = new Set([
+  ...EMPTY_PREDICATE_KEYS,
+  'not',
+  'boost',
+  'linkedFrom',
+]);
+
+// An interpolated value as plain data. A card's own list (a `containsMany`) is
+// a tracked array on the host, which cannot be cloned or serialized as the
+// query is passed along, so lists are copied element by element.
+function toPlainValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return Array.from(value, (entry) => toPlainValue(entry));
+  }
+  return value;
+}
+
 export const THIS_INTERPOLATION_PREFIX = '$this.';
-export const THIS_REALM_TOKEN = '$REALM';
+// The query's own realm, as a whole value (`realm: '$REALM'`) here and as a
+// module's root (`$REALM/product#Product`) in type-reference.ts.
+export const THIS_REALM_TOKEN = REALM_TOKEN;
 
 function isInterpolationToken(value: unknown): boolean {
   return (
@@ -82,6 +129,14 @@ export function normalizeQueryDefinition({
   relativeTo,
   resolveRealmForReference,
 }: NormalizeQueryDefinitionParams): NormalizedQueryDefinitionResult | null {
+  // `rerank` is the engine's form of a sort entry with `top`, as `_expr`
+  // is of an expression sort: no field query writes either
+  if (Object.prototype.hasOwnProperty.call(queryDefinition ?? {}, 'rerank')) {
+    throw new InvalidQueryError(
+      `${fieldName}: ${RERANK_REFUSAL}`,
+      'unknown-key',
+    );
+  }
   let internal = internalSortKeyIn(
     (queryDefinition as { sort?: unknown }).sort,
   );
@@ -91,9 +146,28 @@ export function normalizeQueryDefinition({
       'unknown-key',
     );
   }
-  let workingQuery: QueryWithInterpolations = JSON.parse(
-    JSON.stringify(queryDefinition),
-  );
+  let strict = usesNewSyntax(queryDefinition);
+  // An author's definition in the newer spelling anchors its type with a
+  // top-level `type`, never the older `on` (ADR 022 §1.7).
+  assertAuthoredQuerySpelling(queryDefinition, fieldName);
+  // Its type references name modules in the card's realm, written `$REALM/`:
+  // the realm in its canonical form, prefix form for a mapped one.
+  let typeRealm =
+    resource?.id && isPrefixForm(resource.id)
+      ? resolveRRIReference(`${THIS_REALM_TOKEN}/`, rri(resource.id))
+      : realmURL.href;
+  let workingQuery: QueryWithInterpolations;
+  try {
+    workingQuery = resolveTypeReferences(
+      JSON.parse(JSON.stringify(queryDefinition)),
+      { realm: typeRealm },
+    );
+  } catch (err: unknown) {
+    if (err instanceof InvalidQueryError) {
+      throw new InvalidQueryError(`${fieldName}: ${err.message}`, err.code);
+    }
+    throw err;
+  }
   let queryAny = workingQuery as Record<string, any>;
   let aborted = false;
   let basePath =
@@ -110,6 +184,22 @@ export function normalizeQueryDefinition({
     }
   }
 
+  // A card's own value is text, never a reference: one that reads as a
+  // binding the query declares ("$sofa.priceMin") stands as its text.
+  let declared = new Set(
+    queryAny.let && typeof queryAny.let === 'object'
+      ? Object.keys(queryAny.let)
+      : [],
+  );
+  let asLiteral = (value: unknown): unknown =>
+    declared.size === 0
+      ? value
+      : Array.isArray(value)
+        ? value.map(asLiteral)
+        : bindingReference(value, declared)
+          ? { $literal: value }
+          : value;
+
   let resolveInterpolationPath = (path: string) => {
     if (!basePath) {
       return path;
@@ -123,16 +213,33 @@ export function normalizeQueryDefinition({
     }
   };
 
-  const resolveInterpolatedValue = (path: string, context?: string) => {
+  const resolveInterpolatedValue = (
+    path: string,
+    context?: string,
+    operator?: string,
+  ) => {
     let value = resolvePathValue(resolveInterpolationPath(path));
-    if (value === undefined) {
+    let nullIsNothing = Boolean(operator && NULL_IS_NOTHING_KEYS.has(operator));
+    if (value === undefined || (value === null && nullIsNothing)) {
+      // Under an operator, a value that isn't there is no cards, whatever
+      // else the node holds: another path of an `eq` (`{ eq: { a: '$this.x',
+      // b: 'y' } }` is not `{ eq: { b: 'y' } }`), another entry of an `in`
+      // list, a `minSimilarity`, a `within`.
+      if (operator && EMPTY_PREDICATE_KEYS.has(operator)) {
+        aborted = true;
+      }
       markEmptyPredicate(context);
       return undefined;
     }
-    return value;
+    return asLiteral(toPlainValue(value));
   };
 
-  const interpolateNode = (node: any, context?: string): any => {
+  // `operator` is the nearest operator above the node (see OPERATOR_KEYS).
+  const interpolateNode = (
+    node: any,
+    context?: string,
+    operator?: string,
+  ): any => {
     if (aborted) {
       return undefined;
     }
@@ -141,11 +248,9 @@ export function normalizeQueryDefinition({
       if (node === THIS_REALM_TOKEN) {
         return realmURL.href;
       }
-      if (node.startsWith(THIS_INTERPOLATION_PREFIX)) {
-        return resolveInterpolatedValue(
-          node.slice(THIS_INTERPOLATION_PREFIX.length),
-          context,
-        );
+      let ref = bindingReference(node, [THIS_BINDING]);
+      if (ref?.path !== undefined) {
+        return resolveInterpolatedValue(ref.path, context, operator);
       }
       return node;
     }
@@ -153,7 +258,7 @@ export function normalizeQueryDefinition({
     if (Array.isArray(node)) {
       let result: any[] = [];
       for (let entry of node) {
-        let interpolated = interpolateNode(entry, context);
+        let interpolated = interpolateNode(entry, context, operator);
         if (interpolated !== undefined) {
           result.push(interpolated);
         }
@@ -168,7 +273,11 @@ export function normalizeQueryDefinition({
     if (node && typeof node === 'object') {
       let result: Record<string, any> = {};
       for (let [key, value] of Object.entries(node)) {
-        let interpolated = interpolateNode(value, key);
+        let interpolated = interpolateNode(
+          value,
+          key,
+          OPERATOR_KEYS.has(key) ? key : operator,
+        );
         if (interpolated !== undefined) {
           result[key] = interpolated;
         }
@@ -207,6 +316,28 @@ export function normalizeQueryDefinition({
       delete queryAny.page;
     } else {
       queryAny.page = interpolatedPage;
+    }
+  }
+
+  // A `let` binding's query reads the card's values as the outer query does.
+  // It names its own type, so nothing is anchored here.
+  if (queryAny.let && typeof queryAny.let === 'object') {
+    for (let binding of Object.values(queryAny.let as Record<string, any>)) {
+      let from = binding?.from;
+      if (!from || typeof from !== 'object') {
+        continue;
+      }
+      for (let member of ['filter', 'sort', 'page']) {
+        if (from[member] === undefined) {
+          continue;
+        }
+        let interpolated = interpolateNode(from[member], member);
+        if (interpolated === undefined) {
+          delete from[member];
+        } else {
+          from[member] = interpolated;
+        }
+      }
     }
   }
 
@@ -329,17 +460,46 @@ export function normalizeQueryDefinition({
     undefined,
   );
 
+  // A top-level `type` narrows the field to that type (a subtype of the
+  // field's), so the clauses are anchored on it rather than on the field's
+  // type. The field's own type still holds as well: a type outside it would
+  // otherwise link cards the field cannot hold, so such a query finds no
+  // cards. (Telling the two apart needs the type's ancestry, which this
+  // module cannot read.)
+  // The query as the strict check reads it: as written, with the card's
+  // values in place, naming the type it is anchored on at the top (which is
+  // what the anchors added below mean).
+  let asChecked: Record<string, any> | undefined = strict
+    ? JSON.parse(JSON.stringify(workingQuery))
+    : undefined;
+
+  let declaredType =
+    queryAny.type && typeof queryAny.type === 'object'
+      ? codeRefWithAbsoluteIdentifier(queryAny.type, relativeToBase, undefined)
+      : undefined;
+  if (declaredType) {
+    queryAny.type = declaredType;
+  }
+  let anchorRef = declaredType ?? targetRef;
+  let narrowed =
+    declaredType !== undefined && !sameCodeRef(declaredType, targetRef);
+
   let filter = queryAny.filter as Record<string, any> | undefined;
   if (!filter || Object.keys(filter).length === 0) {
-    queryAny.filter = { type: targetRef };
+    queryAny.filter = narrowed
+      ? { every: [{ type: targetRef }, { type: anchorRef }] }
+      : { type: anchorRef };
   } else {
-    injectOnIntoLeafFilters(filter, targetRef);
+    injectOnIntoLeafFilters(filter, anchorRef);
+    if (narrowed) {
+      queryAny.filter = { every: [{ type: targetRef }, filter] };
+    }
   }
 
   if (Array.isArray(queryAny.sort)) {
     queryAny.sort = queryAny.sort.map((entry: any) => {
       if (entry && typeof entry === 'object' && !('on' in entry)) {
-        return { ...entry, on: targetRef };
+        return { ...entry, on: anchorRef };
       }
       return entry;
     });
@@ -364,10 +524,97 @@ export function normalizeQueryDefinition({
     queryAny.page = page;
   }
 
+  // A field query in the newer spelling is checked as strictly as any other
+  // query in it: a member the grammar lacks is refused, not read without it.
+  // It is checked as it will run, with the card's values in place.
+  if (asChecked) {
+    asChecked.type = anchorRef;
+    asChecked.page = JSON.parse(JSON.stringify(queryAny.page));
+    try {
+      assertQuery(asChecked);
+    } catch (err: unknown) {
+      if (err instanceof InvalidQueryError) {
+        throw new InvalidQueryError(`${fieldName}: ${err.message}`, err.code);
+      }
+      throw err;
+    }
+  }
+
   return { query: workingQuery as Query, realms: resolvedRealms };
 }
 
+export interface ResourcePathOptions {
+  // The canonical spelling of an id read from a link (ADR 002): a URL in a
+  // realm with a registered prefix reads in prefix form. Supplied by the
+  // caller, which holds the realm mappings; absent, an id reads as resolved.
+  canonicalId?: (id: string) => string;
+}
+
 export function getValueForResourcePath(
+  resource: LooseCardResource | FileMetaResource,
+  path: string,
+  opts: ResourcePathOptions = {},
+): any {
+  let value = getAttributeValueForPath(resource, path);
+  if (value !== undefined) {
+    return value;
+  }
+  return getLinkIdForPath(resource, path, opts);
+}
+
+// `<link>.id` reads the id of the card a `linksTo` field links to, and of each
+// card a `linksToMany` links to as a list. A link with no target reads nothing.
+function getLinkIdForPath(
+  resource: LooseCardResource | FileMetaResource,
+  path: string,
+  { canonicalId }: ResourcePathOptions,
+): any {
+  if (!path.endsWith('.id') || !resource.relationships) {
+    return undefined;
+  }
+  let linkPath = path.slice(0, -'.id'.length);
+  let idOf = (relationship: Relationship | undefined): string | undefined => {
+    let self = relationship?.links?.self;
+    let data = relationship?.data as { id?: unknown } | null | undefined;
+    let dataId =
+      data && !Array.isArray(data) && typeof data.id === 'string'
+        ? data.id
+        : undefined;
+    let reference = typeof self === 'string' && self ? self : dataId;
+    if (!reference) {
+      return undefined;
+    }
+    let resolved = resolveRRIReference(
+      reference,
+      resource.id ? rri(resource.id) : undefined,
+    );
+    return canonicalId ? canonicalId(resolved) : resolved;
+  };
+  let relationships = normalizeRelationships(resource.relationships);
+  let single = relationships[linkPath];
+  if (single) {
+    let id = idOf(single);
+    if (id !== undefined) {
+      return id;
+    }
+  }
+  let members = Object.keys(relationships)
+    .filter((key) => /^\d+$/.test(key.slice(linkPath.length + 1)))
+    .filter((key) => key.startsWith(`${linkPath}.`))
+    .sort(
+      (a, b) =>
+        Number(a.slice(linkPath.length + 1)) -
+        Number(b.slice(linkPath.length + 1)),
+    );
+  if (members.length === 0) {
+    return undefined;
+  }
+  return members
+    .map((key) => idOf(relationships[key]))
+    .filter((id): id is string => id !== undefined);
+}
+
+function getAttributeValueForPath(
   resource: LooseCardResource | FileMetaResource,
   path: string,
 ): any {
@@ -431,6 +678,14 @@ export function buildQuerySearchURL(
   return searchURL.href;
 }
 
+function sameCodeRef(a: CodeRef, b: CodeRef): boolean {
+  let key = (ref: CodeRef) =>
+    'module' in ref && 'name' in ref
+      ? `${ref.module}#${ref.name}`
+      : JSON.stringify(ref);
+  return key(a) === key(b);
+}
+
 function injectOnIntoLeafFilters(
   filter: Record<string, any>,
   targetRef: any,
@@ -439,6 +694,11 @@ function injectOnIntoLeafFilters(
     return;
   }
   if ('not' in filter && filter.not && typeof filter.not === 'object') {
+    // The `not` itself is anchored: anchoring only what it negates would
+    // return every card of every other type ("not a Thing with this kind").
+    if (!filter.on) {
+      filter.on = targetRef;
+    }
     injectOnIntoLeafFilters(filter.not, targetRef);
     return;
   }

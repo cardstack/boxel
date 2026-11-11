@@ -334,13 +334,19 @@ export interface SearchResultError {
   };
 }
 
-type QueryFieldErrorType = 'authorization' | 'network' | 'unknown';
+type QueryFieldErrorType =
+  | 'authorization'
+  | 'network'
+  | 'invalid-query'
+  | 'unknown';
 
 type QueryFieldErrorDetail = {
   realm: string;
   type: QueryFieldErrorType;
   message: string;
   status?: number;
+  // An `invalid-query` refusal's code (`unknown-key`, …).
+  code?: string;
 };
 
 function absolutizeInstanceURL(
@@ -444,7 +450,6 @@ export class RealmIndexQueryEngine {
       labelFilter,
       grantFilter,
       grantsForType,
-      expressionOverTopWindow,
     } = searchEntryQuery;
     if (!columns) {
       throw new Error('searchColumns needs columns');
@@ -463,7 +468,10 @@ export class RealmIndexQueryEngine {
       ...(labelFilter ? { labelFilter } : {}),
       ...(grantFilter ? { grantFilter } : {}),
       ...(grantsForType ? { grantsForType } : {}),
-      ...(expressionOverTopWindow ? { expressionOverTopWindow } : {}),
+      readLogFile: this.#realm.readLogFileForQuery,
+      ...(searchEntryQuery.logAccess
+        ? { logAccess: searchEntryQuery.logAccess }
+        : {}),
     };
     let engine = this.#engineFor(opts);
     let plans = await engine.planColumns(type, columns);
@@ -511,9 +519,26 @@ export class RealmIndexQueryEngine {
     // 'instance', 'files' -> 'file', 'all'/absent -> 'all'.
     entryTypeScopeOverride?: 'instance' | 'file' | 'all',
   ): Promise<EntryCollectionDocument> {
+    let { results, meta } = await this.searchEntryRows(
+      searchEntryQuery,
+      opts,
+      entryTypeScopeOverride,
+    );
+    return await this.entriesFromRows(searchEntryQuery, results, meta, opts);
+  }
+
+  // The SQL half of `searchEntries`: the query's rows and meta. `over` is the
+  // realm the search reads, this realm unless the search reads a union of
+  // realms on this realm's database (realm-union.ts), whose rows each realm
+  // then makes its own entries of (`entriesFromRows`).
+  async searchEntryRows(
+    searchEntryQuery: SearchEntryQuery,
+    opts?: Options,
+    entryTypeScopeOverride?: 'instance' | 'file' | 'all',
+    over?: URL,
+  ): Promise<Awaited<ReturnType<IndexQueryEngine['search']>>> {
     let {
       itemQuery: query,
-      htmlQuery,
       fieldset,
       cardUrls,
       scope,
@@ -522,17 +547,20 @@ export class RealmIndexQueryEngine {
       grantFilter,
       grantsForType,
       exposeSortValues,
-      expressionOverTopWindow,
+      logAccess,
     } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
+      // A `let` binding read from a log syncs a log no pass has reached from
+      // its file, and reads only what a policy-scoped caller may.
+      readLogFile: this.#realm.readLogFileForQuery,
+      ...(logAccess ? { logAccess } : {}),
       ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
       ...(anonymizeStatistics ? { anonymizeStatistics } : {}),
       ...(labelFilter ? { labelFilter } : {}),
       ...(grantFilter ? { grantFilter } : {}),
       ...(grantsForType ? { grantsForType } : {}),
       ...(exposeSortValues ? { exposeSortValues } : {}),
-      ...(expressionOverTopWindow ? { expressionOverTopWindow } : {}),
     };
 
     // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one
@@ -545,7 +573,6 @@ export class RealmIndexQueryEngine {
       entryTypeScopeOverride ??
       (scope === 'cards' ? 'instance' : scope === 'files' ? 'file' : 'all');
 
-    let itemOnEveryRow = fieldset.item.kind !== 'none';
     let projection: SearchProjection = fieldset.html
       ? { kind: 'renderSet' }
       : { kind: 'dataOnly' };
@@ -566,16 +593,28 @@ export class RealmIndexQueryEngine {
     }
     let runSql = () =>
       this.#engineFor(opts).search(
-        new URL(this.#realm.url),
+        over ?? new URL(this.#realm.url),
         query,
         sqlOpts,
         projection,
         entryTypeScope,
       );
-    let { results, meta } = opts?.timings
+    return opts?.timings
       ? await opts.timings.time('sql', runSql)
       : await runSql();
+  }
 
+  // The entries of a search's rows, each row being one of this realm's cards
+  // or files: its renderings, item and links, and the document they make
+  // with `meta`.
+  async entriesFromRows(
+    searchEntryQuery: SearchEntryQuery,
+    results: Awaited<ReturnType<IndexQueryEngine['search']>>['results'],
+    meta: Awaited<ReturnType<IndexQueryEngine['search']>>['meta'],
+    opts?: Options,
+  ): Promise<EntryCollectionDocument> {
+    let { htmlQuery, fieldset } = searchEntryQuery;
+    let itemOnEveryRow = fieldset.item.kind !== 'none';
     // Resolve the htmlQuery's renderType CodeRefs to their `<module>/<name>`
     // keys once; the pure evaluator then runs per candidate rendering.
     let resolvedHtmlQuery = resolveHtmlQuery(htmlQuery, (ref) =>
@@ -629,7 +668,7 @@ export class RealmIndexQueryEngine {
         | number
         | null
         | undefined;
-      let rerankValue = (row as Record<string, unknown>)[RERANK_KEY] as
+      let windowValue = (row as Record<string, unknown>)[RERANK_KEY] as
         | number
         | null
         | undefined;
@@ -718,7 +757,7 @@ export class RealmIndexQueryEngine {
             nearSimilarity,
             blendScore,
             explanation,
-            rerankValue,
+            windowValue,
             collapseSize,
             sortValues,
             formulaValue,
@@ -874,7 +913,7 @@ export class RealmIndexQueryEngine {
           nearSimilarity,
           blendScore,
           explanation,
-          rerankValue,
+          windowValue,
           collapseSize,
           sortValues,
           formulaValue,
@@ -1474,20 +1513,50 @@ export class RealmIndexQueryEngine {
     // matches via its equivalent-spelling tolerance, and the resulting
     // `links.search` seed URL reconciles with the client's RRI-space rebuild
     // of the same query.
-    let normalized = normalizeQueryDefinition({
-      fieldDefinition,
-      queryDefinition,
-      resource,
-      realmURL,
-      fieldName,
-      fieldPath,
-      resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      // The realm mappings live here, not in the card: an entry naming a
-      // resource resolves to the realm holding it, so a field can target
-      // "wherever these references live".
-      resolveRealmForReference: (reference) =>
-        this.realmHrefForReference(reference),
-    });
+    let normalized: ReturnType<typeof normalizeQueryDefinition>;
+    try {
+      normalized = normalizeQueryDefinition({
+        fieldDefinition,
+        queryDefinition,
+        resource,
+        realmURL,
+        fieldName,
+        fieldPath,
+        resolvePathValue: (path) =>
+          getValueForResourcePath(resource, path, {
+            // A link's id reads in its canonical spelling (ADR 002), the
+            // spelling the index holds ids in.
+            canonicalId: (id) => this.#realm.virtualNetwork.unresolveURL(id),
+          }),
+        // The realm mappings live here, not in the card: an entry naming a
+        // resource resolves to the realm holding it, so a field can target
+        // "wherever these references live".
+        resolveRealmForReference: (reference) =>
+          this.realmHrefForReference(reference),
+      });
+    } catch (err: unknown) {
+      // A refused field query links no cards, and the field says why rather
+      // than failing the card that declares it.
+      if (err instanceof InvalidQueryError) {
+        this.#log.debug(
+          `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} was refused: ${err.message}`,
+        );
+        return {
+          results: [],
+          errors: [
+            {
+              realm: realmURL.href,
+              type: 'invalid-query',
+              code: err.code,
+              message: err.message,
+            },
+          ],
+          searchURL: '',
+          total: undefined,
+        };
+      }
+      throw err;
+    }
     if (!normalized) {
       return { results: [], errors: [], searchURL: '', total: undefined };
     }

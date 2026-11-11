@@ -77,23 +77,3 @@ export function matchSearchableRoutes(
   }
   return { matched, tails };
 }
-
-// Whether a filter path may cross a link into `nextSegment` because the link
-// declares `search: { include: [...] }` naming that field (see
-// `base/searchable.ts`, which keeps exactly the included fields beside the
-// link's id). Only the indexed card's own links include, and only one level:
-// the included value is the target's field as the target indexes it.
-export function linkIncludes(
-  search: unknown,
-  nextSegment: string | undefined,
-  depth: number,
-): boolean {
-  if (depth !== 0 || nextSegment === undefined) {
-    return false;
-  }
-  let include =
-    search && typeof search === 'object'
-      ? (search as { include?: unknown }).include
-      : undefined;
-  return Array.isArray(include) && include.includes(nextSegment);
-}

@@ -10,12 +10,13 @@ import type { VirtualNetwork } from './virtual-network.ts';
 
 // A spelling-tolerant identity signature for a query. Two queries that differ
 // only in how they spell module references (`on`/`type` code refs, sort `on`
-// refs) or reference-field filter values (`id`/`url` under `in`) — RRI prefix
-// vs real URL vs virtual alias — produce the same signature. The tolerance
-// mirrors the query engine's exactly: `in` on a reference field matches
-// equivalent spellings, while `eq` stays exact — so two `eq` queries that
-// differ in spelling are genuinely different queries (different result sets)
-// and keep different signatures.
+// refs) or reference-field filter values (`id`/`url` under `in` or `eq`) — RRI
+// prefix vs real URL vs virtual alias — produce the same signature. The
+// tolerance mirrors the query engine's exactly: `in` and `eq` on a reference
+// field match a card written in either form, so two such queries that differ
+// only in that spelling have one result set and share a signature. Every
+// other `eq` value, and `contains` and `range`, compare verbatim and keep
+// their spelling.
 //
 // The consumer is seed/live query reconciliation: a server-produced seed
 // query (built through the server's VirtualNetwork, URL-form refs) must be
@@ -51,7 +52,7 @@ function canonicalizeNode(
     let out: Record<string, unknown> = {};
     for (let [key, value] of Object.entries(node)) {
       if (
-        key === 'in' &&
+        (key === 'in' || key === 'eq') &&
         value &&
         typeof value === 'object' &&
         !Array.isArray(value)
@@ -61,7 +62,7 @@ function canonicalizeNode(
           virtualNetwork,
         );
       } else if (
-        (key === 'eq' || key === 'contains' || key === 'range') &&
+        (key === 'contains' || key === 'range') &&
         value &&
         typeof value === 'object' &&
         !Array.isArray(value)
@@ -90,7 +91,7 @@ function canonicalizeFieldValues(
   let out: Record<string, unknown> = {};
   for (let [path, value] of Object.entries(fields)) {
     // Only reference leaves get the equivalent-spelling fold — the engine
-    // compares every other `in` value verbatim.
+    // compares every other `in` and `eq` value verbatim.
     out[path] = isReferenceFilterField(path)
       ? canonicalizeReferenceValue(value, virtualNetwork)
       : value;

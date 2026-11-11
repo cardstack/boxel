@@ -317,6 +317,13 @@ export const FILTER_ARGUMENTS_RUN_ON_INPUT: ReadonlySet<string> = new Set([
   'ISERROR/1',
   'ISNA/1',
   'ISERR/1',
+  // Excel's value tests: the argument runs over the input,
+  // and an Excel error value raised by it is an answer, as in ISERROR.
+  'ISNUMBER/1',
+  'ISTEXT/1',
+  'ISLOGICAL/1',
+  'ISBLANK/1',
+  'ISNONTEXT/1',
   'ERROR_TYPE/1',
   'INDEX/2',
   'INDEX/3',

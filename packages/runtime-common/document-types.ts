@@ -81,8 +81,19 @@ export interface EntryCollectionDocument {
       realmTotals?: Record<string, number>;
       // A federated search's shape: per realm (each realm pages on its own,
       // sections in order of their best card) or merged (one global order
-      // and page).
-      federation?: { results: 'byRealm' | 'merged' };
+      // and page). `path`, on a merged search, says how it was answered:
+      // `union`, one statement over every realm (they share this server's
+      // index database), exact; or `merge`, each realm searched on its own
+      // and the answers merged, where scores order only approximately.
+      federation?: {
+        results: 'byRealm' | 'merged';
+        path?: 'union' | 'merge';
+      };
+      // A merged search over several realms sorted by a score (blend,
+      // relevance, text relevance, near, expression) orders them only
+      // approximately, since each realm scores its own matches: it says so
+      // with the `approximate-order` warning in `meta.warnings`. Ties are
+      // still broken deterministically.
       // Per value facet of a search over several realms: how far any count
       // may be short of the true one, because a realm answered only its top
       // values. 0 when every realm answered all of its values.
@@ -99,10 +110,9 @@ export interface EntryCollectionDocument {
         {
           status: 'ok' | 'refused' | 'timeout' | 'unavailable';
           code?: string;
+          // This realm's total; a lower bound when the `total-estimated`
+          // warning names this realm (or names none, so every realm gave it).
           total?: number;
-          // `total` is a lower bound for this realm: the query asked for
-          // `page.total: 'capped'` or `'none'` and the realm holds more.
-          totalIsEstimate?: boolean;
           // Whether this realm holds rows past the ones it answered with.
           hasMore?: boolean;
           ms?: number;

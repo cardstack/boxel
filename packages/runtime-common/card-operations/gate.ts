@@ -11,6 +11,8 @@ import { extensionOfName } from '../file-def-code-ref.ts';
 import { baseFileRef } from '../constants.ts';
 import { isModuleSource, policyFileDefCodeRef } from '../policy-file-def.ts';
 import { routesForField } from '../searchable-routes.ts';
+import { isLogFileURL } from '../log-line-index.ts';
+import { logLineTypeOf } from './log-line-policy.ts';
 import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
@@ -612,8 +614,22 @@ async function decide(
   }
   // The gate grants a file one behavior, the read of its stored bytes. What a
   // file def carries besides — its metadata `read`, its writes — is granted on
-  // nothing.
-  if (subject.kind === 'file' && base !== 'readSource') {
+  // nothing. A log is the exception, the other way round: its lines are
+  // granted per line on their realm-stamped actor (`log-line-policy.ts`), so
+  // the one write a grant reaches on it is the base log types' own `record`,
+  // which stamps the time and the actor where a caller cannot, and its raw
+  // bytes, which hold every caller's lines, are granted to no one.
+  // A log is addressed as a file or, where its extension is not in the
+  // platform's file table, as a stored path the gate would read as a card's.
+  let logTarget =
+    (subject.kind === 'file' || subject.kind === 'card') &&
+    isLogFileURL(subject.url.href);
+  let logRecord = logTarget && stampsItsLine(name, definition);
+  if (logTarget) {
+    if (!logRecord) {
+      return refuse('non-grantable');
+    }
+  } else if (subject.kind === 'file' && base !== 'readSource') {
     return refuse('unmatchable-target');
   }
   // The realm's config card and the card its policy key names together
@@ -637,7 +653,7 @@ async function decide(
   // will serve instead, which costs a file read and a definition lookup, so
   // none of that is paid until a policy is known to be there.
   let rowMatched: MatchedSubject | undefined;
-  if (base !== 'readSource') {
+  if (base !== 'readSource' && !logRecord) {
     let indexed = await indexedSubject(scope, subject);
     if (!indexed) {
       return refuse('unmatchable-target');
@@ -660,6 +676,11 @@ async function decide(
     return refuse('unmatchable-target');
   }
   let { types } = matchOn;
+  // Only the base log types' `record` stamps its line as this realm does: a
+  // type of the caller's choosing could declare one that doesn't.
+  if (logRecord && !isBaseLogTypeKey(types[0])) {
+    return refuse('non-grantable');
+  }
   notes?.typed(types[0]);
   let matched = await matchingGrants(
     policy,
@@ -748,7 +769,10 @@ async function decide(
     await admittedAs(scope, unconditional);
     return { kind: 'granted', grant: unconditional, matchedOn, ...lockCheck };
   }
-  if (isWrite(base)) {
+  // A log's `record` never opens the log, so there is nothing for the
+  // write lock to judge it by later: its grant is judged here, as a read's
+  // is, against the log as it is stored now.
+  if (isWrite(base) && !logRecord) {
     return {
       kind: 'pending',
       grants: matched,
@@ -2719,4 +2743,29 @@ function loadBxlMutation(): Promise<BxlMutationModule> {
     (module) => module as BxlMutationModule,
   );
   return bxlMutation;
+}
+
+// Whether `name` is the `record` the base log types declare: an `appendLine`
+// whose input program composes the line, reading `actor()` to stamp who
+// wrote it, so the caller writes only what happened.
+function stampsItsLine(name: string, definition: OperationDefinition): boolean {
+  return (
+    name === 'record' &&
+    definition.base === 'appendLine' &&
+    definition.input !== undefined &&
+    definition.readsActor === true
+  );
+}
+
+// Whether a type key (`<module>/<name>`) names base JSONLFile or LogFile.
+function isBaseLogTypeKey(key: string | undefined): boolean {
+  if (!key) return false;
+  let at = key.lastIndexOf('/');
+  return (
+    at > 0 &&
+    logLineTypeOf({
+      module: key.slice(0, at) as ResolvedCodeRef['module'],
+      name: key.slice(at + 1),
+    }) !== undefined
+  );
 }

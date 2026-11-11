@@ -138,6 +138,18 @@ export interface Reader {
   ) => Promise<TextFileRef | undefined>;
   readStream: (url: URL) => Promise<StreamFileRef | undefined>;
   mtimes: () => Promise<{ [url: string]: number }>;
+  // Bytes `[start, end)` of a file (to its end when `end` is omitted) and its
+  // size, by an HTTP range request, or undefined when there is no file. A
+  // range at or past the end reads nothing. What keeps a log's line index in
+  // step with it at the cost of what was appended (`log-line-index.ts`).
+  // Optional: a reader without it is read whole.
+  readRange?: (
+    url: URL,
+    start: number,
+    end?: number,
+  ) => Promise<
+    { bytes: Uint8Array; size: number; lastModified?: number } | undefined
+  >;
 }
 
 export interface JobInfo extends JSONTypes.Object {
@@ -846,6 +858,70 @@ export function getReader(
           response.headers.get('X-Boxel-Shimmed-Module')
             ? { isShimmed: true }
             : {}),
+        };
+      }),
+
+    readRange: (url: URL, start: number, end?: number) =>
+      withRetries('readRange', url, async (watchdog, progress) => {
+        let response: ResponseWithNodeStream;
+        try {
+          response = await Promise.race([
+            _fetch(url, {
+              headers: {
+                Accept: SupportedMimeType.CardSource,
+                Range: `bytes=${start}-${end === undefined ? '' : Math.max(start, end - 1)}`,
+              },
+              signal: watchdog.signal,
+            }),
+            watchdog.stalled,
+          ]);
+        } catch (error) {
+          progress.failedInTransfer = true;
+          throw error;
+        }
+        watchdog.stop();
+        let total = (header: string | null) => {
+          let m = header ? /\/(\d+)$/.exec(header) : null;
+          return m ? Number(m[1]) : undefined;
+        };
+        if (response.status === 416) {
+          await releaseBody(response);
+          let size = total(response.headers.get('content-range'));
+          return size === undefined
+            ? undefined
+            : { bytes: new Uint8Array(), size };
+        }
+        if (!servesFileAt(url, response)) {
+          await releaseBody(response);
+          return undefined;
+        }
+        let { lastModified } = await parseResponseMetadata(response, url);
+        if (end !== undefined && end <= start) {
+          await releaseBody(response);
+          let size = total(response.headers.get('content-range'));
+          return { bytes: new Uint8Array(), size: size ?? start, lastModified };
+        }
+        let withStream = response as ResponseWithNodeStream;
+        let bytes =
+          'nodeStream' in withStream && withStream.nodeStream
+            ? await fileContentToBytes({ content: withStream.nodeStream })
+            : new Uint8Array(await response.arrayBuffer());
+        if (response.status === 206) {
+          let size = total(response.headers.get('content-range'));
+          return {
+            bytes,
+            size: size ?? start + bytes.byteLength,
+            lastModified,
+          };
+        }
+        // A server that ignored the range answered the whole file.
+        return {
+          bytes: bytes.subarray(
+            Math.min(start, bytes.byteLength),
+            Math.min(end ?? bytes.byteLength, bytes.byteLength),
+          ),
+          size: bytes.byteLength,
+          lastModified,
         };
       }),
 

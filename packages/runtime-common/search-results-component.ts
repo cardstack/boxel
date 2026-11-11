@@ -2,7 +2,7 @@ import type { ComponentLike } from '@glint/template';
 
 import type { ResolvedCodeRef } from './code-ref.ts';
 import type { EntryCollectionDocument } from './document-types.ts';
-import type { ErrorEntry } from './error.ts';
+import type { ErrorEntry, SearchRefusal } from './error.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type {
   CardResource,
@@ -83,6 +83,13 @@ export interface SearchResultsYield {
   entriesQuery?: SearchEntryWireQuery;
   meta: EntryCollectionDocument['meta'];
   errors: ErrorEntry[] | undefined;
+  // The realm refused the query: its status, the grammar's `code` for the
+  // mistake (`unknown-key`, `limit-exceeded`, …) and its message, so a
+  // template can say why instead of showing no results. Absent otherwise.
+  refusal?: SearchRefusal;
+  // `meta.warnings`: what the realm did short of refusing (a binding cut to
+  // its limit, a page clamped, a rerank that kept the query's order).
+  warnings?: NonNullable<EntryCollectionDocument['meta']>['warnings'];
 }
 
 // The card-facing contract for the search component the host provides on
