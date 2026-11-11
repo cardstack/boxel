@@ -972,6 +972,14 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return this.getFileMetaItem('error', id);
   }
 
+  // The file-meta counterpart of `cardErrorEntries`.
+  fileMetaErrorEntries(): [string, CardErrorJSONAPI][] {
+    return [
+      ...this.#nonTrackedFileMetaInstanceErrors.entries(),
+      ...this.#fileMetaInstanceErrors.entries(),
+    ];
+  }
+
   delete(id: string): void {
     // A `.json` url addresses the file-meta identity, never a card: card ids
     // never carry an extension, while file-meta keeps its `.json`. The two

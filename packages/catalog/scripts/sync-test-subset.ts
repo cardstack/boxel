@@ -52,6 +52,7 @@ const manifestPath = join(catalogDir, 'test-subset.json');
 const subsetDir = join(catalogDir, 'test-subset');
 const cloneDir = join(catalogDir, 'contents');
 const externalsPath = join(repoRoot, 'packages/host/app/lib/externals.ts');
+const hostToolsPath = join(repoRoot, 'packages/host/app/tools/index.ts');
 
 // Served by the catalog realm, so its name must not look like a card or a
 // definition to the indexer.
@@ -64,6 +65,7 @@ const ALLOWED_PREFIXES = [
   '@cardstack/base/',
   '@cardstack/boxel-icons/',
   '@cardstack/boxel-ui/',
+  '@cardstack/pretui/',
 ];
 
 interface Manifest {
@@ -199,14 +201,26 @@ async function loadContents(manifest: Manifest) {
 
 function shimmedModules() {
   let source = readFileSync(externalsPath, 'utf8');
-  return new Set(
+  let shims = new Set(
     [...source.matchAll(/shimModule\(\s*'([^']+)'/g)].map((m) => m[1]),
   );
+  // Host tools are shimmed by name, under both their tools/ and their older
+  // commands/ path.
+  let tools = readFileSync(hostToolsPath, 'utf8');
+  for (let [, name] of tools.matchAll(
+    /shimHostToolModule\(\s*virtualNetwork,\s*'([^']+)'/g,
+  )) {
+    shims.add(`@cardstack/boxel-host/tools/${name}`);
+    shims.add(`@cardstack/boxel-host/commands/${name}`);
+  }
+  return shims;
 }
 
 // Every import a subset definition makes has to resolve in a test stack that
-// serves only the subset: a sibling subset file, the base realm, or a module
-// the host shims. Anything else would load in a full catalog and fail here.
+// serves only the subset: a sibling subset file, the base realm, Pret UI, or a
+// module the host shims. Every stack that serves base serves Pret UI too,
+// since base imports it. Anything else would load in a full catalog and fail
+// here.
 function checkClosure(contents: Map<string, string>) {
   let shims = shimmedModules();
   let problems: string[] = [];

@@ -360,10 +360,12 @@ class RealmResource {
               // other things, clobber client-managed publish state. Instance
               // invalidations carry the card id without `.json`, so the
               // RealmConfig card at `<realm>/realm.json` appears as
-              // `<realm>/realm`.
+              // `<realm>/realm`. A realm-wide incremental names nothing, so
+              // the config card may be among what it moved.
               if (
                 data.indexType === 'incremental' &&
-                data.invalidations.includes(`${this.realmURL}realm`)
+                ('realmWide' in data ||
+                  data.invalidations.includes(`${this.realmURL}realm`))
               ) {
                 this.refreshInfo();
               }

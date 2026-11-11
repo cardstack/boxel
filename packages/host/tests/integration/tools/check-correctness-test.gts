@@ -206,6 +206,7 @@ function announceRendersWithIndexEvents() {
     if (
       event.eventName !== 'index' ||
       event.indexType !== 'incremental' ||
+      'realmWide' in event ||
       event.generation === undefined
     ) {
       return;

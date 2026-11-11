@@ -849,6 +849,23 @@ export function stringifyErrorForLog(err: unknown): string {
   return coerceErrorMessage(err, '(no error detail available)');
 }
 
+// The frames Node's event loop puts at the bottom of a stack name what woke
+// the code that threw: a tick-queue drain, a timer, or nothing at all when an
+// I/O callback ran the microtasks directly. They say nothing about which code
+// path raised the error, but they do differ between two paths that awaited
+// different kinds of I/O. A response that must be identical for a card that
+// exists and one that does not (see `Realm#cardWriteRefusal`) would otherwise
+// differ by one of these frames, so they are left out of every error body.
+const SCHEDULING_FRAME =
+  /^\s*at .*\(node:internal\/(process\/task_queues|timers):\d+:\d+\)$/;
+
+function withoutSchedulingFrames(stack: string): string {
+  return stack
+    .split('\n')
+    .filter((line) => !SCHEDULING_FRAME.test(line))
+    .join('\n');
+}
+
 export function responseWithError(
   error: CardError,
   requestContext: RequestContext,
@@ -889,6 +906,9 @@ export function responseWithError(
   }
   let realmURL = requestContext.realm?.url;
   let responseBody = body ? { ...body } : serializableError(error);
+  if (typeof responseBody.stack === 'string') {
+    responseBody.stack = withoutSchedulingFrames(responseBody.stack);
+  }
   if (realmURL && responseBody.realm === undefined) {
     responseBody.realm = realmURL;
   }

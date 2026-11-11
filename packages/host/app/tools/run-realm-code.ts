@@ -7,6 +7,7 @@ import {
   clearReplacedArrayFieldMeta,
   coerceErrorMessage,
   ensureTrailingSlash,
+  isAbsoluteIdentifier,
   isBinaryContentType,
   isCardInstance,
   isFileDefInstance,
@@ -15,12 +16,15 @@ import {
   isResolvedCodeRef,
   logger,
   RealmPaths,
+  resolveRRIReference,
   resourceIdentity,
   ri,
   rri,
   searchEntryWireQueryFromQuery,
   SupportedMimeType,
   validateWriteSize,
+  type CapabilityAnswer,
+  type CapabilityCheck,
   type CardResource,
   type EntryCollectionDocument,
   type Format,
@@ -151,6 +155,7 @@ import type {
   default as BillingService,
   SubscriptionData,
 } from '../services/billing-service';
+import type CapabilitiesService from '../services/capabilities';
 import type CardService from '../services/card-service';
 import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
@@ -178,6 +183,9 @@ const MAX_CARD_UPDATES = 200;
 // realm.operations calls in one run, each entry of a batch counted on its
 // own, so a bulk change can reach as many cards as cards.update can.
 const MAX_OPERATIONS = 200;
+// Operations realm.operations.capabilities asks about in one run, each check
+// counted on its own. Each check reads index rows on the realm.
+const MAX_CAPABILITY_CHECKS = 500;
 const MAX_FILE_SIZE = 500_000;
 // A UTF-8 character is at most 4 bytes, so a larger body is always too large.
 const MAX_READ_BYTES = MAX_FILE_SIZE * 4;
@@ -408,6 +416,25 @@ interface OperationAnswer {
 // was given.
 type RunOperations = (entries: OperationEntry[]) => Promise<OperationAnswer[]>;
 
+// Asks the run's realm whether it would allow each operation now, and answers
+// in the order asked. Runs none of them.
+type CheckCapabilities = (
+  checks: CapabilityCheck[],
+) => Promise<CapabilityAnswer[]>;
+
+// What a realm.operations.capabilities check asks about: a card, by its
+// path, or a type, by its code ref.
+type CapabilityQuestion =
+  | { path: string; operation: string }
+  | { type: { module: string; name: string }; operation: string };
+
+// One check as the script reads it back: its question and the realm's answer.
+type CapabilityResult = CapabilityQuestion &
+  Pick<CapabilityAnswer, 'allowed' | 'conditional' | 'reason'>;
+
+const CAPABILITY_CHECK_SHAPE =
+  '{ path, operation } for a card, or { type: { module, name }, operation } for a type';
+
 // Lists one directory. `entries` is empty unless `status` is 200.
 type ListDirectory = (
   url: string,
@@ -500,6 +527,8 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   // read. The realm refuses one the policy does not allow.
   'operations.invoke': false,
   'operations.invokeBatchOperation': false,
+  // Asking runs nothing, and the realm answers a caller who can only read.
+  'operations.capabilities': false,
   'entries.search': false,
   'fs.delete': true,
   capture: false,
@@ -616,6 +645,7 @@ class RealmFsSession {
   // and a retry does not run them again.
   readonly operationsRun: string[] = [];
   private operationCount = 0;
+  private capabilityCheckCount = 0;
   // Binary files this run knows exist: found by a lookup or saved by
   // realm.fs.writeBytes. They are not in `known`, since their content is not
   // text, but they count toward MAX_FILES.
@@ -717,6 +747,7 @@ class RealmFsSession {
     readonly room: RoomActions,
     private research: Research,
     private recordEntriesSearch: RecordEntriesSearch,
+    private checkCapabilities: CheckCapabilities,
   ) {
     this.captures = new RealmCaptures(captureURL);
   }
@@ -1436,6 +1467,8 @@ class RealmFsSession {
           saved: true,
         };
       }
+      case 'operations.capabilities':
+        return await this.askCapabilities(args[0]);
       case 'capture': {
         let { url, path } = this.captureTarget(args[0]);
         return await this.captures.take(url, path, args[1]);
@@ -1949,6 +1982,112 @@ class RealmFsSession {
     } catch {
       throw new Error(`Path is outside this realm: ${path}`);
     }
+  }
+
+  // Asks the run's realm whether it would allow the user each operation now,
+  // and runs none of them. A check names a card by its path, as
+  // realm.operations.invoke does, or a type by `{ module, name }`, which is how
+  // a create is asked about before the card it would make exists.
+  //
+  // The realm judges each check as it judges an invocation, by its
+  // permissions and its policy, including a grant's condition on the card as
+  // it is stored. So the answer is the realm's, not a reading of the policy
+  // here. It is advisory all the same: the realm decides again when the
+  // operation runs, against the card as it is then.
+  private async askCapabilities(raw: unknown): Promise<CapabilityResult[]> {
+    if (!Array.isArray(raw) || raw.length === 0) {
+      throw new TypeError(
+        `realm.operations.capabilities expects a non-empty array of checks: ${CAPABILITY_CHECK_SHAPE}`,
+      );
+    }
+    if (this.capabilityCheckCount + raw.length > MAX_CAPABILITY_CHECKS) {
+      throw new Error(
+        `Realm code may ask about at most ${MAX_CAPABILITY_CHECKS} operations per run`,
+      );
+    }
+    let asked = raw.map((item: unknown) => this.capabilityCheck(item));
+    // Held while the realm is asked, so the limit holds however the script's
+    // calls are scheduled, and given back when the realm does not answer, so
+    // the checks can be asked again.
+    this.capabilityCheckCount += asked.length;
+    let answers: CapabilityAnswer[];
+    try {
+      answers = await this.checkCapabilities(asked.map(({ check }) => check));
+    } catch (error) {
+      this.capabilityCheckCount -= asked.length;
+      throw error;
+    }
+    return asked.map(({ question }, index) => {
+      let { allowed, conditional, reason } = answers[index]!;
+      return {
+        ...question,
+        allowed,
+        ...(conditional ? { conditional } : {}),
+        ...(reason ? { reason } : {}),
+      };
+    });
+  }
+
+  // One check as the realm is asked it, and the question its answer echoes:
+  // a card's path in the form the other calls answer with, a type as the
+  // script named it. A type's module resolves against the realm root, so a
+  // module in this realm may be named `./classroom`; an absolute URL or a
+  // prefix form is taken as it is.
+  private capabilityCheck(item: unknown): {
+    check: CapabilityCheck;
+    question: CapabilityQuestion;
+  } {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new TypeError(
+        `each realm.operations.capabilities check is ${CAPABILITY_CHECK_SHAPE}`,
+      );
+    }
+    let { path, type, operation } = item as Record<string, unknown>;
+    if (typeof operation !== 'string' || operation.length === 0) {
+      throw new TypeError(
+        `each realm.operations.capabilities check names an operation: ${CAPABILITY_CHECK_SHAPE}`,
+      );
+    }
+    if ((path === undefined) === (type === undefined)) {
+      throw new TypeError(
+        `a realm.operations.capabilities check names a card by path or a type, one of them: ${CAPABILITY_CHECK_SHAPE}`,
+      );
+    }
+    if (path !== undefined) {
+      let cardId = this.resolve('operations.capabilities', path).replace(
+        /\.json$/,
+        '',
+      );
+      return {
+        check: { target: cardId, operation },
+        question: { path: `${this.relative(cardId)}.json`, operation },
+      };
+    }
+    let { module, name } = (type ?? {}) as Record<string, unknown>;
+    if (
+      typeof module !== 'string' ||
+      typeof name !== 'string' ||
+      name.length === 0 ||
+      !(
+        isAbsoluteIdentifier(module) ||
+        module.startsWith('./') ||
+        module.startsWith('../')
+      )
+    ) {
+      throw new TypeError(
+        `a realm.operations.capabilities type is { module, name }: module a URL, a prefix form such as @cardstack/catalog/..., or a path from the realm root that starts with ./`,
+      );
+    }
+    return {
+      check: {
+        target: {
+          module: rri(resolveRRIReference(module, rri(this.realmURL))),
+          name,
+        },
+        operation,
+      },
+      question: { type: { module, name }, operation },
+    };
   }
 
   // Finds cards, specs and files across realms, the catalog among them, and
@@ -2872,6 +3011,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeResult
 > {
   @service declare private billingService: BillingService;
+  @service declare private capabilities: CapabilitiesService;
   @service declare private cardService: CardService;
   @service declare private clientTelemetry: ClientTelemetryService;
   @service declare private environmentService: EnvironmentService;
@@ -2942,7 +3082,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     "never edit a card's data to make the workspace index it. In a workspace " +
     'the user can only read, reads work and each write is refused, except ' +
     'realm.operations, which the realm allows when its policy grants the ' +
-    'operation. realm ' +
+    'operation. To learn whether the realm would allow the user an ' +
+    'operation now, without running it, ask with ' +
+    'realm.operations.capabilities([{ path, operation }, { type: { module, ' +
+    'name }, operation }]) (a type for a create; module is a URL, a prefix ' +
+    'form, or a ./ path from the realm root); it answers each check in ' +
+    'order with { allowed, conditional?, reason? }, where conditional means ' +
+    "a create's grant matched and its condition is checked against the card " +
+    'the create makes. The realm decides again when the operation runs. realm ' +
     'is the root of the workspace, and paths are relative to it, so a file ' +
     'in a folder is named with its folder (folder/file.json). Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends. ' +
@@ -3183,6 +3330,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
             },
             { ...search, tool: 'run-realm-code', realm: rootURL },
           ),
+        (checks) => this.capabilities.check(rootURL, checks),
       );
     let session = newSession();
     session.onActivity = this.publishActivity;

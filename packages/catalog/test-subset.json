@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "909cfc4ebdf3aca5660af31fa0f0a087f20385fe",
+  "revision": "d9bd1244fd277e9e070ed7f4e2b4558e3dfee543",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -9,10 +9,24 @@
     {
       "path": "fields/policy-predicate/policy-predicate.gts",
       "reason": "PolicyPredicateField: the BXL `where` condition on an OperationGrant"
+    },
+    {
+      "path": "automation/automation.gts",
+      "reason": "Automation: the automation definition the server reads from the index as data (its script, triggers, callApi operations, caps, params and batchedAI)"
+    },
+    {
+      "path": "automation/describe-cron.ts",
+      "reason": "describeCron: the plain-words reading of a cron trigger that Automation's views show; imported by automation/automation.gts"
+    },
+    {
+      "path": "fields/code/code.gts",
+      "reason": "CodeField, CodeView and CodeEdit: how Automation shows and edits its script; imported by automation/automation.gts"
     }
   ],
   "tests": {
     "host": [
+      "Acceptance | automation edit format",
+      "Acceptance | code submode | automation script editor",
       "Integration | realm policy",
       "Integration | realm config policy standing",
       "Integration | policy-scoped search",
@@ -20,6 +34,7 @@
     ],
     "realmServer": [
       "anonymous-key-use-test",
+      "automation-card-test",
       "catalog-test-subset-test",
       "direct-writer-queries-test",
       "policy-share-audit-test",

@@ -79,6 +79,7 @@ import type { TestRealmAdapter } from '../helpers/adapter';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type {
   IncrementalIndexEventContent,
+  RealmWideIncrementalIndexEventContent,
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
 
@@ -161,6 +162,9 @@ module('Integration | Store', function (hooks) {
         (event): event is IncrementalIndexEventContent =>
           event.eventName === 'index' &&
           (event as IncrementalIndexEventContent).indexType === 'incremental' &&
+          Array.isArray(
+            (event as IncrementalIndexEventContent).invalidations,
+          ) &&
           (event as IncrementalIndexEventContent).invalidations.includes(url),
       );
     }
@@ -4458,6 +4462,169 @@ module('Integration | Store', function (hooks) {
       (instance as any).name,
       'From Source Indexed',
       'and it now holds the indexed state',
+    );
+  });
+
+  // Count the loader resets a test causes. The coalesced rebuild starts with
+  // one, so the count tells a rebuild from a per-card re-read even where both
+  // leave the card holding the same state.
+  function countLoaderResets() {
+    let loaderService = getService('loader-service');
+    let original = loaderService.resetLoader.bind(loaderService);
+    let count = 0;
+    loaderService.resetLoader = ((...args: Parameters<typeof original>) => {
+      count++;
+      return original(...args);
+    }) as typeof original;
+    return {
+      get count() {
+        return count;
+      },
+      stop() {
+        loaderService.resetLoader = original;
+      },
+    };
+  }
+
+  // What a realm sends when a pass invalidated more than one event can list.
+  function realmWideEvent(
+    extra: Partial<RealmWideIncrementalIndexEventContent> = {},
+  ): RealmWideIncrementalIndexEventContent {
+    return {
+      eventName: 'index',
+      indexType: 'incremental',
+      realmWide: true,
+      invalidatedModules: [],
+      realmURL: testRealmURL,
+      ...extra,
+    };
+  }
+
+  test('a realm-wide index event re-reads every card the store holds from the realm', async function (assert) {
+    let url = `${testRealmURL}Person/hassan`;
+    storeService.addReference(url);
+    await storeService.flush();
+    let instance = storeService.peek(url);
+    assert.true(isCardInstance(instance), 'the card is loaded');
+
+    let events = interceptRealmEvents();
+    try {
+      // The realm's own event names the card; the store is shown the
+      // realm-wide one in its place.
+      await writePerson('Person/hassan.json', 'Hassan Realm Wide');
+      await events.nextEventFor(url);
+      events.deliver({
+        eventName: 'index',
+        indexType: 'incremental-index-initiation',
+        updatedFile: `${testRealmURL}Person/hassan.json`,
+        realmURL: testRealmURL,
+      });
+      // Read before settling: the initiation holds the indexing waiter open
+      // until a completion arrives.
+      assert.true(
+        getService('realm').info(testRealmURL).isIndexing,
+        'the realm reads as indexing once the pass starts',
+      );
+      let resets = countLoaderResets();
+      try {
+        events.deliver(realmWideEvent());
+        await settled();
+      } finally {
+        resets.stop();
+      }
+      assert.false(
+        getService('realm').info(testRealmURL).isIndexing,
+        'and as done once its realm-wide completion arrives',
+      );
+      assert.strictEqual(
+        resets.count,
+        0,
+        'an event naming no changed module re-reads cards rather than rebuilding',
+      );
+    } finally {
+      events.restore();
+    }
+
+    assert.strictEqual(
+      storeService.peek(url),
+      instance,
+      'the same instance is still the one the store hands out',
+    );
+    assert.strictEqual(
+      (instance as any).name,
+      'Hassan Realm Wide',
+      'and it holds the indexed state',
+    );
+  });
+
+  test("a realm-wide index event leaves a writer's own verbatim cards alone", async function (assert) {
+    let url = `${testRealmURL}Person/hassan`;
+    storeService.addReference(url);
+    await storeService.flush();
+    let instance = storeService.peek(url);
+    let clientRequestId = 'instance:realm-wide-own-write';
+    getService('card-service').clientRequestIds.add(clientRequestId);
+    let reads = countCardReads('Person/hassan');
+    let events = interceptRealmEvents();
+    try {
+      await writePerson('Person/hassan.json', 'Hassan Elsewhere');
+      await events.nextEventFor(url);
+      events.deliver(
+        realmWideEvent({ clientRequestId, clientAuthored: [url] }),
+      );
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        0,
+        'a card the writer sent verbatim is not re-read',
+      );
+
+      events.deliver(realmWideEvent({ clientRequestId, clientAuthored: [] }));
+      await settled();
+      assert.strictEqual(
+        reads.count,
+        1,
+        'an emptied authorship list re-reads it',
+      );
+    } finally {
+      events.restore();
+      reads.stop();
+    }
+    assert.strictEqual(
+      (instance as any).name,
+      'Hassan Elsewhere',
+      'the re-read brought the indexed state',
+    );
+  });
+
+  test('a realm-wide index event that cannot name its modules rebuilds a tab that loaded code from the realm', async function (assert) {
+    let url = `${testRealmURL}Person/hassan`;
+    storeService.addReference(url);
+    await storeService.flush();
+    let events = interceptRealmEvents();
+    try {
+      await writePerson('Person/hassan.json', 'Hassan Rebuilt');
+      await events.nextEventFor(url);
+      let resets = countLoaderResets();
+      try {
+        events.deliver(realmWideEvent({ invalidatedModules: undefined }));
+        await settled();
+      } finally {
+        resets.stop();
+      }
+      assert.ok(
+        resets.count > 0,
+        'the tab rebuilds, since a module it loaded from the realm may have changed',
+      );
+    } finally {
+      events.restore();
+    }
+    let current = storeService.peek(url);
+    assert.true(isCardInstance(current), 'the card is held after the rebuild');
+    assert.strictEqual(
+      (current as any).name,
+      'Hassan Rebuilt',
+      'and it holds the indexed state',
     );
   });
 

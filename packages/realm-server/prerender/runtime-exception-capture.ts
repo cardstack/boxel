@@ -154,9 +154,12 @@ export interface AttachRuntimeExceptionCaptureOptions {
   recorder: RuntimeExceptionRecorder;
 }
 
+// Resolves to the session it enabled `Runtime` on, so the caller can issue
+// other `Runtime` commands for the tab without attaching a session of its own;
+// undefined when the attach failed.
 export async function attachRuntimeExceptionCapture(
   opts: AttachRuntimeExceptionCaptureOptions,
-): Promise<void> {
+): Promise<CDPSession | undefined> {
   let { page, getAffinityKey, pageId, recorder } = opts;
   let client: CDPSession;
   try {
@@ -175,8 +178,9 @@ export async function attachRuntimeExceptionCapture(
       pageId,
       e,
     );
-    return;
+    return undefined;
   }
+  return client;
 
   function onExceptionThrown(event: CdpExceptionThrownEvent): void {
     try {

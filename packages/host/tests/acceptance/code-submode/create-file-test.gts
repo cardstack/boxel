@@ -1702,6 +1702,7 @@ export class TestCard extends Animal {
           if (
             ev.eventName === 'index' &&
             ev.indexType === 'incremental' &&
+            'invalidations' in ev &&
             Array.isArray(ev.invalidations) &&
             (ev.invalidations as string[]).includes(newFileUrl)
           ) {
@@ -1789,6 +1790,7 @@ export class TestCard extends Animal {
           if (
             ev.eventName === 'index' &&
             ev.indexType === 'incremental' &&
+            'invalidations' in ev &&
             Array.isArray(ev.invalidations) &&
             (ev.invalidations as string[]).includes(newFileUrl)
           ) {

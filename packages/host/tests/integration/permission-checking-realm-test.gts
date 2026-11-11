@@ -17,6 +17,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
 import InvokeCardOperationTool from '@cardstack/host/tools/invoke-card-operation';
+import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import {
   provideConsumeContext,
@@ -576,6 +577,109 @@ module('Integration | a realm that checks permissions', function (hooks) {
       await storedTitle(adapter, 'classrooms/room-205.json'),
       'Room 205',
       'and nothing was written',
+    );
+  });
+
+  test('a Realm Runner script asks the realm which classrooms the policy lets the user rename, and renames none', async function (assert) {
+    let adapter = await setupSchool({
+      enforcePermissions: true,
+      readableByTestUser: true,
+    });
+
+    let toolService = getService('tool-service');
+    let result = await new RunRealmCodeTool(toolService.toolContext).execute({
+      realm: SCHOOL,
+      roomId: '!room:example.com',
+      code: `return await realm.operations.capabilities([
+  { path: 'classrooms/room-204', operation: 'rename' },
+  { path: 'classrooms/room-205', operation: 'rename' },
+  { type: { module: ${JSON.stringify(`${DEFINITIONS}classroom`)}, name: 'Classroom' }, operation: 'create' },
+]);`,
+    });
+
+    let [teaches, colleagues, create] = JSON.parse(result.scriptResult!);
+    assert.deepEqual(
+      teaches,
+      {
+        path: 'classrooms/room-204.json',
+        operation: 'rename',
+        allowed: true,
+      },
+      'the realm allows renaming a classroom the user teaches',
+    );
+    assert.deepEqual(
+      colleagues,
+      {
+        path: 'classrooms/room-205.json',
+        operation: 'rename',
+        allowed: false,
+        reason: 'operation-not-permitted',
+      },
+      'and refuses renaming a colleague’s, telling a reader why',
+    );
+    assert.deepEqual(
+      create,
+      {
+        type: { module: `${DEFINITIONS}classroom`, name: 'Classroom' },
+        operation: 'create',
+        allowed: false,
+        reason: 'operation-not-permitted',
+      },
+      'and refuses a create the policy does not grant',
+    );
+    assert.strictEqual(
+      await storedTitle(adapter, 'classrooms/room-204.json'),
+      'Room 204',
+      'asking renamed nothing',
+    );
+  });
+
+  test('a Realm Runner script is told a create the policy grants on a condition is conditional', async function (assert) {
+    await setupSchool({
+      enforcePermissions: true,
+      readableByTestUser: true,
+      policy: {
+        data: {
+          ...classroomPolicy.data,
+          attributes: {
+            cardInfo: { name: 'Classrooms' },
+            rules: [
+              {
+                targetType: {
+                  module: `${DEFINITIONS}classroom`,
+                  name: 'Classroom',
+                },
+                grants: [
+                  { operation: 'read' },
+                  { operation: 'create', where: TEACHES },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    let toolService = getService('tool-service');
+    let result = await new RunRealmCodeTool(toolService.toolContext).execute({
+      realm: SCHOOL,
+      roomId: '!room:example.com',
+      code: `return await realm.operations.capabilities([
+  { type: { module: ${JSON.stringify(`${DEFINITIONS}classroom`)}, name: 'Classroom' }, operation: 'create' },
+]);`,
+    });
+
+    assert.deepEqual(
+      JSON.parse(result.scriptResult!),
+      [
+        {
+          type: { module: `${DEFINITIONS}classroom`, name: 'Classroom' },
+          operation: 'create',
+          allowed: true,
+          conditional: true,
+        },
+      ],
+      'the grant matches, and its condition is judged against the classroom the create makes',
     );
   });
 
