@@ -2919,7 +2919,6 @@ export class Realm {
   #policyTypeKey: string | undefined;
   #operationCore: OperationCore | undefined;
   #batchCore: BatchCore | undefined;
-  #requestDefinitions: ReturnType<typeof requestDefinitionLookup> | undefined;
   #adapter: RealmAdapter;
   #router: Router;
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
@@ -8446,19 +8445,6 @@ export class Realm {
 
   get realmIndexQueryEngine() {
     return this.#realmIndexQueryEngine;
-  }
-
-  // The definition lookup an operation reads through: a cache miss renders at
-  // user priority, ahead of background re-index work, and a render that does
-  // not finish in time refuses with a retryable 503 rather than holding the
-  // request open. See `requestDefinitionLookup`.
-  get #requestDefinitionLookup(): ReturnType<typeof requestDefinitionLookup> {
-    if (!this.#requestDefinitions) {
-      this.#requestDefinitions = requestDefinitionLookup(
-        this.#definitionLookup,
-      );
-    }
-    return this.#requestDefinitions;
   }
 
   // The operation core, built from the realm's own collaborators. What it is
