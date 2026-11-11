@@ -265,8 +265,14 @@ change.
 
 ## Key files
 
-- `packages/runtime-common/index-query-engine.ts` — stage 0 + pass 1
-- `packages/runtime-common/expression.ts` — node kinds + pass 2
+- `packages/runtime-common/index-query-engine.ts` — the public class and the
+  module map of `query-engine/` (one concern per module)
+- `packages/runtime-common/query-engine/filter-compiler.ts` — stage 0 + pass 1
+- `packages/runtime-common/query-engine/expression-resolver.ts` — pass 2 field
+  resolution
+- `packages/runtime-common/query-engine/dialect.ts` — Postgres vs SQLite
+- `packages/runtime-common/expression.ts` — node kinds + pass 2 SQL
+- `packages/runtime-common/query-grammar.ts` — every query member
 - `packages/runtime-common/query.ts` — `Query`/`Filter` types + assertions
 - `packages/runtime-common/definitions.ts` — `FieldDefinition`, `getFieldDef`
 - `packages/host/app/lib/sqlite-adapter.ts` — `adjustSQL` text rewrites

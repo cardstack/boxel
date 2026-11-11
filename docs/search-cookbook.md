@@ -1,8 +1,8 @@
 # Search cookbook
 
-What people ask for, and the query that answers it. Many requests don't map to an obvious operator: "hidden gem" is a blend with an inverted signal, "cheap for its kind" is a rerank against a comparison set, "dupes of this" is a one-card `let` binding. Find the phrase, then adapt the type and field names to your cards.
+What people ask for, and the query that answers it. Many requests don't map to an obvious operator: "hidden gem" is a blend with an inverted signal, "cheap for its kind" is an expression sort entry against a comparison set, "dupes of this" is a one-card `let` binding. Find the phrase, then adapt the type and field names to your cards. Each member is defined once, in [Search](search.md); this page only shows them combined.
 
-Every query here is in the V2 grammar described in [search.md](search.md), with `productRef` standing for the product card type's fully qualified code ref, such as `{ module: 'https://my.realm/product', name: 'Product' }` or a registered prefix like `{ module: '@cardstack/catalog/product', name: 'Product' }` (never a bare name or a relative module). The examples assume a product type with the usual shop fields (`productType`, `priceMin`, `rating`, `reviewCount`, `unitsSold30d`, `imageEmbedding`, …). Each one is checked against the query grammar, and all but the four marked as needing an embedding or a saved list ran against a real catalog and found results.
+Every query is in the newer spelling, with `productRef` standing for the product card type's code ref: `{ module: '@cardstack/catalog/product', name: 'Product' }` (a registered prefix) or the module's URL, never a bare name or a relative module ([ADR 002](adr/002-keep-identifiers-canonical-resolve-at-network-boundary.md)). The examples assume a product type with the usual shop fields (`productType`, `priceMin`, `rating`, `reviewCount`, `unitsSold30d`, `imageEmbedding`, …), and `textVector` stands for an embedding of the shopper's words that the caller computed, as a list of numbers. Each query passes the grammar check (`assertQuery` in `@cardstack/runtime-common`).
 
 ## Find a pattern
 
@@ -80,7 +80,7 @@ const query = {
 
 `not` around an `in` excludes every spelling of the thing at once.
 
-**Watch out:** A product with no material at all is kept; add `{ exists: "material" }` if the field must be known.
+**Watch out:** A product with no material at all is left out too: a missing value matches neither `in` nor its `not`. To keep those, write `{ any: [{ missing: 'material' }, { not: { in: { material: ['Leather', 'Faux Leather'] } } }] }`.
 
 ### Either of two
 
@@ -159,14 +159,19 @@ const query = {
   type: productRef,
   filter: {
     every: [
-      { linkedFrom: { card: 'Wishlist/mine', field: 'items' } },
+      {
+        linkedFrom: {
+          card: 'https://my.realm/Wishlist/mine',
+          field: 'items',
+        },
+      },
       { range: { priceMin: { lte: 100 } } },
     ],
   },
 };
 ```
 
-`linkedFrom` keeps the cards another card links to, so the list stays the source of truth.
+`linkedFrom` keeps the cards another card links to, so the list stays the source of truth. `card` is the list card's absolute URL, in the realm being searched.
 
 **Watch out:** Under a realm policy, `linkedFrom` cannot sit inside a binding or a comparison filter.
 
@@ -233,12 +238,12 @@ const query = { type: productRef, filter: { matches: 'reclinr', typos: true } };
 ```js
 const query = {
   type: productRef,
-  filter: { typeahead: 'otto', typos: true },
+  filter: { matches: 'otto', prefix: true, scope: 'title', typos: true },
   page: { size: 8 },
 };
 ```
 
-`typeahead` matches word prefixes in titles and alternative names, in any order, without stemming. Use `matches` with `prefix: true` to search whole pages.
+`prefix: true` with `scope: 'title'` matches word prefixes in titles and alternative names, in any order, without stemming, and ranks the closest title first. Leave out `scope` to search whole pages, where only the last word is unfinished.
 
 ### An exact phrase, minus a word
 
@@ -297,7 +302,24 @@ const query = {
 };
 ```
 
-`pattern` is a glob over a whole value, ignoring case; `regex` is the full form.
+`pattern` is a glob over a whole value, ignoring case; `regex` is the full form. `*` stays within a `/`: for a model number like `FL-922/BLU`, write `FL-922**`.
+
+### Find source files by path
+
+**Say:** "the components", "every card module in this folder", "the docs pages", "files named like"
+
+```js
+const gtsFileDef = {
+  module: '@cardstack/base/gts-file-def',
+  name: 'GtsFileDef',
+};
+const query = {
+  type: gtsFileDef,
+  filter: { pattern: { url: '**/components/*.gts' } },
+};
+```
+
+A file's `url` and `name` are searched by glob on every file type: `*` and `?` stay within one folder, `**` crosses folders, ignoring case. `**/components/*.gts` is the modules directly in a `components` folder, `**/components/**.gts` everything under it, and `{ pattern: { name: '*-card.gts' } }` matches the name alone. Use `TsFileDef`, `JsonFileDef`, `TextFileDef` or `MarkdownDef` (`**/docs/**.md`) for one kind, or `FileDef` (`@cardstack/base/card-api`) for every kind. To find a word inside the files, use `matches`.
 
 ### Words, ranked by how well they match
 
@@ -610,7 +632,7 @@ Last week's pace against the month's: above 1 means sales are speeding up.
 
 ## "For its kind"
 
-A `rerank` with a comparison set measures each result against similar products: the median of its kind, its percentile, its z-score.
+An expression sort entry with `top` and a comparison set (`compare`) re-orders the top results by how each measures against similar products: the median of its kind, its percentile, its z-score. The entries after it (none here: card URL order) choose which rows are the top.
 
 ### Cheap for its kind
 
@@ -620,11 +642,13 @@ A `rerank` with a comparison set measures each result against similar products: 
 const query = {
   type: productRef,
   filter: { eq: { productType: 'HOME' } },
-  rerank: {
-    expression: '1 - priceMin / stats.priceMin.median',
-    top: 200,
-    compare: { by: 'productType' },
-  },
+  sort: [
+    {
+      expression: '1 - priceMin / stats.priceMin.median',
+      top: 200,
+      compare: { by: 'productType' },
+    },
+  ],
 };
 ```
 
@@ -638,15 +662,17 @@ The comparison set is every match of the same product type; `stats.priceMin.medi
 const query = {
   type: productRef,
   filter: { eq: { productType: 'FURNITURE' } },
-  rerank: {
-    expression: 'PERCENTRANK_INC(peers.rating, rating)',
-    top: 200,
-    compare: { by: 'productType' },
-  },
+  sort: [
+    {
+      expression: 'PERCENTRANK_INC(peers.rating, rating)',
+      top: 200,
+      compare: { by: 'productType' },
+    },
+  ],
 };
 ```
 
-`peers.rating` is the kind's ratings as a list, so any Excel function can place the product among them.
+`peers.rating` is the kind's ratings as a list, which `PERCENTRANK_INC`, `COUNTIF`, `MEDIAN` and the other list functions read.
 
 ### Each brand's best seller
 
@@ -656,11 +682,13 @@ const query = {
 const query = {
   type: productRef,
   filter: { matches: 'kitchen' },
-  rerank: {
-    expression: 'PERCENTRANK_INC(peers.unitsSold30d, unitsSold30d)',
-    top: 200,
-    compare: { by: 'brand.name' },
-  },
+  sort: [
+    {
+      expression: 'PERCENTRANK_INC(peers.unitsSold30d, unitsSold30d)',
+      top: 200,
+      compare: { by: 'brand.name' },
+    },
+  ],
 };
 ```
 
@@ -674,11 +702,13 @@ Comparing by brand instead of by type ranks each product within its own brand.
 const query = {
   type: productRef,
   filter: { eq: { productType: 'CHAIR' } },
-  rerank: {
-    expression: '(rating - stats.rating.avg) / stats.rating.stdev',
-    top: 200,
-    compare: { by: 'productType' },
-  },
+  sort: [
+    {
+      expression: '(rating - stats.rating.avg) / stats.rating.stdev',
+      top: 200,
+      compare: { by: 'productType' },
+    },
+  ],
 };
 ```
 
@@ -692,12 +722,14 @@ A z-score: how many standard deviations above its kind's average rating.
 const query = {
   type: productRef,
   filter: { eq: { productType: 'RUG' } },
-  rerank: {
-    expression:
-      'PERCENTRANK_INC(peers.rating, rating) - PERCENTRANK_INC(peers.priceMin, priceMin)',
-    top: 200,
-    compare: { by: 'productType' },
-  },
+  sort: [
+    {
+      expression:
+        'PERCENTRANK_INC(peers.rating, rating) - PERCENTRANK_INC(peers.priceMin, priceMin)',
+      top: 200,
+      compare: { by: 'productType' },
+    },
+  ],
 };
 ```
 
@@ -711,18 +743,20 @@ Where it ranks on rating minus where it ranks on price, both within its kind.
 const query = {
   type: productRef,
   filter: { eq: { productType: 'LAMP' } },
-  rerank: {
-    expression:
-      'LET(fit, LINEST(peers.priceMin, peers.rating), INDEX(fit, 1) * rating + INDEX(fit, 2) - priceMin)',
-    top: 200,
-    compare: { by: 'productType' },
-  },
+  sort: [
+    {
+      expression:
+        'rating / stats.rating.avg - priceMin / stats.priceMin.median',
+      top: 200,
+      compare: { by: 'productType' },
+    },
+  ],
 };
 ```
 
-Fits price against rating across the kind, then ranks by how far below the fitted line each product sits.
+How far its rating sits above its kind's average, less how far its price sits above its kind's median.
 
-**Watch out:** Check `RSQ(peers.priceMin, peers.rating)` first; where rating does not explain price, the line means nothing.
+**Watch out:** A fitted line (`LINEST`, `RSQ`) is outside what a query expression can compute in SQL and is refused (`expression-unsupported`); compute such a fit into a field when the card is indexed if you need it.
 
 ## Meaning and look
 
@@ -736,7 +770,7 @@ Vector signals: what a product is like, or looks like. A `let` binding with `one
 const query = {
   type: productRef,
   let: {
-    seed: {
+    $seed: {
       from: { type: productRef, filter: { eq: { itemId: 'B073F7GFKB' } } },
       one: true,
     },
@@ -747,7 +781,7 @@ const query = {
       blend: [
         {
           by: 'imageEmbedding',
-          near: { $let: 'seed', path: 'imageEmbedding' },
+          near: '$seed.imageEmbedding',
           weight: 1.5,
         },
         { by: 'rating', weight: 0.5 },
@@ -767,7 +801,7 @@ A one-card binding reads the product's image vector on the server; the blend kee
 const query = {
   type: productRef,
   let: {
-    avoid: {
+    $avoid: {
       from: { type: productRef, filter: { eq: { itemId: 'B07CF7B5S2' } } },
       one: true,
     },
@@ -778,7 +812,7 @@ const query = {
       blend: [
         {
           by: 'imageEmbedding',
-          near: { $let: 'avoid', path: 'imageEmbedding' },
+          near: '$avoid.imageEmbedding',
           weight: -1,
         },
         { by: 'rating', weight: 0.6 },
@@ -798,12 +832,12 @@ A negative weight on similarity favors the least alike. Pair one positive and on
 const query = {
   type: productRef,
   filter: {
-    near: { embedding: { to: '<embedding of the text>', minSimilarity: 0.35 } },
+    near: { embedding: { to: textVector, minSimilarity: 0.35 } },
   },
   sort: [
     {
       relevance: { meaning: 1.5, quality: 0.5 },
-      near: '<embedding of the text>',
+      near: textVector,
     },
   ],
 };
@@ -826,7 +860,7 @@ const query = {
   sort: [
     {
       relevance: { meaning: 1.5, quality: 0.5 },
-      near: '<embedding of the text>',
+      near: textVector,
     },
   ],
 };
@@ -848,7 +882,7 @@ The look of one product, cheaper, from another brand.
 const query = {
   type: productRef,
   let: {
-    orig: {
+    $orig: {
       from: { type: productRef, filter: { eq: { itemId: 'B07P8SV57Z' } } },
       one: true,
     },
@@ -858,32 +892,32 @@ const query = {
       {
         near: {
           imageEmbedding: {
-            to: { $let: 'orig', path: 'imageEmbedding' },
+            to: '$orig.imageEmbedding',
             minSimilarity: 0.6,
           },
         },
       },
-      { eq: { productType: { $let: 'orig', path: 'productType' } } },
-      { range: { priceMin: { lt: { $let: 'orig', path: 'priceMin' } } } },
+      { eq: { productType: '$orig.productType' } },
+      { range: { priceMin: { lt: '$orig.priceMin' } } },
       {
         any: [
           { missing: 'brand.name' },
           {
-            not: { eq: { 'brand.name': { $let: 'orig', path: 'brand.name' } } },
+            not: { eq: { 'brand.name': '$orig.brand.name' } },
           },
         ],
       },
     ],
   },
   sort: [
-    { by: 'imageEmbedding', near: { $let: 'orig', path: 'imageEmbedding' } },
+    { expression: 'ROUND($orig.priceMin - priceMin, 2)', top: 200 },
+    { by: 'imageEmbedding', near: '$orig.imageEmbedding' },
   ],
   collapse: 'brand.name',
-  rerank: { expression: 'ROUND(orig.priceMin - priceMin, 2)', top: 200 },
 };
 ```
 
-Same look, same kind, cheaper, another brand; one per brand; `rerank` shows the saving. Raise `minSimilarity` to 0.8 for a near twin.
+Same look, same kind, cheaper, another brand; one per brand; the 200 closest re-ordered by the saving. Raise `minSimilarity` to 0.8 for a near twin.
 
 ### Cheaper than its look-alikes
 
@@ -893,11 +927,13 @@ Same look, same kind, cheaper, another brand; one per brand; `rerank` shows the 
 const query = {
   type: productRef,
   filter: { eq: { productType: 'LAMP' } },
-  rerank: {
-    expression: '1 - priceMin / stats.priceMin.median',
-    top: 200,
-    compare: { near: 'imageEmbedding', k: 20, minSimilarity: 0.75 },
-  },
+  sort: [
+    {
+      expression: '1 - priceMin / stats.priceMin.median',
+      top: 200,
+      compare: { near: 'imageEmbedding', k: 20, minSimilarity: 0.75 },
+    },
+  ],
 };
 ```
 
@@ -950,16 +986,17 @@ At most two per brand. Each result carries `meta._collapseSize` for "and 12 more
 
 ```js
 const query = {
+  realms: [catalogRealm, myRealm],
+  federation: { results: 'merged' },
   type: productRef,
   filter: { matches: 'lamp' },
   sort: [{ by: 'priceMin' }],
-  federation: { results: 'merged' },
 };
 ```
 
 Over several realms, `merged` gives one list in the query's sort; the default `byRealm` keeps each realm's rows as a section.
 
-**Watch out:** Send it to `_federated-search` with `realms`; blend and text scores compare only approximately across realms.
+**Watch out:** Send it to `_federated-search`; `realms` names realms on that server. Blend and text scores compare only approximately across realms.
 
 _Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
 
@@ -984,7 +1021,37 @@ const query = {
 
 A facet with a measure answers per value; `page.size: 0` skips the list.
 
-**Watch out:** `order: "measure"` puts the highest first; read the list from the end for the cheapest.
+**Declare:** both fields are facets. `Brand` declares `name = contains(StringField, { search: { facet: true } })`, the product's `brand = linksTo(() => Brand, { searchable: true })` carries it, and `priceMin = contains(NumberField, { search: { facet: true } })`. An undeclared field is refused with `needs-declaration`.
+
+**Watch out:** `order: "measure"` puts the highest first, so the cheapest brand is last. Raise `size` (up to 1,000) past the number of brands, or the cheapest may be cut off.
+
+### Facet by something inside a linked file: the wrapper card declares it
+
+**Say:** "photos by camera", "count the documents by title"
+
+A file's fields are not facets of the card that links it, and a FileDef declares no facets: the card that links the file declares what it counts by, in a computed field of its own.
+
+```ts
+export class Photo extends CardDef {
+  @field image = linksTo(ImageDef, { search: { facet: true } });
+  @field cameraModel = contains(StringField, {
+    computeVia: function (this: Photo) {
+      return this.image?.exif?.cameraModel;
+    },
+    search: { facet: true },
+  });
+}
+
+const query = {
+  type: photoRef,
+  facets: [{ by: 'cameraModel' }, { by: 'image' }],
+  page: { size: 0 },
+};
+```
+
+The computed value is in the card's search doc when it is indexed (the render loads the linked file), and editing the file reindexes the cards that read it. `image` counts the linked files by id.
+
+**Watch out:** `{ by: 'image.exif.cameraModel' }` is refused with `needs-declaration`, and the message spells out the computed field to add.
 
 ### Price range
 
@@ -1007,6 +1074,8 @@ const query = {
 
 `stats` gives min, max and average; `ranges` gives counts per bucket for a price slider.
 
+**Declare:** `priceMin = contains(NumberField, { search: { facet: true } })`.
+
 ### A table to analyze
 
 **Say:** "export", "spreadsheet", "all the prices"
@@ -1022,6 +1091,82 @@ const query = {
 
 `select` answers with columns read from the index, nothing rendered: fast enough to load thousands of rows.
 
+## Activity logs
+
+Queries over a log's lines (`from: { log }`, [Searching a log](search.md#searching-a-log-from--log-)), and card queries that read one. `postRef` stands for a post card type with a `uri` field; the log's lines are `record`ed as `{ what: { action, post } }`. The tests in `packages/realm-server/tests/log-query-sources-integration-test.ts` and `log-policy-http-test.ts` run each of these.
+
+### Likes per post
+
+**Say:** "how many likes", "most liked", "likes per post"
+
+```js
+const query = {
+  from: { log: 'Feed/reactions.jsonl' },
+  filter: { eq: { 'what.action': 'like' } },
+  group: { by: 'what.post', aggregates: { likes: { count: true } } },
+  sort: [{ by: 'likes', direction: 'desc' }],
+};
+```
+
+One row per post, `{ group: { 'what.post': … }, likes }`, most liked first; ties by post.
+
+**Watch out:** a count shown on a card belongs on the card, kept there by whatever writes the log; a query answers it for one request.
+
+### Skip what I've seen, in one request
+
+**Say:** "new to me", "hide what I've seen", "not seen yet"
+
+```js
+const query = {
+  type: postRef,
+  let: {
+    $seen: {
+      from: {
+        log: 'Feed/me.history.jsonl',
+        filter: { eq: { 'what.action': 'seen' } },
+      },
+      select: 'what.post',
+    },
+  },
+  filter: { not: { in: { uri: '$seen' } } },
+};
+```
+
+The binding reads the distinct posts the reader's log says they saw, in the card query's snapshot, and the card query keeps the rest.
+
+**Watch out:** a binding holds at most as many values as any list binding, the most recently seen first; past that, `meta.warnings` says it was cut.
+
+### Attendance per day, across classes
+
+**Say:** "who came", "attendance by day", "check-ins per class"
+
+```js
+const query = {
+  from: { logs: { under: 'Classes/' } },
+  filter: { eq: { 'what.present': true } },
+  group: {
+    by: ['file', 'what.day'],
+    aggregates: { present: { count: true }, people: { distinct: 'actor' } },
+  },
+};
+```
+
+Every log in the folder, read as one set; `file` names which class each row counts.
+
+### My own lines of a shared log
+
+**Say:** "my check-ins", "what I logged", "my history" (in a realm I can't read)
+
+```js
+const query = {
+  from: { log: 'Classes/maths.jsonl' },
+  sort: [{ by: 'at', direction: 'desc' }],
+  page: { size: 50 },
+};
+```
+
+The query is the same as the owner's. Under a realm policy with a log-line grant (`query` on `JSONLFile`, `where: '.actor == actor()'`), the answer holds only the caller's lines, and its totals and facets count only those; `meta.policyScopedLogs` says so.
+
 ## Adding a pattern
 
-Each pattern pairs what people say with the query and why it is written that way. To add one, write it in the same shape, and check its query against the grammar (`assertQuery` in `@cardstack/runtime-common`) and run it against a realm before adding it here.
+Each pattern pairs what people say with the query and a line on why it is written that way. To add one, write it in the same shape, check its query with `assertQuery` from `@cardstack/runtime-common`, and run it against a realm. A rule a pattern relies on belongs in [Search](search.md), not here.

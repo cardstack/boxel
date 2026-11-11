@@ -7,7 +7,11 @@ a `relevance` sort blends in. Authors never name an index, a weight letter,
 or a storage choice. The framework can change those without touching a card.
 
 This page is the reference for the field options, the card-level defaults, and
-the query features that read them. Query basics are in [Search](search.md).
+which query features read them. The query language itself (every member,
+default, limit and refusal) is in [Search](search.md), and worked queries are
+in the [Search cookbook](search-cookbook.md). The options are checked in
+`packages/runtime-common/search-intent.ts`, and the defaults in each field
+type's `searchDefaults`.
 
 ## For card authors
 
@@ -19,13 +23,15 @@ the query features that read them. Query basics are in [Search](search.md).
   low (`role: 'note'`), a number that says how popular a card is
   (`rank: 'popularity'`), a field people filter a list by (`facet: true`), or a
   field that should not be searchable at all (`search: false`).
+- **Facets are the one opt-in.** A query may count a field in `facets` only
+  when the field declares `facet: true` (see [`facet`](#facet)); the card
+  type, realm, created and modified time need no declaration.
 - **Queries get shorter.** With hints in place, a search pane is
   `{ matches: q }` sorted by `{ relevance: true }`, a shelf is a `relevance`
   sort with signal weights, and facets come back labeled and bucketed, with no
   hand-written `blend` sorts or id-to-name lookups.
-- **Write the intent, not the mechanism.** If you find yourself wanting an
-  option that names how something is stored, that's a gap in this vocabulary.
-  Raise it rather than work around it.
+- **Write the intent, not the mechanism.** No option names an index, a
+  weight or a storage choice.
 
 ## Field options
 
@@ -39,11 +45,10 @@ the field is declared, so a misspelled role or option fails the module:
 | Option      | Values                                                                                         | Says                                                   |
 | ----------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `role`      | `title`, `name`, `alias`, `summary`, `keywords`, `label`, `body`, `note`, `identifier`, `code` | What this text is to the card                          |
-| `facet`     | `true`, or `'values'`, `'range'`, `'date'` to override the shape                               | People narrow results by this field                    |
+| `facet`     | `true`                                                                                         | People narrow results by this field                    |
 | `rank`      | `popularity`, `recency`, `quality`, `priority`                                                 | This number or date says how good or fresh the card is |
 | `typos`     | `true`                                                                                         | A misspelling should still find it                     |
 | `patterns`  | `true`                                                                                         | People search it with wildcards or patterns            |
-| `include`   | field names of the linked card (links only)                                                    | Which of the linked card's fields describe this card   |
 | `neighbors` | `true` (on a `VectorField`)                                                                    | Each card is compared with its own look-alikes         |
 | `search`    | `false` (instead of an object)                                                                 | Don't index this field                                 |
 
@@ -77,44 +82,58 @@ its role.
 
 ### `facet`
 
-`facet: true` takes its shape from the field's type: a string, a list of
-strings or a link gives values with counts; a number gives range buckets with
-stats; a date gives a histogram with stats; a boolean gives true and false
-with counts. A link's value is the linked card's id, with the card's title
-beside it as `label` when the search could return that card itself. Use
-`'values'`, `'range'` or `'date'` only to override the shape, for example
-`facet: 'values'` on a 1–5 rating, or `facet: 'date'` on a number that holds
-a timestamp. A number facet with no `ranges` gets up to ten buckets of a
-round width across its values' span. A date may be an ISO date string or a
-number of seconds or milliseconds since the epoch; its histogram is monthly
-unless the query names an `interval`.
+`facet: true` makes the field a facet: a query may count it with
+`facets: [{ by }]`, and the index keeps its values in its facet table. A field
+that does not declare it is refused in `facets` with `needs-declaration`, and
+the message names the declaration to add. It is a boolean: the facet's shape
+comes from the field's type, and a query reshapes it with `stats`, `ranges`
+or `interval` (see [Facets](search.md#facets)). A string, a list of strings
+or a boolean gives values with counts; a number gives range buckets with
+stats (up to ten buckets of a round width across its values' span, unless
+the query names `ranges`); a date or date-time gives a monthly histogram
+with stats (unless the query names an `interval`). For a 1–5 rating counted
+by value, the query says `stats: true`; for a number that holds a
+timestamp, it says `interval`.
+
+- **A compound field** (a FieldDef) declared `facet: true` opts in the
+  subfields its FieldDef declares `facet: true`, by dotted path:
+  `shipTo = contains(Address, { search: { facet: true } })` with `city`
+  declared on `Address` is the facet `shipTo.city`. A FieldDef that counts
+  by one value names it, `static facetValue = 'currency'`, and the compound
+  itself is a facet (`price`, read from `price.currency`). A compound whose
+  FieldDef declares neither opts in nothing.
+- **A list** of values or of compounds counts a card once per distinct value
+  any element holds.
+- **A link** declared `facet: true` counts by the linked card: its value is
+  the linked card's id, with the card's title beside it as `label` when the
+  search could return that card itself. The linked card's own fields
+  (`author.name`) are facets when its type declares them `facet: true`, and
+  they reach this card's search doc through the link's `searchable` option.
+- **Subclasses** inherit their parents' declarations. A facet over a base type
+  counts a field a subclass defines when that subclass declares it.
+- Changing only a type's `search` declarations rewrites its cards' facet
+  rows from their indexed search docs; nothing is rendered again.
 
 ### `rank`
 
 A ranking signal for the `relevance` sort (see [Ranking](#ranking)).
 Several fields may share a signal; the card-level `rank` names the main one.
 
-### `include`
+### Linked fields
 
-On a `linksTo` or `linksToMany`, the linked card's fields to copy into this
-card's search doc, for example `include: ['name']`. Fields not listed stay
-with the linked card, so a card with many links keeps a small search doc.
-
-The link keeps its id beside the included fields: `topics: [{ id, name }]`.
-A filter may cross the link into an included field (`topics.name`) or its
-`id`, and a `select` may read them. Any other path through the link is
-refused, since the search doc doesn't carry it. A result or facet value
-renders the linked card by its prerendered HTML, by id, so a search never
-hydrates linked cards to display them.
-
-Only the indexed card's own links include, one level deep. The included
-values are the linked card's as it indexes them, and the linked card is a
-dependency, so renaming it reindexes the cards that link to it.
+A link's linked card's fields reach this card's search doc through the
+link's `searchable` option (`searchable: true` for the linked card's own
+fields, or dotted paths further along), not through `search`. A filter, a
+`select` and a facet may cross the link into what `searchable` brings; any
+other path through the link is refused, since the search doc doesn't carry
+it. The link always keeps its `id`. A result or facet value renders the
+linked card by its prerendered HTML, by id, so a search never hydrates linked
+cards to display them.
 
 ### `neighbors`
 
 On a `VectorField`, `neighbors: true` keeps a nearest-neighbor index of its
-vectors, so a `rerank` can compare each card with its own look-alikes
+vectors, so an expression sort entry can compare each card with its own look-alikes
 (`compare.near`). A vector field without it still answers `near` searches,
 exactly, with no index to maintain on every write.
 
@@ -143,7 +162,8 @@ fast on any realm, whatever its cards hold:
   summaries, keywords, labels and type names; and the start of plain and body
   text, capped to stay inline in the row. Ranking thousands of matches never
   reads a large value.
-- **Type-ahead ranks by title.** A `typeahead` term ranks the title that is
+- **Type-ahead ranks by title.** A type-ahead term (`matches` with
+  `prefix: true` and `scope: 'title'`) ranks the title that is
   what was typed first, then titles that start with it, then titles with
   every typed word as a word prefix, then matches through alternative names
   or type words; the rank vector orders within a tier. The pane's Relevance
@@ -195,7 +215,7 @@ merges over its parent's, member by member, and `rank` signal by signal.
 | `BooleanField`                              | Filterable                                                                        |
 | `VectorField`                               | Found by similarity (`near`)                                                      |
 | `PassageField` lists                        | Searched passage by passage (`matches … within`), never in the card's own vectors |
-| `linksTo`, `linksToMany`                    | Filterable by id; nothing included                                                |
+| `linksTo`, `linksToMany`                    | Filterable by id; `searchable` brings the linked card's fields                    |
 
 ## Precedence
 
@@ -254,17 +274,17 @@ and [Blended ranking](search.md#blended-ranking-blend).
 
 ### Text
 
-| Syntax                                       | Does                                                    |
-| -------------------------------------------- | ------------------------------------------------------- |
-| `{ matches: 'crdt' }`                        | Full-text search, ranked by role                        |
-| `{ matches: 'crdt', prefix: true }`          | The last word matches as a prefix                       |
-| `{ typeahead: 'kleppm' }`                    | Type-ahead over titles and alternative names            |
-| `{ matches: 'kleppman', typos: true }`       | Typo-tolerant                                           |
-| `{ matches: 'crdt', scope: 'title' }`        | Only title, name and alias roles                        |
-| `{ matches: 'metal', fields: ['material'] }` | Only the values of these fields                         |
-| `{ matches: '…', within: 'segments' }`       | Passage search, reported in `meta.passages`             |
-| `{ pattern: { slug: 'intro-*' } }`           | Glob, on fields with `patterns` or an `identifier` role |
-| `{ regex: { slug: '^intro-' } }`             | Regex, on the same fields                               |
+| Syntax                                                | Does                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| `{ matches: 'crdt' }`                                 | Full-text search, ranked by role                        |
+| `{ matches: 'crdt', prefix: true }`                   | The last word matches as a prefix                       |
+| `{ matches: 'kleppm', prefix: true, scope: 'title' }` | Type-ahead over titles and alternative names            |
+| `{ matches: 'kleppman', typos: true }`                | Typo-tolerant                                           |
+| `{ matches: 'crdt', scope: 'title' }`                 | Only title, name and alias roles                        |
+| `{ matches: 'metal', fields: ['material'] }`          | Only the values of these fields                         |
+| `{ matches: '…', within: 'segments' }`                | Passage search, reported in `meta.passages`             |
+| `{ pattern: { slug: 'intro-*' } }`                    | Glob, on fields with `patterns` or an `identifier` role |
+| `{ regex: { slug: '^intro-' } }`                      | Regex, on the same fields                               |
 
 A card matches by its rendered markdown or by its fields' role-weighted words,
 so a field the card doesn't render still matches. With `prefix`, the word
@@ -286,7 +306,8 @@ under four letters, one edit up to seven, two from eight; a swapped pair of
 letters is one edit), and a word the list already holds is matched as typed.
 Every word must still match, as one of its alternatives.
 
-`{ typeahead: 'ownrship in prac', typos: true }` does the same for
+`{ matches: 'ownrship in prac', prefix: true, scope: 'title', typos: true }`
+does the same for
 type-ahead: each word keeps its prefix match and also matches its
 corrections whole, so a fully typed misspelling finds the word it meant.
 
@@ -305,26 +326,14 @@ pattern values or listed words, until it is reindexed.
 
 ### Facets
 
-A facet is `facets: [{ by, size }]`; counts come back in
-`meta.facets[by]`, stats and totals in `meta.facetStats[by]`.
-
-| Member                                           | Does                                                      |
-| ------------------------------------------------ | --------------------------------------------------------- |
-| `by`, `size`                                     | Values with counts, top first                             |
-| `own: 'ignore'`                                  | Counts the facet without its own selection (multi-select) |
-| `stats: true`                                    | Min, max, average, sum and distinct count                 |
-| `measure: { sum \| avg \| min \| max: path }`    | A metric per value                                        |
-| `interval: 'day' \| 'week' \| 'month' \| 'year'` | Date histogram                                            |
-| `ranges: [{ to }, { from, to }, { from }]`       | Range buckets                                             |
-| `prefix: 'kle'`                                  | Only values starting with it (searching a facet's values) |
-| `missing: true`                                  | Adds the count of matches with no value                   |
-| `order: 'count' \| 'value' \| 'measure'`         | Value order                                               |
-
-A faceted field's declared shape applies when the query names none of
-`stats`, `interval` or `ranges`. On Postgres, a paged search counts a plain
-values facet in the page's own statement; a facet with any other member, or a
-declared range or date shape, runs its own queries over the same match set.
-`own: 'ignore'` leaves out every filter node that constrains only `by`
+A facet's members are listed under [Facets](search.md#facets). A facet's
+`by` (and a `measure`'s field) must be declared `facet: true` (see
+[`facet`](#facet)) or be a built-in facet; anything else is refused with
+`needs-declaration`. A declared field gives the facet its shape when the
+query names none of `stats`, `interval` or `ranges`. Every facet is counted
+from the index's facet table, which holds the declared fields' values, by its
+own queries over the page's match set; the SQLite browser index keeps no
+facet table and refuses facets with `needs-postgres`. `own: 'ignore'` leaves out every filter node that constrains only `by`
 (keeping its type anchor). Range labels are `key`, or `from-to` with `*` for
 an open end; date buckets are labeled by their first day (weeks start on
 Monday, in UTC). `meta.facetStats[by]` holds `count` and `distinct`, then
@@ -335,12 +344,11 @@ any merged count may be short. See [Facets](search.md#facets).
 
 ### Results
 
-| Syntax                       | Does                                                      |
-| ---------------------------- | --------------------------------------------------------- |
-| `meta.page.total`            | Exact total; paged searches count in the page's statement |
-| `collapse: { by, on, keep }` | The best `keep` results per value; totals count groups    |
-
-See [Collapsing to one per group](search.md#collapsing-to-one-per-group-collapse).
+`collapse: { by, keep }` keeps the best `keep` results per value, and the
+total counts what remains (see
+[Collapsing to one per group](search.md#collapsing-to-one-per-group-collapse)).
+How `meta.page.total` is counted, capped at 1,000 by default, is under
+[Pagination](search.md#pagination).
 
 ## Example: a library of recorded talks
 
@@ -371,23 +379,30 @@ export class Talk extends CardDef {
   @field views = contains(NumberField, {
     search: { rank: 'popularity', facet: true },
   });
-  @field lastWatched = contains(NumberField, {
-    search: { rank: 'recency', facet: 'date' },
+  @field lastWatched = contains(DateTimeField, {
+    search: { rank: 'recency', facet: true },
   });
   @field editorNote = contains(StringField, { search: { role: 'note' } });
   @field recordingPath = contains(StringField, { search: false });
   @field segments = containsMany(TranscriptSegment);
   @field topics = linksToMany(() => Topic, {
-    search: { include: ['name'], facet: true },
+    searchable: true,
+    search: { facet: true },
   });
 }
 ```
 
-A search pane over these is:
+A search pane over these, with `talkRef` the code ref of `Talk`
+(`{ module: '<the module's id>', name: 'Talk' }`) and `q` what was typed, is:
 
 ```js
-{ filter: { on: Talk, matches: q }, sort: [{ relevance: true }], page: { size: 20 },
-  facets: [{ by: 'event', own: 'ignore' }, { by: 'duration' }, { by: 'topics' }] }
+{
+  type: talkRef,
+  filter: { matches: q },
+  sort: [{ relevance: true }],
+  page: { size: 20 },
+  facets: [{ by: 'event', own: 'ignore' }, { by: 'duration' }, { by: 'topics' }],
+}
 ```
 
 Titles and speakers outrank abstracts, popular and recently watched talks
@@ -397,7 +412,7 @@ A misspelled speaker still matches with `typos: true` on the term. To find the
 moment in a talk where something was said, search its passages:
 
 ```js
-{ filter: { on: Talk, matches: q, within: 'segments' }, sort: [{ relevance: true }] }
+{ type: talkRef, filter: { matches: q, within: 'segments' }, sort: [{ relevance: true }] }
 ```
 
 `meta.passages` lists, for each result, the segments that matched with their
