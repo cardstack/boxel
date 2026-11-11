@@ -192,6 +192,22 @@ module('Pretui | components/code-editor', function (hooks) {
     assert.strictEqual(created[0].language, 'plain');
   });
 
+  test('a file extension names its language, and a card definition reads as its script', async function (assert) {
+    await render(
+      <template>
+        <CodeEditor @value='x' @language='gts' />
+        <CodeEditor @value='x' @language='gjs' />
+        <CodeEditor @value='x' @language='constructor' />
+      </template>,
+    );
+    await waitFor('[data-test-stub-editor]');
+    assert.deepEqual(
+      created.map((c) => c.language),
+      ['typescript', 'javascript', 'plain'],
+      'a name that is only on a prototype is not an alias',
+    );
+  });
+
   test('a new value from outside replaces the document, and an echo of typing does not', async function (assert) {
     class State {
       @tracked value = 'one';

@@ -23,6 +23,18 @@ const LANGUAGES: readonly CodeEditorLanguage[] = [
   'plain',
 ];
 
+// Other names a caller may pass, often a file's extension. A card definition
+// (`gts`, `gjs`) reads as its script language: the class, imports and fields
+// highlight, and a `<template>` body gets the script grammar's approximation,
+// as CodeBlock gives it.
+// A Map, so a name like `constructor` finds nothing on a prototype.
+const ALIASES = new Map<string, CodeEditorLanguage>([
+  ['js', 'javascript'],
+  ['gjs', 'javascript'],
+  ['ts', 'typescript'],
+  ['gts', 'typescript'],
+]);
+
 // CodeBlock's names for the same grammars, for the read-only fallback.
 const FALLBACK_LANGUAGE: Record<CodeEditorLanguage, string | undefined> = {
   javascript: 'js',
@@ -232,8 +244,8 @@ export interface CodeEditorSignature {
     value?: string;
     /** fires with the whole text after every edit */
     onInput?: (value: string) => void;
-    /** 'javascript' | 'typescript' | 'json' | 'plain' (default); anything
-     * else is plain */
+    /** 'javascript' | 'typescript' | 'json' | 'plain' (default), or an
+     * alias: js, gjs, ts, gts; anything else is plain */
     language?: CodeEditorLanguage | string;
     /** shows the code and lets it be selected, but not changed */
     readOnly?: boolean;
@@ -320,9 +332,10 @@ export class CodeEditor extends Component<CodeEditorSignature> {
 
   get language(): CodeEditorLanguage {
     let language = this.args.language;
-    return LANGUAGES.includes(language as CodeEditorLanguage)
-      ? (language as CodeEditorLanguage)
-      : 'plain';
+    if (LANGUAGES.includes(language as CodeEditorLanguage)) {
+      return language as CodeEditorLanguage;
+    }
+    return (language && ALIASES.get(language)) || 'plain';
   }
 
   get fallbackLanguage(): string | undefined {
