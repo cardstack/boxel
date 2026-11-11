@@ -32,7 +32,9 @@ export const BATCHED_AI_RESERVE_FACTOR = 2;
 export type AutomationRunAIAdmission =
   | {
       kind: 'admitted';
-      // The credits reserved: pass them to `settleAutomationRunAIRequest`.
+      // The reservation to settle with `settleAutomationRunAIRequest`, and
+      // the credits it holds.
+      reservationId: string;
       reservedCredits: number;
       ceiling: AIRequestCostCeiling;
     }
@@ -85,7 +87,12 @@ export async function admitAutomationRunAIRequest(
   );
   switch (reservation.kind) {
     case 'reserved':
-      return { kind: 'admitted', reservedCredits: credits, ceiling };
+      return {
+        kind: 'admitted',
+        reservationId: reservation.reservationId,
+        reservedCredits: credits,
+        ceiling,
+      };
     case 'over-cap': {
       let { aiCreditsSpent, aiCreditsReserved } = reservation.run;
       return {
@@ -116,20 +123,22 @@ export async function admitAutomationRunAIRequest(
 // Settles an admitted request: releases its reservation and adds what it
 // cost, in USD as the AI provider reports it, to the run's AI spending. Pass
 // `costInUsd: 0` for a request that was never sent, and leave it undefined
-// when the cost can't be learned, which spends the whole reservation.
+// when the cost can't be learned, which spends the whole reservation. Returns
+// false when the reservation was already settled, which changes nothing.
 export async function settleAutomationRunAIRequest(
   dbAdapter: DBAdapter,
   {
     runId,
-    reservedCredits,
+    reservationId,
     costInUsd,
-  }: { runId: string; reservedCredits: number; costInUsd: number | undefined },
-): Promise<void> {
-  await settleAutomationRunAICredits(dbAdapter, runId, {
-    reserved: reservedCredits,
-    cost:
-      costInUsd === undefined ? reservedCredits : costInUsd * CREDITS_PER_USD,
-  });
+  }: { runId: string; reservationId: string; costInUsd: number | undefined },
+): Promise<boolean> {
+  return await settleAutomationRunAICredits(
+    dbAdapter,
+    runId,
+    reservationId,
+    costInUsd === undefined ? undefined : costInUsd * CREDITS_PER_USD,
+  );
 }
 
 function formatCredits(credits: number): string {

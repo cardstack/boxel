@@ -20,6 +20,8 @@
 // takes a run whose commit was already claimed learns that from the start
 // and finishes the run without running the script again.
 
+import { v4 as uuidv4 } from '@lukeed/uuid';
+
 import type { DBAdapter } from './db.ts';
 import { param, query, type Expression } from './expression.ts';
 import type { PgPrimitive } from './index.ts';
@@ -63,7 +65,8 @@ export interface AutomationRun extends AutomationRunCounts {
   errorMessage: string | null;
   canceledBy: string | null;
   // Credits the run's finished AI requests cost, and the most its AI requests
-  // in flight can cost (see `reserveAutomationRunAICredits`).
+  // in flight can cost: the sum of the reservations it holds (see
+  // `reserveAutomationRunAICredits`).
   aiCreditsSpent: number;
   aiCreditsReserved: number;
   createdAt: string;
@@ -368,13 +371,15 @@ export async function addAutomationRunCounts(
 // - `not-running`: the run is pending, finished or canceled.
 // - `missing`: there is no such run.
 export type AutomationRunAIReservation =
-  | { kind: 'reserved' | 'over-cap' | 'not-running'; run: AutomationRun }
+  | { kind: 'reserved'; reservationId: string; run: AutomationRun }
+  | { kind: 'over-cap' | 'not-running'; run: AutomationRun }
   | { kind: 'missing' };
 
 // Reserves `credits`, the most an AI request can cost, against a running
 // run's AI spending cap, `cap` (ADR 029 §1.5). The check and the reservation
 // are one statement, so two requests racing for the last of a run's AI
-// credits can't both get them. A reservation counts against the cap until
+// credits can't both get them. Each reservation is held on the row under its
+// own id (`ai_reservations`) and counts against the cap until
 // `settleAutomationRunAICredits` replaces it with what the request cost.
 export async function reserveAutomationRunAICredits(
   dbAdapter: DBAdapter,
@@ -384,10 +389,15 @@ export async function reserveAutomationRunAICredits(
 ): Promise<AutomationRunAIReservation> {
   assertCredits('reserve', credits);
   assertCredits('cap a run at', cap);
+  let reservationId = uuidv4();
   let [row] = await query(dbAdapter, [
     'UPDATE automation_runs SET ai_credits_reserved = ai_credits_reserved +',
     param(credits),
-    'WHERE id =',
+    ', ai_reservations = ai_reservations || jsonb_build_object(CAST(',
+    param(reservationId),
+    'AS text), CAST(',
+    param(credits),
+    'AS numeric)) WHERE id =',
     param(id),
     "AND state = 'running'",
     'AND ai_credits_spent + ai_credits_reserved +',
@@ -397,7 +407,7 @@ export async function reserveAutomationRunAICredits(
     'RETURNING *',
   ]);
   if (row) {
-    return { kind: 'reserved', run: runFromRow(row) };
+    return { kind: 'reserved', reservationId, run: runFromRow(row) };
   }
   let run = await getAutomationRun(dbAdapter, id);
   if (!run) {
@@ -406,27 +416,44 @@ export async function reserveAutomationRunAICredits(
   return { kind: run.state === 'running' ? 'over-cap' : 'not-running', run };
 }
 
-// Settles an AI request that reserved `reserved` credits: releases the
-// reservation and adds `cost`, what the request cost in credits, to the run's
-// AI spending. A request that was never sent, or cost nothing, settles with
-// a `cost` of 0. It applies in any state, since the request was paid for
-// whether or not the run is still going. A request whose cost can't be
-// learned settles at its reservation, the most it could have cost.
+// Settles the AI request that holds `reservationId`: releases its
+// reservation and adds `cost`, what the request cost in credits, to the
+// run's AI spending. A request that was never sent, or cost nothing, settles
+// with a `cost` of 0. A request whose cost can't be learned settles with an
+// undefined `cost`, which spends its whole reservation, the most it could
+// have cost. It applies in any state, since the request was paid for whether
+// or not the run is still going. The reservation is removed in the same
+// statement, so a second settle of it changes nothing and returns false.
 export async function settleAutomationRunAICredits(
   dbAdapter: DBAdapter,
   id: string,
-  { reserved, cost }: { reserved: number; cost: number },
-): Promise<void> {
-  assertCredits('release', reserved);
-  assertCredits('spend', cost);
-  await query(dbAdapter, [
-    'UPDATE automation_runs SET ai_credits_reserved = GREATEST(ai_credits_reserved -',
-    param(reserved),
-    ', 0), ai_credits_spent = ai_credits_spent +',
-    param(cost),
-    'WHERE id =',
+  reservationId: string,
+  cost: number | undefined,
+): Promise<boolean> {
+  if (cost !== undefined) {
+    assertCredits('spend', cost);
+  }
+  let held = [
+    'CAST(ai_reservations ->> CAST(',
+    param(reservationId),
+    'AS text) AS numeric)',
+  ];
+  let rows = await query(dbAdapter, [
+    'UPDATE automation_runs SET ai_credits_reserved = ai_credits_reserved -',
+    ...held,
+    ', ai_credits_spent = ai_credits_spent + COALESCE(CAST(',
+    param(cost ?? null),
+    'AS numeric),',
+    ...held,
+    '), ai_reservations = ai_reservations - CAST(',
+    param(reservationId),
+    'AS text) WHERE id =',
     param(id),
+    'AND jsonb_exists(ai_reservations, CAST(',
+    param(reservationId),
+    'AS text)) RETURNING id',
   ]);
+  return rows.length > 0;
 }
 
 function assertCredits(action: string, credits: number) {

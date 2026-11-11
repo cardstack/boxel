@@ -150,7 +150,7 @@ cancel works by changing it. The functions that change it are in
 | `error_reason`, `error_message`                                                | For an error: a code (such as `script-error`, `timed-out`, `commit-interrupted`) and its detail                              |
 | `canceled_by`                                                                  | Who canceled the run                                                                                                         |
 | `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, which the realm server must add to where it does the work, never taking them from the tab                |
-| `ai_credits_spent`, `ai_credits_reserved`                                      | Credits the run's finished AI requests cost, and the worst case of those in flight (see _The AI spending cap_)               |
+| `ai_credits_spent`, `ai_credits_reserved`, `ai_reservations`                   | Credits the run's finished AI requests cost, and the worst case of those in flight (see _The AI spending cap_)               |
 | `created_at`, `started_at`, `commit_started_at`, `committed_at`, `finished_at` | When the run was enqueued, first started (a retry keeps it), claimed its commit, had its commit land, and ended              |
 
 A run is unique by `(automation_id, trigger, slot)`, the same three its
@@ -283,8 +283,8 @@ Before the server sends an AI request for a run, `admitAutomationRunAIRequest` (
 - **What it refuses rather than prices**: a body that names another model or lists fallback `models` (`model-mismatch`); web search (`:online`, `plugins`, `web_search_options`) and any non-text content part, which bill in ways the body's bytes don't bound (`unpriced-input`); and a request with no output limit to a model with no listed context window (`unbounded-output`).
 - **The price** is the model's OpenRouter listing, read from its indexed `OpenRouterModel` card with `readOpenRouterModelPrice`. The prompt and completion prices are required; a missing one, or a variable price (`-1`, as `openrouter/auto` lists), can't be read, so that model can't be priced.
 - **A batched request** reserves `BATCHED_AI_RESERVE_FACTOR` (2) times its worst case, once for the batch and once for its normal-price fallback (ADR 030 §1.4).
-- **The reservation** is `reserveAutomationRunAICredits`, one conditional `UPDATE`: it adds the worst case to `ai_credits_reserved` only while the run is running and `ai_credits_spent + ai_credits_reserved` plus the worst case stays within the cap. Otherwise the request is refused (`over-cap`), so requests in flight at once can't between them pass the cap.
-- **Settling** is `settleAutomationRunAIRequest`, exactly once per admitted request: it releases the reservation and adds the cost the AI provider reports. A request never sent settles at 0; one whose cost can't be learned settles at its reservation, the most it could have cost. It applies in any state, since the request was paid for whether or not the run is still going.
+- **The reservation** is `reserveAutomationRunAICredits`, one conditional `UPDATE`: it holds the worst case in `ai_reservations` under a new reservation id and adds it to `ai_credits_reserved`, only while the run is running and `ai_credits_spent + ai_credits_reserved` plus the worst case stays within the cap. Otherwise the request is refused (`over-cap`), so requests in flight at once can't between them pass the cap.
+- **Settling** is `settleAutomationRunAIRequest` with the admission's `reservationId`: it removes the reservation, releases its credits and adds the cost the AI provider reports. A request never sent settles at 0; one whose cost can't be learned settles at its reservation, the most it could have cost. It applies in any state, since the request was paid for whether or not the run is still going. A second settle of the same reservation finds nothing and changes nothing.
 
 Raising `aiCredits` above the automation's caps snapshot pauses it like raising any other cap, since the snapshot holds every cap in `AUTOMATION_CAP_NAMES`.
 
@@ -293,7 +293,7 @@ SELECT state, ai_credits_spent, ai_credits_reserved, resolve_calls
   FROM automation_runs WHERE id = '<run id>';
 ```
 
-A finished run with `ai_credits_reserved` above 0 has an admitted request that was never settled.
+A finished run with `ai_credits_reserved` above 0 has an admitted request that was never settled; `ai_reservations` names it and what it holds.
 
 ## The queue tier and worker lane
 

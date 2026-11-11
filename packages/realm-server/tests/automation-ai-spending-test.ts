@@ -202,7 +202,7 @@ module(basename(import.meta.filename), function () {
       // The first request cost a tenth of its worst case.
       await settleAutomationRunAIRequest(dbAdapter, {
         runId: run.id,
-        reservedCredits: first.reservedCredits,
+        reservationId: first.reservationId,
         costInUsd: each / 10 / 1000,
       });
       let settled = await current(run.id);
@@ -270,12 +270,57 @@ module(basename(import.meta.filename), function () {
       );
       await settleAutomationRunAIRequest(dbAdapter, {
         runId: run.id,
-        reservedCredits: admission.reservedCredits,
+        reservationId: admission.reservationId,
         costInUsd: undefined,
       });
       let settled = await current(run.id);
       close(assert, settled.aiCreditsSpent, admission.reservedCredits, 'spent');
       close(assert, settled.aiCreditsReserved, 0, 'nothing held');
+    });
+
+    test('a reservation settles once', async function (assert) {
+      let run = await runningRun();
+      let body = request(500);
+      let first = admitted(
+        await admitAutomationRunAIRequest(dbAdapter, {
+          runId: run.id,
+          aiCreditsCap: 50,
+          body,
+          price: PRICE,
+        }),
+      );
+      let second = admitted(
+        await admitAutomationRunAIRequest(dbAdapter, {
+          runId: run.id,
+          aiCreditsCap: 50,
+          body,
+          price: PRICE,
+        }),
+      );
+      assert.true(
+        await settleAutomationRunAIRequest(dbAdapter, {
+          runId: run.id,
+          reservationId: first.reservationId,
+          costInUsd: 0.001,
+        }),
+        'the first settle applies',
+      );
+      assert.false(
+        await settleAutomationRunAIRequest(dbAdapter, {
+          runId: run.id,
+          reservationId: first.reservationId,
+          costInUsd: 0.001,
+        }),
+        'settling it again does nothing',
+      );
+      let settled = await current(run.id);
+      close(assert, settled.aiCreditsSpent, 1, 'its cost is spent once');
+      close(
+        assert,
+        settled.aiCreditsReserved,
+        second.reservedCredits,
+        'the other request’s reservation still holds',
+      );
     });
 
     test('a request that was never sent releases its reservation', async function (assert) {
@@ -290,7 +335,7 @@ module(basename(import.meta.filename), function () {
       );
       await settleAutomationRunAIRequest(dbAdapter, {
         runId: run.id,
-        reservedCredits: admission.reservedCredits,
+        reservationId: admission.reservationId,
         costInUsd: 0,
       });
       let settled = await current(run.id);
@@ -321,7 +366,7 @@ module(basename(import.meta.filename), function () {
       );
       await settleAutomationRunAIRequest(dbAdapter, {
         runId: run.id,
-        reservedCredits: admission.reservedCredits,
+        reservationId: admission.reservationId,
         costInUsd: 0.0005,
       });
       close(
