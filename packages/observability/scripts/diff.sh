@@ -158,17 +158,12 @@ source ./scripts/grafanactl-env.sh "$env_name"
 # value apply.sh uses (CI fetches it from /<env>/boxel-grafana/realm_server_url
 # — see observability-apply-${env_name}.yml).
 #
-# `grafana_secret` (CS-10929) is intentionally NOT mirrored from
-# GRAFANA_SECRET. apply.sh substitutes the real secret, so the live
-# (pulled) state of every dashboard's `grafana_secret` constant template
-# variable carries the real value. If we substituted the same real value
-# on the committed side, a) any rotation drift between SSM and live
-# Grafana would surface in the diff (i.e., the diff would print the old
-# AND new secret), and b) the substituted value can appear in `git diff`
-# context lines when nearby panels change. Both leak into the PR comment
-# diff.sh's output is rendered into. Instead we redact both sides to a
-# fixed placeholder before diffing — see the `grafana_secret` arm of
-# JQ_NORMALIZE below.
+# No committed dashboard has a `grafana_secret` variable any more, but a
+# live dashboard applied before operator actions moved to the
+# realm-server-operator datasource proxy still carries the real secret in
+# one. The diff that removes it would print that secret into the PR
+# comment diff.sh's output is rendered into, so the pulled side is still
+# redacted — see the `grafana_secret` arm of JQ_NORMALIZE below.
 case "$env_name" in
   local) realm_server_url="${REALM_SERVER_URL:-https://localhost:4201/}" ;;
   *)
@@ -283,19 +278,13 @@ normalize folders Folder
 #      live URL (never the placeholder), so real drift between
 #      $REALM_SERVER_URL and what's actually provisioned in Grafana
 #      surfaces in the diff.
-#   4b. `grafana_secret` redaction (CS-10929). apply.sh substitutes the
-#      realm-server shared secret into the `grafana_secret` constant
-#      template variable's `query` at push time. The live (pulled) state
-#      therefore carries the real secret, and a rotation in SSM that
-#      hasn't been re-applied would show the old secret in the diff
-#      output — which the diff.yml workflow renders into a PR comment
-#      (no Actions log masking on PR comment bodies). To keep diff.sh
-#      from leaking credentials, redact both sides to a fixed placeholder
-#      ("REDACTED") whenever a `grafana_secret` constant template
-#      variable is encountered, regardless of its current `.query` value.
-#      That covers the committed side (where `.query` is still
-#      "REPLACE_AT_APPLY_TIME") and the pulled side (where it's the
-#      substituted real secret) with one walk arm.
+#   4b. `grafana_secret` redaction. Dashboards once carried the
+#      realm-server shared secret in a `grafana_secret` constant template
+#      variable, substituted at apply time. A live dashboard applied
+#      before that ended still has it, and the diff.yml workflow renders
+#      this output into a PR comment (no Actions log masking on PR comment
+#      bodies). So any `grafana_secret` constant template variable is
+#      redacted to a fixed placeholder ("REDACTED"), whatever its `.query`.
 #   5. Default `"value": null` on threshold step zero (CS-10991). Grafana
 #      fills in `value: null` on the lowest threshold step (the implicit
 #      `-Infinity` floor) when it stores a dashboard. AMG-era exports

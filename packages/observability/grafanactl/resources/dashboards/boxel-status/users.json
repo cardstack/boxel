@@ -241,7 +241,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator actions: grant extra credit to the selected user. Live balance + last grant are fetched from credits_ledger every refresh; the custom-amount button disables when the entered amount is non-positive. Each click POSTs with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929).",
+        "description": "Operator actions: grant extra credit to the selected user. Live balance + last grant are fetched from credits_ledger every refresh; the custom-amount button disables when the entered amount is non-positive. Each click POSTs through the Grafana datasource proxy, which adds the realm-server credential.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
@@ -351,7 +351,7 @@
               "size": "md",
               "variant": "primary",
               "value": "",
-              "customCode": "if (!window.confirm('Add 1,000 credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '1000' });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+1,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "if (!window.confirm('Add 1,000 credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '1000' });\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-add-credit?' + params.toString(), { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+1,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             },
             {
               "id": "btn_add_10k",
@@ -365,7 +365,7 @@
               "size": "md",
               "variant": "primary",
               "value": "",
-              "customCode": "if (!window.confirm('Add 10,000 credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '10000' });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+10,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "if (!window.confirm('Add 10,000 credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '10000' });\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-add-credit?' + params.toString(), { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+10,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             },
             {
               "id": "btn_add_100k",
@@ -379,7 +379,7 @@
               "size": "md",
               "variant": "destructive",
               "value": "",
-              "customCode": "if (!window.confirm('Add 100,000 credits to ' + ${matrix_user_id:doublequote} + '?\\n\\nThis is the largest preset \u2014 make sure this is intentional.')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '100000' });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+100,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "if (!window.confirm('Add 100,000 credits to ' + ${matrix_user_id:doublequote} + '?\\n\\nThis is the largest preset \u2014 make sure this is intentional.')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '100000' });\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-add-credit?' + params.toString(), { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+100,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             },
             {
               "id": "btn_add_custom",
@@ -394,7 +394,7 @@
               "variant": "secondary",
               "value": "",
               "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='custom_amount';})||{}).value || 0) <= 0;",
-              "customCode": "const amount = Number((context.panel.elements.find(function(e){return e.id==='custom_amount';})||{}).value || 0);\nif (amount <= 0) {\n  context.grafana.notifyWarning(['Invalid amount', 'Enter a positive credit amount before clicking.']);\n  return;\n}\nif (!window.confirm('Add ' + amount.toLocaleString() + ' credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: String(amount) });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+' + amount.toLocaleString() + ' credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "const amount = Number((context.panel.elements.find(function(e){return e.id==='custom_amount';})||{}).value || 0);\nif (amount <= 0) {\n  context.grafana.notifyWarning(['Invalid amount', 'Enter a positive credit amount before clicking.']);\n  return;\n}\nif (!window.confirm('Add ' + amount.toLocaleString() + ' credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: String(amount) });\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-add-credit?' + params.toString(), { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+' + amount.toLocaleString() + ' credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             }
           ],
           "initial": {
@@ -647,7 +647,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: grant the selected permission level to this user on the chosen realm. POSTs to the realm-server with Authorization: Bearer.",
+        "description": "Operator action: grant the selected permission level to this user on the chosen realm. POSTs to the realm-server through the Grafana datasource proxy, which adds the realm-server credential.",
         "fieldConfig": {
           "defaults": {
             "actions": [
@@ -656,7 +656,7 @@
                 "title": "Grant ${permission_label} to ${matrix_user_id} on ${grant_realm_url}",
                 "fetch": {
                   "method": "POST",
-                  "url": "${realm_server}_grafana-upsert-realm-user-permission",
+                  "url": "/api/datasources/proxy/uid/realm-server-operator/_grafana-upsert-realm-user-permission",
                   "queryParams": [
                     [
                       "realm",
@@ -675,12 +675,7 @@
                       "${write_flag}"
                     ]
                   ],
-                  "headers": [
-                    [
-                      "Authorization",
-                      "Bearer ${grafana_secret}"
-                    ]
-                  ],
+                  "headers": [],
                   "body": ""
                 },
                 "confirmation": "Grant ${permission_label} to ${matrix_user_id} on ${grant_realm_url}?",
@@ -880,7 +875,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: retire every session token already issued to this user \u2014 both the realm-server session and the per-realm sessions. Tokens minted after the click are unaffected, so a client holding a valid Matrix session simply re-authenticates; this is not a sign-out. To evict an active session, deactivate the user's Matrix device in Synapse first, then revoke here \u2014 the other order lets the client re-mint. Against a bearer who copied a realm JWT and has no Matrix session, this alone is a permanent cutoff. Click POSTs with `Authorization: Bearer ${grafana_secret}`.",
+        "description": "Operator action: retire every session token already issued to this user \u2014 both the realm-server session and the per-realm sessions. Tokens minted after the click are unaffected, so a client holding a valid Matrix session simply re-authenticates; this is not a sign-out. To evict an active session, deactivate the user's Matrix device in Synapse first, then revoke here \u2014 the other order lets the client re-mint. Against a bearer who copied a realm JWT and has no Matrix session, this alone is a permanent cutoff. Click POSTs through the Grafana datasource proxy, which adds the realm-server credential.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
@@ -955,7 +950,7 @@
               "size": "md",
               "variant": "destructive",
               "value": "",
-              "customCode": "if (!window.confirm('Revoke every session token already issued to ' + ${matrix_user_id:doublequote} + '?\\n\\nThis does NOT sign the user out. A client that still holds a valid Matrix session will re-authenticate and keep working.\\n\\nTo evict an active intruder, deactivate their Matrix device in Synapse FIRST, then run this to retire the tokens it already minted.')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote} });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-revoke-user-sessions?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Sessions revoked', 'Tokens issued to ' + ${matrix_user_id:doublequote} + ' before now are no longer accepted. Deactivate their Matrix device if the intent is to evict an active session.']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Revoke sessions failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Revoke sessions failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "if (!window.confirm('Revoke every session token already issued to ' + ${matrix_user_id:doublequote} + '?\\n\\nThis does NOT sign the user out. A client that still holds a valid Matrix session will re-authenticate and keep working.\\n\\nTo evict an active intruder, deactivate their Matrix device in Synapse FIRST, then run this to retire the tokens it already minted.')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote} });\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-revoke-user-sessions?' + params.toString(), { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Sessions revoked', 'Tokens issued to ' + ${matrix_user_id:doublequote} + ' before now are no longer accepted. Deactivate their Matrix device if the intent is to evict an active session.']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Revoke sessions failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Revoke sessions failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             }
           ],
           "initial": {
@@ -1139,20 +1134,6 @@
           "skipUrlSync": true,
           "sort": 0,
           "type": "query"
-        },
-        {
-          "hide": 2,
-          "name": "realm_server",
-          "query": "__REALM_SERVER_URL__",
-          "skipUrlSync": true,
-          "type": "constant"
-        },
-        {
-          "hide": 2,
-          "name": "grafana_secret",
-          "query": "REPLACE_AT_APPLY_TIME",
-          "skipUrlSync": true,
-          "type": "constant"
         }
       ]
     },

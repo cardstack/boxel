@@ -3,6 +3,8 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
+import Pin from '@cardstack/boxel-icons/pin';
+import PinOff from '@cardstack/boxel-icons/pin-off';
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
@@ -28,6 +30,7 @@ import {
 import {
   cardTypeDisplayName,
   cardTypeIcon,
+  rri,
   type ToolContext,
 } from '@cardstack/runtime-common';
 
@@ -44,6 +47,7 @@ import {
   AdornCheckmarkSelected,
 } from '@cardstack/host/components/adorn/adorn-select-checkmark';
 
+import SetWorkspacePinTool from '@cardstack/host/tools/set-workspace-pin';
 import { copyOpenableURLToClipboard } from '@cardstack/host/utils/clipboard';
 import { removeCardJsonExtension } from '@cardstack/host/utils/search/types';
 
@@ -58,6 +62,7 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 import type { CardDefOrId } from './stack-item';
 import type NetworkService from '../../services/network';
 import type StoreService from '../../services/store';
+import type WorkspacePinsService from '../../services/workspace-pins';
 import type {
   BaseDef,
   CardCrudFunctions,
@@ -77,6 +82,7 @@ export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
+  @service declare private workspacePins: WorkspacePinsService;
 
   @consume(CardCrudFunctionsContextName)
   declare private cardCrudFunctions: CardCrudFunctions;
@@ -607,6 +613,24 @@ export default class OperatorModeOverlays extends Overlays {
         menuItems.push(editItem);
       }
       menuItems.push(copyUrlItem);
+      // A workspace pins cards only, never files.
+      let workspacePin =
+        isField || isFile
+          ? undefined
+          : this.workspacePins.pinStateFor(rri(cardId));
+      if (workspacePin) {
+        menuItems.push({
+          label: workspacePin.pinned
+            ? 'Unpin from Workspace'
+            : 'Pin to Workspace',
+          action: () =>
+            new SetWorkspacePinTool(this.toolContext).execute({
+              cardId,
+              pinned: !workspacePin.pinned,
+            }),
+          icon: workspacePin.pinned ? PinOff : Pin,
+        });
+      }
       if (!isField && this.realm.canWrite(cardId)) {
         menuItems.push({
           label: 'Delete',
@@ -624,6 +648,10 @@ export default class OperatorModeOverlays extends Overlays {
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         toolContext: this.toolContext,
+        workspacePin:
+          isField || isFile
+            ? undefined
+            : this.workspacePins.pinStateFor(rri(cardId)),
       }) ?? [];
 
     // Delete and New Card of This Type don't make sense from an embedded field

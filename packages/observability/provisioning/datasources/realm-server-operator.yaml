@@ -1,0 +1,47 @@
+# Carries the operator actions on the dashboards (Reindex, Complete Job, Add
+# Credit, Grant Permission, Revoke Sessions, Set Catalog) to the realm-server's
+# `/_grafana-*` endpoints. A button POSTs to
+#
+#   /api/datasources/proxy/uid/realm-server-operator/_grafana-<action>
+#
+# and Grafana forwards it to `${REALM_SERVER_URL}_grafana-<action>`, adding the
+# headers below on its own side. The realm-server credential lives only in this
+# datasource's secureJsonData: it is in no dashboard, never reaches the
+# viewer's browser, and isn't returned by Grafana's datasource API.
+#
+# Grafana also adds `X-Grafana-Id`, its signed ID token for whoever clicked.
+# `X-Boxel-Grafana-Proxy` marks the request as proxied by Grafana, so the
+# realm server checks that token and refuses a service account or a Viewer.
+# Grafana adds the marker from this file, so a caller going through Grafana
+# can't leave it off. See `grafanaAuthorization` in
+# packages/realm-server/middleware/index.ts.
+#
+# Values substituted by `apply-datasources.sh` at apply time:
+#
+#   ${REALM_SERVER_URL}  ← /<env>/boxel-grafana/realm_server_url
+#   ${GRAFANA_SECRET}    ← /<env>/boxel/GRAFANA_SECRET  (SecureString)
+#
+# Locally, provisioning/local-only/realm-server-operator.yaml masks this file.
+#
+# The type is only a carrier. Grafana has no generic HTTP datasource, and the
+# datasource proxy forwards any path and method for most types, but not for
+# all: Prometheus refuses a POST to a path it doesn't know. Zipkin forwards
+# every request unchanged and is otherwise unused here, so it won't be
+# mistaken for a real data source.
+
+apiVersion: 1
+
+datasources:
+  - name: realm-server-operator
+    uid: realm-server-operator
+    type: zipkin
+    access: proxy
+    url: ${REALM_SERVER_URL}
+    isDefault: false
+    editable: false
+    jsonData:
+      httpHeaderName1: Authorization
+      httpHeaderName2: X-Boxel-Grafana-Proxy
+    secureJsonData:
+      httpHeaderValue1: Bearer ${GRAFANA_SECRET}
+      httpHeaderValue2: "true"

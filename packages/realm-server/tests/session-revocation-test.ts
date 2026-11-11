@@ -235,7 +235,7 @@ module(basename(import.meta.filename), function () {
       let router = new Router();
       router.post(
         '/_grafana-revoke-user-sessions',
-        grafanaAuthorization(grafanaSecret),
+        grafanaAuthorization(grafanaSecret, undefined),
         handleRevokeUserSessions({ dbAdapter } as any),
       );
       app.use(router.routes());

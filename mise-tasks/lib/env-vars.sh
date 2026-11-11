@@ -72,6 +72,29 @@ export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
 export WORKER_HIGH_PRIORITY_COUNT="${WORKER_HIGH_PRIORITY_COUNT:-0}"
 export WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-1}"
 
+# Prices for local stacks (ADR 029). Deployed tasks get theirs from their own
+# environment and never source this file. The rates are list prices for x86
+# compute, network, file storage and database storage. The task shapes
+# describe the local processes, so a tab's and a worker's share follow the
+# scaling above: a local stack can run several prerender servers, so its tabs
+# are the server count times the pool's ceiling. Every value can be
+# overridden, for example to try a bad value against the startup check.
+export PRICING_PRERENDER_USD_PER_VCPU_HOUR="${PRICING_PRERENDER_USD_PER_VCPU_HOUR:-0.04048}"
+export PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR="${PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR:-0.004445}"
+export PRICING_PRERENDER_TASK_VCPUS="${PRICING_PRERENDER_TASK_VCPUS:-4}"
+export PRICING_PRERENDER_TASK_MEMORY_GB="${PRICING_PRERENDER_TASK_MEMORY_GB:-16}"
+export PRICING_PRERENDER_TASK_TABS="${PRICING_PRERENDER_TASK_TABS:-$((PRERENDER_COUNT * PRERENDER_PAGE_POOL_MAX))}"
+export PRICING_WORKER_USD_PER_VCPU_HOUR="${PRICING_WORKER_USD_PER_VCPU_HOUR:-0.04048}"
+export PRICING_WORKER_USD_PER_MEMORY_GB_HOUR="${PRICING_WORKER_USD_PER_MEMORY_GB_HOUR:-0.004445}"
+export PRICING_WORKER_TASK_VCPUS="${PRICING_WORKER_TASK_VCPUS:-2}"
+export PRICING_WORKER_TASK_MEMORY_GB="${PRICING_WORKER_TASK_MEMORY_GB:-4}"
+export PRICING_WORKER_TASK_PROCESSES="${PRICING_WORKER_TASK_PROCESSES:-$((WORKER_HIGH_PRIORITY_COUNT + WORKER_ALL_PRIORITY_COUNT))}"
+export PRICING_USD_PER_DOWNLOADED_GB="${PRICING_USD_PER_DOWNLOADED_GB:-0.045}"
+export PRICING_USD_PER_FILE_STORAGE_GB_MONTH="${PRICING_USD_PER_FILE_STORAGE_GB_MONTH:-0.30}"
+export PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH="${PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH:-0.115}"
+export PRICING_MARGIN="${PRICING_MARGIN:-1.5}"
+export PRICING_MINIMUM_BALANCE_FLOOR_CREDITS="${PRICING_MINIMUM_BALANCE_FLOOR_CREDITS:-1000}"
+
 # Echo the first installed system Chrome/Chromium, or nothing. Lets tooling
 # reuse an already-present browser instead of downloading its own. Explicit
 # checks (not a for-loop) so the macOS path's embedded space doesn't get
