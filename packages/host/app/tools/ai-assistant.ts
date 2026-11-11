@@ -94,7 +94,6 @@ export default class UseAiAssistantTool extends HostBaseTool<
         attachedFileIdentifiers: input.attachedFileIdentifiers,
         openCardIds: openCardIds.length ? openCardIds : input.openCardIds,
         realmIdentifier: this.operatorModeStateService.realmURL,
-        requireCommandCall: input.requireCommandCall,
       });
       return sendMessageResult;
     }
@@ -128,12 +127,16 @@ export default class UseAiAssistantTool extends HostBaseTool<
       return existingRoomId;
     }
 
-    // Create a new room if no roomId is provided and no current room exists
+    // Create a new room if no roomId is provided and no current room exists.
+    // It gets the default skills, as a room the user opens does: the model
+    // changes cards through the tools those skills provide, and the message
+    // carries none of its own. Skills the input names are added after.
     let createAIAssistantRoomCommand = new CreateAiAssistantRoomTool(
       this.toolContext,
     );
     let createRoomResult = await createAIAssistantRoomCommand.execute({
       name: input.roomName,
+      enabledSkillIds: await this.matrixService.loadDefaultSkills(),
     });
     return createRoomResult.roomId;
   }

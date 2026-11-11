@@ -18,6 +18,7 @@ import {
 } from '../../src/shell/keys/approve-page.gts';
 import KeyPage from '../../src/shell/keys/key-page.gts';
 import UseKeyPage from '../../src/shell/keys/use-key-page.gts';
+import { assertNoLoginForm } from '../helpers/password-managers.ts';
 import {
   setupTelemetrySecretsCheck,
   stringsIn,
@@ -177,7 +178,7 @@ function withFillers(attributes: Record<string, any>) {
       }
     }
   }
-  return { ...attributes, fillers: { interactive: fill, pipelines: fill } };
+  return { ...attributes, fillers: { interactive: fill, automations: fill } };
 }
 
 // A served batch answer whose attributes a test changed after they were
@@ -193,7 +194,7 @@ function refilled(answer: Answer): Answer {
 
 // The same slots filled the same way for either use.
 function filledBy(slot: string, ids: string[]) {
-  return { interactive: { [slot]: ids }, pipelines: { [slot]: ids } };
+  return { interactive: { [slot]: ids }, automations: { [slot]: ids } };
 }
 
 function context() {
@@ -512,8 +513,10 @@ module('Integration | approve pages', function (hooks) {
         )
         .isChecked('the key the CLI named starts chosen');
       assert
-        .dom('[data-test-pretui-radio-option="pipelines"] input')
-        .isChecked('without --interactive the CLI approves for pipelines only');
+        .dom('[data-test-pretui-radio-option="automations"] input')
+        .isChecked(
+          'without --interactive the CLI approves for automations only',
+        );
       assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
       assert.deepEqual(submitted, [], 'nothing leaves before the user says');
 
@@ -964,7 +967,7 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-approve-key="GitHub token"]').doesNotExist();
   });
 
-  test('a key chosen for pipelines that interactive use no longer offers gives way to one it does', async function (assert) {
+  test('a key chosen for automations that interactive use no longer offers gives way to one it does', async function (assert) {
     let mixed = batch({
       keys: [
         {
@@ -983,19 +986,19 @@ module('Integration | approve pages', function (hooks) {
         },
       ],
       // The account reaches only the GraphQL API, so it fills the slot only
-      // without the upload, which pipelines don't approve again.
+      // without the upload, which automations don't approve again.
       fillers: {
         interactive: { userKey: ['key-gh'] },
-        pipelines: { userKey: ['key-gh', 'key-api-only'] },
+        automations: { userKey: ['key-gh', 'key-api-only'] },
       },
     });
     let [, uploads] = mixed.groups as { operations: any[] }[];
     uploads!.operations = uploads!.operations.map((o) => ({
       ...o,
-      status: 'pipelines-only',
+      status: 'automations-only',
       slots: o.slots.map((slot: object) => ({
         ...slot,
-        status: 'pipelines-only',
+        status: 'automations-only',
         approved: {
           snapshot: snapshot('null', UPLOADS),
           keyId: 'key-gh',
@@ -1015,7 +1018,7 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-approve-form]');
     assert.dom('[data-test-approve-key="GitHub API account"]').doesNotExist();
 
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
     await click(
       '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
     );
@@ -1303,7 +1306,7 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-approve-save]').hasText('Approve 3 calls');
   });
 
-  test('a page that starts on pipelines only starts each slot on a key pipelines offer', async function (assert) {
+  test('a page that starts on automations only starts each slot on a key automations offer', async function (assert) {
     let mixed = batch({
       keys: [
         {
@@ -1315,19 +1318,19 @@ module('Integration | approve pages', function (hooks) {
         },
       ],
       // The account reaches only the GraphQL API: it fills the slot for
-      // pipelines, which leave the upload out, and not for interactive use.
+      // automations, which leave the upload out, and not for interactive use.
       fillers: {
         interactive: { userKey: [] },
-        pipelines: { userKey: ['key-api-only'] },
+        automations: { userKey: ['key-api-only'] },
       },
     });
     let [, uploads] = mixed.groups as { operations: any[] }[];
     uploads!.operations = uploads!.operations.map((o) => ({
       ...o,
-      status: 'pipelines-only',
+      status: 'automations-only',
       slots: o.slots.map((slot: object) => ({
         ...slot,
-        status: 'pipelines-only',
+        status: 'automations-only',
         approved: {
           snapshot: snapshot('null', UPLOADS),
           keyId: 'key-gh',
@@ -1352,13 +1355,13 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     assert
-      .dom('[data-test-pretui-radio-option="pipelines"] input')
-      .isChecked('the CLI asked for pipelines only');
+      .dom('[data-test-pretui-radio-option="automations"] input')
+      .isChecked('the CLI asked for automations only');
     assert
       .dom(
         '[data-test-pretui-choice-card]:has([data-test-approve-key="GitHub API account"]) input',
       )
-      .isChecked('the only key pipelines offer starts chosen');
+      .isChecked('the only key automations offer starts chosen');
     assert.dom('[data-test-approve-save]').isEnabled();
   });
 
@@ -1966,16 +1969,16 @@ module('Integration | approve pages', function (hooks) {
       'back to the key page, not closed',
     );
   });
-  // An operation approved, unchanged, for pipelines only: in the batch only
+  // An operation approved, unchanged, for automations only: in the batch only
   // for interactive use.
-  function pipelinesOnly(name: string, label: string) {
+  function automationsOnly(name: string, label: string) {
     let base = operation(name, label);
     return {
       ...base,
-      status: 'pipelines-only',
+      status: 'automations-only',
       slots: base.slots.map((s) => ({
         ...s,
-        status: 'pipelines-only',
+        status: 'automations-only',
         approved: {
           snapshot: s.snapshot,
           keyId: 'key-gh',
@@ -2004,7 +2007,7 @@ module('Integration | approve pages', function (hooks) {
                     },
                     operations: [
                       operation('listPRs', 'List your open pull requests'),
-                      pipelinesOnly('listReviews', 'List reviews'),
+                      automationsOnly('listReviews', 'List reviews'),
                     ],
                   },
                 ],
@@ -2019,13 +2022,13 @@ module('Integration | approve pages', function (hooks) {
     assert.true(
       requests.find((r) => r.path === '_key-bindings/batch')?.body.data
         .attributes.interactive,
-      'the batch also answers what is approved for pipelines only',
+      'the batch also answers what is approved for automations only',
     );
     assert.deepEqual(
       [...document.querySelectorAll('[data-test-pretui-radio-option]')].map(
         (choice) => choice.getAttribute('data-test-pretui-radio-option'),
       ),
-      ['interactive', 'pipelines'],
+      ['interactive', 'automations'],
       'interactive use is the first choice',
     );
     assert
@@ -2033,10 +2036,10 @@ module('Integration | approve pages', function (hooks) {
       .isChecked('interactive use is where the choice starts');
     assert.dom('[data-test-approve-operation="listReviews"]').exists();
 
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
     assert
       .dom('[data-test-approve-operation="listReviews"]')
-      .doesNotExist('one approved for pipelines already needs nothing more');
+      .doesNotExist('one approved for automations already needs nothing more');
     assert.dom('[data-test-approve-interactive]').doesNotExist();
 
     await click('[data-test-pretui-radio-option="interactive"] input');
@@ -2061,11 +2064,11 @@ module('Integration | approve pages', function (hooks) {
     );
   });
 
-  test('approving for pipelines only sends no interactive approval', async function (assert) {
+  test('approving for automations only sends no interactive approval', async function (assert) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
     await click('[data-test-approve-save]');
     await settled();
     let [approval] = approvals();
@@ -2110,8 +2113,8 @@ module('Integration | approve pages', function (hooks) {
     };
   }
   // An operation whose request changed since it was last approved, and that
-  // approval allowed pipelines only.
-  function changedPipelinesOnly(name: string, label: string) {
+  // approval allowed automations only.
+  function changedAutomationsOnly(name: string, label: string) {
     let base = changedInteractive(name, label);
     return {
       ...base,
@@ -2137,14 +2140,14 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-approve-form]');
   }
 
-  test('a batch holding only requests approved for pipelines starts on interactive use, each marked', async function (assert) {
-    await openWith([pipelinesOnly('listPRs', 'List PRs')]);
+  test('a batch holding only requests approved for automations starts on interactive use, each marked', async function (assert) {
+    await openWith([automationsOnly('listPRs', 'List PRs')]);
     assert
       .dom('[data-test-pretui-radio-option="interactive"] input')
       .isChecked();
     assert
       .dom(
-        '[data-test-approve-operation="listPRs"] [data-test-approve-pipelines-only]',
+        '[data-test-approve-operation="listPRs"] [data-test-approve-automations-only]',
       )
       .hasText('Approved for the schedule');
   });
@@ -2156,17 +2159,19 @@ module('Integration | approve pages', function (hooks) {
       .isChecked();
   });
 
-  test('a batch whose every request was last approved for pipelines only starts on it, so approving again keeps it', async function (assert) {
+  test('a batch whose every request was last approved for automations only starts on it, so approving again keeps it', async function (assert) {
     await openWith([
-      changedPipelinesOnly('listPRs', 'List PRs'),
-      changedPipelinesOnly('listReviews', 'List reviews'),
+      changedAutomationsOnly('listPRs', 'List PRs'),
+      changedAutomationsOnly('listReviews', 'List reviews'),
     ]);
-    assert.dom('[data-test-pretui-radio-option="pipelines"] input').isChecked();
+    assert
+      .dom('[data-test-pretui-radio-option="automations"] input')
+      .isChecked();
   });
 
-  test('new requests among ones last approved for pipelines only start on interactive use', async function (assert) {
+  test('new requests among ones last approved for automations only start on interactive use', async function (assert) {
     await openWith([
-      changedPipelinesOnly('listPRs', 'List PRs'),
+      changedAutomationsOnly('listPRs', 'List PRs'),
       operation('listReviews', 'List reviews'),
     ]);
     assert
@@ -2178,18 +2183,20 @@ module('Integration | approve pages', function (hooks) {
     await openWith([
       changedInteractive('listPRs', 'List PRs'),
       operation('listReviews', 'List reviews'),
-      pipelinesOnly('listComments', 'List comments'),
+      automationsOnly('listComments', 'List comments'),
     ]);
     assert
       .dom('[data-test-pretui-radio-option="interactive"] input')
       .isChecked();
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
     assert
       .dom('[data-test-approve-operation="listComments"]')
-      .doesNotExist('one approved for pipelines needs nothing for pipelines');
+      .doesNotExist(
+        'one approved for automations needs nothing for automations',
+      );
   });
 
-  test('approving a request last approved for interactive use for pipelines only says it stops running when the card is opened', async function (assert) {
+  test('approving a request last approved for interactive use for automations only says it stops running when the card is opened', async function (assert) {
     await openWith([
       changedInteractive('listPRs', 'List PRs'),
       operation('listReviews', 'List reviews'),
@@ -2204,7 +2211,7 @@ module('Integration | approve pages', function (hooks) {
         '[data-test-approve-operation="listReviews"] [data-test-approve-open-cards]',
       )
       .doesNotExist();
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
     assert
       .dom('[data-test-approve-demoted]')
       .includesText('stops the calls marked “Approved for open cards”');
@@ -2220,7 +2227,7 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-demoted]')
       .doesNotExist('interactive use keeps it');
 
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
     await click('[data-test-approve-save]');
     await settled();
     let [approval] = approvals();
@@ -2316,6 +2323,9 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-budget="Team GitHub"] input')
       .hasValue('2400');
+    assertNoLoginForm(assert, '[data-test-approve-form]', [
+      '[data-test-approve-budget="Team GitHub"] input',
+    ]);
     let input = find('[data-test-approve-budget="Team GitHub"] input')!;
     let name = input
       .getAttribute('aria-labelledby')!
@@ -2805,7 +2815,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
 
     assert
       .dom('[data-test-approve]')
@@ -2834,7 +2844,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
     assert
       .dom('[data-test-key-audience="userKey"]')
       .includesText('Boxel uses this key only for the card’s scheduled calls');
@@ -3153,10 +3163,10 @@ module('Integration | approve pages', function (hooks) {
         'warning',
         'a share that serves people who aren’t signed in is a warning section',
       );
-    await click('[data-test-pretui-radio-option="pipelines"] input');
+    await click('[data-test-pretui-radio-option="automations"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
-      .doesNotExist('a pipeline serves nobody who opens the card');
+      .doesNotExist('an automation serves nobody who opens the card');
     assert
       .dom('[data-test-key-audience="apiKey"] [data-test-key-audience-who]')
       .hasText('The card’s schedule in Team Workspace');

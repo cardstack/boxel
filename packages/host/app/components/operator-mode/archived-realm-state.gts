@@ -36,7 +36,8 @@ const ArchivedRealmState: TemplateOnlyComponent<Signature> = <template>
     <div class='message'>
       <p class='headline'>This workspace is archived</p>
       <p class='detail'>
-        Restore it from the dashboard, or ask an owner to restore it.
+        Restore it from the dashboard, or ask someone who can edit it to restore
+        it.
       </p>
     </div>
   </div>

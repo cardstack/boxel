@@ -5,8 +5,8 @@ import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import jwt from 'jsonwebtoken';
-import sinon from 'sinon';
 import {
+  getOrCreateUser,
   param,
   query,
   rri,
@@ -19,7 +19,6 @@ import type {
   RealmPermissions,
 } from '@cardstack/runtime-common';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER,
   DELEGATED_USER_REALM_SESSION_TIMESTAMP_HEADER,
@@ -51,7 +50,7 @@ import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
 //
 // - Lib: anyone may read it, token or not. It holds the note type.
 // - Home and Second: the user reads both outright.
-// - Members: any registered Matrix user reads it, through its `users` grant.
+// - Members: any user with a Boxel account reads it, through its `users` grant.
 // - Policy: the user may not read it, and its policy grants a `query` over its
 //   open notes to every signed-in caller, so a full session for the user finds
 //   one row there that a delegated session must never reach.
@@ -69,7 +68,7 @@ const JANE = '@jane:localhost';
 // Reads Home only, and has their sessions revoked partway through a test.
 const KIM = '@kim:localhost';
 // Holds no permission row anywhere, and reads Members through its `users`
-// grant whenever the homeserver has a profile for them.
+// grant whenever they hold a Boxel account.
 const LEE = '@lee:localhost';
 
 const REALM_POLICY = {
@@ -214,10 +213,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.timeout(300_000);
     });
 
-    hooks.afterEach(function () {
-      sinon.restore();
-    });
-
     setupDB(hooks, {
       before: async (dbAdapter, publisher, runner) => {
         await start({ dbAdapter, publisher, runner });
@@ -350,9 +345,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test("a delegated session reads a realm its user reads through the realm's `users` grant", async function (assert) {
-      sinon
-        .stub(MatrixClient.prototype, 'getProfile')
-        .resolves({ displayname: 'Lee' });
+      await getOrCreateUser(db, LEE);
       let token = await mintDelegatedSession(LEE, MEMBERS);
 
       let response = await federatedSearch([MEMBERS], token);
@@ -361,8 +354,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.deepEqual(ids(response), MEMBERS_NOTES, "the realm's rows");
     });
 
-    test('a delegated session whose user has no Matrix profile is refused a `users`-grant realm', async function (assert) {
-      sinon.stub(MatrixClient.prototype, 'getProfile').resolves(undefined);
+    test('a delegated session whose user has no Boxel account is refused a `users`-grant realm', async function (assert) {
+      await query(db, ['DELETE FROM users WHERE matrix_user_id =', param(LEE)]);
       let token = signDelegatedSession(LEE, MEMBERS);
 
       let response = await federatedSearch([MEMBERS], token);

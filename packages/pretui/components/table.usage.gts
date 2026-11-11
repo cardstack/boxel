@@ -10,6 +10,8 @@ class TableUsage extends Component {
   rows = LOT_ROWS;
   @tracked framed = true;
   setFramed = (v: boolean) => (this.framed = v);
+  @tracked striped = true;
+  setStriped = (v: boolean) => (this.striped = v);
   <template>
     <FreestyleUsage
       @name='Table'
@@ -18,7 +20,7 @@ class TableUsage extends Component {
       @viewportMode='wide'
     >
       <:example>
-        <Table @framed={{this.framed}}>
+        <Table @framed={{this.framed}} @striped={{this.striped}}>
           <:head><tr><th>Lot</th><th>Tea</th><th>Origin</th><th>Chests</th></tr></:head>
           <:body>{{#each this.rows as |row|}}<tr><td><Token @value={{row.lot}} /></td><td>{{row.tea}}</td><td>{{row.origin}}</td><td>{{row.chests}}</td></tr>{{/each}}</:body>
         </Table>
@@ -31,6 +33,13 @@ class TableUsage extends Component {
           @defaultValue={{true}}
           @description='Off drops the radius and hairline, for a table inside a panel.'
           @onInput={{this.setFramed}}
+        />
+        <Args.Bool
+          @name='striped'
+          @value={{this.striped}}
+          @defaultValue={{true}}
+          @description='Off drops the zebra stripe, so every row sits on the card surface.'
+          @onInput={{this.setStriped}}
         />
         <Args.Yield @name='head' @description='Table header rows.' />
         <Args.Yield @name='body' @description='Table body rows.' />

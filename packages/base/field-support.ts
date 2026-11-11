@@ -652,7 +652,8 @@ function computeFields(
 
 // Empty `linksToMany` backing arrays that came from an authored-empty
 // relationship (`{ self: null }` / `{ data: [] }` in the source), tagged by
-// `LinksToMany.deserialize`. An empty array in the data bucket is ambiguous —
+// `LinksToMany.deserialize`, or assigned to the field, tagged by
+// `LinksToMany.validate`. An empty array in the data bucket is ambiguous —
 // it may be an authored empty or one a mere render fabricated (the plural
 // getter persists a backing array on read, unlike `linksTo`) — so this tag is
 // what lets serialization keep the authored empty and drop the fabricated one.
@@ -677,11 +678,12 @@ export function markAuthoredEmptyLink(value: unknown): void {
 // A `linksToMany` getter must persist its (mutable) backing array even when
 // empty, so a never-set plural link merely read fabricates an empty array in
 // the bucket. An empty array is therefore ambiguous: authored empty vs.
-// render-fabricated. `LinksToMany.deserialize` disambiguates by tagging the
-// arrays it produces from an authored-empty relationship
-// (`markAuthoredEmptyLink`); an untagged empty array is treated as never-set
-// and omitted. So an authored empty plural link round-trips as `{ self: null }`
-// while a never-set one stays off the wire — matching the `linksTo` fidelity.
+// render-fabricated. `LinksToMany.deserialize` and `LinksToMany.validate`
+// disambiguate by tagging the arrays they produce from an authored-empty
+// relationship or an assigned empty list (`markAuthoredEmptyLink`); an
+// untagged empty array is treated as never-set and omitted. So an authored
+// empty plural link round-trips as `{ self: null }` while a never-set one stays
+// off the wire — matching the `linksTo` fidelity.
 //
 // This is pure card data, independent of searchability. Contained fields never
 // reach here (always kept).
@@ -698,9 +700,9 @@ function isFieldUsed(
   }
   let value = bucket.get(fieldName);
   // A non-empty array is a set plural link. An empty array is "had" only when
-  // `deserialize` tagged it as an authored empty; a render-fabricated empty
-  // (an unset plural link merely read) is untagged and dropped. `null` is an
-  // authored empty `linksTo` and is kept.
+  // `deserialize` or `validate` tagged it as an authored empty;
+  // a render-fabricated empty (an unset plural link merely read) is untagged
+  // and dropped. `null` is an authored empty `linksTo` and is kept.
   if (Array.isArray(value)) {
     return value.length > 0 || authoredEmptyLinks.has(value);
   }

@@ -14,6 +14,7 @@ import {
   type MenuItemOptions,
   not,
 } from '@cardstack/boxel-ui/helpers';
+import { ignoredByPasswordManagers } from './components/password-managers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -2489,7 +2490,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       }
     }
 
-    return new WatchedArray(
+    let watched = new WatchedArray(
       (oldValue, value) => {
         applySubscribersToInstanceValue(
           instance,
@@ -2505,6 +2506,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       rawArrayValues(values),
       { hideSlot: isNonPresentLink },
     );
+    // Assigning an empty list empties the field, so it serializes as
+    // `{ self: null }`. Untagged, serialization would drop it as never set,
+    // and the save would keep the old links.
+    markAuthoredEmptyLink(watched);
+    return watched;
   }
 
   captureQueryFieldSeedData(
@@ -3765,6 +3771,7 @@ export class StringField extends FieldDef {
         @value={{@model}}
         @onInput={{@set}}
         @disabled={{not @canEdit}}
+        {{ignoredByPasswordManagers}}
       />
     </template>
   };
@@ -4041,6 +4048,7 @@ export class NumberField extends FieldDef {
         @errorMessage={{this.textInputValidator.errorMessage}}
         @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
         @disabled={{not @canEdit}}
+        {{ignoredByPasswordManagers}}
       />
     </template>
 

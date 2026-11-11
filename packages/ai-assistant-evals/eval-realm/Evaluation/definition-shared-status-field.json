@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Make me a Task card and a Project card. Each has a name and a status, and the status is one of To do, In progress or Done. Keep the Task and the Project in separate files, and define the list of statuses once, in a file of its own, so that changing it changes both cards. Create one task and one project and show me the project. Don't ask me any follow-up questions; decide the details yourself.",
+      "followUpPrompts": [],
+      "successCriteria": "1. The status list is defined once: one field definition with the options To do, In progress and Done, in a module of its own, and both the Task and the Project definitions import it from there and use it for their status. Neither card declares its own copy of the options.\n2. (problem) The status field's module exports it wrapped in `markDefinition`, imported from `'@cardstack/base/mark-definition'`: `export const <Name> = markDefinition(<call>)`, or the same wrap as the default export or under `export { <Name> }`. Every other exported definition the workspace makes by calling a function is wrapped the same way, and no `markDefinition` wraps a binding that is not exported. A status field written as a class (`class … extends …`) instead of a call does not meet this criterion, because it does not exercise the case.\n3. One task and one project instance exist, each with a name and a status from the list. The project is open on screen with no error boundary and shows its status.\n4. Every tool call applied or was repaired by the model, the assistant did not ask a question or wait for confirmation before acting, and the whole flow took at most 12 turns.",
+      "secondsPerPrompt": 240,
+      "cardInfo": {
+        "name": "Shared Status Field",
+        "summary": "The prompt asks for a Task card and a Project card in separate files that share one status list (To do, In progress, Done) defined once in a file of its own, plus one task and one project, with the project shown. This eval tests whether the selected models export a field definition made by a call, such as enumField, wrapped in markDefinition, so that the definition has an identity.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

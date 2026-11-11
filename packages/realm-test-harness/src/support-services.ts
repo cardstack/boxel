@@ -2,6 +2,10 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
 import puppeteer, { type Browser } from 'puppeteer';
 
 import { logger } from './logger.ts';
@@ -214,8 +218,9 @@ async function launchStandbyBrowser(deadline: number): Promise<Browser> {
         timeout,
         dumpio,
         args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
+          // The standby page runs the host app. The sandbox is off only on
+          // Linux, for the reasons `chromeSandboxEnabled` gives.
+          ...(chromeSandboxEnabled() ? [] : CHROME_NO_SANDBOX_ARGS),
           '--disable-dev-shm-usage',
           '--disable-gpu',
         ],

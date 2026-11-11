@@ -44,6 +44,7 @@ import {
   type UserKeyState,
 } from './user-keys.ts';
 import {
+  mintingRefusal,
   oauthAccessToken,
   OAuthTokenError,
   type OAuthTokenFailure,
@@ -95,11 +96,11 @@ import { recordFillRefusal } from './key-uses.ts';
 //   definition cache lowers the operation to now. A binding whose request has
 //   changed goes to `needs-reapproval`, its owner gets one notice, and nothing
 //   is sent until they approve the new request.
-// - **Pipelines, and interactive use when approved for it.** A pipeline the
-//   realm server runs as its payer (`Realm.handlePipeline`) is served by any
+// - **Automations, and interactive use when approved for it.** An automation the
+//   realm server runs as its payer (`Realm.handleAutomation`) is served by any
 //   active binding. An interactive invocation — a card in the browser, the AI
 //   assistant, the CLI — is served only by a binding approved `interactive`,
-//   and refused `interactive-use-not-approved` by one approved for pipelines
+//   and refused `interactive-use-not-approved` by one approved for automations
 //   only. Approving interactive use is the owner's choice for the whole
 //   confirmation; a share's first interactive approval also sets the share's
 //   daily budget, since every reader of its realm can then spend it.
@@ -115,7 +116,7 @@ import { recordFillRefusal } from './key-uses.ts';
 // - **Within the owner's limits.** An interactive call counts against the
 //   limits of the share or key filling each slot, and is refused
 //   `rate-limited`, `over-budget` or `rate-limit-unavailable` before anything
-//   is opened (`key-limits.ts`). A pipeline's call doesn't count.
+//   is opened (`key-limits.ts`). An automation's call doesn't count.
 // - **Approved only on the secure origin.** Approving and revoking take a
 //   session signed in on the secure origin, from the secure window or the CLI
 //   (`handle-key-bindings.ts`), never the app page's session, which card code
@@ -404,7 +405,7 @@ export async function approveBindings(
     approver: string;
     via: SecureSessionClient;
     operations: OperationApproval[];
-    // Approves interactive use as well as pipelines, for every slot.
+    // Approves interactive use as well as automations, for every slot.
     interactive?: boolean;
     anonymous?: boolean;
     // A daily budget for a share this approval fills, by share id. Required
@@ -1210,7 +1211,9 @@ export interface CheckedSlotBinding {
 // would be filled (`probe`: under a grant the vendor rejected, as its probe;
 // `keyProbe`: with a service-account key Google refused, as the key's probe).
 // `key-rejected` is a service-account key Google refused whose probe isn't
-// due.
+// due. `credential-rejected` is a grant the vendor rejected whose probe isn't
+// due, or, with a `reason`, an OAuth connection or client that can't mint a
+// token (`mintingRefusal`).
 export type SlotCheck =
   | {
       slot: CallApiSlot;
@@ -1232,9 +1235,21 @@ export type SlotCheck =
         | 'binding-needs-reapproval'
         | 'interactive-use-not-approved'
         | 'anonymous-use-not-approved'
-        | 'credential-rejected'
         | 'key-rejected';
+    }
+  | {
+      slot: CallApiSlot;
+      binding: CheckedSlotBinding;
+      refused: 'credential-rejected';
+      reason?: OAuthTokenFailure;
     };
+
+// The kinds of key that mint their token through an OAuth client, which the
+// database says whether they can (`mintingRefusal`).
+const OAUTH_MINTING_KINDS: ReadonlySet<string> = new Set([
+  'oauth-connection',
+  'oauth-client',
+]);
 
 // Every slot of the request checked against the binding that would fill it:
 // approved in this realm, for this operation (and this card, when it is
@@ -1243,15 +1258,20 @@ export type SlotCheck =
 // approved for how the invocation arrived, and for a caller who isn't signed
 // in, its share's key allowing anonymous use; its grant still there for its
 // key;
-// that grant not rejected by the vendor, unless its probe is due; and the
+// that grant not rejected by the vendor, unless its probe is due; the
 // grant's key not a service-account key Google refused, unless the key's
-// probe is due. The first check a slot fails is its answer.
+// probe is due; and an OAuth connection or `client_credentials` client able
+// to mint a token, as far as the database records: a connection its vendor
+// refused, an access-only token past its expiry, and a client that is
+// broken, deleted, unshared or suspended can't. The first check a slot fails
+// is its answer.
 //
-// This is the one place a call (`fillSlots`), a pipeline's admission
-// (`pipelineAdmission`) and readiness (`keyReadiness`) learn what a call
+// This is the one place a call (`fillSlots`), an automation's admission
+// (`automationAdmission`) and readiness (`keyReadiness`) learn what a call
 // would do, so a check added for one is a check for all three. It writes
-// nothing: what a refusal changes (moving a binding to `needs-reapproval`,
-// claiming a probe) is the call's to do.
+// nothing and opens no key: what a refusal changes (moving a binding to
+// `needs-reapproval`, claiming a probe) is the call's to do, and a token
+// endpoint that is failing right now is found only by the call that asks it.
 export async function checkSlots(
   dbAdapter: DBAdapter,
   lookup: BindingLookup,
@@ -1277,7 +1297,23 @@ export async function checkSlots(
         WHERE `,
       ...slotBindingConditions({ ...lookup, slot }),
     ])) as unknown as (CheckedSlotBinding | undefined)[];
-    checks.push(checkSlot(lookup, slot, binding));
+    let check = checkSlot(lookup, slot, binding);
+    if (
+      check.refused === undefined &&
+      check.binding.grant_key_id &&
+      OAUTH_MINTING_KINDS.has(check.binding.key_kind ?? '')
+    ) {
+      let reason = await mintingRefusal(dbAdapter, check.binding.grant_key_id);
+      if (reason) {
+        check = {
+          slot,
+          binding: check.binding,
+          refused: 'credential-rejected',
+          reason,
+        };
+      }
+    }
+    checks.push(check);
   }
   return checks;
 }
@@ -1437,8 +1473,8 @@ async function checkedBindings(
             // use, since the AI assistant sees only the message and answers a
             // caller's own key and a realm's shared key differently.
             slot.key === 'userKey'
-              ? `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
-              : `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
+              ? `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
+              : `operation "${lookup.operation}" is approved for automations only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
             slot,
           ),
         );
@@ -1454,13 +1490,32 @@ async function checkedBindings(
           ),
         );
       case 'credential-rejected':
+        // A call through a key that can't mint is a refused mint, as one the
+        // token endpoint refuses is; admission and readiness record nothing.
+        if (check.reason && rejection.claimProbe) {
+          emitKeyGrantEvent({
+            event: 'mint-failed',
+            key: check.binding.grant_key_id!,
+            kind: check.binding.key_kind!,
+            host: hostOf(check.binding.grant_destination!),
+            realm: lookup.realmURL,
+            reason: check.reason,
+          });
+        }
         throw refusedFrom(
           limitSubjectOf(check.binding),
-          credentialRejected(
-            lookup.operation,
-            slot,
-            check.binding.grant_destination!,
-          ),
+          check.reason
+            ? mintingRefused(
+                lookup.operation,
+                slot,
+                check.binding.grant_destination!,
+                check.reason,
+              )
+            : credentialRejected(
+                lookup.operation,
+                slot,
+                check.binding.grant_destination!,
+              ),
         );
       case 'key-rejected':
         throw refusedFrom(
@@ -1830,6 +1885,27 @@ const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
     'its token endpoint kept failing, so asking again later may succeed',
 };
 
+// The refusal for a slot whose OAuth connection or client can't mint a
+// token, for `reason`. Nothing was sent to the slot's destination.
+function mintingRefused(
+  operation: string,
+  slot: Pick<CallApiSlot, 'name' | 'key'>,
+  destination: string,
+  reason: OAuthTokenFailure,
+): OperationFailure {
+  return new OperationFailure({
+    status: 424,
+    code: 'credential-rejected',
+    title: 'Credential rejected',
+    detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${MINTING_REFUSALS[reason]}`,
+    meta: {
+      slot: { name: slot.name, key: slot.key },
+      destination,
+      reason,
+    },
+  });
+}
+
 const SERVICE_ACCOUNT_REJECTED =
   'Google no longer accepts its service account key, so nothing is sent with it until its owner replaces the key or a periodic retry mints a token';
 
@@ -1930,29 +2006,26 @@ async function mintedToken(
       }
       throw serviceAccountRejected(operation, slot, opened.destination);
     }
-    let why = MINTING_REFUSALS[error.reason];
-    throw new OperationFailure({
-      status: 424,
-      code: 'credential-rejected',
-      title: 'Credential rejected',
-      detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${why}`,
-      meta: {
-        slot: { name: slot.name, key: slot.key },
-        destination: opened.destination,
-        reason: error.reason,
-      },
-    });
+    throw mintingRefused(operation, slot, opened.destination, error.reason);
   }
 }
 
-// Whether a pipeline may invoke an operation, asked before the run starts: the
+// Whether an automation may invoke an operation, asked before the run starts: the
 // same checks a call makes, without opening any key. A Scheduling System run
 // asks this at admission for each operation it declares, as its payer, so a
-// missing or changed approval stops the run before anything is sent. Answers
-// with the refusal the call would get, or nothing when it would be served. A
-// grant the vendor rejected admits the run only while its probe is due, since
-// only then would the call be sent.
-export async function pipelineAdmission(
+// missing or changed approval, or a credential that can't mint a token,
+// stops the run before anything is sent. Answers with the refusal the call
+// would get, or nothing when it would be served. The slots are checked as
+// `checkSlots` checks them for every call and for readiness: an OAuth
+// connection its vendor refused or whose access-only token has expired is
+// refused `credential-rejected` (`reason: 'rejected'`), and one whose client
+// is broken, deleted, unshared or suspended, or a broken `client_credentials`
+// client, `credential-rejected` (`reason: 'needs-admin'`). A grant the
+// vendor rejected, or a service-account key Google refused, admits the run
+// only while its probe is due, since only then would the call be sent. A
+// token endpoint failing at the moment (`reason: 'unavailable'`) is found by
+// the call, not here.
+export async function automationAdmission(
   dbAdapter: DBAdapter,
   {
     core,
@@ -2013,7 +2086,7 @@ export async function pipelineAdmission(
           ? { instance: canonicalInstance(realmURL, instance) }
           : {}),
         caller: payer,
-        mode: 'pipeline',
+        mode: 'automation',
         request: definition.callApi,
       },
       { probeIntervalMs, claimProbe: false },

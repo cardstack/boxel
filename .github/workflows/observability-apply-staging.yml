@@ -37,11 +37,9 @@ jobs:
       # in cardstack/infra. Permissions are ssm:GetParameter on:
       #   /staging/grafana/grafanactl_token  (added in cardstack/infra#665)
       #   /staging/loki/internal_url         (added in cardstack/infra#674, CS-10968)
-      #   /staging/boxel/GRAFANA_SECRET      (CS-10929 — used by operator-action
-      #                                      button panels for `Authorization:
-      #                                      Bearer ${grafana_secret}`; matches
-      #                                      the realm-server task's existing
-      #                                      shared secret)
+      #   /staging/boxel/GRAFANA_SECRET      (the realm-server's shared secret;
+      #                                      the realm-server-operator datasource
+      #                                      attaches it to operator actions)
       # If the role doesn't exist or is missing one of those grants, the
       # configure-aws-credentials step below will succeed but the SSM
       # fetch step will fail with AccessDenied — apply the infra config first.

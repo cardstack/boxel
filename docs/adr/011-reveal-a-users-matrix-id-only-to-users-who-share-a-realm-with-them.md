@@ -5,6 +5,7 @@ scope:
   - packages/realm-server/**
   - packages/runtime-common/matrix-client.ts
   - packages/runtime-common/db-queries/realm-permission-queries.ts
+  - packages/runtime-common/realm-permission-checker.ts
   - packages/host/app/services/matrix-service.ts
   - packages/host/app/services/message-service.ts
   - packages/host/app/services/realm-server.ts
@@ -66,8 +67,8 @@ hyphen so the host stays one label under the domain.
 Boxel MUST NOT offer a public or queryable list of realm URLs, except as this
 section allows. An endpoint MAY list the realms a user holds a grant on that
 names them. An endpoint MAY list world-readable realms that are not published
-realms, with their URLs and names: an owner who makes a realm world-readable
-agrees to have it found. A list MUST NOT include a published realm. Outside
+realms, with their URLs and names: administrators who make a realm
+world-readable agree to have it found. A list MUST NOT include a published realm. Outside
 these lists, a user learns a realm's URL only when someone gives it to them.
 
 ### 1.5. End users share a room only when they may see each other
@@ -125,8 +126,8 @@ history operations publishes the realm's authors' Matrix ids.
 
 The team decided that Boxel must not expose one user's Matrix username to
 another without a reason the user agreed to. Sharing a realm is that reason:
-the owner chose whom to grant access to, and collaborators in a realm already
-see each other's activity in it.
+its administrators chose whom to grant access to, and collaborators in a
+realm already see each other's activity in it.
 
 Matrix gives no way to hide a room's members from each other. A member can
 list the room's members, and every join is an event in the room's timeline,
@@ -182,7 +183,8 @@ choice is made knowingly.
 - **Reveal ids only within a shared realm (chosen).** It allows what Boxel
   does today in private realms, and it gives a test a reviewer can apply.
 - **Never reveal one user's id to another.** Collaborators in a realm already
-  see each other's activity, and realm owners manage grants by Matrix id.
+  see each other's activity, and a realm's administrators manage grants by
+  Matrix id.
 - **Reveal ids when a user accepts an invite from another user.** Boxel has no
   invite flow between end users yet. When it does, its consent rule belongs in
   a change to this ADR.
