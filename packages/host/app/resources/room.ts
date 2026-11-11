@@ -54,8 +54,8 @@ import { usedLLMsFromEvents } from '../lib/pickable-models';
 import {
   getSkillSourceTools,
   isMarkdownSkillId,
-  loadSkillSource,
   peekSkillSource,
+  resolveSkillSource,
 } from '../lib/skill-tools';
 
 import type { Message, MessageCompaction } from '../lib/matrix-classes/message';
@@ -800,11 +800,13 @@ export class RoomResource extends Resource<Args> {
         // A skill markdown file loads as a file-meta resource (not a card doc
         // downloaded from Matrix). Keep its instance in the store so the menu
         // pill renders and the room's usable commands resolve.
-        let source = await loadSkillSource(
+        // The id the skill loaded from, which differs from the stored one
+        // when the skill was found in the skills realm's other layout.
+        let resolved = await resolveSkillSource(
           this.store,
           skillCardFileDef.sourceUrl,
         );
-        return source ? skillCardFileDef.sourceUrl : undefined;
+        return resolved?.id;
       }
       let cardDoc =
         await this.matrixService.downloadCardFileDef(skillCardFileDef);

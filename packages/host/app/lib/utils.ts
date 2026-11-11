@@ -116,6 +116,30 @@ export function skillFileURL(skillName: string): string {
   return `${skillsRealmURL}${skillName}/SKILL.md`;
 }
 
+// The skills realm serves its skill trees at its root (`<realm>/boxel/SKILL.md`).
+// A realm that hasn't synced that layout yet serves them one level down
+// (`<realm>/skills/boxel/SKILL.md`), and AI rooms enabled against such a realm
+// store skill ids in that form. Given a skill id in either form, this returns
+// the same file in the other form, so a skill that fails to load can be tried
+// once more: a host ahead of its skills realm finds the nested file, and a room
+// holding a nested id finds the file at the root. Returns `undefined` for an id
+// outside the skills realm.
+export function otherSkillsLayoutURL(
+  id: string,
+  realmURL: string = skillsRealmURL,
+): string | undefined {
+  if (!id.startsWith(realmURL)) {
+    return undefined;
+  }
+  let localPath = id.slice(realmURL.length);
+  if (!localPath) {
+    return undefined;
+  }
+  return localPath.startsWith('skills/')
+    ? `${realmURL}${localPath.slice('skills/'.length)}`
+    : `${realmURL}skills/${localPath}`;
+}
+
 // The skills index, the default skill for every new AI room. Spelled as a
 // resolved absolute URL rather than an `@cardstack/skills/` reference because
 // the index routes to its siblings entirely through document-relative markdown
