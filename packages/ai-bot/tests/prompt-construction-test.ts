@@ -533,6 +533,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
         (await contextFor()).includes('realm.operations.capabilities'),
         'a workspace whose realm names no policy has nothing to ask about',
       );
+      assert.false(
+        (await contextFor({}, { canRead: false })).includes(
+          'realm.operations.capabilities',
+        ),
+        'nor is it named to a user the realm admits only through its policy, whom run-realm-code does not run for',
+      );
     });
 
     test('refuses every edit when the realm names no policy', async () => {
