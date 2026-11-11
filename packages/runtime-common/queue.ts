@@ -51,9 +51,9 @@ import type { Deferred } from './deferred.ts';
 // its family's system-tier exclusive work and render its HTML at 0. The
 // indexing a run's writes cause takes the tier the realm's write path gives
 // it. The run-command job runs in its realm's `command:` group, which belongs
-// to no lane family, so neither rule reaches it. The tier exists so a run due at a set time is not queued behind a
-// system backlog such as a full reindex, which only the all-priority pool
-// works through. The automation pool (`--automationCount`) floors there, so
+// to no lane family, so neither rule reaches it. The tier exists so a run due
+// at a set time is not queued behind a system backlog such as a full reindex,
+// which only the all-priority pool works through. The automation pool (`--automationCount`) floors there, so
 // it serves automation runs and every user-initiated job and never
 // system-tier work: when no automation is due it helps with user work. The
 // all-priority pool claims automation runs too, so a deployment that runs no

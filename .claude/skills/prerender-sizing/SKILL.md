@@ -309,7 +309,7 @@ The 16 GB resize is what makes HP_MAX=8 safe. On the existing 8 GB task, MAX=6 i
 - `MIN = 2`
 - `MAX = 6`
 - `HP_MAX = 8`
-- `HIGH_PRIORITY_THRESHOLD = 5` (with no job priority between 1 and 9 in use, any value from 2 to 9 split user from non-user work the same way; Step 4 gives the value to use alongside the automation tier at 5)
+- `HIGH_PRIORITY_THRESHOLD = 9`
 - `IDLE_CONTRACTION_MS = 60_000`
 - `SHARED_CONTEXT_CAP = 12` (HP_MAX × 1.5)
 
