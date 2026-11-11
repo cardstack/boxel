@@ -97,6 +97,10 @@ const FORMULAS = [
   'ROUND(rating * 1.005, 2)',
   'ROUND(2.675, 2)',
   'ROUND(-2.5)',
+  // a value or a result whose decimal form has an exponent
+  'ROUND(rating * 0.0000001, 2)',
+  'ROUND(rating * 0.00000012345, 9)',
+  'ROUND(rating * 1000000, 15)',
   'ROUND(rating / 3, 1)',
   'ROUNDUP(rating / 3, 1)',
   'ROUNDDOWN(-rating / 3, 1)',

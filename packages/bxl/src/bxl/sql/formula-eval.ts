@@ -243,8 +243,16 @@ function compare(
 function roundHalfAway(x: number, digits: number): number {
   if (!Number.isFinite(x) || Math.abs(x) >= 1e15) return x;
   let abs = Number(Math.abs(x).toPrecision(15));
-  let scaled = Math.round(Number(`${abs}e${digits}`));
-  return Math.sign(x) * Number(`${scaled}e${-digits}`);
+  let scaled = Math.round(shiftDecimal(abs, digits));
+  return Math.sign(x) * shiftDecimal(scaled, -digits);
+}
+
+// n × 10^k without binary error, by moving the decimal exponent. Read from
+// the exponential form, since `${n}` may itself carry an exponent (1e-7)
+// and "1e-7e2" is not a number.
+function shiftDecimal(n: number, k: number): number {
+  let [mantissa, exponent] = n.toExponential().split('e');
+  return Number(`${mantissa}e${Number(exponent) + k}`);
 }
 
 const COMPARISON: Record<string, (c: number) => boolean> = {
