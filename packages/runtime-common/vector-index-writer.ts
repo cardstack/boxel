@@ -162,6 +162,7 @@ export async function syncVectorIndex(
     }
   }
   await store.ensureSpaces([...spaces]);
+  store.noteVectorWrites([...spaces]);
   for (let start = 0; start < urls.length; start += CHUNK) {
     let chunk = urls.slice(start, start + CHUNK);
     let rows = await host.stagedSearchDocs(

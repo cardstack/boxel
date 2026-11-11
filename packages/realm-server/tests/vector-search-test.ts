@@ -20,8 +20,10 @@ import {
   internalKeyFor,
   rri,
   setVectorSearchSettings,
+  vectorStoreFor,
   type Definition,
   type DefinitionLookup,
+  type EveryFilter,
   type Query,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -90,7 +92,7 @@ const momentDef: Definition = {
       isComputed: false,
       fieldOrCard: vectorRef,
       serializerName: 'vector',
-      // opted in to look-alike lookups (rerank compare.near)
+      // opted in to look-alike lookups (a window's compare.near)
       search: { neighbors: true },
     },
     f2: {
@@ -1030,7 +1032,7 @@ module(basename(import.meta.filename), function () {
           new URL(testRealm),
           {
             let: {
-              a: {
+              $a: {
                 from: { filter: { on: momentRef, eq: { title: 'a' } } },
                 one: true,
               },
@@ -1039,7 +1041,7 @@ module(basename(import.meta.filename), function () {
               on: momentRef,
               near: {
                 embedding: {
-                  to: { $let: 'a', path: 'embedding' },
+                  to: '$a.embedding',
                   minSimilarity: 0.5,
                 },
               },
@@ -1048,7 +1050,7 @@ module(basename(import.meta.filename), function () {
               {
                 on: momentRef,
                 by: 'embedding',
-                near: { $let: 'a', path: 'embedding' },
+                near: '$a.embedding',
               },
             ],
           } as unknown as Query, // a binding reference resolves before the engine reads it
@@ -1063,7 +1065,7 @@ module(basename(import.meta.filename), function () {
           'nearest first, and c is too far',
         );
         assert.deepEqual((meta as any).lets, {
-          a: { strategy: 'card', found: true },
+          $a: { strategy: 'card', found: true },
         });
       },
     );
@@ -1085,7 +1087,7 @@ module(basename(import.meta.filename), function () {
           new URL(testRealm),
           {
             let: {
-              me: {
+              $me: {
                 from: { filter: { on: momentRef, eq: { title: 'a' } } },
                 one: true,
               },
@@ -1095,7 +1097,7 @@ module(basename(import.meta.filename), function () {
               {
                 on: momentRef,
                 by: 'embedding',
-                near: { $let: 'me', path: 'embedding' },
+                near: '$me.embedding',
               },
             ],
           } as unknown as Query,
@@ -1122,23 +1124,25 @@ module(basename(import.meta.filename), function () {
             new URL(testRealm),
             {
               filter: { type: momentRef },
-              rerank: {
-                expression: 'views / stats.views.median',
-                compare: {
-                  near: 'embedding',
-                  k: 2,
-                  minSimilarity: 0.5,
-                  filter: grant,
+              sort: [
+                {
+                  expression: 'views / stats.views.median',
+                  compare: {
+                    near: 'embedding',
+                    k: 2,
+                    minSimilarity: 0.5,
+                    filter: grant,
+                  },
                 },
-              },
-            } as Query,
+              ],
+            } as unknown as Query,
             { grantFilter: grant },
             { kind: 'renderSet' },
           );
           return {
             rows: results.map((r: any) => [
               r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
-              r._rerank == null ? null : Number(Number(r._rerank).toFixed(3)),
+              r._window == null ? null : Number(Number(r._window).toFixed(3)),
             ]),
             total: meta.page.total,
           };
@@ -1265,18 +1269,20 @@ module(basename(import.meta.filename), function () {
           new URL(testRealm),
           {
             filter: { type: momentRef },
-            rerank: {
-              expression: 'stats.similarity.count',
-              compare: { near: 'embedding', k: 3 },
-            },
-          } as Query,
+            sort: [
+              {
+                expression: 'stats.similarity.count',
+                compare: { near: 'embedding', k: 3 },
+              },
+            ],
+          } as unknown as Query,
           {},
           { kind: 'dataOnly' },
         );
         let counts = Object.fromEntries(
           results.map((r: any) => [
             r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
-            r._rerank == null ? null : Number(r._rerank),
+            r._window == null ? null : Number(r._window),
           ]),
         );
         assert.strictEqual(counts.a, 2, "a's look-alikes are b and d, not c");
@@ -1285,7 +1291,7 @@ module(basename(import.meta.filename), function () {
     );
 
     pgvectorTest(
-      'rerank compares each card with its own look-alikes',
+      'a window compares each card with its own look-alikes',
       async function (assert) {
         await index({
           a: { title: 'a', views: 10, embedding: vec([1, 0, 0]) },
@@ -1294,17 +1300,17 @@ module(basename(import.meta.filename), function () {
           d: { title: 'd', views: 5, embedding: vec([0, 1, 0]) },
           e: { title: 'e', views: 100, embedding: vec([0, 0.99, 0.1]) },
         });
-        let rerankRows = async (rerank: any) => {
+        let rerankRows = async (window: any) => {
           let { results, meta } = await engine.search(
             new URL(testRealm),
-            { filter: { type: momentRef }, rerank } as Query,
+            { filter: { type: momentRef }, sort: [window] } as Query,
             {},
             { kind: 'renderSet' },
           );
           return {
             rows: results.map((r: any) => [
               r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
-              r._rerank == null ? null : Number(Number(r._rerank).toFixed(3)),
+              r._window == null ? null : Number(Number(r._window).toFixed(3)),
             ]),
             meta,
           };
@@ -1531,8 +1537,10 @@ module(basename(import.meta.filename), function () {
             filter: { type: momentRef },
             sort: [{ on: momentRef, by: 'embedding', near: [1, 0, 0] }],
           }),
-          ['a.json', 'b.json', 'c.json'],
-          'a near sort reads its declared space, from its partition',
+          ['c.json', 'a.json', 'b.json'],
+          // This fixture's definition declares no space, so the engine falls
+          // back to the space of the most recently indexed card: c, in C.
+          'with no space in the definition, a near sort reads the space of the most recently indexed card, from its partition',
         );
       },
     );
@@ -1640,6 +1648,9 @@ module(basename(import.meta.filename), function () {
     const otherRealm = testRealm.replace(/\/$/, '-other/');
     const SPACE = 'seg/model@1 test 16';
     const DIMS = 16;
+    // The threshold these tests run under: a few thousand vectors stand in
+    // for a space past the deployment's (100,000).
+    const APPROXIMATE = { exactThreshold: 5_000 };
 
     function pgvectorTest(name: string, fn: (assert: Assert) => Promise<void>) {
       test(name, async (assert) => {
@@ -1663,7 +1674,7 @@ module(basename(import.meta.filename), function () {
       );
       momentKey = internalKeyFor(momentRef, undefined, virtualNetwork);
       vectorsAvailable = await hasVectorIndex(adapter);
-      setVectorSearchSettings();
+      setVectorSearchSettings(APPROXIMATE);
     });
 
     hooks.afterEach(async function () {
@@ -1732,6 +1743,8 @@ module(basename(import.meta.filename), function () {
         });
       }
       await batch.done();
+      // the index the writer starts building after the commit
+      await vectorStoreFor(adapter).buildIndexes();
       await adapter.execute('ANALYZE boxel_index_vectors');
     }
 
@@ -1747,7 +1760,7 @@ module(basename(import.meta.filename), function () {
           sort: [{ on: momentRef, by: 'segments.embedding', near: target }],
           page: { size: 10 },
           ...extra,
-        },
+        } as Query,
         {},
         { kind: 'dataOnly' },
       );
@@ -1765,7 +1778,7 @@ module(basename(import.meta.filename), function () {
       try {
         return await fn();
       } finally {
-        setVectorSearchSettings();
+        setVectorSearchSettings(APPROXIMATE);
       }
     }
 
@@ -1832,6 +1845,54 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(page.meta.near?.candidates, 200);
         assert.notOk(page.meta.warnings, 'no warning');
+      },
+    );
+
+    pgvectorTest(
+      'a space is read exactly until its vectors pass the threshold, then its index is built and read, with the same answers',
+      async (assert) => {
+        let validIndexes = async () =>
+          Number(
+            (
+              await adapter.execute(
+                `SELECT count(*)::int AS n FROM pg_index AS i JOIN pg_class AS c ON c.oid = i.indexrelid
+                  WHERE c.relname LIKE 'boxel_index_vectors_seg_model_16_%_hnsw' AND i.indisvalid`,
+              )
+            )[0].n,
+          );
+        setVectorSearchSettings({ exactThreshold: 1_000 });
+        await seed(testRealm, 20, 10); // 200 vectors
+        assert.strictEqual(
+          await validIndexes(),
+          0,
+          'a space under the threshold has no index',
+        );
+        let target = randomVector(random(11));
+        setVectorSearchSettings({ exactThreshold: 100 });
+        let before = await nearPage(testRealm, target);
+        assert.deepEqual(
+          { path: before.meta.near?.path, reason: before.meta.near?.reason },
+          { path: 'exact', reason: 'no-index' },
+          'past the threshold, a space with no index yet is read exactly',
+        );
+        // another realm's vectors take the space past the threshold: the
+        // writer builds its index after the commit (`seed` waits for it)
+        await seed(otherRealm, 20, 10);
+        assert.strictEqual(await validIndexes(), 1, 'the index is built');
+        let after = await nearPage(testRealm, target);
+        assert.strictEqual(after.meta.near?.path, 'hnsw', 'and read');
+        assert.deepEqual(
+          after.rows,
+          before.rows,
+          'the same page, with the same similarities',
+        );
+        setVectorSearchSettings({ exactThreshold: 1_000_000 });
+        await vectorStoreFor(adapter).buildIndexes([SPACE]);
+        assert.strictEqual(
+          await validIndexes(),
+          1,
+          'an index is never dropped when its space falls under the threshold',
+        );
       },
     );
 
@@ -1949,7 +2010,10 @@ module(basename(import.meta.filename), function () {
           new URL(testRealm),
           {
             filter: {
-              every: [{ type: momentRef }, { not: query.filter!.every![1] }],
+              every: [
+                { type: momentRef },
+                { not: (query.filter as EveryFilter).every[1] },
+              ],
             },
             page: { size: 1 },
           } as Query,
@@ -2034,24 +2098,27 @@ module(basename(import.meta.filename), function () {
           });
         }
         await batch.done();
+        await vectorStoreFor(adapter).buildIndexes();
         let lookalikes = async () => {
           let { results } = await engine.search(
             new URL(testRealm),
             {
               filter: { type: momentRef },
-              sort: [{ by: 'views', on: momentRef }],
+              sort: [
+                {
+                  expression: 'MAX(peers.similarity)',
+                  compare: { near: 'embedding', k: 3 },
+                },
+                { by: 'views', on: momentRef },
+              ],
               page: { size: 20 },
-              rerank: {
-                expression: 'MAX(peers.similarity)',
-                compare: { near: 'embedding', k: 3 },
-              },
             } as Query,
             {},
             { kind: 'renderSet' },
           );
           return results.map((r: any) => [
             String(r.url),
-            Number(Number(r._rerank).toFixed(9)),
+            Number(Number(r._window).toFixed(9)),
           ]);
         };
         let approximate = await lookalikes();
@@ -2071,6 +2138,7 @@ module(basename(import.meta.filename), function () {
     pgvectorTest(
       'the index migration drops the per-space indexes and builds them again',
       async (assert) => {
+        setVectorSearchSettings({ exactThreshold: 5 });
         await seed(testRealm, 5, 2);
         let migration = (await import(
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment

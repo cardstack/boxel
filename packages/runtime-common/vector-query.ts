@@ -1,7 +1,12 @@
 import type { DBAdapter } from './db.ts';
 import type { CardExpression } from './expression.ts';
 import type { FieldDefinition } from './definitions.ts';
-import { type CodeRef, internalKeyFor } from './index.ts';
+import {
+  type CodeRef,
+  codeRefWithAbsoluteIdentifier,
+  internalKeyFor,
+  isResolvedCodeRef,
+} from './index.ts';
 import {
   InvalidQueryError,
   type BlendComponent,
@@ -17,6 +22,8 @@ import {
   type VectorStore,
 } from './vector-store.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import { realmsOf } from './realm-union.ts';
+import { dialectFor } from './query-engine/dialect.ts';
 
 // Near search: ranking and filtering cards by how close one of their vectors
 // is to a target vector.
@@ -31,7 +38,7 @@ import type { VirtualNetwork } from './virtual-network.ts';
 //   - a `near` sort ranks the cards a query admits by one VectorField; a
 //     `near` filter admits the cards within `minSimilarity`; a near signal
 //     inside a `_blend` contributes a rank to the fusion;
-//   - `rerank.compare.near` reads each result's look-alikes by a field that
+//   - an expression sort entry's `compare.near` reads each result's look-alikes by a field that
 //     declares `search: { neighbors: true }`;
 //   - a one-card `let` binding reads a stored card's vector as a target,
 //     with its space;
@@ -101,6 +108,40 @@ function targetSpaceOf(target: unknown): string | undefined {
 // `assertNearFilter` reads it first).
 const nearFilterDeclaredSpaces = new WeakMap<object, string>();
 
+// A near search past the exact threshold that compared every vector: the
+// warning a caller tuning a slow search reads, whatever made it exact (save
+// a caller's own `exact` and a field that is a small share of its space).
+export function warnExactScan(
+  ctx: NearContext | undefined,
+  fieldPath: string,
+  threshold: number,
+  reason: NonNullable<NearReport['reason']>,
+) {
+  if (!ctx || ctx.warnings.some((w) => w.code === 'near-exact-scan')) return;
+  ctx.warnings.push({
+    code: 'near-exact-scan',
+    message: `a near search over "${fieldPath}" compared each of more than ${threshold.toLocaleString('en-US')} vectors exactly (${reason})`,
+  });
+}
+
+// A target of all zeros has no direction, so no similarity to it exists:
+// refused, rather than answered with NaN. A target read from a card (it
+// carries its space) is that card's vector, and a stored zero vector is no
+// vector: it matches nothing.
+export function assertHasDirection(target: unknown, what: string) {
+  if (
+    Array.isArray(target) &&
+    target.length > 0 &&
+    target.every((n) => n === 0) &&
+    targetSpaceOf(target) == null
+  ) {
+    throw new InvalidQueryError(
+      `${what}: the target vector is all zeros, which has no direction to compare with`,
+      'invalid-value',
+    );
+  }
+}
+
 function removeBrackets(path: string) {
   return path.replace(/\[\]/g, '');
 }
@@ -147,12 +188,34 @@ export class NearContext {
   // may then be a card the filter admits whose vector was not read.
   leadingSortTruncated = false;
 
+  // For a caller a realm policy scopes: counts the field's vectors on the
+  // cards the caller's grants open, so how a search ran (and what
+  // `meta.near` reports) is what a realm holding only those cards gives,
+  // never a count of cards the caller cannot read (ADR 006).
+  readonly countVisible?: (
+    fieldPath: string,
+    space: string,
+    limit: number,
+  ) => Promise<number>;
+
+  // The search's read snapshot: the vectors its near reads compare are the
+  // ones its rows were read with (see `DBAdapter.withReadSnapshot`).
+  readonly reader?: DBAdapter;
+
   constructor(opts: {
     exact?: boolean;
     page?: { size: number; number?: number };
+    countVisible?: (
+      fieldPath: string,
+      space: string,
+      limit: number,
+    ) => Promise<number>;
+    reader?: DBAdapter;
   }) {
     this.exact = Boolean(opts.exact);
     this.page = opts.page;
+    this.countVisible = opts.countVisible;
+    this.reader = opts.reader;
   }
 
   // The report for `meta.near`: the first approximate search, else the
@@ -223,7 +286,7 @@ export class VectorQuery {
     let db = this.#host.dbAdapter;
     let href = url.href.endsWith('.json') ? url.href : `${url.href}.json`;
     let [row] = await db.execute(
-      `SELECT search_doc -> '_vectorFields' AS fields FROM boxel_index WHERE url = $1 AND type = 'instance' AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1`,
+      `SELECT search_doc -> '_vectorFields' AS fields, pristine_doc -> 'meta' -> 'adoptsFrom' AS adopts_from FROM boxel_index WHERE url = $1 AND type = 'instance' AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1`,
       { bind: [href] },
     );
     let fields: unknown = row?.fields;
@@ -249,15 +312,21 @@ export class VectorQuery {
         ? JSON.parse(sidecar.errors)
         : (sidecar?.errors ?? [])
     ) as { field?: string; item?: string; code: string; message: string }[];
+    let type = this.#adoptedType(row?.adopts_from, href);
     for (let [path, info] of Object.entries(
       fields as Record<string, { space: string }>,
     )) {
+      // The space the card's type declares now, when its definition records
+      // it: a card not yet reindexed since its field moved to another space
+      // is stale. Otherwise the space the card recorded when it was indexed.
+      let space =
+        (type && (await this.#definedSpaceOf(type, path))) ?? info.space;
       let rows = counts.filter((c) => c.fieldPath === path);
       let inSpace = rows
-        .filter((c) => c.space === info.space)
+        .filter((c) => c.space === space)
         .reduce((n, c) => n + c.count, 0);
       let other = rows
-        .filter((c) => c.space !== info.space)
+        .filter((c) => c.space !== space)
         .reduce((n, c) => n + c.count, 0);
       let fieldErrors = errors
         .filter((e) => e.field === path)
@@ -268,7 +337,7 @@ export class VectorQuery {
         }));
       out[path] = {
         status: other > 0 ? 'stale' : inSpace > 0 ? 'ok' : 'missing',
-        space: info.space,
+        space,
         count: inSpace,
         ...(fieldErrors.length ? { errors: fieldErrors } : {}),
       };
@@ -276,16 +345,43 @@ export class VectorQuery {
     return out;
   }
 
+  // The type an indexed card adopts from, as a code ref a definition lookup
+  // takes (its module made absolute against the card's URL).
+  #adoptedType(adoptsFrom: unknown, cardURL: string): CodeRef | undefined {
+    if (typeof adoptsFrom === 'string') {
+      try {
+        adoptsFrom = JSON.parse(adoptsFrom);
+      } catch {
+        return undefined;
+      }
+    }
+    if (!adoptsFrom || typeof adoptsFrom !== 'object') {
+      return undefined;
+    }
+    let ref = codeRefWithAbsoluteIdentifier(
+      adoptsFrom as CodeRef,
+      new URL(cardURL),
+      undefined,
+      this.#host.virtualNetwork,
+    );
+    return isResolvedCodeRef(ref) ? ref : undefined;
+  }
+
   // A card's single (non-list) vectors, by field path, with their spaces.
   async oneCardVectors(
     realmURL: URL,
     url: string,
+    reader?: DBAdapter,
   ): Promise<Map<string, { space: string; components: number[] }>> {
     let found = new Map<string, { space: string; components: number[] }>();
     if (!this.#pg || !(await this.#store.available())) {
       return found;
     }
-    for (let row of await this.#store.oneCardVectors(realmURL.href, url)) {
+    for (let row of await this.#store.oneCardVectors(
+      realmURL.href,
+      url,
+      reader,
+    )) {
       try {
         let components = JSON.parse(row.components);
         if (Array.isArray(components) && components.length > 0) {
@@ -332,20 +428,15 @@ export class VectorQuery {
     return cached.spaces;
   }
 
-  // The space a type declares one of its vector fields in, read from the
-  // `_vectorFields` its cards' search docs carry (a card from before that was
-  // recorded stored its vectors as a plain `vector <size>`). A near
+  // The space a type declares one of its vector fields in: a fact about the
+  // type's code, read from the definition of the type and field path the
+  // query names (`FieldDefinition.vectorSpace`), so it is the same whatever
+  // spaces the type's cards are stored in while a reindex moves them. A near
   // comparison reads only the vectors stored in it, so one in another space
   // (stale, or `''` from before spaces were recorded) never compares with
   // the target just because its size matches. A target read from a card
   // carries its own space, and one in another space is refused. Undefined
-  // off Postgres. Cached for a few seconds, so a query naming the field
-  // several times asks once, and a reindex that moves a field to a new space
-  // is seen soon after.
-  #declaredSpaces = new Map<
-    string,
-    { at: number; space: Promise<string | undefined> }
-  >();
+  // off Postgres.
   async declaredSpaceOf(
     realmURL: URL,
     on: CodeRef,
@@ -356,40 +447,9 @@ export class VectorQuery {
     if (!this.#pg) {
       return undefined;
     }
-    let typeKey = internalKeyFor(on, undefined, this.#host.virtualNetwork);
-    let key = `${realmURL.href} ${typeKey} ${fieldPath}`;
-    let cached = this.#declaredSpaces.get(key);
-    if (!cached || Date.now() - cached.at > 5_000) {
-      cached = {
-        at: Date.now(),
-        space: this.#host.dbAdapter
-          .execute(
-            `SELECT d.space FROM (
-               SELECT bi.search_doc -> '_vectorFields' -> $3 ->> 'space' AS space,
-                      jsonb_exists(bi.search_doc, '_vectorFields') AS recorded
-                 FROM boxel_index AS bi
-                WHERE bi.realm_url = $1 AND bi.type = 'instance'
-                  AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
-                  AND COALESCE(bi.types, '[]'::jsonb) @> $2::jsonb
-                LIMIT 20
-             ) AS d
-             ORDER BY d.space IS NULL, d.recorded DESC
-             LIMIT 1`,
-            { bind: [realmURL.href, JSON.stringify([typeKey]), fieldPath] },
-          )
-          .then(([row]) =>
-            row?.space != null
-              ? String(row.space)
-              : // no card records its fields: they stored plain vectors
-                row && !row.recorded
-                ? ''
-                : undefined,
-          )
-          .catch(() => undefined),
-      };
-      this.#declaredSpaces.set(key, cached);
-    }
-    let declared = await cached.space;
+    let declared =
+      (await this.#definedSpaceOf(on, fieldPath)) ??
+      (await this.#recordedSpaceOf(realmURL, on, fieldPath));
     let dims = Array.isArray(target)
       ? vectorDimensions(target as number[])
       : undefined;
@@ -407,6 +467,70 @@ export class VectorQuery {
     return declared;
   }
 
+  // The space the definition of `on` records for the vector field at `path`
+  // (through compound fields and lists). Undefined when the path names no
+  // field, or the definition was stored before the space was recorded.
+  async #definedSpaceOf(on: CodeRef, path: string) {
+    try {
+      return (await this.#host.fieldOf(on, path)).vectorSpace;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Only for a definition stored before `vectorSpace` was recorded on it:
+  // the space the type's most recently indexed card records for the field in
+  // its search doc's `_vectorFields`, cards that record the field first (ties
+  // go to the lower URL, so the answer never depends on row order). `''` when
+  // the cards record no vector fields at all: they stored plain vectors.
+  // Cached for a few seconds, because unlike the definition this costs a
+  // read of the type's cards each time a query names the field.
+  #recordedSpaces = new Map<
+    string,
+    { at: number; space: Promise<string | undefined> }
+  >();
+  async #recordedSpaceOf(
+    realmURL: URL,
+    on: CodeRef,
+    fieldPath: string,
+  ): Promise<string | undefined> {
+    let typeKey = internalKeyFor(on, undefined, this.#host.virtualNetwork);
+    let key = `${realmURL.href} ${typeKey} ${fieldPath}`;
+    let cached = this.#recordedSpaces.get(key);
+    if (!cached || Date.now() - cached.at > 5_000) {
+      cached = {
+        at: Date.now(),
+        space: this.#host.dbAdapter
+          .execute(
+            `SELECT d.space, d.recorded FROM (
+               SELECT bi.search_doc -> '_vectorFields' -> $3 ->> 'space' AS space,
+                      jsonb_exists(bi.search_doc, '_vectorFields') AS recorded,
+                      bi.indexed_at, bi.url
+                 FROM boxel_index AS bi
+                WHERE bi.realm_url = $1 AND bi.type = 'instance'
+                  AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
+                  AND COALESCE(bi.types, '[]'::jsonb) @> $2::jsonb
+             ) AS d
+             ORDER BY d.space IS NULL, d.recorded DESC,
+                      d.indexed_at DESC NULLS LAST, d.url
+             LIMIT 1`,
+            { bind: [realmURL.href, JSON.stringify([typeKey]), fieldPath] },
+          )
+          .then(([row]) =>
+            row?.space != null
+              ? String(row.space)
+              : // no card records its fields: they stored plain vectors
+                row && !row.recorded
+                ? ''
+                : undefined,
+          )
+          .catch(() => undefined),
+      };
+      this.#recordedSpaces.set(key, cached);
+    }
+    return cached.space;
+  }
+
   // A near target read from a card carries its space: comparing it with a
   // field whose vectors are all in other spaces is refused, never answered
   // with distances that mean nothing.
@@ -416,6 +540,7 @@ export class VectorQuery {
     near: unknown,
     what: string,
   ) {
+    assertHasDirection(near, what);
     let space = targetSpaceOf(near);
     // Without the realm there are no vectors to compare against; the join's
     // own space condition still keeps other spaces out.
@@ -423,12 +548,17 @@ export class VectorQuery {
       return;
     }
     let dims = vectorDimensions(near as number[]);
-    let spaces = await this.#spacesOf(realmURL, fieldPath, dims);
-    if (spaces.length > 0 && !spaces.includes(space)) {
-      throw new InvalidQueryError(
-        `${what}: the target vector is in the space "${space}", but "${fieldPath}" holds vectors in ${spaces.map((s) => `"${s}"`).join(', ')}; vectors from different spaces can't be compared`,
-        'vector-space-mismatch',
-      );
+    // Over a union, each realm's vectors are checked, and a refusal names
+    // the realm whose vectors are in another space.
+    let realms = realmsOf(realmURL);
+    for (let realm of realms) {
+      let spaces = await this.#spacesOf(new URL(realm), fieldPath, dims);
+      if (spaces.length > 0 && !spaces.includes(space)) {
+        throw new InvalidQueryError(
+          `${what}: the target vector is in the space "${space}", but "${fieldPath}" holds vectors in ${spaces.map((s) => `"${s}"`).join(', ')}${realms.length > 1 ? ` in ${realm}` : ''}; vectors from different spaces can't be compared`,
+          'vector-space-mismatch',
+        );
+      }
     }
   }
 
@@ -474,6 +604,7 @@ export class VectorQuery {
         to: number[];
         minSimilarity?: number;
       };
+      assertHasDirection(to, `near filter on "${path}"`);
       let space = await this.declaredSpaceOf(
         realmURL,
         on,
@@ -506,6 +637,7 @@ export class VectorQuery {
         literal: vectorToSqlLiteral(to),
         k,
         maxDistance: 1 - minSimilarity + settings.halfPrecisionSlack,
+        reader: ctx?.reader,
       });
       if (rows.length >= k) {
         this.#record(ctx, {
@@ -513,6 +645,12 @@ export class VectorQuery {
           path: 'exact',
           reason: 'too-many-matches',
         });
+        warnExactScan(
+          ctx,
+          fieldPath,
+          plan.report.threshold,
+          'too-many-matches',
+        );
         continue;
       }
       let urls = [...new Set(rows.map((r) => r.url))];
@@ -574,12 +712,22 @@ export class VectorQuery {
     let { minShare } = vectorSearchSettings();
     let spaceSize = await this.#store.spaceSize(space);
     let shareOf = spaceSize ? Math.ceil(spaceSize * minShare) : 0;
-    let candidates = await this.#store.countVectors({
-      realmURL: realmURL.href,
-      fieldPath,
-      space,
-      limit: Math.max(threshold, shareOf) + 1,
-    });
+    let limit = Math.max(threshold, shareOf) + 1;
+    // A union's count is its realms' together.
+    let candidates = ctx?.countVisible
+      ? await ctx.countVisible(fieldPath, space, limit)
+      : (
+          await Promise.all(
+            realmsOf(realmURL).map((realm) =>
+              this.#store.countVectors({
+                realmURL: realm,
+                fieldPath,
+                space,
+                limit,
+              }),
+            ),
+          )
+        ).reduce((sum, n) => sum + n, 0);
     let large = candidates > threshold;
     let reason: NearReport['reason'] | undefined = !large
       ? 'below-threshold'
@@ -596,10 +744,7 @@ export class VectorQuery {
                 : undefined;
     if (reason) {
       if (large && reason !== 'asked' && reason !== 'small-share') {
-        ctx?.warnings.push({
-          code: 'near-exact-scan',
-          message: `a near search over "${fieldPath}" compared each of more than ${threshold.toLocaleString('en-US')} vectors exactly (${reason})`,
-        });
+        warnExactScan(ctx, fieldPath, threshold, reason);
       }
       return exact(reason, candidates);
     }
@@ -631,6 +776,7 @@ export class VectorQuery {
     space: string,
     literal: string,
     needed: number,
+    reader: DBAdapter | undefined,
   ): Promise<{ urls: string[]; truncated: boolean } | undefined> {
     let settings = vectorSearchSettings();
     let k = Math.max(needed * settings.rescoreFactor, settings.minRescore);
@@ -642,6 +788,7 @@ export class VectorQuery {
         space,
         literal,
         k,
+        reader,
       });
       let urls = [...new Set(rows.map((r) => r.url))];
       let truncated = rows.length >= k;
@@ -740,6 +887,7 @@ export class VectorQuery {
       plan.space,
       literal,
       needed,
+      ctx?.reader,
     );
     if (!found) {
       this.#record(ctx, {
@@ -747,6 +895,7 @@ export class VectorQuery {
         path: 'exact',
         reason: 'filtered-out',
       });
+      warnExactScan(ctx, fieldPath, plan.report.threshold, 'filtered-out');
       return undefined;
     }
     this.#record(ctx, { ...plan.report, rescored: found.urls.length });
@@ -835,14 +984,13 @@ export class VectorQuery {
     k: number;
     minSimilarity: number | undefined;
     allowed: () => Promise<Set<string> | undefined>;
+    // the search's read snapshot
+    reader?: DBAdapter;
   }): Promise<Map<string, { url: string; sim: number }[]>> {
     let { realmURL, anchor, field } = opts;
-    if (!this.#pg) {
-      throw new InvalidQueryError(
-        'rerank: look-alikes (compare.near) run on Postgres only',
-        'needs-postgres',
-      );
-    }
+    dialectFor(this.#host.dbAdapter.kind).requirePostgres(
+      'expression: look-alikes (compare.near) run on Postgres only',
+    );
     let declared = false;
     if (anchor) {
       try {
@@ -855,7 +1003,7 @@ export class VectorQuery {
     }
     if (!declared) {
       throw new InvalidQueryError(
-        `rerank: compare.near reads each card's look-alikes by "${field}", which needs a neighbour index: declare the field with search: { neighbors: true }, and anchor the query on its type`,
+        `expression: compare.near reads each card's look-alikes by "${field}", which needs a neighbour index: declare the field with search: { neighbors: true }, and anchor the query on its type`,
         'needs-declaration',
       );
     }
@@ -872,7 +1020,7 @@ export class VectorQuery {
       anchor!,
       field,
       undefined,
-      'rerank: compare.near',
+      'expression: compare.near',
     );
     // The neighbours a row may have are applied inside the
     // nearest-neighbour read, before its ORDER BY and LIMIT, so rows the
@@ -890,6 +1038,7 @@ export class VectorQuery {
       sourceUrls: opts.sourceUrls,
       k: opts.k,
       allowed,
+      reader: opts.reader,
     });
     for (let { src, nb, sim } of pairs) {
       if (opts.minSimilarity !== undefined && sim < opts.minSimilarity)

@@ -6,6 +6,7 @@ import {
   type Expression,
 } from './expression.ts';
 import type { DBAdapter } from './db.ts';
+import { sqlTextLiteral } from './sql-literal.ts';
 import { hasVectorIndex } from './vector-index.ts';
 import { spaceDimensions } from './vector-space.ts';
 import {
@@ -48,7 +49,7 @@ export function hnswIndexName(partition: string): string {
 
 function hnswIndexDdl(partition: string, dims: number): string {
   let { m, efConstruction } = vectorSearchSettings();
-  return `CREATE INDEX IF NOT EXISTS ${hnswIndexName(partition)} ON ${partition} USING hnsw ((embedding::halfvec(${dims})) halfvec_cosine_ops) WITH (m = ${m}, ef_construction = ${efConstruction})`;
+  return `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${hnswIndexName(partition)} ON ${partition} USING hnsw ((embedding::halfvec(${dims})) halfvec_cosine_ops) WITH (m = ${m}, ef_construction = ${efConstruction})`;
 }
 
 // The settings an approximate read runs under, for its transaction only. A
@@ -82,9 +83,8 @@ function amongCandidates(alias: string, urls: string[] | undefined) {
 }
 
 // A string as a SQL literal, for DDL (which takes no bind parameters).
-// Standard-conforming strings are on, so doubling quotes is the whole escape.
 function sqlLiteral(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
+  return sqlTextLiteral(value);
 }
 
 // Vectors in Postgres, with pgvector.
@@ -272,7 +272,8 @@ export class PgVectorStore implements VectorStore {
       `AS ${half}))`,
     ];
     let k = Math.max(1, Math.round(request.k));
-    let rows = await this.#dbAdapter.withTransaction(async (q) => {
+    let db = request.reader ?? this.#dbAdapter;
+    let rows = await db.withTransaction(async (q) => {
       await hnswSettings(q, Math.max(vectorSearchSettings().efSearch, 1));
       return await q([
         'SELECT v.url AS url,',
@@ -281,6 +282,7 @@ export class PgVectorStore implements VectorStore {
         param(request.realmURL),
         'AND v.field_path =',
         param(request.fieldPath),
+        'AND vector_norm(v.embedding) > 0',
         ...(request.maxDistance == null
           ? []
           : ['AND', ...distance, '<=', param(request.maxDistance)]),
@@ -366,21 +368,9 @@ export class PgVectorStore implements VectorStore {
             `RETURNING *) INSERT INTO ${name} SELECT * FROM moved`,
           ]);
         }
-        // Its approximate index, built while the table is still small and
-        // its own. A pgvector without `halfvec` (before 0.7), or a size past
-        // what the index covers, leaves the space exact-only.
-        if (dims > 0 && dims <= MAX_HALFVEC_INDEX_DIMS) {
-          await q(['SAVEPOINT hnsw_index']);
-          try {
-            await q([hnswIndexDdl(name, dims)]);
-            await q(['RELEASE SAVEPOINT hnsw_index']);
-          } catch (e) {
-            await q(['ROLLBACK TO SAVEPOINT hnsw_index']);
-            log.warn(
-              `the vectors of "${space}" have no approximate index: ${(e as Error).message}`,
-            );
-          }
-        }
+        // No approximate index yet: a new space is read exactly, and gets
+        // its index once it holds more vectors than the exact threshold
+        // (`buildIndexes`).
         await q([
           `ALTER TABLE boxel_index_vectors ATTACH PARTITION ${name} FOR VALUES IN (${sqlLiteral(space)})`,
         ]);
@@ -398,6 +388,103 @@ export class PgVectorStore implements VectorStore {
     );
   }
 
+  // Spaces vectors were written in since `buildIndexes` last looked, and
+  // the builds in order: one runs at a time.
+  #written = new Set<string>();
+  #builds: Promise<void> = Promise.resolve();
+
+  noteVectorWrites(spaces: string[]): void {
+    for (let space of spaces) {
+      this.#written.add(space);
+    }
+  }
+
+  // A space's partition starts exact-only (`#createPartition`). Once it
+  // holds more vectors than the exact threshold, its HNSW index is built
+  // here with CREATE INDEX CONCURRENTLY, so reads and writes of the
+  // partition go on while it builds. Until the index is valid every near
+  // search of the space reads exactly (`nearIndex` is false), so answers
+  // don't change while it builds; once it is, a search over more than the
+  // threshold reads it. An index is never dropped when a space shrinks,
+  // except one a failed build left invalid, which is built again.
+  //
+  // Each process builds for the spaces it wrote (and `spaces`). Two
+  // processes that start the same build both name the index `IF NOT
+  // EXISTS`, so the second skips it; a build another session is still
+  // running (its progress row) is left to finish.
+  buildIndexes(spaces: string[] = []): Promise<void> {
+    this.noteVectorWrites(spaces);
+    let run = async () => {
+      while (this.#written.size > 0) {
+        let pending = [...this.#written];
+        this.#written.clear();
+        for (let space of pending) {
+          try {
+            await this.#buildIndexIfLarge(space);
+          } catch (e) {
+            log.warn(
+              `could not build the approximate index of the vectors of "${space}"; they are read exactly: ${(e as Error).message}`,
+            );
+          }
+        }
+      }
+    };
+    this.#builds = this.#builds.then(run, run);
+    return this.#builds;
+  }
+
+  async #buildIndexIfLarge(space: string) {
+    if (this.#dbAdapter.isClosed || !(await this.#isPartitioned())) {
+      return;
+    }
+    await this.#loadSpaces();
+    let info = this.#spaces.get(space);
+    if (
+      !info ||
+      info.indexed ||
+      !info.dims ||
+      info.dims > MAX_HALFVEC_INDEX_DIMS ||
+      !/^[a-z0-9_]+$/.test(info.partition)
+    ) {
+      return;
+    }
+    let threshold = vectorSearchSettings().exactThreshold;
+    let [counted] = await this.#dbAdapter.execute(
+      `SELECT count(*)::int AS n FROM (SELECT 1 FROM ${info.partition} LIMIT $1) AS s`,
+      { bind: [threshold + 1] },
+    );
+    if (Number(counted?.n ?? 0) <= threshold) {
+      return;
+    }
+    let index = hnswIndexName(info.partition);
+    let [state] = await this.#dbAdapter.execute(
+      `SELECT c.oid IS NOT NULL AS present,
+              COALESCE(i.indisvalid, false) AS valid,
+              EXISTS (SELECT 1 FROM pg_stat_progress_create_index AS p
+                       WHERE p.relid = to_regclass($2)) AS building
+         FROM (SELECT 1) AS one
+         LEFT JOIN pg_class AS c ON c.relname = $1 AND c.relkind = 'i'
+         LEFT JOIN pg_index AS i ON i.indexrelid = c.oid`,
+      { bind: [index, info.partition] },
+    );
+    if (state?.building) {
+      return;
+    }
+    if (state?.present && !state.valid) {
+      await this.#dbAdapter.execute(
+        `DROP INDEX CONCURRENTLY IF EXISTS ${index}`,
+      );
+    }
+    if (!state?.present || !state.valid) {
+      let started = Date.now();
+      await this.#dbAdapter.execute(hnswIndexDdl(info.partition, info.dims));
+      log.info(
+        `built the approximate index of the vectors of "${space}" (more than ${threshold}) in ${Date.now() - started} ms`,
+      );
+    }
+    await this.#loadSpaces();
+  }
+
   // An uncorrelated IN rather than a correlated EXISTS: under AND the
   // planner makes it a semi-join, and under OR (`any`) a hashed SubPlan
   // that scans the vectors once instead of once per candidate row.
@@ -413,6 +500,8 @@ export class PgVectorStore implements VectorStore {
       ...spaceEquals('nvf', target.targetSpace),
       ...spaceEquals('nvf', target.declaredSpace),
       ...amongCandidates('nvf', target.candidates),
+      // a vector of all zeros has no direction, so it is no vector
+      'AND vector_norm(nvf.embedding) > 0',
       ...(minSimilarity == null
         ? []
         : [
@@ -443,11 +532,14 @@ export class PgVectorStore implements VectorStore {
         ...spaceEquals(alias, target.targetSpace),
         ...spaceEquals(alias, target.declaredSpace),
         ...amongCandidates(alias, target.candidates),
+        // a vector of all zeros has no direction, so it is no vector
+        `AND vector_norm(${alias}.embedding) > 0`,
       ],
+      // NaN (a target with no direction) is no similarity
       similarity: [
-        `MAX(1 - (${alias}.embedding <=> CAST(`,
+        `MAX(NULLIF(1 - (${alias}.embedding <=> CAST(`,
         param(target.literal),
-        'AS vector)))',
+        "AS vector)), 'NaN'::float8))",
       ],
     };
   }
@@ -497,7 +589,8 @@ export class PgVectorStore implements VectorStore {
     let order = partition
       ? `v.embedding${half} <=> s.embedding${half}`
       : 'v.embedding <=> s.embedding';
-    let pairs = await this.#dbAdapter.withTransaction(async (q) => {
+    let db = request.reader ?? this.#dbAdapter;
+    let pairs = await db.withTransaction(async (q) => {
       if (partition) {
         await hnswSettings(q, Math.max(settings.efSearch, fetchK));
       }
@@ -514,7 +607,8 @@ export class PgVectorStore implements VectorStore {
         'AND v.dims =',
         param(dims),
         `AND v.realm_url = s.realm_url AND v.url <> s.url
-                    AND v.type = 'instance' AND v.space = s.space`,
+                    AND v.type = 'instance' AND v.space = s.space
+                    AND vector_norm(v.embedding) > 0`,
         ...(allowed
           ? [
               'AND v.url IN (SELECT jsonb_array_elements_text(',
@@ -532,7 +626,7 @@ export class PgVectorStore implements VectorStore {
         param(fieldPath),
         'AND s.dims =',
         param(dims),
-        'AND s.ordinal = 0',
+        'AND s.ordinal = 0 AND vector_norm(s.embedding) > 0',
         ...spaceEquals('s', request.declaredSpace),
         'AND s.realm_url =',
         param(realmURL),
@@ -566,8 +660,12 @@ export class PgVectorStore implements VectorStore {
   }
 
   // A card's single (non-list) vectors, with their spaces.
-  async oneCardVectors(realmURL: string, url: string): Promise<StoredVector[]> {
-    let rows = await this.#dbAdapter.execute(
+  async oneCardVectors(
+    realmURL: string,
+    url: string,
+    reader?: DBAdapter,
+  ): Promise<StoredVector[]> {
+    let rows = await (reader ?? this.#dbAdapter).execute(
       `SELECT field_path, space, embedding::text AS components FROM boxel_index_vectors WHERE realm_url = $1 AND url = $2 AND type = 'instance' AND item_id = ''`,
       { bind: [realmURL, url] },
     );
@@ -581,7 +679,7 @@ export class PgVectorStore implements VectorStore {
   // A `select` column holding the card's own vectors at a field, each with
   // its space (and, inside a list, its item id), in item order.
   vectorColumn(fieldPath: string, list: boolean, alias: string): string {
-    let match = `v.realm_url = i.realm_url AND v.url = i.url AND v.type = i.type AND v.field_path = '${fieldPath.replace(/'/g, "''")}'`;
+    let match = `v.realm_url = i.realm_url AND v.url = i.url AND v.type = i.type AND v.field_path = ${sqlTextLiteral(fieldPath)}`;
     return list
       ? `, ANY_VALUE((SELECT jsonb_agg(jsonb_build_object('item', v.item_id, 'space', v.space, 'values', v.embedding::text::jsonb) ORDER BY v.ordinal, v.item_id) FROM boxel_index_vectors AS v WHERE ${match})) AS "${alias}"`
       : `, ANY_VALUE((SELECT jsonb_build_object('space', v.space, 'values', v.embedding::text::jsonb) FROM boxel_index_vectors AS v WHERE ${match} AND v.item_id = '' LIMIT 1)) AS "${alias}"`;

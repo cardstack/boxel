@@ -23,8 +23,11 @@ export interface VectorSearchSettings {
   // Below this many of a realm's vectors in one field and space, a near
   // search scans them exactly; above it, it reads an approximate index.
   // Lucene and Elasticsearch make the same switch (an exact search when the
-  // filtered set is small); 5,000 256-d vectors scan exactly in a few
-  // milliseconds here, where the index's own overhead is about the same.
+  // filtered set is small). An exact scan of 50,000 256-d vectors takes
+  // about 16 ms here (so about 35 ms at this threshold), which is fast
+  // enough that answers at a realm's scale stay exact; the index serves
+  // larger spaces. A space's partition gets its index only once it holds
+  // more than this many vectors (`PgVectorStore.buildIndexes`).
   exactThreshold: number;
   // Below this share of its space's vectors, a realm's vectors in a field
   // are scanned exactly too, however many: the index walk would pass over
@@ -72,7 +75,7 @@ function envNumber(name: string): number | undefined {
 }
 
 export const VECTOR_SEARCH_DEFAULTS: Readonly<VectorSearchSettings> = {
-  exactThreshold: envNumber('BOXEL_VECTOR_EXACT_THRESHOLD') ?? 5_000,
+  exactThreshold: envNumber('BOXEL_VECTOR_EXACT_THRESHOLD') ?? 100_000,
   minShare: 0.1,
   efSearch: envNumber('BOXEL_VECTOR_EF_SEARCH') ?? 100,
   m: 16,
@@ -123,6 +126,8 @@ export interface NearCandidateRequest {
   k: number;
   // keep only vectors within this cosine distance (a filter's threshold)
   maxDistance?: number;
+  // the search's read snapshot, when the read is part of one
+  reader?: DBAdapter;
 }
 
 export interface VectorStore {
@@ -160,7 +165,11 @@ export interface VectorStore {
     url: string,
   ): Promise<{ fieldPath: string; space: string; count: number }[]>;
   // A card's single (non-list) vectors, with their spaces.
-  oneCardVectors(realmURL: string, url: string): Promise<StoredVector[]>;
+  oneCardVectors(
+    realmURL: string,
+    url: string,
+    reader?: DBAdapter,
+  ): Promise<StoredVector[]>;
   // A `select` column holding a card's vectors at a field.
   vectorColumn(fieldPath: string, list: boolean, alias: string): string;
   // Whether a space's vectors have an approximate (nearest-neighbour) index,
@@ -184,6 +193,14 @@ export interface VectorStore {
   // Gives each space a home before vectors are written in it (a partition,
   // in Postgres). Runs outside the writer's transaction.
   ensureSpaces(spaces: string[]): Promise<void>;
+  // Records that vectors were written in these spaces, inside the writer's
+  // transaction; `buildIndexes`, after it commits, looks at them.
+  noteVectorWrites(spaces: string[]): void;
+  // Builds the approximate index of each noted space (and each of
+  // `spaces`) whose vectors now number more than the exact threshold. The
+  // index writer starts it after a commit and does not wait for it. Resolves
+  // when every build asked for so far has finished; never rejects.
+  buildIndexes(spaces?: string[]): Promise<void>;
   // Index writes: remove the rows `condition` selects; add `rows`.
   deleteVectors(condition: Expression): Expression;
   insertVectors(rows: VectorRow[]): Expression;
@@ -202,6 +219,8 @@ export interface LookalikeRequest {
   allowed: Set<string> | undefined;
   // read through the space's approximate index, then re-scored exactly
   approximate: boolean;
+  // the search's read snapshot, when the read is part of one
+  reader?: DBAdapter;
 }
 
 export interface StoredVector {
@@ -286,6 +305,8 @@ export class SqliteVectorStore implements VectorStore {
     return [];
   }
   async ensureSpaces(): Promise<void> {}
+  noteVectorWrites(): void {}
+  async buildIndexes(): Promise<void> {}
   async nearIndex(): Promise<boolean> {
     return false;
   }
