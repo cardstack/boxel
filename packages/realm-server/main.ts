@@ -31,8 +31,6 @@ import { RealmServer } from './server.ts';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { setRerankScorer } from '@cardstack/runtime-common/rerank-score';
-import { RerankPool } from '@cardstack/runtime-common/rerank-pool';
 
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
@@ -667,9 +665,6 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     process.exit(-2);
   }
   let realms: Realm[] = [];
-  // Rerank formulas SQL cannot run are scored on a thread pool, never on this
-  // event loop (RERANK_THREADS threads, 2 by default).
-  setRerankScorer(new RerankPool().scorer);
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
   await reportPlaintextCensus(dbAdapter);

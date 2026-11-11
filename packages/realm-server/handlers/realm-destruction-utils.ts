@@ -1,5 +1,6 @@
 import type { DBAdapter, Expression, Querier } from '@cardstack/runtime-common';
 import {
+  dropLogPartition,
   hasVectorIndex,
   addExplicitParens,
   cancelRunningJobsInLaneFamily,
@@ -134,13 +135,19 @@ export async function removeRealmDatabaseArtifacts(args: {
     param(realmURL),
   ]);
   await q([`DELETE FROM boxel_index_spill WHERE realm_url =`, param(realmURL)]);
+  await q([
+    `DELETE FROM boxel_index_facet_values WHERE realm_url =`,
+    param(realmURL),
+  ]);
   await q([`DELETE FROM boxel_index_words WHERE realm_url =`, param(realmURL)]);
   await q([`DELETE FROM boxel_term_stats WHERE realm_url =`, param(realmURL)]);
   await q([
     `DELETE FROM boxel_realm_text_stats WHERE realm_url =`,
     param(realmURL),
   ]);
-  await q([`DELETE FROM boxel_log_lines WHERE realm_url =`, param(realmURL)]);
+  // The realm's partition of the log lines goes whole; a line written before
+  // the partition existed is deleted from the default one.
+  await dropLogPartition(dbAdapter, q, realmURL);
   await q([`DELETE FROM boxel_log_files WHERE realm_url =`, param(realmURL)]);
   await q([
     `DELETE FROM prerendered_html_pending WHERE realm_url =`,
