@@ -2,7 +2,7 @@
 
 What people ask for, and the query that answers it. Many requests don't map to an obvious operator: "hidden gem" is a blend with an inverted signal, "cheap for its kind" is an expression sort entry against a comparison set, "dupes of this" is a one-card `let` binding. Find the phrase, then adapt the type and field names to your cards. Each member is defined once, in [Search](search.md); this page only shows them combined.
 
-Every query is in the newer spelling, with `productRef` standing for the product card type's code ref: `{ module: '@cardstack/catalog/product', name: 'Product' }` (a registered prefix) or the module's URL, never a bare name or a relative module ([ADR 002](adr/002-keep-identifiers-canonical-resolve-at-network-boundary.md)). The examples assume a product type with the usual shop fields (`productType`, `priceMin`, `rating`, `reviewCount`, `unitsSold30d`, `imageEmbedding`, …), and `textVector` stands for an embedding of the shopper's words that the caller computed, as a list of numbers. Each query passes the grammar check (`assertQuery` in `@cardstack/runtime-common`).
+Every query is in the newer spelling, with `productRef` standing for the product card type's code ref: `{ module: '@cardstack/catalog/product', name: 'Product' }` (a registered prefix) or the module's URL, never a bare name or a relative module ([ADR 002](adr/002-keep-identifiers-canonical-resolve-at-network-boundary.md)). The examples assume a product type with the usual shop fields (`productType`, `priceMin`, `rating`, `reviewCount`, `unitsSold30d`, `imageEmbedding`, …), and `textVector` stands for an embedding of the shopper's words that the caller computed, as a list of numbers. Each query passes the grammar check: `assertQuery` in `@cardstack/runtime-common`, the HTTP wire parser for the ones that carry `select`, `realms` or `federation`, and the log query's validator for the ones that read a log.
 
 ## Find a pattern
 
@@ -174,8 +174,6 @@ const query = {
 `linkedFrom` keeps the cards another card links to, so the list stays the source of truth. `card` is the list card's absolute URL, in the realm being searched.
 
 **Watch out:** Under a realm policy, `linkedFrom` cannot sit inside a binding or a comparison filter.
-
-_Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
 
 ### A category, then its neighbors
 
@@ -491,7 +489,7 @@ Plain sorts apply in order: the shop's priority, then rating to break ties.
 
 ## Ranking by an expression
 
-When the idea is a ratio or a curve, write it as a spreadsheet expression. It runs in SQL over every match when Postgres can compute it.
+When the idea is a ratio or a curve, write it as a spreadsheet expression. It runs in SQL over every match; an expression SQL cannot compute (a text function, a fitted line) is refused with `expression-unsupported`, never run elsewhere.
 
 ### Value for money
 
@@ -847,8 +845,6 @@ Embed the shopper's words, keep what is close enough, and rank by meaning with q
 
 **Watch out:** Embed a description of the products that solve it ("couch cover, pet barrier, dog bed"), not the complaint itself.
 
-_Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
-
 ### A mood or occasion
 
 **Say:** "housewarming gift", "calm bedroom", "cozy"
@@ -867,8 +863,6 @@ const query = {
 ```
 
 No threshold: everything under budget stays, ranked by closeness to the mood.
-
-_Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
 
 ## Dupes and twins
 
@@ -996,9 +990,7 @@ const query = {
 
 Over several realms, `merged` gives one list in the query's sort; the default `byRealm` keeps each realm's rows as a section.
 
-**Watch out:** Send it to `_federated-search`; `realms` names realms on that server. Blend and text scores compare only approximately across realms.
-
-_Needs a value computed first (an embedding, a saved list, or several realms) before it runs._
+**Watch out:** Send it to `_federated-search`; `realms` names realms on that server. When the realms share that server's index the merged list is exact, as if one realm held every card (`meta.federation.path: 'union'`); otherwise each realm's scores are merged as they are, and a list sorted by a score carries the `approximate-order` warning.
 
 ## Answering with numbers
 

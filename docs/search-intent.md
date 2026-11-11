@@ -24,8 +24,9 @@ type's `searchDefaults`.
   (`rank: 'popularity'`), a field people filter a list by (`facet: true`), or a
   field that should not be searchable at all (`search: false`).
 - **Facets are the one opt-in.** A query may count a field in `facets` only
-  when the field declares `facet: true` (see [`facet`](#facet)); the card
-  type, realm, created and modified time need no declaration.
+  when the field declares `facet: true` (see [`facet`](#facet)); the index
+  fields base declares (`_type`, `_cardType`, `_realm`, `createdAt`,
+  `lastModified`) need no declaration of yours.
 - **Queries get shorter.** With hints in place, a search pane is
   `{ matches: q }` sorted by `{ relevance: true }`, a shelf is a `relevance`
   sort with signal weights, and facets come back labeled and bucketed, with no
@@ -111,8 +112,11 @@ timestamp, it says `interval`.
   they reach this card's search doc through the link's `searchable` option.
 - **Subclasses** inherit their parents' declarations. A facet over a base type
   counts a field a subclass defines when that subclass declares it.
-- Changing only a type's `search` declarations rewrites its cards' facet
-  rows from their indexed search docs; nothing is rendered again.
+- Changing only a type's facet declarations (a field's `facet`, a
+  FieldDef's `static facetValue`) rewrites its cards' facet rows from their
+  indexed search docs, with nothing rendered again, for a write that waits
+  for its index pass. Any other change to the module renders its cards
+  again (see [Declaring a facet](search.md#declaring-a-facet)).
 
 ### `rank`
 
@@ -311,8 +315,11 @@ does the same for
 type-ahead: each word keeps its prefix match and also matches its
 corrections whole, so a fully typed misspelling finds the word it meant.
 
-`pattern` is a glob over the field's whole value, ignoring case: `*` is any
-run of characters and `?` one character. `regex` is a POSIX regular
+`pattern` is a glob over the field's whole value, ignoring case, and
+path-aware: `*` is any run of characters within one `/`-separated segment,
+`?` one character other than `/`, and `**` any run across segments (on
+SQLite `*` and `?` cross `/`). Every file type's `url` and `name` are
+pattern fields, declared on base's `FileDef`. `regex` is a POSIX regular
 expression, Postgres's `~`, case-sensitive. Both are refused on a field that
 isn't searched by pattern (`patterns: true`, or an `identifier` or `code`
 role, including the Email, Phone and URL defaults), and both use a trigram
@@ -328,15 +335,16 @@ pattern values or listed words, until it is reindexed.
 
 A facet's members are listed under [Facets](search.md#facets). A facet's
 `by` (and a `measure`'s field) must be declared `facet: true` (see
-[`facet`](#facet)) or be a built-in facet; anything else is refused with
-`needs-declaration`. A declared field gives the facet its shape when the
+[`facet`](#facet)) or be one of base's index fields; anything else is
+refused with `needs-declaration`. A declared field gives the facet its shape when the
 query names none of `stats`, `interval` or `ranges`. Every facet is counted
 from the index's facet table, which holds the declared fields' values, by its
 own queries over the page's match set; the SQLite browser index keeps no
 facet table and refuses facets with `needs-postgres`. `own: 'ignore'` leaves out every filter node that constrains only `by`
 (keeping its type anchor). Range labels are `key`, or `from-to` with `*` for
 an open end; date buckets are labeled by their first day (weeks start on
-Monday, in UTC). `meta.facetStats[by]` holds `count` and `distinct`, then
+Monday), on the calendar of the query's time zone, UTC unless the query,
+its caller or its realm names one. `meta.facetStats[by]` holds `count` and `distinct`, then
 `values`, `min`, `max`, `sum` and `avg` over numbers or `min` and `max` over
 text, `missing` when asked, and `order` when the counts are not sorted by
 count. Across realms, counts add up, and `meta.facetErrors[by]` bounds how far
