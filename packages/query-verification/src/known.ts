@@ -19,8 +19,6 @@ export interface Known {
   when?: () => boolean;
 }
 
-const notUtc = () => new Date(2000, 0, 1).getTimezoneOffset() !== 0;
-
 export const KNOWN: Known[] = [
   {
     about:
@@ -46,15 +44,6 @@ export const KNOWN: Known[] = [
     file: 'values',
     cases: /^(not )?eq ds "0\.50"$/,
     kind: 'answers',
-  },
-  {
-    about:
-      "in a process whose time zone is not UTC, as most browsers' are, a date-time value is read in local wall time, so every date-time filter misses or matches by the zone's offset",
-    evaluators: ['matcher'],
-    file: ['values', 'dates'],
-    cases: /\btss? |\bts\b|, as a date$/,
-    kind: 'answers',
-    when: notUtc,
   },
 ];
 
