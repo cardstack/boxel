@@ -172,7 +172,6 @@ module('Integration | Component | hydratable-card', function (hooks) {
         </TestContext>
       </template>,
     );
-    await settled();
 
     assert
       .dom('[data-test-hydratable-stand-in]')

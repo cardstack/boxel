@@ -224,9 +224,12 @@ module('Unit | ai-function-generation-test', function (hooks) {
       [],
       'a sort entry takes expression, top and compare',
     );
+    let sortRequired: string[] =
+      'required' in query.properties.sort.items
+        ? query.properties.sort.items.required
+        : [];
     assert.notOk(
-      'required' in query.properties.sort.items &&
-        query.properties.sort.items.required.includes('by'),
+      sortRequired.includes('by'),
       'an expression sort entry needs no by',
     );
     assert.deepEqual(

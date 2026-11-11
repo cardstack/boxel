@@ -1457,7 +1457,10 @@ export default class PublishRealmModal extends Component<Signature> {
                     </div>
                   </div>
                 {{else if this.claimedDomain}}
-                  <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
+                  <WithLoadedRealm
+                    @realmURL={{this.currentRealmURL}}
+                    as |realm|
+                  >
                     <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
                       <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
                     </RealmURLTooltip>
@@ -1486,7 +1489,8 @@ export default class PublishRealmModal extends Component<Signature> {
                               {{on
                                 'click'
                                 (fn
-                                  @handleUnpublish this.claimedDomainPublishedUrl
+                                  @handleUnpublish
+                                  this.claimedDomainPublishedUrl
                                 )
                               }}
                               data-test-unpublish-custom-subdomain-button

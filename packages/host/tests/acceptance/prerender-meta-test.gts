@@ -12,6 +12,7 @@ import {
   type PrerenderMeta,
   type RenderRouteOptions,
   rri,
+  SEARCH_TEXT_KEY,
 } from '@cardstack/runtime-common';
 
 import {
@@ -38,8 +39,12 @@ function expectMetaSearchDoc(
   expected: Record<string, any>,
   message?: string,
 ) {
+  // The search-intent text the route stamps beside the generated doc
+  // (`_searchText`) has its own tests; the index writer moves it out of the
+  // stored doc.
+  let { [SEARCH_TEXT_KEY]: _searchText, ...generated } = actual ?? {};
   assert.deepEqual(
-    diffDoc(expected, actual ?? {}, false),
+    diffDoc(expected, generated, false),
     [],
     message ?? 'search doc is correct',
   );

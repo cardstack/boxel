@@ -383,6 +383,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'docx-file-def': () => import('@cardstack/base/docx-file-def'),
   'docx-meta-extractor': () => import('@cardstack/base/docx-meta-extractor'),
   'exif-meta-extractor': () => import('@cardstack/base/exif-meta-extractor'),
+  'file-content-cap': () => import('@cardstack/base/file-content-cap'),
   'file-formats/audio-preview': () =>
     import('@cardstack/base/file-formats/audio-preview'),
   'file-formats/file-resources': () =>
@@ -428,6 +429,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'iso-bmff': () => import('@cardstack/base/iso-bmff'),
   'jpg-meta-extractor': () => import('@cardstack/base/jpg-meta-extractor'),
   'json-file-def': () => import('@cardstack/base/json-file-def'),
+  'log-lines': () => import('@cardstack/base/log-lines'),
   'm4a-meta-extractor': () => import('@cardstack/base/m4a-meta-extractor'),
   'midi-audio-def': () => import('@cardstack/base/midi-audio-def'),
   'midi-meta-extractor': () => import('@cardstack/base/midi-meta-extractor'),
