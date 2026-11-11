@@ -365,11 +365,14 @@ export abstract class ExpressionResolver extends IndexRows {
       // instead of lexicographic ordering (e.g. 100 > 20 > 3, not
       // "100" < "20" < "3"). SQLite's ->> preserves the original JSON type so
       // no cast is needed there.
-      if (isNumericField && errorHint !== 'filter') {
+      if (isNumericField) {
         // A sort reads every row the query returns, and a sort anchored on
         // one subclass reaches rows of its siblings, which may hold text
         // under the same name: only text that reads as a number is cast, so
         // any other value sorts as no value rather than failing the search.
+        // A filter (`eq`, `in`, `range`) is guarded the same way: nothing
+        // makes Postgres apply the type gate before the cast, so another
+        // type's text there would fail the query.
         exp = [
           dbExpression({
             pg: [
@@ -381,13 +384,6 @@ export abstract class ExpressionResolver extends IndexRows {
             ],
             sqlite: ['search_doc', ...exp],
           }),
-        ];
-      } else if (isNumericField) {
-        exp = [
-          dbExpression({ pg: '(', sqlite: '' }),
-          'search_doc',
-          ...exp,
-          dbExpression({ pg: ')::numeric', sqlite: '' }),
         ];
       } else if (readsSpill && errorHint !== 'filter' && path === 'cardTitle') {
         // A title sort reads the row's inline `title_sort`, the same text as

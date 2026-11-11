@@ -24,14 +24,6 @@ const notUtc = () => new Date(2000, 0, 1).getTimezoneOffset() !== 0;
 export const KNOWN: Known[] = [
   {
     about:
-      '`in` on a number or big-integer field fails with `invalid input syntax for type numeric` when a card of another type holds text under the field name: the extracted value is cast to numeric unguarded',
-    evaluators: ['postgres'],
-    file: 'values',
-    cases: /^(not )?in [dg]( strings)?$/,
-    kind: 'fails',
-  },
-  {
-    about:
       'a number written as a string (`"2.00"`) does not equal the number on a number field, a number does not equal a big-integer field (stored as a string), and a string range bound on a big integer compares as text (`"10" > "9"` is false)',
     evaluators: ['matcher'],
     file: 'values',
