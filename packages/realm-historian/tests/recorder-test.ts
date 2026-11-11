@@ -1382,4 +1382,142 @@ module('recording through the historian', (hooks) => {
     );
     assert.deepEqual(failures, []);
   });
+
+  test('a transaction left open elsewhere keeps the clock from splitting a burst it holds partly unread', async (assert) => {
+    let realmsRoot = join(root, 'realms');
+    let historyRoot = join(root, 'history');
+    let target = await insertRealm(database.db, {
+      url: 'http://localhost:4201/test-user/held/',
+      diskId: 'test-user/held',
+    });
+    let directory = join(realmsRoot, 'test-user', 'held');
+    await mkdir(directory, { recursive: true });
+    let db = database.another();
+    let failures: unknown[] = [];
+    let ticks = 0;
+    let quietPeriodMs = 500;
+    historian = new Historian({
+      db,
+      historyRoot,
+      realmsRoot,
+      heartbeat: new Heartbeat(),
+      pollMs: 50,
+      lease: {
+        shardCount: 1,
+        taskCount: 1,
+        renewMs: 50,
+        expiryMs: 1000,
+        holder: 'held-test-task',
+      },
+      recording: { clockGraceMs: 0 },
+      recorderFor: (realm, beat) => {
+        let recorder = new Recorder({
+          db,
+          realm,
+          historyRoot,
+          holder: 'held-test-task',
+          io: new Semaphore(1),
+          onFatal: (error) => failures.push(error),
+          beat,
+          limits: { ...DEFAULT_GROUPING_LIMITS, quietPeriodMs },
+        });
+        let tick = recorder.tick.bind(recorder);
+        recorder.tick = (at) => {
+          ticks++;
+          tick(at);
+        };
+        return recorder;
+      },
+    });
+    historian.run().catch((error) => failures.push(error));
+    let write = async (content: string, status: ChangeStatus) => {
+      await writeFile(join(directory, 'card.json'), content);
+      return appendEvent(database.db, target, {
+        author: ALICE,
+        changes: [
+          {
+            path: 'card.json',
+            status,
+            contentHash: computeContentHash(content),
+            size: content.length,
+          },
+        ],
+      });
+    };
+    let databaseNow = async () => {
+      let [{ now }] = await database.db.execute(
+        `SELECT (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now`,
+      );
+      return Number(now);
+    };
+    let recorded = async () => {
+      let [row] = await database.db.execute(
+        `SELECT cursor_seq, head FROM realm_history_state WHERE realm_id = $1`,
+        { bind: [target.id] },
+      );
+      return {
+        cursorSeq: Number(row.cursor_seq),
+        head: row.head as string | null,
+      };
+    };
+
+    let first = await write('{"v":1}', 'A');
+    // A transaction in another connection takes its id after the first
+    // write's and stays open, so the second write commits above the horizon.
+    let began!: (xid: bigint) => void;
+    let begun = new Promise<bigint>((resolve) => (began = resolve));
+    let release!: () => void;
+    let released = new Promise<void>((resolve) => (release = resolve));
+    let holding = database.another().withTransaction(async (query) => {
+      let [{ xid }] = await query(['SELECT pg_current_xact_id()::text AS xid']);
+      began(BigInt(xid as string));
+      await released;
+    });
+    let held = await begun;
+    let second = await write('{"v":2}', 'M');
+    assert.true(
+      BigInt(first.xid) < held,
+      'the open transaction began after the first write',
+    );
+    assert.true(
+      held < BigInt(second.xid),
+      'and holds the horizon below the second',
+    );
+    let deadline = Date.parse(first.occurredAt) + quietPeriodMs;
+    assert.true(
+      Date.parse(second.occurredAt) < deadline,
+      "the second write lands within the first's quiet period",
+    );
+
+    // Tick past the first write's deadline: a tick whose database time was
+    // read after it.
+    await waitUntil(async () => (await databaseNow()) > deadline, {
+      what: "the first write's quiet period to end",
+    });
+    let seen = ticks;
+    await waitUntil(() => ticks >= seen + 2, {
+      what: 'two more ticks',
+    });
+    assert.deepEqual(
+      await recorded(),
+      { cursorSeq: 0, head: null },
+      'the group waits for the write it has yet to read',
+    );
+
+    release();
+    await holding;
+    await waitUntil(async () => (await recorded()).cursorSeq === second.seq, {
+      timeoutMs: 10_000,
+      what: 'both writes to be recorded',
+    });
+    let gitDir = repoPath(historyRoot, target.id);
+    let revisions = await readRevisions(gitDir, [(await recorded()).head!]);
+    assert.strictEqual(revisions.length, 1, 'the burst is one revision');
+    assert.deepEqual(revisions[0].trailers.writeCount, ['2']);
+    assert.strictEqual(
+      (await runGit(gitDir, ['show', `${MAIN_REF}:card.json`])).toString(),
+      '{"v":2}',
+    );
+    assert.deepEqual(failures, []);
+  });
 });

@@ -6,8 +6,10 @@
 // still in flight. The consumer therefore reads only events whose transaction
 // is older than every transaction still in progress, the visibility horizon
 // `pg_snapshot_xmin(pg_current_snapshot())`, taken in the statement that
-// reads them: nothing below it can still appear. A long transaction anywhere
-// in the database holds the horizon back, which shows up as recording lag.
+// reads them: nothing below it can still appear. A transaction holds the
+// horizon back from its first write until it ends, whichever database on the
+// server it runs in, and a long one shows up as recording lag. A read-only
+// transaction never does: it takes no transaction id.
 //
 // The horizon is a transaction id, so the read position is one too: the pair
 // `(xid, seq)`, and events are read in that order. A transaction's `xid` is
@@ -129,6 +131,26 @@ export class Consumer {
       }
     } while (more);
     return total;
+  }
+
+  // The earliest `occurred_at` among each realm's committed events after the
+  // position, in milliseconds since the epoch, for the realms that have one.
+  // After a poll, these are the events a transaction still in progress keeps
+  // above the horizon. The query reads every committed event after the
+  // position: a few once a poll has caught up, but every event committed
+  // since a long transaction's first write, for as long as it stays open.
+  async earliestUnread(): Promise<Map<string, number>> {
+    let rows = await this.#db.execute(
+      `SELECT realm_id,
+              (extract(epoch FROM min(occurred_at)) * 1000)::float8 AS earliest
+       FROM realm_change_events
+       WHERE (xid, seq) > ($1::xid8, $2::bigint)
+       GROUP BY realm_id`,
+      { bind: [this.#position.xid, this.#position.seq] },
+    );
+    return new Map(
+      rows.map((row) => [row.realm_id as string, Number(row.earliest)]),
+    );
   }
 
   async #readBatch(): Promise<ChangeEvent[]> {

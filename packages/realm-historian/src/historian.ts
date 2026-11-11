@@ -7,12 +7,18 @@
 // event, and reports it stalled only when no step finishes.
 //
 // After a turn that has read every event below the horizon, the loop ticks
-// every recorder with the database's time from before that read, less a
-// grace period, so a recorder can close a group whose deadline has passed:
-// every event with an earlier `occurred_at` is in hand by then, unless its
-// transaction stayed open past the grace period. The recorders share one
-// semaphore, which caps how many do I/O at once, and a recorder with nothing
-// uncommitted is dropped once it has been idle for a while.
+// every recorder, so a recorder can close a group whose deadline has passed.
+// A realm's tick must be a time by which every event of the realm with an
+// earlier `occurred_at` is in hand. It is the database's time from before
+// that read, less a grace period, or the `occurred_at` of the realm's
+// earliest event that has committed but is still unread, when that is
+// earlier: a transaction still in progress elsewhere holds the horizon below
+// such an event. An event whose transaction hasn't committed is in hand by
+// then unless the transaction stayed open past the grace period.
+//
+// The recorders share one semaphore, which caps how many do I/O at once, and
+// a recorder with nothing uncommitted is dropped once it has been idle for a
+// while.
 //
 // The loop exits rather than run degraded: a lost lease or a query that fails
 // ends `run()` with the error, and the process exits non-zero. A lost
@@ -179,8 +185,11 @@ export class Historian {
             this.#options.heartbeat.beat();
             return this.#running();
           });
-          if (this.#running()) {
-            this.#tickRecorders(readFrom);
+          if (this.#running() && this.#recorders.size > 0) {
+            this.#tickRecorders(
+              readFrom,
+              await this.#consumer!.earliestUnread(),
+            );
           }
         }
         if (this.#running()) {
@@ -316,17 +325,18 @@ export class Historian {
     });
   }
 
-  // Ticks every recorder with `readFrom` less the grace period, and drops
-  // the recorders that have been idle long enough. A dropped recorder's
-  // realm gets a new one, loaded from Postgres and the repo, with its next
-  // event.
-  #tickRecorders(readFrom: number): void {
+  // Ticks every recorder with `readFrom` less the grace period, or with the
+  // `occurred_at` of its realm's earliest unread event when that is earlier,
+  // and drops the recorders that have been idle long enough. A dropped
+  // recorder's realm gets a new one, loaded from Postgres and the repo, with
+  // its next event.
+  #tickRecorders(readFrom: number, earliestUnread: Map<string, number>): void {
     let { recording } = this.#options;
     let at = readFrom - (recording?.clockGraceMs ?? DEFAULT_CLOCK_GRACE_MS);
     let idleAfterMs = recording?.idleAfterMs ?? DEFAULT_IDLE_AFTER_MS;
     let now = Date.now();
     for (let [id, recorder] of this.#recorders) {
-      recorder.tick?.(at);
+      recorder.tick?.(Math.min(at, earliestUnread.get(id) ?? Infinity));
       let idleSince = recorder.idleSince?.();
       if (idleSince !== undefined && now - idleSince >= idleAfterMs) {
         this.#drop(id, recorder);
