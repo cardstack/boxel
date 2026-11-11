@@ -3,6 +3,7 @@ import { isBxlTransformError, runBxlTransform } from '@cardstack/bxl/transform';
 
 import {
   MAX_TRANSFORM_OUTPUT_BYTES,
+  TRANSFORM_MAX_OUTPUTS,
   TRANSFORM_MAX_STEPS,
   TRANSFORM_TIMEOUT_MS,
 } from './transform-limits';
@@ -43,6 +44,8 @@ worker.onmessage = async (event: MessageEvent<TransformWorkerRequest>) => {
             1,
           ),
           maxSteps: TRANSFORM_MAX_STEPS,
+          maxOutputs: TRANSFORM_MAX_OUTPUTS,
+          maxOutputBytes: MAX_TRANSFORM_OUTPUT_BYTES,
         },
       }) ?? null,
     );

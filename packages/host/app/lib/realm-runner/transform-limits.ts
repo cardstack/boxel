@@ -14,6 +14,10 @@ export const TRANSFORM_STALL_GRACE_MS = 5_000;
 // BXL's step limit. Set high, so that time and size are the limits a program
 // meets: BXL's default would refuse a map over a few thousand objects.
 export const TRANSFORM_MAX_STEPS = 50_000_000;
+// BXL's output limits. A transform produces one value, so BXL stops a
+// program at its second. The byte limit is the host's own output limit:
+// BXL counts UTF-16 units, so the worker still measures the bytes it sends.
+export const TRANSFORM_MAX_OUTPUTS = 1;
 // The time the worker module may take to load before it can run any program.
 export const TRANSFORM_WORKER_START_TIMEOUT_MS = 30_000;
 // How many programs one run may run, and how many bytes they may move in and

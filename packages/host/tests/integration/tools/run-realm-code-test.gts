@@ -5589,6 +5589,12 @@ return [out.length, out[39999].b, gauss];`);
   test('realm.transform refuses output over its size limit', async function (assert) {
     await assert.rejects(
       run(`await realm.transform('x'.repeat(600_000), '[., .]');`),
+      /1000000 byte/,
+    );
+    // Non-ASCII output that BXL counts under the limit is still over it in
+    // bytes, and the worker refuses it.
+    await assert.rejects(
+      run(`await realm.transform('é'.repeat(300_000), '[., .]');`),
       /realm.transform returns at most 1000000 bytes/,
     );
   });
