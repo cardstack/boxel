@@ -144,7 +144,7 @@ function realmContents() {
 // the input card from rather than the card type itself.
 interface ToolInput {
   cardId?: string;
-  type?: { module: string; name: string };
+  type?: { module?: string; name?: string };
   operation: string;
   payload?: Record<string, unknown>;
   realm?: string;
@@ -693,6 +693,23 @@ module('Integration | tools | invoke-card-operation', function (hooks) {
     );
     assert.true(neither.includes('give one'), `and says why: ${neither}`);
     assert.strictEqual(sent.length, 0, 'and nothing was sent to the realm');
+  });
+
+  test('a blank type is read as no type, so a call through a card still runs', async function (assert) {
+    for (let type of [{}, { module: '', name: '' }]) {
+      let result = await invoke({
+        cardId: `${testRealmURL}report-commented`,
+        type,
+        operation: 'addComment',
+        payload: { body: 'Beside a blank type' },
+      });
+
+      assert.strictEqual(
+        result.cardId,
+        `${testRealmURL}report-commented`,
+        `the operation ran on the card beside type ${JSON.stringify(type)}`,
+      );
+    }
   });
 
   test('an operation that acts on a card is refused when named on its type, with the ones the type carries', async function (assert) {

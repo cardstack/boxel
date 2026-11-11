@@ -64,15 +64,16 @@ A write answers the card it wrote and the version that card now holds; a read an
   protected async run(
     input: BaseToolModule.InvokeCardOperationInput,
   ): Promise<BaseToolModule.InvokeCardOperationResult> {
-    if (Boolean(input.cardId) === Boolean(input.type)) {
+    let type = givenType(input.type);
+    if (Boolean(input.cardId) === Boolean(type)) {
       throw new Error(
         `"${input.operation}" is reached through exactly one of "cardId", a card to act on, and "type", a type to act on with no card - ${
           input.cardId ? 'not both' : 'give one'
         }.`,
       );
     }
-    if (input.type) {
-      return await this.runOnType(input, input.type);
+    if (type) {
+      return await this.runOnType(input, type);
     }
     return await this.runOnCard(input);
   }
@@ -311,6 +312,22 @@ function invokeOptions(
     ...(realm ? { realm } : {}),
     ...(relationships ? { relationships } : {}),
   };
+}
+
+// The type a call names, or none where the caller left it blank. A model
+// fills an optional code ref with empty strings as readily as it leaves it
+// out, so `{}` and `{ module: '', name: '' }` read as no type rather than as
+// one given beside "cardId". A ref with either part filled in is given, and
+// one that names no module and export is refused for that.
+function givenType(type: CodeRef | null | undefined): CodeRef | undefined {
+  if (!type) {
+    return undefined;
+  }
+  let { module, name } = type as { module?: unknown; name?: unknown };
+  if (!('type' in type) && !module && !name) {
+    return undefined;
+  }
+  return type;
 }
 
 // The payload as the operation reads it. A field the caller left unset arrives
