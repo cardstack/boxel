@@ -348,8 +348,8 @@ export class SearchInput extends Component<SearchInputSignature> {
            field lies over the square from its start, in a fixed Popup layer */
         .pretui-searchcollapse {
           --_search-h: var(
-            --pretui-field-h,
-            var(--boxel-form-control-height-sm)
+            --pretui-row-h,
+            var(--pretui-field-h, var(--boxel-form-control-height-sm))
           );
           position: relative;
           inline-size: var(--_search-h);

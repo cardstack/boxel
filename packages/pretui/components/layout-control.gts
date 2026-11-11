@@ -235,9 +235,9 @@ export interface LayoutControlSignature {
   Args: {
     /** accessible name for the row (default 'Toolbar') */
     label?: string;
-    /** one height for every control in the row; sets --control-height on the
-     * bar. Any CSS length (default: whatever an ancestor sets, else the
-     * row's own height) */
+    /** one height for every control in the row; sets --pretui-row-h (and
+     * --control-height) on the bar. Any CSS length (default: none set, so
+     * each control keeps its own height, unless an ancestor sets one) */
     controlHeight?: string;
     /** accessible name of the ⋯ button (default 'More options') */
     overflowLabel?: string;
@@ -291,7 +291,7 @@ export class LayoutControl extends Component<LayoutControlSignature> {
   }
   get style() {
     let h = this.args.controlHeight;
-    return h ? `--control-height: ${h}` : undefined;
+    return h ? `--control-height: ${h}; --pretui-row-h: ${h}` : undefined;
   }
   get moreIcon() {
     return iconFor('ellipsis');
@@ -636,10 +636,11 @@ export class LayoutControl extends Component<LayoutControlSignature> {
       /* composite: it passes a class onto Popover's root */
       @layer PretComposite {
         .pretui-lc {
-          /* Equal height: each child's own height knob maps from
-             --control-height here (custom properties inherit, so no :deep()).
-             No child has one yet; a control that gains one adds
-             its line in this block. */
+          /* Equal height: @controlHeight sets --pretui-row-h on this root, and
+             a control reads it as the first link of its own height chain
+             (custom properties inherit, so no :deep()). The theme also defines
+             --control-height for every themed scope, so controls read the
+             row-scoped name, which only a sized row sets. */
           display: flex;
           align-items: center;
           gap: var(--pretui-lc-gap, var(--boxel-sp-xs));

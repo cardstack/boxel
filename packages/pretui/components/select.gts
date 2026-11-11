@@ -603,12 +603,15 @@ export class Select extends Component<SelectSignature> {
            these reach its trigger, dressed to match Input. */
         .pretui-selectwrap :deep(.pretui-selecttrigger) {
           align-items: center;
-          /* per-instance knob, inherited (LayoutControl sets it); falls back to
-             the shared field knob so a row-level --pretui-field-h sizes Select
-             with Input and Search */
+          /* the row height LayoutControl sets (--pretui-row-h) first,
+             then the per-instance knob, then the shared field knob so a
+             row-level --pretui-field-h sizes Select with Input and Search */
           height: var(
-            --pretui-select-h,
-            var(--pretui-field-h, var(--boxel-form-control-height-sm))
+            --pretui-row-h,
+            var(
+              --pretui-select-h,
+              var(--pretui-field-h, var(--boxel-form-control-height-sm))
+            )
           );
           border: 1px solid var(--input);
           width: 100%;
