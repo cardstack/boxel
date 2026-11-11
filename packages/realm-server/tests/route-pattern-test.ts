@@ -85,6 +85,14 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(routePatternTests, assert, {});
   });
 
+  test('fillCardIdPattern: spells the id the way the realm spells a card id', async function (assert) {
+    await runSharedTest(routePatternTests, assert, {});
+  });
+
+  test('fillCardIdPattern: a value always stays one segment', async function (assert) {
+    await runSharedTest(routePatternTests, assert, {});
+  });
+
   test('round trip: a path match fills a card id and back', async function (assert) {
     await runSharedTest(routePatternTests, assert, {});
   });

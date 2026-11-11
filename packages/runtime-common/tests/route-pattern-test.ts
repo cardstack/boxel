@@ -504,7 +504,6 @@ const tests: SharedTests<unknown> = Object.freeze({
       let params = { category: value, product: 'p' };
       let id = fillCardIdPattern(pattern, params, REALM);
       assert.ok(id, `fills ${value}`);
-      assert.strictEqual(new URL(id!).href, id, `${id} is already normalized`);
       assert.deepEqual(matchCardIdPattern(pattern, id!, REALM), params);
       assert.strictEqual(
         fillCardIdPattern(
@@ -515,6 +514,77 @@ const tests: SharedTests<unknown> = Object.freeze({
         id,
       );
     }
+  },
+
+  'fillCardIdPattern: spells the id the way the realm spells a card id': async (
+    assert,
+  ) => {
+    // A value that names a file gives the id the realm gives that file:
+    // `new URL(local, realmURL).href`, as `RealmPaths.fileURL` builds it.
+    let fileNames = [
+      'robin',
+      'a+b',
+      'a:b',
+      "it's",
+      'x(1)',
+      'a,b;c=d&e@f$g!h*i',
+      'hello world',
+      'café',
+      '日本語',
+      '😀',
+      '~tilde_under-dash.dot',
+      'a[b]{c}|d^e`f"g<h>',
+    ];
+    let pattern = cardId('./Person/:person_id');
+    for (let name of fileNames) {
+      let realmId = new URL(`Person/${name}`, REALM).href;
+      assert.strictEqual(
+        fillCardIdPattern(pattern, { person_id: name }, REALM),
+        realmId,
+        `fills ${name} as the realm's id`,
+      );
+      assert.deepEqual(
+        matchCardIdPattern(pattern, realmId, REALM),
+        { person_id: name },
+        `matches the realm's id for ${name}`,
+      );
+    }
+
+    let root = cardId('./:id');
+    assert.strictEqual(
+      fillCardIdPattern(root, { id: 'http:foo' }, REALM),
+      `${REALM}http:foo`,
+      'a first segment with a colon is not read as a URL scheme',
+    );
+    assert.deepEqual(matchCardIdPattern(root, `${REALM}http:foo`, REALM), {
+      id: 'http:foo',
+    });
+  },
+
+  'fillCardIdPattern: a value always stays one segment': async (assert) => {
+    let pattern = cardId('./Person/:person_id');
+    let cases: [string, string][] = [
+      ['a/b', 'a%2Fb'],
+      ['a\\b', 'a%5Cb'],
+      ['a?b#c', 'a%3Fb%23c'],
+      ['100%', '100%25'],
+      ['%41', '%2541'],
+      [' padded ', '%20padded%20'],
+      ['tab\there', 'tab%09here'],
+      ['new\nline', 'new%0Aline'],
+    ];
+    for (let [value, segment] of cases) {
+      let id = fillCardIdPattern(pattern, { person_id: value }, REALM);
+      assert.strictEqual(id, `${REALM}Person/${segment}`, `fills ${value}`);
+      assert.deepEqual(matchCardIdPattern(pattern, id!, REALM), {
+        person_id: value,
+      });
+    }
+    assert.strictEqual(
+      fillCardIdPattern(pattern, { person_id: '\uD800' }, REALM),
+      undefined,
+      'a lone surrogate has no encoding',
+    );
   },
 
   'round trip: a path match fills a card id and back': async (assert) => {

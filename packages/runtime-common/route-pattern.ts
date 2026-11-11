@@ -9,12 +9,13 @@
 // optional segments: a `:name` segment matches exactly one non-empty
 // path segment.
 //
-// One canonical percent-encoding makes filling and matching inverses:
-// a filled segment encodes every character except the RFC 3986
-// unreserved ones (`A-Z a-z 0-9 - . _ ~`), with upper-case hex digits,
-// and a matched segment is percent-decoded. So `fill(match(x)) === x`
-// for a canonically encoded `x`, and `match(fill(v)) === v` for any
-// value `fill` accepts.
+// Each kind of pattern has one canonical encoding, so filling and
+// matching are inverses. A matched segment is percent-decoded. A filled
+// request path encodes every character except the RFC 3986 unreserved
+// ones (`A-Z a-z 0-9 - . _ ~`), with upper-case hex digits. A filled card
+// id is spelled the way the realm spells it: `new URL(local, realmURL)`.
+// So `fill(match(x)) === x` for a canonically spelled `x`, and
+// `match(fill(v)) === v` for any value `fill` accepts.
 
 export interface RoutePatternLiteralSegment {
   kind: 'literal';
@@ -102,6 +103,8 @@ export interface SegmentMatch {
 const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const VALID_LITERAL = /^(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+$/;
 const UNRESERVED = /[A-Za-z0-9._~-]/;
+// eslint-disable-next-line no-control-regex
+const CARD_ID_ESCAPE = /[\u0000-\u0020%/\\?#\u007F]/;
 
 /**
  * Parses a request path pattern such as `/posts/:slug` or `/c/:category`.
@@ -241,15 +244,23 @@ export function fillRoutePathPattern(
   pattern: RoutePathPattern,
   params: RouteParams,
 ): string | undefined {
-  let segments = fillSegments(pattern, params);
+  let segments = fillSegments(pattern, params, encodeRouteSegment);
   return segments === undefined ? undefined : '/' + segments.join('/');
 }
 
 /**
  * Fills a card id pattern from parameter values and returns the card
- * id: the realm URL followed by the filled segments, each value
- * percent-encoded with the canonical encoding. `realmURL` must end with
- * `/`. Returns `undefined` under the same conditions as
+ * id under `realmURL`, which must end with `/`.
+ *
+ * The id is spelled the way the realm spells a card id, as
+ * `new URL(local, realmURL).href`, so it is the id the index holds for
+ * the card. That spelling encodes non-ASCII characters, spaces and a few
+ * others, and leaves characters such as `+ : , ; = & @ $ ' ( ) ! *` as
+ * they are. Before that, each value has the characters that would change
+ * the URL's structure (`% / \ ? #`) and control characters encoded, so
+ * a value always stays one segment.
+ *
+ * Returns `undefined` under the same conditions as
  * `fillRoutePathPattern`.
  */
 export function fillCardIdPattern(
@@ -260,8 +271,14 @@ export function fillCardIdPattern(
   if (!realmURL.endsWith('/')) {
     return undefined;
   }
-  let segments = fillSegments(pattern, params);
-  return segments === undefined ? undefined : realmURL + segments.join('/');
+  let segments = fillSegments(pattern, params, encodeCardIdSegment);
+  if (segments === undefined) {
+    return undefined;
+  }
+  // The `./` keeps a first segment such as `http:foo` from being read as
+  // a URL scheme.
+  let id = new URL('./' + segments.join('/'), realmURL).href;
+  return id.startsWith(realmURL) ? id : undefined;
 }
 
 /**
@@ -393,14 +410,31 @@ function parseSegments(
   return { ok: true, parsed: { segments, paramNames } };
 }
 
+// Encodes the characters that would change the structure of a URL path
+// (`%`, `/`, `\`, `?`, `#`), and the control characters and space, which
+// the URL parser drops or strips from the ends. Everything else is left
+// for `new URL` to spell. Throws a `URIError` for a lone UTF-16
+// surrogate, which `new URL` would otherwise replace with U+FFFD.
+function encodeCardIdSegment(value: string): string {
+  encodeURIComponent(value);
+  let out = '';
+  for (let char of value) {
+    out += CARD_ID_ESCAPE.test(char)
+      ? '%' + char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')
+      : char;
+  }
+  return out;
+}
+
 function fillSegments(
   pattern: RoutePathPattern | CardIdPattern,
   params: RouteParams,
+  encode: (value: string) => string,
 ): string[] | undefined {
   let out: string[] = [];
   for (let segment of pattern.segments) {
     if (segment.kind === 'literal') {
-      out.push(encodeRouteSegment(segment.value));
+      out.push(encode(segment.value));
       continue;
     }
     let value = Object.prototype.hasOwnProperty.call(params, segment.name)
@@ -410,7 +444,7 @@ function fillSegments(
       return undefined;
     }
     try {
-      out.push(encodeRouteSegment(value));
+      out.push(encode(value));
     } catch {
       // A lone UTF-16 surrogate has no UTF-8 encoding.
       return undefined;
