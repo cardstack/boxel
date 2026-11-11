@@ -117,8 +117,9 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('attributes private memory to each kind of Chrome process', async function (assert) {
     let memory = await readChromeProcessMemory(100, { procRoot, cgroupRoot });
+    assert.ok(memory, 'the browser tree was read');
     assert.deepEqual(
-      memory && { ...memory, cgroup: undefined },
+      { ...memory!, cgroup: null },
       {
         browserMB: 150,
         gpuMB: 80,
@@ -127,7 +128,7 @@ module(basename(import.meta.filename), function (hooks) {
         rendererMaxMB: 12 * 1024,
         rendererMaxPid: 102,
         otherMB: 50,
-        cgroup: undefined,
+        cgroup: null,
       },
       'renderers are recognised from a space-separated cmdline, the zygote and utility land in other, and processes outside the browser tree (node, fluent-bit) are not counted',
     );
