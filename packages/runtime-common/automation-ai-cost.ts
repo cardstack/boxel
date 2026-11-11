@@ -9,6 +9,9 @@
 // anything else that bills (web search, which bills per search and adds its
 // results to the prompt; images, files, audio or video, which bill in tokens
 // or units the body's bytes don't bound) is refused rather than priced low.
+// An automation that needs media calls the AI vendor through a `callApi`
+// operation with the author's own key, which the vendor bills directly and
+// which the run's `callApi` caps bound instead.
 
 import { CREDITS_PER_USD } from './constants.ts';
 
@@ -46,6 +49,11 @@ export type AIRequestCostRefusal =
 export type AIRequestCostCeilingResult =
   | { ok: true; ceiling: AIRequestCostCeiling }
   | { ok: false; reason: AIRequestCostRefusal; message: string };
+
+// Input tokens added for a request with `tools`, for the tool-use system
+// prompt a provider adds outside the body. Anthropic's is about 350 to 500
+// tokens; the allowance leaves room above the largest.
+export const TOOL_PROMPT_ALLOWANCE_TOKENS = 1000;
 
 // Reads a model's price from an indexed `OpenRouterModel` card's attributes.
 // OpenRouter lists prices as decimal strings in USD per token, and per
@@ -90,13 +98,18 @@ export function readOpenRouterModelPrice(
 //   holds the messages, tool definitions and every other input, so it holds
 //   more bytes than they do. The JSON around each message (its braces,
 //   quotes and `"role"` key) is more bytes than the few tokens a chat
-//   template adds per message.
+//   template adds per message. A request with `tools` also gets
+//   `TOOL_PROMPT_ALLOWANCE_TOKENS`: providers wrap tool definitions in a
+//   tool-use system prompt of a few hundred tokens that isn't in the body.
 // - **Output**: the request's `max_completion_tokens` or `max_tokens`, plus
 //   its `reasoning.max_tokens` when it sets one, no more than the model's
 //   context window. A request that sets no limit is priced at the context
 //   window. The limit a provider lists isn't used: OpenRouter can route a
 //   request to another provider with a higher one.
 // - **Per request**: the model's request price.
+//
+// Output is priced at the completion rate, so a request asking for audio or
+// image output, which bills at other rates, is refused.
 export function aiRequestCostCeiling(
   body: string,
   price: AIModelPrice,
@@ -126,11 +139,13 @@ export function aiRequestCostCeiling(
       `An AI request priced at ${price.modelId} must name that model alone`,
     );
   }
-  let unpriced = unpricedInput(request);
+  let unpriced = unpricedInput(request) ?? unpricedOutput(request);
   if (unpriced) {
     return refuse(
       'unpriced-input',
-      `An automation's AI request can't use ${unpriced}, since its cost can't be bounded before it is sent`,
+      `Boxel sends an automation's AI requests as text only, so Boxel can't send a request with ${unpriced}. ` +
+        'To send or receive images, audio or files, call the AI vendor through an outside service with the author’s own API key. ' +
+        'The AI vendor then bills the key’s owner directly.',
     );
   }
 
@@ -151,7 +166,11 @@ export function aiRequestCostCeiling(
     );
   }
 
-  let inputTokens = new TextEncoder().encode(body).length;
+  let inputTokens =
+    new TextEncoder().encode(body).length +
+    (Array.isArray(request.tools) && request.tools.length > 0
+      ? TOOL_PROMPT_ALLOWANCE_TOKENS
+      : 0);
   let usd =
     inputTokens * price.promptUsdPerToken +
     outputTokens * price.completionUsdPerToken +
@@ -160,6 +179,18 @@ export function aiRequestCostCeiling(
     ok: true,
     ceiling: { credits: usd * CREDITS_PER_USD, inputTokens, outputTokens },
   };
+}
+
+// What, if anything, the request asks for that bills outside text output.
+function unpricedOutput(request: Record<string, unknown>): string | undefined {
+  if (
+    request.audio !== undefined ||
+    (Array.isArray(request.modalities) &&
+      request.modalities.some((modality) => modality !== 'text'))
+  ) {
+    return 'audio or image output';
+  }
+  return undefined;
 }
 
 // What, if anything, the request carries that bills outside its text tokens.

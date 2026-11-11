@@ -1,6 +1,7 @@
 import {
   aiRequestCostCeiling,
   readOpenRouterModelPrice,
+  TOOL_PROMPT_ALLOWANCE_TOKENS,
   type AIModelPrice,
 } from '../automation-ai-cost.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -71,6 +72,36 @@ const tests = Object.freeze({
       withRequestPrice.ceiling.credits,
       ceiling.credits + 1,
       'the per-request price adds to it',
+    );
+  },
+
+  'a request with tools counts the provider’s tool-use prompt as input': async (
+    assert,
+  ) => {
+    let { body, ceiling } = ceilingOf({
+      max_tokens: 1,
+      tools: [
+        {
+          type: 'function',
+          function: { name: 'count', parameters: { type: 'object' } },
+        },
+      ],
+      messages: MESSAGES,
+    });
+    assert.strictEqual(
+      ceiling.inputTokens,
+      bytes(body) + TOOL_PROMPT_ALLOWANCE_TOKENS,
+      'the body’s bytes plus the allowance',
+    );
+    assert.true(
+      ceiling.inputTokens >= 500,
+      'a small tool request covers a few-hundred-token tool-use prompt',
+    );
+    let plain = ceilingOf({ max_tokens: 1, tools: [], messages: MESSAGES });
+    assert.strictEqual(
+      plain.ceiling.inputTokens,
+      bytes(plain.body),
+      'an empty tools list adds nothing',
     );
   },
 
@@ -220,6 +251,34 @@ const tests = Object.freeze({
       }),
       'priced',
       'text parts are priced',
+    );
+  },
+
+  'a request asking for audio or image output is refused': async (assert) => {
+    let base = { model: PRICE.modelId, max_tokens: 4000, messages: MESSAGES };
+    assert.strictEqual(
+      refusalOf({
+        ...base,
+        modalities: ['text', 'audio'],
+        audio: { voice: 'alloy', format: 'wav' },
+      }),
+      'unpriced-input',
+      'audio output bills at an audio rate',
+    );
+    assert.strictEqual(
+      refusalOf({ ...base, audio: { voice: 'alloy', format: 'wav' } }),
+      'unpriced-input',
+      'an audio key alone',
+    );
+    assert.strictEqual(
+      refusalOf({ ...base, modalities: ['image', 'text'] }),
+      'unpriced-input',
+      'image output bills per image',
+    );
+    assert.strictEqual(
+      refusalOf({ ...base, modalities: ['text'] }),
+      'priced',
+      'text output alone is priced',
     );
   },
 
