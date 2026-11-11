@@ -33,6 +33,7 @@ import {
 import {
   formatCredits,
   formatTokenUsage,
+  isCountedTurn,
 } from '@cardstack/host/lib/format-token-usage';
 import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import type { MessageCompaction } from '@cardstack/host/lib/matrix-classes/message';
@@ -924,7 +925,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       return undefined;
     }
     let { usage } = this.args;
-    if (usage?.promptTokens == null && usage?.completionTokens == null) {
+    if (!isCountedTurn(usage)) {
       return undefined;
     }
     return formatTokenUsage(usage);
