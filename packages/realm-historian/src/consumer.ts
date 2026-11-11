@@ -171,7 +171,9 @@ export function positionOfCursors(cursors: ReadPosition[]): ReadPosition {
   return lowest;
 }
 
-function changeEventFromRow(row: Record<string, unknown>): ChangeEvent {
+// A journal row as the consumer reads it, with `xid` as text and
+// `occurred_at` as an ISO timestamp.
+export function changeEventFromRow(row: Record<string, unknown>): ChangeEvent {
   let occurredAt = row.occurred_at;
   return {
     seq: Number(row.seq),
