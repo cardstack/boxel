@@ -5,11 +5,14 @@ import { module, test } from 'qunit';
 
 import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common';
 
+import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
+
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   skillsRealmURL,
 } from '../helpers';
+
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -152,6 +155,25 @@ module('Integration | skills layout fallback', function (hooks) {
     assert.deepEqual(disabledSkillUrls(), [
       `${skillsRealmURL}catalog-listing/SKILL.md`,
       `${skillsRealmURL}skills/does-not-exist/SKILL.md`,
+    ]);
+  });
+
+  test('activating a root URL stores the skills/skills/ URL while the realm serves only that', async function (assert) {
+    await setupSkillsRealm({
+      'skills/boxel/SKILL.md': skillMarkdown('boxel'),
+    });
+    setEnabledSkills([]);
+
+    await new UpdateRoomSkillsTool(
+      getService('tool-service').toolContext,
+    ).execute({
+      roomId,
+      skillCardIdsToActivate: [`${skillsRealmURL}boxel/SKILL.md`],
+      skillCardIdsToDeactivate: [],
+    });
+
+    assert.deepEqual(enabledSkillUrls(), [
+      `${skillsRealmURL}skills/boxel/SKILL.md`,
     ]);
   });
 });

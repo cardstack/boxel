@@ -7,7 +7,9 @@
 // skill load from either layout. The room resource and
 // `MatrixService.updateSkillsAndToolsIfNeeded` use it to write the id that
 // loads back to the room, for enabled and disabled skills alike, so a room
-// moves to the root form when it is opened.
+// moves to the root form when it is opened. The tools that load skills by id
+// (activating, creating a room, one-shot requests, realm code's skill check)
+// load through it too, so a skill id built for either layout still loads.
 //
 // Remove this module, and every block marked with its name, once production
 // serves the root layout and the rooms in use have rewritten their skill ids.
