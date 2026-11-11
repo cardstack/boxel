@@ -3571,25 +3571,34 @@ function mediaFileLabel(file: SerializedFileDef): string {
   return file.sourceUrl ? `${name} (${file.sourceUrl})` : name;
 }
 
+// Whether a grant admits the user on a given card turns on its condition,
+// which reads the card and the user, and on grants the context may not list.
+// The realm answers that without running anything, so the note names the call
+// that asks it. The call runs in run-realm-code, which runs only for a user
+// who can read or write the workspace, so the note names it only to a reader.
+const CHECK_GRANTED_OPERATIONS = `To learn whether the realm allows the user an operation now, on a given card or as a create of a given type, ask it with realm.operations.capabilities in run-realm-code, which runs nothing. Ask before offering an operation whose grant, or whose condition, you can't confirm from what you've read.`;
+
 // What the context says about a workspace the user can't write. The realm's
 // policy can still grant them operations there, so where the host knows the
 // realm names one, the note lists what it grants rather than saying every
 // change is refused, or, where the host couldn't read the policy, says it may
 // grant some. `user` is the Matrix id that a policy condition's `actor()`
-// reads.
+// reads, and `canRead` whether the user can read the workspace.
 function readOnlyWorkspaceNote(
   policy: RealmPolicyForContext | undefined,
   user: string | undefined,
+  canRead: boolean,
 ): string {
+  let check = canRead ? ` ${CHECK_GRANTED_OPERATIONS}` : '';
   if (!policy) {
     return `This workspace is read-only for the user: edits to its cards and files will be rejected.\n`;
   }
   if (policy.tooLarge && policy.card) {
-    return `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them operations here: more than the context can list. Read that card to see which. ${OFFER_GRANTED_OPERATIONS} The realm refuses an operation the policy doesn't grant when it runs.\n`;
+    return `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them operations here: more than the context can list. Read that card to see which. ${OFFER_GRANTED_OPERATIONS}${check} The realm refuses an operation the policy doesn't grant when it runs.\n`;
   }
   if (!policy.rules) {
     let named = policy.card ? `, ${policy.card},` : '';
-    return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS} The realm refuses an operation the policy doesn't grant when it runs.\n`;
+    return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS}${check} The realm refuses an operation the policy doesn't grant when it runs.\n`;
   }
   if (policy.rules.length === 0) {
     return `This workspace is read-only for the user: edits to its cards and files will be rejected. Its policy, ${policy.card}, grants no operations.\n`;
@@ -3605,7 +3614,7 @@ function readOnlyWorkspaceNote(
       .join('; ');
     note += ` - ${humanReadable(targetType)}: ${granted}\n`;
   }
-  note += `In a condition, actor() is the user${user ? ` (${user})` : ''}, and a path that starts with "." reads a field of the card. ${OFFER_GRANTED_OPERATIONS} Any other change to this workspace is refused.\n`;
+  note += `In a condition, actor() is the user${user ? ` (${user})` : ''}, and a path that starts with "." reads a field of the card. ${OFFER_GRANTED_OPERATIONS}${check} Any other change to this workspace is refused.\n`;
   return note;
 }
 
@@ -3667,6 +3676,7 @@ export const buildContextMessage = async (
         result += readOnlyWorkspaceNote(
           context.realmPolicy,
           lastEventWithContext?.sender,
+          context.realmPermissions.canRead === true,
         );
       }
     }
