@@ -81,7 +81,7 @@ List all files in a realm
 
 ### `boxel file delete <path>`
 
-Delete a file from a realm
+Delete a file from a realm. When no file exists at <path>, the realm deletes <path> plus the first of .js, .gjs, .ts, .gts, .json that exists instead, so deleting an extensionless path twice removes the card beside it.
 
 **Arguments:**
 
