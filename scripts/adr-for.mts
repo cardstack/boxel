@@ -74,7 +74,7 @@ function parseAdr(file: string): Adr {
     )
     .filter(Boolean);
 
-  let remediation = join('remediation', `${file.slice(0, 3)}.md`);
+  let remediation = remediationFileOf(file);
   return {
     file,
     status: field('status') ?? 'unknown',
@@ -84,6 +84,15 @@ function parseAdr(file: string): Adr {
       ? remediation
       : undefined,
   };
+}
+
+// A numbered ADR's remediation file is `remediation/<number>.md`; a proposed
+// one's has the ADR's own file name.
+function remediationFileOf(file: string): string {
+  return join(
+    'remediation',
+    file.startsWith('proposed-') ? file : `${file.slice(0, 3)}.md`,
+  );
 }
 
 // A backticked token names a file when it is a glob or a path that exists from
@@ -162,8 +171,11 @@ function gapsFor(gaps: Gap[], paths: string[]): string[] {
   return out;
 }
 
+// A numbered ADR (`<number>-<slug>.md`), or one proposed in an open pull
+// request, which has no number yet (`proposed-<slug>.md`, see
+// docs/adr/README.md).
 let adrs = readdirSync(adrDir)
-  .filter((file) => /^\d+-.*\.md$/.test(file))
+  .filter((file) => /^(\d+|proposed)-.*\.md$/.test(file))
   .sort()
   .map(parseAdr);
 
@@ -188,7 +200,7 @@ for (let adr of adrs) {
   if (!adr.remediation) {
     if (adr.status === 'proposed') {
       console.error(
-        `  warning: no remediation file docs/adr/remediation/${adr.file.slice(0, 3)}.md (ADR 001 §1.6)`,
+        `  warning: no remediation file docs/adr/${remediationFileOf(adr.file)} (ADR 001 §1.6)`,
       );
     }
     continue;

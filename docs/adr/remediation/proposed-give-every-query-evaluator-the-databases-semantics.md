@@ -1,6 +1,6 @@
-# ADR 033 remediation
+# ADR give-every-query-evaluator-the-databases-semantics remediation
 
-Places where the code does not meet [ADR 033](../033-give-every-query-evaluator-the-databases-semantics.md)
+Places where the code does not meet [ADR give-every-query-evaluator-the-databases-semantics](../proposed-give-every-query-evaluator-the-databases-semantics.md)
 yet (ADR 001 §1.6).
 
 - `packages/runtime-common/serializers/datetime.ts` (`queryableValue`)
@@ -11,4 +11,4 @@ yet (ADR 001 §1.6).
   matcher. The engine reads that zoneless text as UTC, so the same instant
   is stored, and matched, differently by zone. Format in UTC; the change
   alters stored values, so it needs a reindex and a compatibility note
-  (ADR 032 §1.1).
+  ([ADR keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was](../proposed-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md) §1.1).

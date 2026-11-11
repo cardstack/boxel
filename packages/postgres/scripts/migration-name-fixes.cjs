@@ -47,7 +47,6 @@ const migrationRenames = [
     '1794200000000_one-text-search-config',
     '1794379052401_one-text-search-config',
   ],
-  ['1794293714555_add-boxel-log-lines', '1794379480500_add-boxel-log-lines'],
   [
     '1793759216000_add-boxel-index-vectors',
     '1794378752846_add-boxel-index-vectors',

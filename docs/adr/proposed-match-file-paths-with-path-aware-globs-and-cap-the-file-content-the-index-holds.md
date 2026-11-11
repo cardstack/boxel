@@ -15,7 +15,7 @@ scope:
   - docs/search.md
 ---
 
-# 038. Match file paths with path-aware globs, and cap the file content the index holds
+# Match file paths with path-aware globs, and cap the file content the index holds
 
 A realm's files (modules, markdown, text, JSON, CSV) are searched like cards.
 People find them by path: `**/components/*.gts`. So `pattern` reads a glob
@@ -56,7 +56,7 @@ A file's `content` in the index MUST hold at most the file type's
 line where one fits, else at a UTF-8 boundary. A CSV MUST hold its header and
 first `contentMaxRows` rows (1,000) within that cap; its columns and row
 count MUST still describe the whole file. A log keeps its own tail rule
-(ADR 037). A file type MAY lower its cap and MUST NOT remove it.
+([ADR index-a-logs-lines-as-they-are-appended-and-grant-them-per-realm-stamped-actor](proposed-index-a-logs-lines-as-they-are-appended-and-grant-them-per-realm-stamped-actor.md)). A file type MAY lower its cap and MUST NOT remove it.
 
 ## 2. Rationale
 
@@ -90,4 +90,4 @@ milliseconds and describes the file.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/038.md](remediation/038.md).
+Known gaps are listed in [remediation/proposed-match-file-paths-with-path-aware-globs-and-cap-the-file-content-the-index-holds.md](remediation/proposed-match-file-paths-with-path-aware-globs-and-cap-the-file-content-the-index-holds.md).

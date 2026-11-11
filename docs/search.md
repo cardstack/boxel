@@ -731,7 +731,7 @@ The answer is `{ data: [{ line, at, actor, entry }], meta: { page, facets?, log 
 
 The search then ANDs `actor = <caller>` into the one condition every statement shares, so rows, `total`, `hasMore`, groups and facets all cover only those lines (a group whose lines are all someone else's is not there), and `meta.policyScopedLogs` names the logs it scoped. A `where` of any other shape is recorded `policy-not-filterable` and admits no one; a caller who isn't signed in is never admitted. With no log-line grant the log is the realm's readers' alone, as before. A `logs` query that names a log the caller may read none of is refused (`log-not-readable`); a folder's such logs are left out, as a realm the caller can't read contributes nothing to a federated search.
 
-The one write a grant reaches on a log is the base types' own `record`, which stamps `at` and `actor`, so "any signed-in user may add a line" is the second grant above. The base `appendLine`, `update` and `delete`, and a read of the log's raw bytes (which hold every caller's lines), are granted to no one, whatever a policy says. Values derived from a log, such as likes per post, belong on cards under card grants ([ADR 037](adr/037-index-a-logs-lines-as-they-are-appended-and-grant-them-per-realm-stamped-actor.md)).
+The one write a grant reaches on a log is the base types' own `record`, which stamps `at` and `actor`, so "any signed-in user may add a line" is the second grant above. The base `appendLine`, `update` and `delete`, and a read of the log's raw bytes (which hold every caller's lines), are granted to no one, whatever a policy says. Values derived from a log, such as likes per post, belong on cards under card grants ([ADR index-a-logs-lines-as-they-are-appended-and-grant-them-per-realm-stamped-actor](adr/proposed-index-a-logs-lines-as-they-are-appended-and-grant-them-per-realm-stamped-actor.md)).
 
 ### Query-backed fields (`$this`)
 
@@ -995,7 +995,7 @@ let { data: matching, meta } = await indexer.search({
 
 ## How a query is evaluated
 
-The rules in this section are decided in [ADR 031](adr/031-keep-the-query-language-declarative.md) (declarative order, ties, one snapshot, ranking in `sort`) and [ADR 033](adr/033-give-every-query-evaluator-the-databases-semantics.md) (missing values, dates, text order).
+The rules in this section are decided in [ADR keep-the-query-language-declarative](adr/proposed-keep-the-query-language-declarative.md) (declarative order, ties, one snapshot, ranking in `sort`) and [ADR give-every-query-evaluator-the-databases-semantics](adr/proposed-give-every-query-evaluator-the-databases-semantics.md) (missing values, dates, text order).
 
 ### Evaluation order
 
@@ -1226,7 +1226,7 @@ Some values have a range rather than a count, and are `invalid-value` (`invalid-
 
 ### Compatibility: older and newer spellings
 
-The rule ([ADR 032](adr/032-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md)): a saved query keeps returning what it returns today. A query in the older spelling is read as it always was, with no rewrite; a query in the newer spelling is checked strictly.
+The rule ([ADR keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was](adr/proposed-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md)): a saved query keeps returning what it returns today. A query in the older spelling is read as it always was, with no rewrite; a query in the newer spelling is checked strictly.
 
 **The older spelling is frozen.** It is a compatibility layer for the queries saved before the newer spelling, and nothing more:
 

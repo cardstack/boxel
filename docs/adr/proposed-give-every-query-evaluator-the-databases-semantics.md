@@ -22,7 +22,7 @@ scope:
   - docs/search.md
 ---
 
-# 033. Give every query evaluator the database's semantics for missing values, dates and text order
+# Give every query evaluator the database's semantics for missing values, dates and text order
 
 A query is answered by more than one evaluator: Postgres, the browser's
 SQLite index, the client's instance matcher during live-query
@@ -95,7 +95,7 @@ one that answers every query on a realm server.
 
 Three-valued logic is what SQL already does, so the Postgres engine gets it
 without extra work, and queries that ran before Query V2 already answer this
-way (ADR 032). The cost is that `not` is not the complement of a comparison.
+way ([ADR keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was](proposed-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md)). The cost is that `not` is not the complement of a comparison.
 The docs show the query that includes the missing cards.
 
 A zoneless date-time has no instant until something supplies a zone. If the
@@ -109,10 +109,10 @@ value names. Real apps ask it in a place's calendar: an attendance punch at
 03:30 UTC on November 10 is November 9 in New York. So the calendar is the
 query's, named once and resolved once per search, while the reading of
 stored values stays fixed. A query that names no zone, in a realm that
-declares none, reckons in UTC and answers as before (ADR 032).
+declares none, reckons in UTC and answers as before ([ADR keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was](proposed-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md)).
 
 The database's collation sorts text as people expect, and an index can serve
-it. Choosing it keeps every saved sort's answer (ADR 032). The cost falls on
+it. Choosing it keeps every saved sort's answer ([ADR keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was](proposed-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md)). The cost falls on
 evaluators outside the database, which have no copy of its tables, so the one
 approximation and its known differences are written down.
 
@@ -134,4 +134,4 @@ approximation and its known differences are written down.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/033.md](remediation/033.md).
+Known gaps are listed in [remediation/proposed-give-every-query-evaluator-the-databases-semantics.md](remediation/proposed-give-every-query-evaluator-the-databases-semantics.md).

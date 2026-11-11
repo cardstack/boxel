@@ -22,7 +22,7 @@ scope:
   - docs/search.md
 ---
 
-# 034. Search vectors in the realm's own index, exactly until a space is large, and never across spaces
+# Search vectors in the realm's own index, exactly until a space is large, and never across spaces
 
 A card carries embeddings in vector fields, and a realm search filters on
 them (`near`), sorts by them, and blends them with other rankings, in the
@@ -154,4 +154,4 @@ should not depend on a provider being up.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/034.md](remediation/034.md).
+Known gaps are listed in [remediation/proposed-search-vectors-in-the-realms-own-index-and-never-across-spaces.md](remediation/proposed-search-vectors-in-the-realms-own-index-and-never-across-spaces.md).

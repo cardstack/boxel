@@ -24,7 +24,7 @@ scope:
   - docs/search.md
 ---
 
-# 032. Keep the answer a saved query gives, and read the older spelling as it always was
+# Keep the answer a saved query gives, and read the older spelling as it always was
 
 Queries live in realms: in query-backed fields, saved searches, and card
 data. Their authors are people and agents who are not watching when the
@@ -96,7 +96,7 @@ schema change cannot make a saved query ambiguous.
 ### 1.6. An addition every older query refused is read in both spellings
 
 A spelling that every query in the older spelling was refused for — such as
-a type written as the string `"<module>#<Name>"` (ADR 035),
+a type written as the string `"<module>#<Name>"` ([ADR let-a-query-name-a-type-by-a-string-and-resolve-realm-relative-modules-at-the-boundary](proposed-let-a-query-name-a-type-by-a-string-and-resolve-realm-relative-modules-at-the-boundary.md)),
 which the older reading refused as `type is not valid` — MAY be accepted in
 both spellings, and MUST NOT by itself make a query the newer spelling. An
 older query that adopts it is still read leniently (§1.2).
@@ -181,4 +181,4 @@ to learn per caveat, and says nothing a person can read.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/032.md](remediation/032.md).
+Known gaps are listed in [remediation/proposed-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md](remediation/proposed-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md).
