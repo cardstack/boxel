@@ -24,15 +24,6 @@ const notUtc = () => new Date(2000, 0, 1).getTimezoneOffset() !== 0;
 export const KNOWN: Known[] = [
   {
     about:
-      'a relative `range` bound is compared as the full ISO instant (`2000-01-01T00:00:00.000Z`) with the stored text, not in the field\'s format: on a date field `gte: "now/d"` misses today and `lt: "now/d"` keeps it, and on a date-time field `gte: "now"` misses the current minute',
-    evaluators: ['matcher'],
-    file: 'dates',
-    cases:
-      /^(not )?range (dy (gte now\/d|lt now\/d|gte now-1d\/d( lt now\+1d\/d)?)|ts (gte now|lt now|gte now\/d)|tss gte now)$/,
-    kind: 'answers',
-  },
-  {
-    about:
       '`in` on a number or big-integer field fails with `invalid input syntax for type numeric` when a card of another type holds text under the field name: the extracted value is cast to numeric unguarded',
     evaluators: ['postgres'],
     file: 'values',

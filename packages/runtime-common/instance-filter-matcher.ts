@@ -20,7 +20,6 @@ import {
   isRelevanceSort,
   isRelativeDate,
   relativeDateForField,
-  resolveRelativeDate,
   isExprSort,
 } from './query.ts';
 import {
@@ -646,11 +645,7 @@ function matchRange(
       }
       return [
         operator as RangeOperator,
-        formatValue(
-          leafField,
-          isRelativeDate(bound) ? resolveRelativeDate(bound) : bound,
-          api,
-        ),
+        formatFilterValue(leafField, bound, api),
       ] as [RangeOperator, any];
     },
   );
