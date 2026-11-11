@@ -10,6 +10,7 @@ The string argument row of a **FreestyleUsage** page — `Args.String`. In the d
 @value?: string | null
 @options?: string[]
 @multiline?: boolean   — a Textarea, six rows tall, instead of an Input; ignored with @options
+@monospace?: boolean   — with @multiline: code-like, in the mono font, long lines scroll instead of wrapping
 @onInput?(value: string)
 ```
 
