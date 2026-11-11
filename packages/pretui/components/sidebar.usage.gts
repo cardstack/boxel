@@ -1,6 +1,7 @@
 // Pretui — Sidebar usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { concat } from '@ember/helper';
 import { Sidebar, SidebarGroup, SidebarItem, SidebarTrigger } from './sidebar';
 import type {
   ShellPlacementAlias,
@@ -11,7 +12,9 @@ import Folder from '@cardstack/boxel-icons/folder';
 import Globe from '@cardstack/boxel-icons/globe';
 import Eye from '@cardstack/boxel-icons/eye';
 import Copy from '@cardstack/boxel-icons/copy';
+import Plus from '@cardstack/boxel-icons/plus';
 import { FreestyleUsage } from './freestyle-usage';
+import { IconButton } from './icon-button';
 import { Toolbar } from './toolbar';
 import { LIBRARY, ORIGINS } from '../internal/structure-shell-fixtures';
 
@@ -149,7 +152,17 @@ export class SidebarUsage extends Component {
                     @collapsed={{bar.collapsed}}
                     @onClick={{this.selectFor row.id}}
                     @icon={{row.icon}}
-                  />
+                  >
+                    <:action>
+                      <IconButton
+                        @label={{concat 'New lot from ' row.label}}
+                        @tooltip={{concat 'New lot from ' row.label}}
+                        @icon={{Plus}}
+                        @appearance='plain'
+                        @size='xs'
+                      />
+                    </:action>
+                  </SidebarItem>
                 {{/each}}
                 <SidebarItem
                   @label='Archived origins'
@@ -196,6 +209,9 @@ export class SidebarUsage extends Component {
                   focus it and press the arrow keys) to set the rail&apos;s
                   width; dragging below the minimum folds it, and a click still
                   toggles.</p>
+                <p class='shell-copy'>Each origin row ends in an add button:
+                  a row action sits beside the row&apos;s own button, not
+                  inside it, and the row stays lit while you point at it.</p>
                 {{#each this.filler}}
                   <p class='shell-copy'>Filler paragraph so this pane is taller
                     than the stage and scrolls on its own.</p>
