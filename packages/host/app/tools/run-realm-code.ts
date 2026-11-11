@@ -861,9 +861,11 @@ class RealmFsSession {
     }
     if (REQUIRES_READ[method] && !this.mayRead) {
       return (
-        `You can't read this workspace directly; realm.${method} was not ` +
-        `run. Read the cards and files the realm's policy grants with ` +
-        `realm.cards.get, realm.cards.search or realm.fs.readText`
+        `You can't read this workspace directly; realm.${method} was not run` +
+        (this.mayWrite
+          ? ''
+          : `. Read the cards and files the realm's policy grants with ` +
+            `realm.cards.get, realm.cards.search or realm.fs.readText`)
       );
     }
     return undefined;
