@@ -1961,8 +1961,17 @@ class RealmFsSession {
       );
     }
     let asked = raw.map((item: unknown) => this.capabilityCheck(item));
-    let answers = await this.checkCapabilities(asked.map(({ check }) => check));
+    // Held while the realm is asked, so the limit holds however the script's
+    // calls are scheduled, and given back when the realm does not answer, so
+    // the checks can be asked again.
     this.capabilityCheckCount += asked.length;
+    let answers: CapabilityAnswer[];
+    try {
+      answers = await this.checkCapabilities(asked.map(({ check }) => check));
+    } catch (error) {
+      this.capabilityCheckCount -= asked.length;
+      throw error;
+    }
     return asked.map(({ question }, index) => {
       let { allowed, conditional, reason } = answers[index]!;
       return {

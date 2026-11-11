@@ -6085,5 +6085,20 @@ return { refused, answered: answered.length };`);
         answered: 1,
       });
     });
+
+    test('lists asked at once share the run limit', async function (assert) {
+      let result = await run(`
+let check = { path: 'Patient/ana', operation: 'chart' };
+let settled = await Promise.allSettled([
+  realm.operations.capabilities(Array(300).fill(check)),
+  realm.operations.capabilities(Array(300).fill(check)),
+]);
+return settled.map((s) => (s.status === 'fulfilled' ? s.value.length : s.reason.message));`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), [
+        300,
+        'Realm code may ask about at most 500 operations per run',
+      ]);
+    });
   },
 );
