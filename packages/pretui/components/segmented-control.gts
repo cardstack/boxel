@@ -168,15 +168,12 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           align-items: center;
           /* --pretui-seg-h: opt-in knob for the whole control; a segment is
              that less the inset on both sides */
-          /* never under the 1.5rem minimum target, whatever the row height */
-          height: max(
-            1.5rem,
-            calc(
-              var(
-                  --pretui-row-h,
-                  var(--pretui-seg-h, calc(1.5rem + 2 * var(--pretui-seg-inset)))
-                ) - 2 * var(--pretui-seg-inset)
-            )
+          height: calc(
+            var(
+              --pretui-row-h,
+              var(--pretui-seg-h, calc(1.5rem + 2 * var(--pretui-seg-inset)))
+            ) -
+              2 * var(--pretui-seg-inset)
           );
           /* --pretui-seg-px: opt-in knob for a segment's side padding */
           padding: 0 var(--pretui-seg-px, var(--boxel-sp-sm));
@@ -248,17 +245,14 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
            a control sized by its knobs or a LayoutControl row keeps that size */
         @media (any-pointer: coarse) {
           .pretui-seg-item {
-            height: max(
-              1.5rem,
-              calc(
-                var(
-                    --pretui-row-h,
-                    var(
-                      --pretui-seg-h,
-                      calc(2.125rem + 2 * var(--pretui-seg-inset))
-                    )
-                  ) - 2 * var(--pretui-seg-inset)
-              )
+            height: calc(
+              var(
+                  --pretui-row-h,
+                  var(
+                    --pretui-seg-h,
+                    calc(2.125rem + 2 * var(--pretui-seg-inset))
+                  )
+                ) - 2 * var(--pretui-seg-inset)
             );
             padding: 0 var(--pretui-seg-px, var(--boxel-sp));
           }
