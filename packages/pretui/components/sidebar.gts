@@ -1425,7 +1425,8 @@ export interface SidebarItemSignature {
     /**
      * A trailing control for this row (an add or a menu button), rendered
      * beside the row's own link or button rather than inside it, and sharing
-     * the row's hover and active surface. Dropped in the icon rail.
+     * the row's hover and active surface. Dropped in the icon rail, and inert
+     * on a disabled row.
      */
     action: [];
   };
@@ -1581,8 +1582,12 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           </button>
         {{/if}}
         {{#if (has-block 'action')}}
+          {{! A disabled row's action is out of reach with it: the yielded
+              control is the caller's, so the wrapper takes it out of the
+              focus order and the pointer's path rather than disabling it. }}
           <span
             class='pretui-sbitem-action'
+            inert={{if @disabled true}}
             data-test-pretui-sidebar-item-action
           >{{yield to='action'}}</span>
         {{/if}}
@@ -1688,6 +1693,9 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         }
         .pretui-sbitem-row[data-action='true'][data-disabled='true']:hover {
           background: none;
+        }
+        .pretui-sbitem-row[data-disabled='true'] > .pretui-sbitem-action {
+          opacity: 0.45;
         }
         /* the icon rail drops the action with the label */
         .pretui-sbitem-action {

@@ -47,7 +47,7 @@ Element: HTMLDivElement
 
 **Icon slot.** `SidebarItem @icon` takes an icon component (a boxel-icon) and sizes it to the icon box, whatever its own `width`/`height`, so a 24px icon sits centered on the label. `<:icon>` still yields as is, unsized, for callers that size their own glyph; a larger glyph stays centered in the icon box, on the label's center line and in the icon rail's square. Every row is at least one control height (`--control-h`), expanded or in the icon rail, so the hover and active background keep their height as the rail folds.
 
-**Row action.** `<:action>` puts a control at the end of a row, such as an add or a menu button (shadcn's `SidebarMenuAction`). It renders beside the row's own link or button, never inside it, so it is its own tab stop. The row then carries the hover and active surface, so pointing at the action keeps the row lit. The icon rail drops it with the label. `@badge` takes a string or a number, and a count of 0 still shows.
+**Row action.** `<:action>` puts a control at the end of a row, such as an add or a menu button (shadcn's `SidebarMenuAction`). It renders beside the row's own link or button, never inside it, so it is its own tab stop. The row then carries the hover and active surface, so pointing at the action keeps the row lit. The icon rail drops it with the label, and a `@disabled` row makes it inert, since the control is the caller's to disable. `@badge` takes a string or a number, and a count of 0 still shows.
 
 **Everything is logical**, so RTL is a `dir` attribute, and the width slide lands on its end state under reduced motion.
 
@@ -74,7 +74,7 @@ APG **Disclosure** for the toggle, on a named navigation landmark.
 - **SidebarTrigger** carries the same `aria-expanded` and `aria-controls` from outside the rail.
 - **Offcanvas collapse** removes the rail from the tab order and the tree. **Rail collapse** keeps each item's name and adds a tooltip. The tests assert both.
 - **SidebarGroup** is a `role="group"` labeled by its heading. `@hideLabel` keeps the name while hiding the text, and no label means no dangling `aria-labelledby`. The tests assert all three.
-- **SidebarItem** is a link with `aria-current="page"` when `@active` and `@href`, and a button otherwise. Disabled stays focusable and refuses to act, and a disabled link becomes a button, because a link can't be disabled. A `<:action>` is a sibling of the row's control, not nested in it, so each is its own tab stop. The tests assert all of these.
+- **SidebarItem** is a link with `aria-current="page"` when `@active` and `@href`, and a button otherwise. Disabled stays focusable and refuses to act, and a disabled link becomes a button, because a link can't be disabled. A `<:action>` is a sibling of the row's control, not nested in it, so each is its own tab stop, and it is `inert` on a disabled row. The tests assert all of these.
 - **The resize seam** (`@resizable`) is a focusable `role="separator"` with `aria-valuenow`, `aria-valuemin` (0, folded; `@minWidth` on a pinned rail), `aria-valuemax`, `aria-controls` and a name, "Resize <label>" (APG window splitter). Its hit area is 24px (44px on a coarse pointer) without widening the rail, and so is the plain toggle's. Where `@placement='end'` meets `@scroll='content'` both keep a 24px lane inside the rail, so the content's scrollbar keeps its own. The tests assert drag, keys, clamp and fold.
 - **The shortcut** needs a modifier and ignores text fields, which the tests assert.
 - **Mobile** is a **Drawer**: native focus trap, Escape and inert background.

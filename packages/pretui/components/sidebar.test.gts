@@ -642,6 +642,19 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.dom('[data-test-pretui-sidebar-item-row]').hasAttribute('data-action', 'false');
   });
 
+  test('SidebarItem: a disabled row takes its action out of reach too', async function (assert) {
+    await render(<template>
+      <SidebarItem @label='Notes' @disabled={{true}} @onClick={{noop}}><:action><button type='button' class='t-add-notes'>New Note</button></:action></SidebarItem>
+      <SidebarItem @label='Files' @onClick={{noop}}><:action><button type='button' class='t-add-files'>New File</button></:action></SidebarItem>
+    </template>);
+    let [notes, files] = [...document.querySelectorAll('[data-test-pretui-sidebar-item-action]')];
+    assert.true(notes?.hasAttribute('inert'), "the disabled row's action is inert");
+    assert.false(files?.hasAttribute('inert'), "an enabled row's action is not");
+    let addNote = document.querySelector('.t-add-notes') as HTMLElement;
+    addNote.focus();
+    assert.notStrictEqual(document.activeElement, addNote, 'so it takes no focus');
+  });
+
   test('SidebarItem: a numeric badge shows, a count of 0 included', async function (assert) {
     await render(<template>
       <SidebarItem @label='Notes' @badge={{0}} @onClick={{noop}} />
