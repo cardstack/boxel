@@ -803,11 +803,11 @@ module('Acceptance | automation edit format', function (hooks) {
     await click('[data-test-automation-choose-another-service]');
     await waitFor('[data-test-card-chooser-modal]');
     assert
-      .dom('[data-test-automation-service-calls]')
+      .dom('dialog[open] [data-test-automation-service-calls]')
       .doesNotExist('the dialog closes while the chooser is open');
     await click(`[data-test-item-button="${testRealmURL}trackers/main"]`);
     await click('[data-test-card-chooser-go-button]');
-    await waitFor('[data-test-automation-service-calls]');
+    await waitFor('dialog[open] [data-test-automation-service-calls]');
     await click('[data-test-automation-add-service-confirm]');
     await waitForSave(
       (d) =>
