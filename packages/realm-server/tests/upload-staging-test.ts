@@ -165,6 +165,35 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(await readdir(dir), []);
   });
 
+  test('a declared length that never arrives holds no staging capacity', async function (assert) {
+    let staging = new UploadStaging(5);
+    let stalledBody!: ReadableStreamDefaultController<Uint8Array>;
+    let stalled = staging.stage(
+      join(dir, 'stalled.bin'),
+      new ReadableStream<Uint8Array>(
+        {
+          start(controller) {
+            stalledBody = controller;
+          },
+        },
+        { highWaterMark: 0 },
+      ),
+      5,
+      5,
+    );
+    let next = await staging.stage(
+      join(dir, 'next.bin'),
+      stream([1, 2, 3, 4, 5]),
+      5,
+      5,
+    );
+    assert.strictEqual(next.size, 5, 'the whole budget was still available');
+    await staging.dispose(next);
+    stalledBody.error(new Error('client went away'));
+    await assert.rejects(stalled, /client went away/);
+    assert.deepEqual(await readdir(dir), []);
+  });
+
   test('concurrent uploads to one target have distinct staging files', async function (assert) {
     let staging = new UploadStaging(10);
     let target = join(dir, 'asset.bin');

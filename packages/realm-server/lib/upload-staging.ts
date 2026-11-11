@@ -172,13 +172,15 @@ export class UploadStaging {
       ? partialWritePath(join(targetDirectory, `.boxel-upload.${id}`))
       : join(directory, `${id}.boxel-partial`);
     let manifest = join(directory, `${id}.json`);
+    // Capacity is reserved as bytes arrive, never for a declared length. A
+    // `Content-Length` costs the client nothing to send, so reserving it up
+    // front would let requests that never send their bodies hold the whole
+    // budget, and refuse every other upload, until the server times them out.
     let reserved = 0;
     let size = 0;
     let hash = createHash('sha256');
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     try {
-      this.#reserve(contentLength ?? 0);
-      reserved = contentLength ?? 0;
       await writeFile(manifest, JSON.stringify([path]), {
         flag: 'wx',
         mode: 0o600,
