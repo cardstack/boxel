@@ -387,13 +387,27 @@ module('grouper', (hooks) => {
       });
     }
 
-    test('on ai-assistant, events with no tool call join the group', (assert) => {
-      let group = groupOf(event(0, { channel: 'ai-assistant' }));
-      assert.deepEqual(
-        reasons(group, event(1, { channel: 'ai-assistant' }), LIMITS),
-        {},
-      );
-    });
+    for (let channel of ['ai-assistant', 'mcp'] as const) {
+      test(`on ${channel}, an event with no tool call is a revision of its own`, (assert) => {
+        let none = { channel };
+        let call = { channel, correlationId: 'call-1' };
+        assert.deepEqual(
+          reasons(groupOf(event(0, none)), event(1, none), LIMITS),
+          { closeBefore: 'tool-call' },
+          'after another event with no tool call',
+        );
+        assert.deepEqual(
+          reasons(groupOf(event(0, call)), event(1, none), LIMITS),
+          { closeBefore: 'tool-call' },
+          'after a tool call',
+        );
+        assert.deepEqual(
+          reasons(groupOf(event(0, none)), event(1, call), LIMITS),
+          { closeBefore: 'tool-call' },
+          'before a tool call',
+        );
+      });
+    }
 
     test('on other channels, events with different correlation ids join the group', (assert) => {
       for (let channel of ['host', 'boxel-cli', 'api'] as const) {

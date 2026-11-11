@@ -8,9 +8,10 @@
 // A group is one writer's run of events. Its events share the author,
 // channel, agent, room and push ID, and on the `ai-assistant` and `mcp`
 // channels the tool call (`correlationId`), so each AI or MCP tool call is
-// its own revision while an autosave burst coalesces into one. An event with
-// an intent (a revert, a scan or a realm deletion) is always a revision of
-// its own.
+// its own revision while an autosave burst coalesces into one. An AI or MCP
+// event with no tool call is a revision of its own, since nothing says which
+// call it belongs to. An event with an intent (a revert, a scan or a realm
+// deletion) is always a revision of its own.
 //
 // Time closes a group at its deadline: the quiet period after its latest
 // write or the maximum age after its earliest, whichever comes first. A push
@@ -234,7 +235,10 @@ function closesAfter(
 }
 
 // How `next` is another writer's than `first`, or undefined when it is the
-// same writer's. A value missing from both events counts as equal.
+// same writer's. An agent or room missing from both events counts as equal.
+// A tool call doesn't: on `ai-assistant` and `mcp`, an event with none is
+// another tool call's than every other event, so two separate calls are never
+// folded into one revision.
 function writerChange(
   first: ChangeEvent,
   next: ChangeEvent,
@@ -256,7 +260,8 @@ function writerChange(
   }
   if (
     TOOL_CALL_CHANNELS.has(first.channel) &&
-    first.correlationId !== next.correlationId
+    (first.correlationId === undefined ||
+      first.correlationId !== next.correlationId)
   ) {
     return 'tool-call';
   }
