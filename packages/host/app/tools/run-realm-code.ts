@@ -104,6 +104,10 @@ import runRealmCode, {
   DeadlineExtension,
   RealmScriptError,
 } from '../lib/realm-runner/runner';
+import {
+  RealmTransformer,
+  transformRequest,
+} from '../lib/realm-runner/transform';
 import { STOPPED_BY_USER } from '../lib/realm-runner/types';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { loadSkillSource } from '../lib/skill-tools';
@@ -513,6 +517,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'web.search': false,
   'web.read': false,
   resolve: false,
+  transform: false,
   activity: false,
   plan: false,
   ask: false,
@@ -630,9 +635,9 @@ class RealmFsSession {
   private researchBytes = 0;
   private researchSlots = MAX_PARALLEL_RESEARCH;
   private researchWaiters: (() => void)[] = [];
-  // Research calls run outside the queue: they touch no file, so they cannot
-  // race one. `idle` still waits for them.
-  private researchInFlight = new Set<Promise<unknown>>();
+  // Research calls and transforms run outside the queue: they touch no file,
+  // so they cannot race one. `idle` still waits for them.
+  private unqueuedInFlight = new Set<Promise<unknown>>();
   // Each file this run changed: its text before the first change and after
   // the last, in the order of the first change. The transcript shows them
   // as diffs and Undo puts them back.
@@ -668,6 +673,8 @@ class RealmFsSession {
   // Aborted when the run ends, so a workspace create or an image request
   // still in flight stops holding up the report.
   private inFlight = new AbortController();
+  // Runs realm.transform programs, in a worker started on the first one.
+  private transformer = new RealmTransformer();
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
   // has reported.
@@ -730,11 +737,18 @@ class RealmFsSession {
       }
     }
     this.callsMade += 1;
-    if (RESEARCH_METHODS.has(method)) {
-      let result = this.researchCall(method, args);
+    if (RESEARCH_METHODS.has(method) || method === 'transform') {
+      // Research and transforms touch no realm file, so they neither wait
+      // behind file calls nor hold file calls up.
+      let result =
+        method === 'transform'
+          ? Promise.resolve().then(() =>
+              this.transformer.run(transformRequest(args[0], args[1], args[2])),
+            )
+          : this.researchCall(method, args);
       let tracked = result.catch(() => undefined);
-      this.researchInFlight.add(tracked);
-      tracked.finally(() => this.researchInFlight.delete(tracked));
+      this.unqueuedInFlight.add(tracked);
+      tracked.finally(() => this.unqueuedInFlight.delete(tracked));
       return result;
     }
     let result = this.queue.then(() => {
@@ -757,6 +771,7 @@ class RealmFsSession {
   close() {
     this.closed = true;
     this.captures.close();
+    this.transformer.close();
     this.inFlight.abort();
     // Calls waiting for a research slot wake and are refused.
     for (let wake of this.researchWaiters.splice(0)) {
@@ -766,11 +781,11 @@ class RealmFsSession {
 
   // Settles once every call already made has finished or been refused.
   idle(): Promise<unknown> {
-    return Promise.all([this.queue, ...this.researchInFlight]);
+    return Promise.all([this.queue, ...this.unqueuedInFlight]);
   }
 
   // Settles once every queued call (each save and delete among them) has
-  // finished or been refused. Research calls are not waited on.
+  // finished or been refused. Research calls and transforms are not waited on.
   queueSettled(): Promise<unknown> {
     return this.queue;
   }
@@ -2851,6 +2866,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'with realm.web.read (Firecrawl; throws with the reason a page cannot ' +
     'be read), can repair or normalize data into a JSON schema with ' +
     'realm.resolve (at most 3 calls per run; it refuses requests for code), ' +
+    'can reshape JSON with a BXL program with realm.transform(input, ' +
+    'program, { params?, spelling? }) (jq spelling by default, with Excel ' +
+    'functions taking ; between arguments, such as map({name, total: ' +
+    'ROUND(.price * .qty; 2)}); spelling "readable" for readable BXL; ' +
+    'params("name") reads a value from params; one value out; no reduce, ' +
+    'def, try or @formats; 1 MB in (input and params) and 1 MB out per call, ' +
+    '10 MB in and out per run; 10 s per program; at most 100 calls per run), ' +
     'can ask the user a question mid-script and wait for the pick with ' +
     'realm.ask({ question, options: [{ label, value?, detail?, confidence? }], kind?, allowOther? }) ' +
     '(kind "recommend" proposes the first option, with its detail as the reason), ' +

@@ -8,6 +8,7 @@ scope:
   - packages/pretui/components/segmented-control.gts
   - packages/pretui/components/select.gts
   - packages/pretui/components/search-input.gts
+  - packages/pretui/components/input-group.gts
   - packages/pretui/components/filter-chips.gts
   - packages/pretui/internal/field-dress.gts
 ---
@@ -28,7 +29,7 @@ A slot MUST render only the form LayoutControl chose. Alternative forms MUST NOT
 
 ### 1.3. Height knob
 
-A Pret UI control meant to sit in a LayoutControl MUST expose its height as a custom property knob (`--pretui-<control>-h` or the control's existing height knob), which LayoutControl maps `--control-height` onto. The knob's default MUST be the control's height outside a LayoutControl, so existing callers don't change.
+A single-line Pret UI control meant to sit in a LayoutControl MUST either read `--pretui-row-h` as the first link of its own height chain, or expose a height knob that LayoutControl maps the row height onto. The first form is: `var(--pretui-row-h, var(--pretui-<control>-h, <default>))`. LayoutControl sets `--pretui-row-h` only when it is given a height, and nothing else sets it, so a control outside a sized row keeps its own height. A control MUST NOT read `--control-height` for this: the theme defines it for every themed scope, so it is never unset there.
 
 ### 1.4. Display argument
 

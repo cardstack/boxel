@@ -23,7 +23,7 @@ import { EmptyState } from './empty-state';
 import { Pagination } from './pagination';
 import { Menu } from './menu';
 import type { MenuEntry } from '../internal/menu';
-import { rovingTabindex } from '../focus';
+import { clickIsContents, rovingTabindex } from '../focus';
 import {
   printValue,
   readField,
@@ -179,6 +179,11 @@ export interface DataTableSignature<T> {
     defaultSelected?: readonly RowKey[];
     /** fires with the next selection on every change */
     onSelectionChange?: (keys: RowKey[], rows: T[]) => void;
+    /** Opens a row: a click on the row (not on a control inside it) or Enter
+     * on the focused row, as in List. A press on a widget in a cell, or the end
+     * of a text selection, does not open it. Selection stays on the row's
+     * checkbox or radio. Without it, rows are not focusable. */
+    onActivate?: (row: T, index: number) => void;
     /** controlled column visibility — the keys that are SHOWN */
     visibleColumns?: readonly string[];
     /** uncontrolled seed; defaults to every column without `hidden` */
@@ -860,6 +865,28 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       box.checked = this.table.isSelected(row, index);
     }
   };
+  get activatable(): true | undefined {
+    return this.args.onActivate ? true : undefined;
+  }
+  onRowClick = (row: T, index: number, event: Event) => {
+    if (!this.args.onActivate) {
+      return;
+    }
+    if (clickIsContents(event, event.currentTarget as HTMLElement)) {
+      return;
+    }
+    this.args.onActivate(row, index);
+  };
+  onRowKeydown = (row: T, index: number, event: Event) => {
+    if (
+      (event as KeyboardEvent).key === 'Enter' &&
+      this.args.onActivate &&
+      event.target === event.currentTarget
+    ) {
+      event.preventDefault();
+      this.args.onActivate(row, index);
+    }
+  };
   toggleAll = (event: Event) => {
     let box = event.target as HTMLInputElement;
     this.table.selectAll();
@@ -1105,6 +1132,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                     class='pretui-dt-row'
                     aria-selected={{line.ariaSelected}}
                     data-selected={{line.selectedFlag}}
+                    data-activatable={{this.activatable}}
+                    tabindex={{if this.activatable '0'}}
+                    {{on 'click' (fn this.onRowClick line.row line.index)}}
+                    {{on 'keydown' (fn this.onRowKeydown line.row line.index)}}
                     data-test-pretui-dt-row
                   >
                     {{#if this.selectable}}
@@ -1234,13 +1265,13 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       @layer PretComponent {
         .pretui-dt {
           display: grid;
-          gap: var(--space-3, 8px);
+          gap: var(--boxel-sp-xs);
           min-width: 0;
           font-size: var(--pretui-data-table-font-size, var(--boxel-font-size-xs));
           /* DataShell, which holds the table body, sets its own size; 1em
              hands it the size resolved here */
           --pretui-data-font-size: 1em;
-          letter-spacing: var(--track-ui, 0.01em);
+          letter-spacing: var(--boxel-body-letter-spacing);
           color: var(--foreground);
           /* The control columns' effective widths. A pin offset computed in
              JS cannot know whether the expander or actions column exists —
@@ -1298,7 +1329,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           display: flex;
           flex-wrap: wrap;
           align-items: flex-end;
-          gap: var(--space-3, 8px);
+          gap: var(--boxel-sp-xs);
           min-width: 0;
         }
         .pretui-dt-bar-gap {
@@ -1307,17 +1338,17 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-bar-slot {
           display: flex;
           align-items: center;
-          gap: var(--space-2, 6px);
+          gap: var(--boxel-sp-2xs);
         }
         .pretui-dt-filter {
           display: grid;
-          gap: 3px;
+          gap: var(--boxel-sp-4xs);
           min-width: 0;
         }
         .pretui-dt-filter-label {
           font-family: var(--font-mono);
           font-size: 0.82em;
-          letter-spacing: var(--track-eyebrow, 0.08em);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
@@ -1348,7 +1379,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           overflow: auto;
           min-width: 0;
           max-width: 100%;
-          border-radius: var(--radius-surface, 10px);
+          border-radius: var(--boxel-border-radius);
           background: var(--card);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         }
@@ -1366,7 +1397,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-caption {
           caption-side: top;
           text-align: start;
-          padding: 0.62em var(--space-4, 11px);
+          padding: 0.62em var(--boxel-sp-sm);
           color: var(--muted-foreground);
           font-size: 0.94em;
         }
@@ -1377,11 +1408,11 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           font-family: var(--font-mono);
           font-size: 0.82em;
           font-weight: 500;
-          letter-spacing: var(--track-eyebrow, 0.08em);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
           background: var(--inset, var(--boxel-100));
-          box-shadow: inset 0 -1px 0 var(--line-strong, var(--boxel-400));
+          box-shadow: inset 0 -1px 0 var(--border-strong);
           white-space: nowrap;
           vertical-align: middle;
         }
@@ -1397,9 +1428,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-table th[data-filtered='true']::after {
           content: '';
           display: inline-block;
-          inline-size: 4px;
-          block-size: 4px;
-          margin-inline-start: 5px;
+          inline-size: 0.25rem;
+          block-size: 0.25rem;
+          margin-inline-start: var(--boxel-sp-3xs);
           border-radius: 50%;
           vertical-align: 0.28em;
           background: var(--primary);
@@ -1407,7 +1438,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-sort {
           display: inline-flex;
           align-items: center;
-          gap: 5px;
+          gap: var(--boxel-sp-3xs);
           background: none;
           border: 0;
           padding: 0;
@@ -1420,7 +1451,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-sort:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
-          border-radius: 3px;
+          border-radius: var(--boxel-border-radius-xs);
         }
         .pretui-dt-mark {
           opacity: 0.4;
@@ -1443,7 +1474,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt[data-flush] .pretui-dt-table th {
           background: var(--card);
         }
-        /* 4px, not 0: room for an edge control's 2px focus outline + 2px offset, which the scroller clips */
+        /* 4px, not 0: room for an edge control's 2px focus outline + 2px offset, which the scroller clips. In px like the ring it clears, so it holds at any root font size */
         /* the caption lines up with the first column's flush edge */
         .pretui-dt[data-flush] .pretui-dt-caption {
           padding-inline: 4px;
@@ -1480,6 +1511,13 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-row:hover td {
           background: var(--hover, var(--boxel-100));
         }
+        .pretui-dt-row[data-activatable] {
+          cursor: pointer;
+        }
+        .pretui-dt-row[data-activatable]:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+        }
         .pretui-dt-row[data-selected='true'] td {
           background: var(--pretui-selected, var(--boxel-100));
         }
@@ -1501,13 +1539,13 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-table td[data-pin='start'],
         .pretui-dt-table th[data-pin='start'] {
           box-shadow:
-            inset -1px 0 0 var(--line-strong, var(--boxel-400)),
+            inset -1px 0 0 var(--border-strong),
             inset 0 -1px 0 var(--border);
         }
         .pretui-dt-table td[data-pin='end'],
         .pretui-dt-table th[data-pin='end'] {
           box-shadow:
-            inset 1px 0 0 var(--line-strong, var(--boxel-400)),
+            inset 1px 0 0 var(--border-strong),
             inset 0 -1px 0 var(--border);
         }
         .pretui-dt[data-sticky] .pretui-dt-table th[data-pin] {
@@ -1531,10 +1569,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         }
         .pretui-dt-box {
           appearance: none;
-          width: 15px;
-          height: 15px;
+          width: 0.9375rem;
+          height: 0.9375rem;
           margin: 0;
-          border-radius: 5px;
+          border-radius: var(--boxel-border-radius-xs);
           background: var(
             --pretui-control-rest,
             var(--field, var(--boxel-light))
@@ -1556,8 +1594,8 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         }
         .pretui-dt-box:checked::before {
           content: '';
-          width: 9px;
-          height: 9px;
+          width: 0.5625rem;
+          height: 0.5625rem;
           background: var(--primary-foreground);
           clip-path: polygon(
             14% 47%,
@@ -1570,8 +1608,8 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         }
         .pretui-dt-radio:checked::before {
           clip-path: circle(50%);
-          width: 7px;
-          height: 7px;
+          width: 0.4375rem;
+          height: 0.4375rem;
         }
         /* The mixed state gets a non-colour channel too — a dash, not a tint. */
         .pretui-dt-box:indeterminate {
@@ -1579,9 +1617,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         }
         .pretui-dt-box:indeterminate::before {
           content: '';
-          width: 9px;
-          height: 2px;
-          border-radius: 1px;
+          width: 0.5625rem;
+          height: 0.125rem;
+          border-radius: var(--boxel-border-radius-2xs);
           background: var(--primary-foreground);
         }
         .pretui-dt-box:focus-visible {
@@ -1595,7 +1633,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           block-size: 1.7em;
           padding: 0;
           border: 0;
-          border-radius: 6px;
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           color: var(--muted-foreground);
           cursor: pointer;
@@ -1618,12 +1656,12 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           transform: rotate(90deg);
         }
         .pretui-dt-detail td {
-          padding: var(--space-4, 11px) var(--space-5, 14px);
+          padding: var(--boxel-sp-sm) var(--boxel-sp);
           background: var(--inset, var(--boxel-100));
           box-shadow: inset 0 -1px 0 var(--border);
         }
         .pretui-dt-noresults {
-          padding: var(--space-4, 11px) 0;
+          padding: var(--boxel-sp-sm) 0;
         }
         /* the pager's selected page is a filled box; room above it keeps it
            off the last row's rule */
@@ -1633,7 +1671,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           flex-wrap: wrap;
           align-items: center;
           justify-content: space-between;
-          gap: var(--space-3, 8px);
+          gap: var(--boxel-sp-xs);
         }
         .pretui-dt-count {
           color: var(--muted-foreground);
@@ -1646,11 +1684,11 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         }
         @media (pointer: coarse) {
           .pretui-dt-table td {
-            height: 44px;
+            height: 2.75rem;
           }
           .pretui-dt-box {
-            width: 20px;
-            height: 20px;
+            width: 1.25rem;
+            height: 1.25rem;
           }
           .pretui-dt-expbtn {
             inline-size: 2.4em;

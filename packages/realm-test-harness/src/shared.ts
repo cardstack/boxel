@@ -178,6 +178,7 @@ export const skillsRealmDir = resolve(
   '..',
   'skills-realm',
   'contents',
+  'skills',
 );
 export const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
 export const dbSnapshotDir = resolve(packageRoot, 'db-snapshots');
