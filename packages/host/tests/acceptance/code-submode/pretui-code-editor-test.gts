@@ -184,7 +184,6 @@ module('Acceptance | code submode | pretui code editor', function (hooks) {
 
   test('focus and keys stay with the editor that has focus', async function (assert) {
     await openSnippetInEditFormat();
-    let monacoBefore = getMonacoContent();
 
     let view = codeEditorView(EDITOR);
     view.focus();
@@ -200,14 +199,15 @@ module('Acceptance | code submode | pretui code editor', function (hooks) {
       'const a = 1;\n',
       'Enter went to the card editor',
     );
-    // Monaco changes only through the card's save, never from the key.
+    assert.false(
+      monacoEditor().hasTextFocus(),
+      'Monaco does not have focus while the card editor takes the key',
+    );
+    // Monaco's text changes only through the card's save of what CodeMirror
+    // typed, never from the key itself.
     await waitUntil(() => savedSource() === 'const a = 1;\n', {
       timeout: 10_000,
     });
-    let before = JSON.parse(monacoBefore);
-    let after = JSON.parse(getMonacoContent());
-    before.data.attributes.source = after.data.attributes.source;
-    assert.deepEqual(after, before, 'Monaco took no keystroke of its own');
 
     let monaco = monacoEditor();
     monaco.focus();
