@@ -36,14 +36,35 @@ const OPENROUTER_DESTINATIONS = [
   // The rest of OpenRouter's generation API. Each answers JSON with the cost in
   // `usage.cost`, so the proxy bills them like chat. Video is left out: a job is
   // polled, and every poll repeats its cost.
-  { destination: 'https://openrouter.ai/api/v1/responses', supportsStreaming: true },
-  { destination: 'https://openrouter.ai/api/v1/messages', supportsStreaming: true },
-  { destination: 'https://openrouter.ai/api/v1/rerank', supportsStreaming: false },
-  { destination: 'https://openrouter.ai/api/v1/images', supportsStreaming: false },
-  { destination: 'https://openrouter.ai/api/v1/systemone', supportsStreaming: false },
+  {
+    destination: 'https://openrouter.ai/api/v1/responses',
+    supportsStreaming: true,
+  },
+  {
+    destination: 'https://openrouter.ai/api/v1/messages',
+    supportsStreaming: true,
+  },
+  {
+    destination: 'https://openrouter.ai/api/v1/rerank',
+    supportsStreaming: false,
+  },
+  {
+    destination: 'https://openrouter.ai/api/v1/images',
+    supportsStreaming: false,
+  },
+  {
+    destination: 'https://openrouter.ai/api/v1/systemone',
+    supportsStreaming: false,
+  },
   // Alpha: typed questions and typed field extraction over a state.
-  { destination: 'https://openrouter.ai/api/alpha/decisions', supportsStreaming: false },
-  { destination: 'https://openrouter.ai/api/alpha/extractions', supportsStreaming: false },
+  {
+    destination: 'https://openrouter.ai/api/alpha/decisions',
+    supportsStreaming: false,
+  },
+  {
+    destination: 'https://openrouter.ai/api/alpha/extractions',
+    supportsStreaming: false,
+  },
 ];
 
 // Credits each local user starts with, once, so the credit gate admits their
@@ -69,8 +90,9 @@ export async function sealLocalVendorKeys(
   }
   let value: string;
   try {
-    value = (await readFile(path.join(directory, 'openrouter.key'), 'utf8'))
-      .trim();
+    value = (
+      await readFile(path.join(directory, 'openrouter.key'), 'utf8')
+    ).trim();
   } catch {
     return;
   }

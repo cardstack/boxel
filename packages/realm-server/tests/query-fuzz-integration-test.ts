@@ -74,8 +74,6 @@ import {
 // Each group collects what it finds and asserts once at its end, so one run
 // lists every hole instead of stopping at the first.
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 // ---------------------------------------------------------------------------
 // The documented refusal codes (docs/search.md "Refusals", and the list in
 // invalid-query-error.ts).

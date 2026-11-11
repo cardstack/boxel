@@ -244,7 +244,9 @@ module('native error response filtering', () => {
   });
   test('a response the handler already wrote to the socket is left as it was sent', async (assert) => {
     let app = appFor((ctx) => {
-      let upstream = JSON.stringify({ error: { message: 'Unknown voice', code: 400 } });
+      let upstream = JSON.stringify({
+        error: { message: 'Unknown voice', code: 400 },
+      });
       ctx.body = null;
       ctx.status = 400;
       ctx.set('Content-Type', 'application/json');

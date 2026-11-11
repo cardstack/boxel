@@ -863,7 +863,12 @@ export class Prerenderer {
         return result;
       } catch (e) {
         if (e instanceof PrerenderCancelledError) {
-          await this.#handlePrerenderCancel(e, affinityKey, cdpCaptureStart, url);
+          await this.#handlePrerenderCancel(
+            e,
+            affinityKey,
+            cdpCaptureStart,
+            url,
+          );
           throw e;
         }
         log.error(`capture attempt failed (url ${url})`, e);

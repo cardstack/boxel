@@ -50,7 +50,7 @@ export function createLocalBrowserLogin(options: {
         1,
         -`:${options.matrixServerName}`.length,
       );
-      if (!/^[a-z0-9._=\/-]+$/.test(localpart))
+      if (!/^[a-z0-9._=/-]+$/.test(localpart))
         throw new Error('Native browser sign-in rejected');
       const proof = jsonwebtoken.sign(
         { sub: localpart },
