@@ -343,9 +343,11 @@ const MACROS: Record<string, string> = {
   '@hourly': '0 * * * *',
 };
 
-// Expressions come from cards, so the cache is bounded.
+// Expressions come from cards, so the cache is bounded. It holds the error
+// message for an invalid expression too, so a validator or recompute that
+// meets the same bad expression again doesn't repeat the work.
 const PARSED_CACHE_LIMIT = 1000;
-const parsedCache = new Map<string, CronSchedule>();
+const parsedCache = new Map<string, CronSchedule | string>();
 
 // Five fields (minute, hour, day of month, month, day of week) with `*`,
 // lists, ranges, steps, and month and day names, or one of the `@hourly` …
@@ -353,9 +355,34 @@ const parsedCache = new Map<string, CronSchedule>();
 // an expression that names no day that ever happens (`0 0 30 2 *`).
 export function parseCronExpression(expression: string): CronSchedule {
   let cached = parsedCache.get(expression);
+  if (typeof cached === 'string') {
+    throw new CronExpressionError(cached);
+  }
   if (cached) {
     return cached;
   }
+  let result: CronSchedule | string;
+  try {
+    result = parseUncached(expression);
+  } catch (e) {
+    if (!(e instanceof CronExpressionError)) {
+      throw e;
+    }
+    result = e.message;
+  }
+  if (typeof expression === 'string') {
+    if (parsedCache.size >= PARSED_CACHE_LIMIT) {
+      parsedCache.clear();
+    }
+    parsedCache.set(expression, result);
+  }
+  if (typeof result === 'string') {
+    throw new CronExpressionError(result);
+  }
+  return result;
+}
+
+function parseUncached(expression: string): CronSchedule {
   if (typeof expression !== 'string') {
     throw new CronExpressionError('A cron expression must be a string');
   }
@@ -398,10 +425,6 @@ export function parseCronExpression(expression: string): CronSchedule {
       `"${expression}" names no day that ever happens, so it never fires`,
     );
   }
-  if (parsedCache.size >= PARSED_CACHE_LIMIT) {
-    parsedCache.clear();
-  }
-  parsedCache.set(expression, schedule);
   return schedule;
 }
 
@@ -458,6 +481,10 @@ function parseField(
       }
       start = parseValue(bounds[0], spec, fail);
       end = parseValue(bounds[1], spec, fail);
+      if (spec.name === 'day-of-week' && end === 0 && start > 0) {
+        // Sunday ends a range as 7, as in Vixie cron: `FRI-SUN`.
+        end = 7;
+      }
       if (start > end) {
         fail(`has a range "${rangeText}" that runs backwards`);
       }
