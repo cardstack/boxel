@@ -7,6 +7,7 @@ import {
   type AutomationTrigger,
 } from '@cardstack/runtime-common/automation-schedule';
 import {
+  cronRunsPerMonth,
   estimateAutomationCost,
   runCostCeiling,
   type RunCostCaps,
@@ -54,8 +55,8 @@ const COMPUTE_CREDITS = 600 * TAB_USD_PER_SECOND * 2 * 1000;
 const NETWORK_CREDITS = 0.045 * 2 * 1000;
 const PER_RUN_CREDITS = COMPUTE_CREDITS + NETWORK_CREDITS + 500;
 
-// 2026-11-11 00:00 UTC. The year after it holds one spring-forward and one
-// fall-back change in the US zones, and no February 29.
+// 2026-11-11 00:00 UTC. The average month after it, 30.4375 days, holds no
+// daylight-saving change in the US zones.
 const NOW = Date.parse('2026-11-11T00:00:00Z') / 1000;
 
 function close(
@@ -109,8 +110,41 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('cronRunsPerMonth', function () {
+    // The coming average month from NOW ends 2026-12-11 10:30 UTC.
+    test('a frequent expression counts its runs in the coming month', function (assert) {
+      // 05:30 Chicago is 11:30 UTC: Nov 11 through Dec 10.
+      assert.strictEqual(cronRunsPerMonth('30 5 * * *', CHICAGO, NOW), 30);
+      assert.strictEqual(cronRunsPerMonth('0 * * * *', NEW_YORK, NOW), 730);
+      assert.strictEqual(
+        cronRunsPerMonth('*/5 * * * *', CHICAGO, NOW),
+        30.4375 * 288,
+      );
+    });
+
+    test('a rarer expression is averaged over four years', function (assert) {
+      assert.strictEqual(cronRunsPerMonth('0 12 1 * *', CHICAGO, NOW), 1);
+      assert.strictEqual(cronRunsPerMonth('@yearly', CHICAGO, NOW), 1 / 12);
+      // Daily, but only in December: 10 runs in the coming month, under the
+      // frequent threshold, so its four Decembers are averaged.
+      assert.strictEqual(
+        cronRunsPerMonth('0 9 * 12 *', CHICAGO, NOW),
+        (31 * 4) / 48,
+      );
+    });
+
+    test('February 29 gets its share from any starting point', function (assert) {
+      let later = Date.parse('2027-03-02T00:00:00Z') / 1000;
+      assert.strictEqual(cronRunsPerMonth('0 0 29 2 *', CHICAGO, NOW), 1 / 48);
+      assert.strictEqual(
+        cronRunsPerMonth('0 0 29 2 *', CHICAGO, later),
+        1 / 48,
+      );
+    });
+  });
+
   module('estimateAutomationCost', function () {
-    test('an unbounded daily cron trigger counts its runs in an average month', function (assert) {
+    test('an unbounded cron trigger counts its runs in a month', function (assert) {
       let result = estimate([
         {
           kind: 'cron',
@@ -119,58 +153,21 @@ module(basename(import.meta.filename), function () {
           timeZone: CHICAGO,
         },
       ]);
-      close(assert, result.unboundedRunsPerMonth, 365 / 12, 'runs a month');
+      assert.strictEqual(result.unboundedRunsPerMonth, 30);
       assert.deepEqual(result.triggers, [
-        {
-          label: 'daily',
-          kind: 'cron',
-          bounded: false,
-          runsPerMonth: result.unboundedRunsPerMonth,
-        },
+        { label: 'daily', kind: 'cron', runsPerMonth: 30 },
       ]);
-      assert.strictEqual(
-        result.credits,
-        Math.ceil(PER_RUN_CREDITS * (365 / 12)),
-      );
-      assert.strictEqual(result.boundedCronRuns, 0);
+      assert.strictEqual(result.credits, Math.ceil(PER_RUN_CREDITS * 30));
+      assert.strictEqual(result.boundedRunsPerMonth, 0);
       assert.strictEqual(result.onceRuns, 0);
-      assert.false(result.runsAtLeast);
       assert.strictEqual(result.pricingVersion, testPricing().version);
     });
 
-    test("an hourly trigger's daylight-saving days even out over the year", function (assert) {
-      let result = estimate([
-        {
-          kind: 'cron',
-          label: 'hourly',
-          expression: '0 * * * *',
-          timeZone: NEW_YORK,
-        },
+    test('names the charges it leaves out', function (assert) {
+      assert.deepEqual(estimate([]).uncountedChargeKinds, [
+        'run_indexing',
+        'storage',
       ]);
-      // 23 runs on the spring-forward day and 25 on the fall-back day.
-      close(assert, result.unboundedRunsPerMonth, (365 * 24) / 12, 'runs');
-    });
-
-    test('a monthly trigger counts one run a month, and a yearly one a twelfth', function (assert) {
-      let result = estimate([
-        {
-          kind: 'cron',
-          label: 'month-start',
-          expression: '0 12 1 * *',
-          timeZone: CHICAGO,
-        },
-        {
-          kind: 'cron',
-          label: 'new-year',
-          expression: '@yearly',
-          timeZone: CHICAGO,
-        },
-      ]);
-      close(assert, result.unboundedRunsPerMonth, 1 + 1 / 12, 'combined');
-      assert.deepEqual(
-        result.triggers.map((t) => 'runsPerMonth' in t && t.runsPerMonth),
-        [1, 1 / 12],
-      );
     });
 
     test('unbounded triggers combine: two at the same instant each start a run', function (assert) {
@@ -178,20 +175,26 @@ module(basename(import.meta.filename), function () {
         {
           kind: 'cron',
           label: 'a',
-          expression: '0 9 * * *',
+          expression: '30 5 * * *',
           timeZone: CHICAGO,
         },
         {
           kind: 'cron',
           label: 'b',
-          expression: '0 9 * * *',
+          expression: '30 5 * * *',
+          timeZone: CHICAGO,
+        },
+        {
+          kind: 'cron',
+          label: 'month-start',
+          expression: '0 12 1 * *',
           timeZone: CHICAGO,
         },
       ]);
-      close(assert, result.unboundedRunsPerMonth, (2 * 365) / 12, 'both');
+      assert.strictEqual(result.unboundedRunsPerMonth, 61);
     });
 
-    test('a cron trigger with a count adds its runs left, not a monthly rate', function (assert) {
+    test('a count smaller than a month of runs adds its runs left', function (assert) {
       let result = estimate([
         {
           kind: 'cron',
@@ -201,13 +204,13 @@ module(basename(import.meta.filename), function () {
           count: 24,
         },
       ]);
-      assert.strictEqual(result.boundedCronRuns, 24);
+      assert.strictEqual(result.boundedRunsPerMonth, 24);
       assert.strictEqual(result.unboundedRunsPerMonth, 0);
       assert.deepEqual(result.triggers, [
         {
           label: 'next-day',
           kind: 'cron',
-          bounded: true,
+          runsPerMonth: 24,
           remainingRuns: 24,
           remainingRunsAtLeast: false,
         },
@@ -231,22 +234,48 @@ module(basename(import.meta.filename), function () {
           runState: { 'next-day': { runs: 10, lastSlot: NOW - 3600 } },
         },
       );
-      assert.strictEqual(result.boundedCronRuns, 14);
+      assert.strictEqual(result.boundedRunsPerMonth, 14);
     });
 
-    test('a cron trigger with `until` adds every run up to it, even past a month', function (assert) {
-      // Daily at 09:00 Chicago through 2027-01-09 09:00 local: Nov 11 to
-      // Jan 9 inclusive is 20 + 31 + 9 = 60 runs.
+    test('a bound past the coming month counts a month of runs, not every run left', function (assert) {
       let result = estimate([
         {
+          // Daily at 05:30 Chicago through 2027-01-09: 60 runs left.
           kind: 'cron',
           label: 'until-quarter',
-          expression: '0 9 * * *',
+          expression: '30 5 * * *',
           timeZone: CHICAGO,
-          until: zonedDateTimeToUnixSeconds('2027-01-09T09:00', CHICAGO),
+          until: zonedDateTimeToUnixSeconds('2027-01-09T05:30', CHICAGO),
+        },
+        {
+          kind: 'cron',
+          label: 'hourly-for-a-year',
+          expression: '0 * * * *',
+          timeZone: NEW_YORK,
+          until: NOW + 365 * 24 * 3600,
+        },
+        {
+          kind: 'cron',
+          label: 'twenty-new-years',
+          expression: '@yearly',
+          timeZone: CHICAGO,
+          count: 20,
         },
       ]);
-      assert.strictEqual(result.boundedCronRuns, 60);
+      assert.deepEqual(
+        result.triggers.map((t) => [
+          t.label,
+          'runsPerMonth' in t && t.runsPerMonth,
+          'remainingRuns' in t && t.remainingRuns,
+        ]),
+        [
+          ['until-quarter', 30, 60],
+          ['hourly-for-a-year', 730, 8760],
+          ['twenty-new-years', 1 / 12, 20],
+        ],
+      );
+      close(assert, result.boundedRunsPerMonth, 30 + 730 + 1 / 12, 'bounded');
+      assert.strictEqual(result.unboundedRunsPerMonth, 0);
     });
 
     test('a spent bounded trigger adds nothing', function (assert) {
@@ -259,11 +288,11 @@ module(basename(import.meta.filename), function () {
           until: NOW - 1,
         },
       ]);
-      assert.strictEqual(result.boundedCronRuns, 0);
+      assert.strictEqual(result.boundedRunsPerMonth, 0);
       assert.strictEqual(result.credits, 0);
     });
 
-    test('a bounded count that reaches the counting limit marks the estimate as a lower bound', function (assert) {
+    test('a trigger with runs left past the counting limit counts a month of runs', function (assert) {
       // Every 5 minutes for a year is over 100,000 runs.
       let result = estimate([
         {
@@ -274,8 +303,15 @@ module(basename(import.meta.filename), function () {
           until: NOW + 365 * 24 * 3600,
         },
       ]);
-      assert.strictEqual(result.boundedCronRuns, REMAINING_RUNS_LIMIT);
-      assert.true(result.runsAtLeast);
+      assert.deepEqual(result.triggers, [
+        {
+          label: 'busy',
+          kind: 'cron',
+          runsPerMonth: 30.4375 * 288,
+          remainingRuns: REMAINING_RUNS_LIMIT,
+          remainingRunsAtLeast: true,
+        },
+      ]);
     });
 
     test('an unspent once trigger adds one run, a spent one none', function (assert) {
@@ -284,10 +320,10 @@ module(basename(import.meta.filename), function () {
         { kind: 'once', label: 'already', at: NOW - 3600 },
       ]);
       assert.strictEqual(result.onceRuns, 1);
-      assert.deepEqual(
-        result.triggers.map((t) => 'remainingRuns' in t && t.remainingRuns),
-        [1, 0],
-      );
+      assert.deepEqual(result.triggers, [
+        { label: 'backfill', kind: 'once', remainingRuns: 1 },
+        { label: 'already', kind: 'once', remainingRuns: 0 },
+      ]);
       assert.strictEqual(result.credits, Math.ceil(PER_RUN_CREDITS));
     });
 
@@ -323,7 +359,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(result.credits, 0);
     });
 
-    test('a mix adds the monthly rate of unbounded triggers to every bounded and one-time run', function (assert) {
+    test('a mix adds every kind of trigger a month brings', function (assert) {
       let result = estimate([
         {
           kind: 'cron',
@@ -347,14 +383,11 @@ module(basename(import.meta.filename), function () {
           count: 24,
         },
       ]);
-      close(assert, result.unboundedRunsPerMonth, 365 / 12 + 1, 'unbounded');
-      assert.strictEqual(result.boundedCronRuns, 24);
+      assert.strictEqual(result.unboundedRunsPerMonth, 31);
+      assert.strictEqual(result.boundedRunsPerMonth, 24);
       assert.strictEqual(result.onceRuns, 1);
       assert.deepEqual(result.webhookTriggers, ['stripe']);
-      assert.strictEqual(
-        result.credits,
-        Math.ceil(PER_RUN_CREDITS * (365 / 12 + 1 + 24 + 1)),
-      );
+      assert.strictEqual(result.credits, Math.ceil(PER_RUN_CREDITS * 56));
       assert.deepEqual(
         result.triggers.map((t) => t.label),
         ['daily', 'month-start', 'stripe', 'backfill', 'next-day'],
