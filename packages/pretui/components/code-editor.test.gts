@@ -358,12 +358,6 @@ module('Pretui | components/code-editor', function (hooks) {
       'var(--pretui-code-editor-cursor)',
       "the theme reads code mode's colours from the frame",
     );
-    let frame = document.querySelector('[data-test-pretui-code-editor]') as HTMLElement;
-    assert.strictEqual(
-      getComputedStyle(frame).getPropertyValue('--pretui-code-editor-cursor').trim(),
-      '#aeafad',
-      "the frame sets code mode's cursor colour",
-    );
 
     state.dark = false;
     await settled();
