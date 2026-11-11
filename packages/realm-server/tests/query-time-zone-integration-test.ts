@@ -28,6 +28,7 @@ import { exprSortSql } from '@cardstack/runtime-common/formula-sql';
 import {
   parseSearchEntryQueryFromPayload,
   searchEntryRealms,
+  searchEntryWireQueryFromQuery,
 } from '@cardstack/runtime-common/search-entry';
 
 import { createVirtualNetwork, setupDB } from './helpers/index.ts';
@@ -660,6 +661,47 @@ module(basename(import.meta.filename), function () {
         'p1',
         'p2',
       ]);
+    });
+
+    test('over the wire a binding keeps its own zone', async function (assert) {
+      // outer UTC, binding New York: at 04:00Z on Nov 10 the binding's
+      // "today" is Nov 9 in New York (p1, p4), not Nov 10 in UTC (p1, p2)
+      let authored = {
+        type: Punch,
+        filter: { in: { id: { $let: '$todays' } } },
+        let: {
+          $todays: {
+            from: { type: Punch, filter: today, timeZone: NY },
+            select: 'id',
+          },
+          $first: {
+            from: { type: Punch, filter: today, timeZone: NY },
+            one: true,
+          },
+        },
+        timeZone: 'UTC',
+      } as unknown as Query;
+      let direct = (await search(tzRealm, authored as any)).names;
+      assert.deepEqual(direct, ['p1', 'p4'], 'direct');
+      for (let [label, payload] of [
+        ['authored', authored],
+        ['serialized', searchEntryWireQueryFromQuery(authored)],
+      ] as const) {
+        let { itemQuery } = parseSearchEntryQueryFromPayload(payload);
+        for (let name of ['$todays', '$first']) {
+          assert.strictEqual(
+            (itemQuery.let as any)?.[name]?.from?.timeZone,
+            NY,
+            `${label}: ${name} keeps its zone`,
+          );
+        }
+        let { $first: _first, ...lets } = itemQuery.let as any;
+        assert.deepEqual(
+          (await search(tzRealm, { ...itemQuery, let: lets })).names,
+          direct,
+          `${label}: the same cards as the direct call`,
+        );
+      }
     });
 
     test("the realm's default zone applies; a query or caller zone beats it", async function (assert) {

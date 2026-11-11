@@ -2227,6 +2227,9 @@ function wireLetBinding(
           ? { sort: (b.from.sort as Sort).map(wireSortFromSort) }
           : {}),
         ...(b.from.page ? { page: b.from.page } : {}),
+        // the binding's own zone (`bindingQuery`); dropped, a relative date
+        // in the binding would resolve in the outer query's zone
+        ...(b.from.timeZone !== undefined ? { timeZone: b.from.timeZone } : {}),
       },
       ...(b.one
         ? { one: true as const }
