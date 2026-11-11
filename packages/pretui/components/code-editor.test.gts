@@ -17,6 +17,8 @@ interface StubOptions {
   lineNumbers?: boolean;
   controlId?: string;
   label?: string;
+  labelledBy?: string;
+  describedBy?: string;
   onDocChange?: (text: string) => void;
 }
 
@@ -57,6 +59,7 @@ class StubView {
 
 const stub = {
   EditorView: StubView,
+  Transaction: { addToHistory: { of: (value: boolean) => ({ value }) } },
   createCodeEditorState(options: StubOptions) {
     created.push(options);
     return options;
@@ -112,6 +115,20 @@ module('Pretui | components/code-editor', function (hooks) {
     assert
       .dom('.pretui-code-editor .pretui-code')
       .includesText('const answer = 42;', 'the code is never blank');
+  });
+
+  test('a prerender keeps the read-only fallback', async function (assert) {
+    let global = globalThis as { __boxelRenderContext?: unknown };
+    global.__boxelRenderContext = {};
+    try {
+      await render(<template><CodeEditor @value={{SOURCE}} /></template>);
+      await settled();
+      assert.dom('.pretui-code-editor').hasAttribute('data-loaded', 'false');
+      assert.dom('[data-test-stub-editor]').doesNotExist();
+      assert.dom('.pretui-code-editor .pretui-code').includesText('answer');
+    } finally {
+      delete global.__boxelRenderContext;
+    }
   });
 
   test('a loader without a code editor keeps the fallback', async function (assert) {
@@ -220,6 +237,50 @@ module('Pretui | components/code-editor', function (hooks) {
     assert.false(created[1].readOnly);
     assert.dom('[data-test-stub-editor]').hasValue('draft');
     assert.dom('[data-test-stub-editor]').doesNotHaveAttribute('readonly');
+  });
+
+  test('a new value that arrives with a rebuild is the rebuilt editor\'s text', async function (assert) {
+    class State {
+      @tracked value = 'one';
+      @tracked language = 'javascript';
+    }
+    let state = new State();
+    let reported: string[] = [];
+    let onInput = (value: string) => {
+      reported.push(value);
+      state.value = value;
+    };
+    await render(
+      <template>
+        <CodeEditor
+          @value={{state.value}}
+          @language={{state.language}}
+          @onInput={{onInput}}
+        />
+      </template>,
+    );
+    await waitFor('[data-test-stub-editor]');
+    await fillIn('[data-test-stub-editor]', 'one, typed');
+    await settled();
+
+    state.value = 'two';
+    state.language = 'json';
+    await settled();
+    assert.strictEqual(created.length, 2, 'the view is rebuilt');
+    assert.strictEqual(created[1].doc, 'two', 'it starts from the new value');
+    assert.dom('[data-test-stub-editor]').hasValue('two');
+    assert.deepEqual(reported, ['one, typed'], 'only the typing is reported');
+  });
+
+  test('the naming and description ids reach the editor', async function (assert) {
+    await render(
+      <template>
+        <CodeEditor @value='x' @labelledBy='lbl' @describedBy='msg' />
+      </template>,
+    );
+    await waitFor('[data-test-stub-editor]');
+    assert.strictEqual(created[0].labelledBy, 'lbl');
+    assert.strictEqual(created[0].describedBy, 'msg');
   });
 
   test('the height floor and ceiling are line counts on the root', async function (assert) {

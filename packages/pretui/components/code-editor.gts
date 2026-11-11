@@ -3,9 +3,9 @@
 // CodeMirror is not a dependency of this module. The host loads it on demand
 // and hands it over through `globalThis.__loadCodeMirror`, as base's markdown
 // editor does, so a card that renders a CodeEditor ships no editor code of its
-// own. Until CodeMirror arrives, and wherever it can't (a prerender, a page
-// with no loader), the code is shown read-only through CodeBlock, so the
-// content is never blank.
+// own. Until CodeMirror arrives, and wherever it doesn't (a prerender, which
+// never loads it, or a page with no loader), the code is shown read-only
+// through CodeBlock, so the content is never blank.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { isDestroyed, isDestroying } from '@ember/destroyable';
@@ -117,6 +117,7 @@ interface EditorViewLike {
   readonly state: { readonly doc: { toString(): string; length: number } };
   dispatch(spec: {
     changes: { from: number; to: number; insert: string };
+    annotations?: unknown;
   }): void;
   destroy(): void;
 }
@@ -126,6 +127,7 @@ interface CodeMirrorLike {
     state: unknown;
     parent: Element;
   }) => EditorViewLike;
+  Transaction: { addToHistory: { of(value: boolean): unknown } };
   createCodeEditorState(options: {
     doc: string;
     language?: CodeEditorLanguage;
@@ -133,6 +135,8 @@ interface CodeMirrorLike {
     lineNumbers?: boolean;
     controlId?: string;
     label?: string;
+    labelledBy?: string;
+    describedBy?: string;
     theme?: Record<string, Record<string, string>>;
     onDocChange?: (text: string) => void;
   }): unknown;
@@ -155,10 +159,17 @@ export interface CodeEditorSignature {
     minLines?: number;
     /** height ceiling, in lines; past it the editor scrolls (default 24) */
     maxLines?: number;
-    /** lands on the editable element, for a Field's `<label for>` */
+    /** an id for the editable element, so other elements can point at it */
     controlId?: string;
-    /** the accessible name when no label points at the editor */
+    /** the accessible name, when no element on the page names the editor */
     label?: string;
+    /** the id of the element that names the editor: a Field's label, with
+     * `@labelTag='span'`, since a `<label for>` can't name CodeMirror's
+     * editable element */
+    labelledBy?: string;
+    /** the id(s) of elements that describe the editor, such as a Field's
+     * message line */
+    describedBy?: string;
   };
   Element: HTMLDivElement;
 }
@@ -184,6 +195,9 @@ export class CodeEditor extends Component<CodeEditorSignature> {
   // @value. That change is not the user's, so it is not reported: reporting
   // it would also write the caller's state in the middle of a render.
   private applyingValue = false;
+  // The @value this editor last took in. A different one is a new value from
+  // outside; the same one, passed again, is not.
+  private seenValue: string | undefined;
 
   constructor(owner: Owner, args: CodeEditorSignature['Args']) {
     super(owner, args);
@@ -193,7 +207,12 @@ export class CodeEditor extends Component<CodeEditorSignature> {
   private async loadCodeMirror() {
     let load = (globalThis as { __loadCodeMirror?: () => Promise<unknown> })
       .__loadCodeMirror;
-    if (typeof load !== 'function') {
+    // A prerender captures the read-only fallback rather than racing the
+    // editor's load.
+    if (
+      typeof load !== 'function' ||
+      (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext
+    ) {
       return;
     }
     try {
@@ -203,7 +222,8 @@ export class CodeEditor extends Component<CodeEditorSignature> {
       }
       if (
         typeof cm?.createCodeEditorState === 'function' &&
-        typeof cm.EditorView === 'function'
+        typeof cm.EditorView === 'function' &&
+        cm.Transaction
       ) {
         this.cm = cm as CodeMirrorLike;
       }
@@ -259,16 +279,25 @@ export class CodeEditor extends Component<CodeEditorSignature> {
       this.lineNumbers,
       this.args.controlId ?? '',
       this.args.label ?? '',
+      this.args.labelledBy ?? '',
+      this.args.describedBy ?? '',
     ]);
+    // A value the caller hasn't passed before, and that isn't the caller
+    // handing back what was typed, replaces the document.
+    let outsideValue =
+      value !== this.seenValue && value !== this.lastReported;
+    this.seenValue = value;
 
     let view = this.view;
     if (view && element.contains(view.dom) && this.viewConfig === config) {
       let current = view.state.doc.toString();
-      if (value !== current && value !== this.lastReported) {
+      if (outsideValue && value !== current) {
         this.applyingValue = true;
         try {
+          // Not the user's edit, so undo doesn't bring back what it replaced.
           view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: value },
+            annotations: cm.Transaction.addToHistory.of(false),
           });
         } finally {
           this.applyingValue = false;
@@ -278,8 +307,9 @@ export class CodeEditor extends Component<CodeEditorSignature> {
       return;
     }
 
-    // A rebuilt view keeps what the user has typed.
-    let doc = view ? view.state.doc.toString() : value;
+    // A rebuilt view keeps what the user has typed, unless a new value
+    // arrived along with the change that rebuilds it.
+    let doc = view && !outsideValue ? view.state.doc.toString() : value;
     view?.destroy();
     element.replaceChildren();
     let state = cm.createCodeEditorState({
@@ -289,6 +319,8 @@ export class CodeEditor extends Component<CodeEditorSignature> {
       lineNumbers: this.lineNumbers,
       controlId: this.args.controlId,
       label: this.args.label,
+      labelledBy: this.args.labelledBy,
+      describedBy: this.args.describedBy,
       theme: readOnly ? READ_ONLY_THEME : EDITOR_THEME,
       onDocChange: (text: string) => {
         if (isDestroying(this) || isDestroyed(this) || this.applyingValue) {
