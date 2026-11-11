@@ -6,9 +6,12 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, rri } from '@cardstack/runtime-common';
+
+import type NetworkService from '@cardstack/host/services/network';
 
 import {
   setupLocalIndexing,
@@ -137,13 +140,13 @@ function inputOf(label: string, scope: ParentNode = document) {
   return input;
 }
 
-// A param row's inputs are named by the list's Name and Value headings.
-function paramInput(part: 'name' | 'value', row: ParentNode) {
-  let input = row.querySelector<HTMLInputElement>(
-    `input[aria-label="Param ${part}"]`,
+// A param row's inputs are named for their row: "Name of param 1".
+function paramInput(part: 'Name' | 'Value', index: number) {
+  let input = document.querySelector<HTMLInputElement>(
+    `[data-test-automation-param="${index}"] input[aria-label="${part} of param ${index + 1}"]`,
   );
   if (!input) {
-    throw new Error(`the param row has no ${part} input`);
+    throw new Error(`param ${index + 1} has no ${part} input`);
   }
   return input;
 }
@@ -551,7 +554,7 @@ module('Acceptance | automation edit format', function (hooks) {
       'the webhook kind and path are saved',
     );
     assert.strictEqual(
-      item.querySelector('input[aria-label="Param name"]'),
+      item.querySelector('input[aria-label^="Name of param"]'),
       null,
       'a trigger has no params of its own',
     );
@@ -581,6 +584,16 @@ module('Acceptance | automation edit format', function (hooks) {
     assert
       .dom('[data-test-automation-remove-trigger="2"]')
       .hasText('Remove this trigger');
+    assert
+      .dom('[data-test-automation-remove-trigger="2"]')
+      .hasAria(
+        'label',
+        'Remove this trigger, trigger 3',
+        'a trigger with no label yet is named by its position',
+      );
+    assert
+      .dom('[data-test-automation-remove-trigger="0"]')
+      .hasAria('label', 'Remove this trigger, nightly');
     assert.dom('[data-test-automation-remove-trigger="2"] svg').exists();
     await click('[data-test-automation-remove-trigger="2"]');
     await waitForSave(
@@ -815,7 +828,7 @@ module('Acceptance | automation edit format', function (hooks) {
 
     assert
       .dom('[data-test-automation-remove-service]')
-      .hasAria('label', 'Remove this outside service');
+      .hasAria('label', 'Remove the outside service Open tickets');
     assert.dom('[data-test-automation-remove-service] svg').exists();
     await click('[data-test-automation-remove-service]');
     await waitForSave(
@@ -839,18 +852,52 @@ module('Acceptance | automation edit format', function (hooks) {
     assert.dom('[data-test-automation-add-service-confirm]').isDisabled();
   });
 
+  test('the script editor stays read-only and Save stays off when the script can’t be read', async function (assert) {
+    // The script file is there, but reading its source fails.
+    let { virtualNetwork } = getService('network') as NetworkService;
+    let failRead = async (request: Request) =>
+      request.method === 'GET' &&
+      request.url === `${testRealmURL}scripts/nightly.js` &&
+      request.headers.get('Accept')?.includes('card+source')
+        ? new Response('The file could not be read', {
+            status: 500,
+            statusText: 'Internal Server Error',
+          })
+        : null;
+    virtualNetwork.mount(failRead, { prepend: true });
+    try {
+      await openEdit();
+      await waitFor('[data-test-automation-script-read-failure]');
+      assert
+        .dom('[data-test-automation-script-read-failure]')
+        .exists('the failed read is shown');
+      assert
+        .dom(SCRIPT_EDITOR)
+        .hasAttribute(
+          'data-read-only',
+          'true',
+          'the editor takes no typing over a script nobody has seen',
+        );
+      assert
+        .dom('[data-test-automation-script-save]')
+        .isDisabled('there is nothing to save');
+    } finally {
+      virtualNetwork.unmount(failRead);
+    }
+  });
+
   test('params are added, edited and removed', async function (assert) {
     await openEdit();
     await click('[data-test-automation-add-param]');
     assert
       .dom('[data-test-automation-params-problem]')
       .hasText('Every param needs a name');
-    let param = document.querySelector(
-      '[data-test-automation-param="0"]',
-    ) as HTMLElement;
-    await fillIn(paramInput('name', param), 'repository');
+    assert
+      .dom('[data-test-automation-remove-param="0"]')
+      .hasAria('label', 'Remove param 1', 'a param with no name yet');
+    await fillIn(paramInput('Name', 0), 'repository');
     assert.dom('[data-test-automation-params-problem]').doesNotExist();
-    await fillIn(paramInput('value', param), 'cardstack/boxel');
+    await fillIn(paramInput('Value', 0), 'cardstack/boxel');
     await waitForSave(
       (d) =>
         d.attributes.params.length === 1 &&
@@ -859,19 +906,13 @@ module('Acceptance | automation edit format', function (hooks) {
       'the param is saved',
     );
     await click('[data-test-automation-add-param]');
-    await fillIn(
-      paramInput(
-        'name',
-        document.querySelector('[data-test-automation-param="1"]')!,
-      ),
-      'repository',
-    );
+    await fillIn(paramInput('Name', 1), 'repository');
     assert
       .dom('[data-test-automation-params-problem]')
       .hasText('Two params share the name “repository”');
     assert
       .dom('[data-test-automation-remove-param="1"]')
-      .hasAria('label', 'Remove this param');
+      .hasAria('label', 'Remove the param repository');
     assert.dom('[data-test-automation-remove-param="1"] svg').exists();
     await click('[data-test-automation-remove-param="1"]');
     await click('[data-test-automation-remove-param="0"]');
