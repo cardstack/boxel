@@ -702,14 +702,14 @@ The answer is `{ data: [{ line, at, actor, entry }], meta: { page, facets?, log 
 | `type`, `on`, a filter's type anchor                     | A line has no card type: name the log in `from`.                                      |
 | `matches`, `prefix`                                      | Lines have no full-text index: use `contains`.                                        |
 | `near`, vector sorts, `blend`, `expression`, `relevance` | Lines have no vectors or ranking signals.                                             |
-| `explain`, `rerank`                                      | A log query ranks nothing.                                                            |
+| `explain`                                                | A log query ranks nothing.                                                            |
 | `collapse`                                               | Use `group`.                                                                          |
 | `let`                                                    | A log query has no bindings; a card query can bind a log (above).                     |
 | `linkedFrom`                                             | Lines have no links.                                                                  |
 | `fields`, `asData`, `cardUrls`, `scope`, `htmlQuery`     | A line is answered whole, or by `select`.                                             |
 | `realms` on a realm's `_search`                          | A log search runs on one realm; the federated route takes `realms` naming exactly it. |
 
-`pattern` and `regex` are not log filters (`unknown-key`). A log query also has none of these: declared log facets (every path counts, with no opt-in); a path with a hyphen, a non-ASCII key or a list position; `range` and `contains` over a list's items (they compare the value at the path); facet options beyond `by` and `size`; label paths; the older spelling (a log query is in the newer spelling only). A `group` query counts the lines each time it runs; a count shown on a card belongs on the card.
+`pattern` and `regex` are not log filters (`unknown-key`). Members no query takes, a top-level `rerank` and a `typeahead` filter, are refused as a card query refuses them (`unknown-key`, with what to write instead), not as a card feature. A log query also has none of these: declared log facets (every path counts, with no opt-in); a path with a hyphen, a non-ASCII key or a list position; `range` and `contains` over a list's items (they compare the value at the path); facet options beyond `by` and `size`; label paths; the older spelling (a log query is in the newer spelling only). A `group` query counts the lines each time it runs; a count shown on a card belongs on the card.
 
 **Who may read the lines.** A caller who reads the realm reads every line. A caller the realm's ACL declines reads only what a **log-line grant** in its policy admits them to: a `query` grant on base `JSONLFile` (or `LogFile`, for `.log` files) whose `where` is `.actor == actor()` (optionally with `and actor() != "anonymous"`) admits every signed-in caller to the lines they wrote, of every such log in the realm:
 

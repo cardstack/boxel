@@ -699,7 +699,6 @@ module(basename(import.meta.filename), function () {
       for (let q of [
         { collapse: 'actor' },
         { let: {} },
-        { rerank: { expression: '1' } },
         { fields: {} },
         { type: { module: 'x', name: 'Y' } },
         { filter: { matches: 'hello' } },
@@ -711,6 +710,26 @@ module(basename(import.meta.filename), function () {
           [400, 'not-supported-for-logs'],
           JSON.stringify(q),
         );
+      }
+      // A retired member is not a card feature a log lacks: no query takes
+      // it, so a log query refuses it as a card query does, with the hint.
+      for (let [q, hint] of [
+        [
+          { rerank: { expression: '1' } },
+          /re-ranking is a card query's sort entry/,
+        ],
+        [
+          { filter: { typeahead: 'he' } },
+          /"typeahead" is not a filter operator/,
+        ],
+      ] as [Row, RegExp][]) {
+        let answer = await refusal({ from: { log: LOG }, ...q });
+        assert.deepEqual(
+          [answer.status, answer.code],
+          [400, 'unknown-key'],
+          JSON.stringify(q),
+        );
+        assert.true(hint.test(answer.message ?? ''), JSON.stringify(q));
       }
       let utc = await refusal({ from: { log: LOG }, timeZone: 'UTC' });
       assert.strictEqual(utc.status, 200, 'timeZone UTC is the default');

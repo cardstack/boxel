@@ -3148,9 +3148,9 @@ module(basename(import.meta.filename), function () {
     // The spread entries above name their rule in a template: an unknown
     // member, a filter operator a log does not take, or a time.
     // A card query's member or operator is refused as one a log does not
-    // support; any other unknown name as unknown.
-    const CARD_ONLY =
-      /"(type|fields|let|collapse|rerank|realms|matches|on|near)"/;
+    // support; any other unknown name as unknown, a retired one (rerank)
+    // included, as a card query refuses it.
+    const CARD_ONLY = /"(type|fields|let|collapse|realms|matches|on|near)"/;
     const codeOf = (rule: string) =>
       /unknown member|which a log filter does not take/.test(rule)
         ? CARD_ONLY.test(rule) &&

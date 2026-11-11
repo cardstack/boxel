@@ -769,7 +769,6 @@ const CARD_ONLY_MEMBERS: ReadonlyMap<string, string> = new Map([
   ['collapse', 'collapse to one per group with group'],
   ['let', 'a log query has no bindings; a card query can bind a log'],
   ['explain', 'a log query ranks nothing'],
-  ['rerank', 'a log query ranks nothing'],
   ['asData', 'a line is data already'],
   ['realm', 'a log names its realm by its URL'],
   ['realms', 'a log search runs on one realm'],
@@ -785,8 +784,26 @@ const CARD_ONLY_FILTERS: ReadonlyMap<string, string> = new Map([
   ['on', 'a line has no card type'],
   ['linkedFrom', 'a line has no links'],
   ['prefix', 'a line has no full-text index; use contains'],
-  ['typeahead', 'a line has no full-text index; use contains'],
 ]);
+// Members no query takes, card or log: a retired or draft spelling. Refused
+// as a card query refuses them (`unknown-key`, with what to write instead),
+// since they are not a card query's features a log lacks; they don't exist.
+const RETIRED_MEMBERS: ReadonlyMap<string, string> = new Map([
+  [
+    'rerank',
+    '"rerank" is not a query member; re-ranking is a card query\'s sort entry ({ expression, top }), and a log query orders lines with sort',
+  ],
+]);
+const RETIRED_FILTERS: ReadonlyMap<string, string> = new Map([
+  [
+    'typeahead',
+    '"typeahead" is not a filter operator; a card query writes type-ahead as { matches, prefix: true, scope: \'title\' }, and a line, which has no full-text index, is searched with contains',
+  ],
+]);
+
+function retiredMember(hint: string, where: string): LogQueryError {
+  return new LogQueryError(`${where}: ${hint}`, 'unknown-key');
+}
 
 function notSupportedForLogs(key: string, why: string): LogQueryError {
   return new LogQueryError(
@@ -816,6 +833,11 @@ function assertMembers(
 ) {
   for (let key of Object.keys(value)) {
     if (!allowed.includes(key)) {
+      let retired =
+        where === 'a log query' ? RETIRED_MEMBERS.get(key) : undefined;
+      if (retired !== undefined) {
+        throw retiredMember(retired, where);
+      }
       let why =
         where === 'a log query' ? CARD_ONLY_MEMBERS.get(key) : undefined;
       throw why !== undefined
@@ -890,6 +912,10 @@ function validateFilter(filter: unknown, now: Date, depth = 1) {
         `A log filter is one of ${FILTER_OPS.join(', ')}, and this filter has none`,
         'missing-member',
       );
+    }
+    let retired = RETIRED_FILTERS.get(unknown);
+    if (retired !== undefined) {
+      throw retiredMember(retired, 'a log filter');
     }
     let why = CARD_ONLY_FILTERS.get(unknown);
     if (why !== undefined) {
