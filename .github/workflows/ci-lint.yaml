@@ -180,6 +180,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/bxl
+      - name: Lint Query Verification
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/query-verification
       - name: Lint Choreo ESLint Config
         if: ${{ !cancelled() }}
         run: pnpm run lint

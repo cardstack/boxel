@@ -57,6 +57,7 @@ jobs:
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
       bxl: ${{ steps.filter.outputs.bxl }}
+      query-verification: ${{ steps.filter.outputs.query-verification }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
       deployed-realms: ${{ steps.filter.outputs.deployed-realms }}
@@ -213,10 +214,15 @@ jobs:
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/pretui/**'
+              - 'packages/query-verification/**'
               - 'packages/realm-historian/**'
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
               - 'packages/test-realm-cards/**'
+            # Plain Node and the Lean toolchain, no stack.
+            query-verification:
+              - *shared
+              - 'packages/query-verification/**'
             vscode-boxel-tools:
               - *shared
               - *test-web-assets
@@ -409,6 +415,35 @@ jobs:
       - name: BXL published package check
         run: pnpm run verify:package
         working-directory: packages/bxl
+
+  query-verification-test:
+    name: Query Verification
+    needs: change-check
+    if: needs.change-check.outputs.query-verification == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: query-verification-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # elan installs the Lean release lean/lean-toolchain names on first use.
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Check the proofs
+        run: pnpm prove
+        working-directory: packages/query-verification
+      - name: Check the vectors are the model's
+        run: pnpm vectors:check
+        working-directory: packages/query-verification
+      # The Postgres engine is held to the same vectors by
+      # query-verification-conformance-test.ts, in the realm server's suite.
+      - name: Hold the host matcher and lowerQuery to the vectors
+        run: pnpm test
+        working-directory: packages/query-verification
 
   host-deploy-cache-control-test:
     name: Host Deploy Cache-Control Tests
