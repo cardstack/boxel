@@ -9,15 +9,15 @@ const require = createRequire(import.meta.url);
 const MIGRATION = join(
   dirname(require.resolve('@cardstack/postgres/package.json')),
   'migrations',
-  '1794314802663_add-oauth-provider-clients.js',
+  '1794314802663_add-oauth-provider-dynamic-clients.js',
 );
 
 // Roles and memberships are shared by every database on the server, so the
 // test removes the membership it makes, whatever happens.
-const MEMBER = 'readonly_member_for_oauth_provider_clients_test';
+const MEMBER = 'readonly_member_for_oauth_provider_dynamic_clients_test';
 
 module(basename(import.meta.filename), function () {
-  module('the read-only role and oauth_provider_clients', function (hooks) {
+  module('readonly_role and oauth_provider_dynamic_clients', function (hooks) {
     let dbAdapter: PgAdapter;
 
     setupDB(hooks, {
@@ -27,7 +27,7 @@ module(basename(import.meta.filename), function () {
         // migration grants it anything here.
         await createRole('readonly_role');
         await dbAdapter.execute(
-          `REVOKE SELECT ON TABLE oauth_provider_clients FROM readonly_role`,
+          `REVOKE SELECT ON TABLE oauth_provider_dynamic_clients FROM readonly_role`,
         );
       },
     });
@@ -55,7 +55,7 @@ module(basename(import.meta.filename), function () {
 
     async function canSelect(role: string): Promise<boolean> {
       let [{ readable }] = await dbAdapter.execute(
-        `SELECT has_table_privilege('${role}', 'oauth_provider_clients', 'SELECT') AS readable`,
+        `SELECT has_table_privilege('${role}', 'oauth_provider_dynamic_clients', 'SELECT') AS readable`,
       );
       return readable as boolean;
     }

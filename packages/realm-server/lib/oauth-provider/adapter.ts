@@ -18,7 +18,7 @@ export function oauthProviderAdapter(
   return function adapterFor(name: string): Adapter {
     switch (name) {
       case 'Client':
-        return new ClientAdapter(dbAdapter);
+        return new DynamicClientAdapter(dbAdapter);
       default:
         throw new OAuthProviderStorageError(
           `the OAuth provider has no storage for ${name}`,
@@ -28,13 +28,13 @@ export function oauthProviderAdapter(
 }
 
 // Clients registered by dynamic client registration, in
-// `oauth_provider_clients`. The library finds a client by its ID and stores
-// one once, on registration: never a client identified by a metadata
+// `oauth_provider_dynamic_clients`. The library finds a client by its ID and
+// stores one once, on registration: never a client identified by a metadata
 // document, and never again under the same ID, since registration management
 // is off. A second store under an ID fails rather than replacing the client.
 // It never consumes a client, and finds none by grant, user code or
 // interaction.
-class ClientAdapter implements Adapter {
+class DynamicClientAdapter implements Adapter {
   #dbAdapter: DBAdapter;
 
   constructor(dbAdapter: DBAdapter) {
@@ -43,7 +43,7 @@ class ClientAdapter implements Adapter {
 
   async upsert(id: string, payload: AdapterPayload): Promise<void> {
     await this.#dbAdapter.execute(
-      `INSERT INTO oauth_provider_clients (client_id, metadata)
+      `INSERT INTO oauth_provider_dynamic_clients (client_id, metadata)
          VALUES ($1, $2::jsonb)`,
       { bind: [id, JSON.stringify(payload)] },
     );
@@ -51,7 +51,7 @@ class ClientAdapter implements Adapter {
 
   async find(id: string): Promise<AdapterPayload | undefined> {
     let [row] = (await this.#dbAdapter.execute(
-      `SELECT metadata FROM oauth_provider_clients WHERE client_id = $1`,
+      `SELECT metadata FROM oauth_provider_dynamic_clients WHERE client_id = $1`,
       { bind: [id] },
     )) as { metadata: AdapterPayload | string }[];
     if (!row) {
@@ -64,7 +64,7 @@ class ClientAdapter implements Adapter {
 
   async destroy(id: string): Promise<void> {
     await this.#dbAdapter.execute(
-      `DELETE FROM oauth_provider_clients WHERE client_id = $1`,
+      `DELETE FROM oauth_provider_dynamic_clients WHERE client_id = $1`,
       { bind: [id] },
     );
   }

@@ -135,7 +135,7 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
       supertest(server!).post(path).set('Host', serverURL.host),
     storedClient: async (clientId: string) => {
       let [row] = await db!.execute(
-        `SELECT metadata FROM oauth_provider_clients WHERE client_id = $1`,
+        `SELECT metadata FROM oauth_provider_dynamic_clients WHERE client_id = $1`,
         { bind: [clientId] },
       );
       return row?.metadata as Record<string, unknown> | undefined;
@@ -143,7 +143,7 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
     clientAdapter: () => oauthProviderAdapter(db!)('Client'),
     storedClientCount: async () => {
       let [{ count }] = await db!.execute(
-        `SELECT count(*)::int AS count FROM oauth_provider_clients`,
+        `SELECT count(*)::int AS count FROM oauth_provider_dynamic_clients`,
       );
       return count as number;
     },

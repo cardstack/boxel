@@ -9,9 +9,10 @@
 // `created_at` is when it registered, which the cleanup of clients that never
 // connect reads.
 //
-// A client registered by a client ID metadata document is never stored here:
-// the provider downloads its document and keeps it in memory. Pre-registered
-// clients are listed in code.
+// It holds only those clients, as its name says, not every client the
+// provider knows. A client identified by a client ID metadata document is
+// never stored here: the provider downloads its document and keeps it in
+// memory. Pre-registered clients are listed in code.
 //
 // The read-only role used by dashboards and read-only database access may read
 // the table: it holds no secret, and it is what explains why a client can't
@@ -23,7 +24,7 @@
 
 exports.up = (pgm) => {
   pgm.sql(`
-    CREATE TABLE IF NOT EXISTS oauth_provider_clients (
+    CREATE TABLE IF NOT EXISTS oauth_provider_dynamic_clients (
       client_id varchar PRIMARY KEY,
       metadata jsonb NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
@@ -33,7 +34,7 @@ exports.up = (pgm) => {
     DO $$
     BEGIN
       IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'readonly_role') THEN
-        GRANT SELECT ON TABLE oauth_provider_clients TO readonly_role;
+        GRANT SELECT ON TABLE oauth_provider_dynamic_clients TO readonly_role;
       END IF;
     END
     $$
@@ -41,5 +42,5 @@ exports.up = (pgm) => {
 };
 
 exports.down = (pgm) => {
-  pgm.sql(`DROP TABLE IF EXISTS oauth_provider_clients`);
+  pgm.sql(`DROP TABLE IF EXISTS oauth_provider_dynamic_clients`);
 };
