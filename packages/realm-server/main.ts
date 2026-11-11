@@ -94,6 +94,7 @@ import {
   matrixServerNameFromEnv,
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
+import { checkPricingAtStartup } from './lib/pricing.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -108,6 +109,7 @@ writeSync(
 );
 
 let log = logger('main');
+checkPricingAtStartup('realm-server');
 const runtimeMetadataFile = process.env.TEST_HARNESS_REALM_SERVER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {
@@ -140,6 +142,16 @@ if (!GRAFANA_SECRET) {
     `The GRAFANA_SECRET environment variable is not set. Please make sure this env var has a value`,
   );
   process.exit(-1);
+}
+
+// The Grafana whose signing keys verify operator actions proxied through it.
+// Local and test runs work without it, so its absence is a warning, not a
+// startup failure.
+const GRAFANA_URL = process.env.GRAFANA_URL || undefined;
+if (!GRAFANA_URL) {
+  console.warn(
+    `GRAFANA_URL is not set: operator actions proxied through Grafana will be refused`,
+  );
 }
 
 const MATRIX_URL = process.env.MATRIX_URL;
@@ -977,6 +989,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    grafanaURL: GRAFANA_URL,
     aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
     matrixInviteCheckSecret: MATRIX_INVITE_CHECK_SECRET,
     dbAdapter,

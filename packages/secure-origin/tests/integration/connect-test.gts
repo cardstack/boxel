@@ -12,6 +12,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
+import { assertNoLoginForm } from '../helpers/password-managers.ts';
 import { waitedFetch } from '../helpers/waiters.ts';
 
 // OAuth on the key pages, against a realm server that answers the requests
@@ -488,6 +489,9 @@ module('Integration | connecting an account', function (hooks) {
         )
         .isChecked('a single app is chosen already');
       assert.dom('[data-test-connect-name]').hasValue('GitHub');
+      assertNoLoginForm(assert, '[data-test-connect-form]', [
+        '[data-test-connect-name]',
+      ]);
       await click('[data-test-connect-back]');
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
       assert.false(

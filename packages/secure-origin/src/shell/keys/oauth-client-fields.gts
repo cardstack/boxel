@@ -22,6 +22,7 @@ import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import { Input } from '@cardstack/pretui/components/input';
 import { Textarea } from '@cardstack/pretui/components/textarea';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 
 import { readConfig } from '../../security/session.js';
 
@@ -126,6 +127,7 @@ export default class OAuthClientFields extends Component<Signature> {
             @onInput={{this.setAuthorizeUrl}}
             name='authorize-url'
             spellcheck='false'
+            {{ignoredByPasswordManagers}}
             data-test-oauth-authorize-url
           />
           <span class='hint'>The address of the site’s page where people sign
@@ -153,6 +155,7 @@ export default class OAuthClientFields extends Component<Signature> {
           @onInput={{this.setTokenUrl}}
           name='token-url'
           spellcheck='false'
+          {{ignoredByPasswordManagers}}
           data-test-oauth-token-url
         />
         <span class='hint'>Where Boxel collects access once someone signs in.
@@ -177,6 +180,7 @@ export default class OAuthClientFields extends Component<Signature> {
           @onInput={{this.setScopes}}
           name='scopes'
           spellcheck='false'
+          {{ignoredByPasswordManagers}}
           data-test-oauth-scopes
         />
         <span class='hint'>What the app asks to do, in the site’s own words (its
@@ -202,6 +206,7 @@ export default class OAuthClientFields extends Component<Signature> {
             name='api-hosts'
             autocomplete='off'
             spellcheck='false'
+            {{ignoredByPasswordManagers}}
             data-test-oauth-api-hosts
           />
         </div>

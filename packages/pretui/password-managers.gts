@@ -18,8 +18,9 @@
 // load without Pret UI. Keep the attributes the same in both.
 import { modifier } from 'ember-modifier';
 
-// Each password manager's own attribute for skipping a field.
-const HINTS: [name: string, value: string][] = [
+// Each password manager's own attribute for skipping a field, and the value
+// the modifier gives it.
+export const HINTS: readonly (readonly [name: string, value: string])[] = [
   // 1Password
   ['data-1p-ignore', ''],
   // LastPass

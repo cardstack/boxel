@@ -86,6 +86,7 @@ import * as SendRequestViaProxyToolModule from './send-request-via-proxy';
 import * as SerializeCardToolModule from './serialize-card';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as SetUserSystemCardToolModule from './set-user-system-card';
+import * as SetWorkspacePinToolModule from './set-workspace-pin';
 import * as ShowCardToolModule from './show-card';
 import * as ShowFileToolModule from './show-file';
 import * as StoreAddToolModule from './store-add';
@@ -503,6 +504,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'set-user-system-card',
     SetUserSystemCardToolModule,
   );
+  shimHostToolModule(
+    virtualNetwork,
+    'set-workspace-pin',
+    SetWorkspacePinToolModule,
+  );
 }
 
 // Note - this is used for the tests
@@ -585,6 +591,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   SendRequestViaProxyToolModule.default,
   SetActiveLlmModule.default,
   SetUserSystemCardToolModule.default,
+  SetWorkspacePinToolModule.default,
   ShowCardToolModule.default,
   ShowFileToolModule.default,
   SummarizeSessionToolModule.default,

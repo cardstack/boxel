@@ -3,9 +3,12 @@ import type {
   Expression,
   PgPrimitive,
 } from '@cardstack/runtime-common';
+import type { Querier } from '@cardstack/runtime-common';
 import {
   addExplicitParens,
   asExpressions,
+  chargeKindForCreditType,
+  dbAdapterQuerier,
   every,
   insert,
   param,
@@ -15,10 +18,18 @@ import {
 } from '@cardstack/runtime-common';
 import type { StripeEvent } from './stripe-webhook-handlers/index.ts';
 import type {
-  Plan,
-  Subscription,
-  SubscriptionCycle,
+  ChargedLedgerEntry,
+  ChargeUsage,
+  CreditType,
+  LedgerCharge,
+  LedgerChargeKind,
   LedgerEntry,
+  Plan,
+  RealmIdentifier,
+  SpendCharge,
+  Subscription,
+  UsageUnit,
+  SubscriptionCycle,
   User,
 } from '@cardstack/runtime-common';
 
@@ -247,21 +258,243 @@ export async function insertSubscription(
   } as Subscription;
 }
 
+type NewLedgerEntry = Omit<LedgerEntry, 'id'> & {
+  // What the entry paid for, or where its credits came from. Defaults to the
+  // kind its credit type implies, with no reference.
+  charge?: LedgerCharge;
+  // Shared by every entry one spend writes, and the key its usage is
+  // recorded under.
+  chargeId?: string;
+};
+
+// A `DBAdapter`, or a `Querier` pinned to a transaction's connection.
+type Queryable = DBAdapter | Querier;
+
+function querierFor(db: Queryable): Querier {
+  return typeof db === 'function' ? db : dbAdapterQuerier(db);
+}
+
+function ledgerColumns(entry: NewLedgerEntry) {
+  let charge: LedgerCharge = entry.charge ?? {
+    kind: chargeKindForCreditType(entry.creditType),
+  };
+  return {
+    user_id: entry.userId,
+    credit_amount: entry.creditAmount,
+    credit_type: entry.creditType,
+    subscription_cycle_id: entry.subscriptionCycleId,
+    charge_kind: charge.kind,
+    realm: 'realm' in charge ? (charge.realm ?? null) : null,
+    run_id: 'runId' in charge ? (charge.runId ?? null) : null,
+    batch_id: 'batchId' in charge ? charge.batchId : null,
+    automation_id: 'automationId' in charge ? charge.automationId : null,
+    charge_day: 'day' in charge ? charge.day : null,
+    pricing_version:
+      'pricingVersion' in charge ? (charge.pricingVersion ?? null) : null,
+    charge_id: entry.chargeId ?? null,
+  };
+}
+
+// The INSERT that writes `entries` as one statement, so they land together or
+// not at all.
+function ledgerInsert(entries: NewLedgerEntry[]): Expression {
+  let nameExpressions: string[][] | undefined;
+  let rows: Expression[] = [];
+  for (let entry of entries) {
+    let expressions = asExpressions(ledgerColumns(entry));
+    nameExpressions ??= expressions.nameExpressions;
+    rows.push(
+      addExplicitParens(
+        separatedByCommas(expressions.valueExpressions),
+      ) as Expression,
+    );
+  }
+  return [
+    'INSERT INTO credits_ledger',
+    ...addExplicitParens(separatedByCommas(nameExpressions!)),
+    'VALUES',
+    ...separatedByCommas(rows),
+  ] as Expression;
+}
+
+async function insertLedgerEntries(
+  db: Queryable,
+  entries: NewLedgerEntry[],
+): Promise<void> {
+  if (entries.length === 0) {
+    return;
+  }
+  await querierFor(db)(ledgerInsert(entries));
+}
+
 export async function addToCreditsLedger(
   dbAdapter: DBAdapter,
-  ledgerEntry: Omit<LedgerEntry, 'id'>,
+  ledgerEntry: NewLedgerEntry,
 ) {
-  let { valueExpressions, nameExpressions } = asExpressions({
-    user_id: ledgerEntry.userId,
-    credit_amount: ledgerEntry.creditAmount,
-    credit_type: ledgerEntry.creditType,
-    subscription_cycle_id: ledgerEntry.subscriptionCycleId,
-  });
+  await insertLedgerEntries(dbAdapter, [ledgerEntry]);
+}
 
-  await query(
-    dbAdapter,
-    insert('credits_ledger', nameExpressions, valueExpressions),
-  );
+// The identity of a charge that is written at most once: its kind and
+// reference. Undefined for an `ai` charge, which is one per call.
+//
+// The payer is not part of it: a run, a batch, or an automation's storage for
+// one day is charged once, to whoever pays when it is first charged. A retry
+// after the payer changes (an automation resumed by another direct writer)
+// reads as `already-charged` and bills no one a second time.
+function chargeIdentity(charge: SpendCharge): string | undefined {
+  switch (charge.kind) {
+    case 'ai':
+      return undefined;
+    case 'run':
+    case 'run_indexing':
+      return `${charge.kind}:${charge.runId}`;
+    case 'batched_ai':
+      return `${charge.kind}:${charge.runId}:${charge.batchId}`;
+    case 'storage':
+      return `${charge.kind}:${charge.automationId}:${charge.day}`;
+  }
+}
+
+async function isCharged(q: Querier, charge: SpendCharge): Promise<boolean> {
+  let columns = ledgerColumns({
+    userId: '',
+    creditAmount: 0,
+    creditType: 'extra_credit_used',
+    subscriptionCycleId: null,
+    charge,
+  });
+  // `=` and `IS NULL` per column, never `IS NOT DISTINCT FROM`, which no index
+  // serves: this way the lookup is an index scan on
+  // `credits_ledger_charge_once_idx`. The kind is written as a literal (it is
+  // one of the closed set `chargeIdentity` accepts) so the planner can match
+  // the index's partial predicate.
+  let match = (column: string, value: string | null): Expression =>
+    value === null
+      ? [` AND ${column} IS NULL`]
+      : [` AND ${column} = `, param(value)];
+  let rows = await q([
+    `SELECT 1 FROM credits_ledger WHERE charge_kind = '${columns.charge_kind}'`,
+    ...match('run_id', columns.run_id),
+    ...match('batch_id', columns.batch_id),
+    ...match('automation_id', columns.automation_id),
+    ...match('charge_day', columns.charge_day),
+    ` LIMIT 1`,
+  ] as Expression);
+  return rows.length > 0;
+}
+
+// Mirrors `chargeKindForCreditType` for entries written without a kind.
+const CHARGE_KIND_FROM_CREDIT_TYPE_SQL = `COALESCE(charge_kind, CASE credit_type
+  WHEN 'plan_allowance_used' THEN 'ai'
+  WHEN 'extra_credit_used' THEN 'ai'
+  WHEN 'daily_credit_used' THEN 'ai'
+  WHEN 'plan_allowance' THEN 'grant'
+  WHEN 'daily_credit' THEN 'grant'
+  WHEN 'extra_credit' THEN 'purchase'
+  WHEN 'plan_allowance_expired' THEN 'expiry'
+END)`;
+
+// Reads ledger entries with what each paid for, oldest first. Every filter
+// given must match. An entry written without a charge kind reads the kind its
+// credit type implies, so filtering on `chargeKind: 'ai'` finds those spends
+// too.
+export interface LedgerFilter {
+  userId?: string;
+  chargeKind?: LedgerChargeKind;
+  realm?: RealmIdentifier;
+  runId?: string;
+  batchId?: string;
+  automationId?: string;
+  chargeDay?: string;
+}
+
+// The WHERE conditions over `credits_ledger` for `filter`; every filter given
+// must match.
+function ledgerConditions(filter: LedgerFilter): Expression[] {
+  let conditions: Expression[] = [];
+  let columnFilters: [string, string | undefined][] = [
+    ['user_id', filter.userId],
+    ['realm', filter.realm],
+    ['run_id', filter.runId],
+    ['batch_id', filter.batchId],
+    ['automation_id', filter.automationId],
+    ['charge_day', filter.chargeDay],
+  ];
+  for (let [column, value] of columnFilters) {
+    if (value !== undefined) {
+      conditions.push([`${column} = `, param(value)]);
+    }
+  }
+  if (filter.chargeKind !== undefined) {
+    conditions.push([
+      `${CHARGE_KIND_FROM_CREDIT_TYPE_SQL} = `,
+      param(filter.chargeKind),
+    ]);
+  }
+  return conditions;
+}
+
+export async function getLedgerEntries(
+  dbAdapter: DBAdapter,
+  filter: LedgerFilter,
+): Promise<ChargedLedgerEntry[]> {
+  let conditions = ledgerConditions(filter);
+  let rows = await query(dbAdapter, [
+    `SELECT *, ${CHARGE_KIND_FROM_CREDIT_TYPE_SQL} AS read_charge_kind,`,
+    `to_char(charge_day, 'YYYY-MM-DD') AS read_charge_day`,
+    `FROM credits_ledger`,
+    ...(conditions.length
+      ? (['WHERE', ...every(conditions)] as Expression)
+      : []),
+    `ORDER BY created_at, id`,
+  ] as Expression);
+  return rows.map((row) => ({
+    id: row.id as string,
+    userId: row.user_id as string,
+    creditAmount: row.credit_amount as number,
+    creditType: row.credit_type as CreditType,
+    subscriptionCycleId: (row.subscription_cycle_id as string | null) ?? null,
+    chargeKind: row.read_charge_kind as LedgerChargeKind,
+    chargeId: (row.charge_id as string | null) ?? null,
+    realm: (row.realm as RealmIdentifier | null) ?? null,
+    runId: (row.run_id as string | null) ?? null,
+    batchId: (row.batch_id as string | null) ?? null,
+    automationId: (row.automation_id as string | null) ?? null,
+    chargeDay: (row.read_charge_day as string | null) ?? null,
+    pricingVersion: (row.pricing_version as string | null) ?? null,
+    createdAt: Number(row.created_at),
+  }));
+}
+
+// How much of each unit the charges matching `filter` priced, summed by charge
+// kind and unit. Only spends record usage, and only those given it, so a
+// charge without usage contributes nothing here even when it cost credits.
+export async function getLedgerUsage(
+  dbAdapter: DBAdapter,
+  filter: LedgerFilter,
+): Promise<
+  { chargeKind: LedgerChargeKind; unit: UsageUnit; quantity: number }[]
+> {
+  let conditions: Expression[] = [
+    [`charge_id IS NOT NULL`],
+    ...ledgerConditions(filter),
+  ];
+  // One charge spans several ledger entries, so the charges are made distinct
+  // before their usage is summed.
+  let rows = await query(dbAdapter, [
+    `SELECT charges.charge_kind, usage.unit, SUM(usage.quantity) AS quantity`,
+    `FROM credit_charge_usage usage JOIN (`,
+    `SELECT DISTINCT charge_id, charge_kind FROM credits_ledger WHERE`,
+    ...every(conditions),
+    `) charges ON charges.charge_id = usage.charge_id`,
+    `GROUP BY charges.charge_kind, usage.unit`,
+    `ORDER BY charges.charge_kind, usage.unit`,
+  ] as Expression);
+  return rows.map((row) => ({
+    chargeKind: row.charge_kind as LedgerChargeKind,
+    unit: row.unit as UsageUnit,
+    quantity: Number(row.quantity),
+  }));
 }
 
 export async function getStripeEventById(
@@ -280,17 +513,8 @@ export async function getStripeEventById(
   return results[0];
 }
 
-type CreditType =
-  | 'plan_allowance'
-  | 'extra_credit'
-  | 'daily_credit'
-  | 'plan_allowance_used'
-  | 'extra_credit_used'
-  | 'daily_credit_used'
-  | 'plan_allowance_expired';
-
 export async function sumUpCreditsLedger(
-  dbAdapter: DBAdapter,
+  db: Queryable,
   params: {
     creditType?: CreditType | Array<CreditType>;
     userId?: string;
@@ -330,7 +554,7 @@ export async function sumUpCreditsLedger(
     ...(everyCondition as Expression),
   ];
 
-  let results = await query(dbAdapter, ledgerQuery);
+  let results = await querierFor(db)(ledgerQuery);
 
   // Sum can be null if there are no matching rows in the credits_ledger table
   return results[0].sum === null ? 0 : parseInt(results[0].sum as string);
@@ -368,10 +592,10 @@ export async function getDailyCreditGrantInfo(
 }
 
 export async function getCurrentActiveSubscription(
-  dbAdapter: DBAdapter,
+  db: Queryable,
   userId: string,
 ): Promise<Subscription | null> {
-  let results = await query(dbAdapter, [
+  let results = await querierFor(db)([
     `SELECT * FROM subscriptions WHERE user_id = `,
     param(userId),
     ` AND status = 'active'`,
@@ -397,10 +621,10 @@ export async function getCurrentActiveSubscription(
 }
 
 export async function getMostRecentSubscriptionCycle(
-  dbAdapter: DBAdapter,
+  db: Queryable,
   subscriptionId: string,
 ): Promise<SubscriptionCycle | null> {
-  let results = await query(dbAdapter, [
+  let results = await querierFor(db)([
     `SELECT * FROM subscription_cycles WHERE subscription_id = `,
     param(subscriptionId),
     ` ORDER BY period_end DESC`,
@@ -516,19 +740,144 @@ export async function expireRemainingPlanAllowanceInSubscriptionCycle(
     creditAmount: -creditsToExpire,
     creditType: 'plan_allowance_expired',
     subscriptionCycleId,
+    charge: { kind: 'expiry' },
   });
 }
 
+// What `spendCredits` did with a charge:
+// - `charged`: it wrote the charge's ledger entries.
+// - `already-charged`: the charge's identity was already in the ledger, so it
+//   wrote nothing.
+// - `nothing-to-charge`: the user's buckets held nothing to draw on, so it
+//   wrote nothing. No entry carries the charge's identity, so a later call can
+//   still charge it.
+export type SpendResult = 'charged' | 'already-charged' | 'nothing-to-charge';
+
+// Spends `creditsToSpend` of the user's credits on `charge`, drawing on their
+// plan allowance first, then daily credits, then extra credits, and charging
+// only what those hold. It writes one ledger entry per bucket it draws from,
+// all carrying the charge, in one INSERT.
+//
+// `usage` is how much of each unit the charge priced. It is recorded with the
+// charge, under the id its entries share, so it is written exactly when they
+// are.
+//
+// A charge with an identity (see `chargeIdentity`) is written at most once:
+// in one transaction, holding a lock on the identity, it checks whether the
+// charge is already in the ledger and writes nothing if it is.
+//
+// The balance it draws on is read and spent without a lock of its own, so two
+// different charges for one user must not run at once: callers hold the
+// payer's cost lock (`DBAdapter.withUserCostLock`) around it, as billable
+// calls do when they settle.
 export async function spendCredits(
   dbAdapter: DBAdapter,
   userId: string,
   creditsToSpend: number,
-) {
-  let subscription = await getCurrentActiveSubscription(dbAdapter, userId);
+  charge: SpendCharge = { kind: 'ai' },
+  usage: ChargeUsage = {},
+): Promise<SpendResult> {
+  if (charge.kind === 'storage' && !isCalendarDay(charge.day)) {
+    throw new Error(
+      `a storage charge's day must be a YYYY-MM-DD date, got ${charge.day}`,
+    );
+  }
+  let identity = chargeIdentity(charge);
+  if (identity === undefined) {
+    return await writeSpend(dbAdapter, userId, creditsToSpend, charge, usage);
+  }
+  return await dbAdapter.withTransaction(
+    async (tx) => {
+      await tx([
+        `SELECT pg_advisory_xact_lock(hashtextextended(`,
+        param(`credits-ledger-charge:${identity}`),
+        `, 0))`,
+      ]);
+      if (await isCharged(tx, charge)) {
+        return 'already-charged';
+      }
+      return await writeSpend(tx, userId, creditsToSpend, charge, usage);
+    },
+    { label: `ledger charge ${identity}` },
+  );
+}
+
+// Writes a spend's ledger entries and its usage in one statement: a
+// data-modifying CTE inserts the usage beside the entries, so both land or
+// neither does, inside or outside a transaction.
+async function writeSpend(
+  db: Queryable,
+  userId: string,
+  creditsToSpend: number,
+  charge: SpendCharge,
+  usage: ChargeUsage,
+): Promise<SpendResult> {
+  let entries = await planSpend(db, userId, creditsToSpend);
+  if (entries.length === 0) {
+    return 'nothing-to-charge';
+  }
+  for (let [unit, quantity] of Object.entries(usage)) {
+    if (
+      quantity !== undefined &&
+      (typeof quantity !== 'number' ||
+        !Number.isFinite(quantity) ||
+        quantity < 0)
+    ) {
+      throw new Error(
+        `usage for ${unit} must be a finite number of 0 or more, got ${quantity}`,
+      );
+    }
+  }
+  let chargeId = globalThis.crypto.randomUUID();
+  let insertEntries = ledgerInsert(
+    entries.map((entry) => ({ ...entry, charge, chargeId })),
+  );
+  let units = (Object.entries(usage) as [UsageUnit, number | undefined][])
+    .filter(([, quantity]) => quantity !== undefined)
+    .map(
+      ([unit, quantity]) =>
+        addExplicitParens(
+          separatedByCommas([
+            [param(chargeId)],
+            [param(unit)],
+            [param(String(quantity))],
+            [param(userId)],
+          ]),
+        ) as Expression,
+    );
+  if (units.length === 0) {
+    await querierFor(db)(insertEntries);
+  } else {
+    await querierFor(db)([
+      'WITH usage AS (INSERT INTO credit_charge_usage (charge_id, unit, quantity, user_id) VALUES',
+      ...separatedByCommas(units),
+      ')',
+      ...insertEntries,
+    ] as Expression);
+  }
+  return 'charged';
+}
+
+function isCalendarDay(day: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return false;
+  }
+  let date = new Date(`${day}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(day);
+}
+
+// The ledger entries that spend `creditsToSpend` from the user's buckets.
+async function planSpend(
+  db: Queryable,
+  userId: string,
+  creditsToSpend: number,
+): Promise<Omit<LedgerEntry, 'id'>[]> {
+  let entries: Omit<LedgerEntry, 'id'>[] = [];
+  let subscription = await getCurrentActiveSubscription(db, userId);
 
   if (!subscription) {
     // If user has no subscription, it means they are on the free plan
-    let availableDailyCredits = await sumUpCreditsLedger(dbAdapter, {
+    let availableDailyCredits = await sumUpCreditsLedger(db, {
       creditType: ['daily_credit', 'daily_credit_used'],
       userId,
     });
@@ -536,7 +885,7 @@ export async function spendCredits(
     let remainingCredits = creditsToSpend - dailyCreditsToSpend;
 
     if (dailyCreditsToSpend > 0) {
-      await addToCreditsLedger(dbAdapter, {
+      entries.push({
         userId,
         creditAmount: -dailyCreditsToSpend,
         creditType: 'daily_credit_used',
@@ -545,7 +894,7 @@ export async function spendCredits(
     }
 
     if (remainingCredits > 0) {
-      let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+      let availableExtraCredits = await sumUpCreditsLedger(db, {
         creditType: ['extra_credit', 'extra_credit_used'],
         userId,
       });
@@ -556,7 +905,7 @@ export async function spendCredits(
       );
 
       if (extraCreditsToSpend > 0) {
-        await addToCreditsLedger(dbAdapter, {
+        entries.push({
           userId,
           creditAmount: -extraCreditsToSpend,
           creditType: 'extra_credit_used',
@@ -565,11 +914,11 @@ export async function spendCredits(
       }
     }
 
-    return;
+    return entries;
   }
 
   let subscriptionCycle = await getMostRecentSubscriptionCycle(
-    dbAdapter,
+    db,
     subscription.id,
   );
   if (!subscriptionCycle) {
@@ -577,7 +926,7 @@ export async function spendCredits(
   }
   let availablePlanAllowanceCredits = Math.max(
     0,
-    await sumUpCreditsLedger(dbAdapter, {
+    await sumUpCreditsLedger(db, {
       creditType: [
         'plan_allowance',
         'plan_allowance_used',
@@ -588,61 +937,60 @@ export async function spendCredits(
   );
 
   if (availablePlanAllowanceCredits >= creditsToSpend) {
-    await addToCreditsLedger(dbAdapter, {
+    entries.push({
       userId,
       creditAmount: -creditsToSpend,
       creditType: 'plan_allowance_used',
       subscriptionCycleId: subscriptionCycle.id,
     });
-  } else {
-    let planAllowanceToSpend = availablePlanAllowanceCredits; // Spend all plan allowance credits first
-    let remainingCredits = creditsToSpend - planAllowanceToSpend;
+    return entries;
+  }
 
-    if (planAllowanceToSpend > 0) {
-      await addToCreditsLedger(dbAdapter, {
+  let planAllowanceToSpend = availablePlanAllowanceCredits; // Spend all plan allowance credits first
+  let remainingCredits = creditsToSpend - planAllowanceToSpend;
+
+  if (planAllowanceToSpend > 0) {
+    entries.push({
+      userId,
+      creditAmount: -planAllowanceToSpend,
+      creditType: 'plan_allowance_used',
+      subscriptionCycleId: subscriptionCycle.id,
+    });
+  }
+
+  let availableDailyCredits = await sumUpCreditsLedger(db, {
+    creditType: ['daily_credit', 'daily_credit_used'],
+    userId,
+  });
+  let dailyCreditsToSpend = Math.min(remainingCredits, availableDailyCredits);
+  remainingCredits -= dailyCreditsToSpend;
+
+  if (dailyCreditsToSpend > 0) {
+    entries.push({
+      userId,
+      creditAmount: -dailyCreditsToSpend,
+      creditType: 'daily_credit_used',
+      subscriptionCycleId: null,
+    });
+  }
+
+  if (remainingCredits > 0) {
+    // If user does not have enough plan allowance or daily credits, use extra credits
+    let availableExtraCredits = await sumUpCreditsLedger(db, {
+      creditType: ['extra_credit', 'extra_credit_used'],
+      userId,
+    });
+    let extraCreditsToSpend = Math.min(remainingCredits, availableExtraCredits);
+    if (extraCreditsToSpend > 0) {
+      entries.push({
         userId,
-        creditAmount: -planAllowanceToSpend,
-        creditType: 'plan_allowance_used',
+        creditAmount: -extraCreditsToSpend,
+        creditType: 'extra_credit_used',
         subscriptionCycleId: subscriptionCycle.id,
       });
     }
-
-    let availableDailyCredits = await sumUpCreditsLedger(dbAdapter, {
-      creditType: ['daily_credit', 'daily_credit_used'],
-      userId,
-    });
-    let dailyCreditsToSpend = Math.min(remainingCredits, availableDailyCredits);
-    remainingCredits -= dailyCreditsToSpend;
-
-    if (dailyCreditsToSpend > 0) {
-      await addToCreditsLedger(dbAdapter, {
-        userId,
-        creditAmount: -dailyCreditsToSpend,
-        creditType: 'daily_credit_used',
-        subscriptionCycleId: null,
-      });
-    }
-
-    if (remainingCredits > 0) {
-      // If user does not have enough plan allowance or daily credits, use extra credits
-      let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
-        creditType: ['extra_credit', 'extra_credit_used'],
-        userId,
-      });
-      let extraCreditsToSpend = Math.min(
-        remainingCredits,
-        availableExtraCredits,
-      );
-      if (extraCreditsToSpend > 0) {
-        await addToCreditsLedger(dbAdapter, {
-          userId,
-          creditAmount: -extraCreditsToSpend,
-          creditType: 'extra_credit_used',
-          subscriptionCycleId: subscriptionCycle.id,
-        });
-      }
-    }
   }
+  return entries;
 }
 
 export async function getPlanByName(

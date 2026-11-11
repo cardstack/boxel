@@ -73,6 +73,8 @@ import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import {
   formatCredits,
   formatTokenUsage,
+  isCountedTurn,
+  sessionUsage,
 } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import {
@@ -1427,12 +1429,7 @@ export default class Room extends Component<Signature> {
     if (!this.conversationTokenUsage) {
       return false;
     }
-    let turns = this.messages.filter(
-      (message) =>
-        message.usage &&
-        (message.usage.promptTokens != null ||
-          message.usage.completionTokens != null),
-    );
+    let turns = this.messages.filter((message) => isCountedTurn(message.usage));
     return turns.length > 1;
   }
 
@@ -1440,81 +1437,33 @@ export default class Room extends Component<Signature> {
     if (!this.conversationTokenUsage) {
       return undefined;
     }
-    let costUsd = 0;
-    let turnsWithCost = 0;
-    let turnsWithUsage = 0;
-    for (let message of this.messages) {
-      let usage = message.usage;
-      if (
-        !usage ||
-        (usage.promptTokens == null && usage.completionTokens == null)
-      ) {
-        continue;
-      }
-      turnsWithUsage++;
-      if (usage.costUsd != null) {
-        costUsd += usage.costUsd;
-        turnsWithCost++;
-      }
-    }
-    // A partial sum would read as the whole bill: fall back to the tokens.
-    return turnsWithCost === turnsWithUsage
+    let { costUsd } = sessionUsage(
+      this.messages.map((message) => message.usage),
+    );
+    // Without a cost for every turn there is no bill to give: fall back to
+    // the tokens.
+    return costUsd != null
       ? formatCredits(costUsd)
       : this.conversationTokenUsage;
   }
 
-  // The session's token bill so far: every turn's counts summed. Input is
-  // summed rather than read off the last turn because each turn re-sends the
-  // whole conversation — the sum is what the provider actually billed. Shown
-  // only behind the `showTokens` query param.
+  // The session's token bill so far, as `sessionUsage` sums it. Shown only
+  // behind the `showTokens` query param.
   @cached
   private get conversationTokenUsage() {
     if (!this.operatorModeStateService.operatorModeController.showTokens) {
       return undefined;
     }
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let cachedTokens = 0;
-    let turnsWithCached = 0;
-    let costUsd = 0;
-    let turnsWithCost = 0;
-    let turnsWithUsage = 0;
-    for (let message of this.messages) {
-      let usage = message.usage;
-      // Same gate as the per-message line: a usage object without token
-      // counts must not add a turn to the total that line never shows.
-      if (
-        !usage ||
-        (usage.promptTokens == null && usage.completionTokens == null)
-      ) {
-        continue;
-      }
-      turnsWithUsage++;
-      promptTokens += usage.promptTokens ?? 0;
-      completionTokens += usage.completionTokens ?? 0;
-      if (usage.cachedTokens != null) {
-        cachedTokens += usage.cachedTokens;
-        turnsWithCached++;
-      }
-      if (usage.costUsd != null) {
-        costUsd += usage.costUsd;
-        turnsWithCost++;
-      }
-    }
+    let { turns, ...usage } = sessionUsage(
+      this.messages.map((message) => message.usage),
+    );
     // With a single counted turn the total merely repeats that message's own
     // line right below it; a sum only earns its place once there is
     // something to add up.
-    if (turnsWithUsage < 2) {
+    if (turns < 2) {
       return undefined;
     }
-    return formatTokenUsage({
-      promptTokens,
-      completionTokens,
-      // An optional figure is only a session total when every counted turn
-      // reported it; a partial sum would read as the whole bill.
-      ...(turnsWithCached === turnsWithUsage ? { cachedTokens } : {}),
-      ...(turnsWithCost === turnsWithUsage ? { costUsd } : {}),
-    });
+    return formatTokenUsage(usage);
   }
 
   // How full the active model's context window is: the latest turn's input
@@ -3149,20 +3098,20 @@ export default class Room extends Component<Signature> {
       // Retry, so the turn above never gets shorter when the next one
       // settles (ADR 013 §1.16)
       if (replyIndex >= 0) {
-        let costUsd = 0;
-        let costed = false;
-        for (let message of turn) {
-          if (message.usage?.costUsd != null) {
-            costUsd += message.usage.costUsd;
-            costed = true;
-          }
-        }
+        // the turn's cost on the session total's rule: none when one of its
+        // counted replies reported no cost
+        let { turns: costedReplies, costUsd } = sessionUsage(
+          turn.map((message) => message.usage),
+        );
         let reply = messages[replyIndex]!;
         let diff = this.turnDiff(tools);
         footers.set(replyIndex, {
           diff,
           markdown: reply.body,
-          credits: costed ? formatCredits(costUsd) : undefined,
+          credits:
+            costedReplies > 0 && costUsd != null
+              ? formatCredits(costUsd)
+              : undefined,
           // Retry is for a turn that went wrong: an error, a call that
           // failed or was invalid, a reply that was stopped. A turn that
           // answered needs no second try offered

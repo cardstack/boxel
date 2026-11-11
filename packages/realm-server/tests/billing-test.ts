@@ -10,6 +10,7 @@ import {
   logger,
   param,
   query,
+  ri,
   userInitiatedPrerenderHtmlPriority,
 } from '@cardstack/runtime-common';
 import QUnit from 'qunit';
@@ -30,9 +31,12 @@ import {
   insertSubscriptionCycle,
   sumUpCreditsLedger,
   addToCreditsLedger,
+  getLedgerEntries,
+  getLedgerUsage,
   insertSubscription,
   spendCredits,
 } from '@cardstack/billing/billing-queries';
+import { spendUsageCost } from '@cardstack/billing/ai-billing';
 import type { TaskArgs } from '@cardstack/runtime-common/tasks';
 import { dailyCreditGrant } from '@cardstack/runtime-common/tasks/daily-credit-grant';
 import { enqueueDailyCreditGrant } from '../scripts/daily-credit-grant.ts';
@@ -1251,6 +1255,777 @@ module(basename(import.meta.filename), function () {
           }),
           2,
         );
+      });
+    });
+
+    module('ledger charges', function (hooks) {
+      let user: User;
+      const realm = ri('http://test-realm/ledger/');
+      const runId = '6f1c1b1e-1b7a-4d5e-9b5f-6f0a3d1c2b10';
+      const otherRunId = '0a8e3c55-2f0d-4c1c-8f6b-3e5b2a7d9c41';
+      const pricingVersion = 'pv-test-1';
+
+      hooks.beforeEach(async function () {
+        user = await insertUser(
+          dbAdapter,
+          '@ledger:localhost',
+          'cus_ledger',
+          'ledger@test.com',
+        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 1000,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+      });
+
+      test('an AI charge records kind ai, with its realm and run when given', async function (assert) {
+        await spendUsageCost(dbAdapter, user.matrixUserId, 0.002);
+        await spendUsageCost(dbAdapter, user.matrixUserId, 0.003, {
+          kind: 'ai',
+          realm,
+          runId,
+        });
+
+        let entries = await getLedgerEntries(dbAdapter, {
+          userId: user.id,
+          chargeKind: 'ai',
+        });
+        assert.deepEqual(
+          entries
+            .map((e) => [e.creditAmount, e.realm, e.runId])
+            .sort((a, b) => (b[0] as number) - (a[0] as number)),
+          [
+            [-2, null, null],
+            [-3, realm, runId],
+          ],
+        );
+        assert.deepEqual(
+          (await getLedgerEntries(dbAdapter, { runId })).map(
+            (e) => e.chargeKind,
+          ),
+          ['ai'],
+          'a run reads back its AI charge by reference',
+        );
+      });
+
+      test('AI charges for the same run each write', async function (assert) {
+        await spendCredits(dbAdapter, user.id, 5, {
+          kind: 'ai',
+          realm,
+          runId,
+        });
+        await spendCredits(dbAdapter, user.id, 5, {
+          kind: 'ai',
+          realm,
+          runId,
+        });
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
+          990,
+        );
+      });
+
+      test('each consumption kind records its realm, reference and pricing version', async function (assert) {
+        await spendCredits(dbAdapter, user.id, 10, {
+          kind: 'run',
+          realm,
+          runId,
+          pricingVersion,
+        });
+        await spendCredits(dbAdapter, user.id, 20, {
+          kind: 'run_indexing',
+          realm,
+          runId,
+          pricingVersion,
+        });
+        await spendCredits(dbAdapter, user.id, 30, {
+          kind: 'batched_ai',
+          realm,
+          runId,
+          batchId: 'batch_abc',
+        });
+        await spendCredits(dbAdapter, user.id, 40, {
+          kind: 'storage',
+          realm,
+          automationId: 'http://test-realm/ledger/Automation/sync',
+          day: '2026-11-10',
+          pricingVersion,
+        });
+
+        let entries = await getLedgerEntries(dbAdapter, { realm });
+        let byKind = Object.fromEntries(entries.map((e) => [e.chargeKind, e]));
+        assert.deepEqual(Object.keys(byKind).sort(), [
+          'batched_ai',
+          'run',
+          'run_indexing',
+          'storage',
+        ]);
+        assert.deepEqual(
+          [
+            byKind.run.creditAmount,
+            byKind.run.runId,
+            byKind.run.pricingVersion,
+          ],
+          [-10, runId, pricingVersion],
+        );
+        assert.deepEqual(
+          [byKind.run_indexing.creditAmount, byKind.run_indexing.runId],
+          [-20, runId],
+        );
+        assert.deepEqual(
+          [
+            byKind.batched_ai.creditAmount,
+            byKind.batched_ai.runId,
+            byKind.batched_ai.batchId,
+            byKind.batched_ai.pricingVersion,
+          ],
+          [-30, runId, 'batch_abc', null],
+        );
+        assert.deepEqual(
+          [
+            byKind.storage.creditAmount,
+            byKind.storage.runId,
+            byKind.storage.automationId,
+            byKind.storage.chargeDay,
+            byKind.storage.pricingVersion,
+          ],
+          [
+            -40,
+            null,
+            'http://test-realm/ledger/Automation/sync',
+            '2026-11-10',
+            pricingVersion,
+          ],
+        );
+        assert.deepEqual(
+          (await getLedgerEntries(dbAdapter, { runId }))
+            .map((e) => e.chargeKind)
+            .sort(),
+          ['batched_ai', 'run', 'run_indexing'],
+          "a run's charges read back by its reference",
+        );
+        assert.deepEqual(
+          (
+            await getLedgerEntries(dbAdapter, {
+              automationId: 'http://test-realm/ledger/Automation/sync',
+              chargeDay: '2026-11-10',
+            })
+          ).map((e) => e.chargeKind),
+          ['storage'],
+        );
+      });
+
+      test('a charge with the same kind and reference writes once', async function (assert) {
+        let charge = {
+          kind: 'run' as const,
+          realm,
+          runId,
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 25, charge),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 25, charge),
+          'already-charged',
+          'the retry reports the charge as already written',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 99, {
+            ...charge,
+            pricingVersion: 'pv-other',
+          }),
+          'already-charged',
+          'the identity is the kind and reference, not the amount or price',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
+          975,
+        );
+
+        // Another kind or another reference is another charge.
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, {
+            ...charge,
+            kind: 'run_indexing',
+          }),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, {
+            ...charge,
+            runId: otherRunId,
+          }),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, {
+            kind: 'batched_ai',
+            realm,
+            runId,
+            batchId: 'batch_1',
+          }),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, {
+            kind: 'batched_ai',
+            realm,
+            runId,
+            batchId: 'batch_2',
+          }),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, {
+            kind: 'batched_ai',
+            realm,
+            runId,
+            batchId: 'batch_1',
+          }),
+          'already-charged',
+        );
+        let storage = {
+          kind: 'storage' as const,
+          realm,
+          automationId: 'http://test-realm/ledger/Automation/sync',
+          day: '2026-11-10',
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, storage),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, {
+            ...storage,
+            day: '2026-11-11',
+          }),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, storage),
+          'already-charged',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
+          945,
+        );
+      });
+
+      test('concurrent writers of one charge write it once', async function (assert) {
+        let charge = {
+          kind: 'run' as const,
+          realm,
+          runId,
+          pricingVersion,
+        };
+        let results = await Promise.all(
+          Array.from({ length: 5 }, () =>
+            spendCredits(dbAdapter, user.id, 10, charge),
+          ),
+        );
+        assert.strictEqual(results.filter((r) => r === 'charged').length, 1);
+        assert.strictEqual(
+          results.filter((r) => r === 'already-charged').length,
+          4,
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
+          990,
+        );
+      });
+
+      test('a charge the balance cannot pay writes nothing and stays chargeable', async function (assert) {
+        let broke = await insertUser(
+          dbAdapter,
+          '@ledger-broke:localhost',
+          'cus_ledger_broke',
+          'ledger-broke@test.com',
+        );
+        let charge = {
+          kind: 'run' as const,
+          realm,
+          runId,
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, broke.id, 10, charge),
+          'nothing-to-charge',
+        );
+        assert.deepEqual(await getLedgerEntries(dbAdapter, { runId }), []);
+        assert.strictEqual(
+          await spendCredits(dbAdapter, broke.id, 10, { kind: 'ai' }),
+          'nothing-to-charge',
+        );
+
+        await addToCreditsLedger(dbAdapter, {
+          userId: broke.id,
+          creditAmount: 50,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+        assert.strictEqual(
+          await spendCredits(dbAdapter, broke.id, 10, charge),
+          'charged',
+          'with no entry carrying its identity, a later call charges it',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: broke.id }),
+          40,
+        );
+      });
+
+      test('a charge records the usage it priced, once', async function (assert) {
+        let charge = {
+          kind: 'run' as const,
+          realm,
+          runId,
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 30, charge, {
+            prerender_tab_seconds: 12.5,
+            downloaded_gb: 0.25,
+          }),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 30, charge, {
+            prerender_tab_seconds: 99,
+          }),
+          'already-charged',
+        );
+        assert.strictEqual(
+          await spendCredits(
+            dbAdapter,
+            user.id,
+            20,
+            { ...charge, kind: 'run_indexing' },
+            { worker_process_seconds: 3, prerender_tab_seconds: 1.5 },
+          ),
+          'charged',
+        );
+
+        assert.deepEqual(await getLedgerUsage(dbAdapter, { runId }), [
+          { chargeKind: 'run', unit: 'downloaded_gb', quantity: 0.25 },
+          { chargeKind: 'run', unit: 'prerender_tab_seconds', quantity: 12.5 },
+          {
+            chargeKind: 'run_indexing',
+            unit: 'prerender_tab_seconds',
+            quantity: 1.5,
+          },
+          {
+            chargeKind: 'run_indexing',
+            unit: 'worker_process_seconds',
+            quantity: 3,
+          },
+        ]);
+        let entries = await getLedgerEntries(dbAdapter, { runId });
+        assert.strictEqual(
+          new Set(entries.map((e) => e.chargeId)).size,
+          2,
+          'each charge has its own id',
+        );
+      });
+
+      test('AI charges record the provider cost as usage', async function (assert) {
+        await spendUsageCost(dbAdapter, user.matrixUserId, 0.002);
+        await spendUsageCost(
+          dbAdapter,
+          user.matrixUserId,
+          0.003,
+          { kind: 'ai', realm, runId },
+          { ai_input_tokens: 1200, ai_output_tokens: 300 },
+        );
+        assert.deepEqual(await getLedgerUsage(dbAdapter, { userId: user.id }), [
+          { chargeKind: 'ai', unit: 'ai_input_tokens', quantity: 1200 },
+          { chargeKind: 'ai', unit: 'ai_output_tokens', quantity: 300 },
+          { chargeKind: 'ai', unit: 'ai_provider_usd', quantity: 0.005 },
+        ]);
+      });
+
+      test('usage is counted once for a charge that spans several buckets, and not at all when nothing is charged', async function (assert) {
+        let broke = await insertUser(
+          dbAdapter,
+          '@ledger-usage-broke:localhost',
+          'cus_ledger_usage_broke',
+          'ledger-usage-broke@test.com',
+        );
+        assert.strictEqual(
+          await spendCredits(
+            dbAdapter,
+            broke.id,
+            10,
+            { kind: 'run', realm, runId: otherRunId, pricingVersion },
+            { prerender_tab_seconds: 4 },
+          ),
+          'nothing-to-charge',
+        );
+        assert.deepEqual(
+          await getLedgerUsage(dbAdapter, { userId: broke.id }),
+          [],
+        );
+
+        await addToCreditsLedger(dbAdapter, {
+          userId: broke.id,
+          creditAmount: 5,
+          creditType: 'daily_credit',
+          subscriptionCycleId: null,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: broke.id,
+          creditAmount: 5,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+        assert.strictEqual(
+          await spendCredits(
+            dbAdapter,
+            broke.id,
+            10,
+            { kind: 'run', realm, runId: otherRunId, pricingVersion },
+            { prerender_tab_seconds: 4 },
+          ),
+          'charged',
+        );
+        assert.strictEqual(
+          (await getLedgerEntries(dbAdapter, { runId: otherRunId })).length,
+          2,
+          'the charge drew on two buckets',
+        );
+        assert.deepEqual(
+          await getLedgerUsage(dbAdapter, { runId: otherRunId }),
+          [{ chargeKind: 'run', unit: 'prerender_tab_seconds', quantity: 4 }],
+        );
+      });
+
+      test('a charge is written once whoever pays it', async function (assert) {
+        let otherPayer = await insertUser(
+          dbAdapter,
+          '@ledger-other-payer:localhost',
+          'cus_ledger_other_payer',
+          'ledger-other-payer@test.com',
+        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: otherPayer.id,
+          creditAmount: 100,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+        let storage = {
+          kind: 'storage' as const,
+          realm,
+          automationId: 'http://test-realm/ledger/Automation/sync',
+          day: '2026-11-10',
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, storage),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, otherPayer.id, 5, storage),
+          'already-charged',
+          'a retry after the payer changed bills no one again',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: otherPayer.id }),
+          100,
+        );
+      });
+
+      test("a storage charge's day must be a calendar date", async function (assert) {
+        for (let day of ['2026-13-01', '2026-02-30', '11/10/2026', '']) {
+          await assert.rejects(
+            spendCredits(dbAdapter, user.id, 5, {
+              kind: 'storage',
+              realm,
+              automationId: 'http://test-realm/ledger/Automation/sync',
+              day,
+              pricingVersion,
+            }),
+            /must be a YYYY-MM-DD date/,
+            `${JSON.stringify(day)} is refused`,
+          );
+        }
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
+          1000,
+        );
+      });
+
+      test('usage must be a finite quantity of a known unit', async function (assert) {
+        for (let bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+          await assert.rejects(
+            spendCredits(
+              dbAdapter,
+              user.id,
+              1,
+              { kind: 'ai' },
+              {
+                prerender_tab_seconds: bad,
+              },
+            ),
+            /must be a finite number/,
+          );
+        }
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
+          1000,
+          'a refused usage writes no charge',
+        );
+        try {
+          await query(dbAdapter, [
+            `INSERT INTO credit_charge_usage (charge_id, unit, quantity, user_id) VALUES (gen_random_uuid(), 'cpu_hours', 1, `,
+            param(user.id),
+            `)`,
+          ]);
+          assert.ok(false, 'an unknown unit was accepted');
+        } catch (e) {
+          assert.true(
+            /credit_charge_usage_unit_check/.test(String(e)),
+            `an unknown unit is refused: ${e}`,
+          );
+        }
+      });
+
+      test('a charge that draws on several buckets writes all its rows once', async function (assert) {
+        let plan = await insertPlan(
+          dbAdapter,
+          'Creator',
+          12,
+          2500,
+          'prod_ledger',
+        );
+        let subscription = await insertSubscription(dbAdapter, {
+          user_id: user.id,
+          plan_id: plan.id,
+          started_at: 1,
+          status: 'active',
+          stripe_subscription_id: 'sub_ledger',
+        });
+        let cycle = await insertSubscriptionCycle(dbAdapter, {
+          subscriptionId: subscription.id,
+          periodStart: 1,
+          periodEnd: 2,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 30,
+          creditType: 'plan_allowance',
+          subscriptionCycleId: cycle.id,
+        });
+        await addToCreditsLedger(dbAdapter, {
+          userId: user.id,
+          creditAmount: 20,
+          creditType: 'daily_credit',
+          subscriptionCycleId: null,
+        });
+
+        let charge = {
+          kind: 'run' as const,
+          realm,
+          runId,
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 100, charge),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 100, charge),
+          'already-charged',
+        );
+
+        let entries = await getLedgerEntries(dbAdapter, { runId });
+        assert.deepEqual(
+          entries.map((e) => [e.creditType, e.creditAmount]).sort(),
+          [
+            ['daily_credit_used', -20],
+            ['extra_credit_used', -50],
+            ['plan_allowance_used', -30],
+          ],
+        );
+        assert.true(
+          entries.every((e) => e.chargeKind === 'run' && e.realm === realm),
+          'every row of the charge carries its kind and reference',
+        );
+      });
+
+      test('entries written without a kind read the kind their credit type implies', async function (assert) {
+        let cycle = await insertSubscriptionCycle(dbAdapter, {
+          subscriptionId: (
+            await insertSubscription(dbAdapter, {
+              user_id: user.id,
+              plan_id: (
+                await insertPlan(dbAdapter, 'Starter', 0, 100, 'prod_old')
+              ).id,
+              started_at: 1,
+              status: 'expired',
+              stripe_subscription_id: 'sub_old',
+            })
+          ).id,
+          periodStart: 1,
+          periodEnd: 2,
+        });
+        let rows: [string, number, string | null][] = [
+          ['plan_allowance', 100, cycle.id],
+          ['plan_allowance_used', -10, cycle.id],
+          ['plan_allowance_expired', -90, cycle.id],
+          ['daily_credit', 20, null],
+          ['daily_credit_used', -5, null],
+          ['extra_credit_used', -7, null],
+        ];
+        for (let [creditType, amount, cycleId] of rows) {
+          await query(dbAdapter, [
+            `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES (`,
+            param(user.id),
+            `,`,
+            param(amount),
+            `,`,
+            param(creditType),
+            `,`,
+            param(cycleId),
+            `)`,
+          ]);
+        }
+        await query(dbAdapter, [
+          `UPDATE credits_ledger SET charge_kind = NULL WHERE user_id = `,
+          param(user.id),
+        ]);
+
+        let kinds = Object.fromEntries(
+          (await getLedgerEntries(dbAdapter, { userId: user.id })).map((e) => [
+            e.creditType,
+            e.chargeKind,
+          ]),
+        );
+        assert.deepEqual(kinds, {
+          plan_allowance: 'grant',
+          plan_allowance_used: 'ai',
+          plan_allowance_expired: 'expiry',
+          daily_credit: 'grant',
+          daily_credit_used: 'ai',
+          extra_credit: 'purchase',
+          extra_credit_used: 'ai',
+        });
+        assert.deepEqual(
+          (
+            await getLedgerEntries(dbAdapter, {
+              userId: user.id,
+              chargeKind: 'ai',
+            })
+          )
+            .map((e) => e.creditAmount)
+            .sort((a, b) => a - b),
+          [-10, -7, -5],
+          'spends without a kind are found by kind ai',
+        );
+      });
+
+      test('credit writers record grants, purchases and expiries', async function (assert) {
+        let task = dailyCreditGrant(buildDailyCreditGrantTaskArgs(dbAdapter));
+        let poorUser = await insertUser(
+          dbAdapter,
+          '@ledger-poor:localhost',
+          'cus_ledger_poor',
+          'ledger-poor@test.com',
+        );
+        await task({ lowCreditThreshold: 10 });
+
+        let stored = await query(dbAdapter, [
+          `SELECT credit_type, charge_kind FROM credits_ledger WHERE user_id IN (`,
+          param(user.id),
+          `,`,
+          param(poorUser.id),
+          `) ORDER BY credit_type::text`,
+        ]);
+        assert.deepEqual(
+          stored.map((r) => [r.credit_type, r.charge_kind]),
+          [
+            ['daily_credit', 'grant'],
+            ['extra_credit', 'purchase'],
+          ],
+          'the kind is stored, not only derived when read',
+        );
+      });
+
+      test('the database refuses a charge without the reference its kind needs', async function (assert) {
+        let attempts: [string, Record<string, string | null>][] = [
+          [
+            'run without a run',
+            { charge_kind: 'run', realm, pricing_version: pricingVersion },
+          ],
+          [
+            'run without a pricing version',
+            { charge_kind: 'run', realm, run_id: runId },
+          ],
+          [
+            'storage without a day',
+            {
+              charge_kind: 'storage',
+              realm,
+              automation_id: 'a',
+              pricing_version: pricingVersion,
+            },
+          ],
+          [
+            'batched AI without a batch',
+            { charge_kind: 'batched_ai', realm, run_id: runId },
+          ],
+          ['a grant with a realm', { charge_kind: 'grant', realm }],
+          ['an unknown kind', { charge_kind: 'refund' }],
+        ];
+        for (let [label, columns] of attempts) {
+          let names = Object.keys(columns);
+          try {
+            await query(dbAdapter, [
+              `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, ${names.join(', ')}) VALUES (`,
+              param(user.id),
+              `, -1, 'extra_credit_used'`,
+              ...names.flatMap((n) => [`,`, param(columns[n])]),
+              `)`,
+            ]);
+            assert.ok(false, `${label} was accepted`);
+          } catch (e) {
+            assert.true(
+              /credits_ledger_charge_reference_check/.test(String(e)),
+              `${label} is refused: ${e}`,
+            );
+          }
+        }
+      });
+
+      test('the database refuses a second row for the same charge and bucket', async function (assert) {
+        await spendCredits(dbAdapter, user.id, 5, {
+          kind: 'run',
+          realm,
+          runId,
+          pricingVersion,
+        });
+        try {
+          await query(dbAdapter, [
+            `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, charge_kind, realm, run_id, pricing_version) VALUES (`,
+            param(user.id),
+            `, -5, 'extra_credit_used', 'run',`,
+            param(realm),
+            `,`,
+            param(runId),
+            `,`,
+            param(pricingVersion),
+            `)`,
+          ]);
+          assert.ok(false, 'the duplicate was accepted');
+        } catch (e) {
+          assert.true(
+            /credits_ledger_charge_once_idx/.test(String(e)),
+            `the duplicate is refused: ${e}`,
+          );
+        }
       });
     });
 

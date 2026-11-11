@@ -346,6 +346,12 @@ module('Unit | credential frame protocol', function () {
         h.frame.error('password'),
         'Password must be at least 8 characters long',
       );
+      fill(h, { password: 'a'.repeat(513) });
+      h.frame.blur('password');
+      assert.strictEqual(
+        h.frame.error('password'),
+        'Password must be at most 512 characters long',
+      );
       fill(h, { password: 'a-long-password', confirm: 'something-else' });
       h.frame.blur('confirm');
       assert.strictEqual(h.frame.error('confirm'), 'Passwords do not match');

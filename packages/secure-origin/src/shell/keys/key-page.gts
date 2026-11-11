@@ -217,6 +217,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                         <form
                           class='panel'
                           novalidate
+                          data-form-type='other'
                           {{on 'submit' this.replace}}
                           data-test-key-replace-form
                         >
@@ -271,6 +272,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                         <form
                           class='panel'
                           novalidate
+                          data-form-type='other'
                           {{on 'submit' this.saveAnonymousUse}}
                           data-anonymous-use-panel
                           data-test-key-anonymous-use-form
