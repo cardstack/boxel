@@ -334,10 +334,16 @@ export class Sidebar extends Component<SidebarSignature> {
   @tracked private measured = false;
   /** The pane's last non-zero width in px; unset until it is measured. */
   @tracked private paneWidth: number | undefined;
-  /** Whether the next change of state slides. A toggle slides; a change the
-   * pane's width made (the first measurement, a band crossing) lands at
-   * once, so a narrow pane doesn't open with the rail sliding shut. */
-  @tracked private slides = true;
+  /** The open state a change the pane's width made (the first measurement, a
+   * band crossing) is landing on. That one change lands at once, so a narrow
+   * pane doesn't open with the rail sliding shut. Cleared a frame later, so
+   * every later change slides, however it arrives: a toggle, or a controlled
+   * caller's own `@open`. Untracked, since clearing it changes nothing on
+   * screen until the open state next changes. */
+  private snapTo: boolean | undefined;
+  get slides(): boolean {
+    return this.open !== this.snapTo;
+  }
   /** Dragged width in px; unset leaves `@width` in charge. */
   @tracked private dragWidth: number | undefined;
   /** The seam a pressed pointer moved on, so the click that ends the drag
@@ -520,7 +526,7 @@ export class Sidebar extends Component<SidebarSignature> {
 
   private setOpen = (next: boolean) => {
     this.noteSeamFocus();
-    this.slides = true;
+    this.snapTo = undefined;
     // Internal state moves only while UNcontrolled; the callback always fires.
     if (this.args.open === undefined && this.mobile) {
       this.drawerOpen = next;
@@ -648,7 +654,12 @@ export class Sidebar extends Component<SidebarSignature> {
     let changed = next !== this.open;
     if (changed) {
       this.noteSeamFocus();
-      this.slides = false;
+      this.snapTo = next;
+      // The change lands in this frame, whether this sidebar holds the state
+      // or a controlled caller applies it in `@onOpenChange`.
+      requestAnimationFrame(() => {
+        this.snapTo = undefined;
+      });
     }
     if (this.args.open === undefined) {
       this.internal = next;

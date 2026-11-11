@@ -209,6 +209,26 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.strictEqual(slides(), 'false', 'a band crossing lands at once');
   });
 
+  test("@railBreakpoint: after a band crossing, a controlled caller's own changes to @open slide", async function (assert) {
+    const slides = () => shells()[0]?.dataset['slides'];
+    class Parent {
+      @tracked open = true;
+    }
+    let parent = new Parent();
+    let follow = (next: boolean) => (parent.open = next);
+    await render(<template><div data-test-pane><Sidebar @label='Library' @collapsible='offcanvas' @mobileBreakpoint={{0}} @railBreakpoint={{640}} @open={{parent.open}} @onOpenChange={{follow}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(400, () => state() === 'collapsed');
+    assert.strictEqual(slides(), 'false', 'the crossing lands at once');
+    // a frame on, as any change after the crossing is
+    await new Promise((r) => requestAnimationFrame(r));
+    parent.open = true;
+    await settled();
+    assert.strictEqual(slides(), 'true', "the caller's own opening slides");
+    parent.open = false;
+    await settled();
+    assert.strictEqual(slides(), 'true', 'and so does its closing, back to the state the crossing chose');
+  });
+
   test('without @railBreakpoint a mid-width pane keeps the full rail', async function (assert) {
     await render(<template><div data-test-pane><Sidebar @label='Library'><:nav>Lots</:nav></Sidebar></div></template>);
     pane().style.inlineSize = '800px';
