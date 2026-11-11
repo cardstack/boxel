@@ -1371,6 +1371,7 @@ function createCodeEditorState(
     keymap.of([...defaultKeymap, ...historyKeymap]),
     ...languageExtension(options.language),
     ...(options.theme ? [EditorView.theme(options.theme)] : []),
+    EditorState.tabSize.of(2),
     EditorState.readOnly.of(readOnly),
     EditorView.editable.of(!readOnly),
     EditorView.contentAttributes.of(attributes),

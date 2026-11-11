@@ -21,7 +21,7 @@ Element: HTMLDivElement
 
 **Until it arrives, the code is shown, not hidden.** Before CodeMirror loads, and wherever it can't (a prerender, a page with no loader, a host whose context has no code editor), the component renders the same text read-only through **CodeBlock**, with the same language and line numbers. A search result or a printed card shows the code, and the swap to the live editor doesn't move anything.
 
-**An echo of your own typing is not a new value.** The editor reports every change through `@onInput`, and a caller usually stores it and passes it straight back as `@value`. The component remembers the last text it reported and ignores a `@value` that matches it, so the caller's round trip never resets the document or the caret. Any other `@value`, such as a save from somewhere else, replaces the document in the same editor.
+**An echo of your own typing is not a new value.** The editor reports every change the user makes through `@onInput`, and a caller usually stores it and passes it straight back as `@value`. The component remembers the last text it reported and ignores a `@value` that matches it, so the caller's round trip never resets the document or the caret. Any other `@value`, such as a save from somewhere else, replaces the document in the same editor, and that replacement is not reported back through `@onInput`: it is the caller's change, not the user's.
 
 **A change of language, read-only, line numbers, id or label rebuilds the editor, keeping its text.** Those are fixed when CodeMirror makes its state; rebuilding keeps what the user typed rather than reverting to `@value`.
 
@@ -45,7 +45,7 @@ Where it is thinner: no autocompletion, linting, folding, search panel or diff v
 
 ## Theming
 
-`--pretui-code-size`, `--pretui-code-leading` and `--pretui-code-tab` (type metrics, shared with CodeBlock), `--pretui-shadow-card`, and the syntax channel CodeBlock reads: `--pretui-code-keyword`, `--pretui-code-string`, `--pretui-code-number`, `--pretui-code-comment`, `--pretui-code-name`. Code reads the same whether it is being read or edited.
+`--pretui-code-size` and `--pretui-code-leading` (type metrics, shared with CodeBlock; tabs are two columns wide), `--pretui-shadow-card`, and the syntax channel CodeBlock reads: `--pretui-code-keyword`, `--pretui-code-string`, `--pretui-code-number`, `--pretui-code-comment`, `--pretui-code-name`. Code reads the same whether it is being read or edited.
 
 The frame sits in `@layer PretComponent`. CodeMirror's own DOM is styled through an `EditorView.theme` the component hands the editor, because CodeMirror injects its base theme as unlayered CSS that a layered rule can't outrank; the theme's values are the same tokens. `--pretui-code-editor-min` and `--pretui-code-editor-max` (line counts) are set from `@minLines` and `@maxLines`.
 
