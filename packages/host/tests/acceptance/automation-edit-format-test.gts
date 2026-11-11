@@ -146,19 +146,26 @@ function messageOf(label: string, scope: ParentNode = document) {
   );
 }
 
-// A section of the edit format, by its title.
+// A section of the edit format, by its title: a Pret UI FormSection, or a
+// Fieldset by its legend. A FormSection's legend holds its issue badge and
+// actions after the title, so only the legend's first element is read: the
+// title itself, or the toggle that holds it when the section collapses.
 function section(title: string): HTMLElement {
-  let match = [...document.querySelectorAll('fieldset')].find(
-    (element) =>
-      (
-        element.querySelector('legend .pretui-formsection-title') ??
-        element.querySelector('legend')
-      )?.textContent?.trim() === title,
-  );
+  let match = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-test-pretui-form-section], [data-test-pretui-fieldset]',
+    ),
+  ].find((element) => {
+    let legend = element.querySelector(':scope > legend');
+    let heading = element.hasAttribute('data-test-pretui-form-section')
+      ? legend?.firstElementChild
+      : legend;
+    return heading?.textContent?.trim() === title;
+  });
   if (!match) {
     throw new Error(`no section titled "${title}"`);
   }
-  return match as HTMLElement;
+  return match;
 }
 
 function triggerItem(index: number): HTMLElement {
@@ -187,16 +194,23 @@ async function typeTime(scope: HTMLElement, digits: string) {
 }
 
 // Searches the time zone picker in `scope` and picks the zone named `zone`.
+// Inside the Pret UI Combobox, ember-power-select renders the trigger, its
+// search input and the options, so they're found by that library's own
+// attributes and roles: the `data-ebd-id` its dropdown trigger carries, the
+// one `input`, and the `option` role. The options render in place, inside
+// the combobox.
 async function pickTimeZone(scope: ParentNode, search: string, zone: string) {
-  let picker = field('Time zone', scope);
-  await click(picker.querySelector('.pretui-pickertrigger')!);
-  await fillIn(
-    picker.querySelector('.ember-power-select-trigger-multiple-input')!,
-    search,
+  let combobox = field('Time zone', scope).querySelector(
+    '[data-test-pretui-combobox]',
   );
-  let option = [
-    ...document.querySelectorAll('.ember-power-select-option'),
-  ].find((o) => o.textContent?.includes(zone));
+  if (!combobox) {
+    throw new Error('the time zone field has no combobox');
+  }
+  await click(combobox.querySelector('[data-ebd-id$="-trigger"]')!);
+  await fillIn(combobox.querySelector('input')!, search);
+  let option = [...combobox.querySelectorAll('[role="option"]')].find((o) =>
+    o.textContent?.includes(zone),
+  );
   if (!option) {
     throw new Error(`no time zone option reading ${zone}`);
   }
