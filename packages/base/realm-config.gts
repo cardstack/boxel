@@ -9,6 +9,7 @@ import {
   getRelationshipMembershipState,
   instanceRealmId,
   linksTo,
+  queryableValue,
   realmURL,
   type CardContext,
   type CardCrudFunctions,
@@ -41,7 +42,6 @@ import {
   isCardInstance,
   isLocalId,
   isPrefixForm,
-  primitive,
   RealmPaths,
   REDIRECT_STATUS_CODES,
   realmPolicyRef,
@@ -394,11 +394,14 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
 }
 
 // A JSON object kept as written: a route's `where` filter and `match` map.
-// Unlike `JsonField`, its value goes into the search document whole, because
-// the server reads routing rules from the indexed realm.json and nowhere else.
-export class RouteJsonField extends FieldDef {
+// Unlike its `JsonField` parent, its value goes into the search document
+// whole, because the server reads routing rules from the indexed realm.json
+// and nowhere else. Extending `JsonField` gives it the same generated schema.
+export class RouteJsonField extends JsonField {
   static displayName = 'Route JSON';
-  static [primitive]: Record<string, any>;
+  static [queryableValue](value: any): any {
+    return value;
+  }
 }
 
 export class RoutingRuleField extends FieldDef {

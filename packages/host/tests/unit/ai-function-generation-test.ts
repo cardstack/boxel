@@ -608,6 +608,25 @@ module('Unit | ai-function-generation-test', function (hooks) {
     assert.deepEqual(schema, { attributes, relationships });
   });
 
+  test(`a JSON field subclass gets the JSON object schema`, async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { RouteJsonField } = await loader.import<
+      typeof import('@cardstack/base/realm-config')
+    >('@cardstack/base/realm-config');
+
+    class RouteCard extends CardDef {
+      @field where = contains(RouteJsonField);
+    }
+
+    let schema = generateJsonSchemaForCardType(RouteCard, cardApi, mappings);
+
+    assert.deepEqual(
+      schema.attributes.properties.where,
+      { type: 'object', properties: {}, additionalProperties: true },
+      'where resolves to the JsonField mapping',
+    );
+  });
+
   test(`generates correct schema for nested linksTo and linksToMany fields`, async function (assert) {
     let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
