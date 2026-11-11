@@ -122,6 +122,13 @@ export class BrowserManager {
     }
   }
 
+  // The running Chrome's browser-process pid, without launching one. Undefined
+  // before the first launch, between a close and the relaunch, and when
+  // Puppeteer connected to a browser it didn't spawn.
+  browserPid(): number | undefined {
+    return this.#browser?.process()?.pid;
+  }
+
   // SIGKILLs the running Chrome without waiting on it. Used when Chrome has
   // stopped answering CDP, where a graceful close would wait out the protocol
   // timeout. The browser handle stays until `restartBrowser` replaces it, and
