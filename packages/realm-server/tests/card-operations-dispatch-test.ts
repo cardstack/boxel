@@ -772,7 +772,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         lookups[0].mode,
         'interactive',
-        'an invocation is interactive unless the realm runs it as a pipeline',
+        'an invocation is interactive unless the realm runs it as an automation',
       );
       assert.strictEqual(sent.length, 1);
       let [credential] = sent[0].credentials as {

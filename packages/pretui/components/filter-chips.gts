@@ -243,10 +243,14 @@ export class FilterChips extends Component<FilterChipsSignature> {
           align-items: center;
           gap: 0.375rem;
           position: relative;
-          /* --pretui-filterchip-h: opt-in height knob (LayoutControl sets it) */
+          /* --pretui-row-h: the row height a LayoutControl sets; --pretui-filterchip-h:
+             opt-in height knob, read after it */
           height: var(--_chip-h);
           /* a full pill at any height */
-          --_chip-h: var(--pretui-filterchip-h, 1.625rem);
+          --_chip-h: var(
+            --pretui-row-h,
+            var(--pretui-filterchip-h, 1.625rem)
+          );
           border-radius: calc(var(--_chip-h) / 2);
           padding: 0 calc(0.375rem * var(--pretui-capsule-base, 1.35) + 0.8125rem * var(--pretui-radius-encroach, 0.35));
           border: 0;
@@ -306,9 +310,11 @@ export class FilterChips extends Component<FilterChipsSignature> {
           background: var(--inset, var(--boxel-100));
           color: var(--muted-foreground);
         }
+        /* a chip in a sized LayoutControl row keeps the row's height on touch
+           too, like SegmentedControl */
         @media (any-pointer: coarse) {
           .pretui-filterchip {
-            min-height: 2.125rem;
+            min-height: var(--pretui-row-h, 2.125rem);
           }
         }
       }

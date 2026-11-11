@@ -15,7 +15,7 @@ import type NetworkService from './network';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 
-interface SubscriptionData {
+export interface SubscriptionData {
   plan: string | null;
   creditsAvailableInPlanAllowance: number | null;
   creditsIncludedInPlanAllowance: number | null;
@@ -26,6 +26,36 @@ interface SubscriptionData {
   lastDailyCreditGrantAt: number | null;
   nextDailyCreditGrantAt: number | null;
   dailyCreditGrantCount: number;
+}
+
+type Balance = Pick<
+  SubscriptionData,
+  'creditsAvailableInPlanAllowance' | 'extraCreditsAvailableInBalance'
+>;
+
+// Everything the user can spend now: the monthly credits left plus the extra
+// credits. The profile popover and the assistant's `room.credits()` both read
+// the balance through this, so they give the same number.
+export function availableCredits(data: Balance | null | undefined): number {
+  return (
+    (data?.creditsAvailableInPlanAllowance ?? 0) +
+    (data?.extraCreditsAvailableInBalance ?? 0)
+  );
+}
+
+// Whether the next daily grant will top the balance up: it does while the
+// balance is below the grant's level, `lowCreditThreshold`. The popover shows
+// the next grant on the same rule.
+export function awaitsDailyGrant(
+  data:
+    | (Balance & Pick<SubscriptionData, 'lowCreditThreshold'>)
+    | null
+    | undefined,
+): boolean {
+  return (
+    data?.lowCreditThreshold != null &&
+    availableCredits(data) < data.lowCreditThreshold
+  );
 }
 
 export default class BillingService extends Service {
@@ -39,10 +69,9 @@ export default class BillingService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.realmServer.subscribeEvent(
-      'billing-notification',
-      this.loadSubscriptionData.bind(this),
-    );
+    this.realmServer.subscribeEvent('billing-notification', async () => {
+      await this.loadSubscriptionData();
+    });
     this.session.register(this);
   }
 
@@ -157,7 +186,12 @@ export default class BillingService extends Service {
   // outdated credits after a billing-notification push. Keep this fetching
   // fresh; if you need a boot-time "load once" guard, that belongs in
   // initializeSubscriptionData(), not here.
-  async loadSubscriptionData() {
+  //
+  // Answers with the data it loaded, or undefined when the server refused: on
+  // a failed fetch `subscriptionData` keeps what it held before, which a
+  // caller that must report current numbers can't use. A fetch that throws
+  // rejects.
+  async loadSubscriptionData(): Promise<SubscriptionData | undefined> {
     this._loadingSubscriptionData = true;
     try {
       let response = await this.fetchSubscriptionData();
@@ -166,7 +200,7 @@ export default class BillingService extends Service {
         console.error(
           `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,
         );
-        return;
+        return undefined;
       }
       let json = await response.json();
       let plan =
@@ -190,7 +224,7 @@ export default class BillingService extends Service {
       let dailyCreditGrantCount =
         json.data?.attributes?.dailyCreditGrantCount ?? 0;
 
-      this._subscriptionData = {
+      let loaded: SubscriptionData = {
         plan,
         creditsAvailableInPlanAllowance,
         creditsIncludedInPlanAllowance,
@@ -202,17 +236,15 @@ export default class BillingService extends Service {
         nextDailyCreditGrantAt,
         dailyCreditGrantCount,
       };
+      this._subscriptionData = loaded;
+      return loaded;
     } finally {
       this._loadingSubscriptionData = false;
     }
   }
 
   get availableCredits() {
-    let allAvailableCredits =
-      (this.subscriptionData?.creditsAvailableInPlanAllowance ?? 0) +
-      (this.subscriptionData?.extraCreditsAvailableInBalance ?? 0);
-
-    return allAvailableCredits;
+    return availableCredits(this.subscriptionData);
   }
 
   private async getToken() {

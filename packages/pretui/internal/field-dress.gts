@@ -35,10 +35,11 @@ export const FieldDress: TemplateOnlyComponent<FieldDressSignature> =
           letter-spacing: var(--boxel-lsp-xs);
           --background: var(--field);
           --border: var(--input);
-          /* --pretui-field-h: opt-in height knob (LayoutControl sets it) */
+          /* --pretui-row-h: the row height a LayoutControl sets, read first;
+             --pretui-field-h: opt-in height knob */
           --boxel-form-control-height: var(
-            --pretui-field-h,
-            var(--boxel-form-control-height-sm)
+            --pretui-row-h,
+            var(--pretui-field-h, var(--boxel-form-control-height-sm))
           );
           --boxel-input-height: var(--boxel-form-control-height);
           --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);

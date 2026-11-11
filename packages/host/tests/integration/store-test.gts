@@ -2681,6 +2681,87 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a patch that empties a linksToMany clears its links', async function (assert) {
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          relationships: {
+            bestFriend: { links: { self: `${testRealmURL}Person/jade` } },
+            'friends.0': { links: { self: `${testRealmURL}Person/germaine` } },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    let instance = (await storeService.patch(`${testRealmURL}Person/hassan`, {
+      relationships: { friends: { links: { self: null } } },
+    })) as any;
+
+    assert.deepEqual(instance.friends, [], 'the instance has no friends');
+    assert.strictEqual(
+      instance.bestFriend?.name,
+      'Jade',
+      'a relationship the patch left out is kept',
+    );
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    let { relationships } = JSON.parse(file!.content as string).data;
+    assert.deepEqual(
+      relationships.friends,
+      { links: { self: null } },
+      'the saved file stores the linksToMany as empty',
+    );
+    assert.strictEqual(
+      relationships['friends.0'],
+      undefined,
+      'the saved file drops the old link',
+    );
+  });
+
+  test('a patch that clears a linksTo clears its link', async function (assert) {
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          relationships: {
+            bestFriend: { links: { self: `${testRealmURL}Person/jade` } },
+            'friends.0': { links: { self: `${testRealmURL}Person/germaine` } },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    let instance = (await storeService.patch(`${testRealmURL}Person/hassan`, {
+      relationships: { bestFriend: { links: { self: null } } },
+    })) as any;
+
+    assert.strictEqual(
+      instance.bestFriend,
+      undefined,
+      'the instance has no link',
+    );
+    assert.deepEqual(
+      instance.friends.map((friend: any) => friend.name),
+      ['Germaine'],
+      'a relationship the patch left out is kept',
+    );
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    let { relationships } = JSON.parse(file!.content as string).data;
+    assert.deepEqual(
+      relationships.bestFriend,
+      { links: { self: null } },
+      'the saved file stores the linksTo as empty',
+    );
+  });
+
   test('a patch that gives a primitive field an object replaces its value', async function (assert) {
     // A JSON-valued primitive is one value: a key the patch leaves out is a
     // key the field no longer has, while a compound field beside it still

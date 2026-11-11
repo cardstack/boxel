@@ -36,10 +36,11 @@ export default function handleAddCredit({
     }
 
     let result = await query([
-      `INSERT INTO credits_ledger (user_id, credit_amount, credit_type)`,
+      // An operator's top-up is a grant, unlike extra credit a user buys.
+      `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, charge_kind)`,
       `SELECT u.id as user_id,`,
       param(credit),
-      `as credit_amount, 'extra_credit' as credit_type`,
+      `as credit_amount, 'extra_credit' as credit_type, 'grant' as charge_kind`,
       `FROM users u`,
       `WHERE u.matrix_user_id =`,
       param(user),

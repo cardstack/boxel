@@ -16,7 +16,7 @@ export const exportIdentitySymbolKey = 'cardstack-ident';
 // other spelling of a base module is a compile error.
 export const markDefinitionModule = '@cardstack/base/mark-definition';
 const markDefinitionName = 'markDefinition';
-const otherBaseSpelling =
+export const otherBaseSpelling =
   /^(?:@cardstack\/base(?:\/|$)|https:\/\/cardstack\.com\/base(?:\/|$))/;
 
 export interface Options {

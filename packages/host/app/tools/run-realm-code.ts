@@ -71,6 +71,7 @@ import {
   proposeFix,
 } from '../lib/realm-runner/auto-fix';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
+import { roomCredits, type RoomCredits } from '../lib/realm-runner/credits';
 import {
   compactDiff,
   CARD_CHANGES_IN_DETAIL,
@@ -139,6 +140,10 @@ import type {
   RealmScriptErrorInfo,
 } from '../lib/realm-runner/types';
 
+import type {
+  default as BillingService,
+  SubscriptionData,
+} from '../services/billing-service';
 import type CardService from '../services/card-service';
 import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
@@ -406,7 +411,7 @@ type CreateWorkspace = (input: {
   endpoint?: string;
 }) => Promise<{ url: string; name: string }>;
 
-// Deletes a workspace the current user owns and returns its URL.
+// Deletes a workspace the current user administers and returns its URL.
 type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
 
 // The index of the run's realm. Every call acts on the whole realm or on
@@ -496,6 +501,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'room.enableSkills': false,
   'room.disableSkills': false,
   'room.setModel': false,
+  'room.credits': false,
   'ui.switchSubmode': false,
   'ui.openFile': false,
   'ui.previewFormat': false,
@@ -1486,6 +1492,8 @@ class RealmFsSession {
         return this.room.disableSkills(args[0]);
       case 'room.setModel':
         return await this.room.setModel(args[0]);
+      case 'room.credits':
+        return await this.room.credits();
       case 'ui.switchSubmode': {
         let submode = args[0];
         if (submode !== 'interact' && submode !== 'code') {
@@ -2803,6 +2811,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeInput,
   typeof BaseToolModule.RunRealmCodeResult
 > {
+  @service declare private billingService: BillingService;
   @service declare private cardService: CardService;
   @service declare private clientTelemetry: ClientTelemetryService;
   @service declare private environmentService: EnvironmentService;
@@ -2851,7 +2860,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.activity({ message, current, total }) (current is 1-based into the ' +
     'plan; add count and of for progress inside a step, e.g. page 3 of 5), ' +
     'can create workspaces with realm.workspaces.create, ' +
-    'can change the skills and model of this room with room.*, and can ' +
+    'can change the skills and model of this room with room.*, can read ' +
+    "the user's plan, credit balance and this room's spend with " +
+    'room.credits(), and can ' +
     'refresh the index of the workspace with realm.index.*. A card that ' +
     'realm.cards.get reports as not indexed while the workspace is not ' +
     'indexing will not index by waiting: run ' +
@@ -3088,6 +3099,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         new RoomActions({
           checkSkill: (id) => this.checkSkill(id),
           knownModels: () => this.matrixService.pickableModelIds(roomId),
+          credits: () => this.roomCredits(roomId),
         }),
         this.research(roomId),
         (search) =>
@@ -3340,6 +3352,36 @@ export default class RunRealmCodeTool extends HostBaseTool<
       }
     }
     return changes;
+  }
+
+  // `room.credits()`: the balance is read fresh, since every answer spends
+  // from it, and a balance that can't be read is an error rather than an
+  // older one.
+  private async roomCredits(roomId: string): Promise<RoomCredits> {
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource) {
+      throw new Error(
+        `room.credits cannot read the messages of room ${roomId}`,
+      );
+    }
+    let subscription: SubscriptionData | undefined;
+    try {
+      subscription = await this.billingService.loadSubscriptionData();
+    } catch (error) {
+      console.error('room.credits: loading the subscription failed', error);
+    }
+    if (!subscription) {
+      throw new Error(
+        "room.credits could not read the account's credits from the server. Try again, or see Profile → Membership Tier",
+      );
+    }
+    // The room's processing restarts when a new event arrives, which cancels
+    // the run being awaited; the messages read after it are current either way.
+    await Promise.allSettled([roomResource.processing]);
+    return roomCredits(
+      subscription,
+      roomResource.messages.map((message) => message.usage),
+    );
   }
 
   private async checkSkill(id: string): Promise<void> {

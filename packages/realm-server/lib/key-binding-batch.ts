@@ -50,8 +50,8 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // one who approves it — their own key for a `{{userKey}}` slot, a share of
 // theirs in the realm for an `{{apiKey}}` slot — and the slot has no binding,
 // has one whose grant is gone, or has one whose request has changed since it
-// was approved. Asked with `interactive`, a slot approved for pipelines only
-// needs it too (`pipelines-only`), so a card that is refused
+// was approved. Asked with `interactive`, a slot approved for automations only
+// needs it too (`automations-only`), so a card that is refused
 // `interactive-use-not-approved` can be approved for it: the window offers
 // those only when the user chooses interactive use. A slot approved and
 // unchanged is left out, and so is an operation with nothing left. Review asks
@@ -77,9 +77,9 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 const log = logger('realm:key-bindings');
 
 // `new`: never approved, or its grant is gone. `changed`: its request changed
-// since it was approved. `pipelines-only`: approved, unchanged, for pipelines
+// since it was approved. `automations-only`: approved, unchanged, for automations
 // only, in a batch asked for with `interactive`.
-export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
+export type BatchSlotStatus = 'new' | 'changed' | 'automations-only';
 
 export interface BatchSlot {
   // The token the slot is written as: `userKey`, `apiKey`, `apiKey:<name>`.
@@ -158,10 +158,10 @@ export interface ApprovalBatch {
   // How many more operations need approving than one confirmation can take:
   // they are asked for again once these are approved.
   remaining: number;
-  // How many more operations approved for pipelines only were left out, in a
+  // How many more operations approved for automations only were left out, in a
   // batch asked with `interactive`. They take only the room the operations
   // that need approving leave, so they never hold one back.
-  remainingPipelinesOnly: number;
+  remainingAutomationsOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
   // The ids of the keys (for a `userKey` slot) or shares (for an `apiKey`
@@ -169,20 +169,20 @@ export interface ApprovalBatch {
   // sends it (`keyOfferedForSlot`), by use. One choice fills a slot token for the
   // whole batch, so these are the only ones the window offers for it. Asked
   // with `operations`, only those operations count. For
-  // `pipelines`, an operation approved for pipelines only is left out, as the
-  // window leaves it out of what it approves for pipelines, so a slot it
+  // `automations`, an operation approved for automations only is left out, as the
+  // window leaves it out of what it approves for automations, so a slot it
   // sends to one more destination can take more keys.
   fillers: Record<BatchUse, Record<string, string[]>>;
 }
 
 // Where the requests a batch approves run: from any card a reader opens, or
-// only from pipelines.
-export type BatchUse = 'interactive' | 'pipelines';
+// only from automations.
+export type BatchUse = 'interactive' | 'automations';
 
 export interface ApprovalBatchRequest {
   target: SecureWindowTarget;
   review?: boolean;
-  // Also answer slots approved for pipelines only.
+  // Also answer slots approved for automations only.
   interactive?: boolean;
   // The operations an approval covers, by name, when it covers only some of
   // the batch's: `fillers` then weigh only these, so a key that fits where
@@ -358,7 +358,7 @@ export async function approvalBatch(
         ? 'changed'
         : slots.some((s) => s.status === 'new')
           ? 'new'
-          : 'pipelines-only',
+          : 'automations-only',
       slots,
       openToAnonymous: openToAnonymous.has(name),
     });
@@ -372,7 +372,7 @@ export async function approvalBatch(
       (a, b) => a.label.localeCompare(b.label) || a.name.localeCompare(b.name),
     );
   }
-  let { kept, remaining, remainingPipelinesOnly } = withinSlotLimit(
+  let { kept, remaining, remainingAutomationsOnly } = withinSlotLimit(
     sorted,
     MAX_BATCH_SLOTS,
   );
@@ -401,9 +401,9 @@ export async function approvalBatch(
   };
   let slotSends: Record<BatchUse, ReturnType<typeof sendsOf>> = {
     interactive: sendsOf(() => true),
-    // The operations the window approves for pipelines (`batchFor` in the
+    // The operations the window approves for automations (`batchFor` in the
     // secure origin's `approval-batch.ts`).
-    pipelines: sendsOf((o) => o.status !== 'pipelines-only'),
+    automations: sendsOf((o) => o.status !== 'automations-only'),
   };
   let needsUserKey = [...slotSends.interactive.values()].some(
     (s) => s.key === 'userKey',
@@ -432,7 +432,7 @@ export async function approvalBatch(
     );
   let fillers: Record<BatchUse, Record<string, string[]>> = {
     interactive: fillersOf(slotSends.interactive),
-    pipelines: fillersOf(slotSends.pipelines),
+    automations: fillersOf(slotSends.automations),
   };
   return {
     realm: { url: realm.url, name: realmName },
@@ -445,7 +445,7 @@ export async function approvalBatch(
     review,
     groups: sorted,
     remaining,
-    remainingPipelinesOnly,
+    remainingAutomationsOnly,
     keys: keys.map(({ grants, apiHosts: _apiHosts, ...key }) => ({
       ...key,
       covers: coveredBy(grants),
@@ -461,21 +461,21 @@ export async function approvalBatch(
 // The operations one confirmation can approve, at most `max` slots in all, in
 // the order the window shows them; an operation is never split. Operations
 // that need approving (`new`, `changed`) come first; ones approved for
-// pipelines only fill what room is left, so a card with more of those than
+// automations only fill what room is left, so a card with more of those than
 // one confirmation holds can't keep the ones that need approving out of every
 // batch. Answers how many of each were left out, for the window to say they
 // come next.
 export function withinSlotLimit(
   groups: BatchGroup[],
   max: number,
-): { kept: BatchGroup[]; remaining: number; remainingPipelinesOnly: number } {
+): { kept: BatchGroup[]; remaining: number; remainingAutomationsOnly: number } {
   let slots = 0;
   let keep = new Set<BatchOperation>();
-  let take = (pipelinesOnly: boolean) => {
+  let take = (automationsOnly: boolean) => {
     let left = 0;
     for (let group of groups) {
       for (let operation of group.operations) {
-        if ((operation.status === 'pipelines-only') !== pipelinesOnly) {
+        if ((operation.status === 'automations-only') !== automationsOnly) {
           continue;
         }
         if (left === 0 && slots + operation.slots.length <= max) {
@@ -489,14 +489,14 @@ export function withinSlotLimit(
     return left;
   };
   let remaining = take(false);
-  let remainingPipelinesOnly = take(true);
+  let remainingAutomationsOnly = take(true);
   let kept = groups
     .map((group) => ({
       ...group,
       operations: group.operations.filter((o) => keep.has(o)),
     }))
     .filter((group) => group.operations.length > 0);
-  return { kept, remaining, remainingPipelinesOnly };
+  return { kept, remaining, remainingAutomationsOnly };
 }
 
 // What the key page names each of the owner's bindings by, as the approval
@@ -600,7 +600,7 @@ function slotStatus(
     return 'changed';
   }
   if (interactive && !row.interactive) {
-    return 'pipelines-only';
+    return 'automations-only';
   }
   return undefined;
 }

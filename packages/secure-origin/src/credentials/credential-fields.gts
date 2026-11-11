@@ -7,6 +7,10 @@ import { modifier } from 'ember-modifier';
 import { Input } from '@cardstack/pretui/components/input';
 import cn from '../helpers/cn.ts';
 import type { CredentialFrame } from '../security/credentials.js';
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_RULES,
+} from '../security/password-rules.js';
 import type { Changes } from './changes.ts';
 
 // The credential fields the app frames, drawn the way the app draws its own:
@@ -25,6 +29,8 @@ interface Field {
   placeholder?: string;
   testId: string;
   accessibleName?: string;
+  // `new` for a new password and `confirm` for its confirmation. Either one
+  // states the password rule to a password manager.
   validate?: 'new' | 'confirm';
 }
 
@@ -118,7 +124,8 @@ export default class CredentialFields extends Component<Signature> {
   };
 
   // The form is never sent: a request goes when the app asks for it, made
-  // by the frame. It is submitted only so a password manager sees it go.
+  // by the frame. It is submitted only so a password manager sees it go, and
+  // its method is `post`, as a password manager expects of a password form.
   private preventSubmit = (event: Event) => event.preventDefault();
 
   private isLayout = (layout: string) => this.layout === layout;
@@ -131,6 +138,7 @@ export default class CredentialFields extends Component<Signature> {
         (concatLayout this.layout)
         narrow=this.narrow
       }}
+      method='post'
       novalidate
       {{on 'submit' this.preventSubmit}}
       {{observeSize this.frame}}
@@ -165,6 +173,8 @@ export default class CredentialFields extends Component<Signature> {
                 @controlId={{controlId}}
                 @type={{entry.field.type}}
                 autocomplete={{entry.field.autocomplete}}
+                minlength={{if entry.field.validate MIN_PASSWORD_LENGTH}}
+                passwordrules={{if entry.field.validate PASSWORD_RULES}}
                 placeholder={{entry.field.placeholder}}
                 @value={{entry.value}}
                 @invalid={{if entry.error true false}}
@@ -192,6 +202,8 @@ export default class CredentialFields extends Component<Signature> {
                 @controlId={{controlId}}
                 @type={{entry.field.type}}
                 autocomplete={{entry.field.autocomplete}}
+                minlength={{if entry.field.validate MIN_PASSWORD_LENGTH}}
+                passwordrules={{if entry.field.validate PASSWORD_RULES}}
                 placeholder={{entry.field.placeholder}}
                 @value={{entry.value}}
                 @invalid={{if entry.error true false}}

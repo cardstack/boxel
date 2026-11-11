@@ -24,6 +24,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
+import { assertNoLoginForm } from '../helpers/password-managers.ts';
 import { setupWaitedBrowserWork, waitedFetch } from '../helpers/waiters.ts';
 
 // The key pages, against a realm server that answers the requests they make.
@@ -1119,6 +1120,10 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-anonymous-cap-input]').doesNotExist();
       assert.dom('[data-test-anonymous-monthly-cap-input]').doesNotExist();
       await click('[data-test-anonymous-use-input]');
+      assertNoLoginForm(assert, '[data-test-key-anonymous-use-form]', [
+        '[data-test-anonymous-cap-input]',
+        '[data-test-anonymous-monthly-cap-input]',
+      ]);
       let capInput = find('[data-test-anonymous-cap-input]')!;
       let capName = capInput
         .getAttribute('aria-labelledby')!
@@ -1445,6 +1450,9 @@ module('Integration | key pages', function (hooks) {
           ],
         });
       await openReplace();
+      assertNoLoginForm(assert, '[data-test-key-replace-form]', [
+        '[data-test-key-value]',
+      ]);
       assert
         .dom(where)
         .hasText(
@@ -1702,6 +1710,45 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-keys-done-next]')
         .doesNotExist('opened for no card, there is no card to mention');
       assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    // A name beside a masked value is a login form's shape, on the origin
+    // where the Boxel login is saved, so a password manager would fill the
+    // login in and offer to save the key as the password.
+    test('tells password managers none of its fields is a login, for every kind of key', async function (assert) {
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await click('[data-test-anonymous-use-input]');
+      assertNoLoginForm(assert, '[data-test-enter-key-form]', [
+        '[data-test-key-name]',
+        '[data-test-key-value]',
+        '[data-test-anonymous-cap-input]',
+        '[data-test-anonymous-monthly-cap-input]',
+      ]);
+
+      await click(
+        '[data-test-pretui-radio-option="google-service-account"] input',
+      );
+      assertNoLoginForm(assert, '[data-test-enter-key-form]', [
+        '[data-test-key-name]',
+        '[data-test-service-account-subject]',
+        '[data-test-service-account-scopes]',
+        '[data-test-anonymous-cap-input]',
+        '[data-test-anonymous-monthly-cap-input]',
+      ]);
+
+      await click('[data-test-pretui-radio-option="oauth-client"] input');
+      await click('[data-test-pretui-radio-option="other"] input');
+      assertNoLoginForm(assert, '[data-test-enter-key-form]', [
+        '[data-test-key-name]',
+        '[data-test-oauth-client-id-input]',
+        '[data-test-oauth-authorize-url]',
+        '[data-test-oauth-token-url]',
+        '[data-test-oauth-scopes]',
+        '[data-test-oauth-api-hosts]',
+        '[data-test-key-value]',
+      ]);
     });
 
     test('a key can let people who aren’t signed in use it, with an optional cap', async function (assert) {
@@ -2945,6 +2992,9 @@ module('Integration | key pages', function (hooks) {
       await click(
         '[data-test-pretui-choice-card]:has([data-test-key-choice="Maps"]) input',
       );
+      assertNoLoginForm(assert, '[data-test-share-key-form]', [
+        '[data-test-share-label]',
+      ]);
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
       assert.deepEqual(
@@ -3540,6 +3590,9 @@ module('Integration | key pages', function (hooks) {
       visitShell(OPENED);
       await render(ReplaceKeyPage);
       await waitFor('[data-test-replace-key-form]');
+      assertNoLoginForm(assert, '[data-test-replace-key-form]', [
+        '[data-test-key-value]',
+      ]);
       assert
         .dom('[data-test-opened-for-operation]')
         .hasText('Get the forecast');

@@ -346,8 +346,8 @@ export interface RunOperationOptions {
   // session, which only a realm rendering its own cards holds.
   duringPrerender?: boolean;
   // How a `callApi` invocation arrived, which decides whether a binding
-  // approved for pipelines only fills its slots. Absent is `interactive`: the
-  // realm sets `pipeline` only for a run it makes on its own, never for a
+  // approved for automations only fills its slots. Absent is `interactive`: the
+  // realm sets `automation` only for a run it makes on its own, never for a
   // request off the network.
   callApiMode?: CallApiMode;
   // Where a `callApi` invoked by a caller who isn't signed in was admitted

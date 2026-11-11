@@ -16,6 +16,7 @@ const ownedRealmURL = 'http://test-realm/testuser/owned-workspace/';
 const sharedRealmURL = 'http://test-realm/otheruser/shared-workspace/';
 const delegatedOwnerRealmURL =
   'http://test-realm/otheruser/delegated-owner-workspace/';
+const readOnlyRealmURL = 'http://test-realm/otheruser/read-only-workspace/';
 
 const cardsGridIndex = {
   data: {
@@ -33,7 +34,12 @@ module('Acceptance | dashboard delete', function (hooks) {
   setupDashboardTest(hooks, {
     matrix: {
       loggedInAs: '@testuser:localhost',
-      activeRealms: [ownedRealmURL, sharedRealmURL, delegatedOwnerRealmURL],
+      activeRealms: [
+        ownedRealmURL,
+        sharedRealmURL,
+        delegatedOwnerRealmURL,
+        readOnlyRealmURL,
+      ],
     },
     realms: [
       {
@@ -76,6 +82,15 @@ export class Person extends CardDef {}
         },
         contents: { 'index.json': cardsGridIndex },
       },
+      {
+        url: readOnlyRealmURL,
+        name: 'Read-only Workspace',
+        permissions: {
+          '@testuser:localhost': ['read'],
+          '@otheruser:localhost': ['read', 'write', 'realm-owner'],
+        },
+        contents: { 'index.json': cardsGridIndex },
+      },
     ],
   });
 
@@ -83,7 +98,7 @@ export class Person extends CardDef {}
     window.localStorage.removeItem(SessionLocalStorageKey);
   });
 
-  test('only workspaces the current user owns offer Delete Workspace', async function (assert) {
+  test('only workspaces the current user administers offer Delete Workspace', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
     assert.dom('[data-test-dashboard]').exists();
 
@@ -95,10 +110,17 @@ export class Person extends CardDef {}
     await click(`[data-test-workspace-menu-trigger="${sharedRealmURL}"]`);
     assert
       .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
-      .doesNotExist('a workspace the user does not own has no Delete');
+      .exists(
+        'a workspace shared with the user with write offers Delete, though someone else owns it',
+      );
+
+    await click(`[data-test-workspace-menu-trigger="${readOnlyRealmURL}"]`);
+    assert
+      .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
+      .doesNotExist('a workspace the user may only read has no Delete');
     assert
       .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
-      .exists('the rest of the menu still renders for non-owners');
+      .exists('the rest of the menu still renders for readers');
 
     await click(
       `[data-test-workspace-menu-trigger="${delegatedOwnerRealmURL}"]`,

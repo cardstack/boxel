@@ -55,6 +55,8 @@ export interface PassHost {
   finishPass(pass: Pass): void;
   /** phase 1: snapshot vs. now, into a changeset — no animation started yet */
   measurePass(): Pass | undefined;
+  /** the nearest element the region scrolls inside, if any */
+  scroller?(): HTMLElement | null;
 }
 
 const intents = new Set<PassHost>();
@@ -131,6 +133,9 @@ export function registerSettle(fn: () => void): () => void {
   };
 }
 
+/** each scroller the barrier holds while its regions measure, with its strut */
+const held = new Map<Element, HTMLElement>();
+
 function runBarrier() {
   booked = false;
   const hosts = [...intents];
@@ -147,19 +152,105 @@ function runBarrier() {
       });
     }
   }
-  const passes: Pass[] = [];
+  // A measurement does not move a scroller. To measure, a region puts its
+  // run's values back to rest, and a translate that reached past the end of
+  // its scroller added to the scroll height. At rest that height is
+  // shorter, and the browser clamps a reader at the end to it. Every region
+  // would then measure the page at a scroll the reader never chose, and a
+  // scroll owner would see a scroll it did not write, with no input and no
+  // change in size once the runs stand again, and take it as the reader's.
+  // So while the regions measure and their runs stand back up, a strut
+  // after the scroller's content holds its scroll height to at least the
+  // bottom of the view. Nothing a region measures sits below it. Where the
+  // content really got shorter, the browser clamps once the strut is gone,
+  // as a change in size.
+  const seen = new Set<HTMLElement>();
   for (const host of hosts) {
-    const pass = host.measurePass();
-    if (pass) {
-      passes.push(pass);
+    const scroller = host.scroller?.();
+    if (!scroller || seen.has(scroller)) {
+      continue;
+    }
+    seen.add(scroller);
+    const el = strut(scroller);
+    if (el) {
+      held.set(scroller, el);
     }
   }
-  if (passes.length > 1) {
-    match(passes);
+  try {
+    const passes: Pass[] = [];
+    for (const host of hosts) {
+      const pass = host.measurePass();
+      if (pass) {
+        passes.push(pass);
+      }
+    }
+    if (passes.length > 1) {
+      match(passes);
+    }
+    for (const pass of passes) {
+      pass.host.finishPass(pass);
+    }
+  } finally {
+    for (const el of held.values()) {
+      el.remove();
+    }
+    held.clear();
   }
-  for (const pass of passes) {
-    pass.host.finishPass(pass);
+}
+
+/**
+ * Takes the hold off a scroller that a region is about to place itself, as a
+ * `@route` region places the window before it measures. The region chose
+ * that scroll, so nothing is left to keep, and a strut still standing would
+ * let it land past the end of the content, where the browser clamps it once
+ * the strut is gone.
+ */
+export function letGo(scroller: Element | null) {
+  if (!scroller) {
+    return;
   }
+  held.get(scroller)?.remove();
+  held.delete(scroller);
+}
+
+/**
+ * A block after the scroller's content that reaches the bottom of its view.
+ * Only a scroller laid out in normal flow takes one: there a last block
+ * moves nothing above it, where a flex or grid container might align,
+ * stretch or wrap its other children around it. A scroller whose own size
+ * follows its content, such as a flex item that grows, would change size
+ * with the block in, so a strut that moves the scroller's box is taken out
+ * again and that scroller is not held. A stylesheet that picks the
+ * scroller's children by their place among siblings (`:last-child`,
+ * `:nth-last-child()`, `:only-child`) sees the strut as the last child while
+ * it stands, and the real last child measures without such a rule. The
+ * document's content lies in `<body>`, so when the document scrolls, the
+ * strut goes there and `<body>`'s layout is the one that counts. A scroller
+ * at the top cannot be clamped, so it needs none.
+ */
+function strut(scroller: HTMLElement): HTMLElement | undefined {
+  if (scroller.scrollTop <= 0) {
+    return undefined;
+  }
+  const parent =
+    scroller === document.scrollingElement ? document.body : scroller;
+  const { display } = getComputedStyle(parent);
+  if (display !== 'block' && display !== 'flow-root') {
+    return undefined;
+  }
+  const { clientWidth, clientHeight } = scroller;
+  const el = document.createElement('div');
+  el.setAttribute('aria-hidden', 'true');
+  el.style.cssText = `display:block;height:${scroller.scrollTop + clientHeight}px;margin:0;padding:0;border:0;visibility:hidden;pointer-events:none`;
+  parent.appendChild(el);
+  if (
+    scroller.clientHeight !== clientHeight ||
+    scroller.clientWidth !== clientWidth
+  ) {
+    el.remove();
+    return undefined;
+  }
+  return el;
 }
 
 const deltaOf = (s: Sprite) =>

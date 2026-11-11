@@ -27,6 +27,12 @@ import {
 } from '../utils/operator-token.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import {
+  GRAFANA_ID_HEADER,
+  GRAFANA_PROXY_HEADER,
+  GrafanaIdentityError,
+  type GrafanaIdentityVerifier,
+} from '../lib/grafana-identity.ts';
+import {
   isKeyRoutePath,
   keepsMethodAndPathOnly,
   withCredentialHeadersMasked,
@@ -705,8 +711,53 @@ export function sharedSecretAuthorization(
   };
 }
 
-// The Grafana operator-action endpoints share one secret with Grafana.
-export const grafanaAuthorization = sharedSecretAuthorization;
+// Operator actions (`/_grafana-*`) need the shared secret. A request that came
+// through the Grafana datasource proxy (it carries the proxy header, which the
+// datasource adds) must also carry a Grafana ID token for a signed-in user with
+// the Editor or Admin role. Every Grafana identity can reach the datasource
+// proxy, including the read-only preview service account, so the secret alone
+// would let any of them act. A request sent straight to the realm server with
+// the secret, as an operator holding it does from a shell, needs no token.
+export function grafanaAuthorization(
+  grafanaSecret: string,
+  grafanaIdentity: GrafanaIdentityVerifier | undefined,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let secretAuthorization = sharedSecretAuthorization(grafanaSecret);
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    await secretAuthorization(ctxt, async () => {
+      if (ctxt.req.headers[GRAFANA_PROXY_HEADER] !== undefined) {
+        let idToken = ctxt.req.headers[GRAFANA_ID_HEADER];
+        if (!grafanaIdentity) {
+          await sendResponseForForbiddenRequest(
+            ctxt,
+            'Operator actions through Grafana are not available: GRAFANA_URL is not configured on the realm server',
+          );
+          return;
+        }
+        if (typeof idToken !== 'string' || !idToken) {
+          await sendResponseForForbiddenRequest(
+            ctxt,
+            'Operator actions through Grafana need a Grafana ID token',
+          );
+          return;
+        }
+        try {
+          let identity = await grafanaIdentity.verify(idToken);
+          getLogger('realm:grafana-identity').info(
+            `operator action ${ctxt.method} ${ctxt.path} by ${identity.username ?? '(no username)'} (${identity.subject}, ${identity.role})`,
+          );
+        } catch (e) {
+          if (e instanceof GrafanaIdentityError) {
+            await sendResponseForForbiddenRequest(ctxt, e.message);
+            return;
+          }
+          throw e;
+        }
+      }
+      await next();
+    });
+  };
+}
 
 export async function sendResponseForBadRequest(
   ctxt: Koa.Context,

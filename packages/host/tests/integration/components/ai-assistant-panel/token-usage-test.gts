@@ -218,4 +218,50 @@ module('Integration | ai-assistant-panel | token usage', function (hooks) {
         'one counted turn has no total to add up',
       );
   });
+  // One question, answered over several replies (one per tool round).
+  async function sendTurnOfReplies(
+    roomId: string,
+    usages: Record<string, number | undefined>[],
+  ) {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'A question',
+      msgtype: 'm.text',
+    });
+    usages.forEach((usage, index) => {
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: `Reply ${index}.`,
+        msgtype: 'm.text',
+        isStreamingFinished: true,
+        data: { usage },
+      });
+    });
+  }
+
+  test("an answer's footer adds up the credits of the replies it took", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    await sendTurnOfReplies(roomId, [
+      { promptTokens: 1000, completionTokens: 100, costUsd: 0.1 },
+    ]);
+    await sendTurnOfReplies(roomId, [
+      { promptTokens: 1000, completionTokens: 100, costUsd: 0.012 },
+      { promptTokens: 1000, completionTokens: 100, costUsd: 0.0304 },
+    ]);
+    let footer = '[data-test-message-idx="4"] [data-test-answer-footer]';
+    await waitFor(footer);
+    assert.dom(footer).containsText('42 credits · 142 credits this session');
+  });
+
+  test("an answer's footer gives no credits when one of its replies reported no cost", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    await sendTurnOfReplies(roomId, [
+      { promptTokens: 1000, completionTokens: 100, costUsd: 0.012 },
+      { promptTokens: 1000, completionTokens: 100 },
+    ]);
+    let footer = '[data-test-message-idx="2"] [data-test-answer-footer]';
+    await waitFor(footer);
+    assert.dom(footer).containsText('this session');
+    assert
+      .dom(footer)
+      .doesNotIncludeText('credit', 'a partial sum is not given as the cost');
+  });
 });

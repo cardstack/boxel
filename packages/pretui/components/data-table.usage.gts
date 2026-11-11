@@ -65,6 +65,7 @@ class DataTableUsage extends Component {
   @tracked showDetail = true;
   @tracked lastSort = '—';
   @tracked lastSelection = '—';
+  @tracked lastActivated = '—';
   @tracked lastFilters = '—';
 
   setSelectionMode = (v: string) => (this.selectionMode = v as SelectionMode);
@@ -82,6 +83,9 @@ class DataTableUsage extends Component {
   rowKey = (row: Lot): RowKey => row.id;
   rowLabel = (row: Lot): string => lotLabel(row);
 
+  onActivate = (row: Lot) => {
+    this.lastActivated = row.id;
+  };
   onSortChange = (sort: SortState | null) => {
     this.lastSort = sort ? sort.key + ' ' + sort.dir : 'unsorted';
   };
@@ -134,6 +138,8 @@ class DataTableUsage extends Component {
               <strong>{{this.lastSort}}</strong></span>
             <span>selected
               <strong>{{this.lastSelection}}</strong></span>
+            <span>activated
+              <strong>{{this.lastActivated}}</strong></span>
             <span>filters
               <strong>{{this.lastFilters}}</strong></span>
           </div>
@@ -153,6 +159,7 @@ class DataTableUsage extends Component {
               @itemNoun='lot'
               @minWidth='46rem'
               @onSortChange={{this.onSortChange}}
+              @onActivate={{this.onActivate}}
               @onSelectionChange={{this.onSelectionChange}}
               @onFiltersChange={{this.onFiltersChange}}
             >
@@ -239,6 +246,10 @@ class DataTableUsage extends Component {
           @description="'none', 'single' or 'multi'. multi adds a header select-all whose mixed state is a real indeterminate checkbox, so it announces aria-checked mixed. Every selected tr carries aria-selected as well as data-selected."
           @onInput={{this.setSelectionMode}}
         />
+        <Args.Action
+          @name='onActivate'
+          @description='(row, index). A click on the row (not on a control or widget inside it, and not the end of a text selection) or Enter on the focused row. With selectionMode on, a row click still activates; selection stays on the checkbox or radio. Omitted, rows are not focusable and have no pointer cursor.'
+        />
         <Args.Bool
           @name='pinFirst (demo knob)'
           @value={{this.pinFirst}}
@@ -320,15 +331,15 @@ class DataTableUsage extends Component {
     <style scoped>
       .dt-demo {
         display: grid;
-        gap: var(--space-4, 11px);
+        gap: var(--boxel-sp-sm);
         min-width: 0;
       }
       .dt-readout {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--space-4, 11px);
+        gap: var(--boxel-sp-sm);
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .dt-readout strong {

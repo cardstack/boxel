@@ -10,6 +10,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
+import { assertNoLoginForm } from '../helpers/password-managers.ts';
 import { setupWaitedBrowserWork, waitedFetch } from '../helpers/waiters.ts';
 
 // A key's and a share's usage and limits in the secure window, against a
@@ -492,6 +493,16 @@ module('Integration | key usage and limits', function (hooks) {
       await render(KeyPage);
       await click(USAGE_TOGGLE);
       await waitFor('[data-test-key-limits-form]');
+      assertNoLoginForm(
+        assert,
+        '[data-test-key-limits-form]',
+        [
+          'rateBurst',
+          'rateRefillPerMinute',
+          'dailyBudget',
+          'monthlyBudget',
+        ].map((name) => `[data-test-key-limit-input="${name}"]`),
+      );
 
       assert
         .dom('[data-test-key-limit-input="rateBurst"]')
