@@ -39,6 +39,7 @@ import compile, { continuation, fadeOn, sameScore } from './compile.ts';
 import {
   join as joinPass,
   leave as leavePass,
+  letGo,
   type Pass,
   setBeforeMeasure,
   setPassScheduler,
@@ -378,6 +379,14 @@ function scrolls(el: Element): boolean {
 /** the nearest ancestor that scrolls vertically: what `@inView` calls the view */
 function scrollerOf(el: Element): HTMLElement | null {
   for (let p = el.parentElement; p; p = p.parentElement) {
+    // while <html> lets its overflow show, <body>'s overflow is the
+    // viewport's: <body> never scrolls, the document does
+    if (
+      p === document.body &&
+      getComputedStyle(document.documentElement).overflowY === 'visible'
+    ) {
+      continue;
+    }
     const overflow = getComputedStyle(p).overflowY;
     if (
       overflow === 'auto' ||
@@ -817,6 +826,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // the arriving scene wants it after the swap renders and BEFORE final
     // bounds are measured, so every landing is measured where it will live
     if (this.args.route && this.arrived.size && this.snapshots.size) {
+      // the hold comes off first, so @scroll reads the page as it is
+      letGo(document.scrollingElement);
       const intent = this.args.scroll ?? 'top';
       const y = intent === 'top' ? 0 : intent();
       window.scrollTo(0, y);
@@ -960,6 +971,21 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // the barrier now pairs any id inserted here against the same id removed in
     // ANOTHER region, before finishPass compiles a timeline against the result
     return { claimed, host: this, inserted, kept, removed, root };
+  }
+
+  /**
+   * the scroller whose scroll height the barrier holds while this region
+   * measures: the nearest scrolling ancestor, or the document when there is
+   * none
+   */
+  scroller(): HTMLElement | null {
+    if (!this.element) {
+      return null;
+    }
+    return (
+      scrollerOf(this.element) ??
+      (document.scrollingElement as HTMLElement | null)
+    );
   }
 
   /** phase 3: identities are settled — compile this region's timeline and play it */

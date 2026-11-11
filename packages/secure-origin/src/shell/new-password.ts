@@ -1,20 +1,10 @@
 import { trackedObject } from '@ember/reactive/collections';
 
+import { newPasswordError } from '../security/password-rules.js';
+
 // A new password and its confirmation, as the app's registration and
 // password reset forms ask for them: each checked when it loses focus, and
 // its error cleared as it is typed into.
-
-export const MIN_PASSWORD_LENGTH = 8;
-
-export function passwordError(password: string): string | undefined {
-  if (!password) {
-    return 'Password is missing';
-  }
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`;
-  }
-  return undefined;
-}
 
 export function confirmError(
   password: string,
@@ -58,7 +48,7 @@ export class NewPassword {
   };
 
   checkPassword = () => {
-    this.state.passwordError = passwordError(this.password);
+    this.state.passwordError = newPasswordError(this.password);
   };
 
   checkConfirm = () => {
@@ -76,7 +66,7 @@ export class NewPassword {
   }
 
   get passwordValid(): boolean {
-    return Boolean(this.password) && !passwordError(this.password);
+    return !newPasswordError(this.password);
   }
 
   get confirmValid(): boolean {

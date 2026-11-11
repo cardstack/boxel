@@ -578,6 +578,53 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(await violationsIn(page), [], 'signed out: no violation');
   });
 
+  test('sign-in and sign-up each load as a document of their own', async function (assert) {
+    // A password manager reads a page's form as the page loads, so the
+    // sign-up form never replaces the sign-in form in place, nor the other
+    // way round.
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-secure-register]', {
+      timeout: 10000,
+    });
+    await page.evaluate(() => {
+      (window as any).__document = 'sign-in';
+    });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle0' }),
+      page.click('[data-test-secure-register]'),
+    ]);
+    await page.waitForSelector('[data-test-register-form]', {
+      timeout: 10000,
+    });
+    assert.strictEqual(
+      await page.evaluate(() => window.location.pathname),
+      '/secure/register',
+    );
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      undefined,
+      'the sign-up page is a new document',
+    );
+    assert.deepEqual(await violationsIn(page), [], 'sign-up: no violation');
+
+    await page.evaluate(() => {
+      (window as any).__document = 'register';
+    });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle0' }),
+      page.click('[data-test-cancel-btn]'),
+    ]);
+    await page.waitForSelector(WINDOW_SIGN_IN, { timeout: 10000 });
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      undefined,
+      'the sign-in page it goes back to is a new document too',
+    );
+    assert.deepEqual(await violationsIn(page), [], 'sign-in: no violation');
+  });
+
   test('the screens a sign-in is handed back to the app from run under the policy', async function (assert) {
     // A window already signed in, sent here by an app on a loopback origin:
     // it asks to confirm, then, with nothing to mint the token, says the
