@@ -507,6 +507,34 @@ Current date and time: 2025-06-11T11:43:00.533Z
       );
     });
 
+    test('points at realm.operations.capabilities to ask the realm whether it allows an operation', async () => {
+      const ASKS =
+        'To learn whether the realm allows the user an operation now, on a given card or as a create of a given type, ask it with realm.operations.capabilities in run-realm-code, which runs nothing.';
+      let notes = {
+        'a policy whose grants are listed': await contextFor({
+          card: POLICY,
+          rules: [
+            {
+              targetType: { module: LIBRARY, name: 'Book' },
+              grants: [{ operation: 'renew', where: '.borrowerId == actor()' }],
+            },
+          ],
+        }),
+        'a policy that could not be read': await contextFor({ card: POLICY }),
+        'a policy too large to list': await contextFor({
+          card: POLICY,
+          tooLarge: true,
+        }),
+      };
+      for (let [policy, context] of Object.entries(notes)) {
+        assert.true(context.includes(ASKS), `the note for ${policy} names it`);
+      }
+      assert.false(
+        (await contextFor()).includes('realm.operations.capabilities'),
+        'a workspace whose realm names no policy has nothing to ask about',
+      );
+    });
+
     test('refuses every edit when the realm names no policy', async () => {
       let context = await contextFor();
 

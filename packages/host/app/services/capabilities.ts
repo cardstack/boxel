@@ -376,25 +376,62 @@ export default class CapabilitiesService
     checks: CapabilityCheck[],
   ): Promise<CapabilityAnswer[] | undefined> {
     try {
-      let response = await this.network.authedFetch(
-        `${realmURL}_capabilities`,
-        {
-          method: 'POST',
-          headers: {
-            Accept: SupportedMimeType.JSON,
-            'Content-Type': SupportedMimeType.JSON,
-          },
-          body: JSON.stringify({ checks }),
-        },
-      );
-      if (!response.ok) {
-        return undefined;
-      }
-      let body = (await response.json()) as { checks?: CapabilityAnswer[] };
-      return body.checks;
+      return await this.#post(realmURL, checks);
     } catch {
       return undefined;
     }
+  }
+
+  // Asks the realm about each pair now, as the session's caller, and answers
+  // in the order they were asked: for a caller that wants the answer at the
+  // moment it asks rather than as a template reads it, such as a Realm Runner
+  // script. Nothing is held, and no held answer is served. A list longer than
+  // the realm's cap goes out as more than one request. A realm that doesn't
+  // answer throws, since the caller has no later read to retry on.
+  //
+  // The answers are as advisory as `canInvoke`'s: the realm decides again
+  // when the operation is invoked.
+  async check(
+    realmURL: string,
+    checks: CapabilityCheck[],
+  ): Promise<CapabilityAnswer[]> {
+    let answers: CapabilityAnswer[] = [];
+    for (let start = 0; start < checks.length; start += CAPABILITY_CHECK_CAP) {
+      let chunk = checks.slice(start, start + CAPABILITY_CHECK_CAP);
+      let answered = await this.#post(realmURL, chunk);
+      if (answered.length !== chunk.length) {
+        throw new Error(
+          `${realmURL} answered ${answered.length} of the ${chunk.length} pairs of a capability check`,
+        );
+      }
+      answers.push(...answered);
+    }
+    return answers;
+  }
+
+  async #post(
+    realmURL: string,
+    checks: CapabilityCheck[],
+  ): Promise<CapabilityAnswer[]> {
+    let response = await this.network.authedFetch(`${realmURL}_capabilities`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSON,
+        'Content-Type': SupportedMimeType.JSON,
+      },
+      body: JSON.stringify({ checks }),
+    });
+    if (!response.ok) {
+      let detail = await response.text().catch(() => '');
+      throw new Error(
+        `${realmURL} did not answer the capability check: ${response.status} ${response.statusText}${detail ? ` ${detail}` : ''}`,
+      );
+    }
+    let body = (await response.json()) as { checks?: CapabilityAnswer[] };
+    if (!Array.isArray(body.checks)) {
+      throw new Error(`${realmURL} answered the capability check with no list`);
+    }
+    return body.checks;
   }
 
   // Listen to a realm this session has asked about, once.
