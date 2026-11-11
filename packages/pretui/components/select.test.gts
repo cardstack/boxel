@@ -11,6 +11,10 @@ const OPTIONS = [
   { value: 'green', label: 'Green' },
   { value: 'oolong', label: 'Oolong' },
 ];
+const FLAGGED = [
+  { value: 'jp', label: 'Japan', glyph: '🇯🇵' },
+  { value: 'pt', label: 'Portugal', glyph: '🇵🇹' },
+];
 
 function wrapper(): HTMLElement {
   return document.querySelector('[data-test-pretui-select]') as HTMLElement;
@@ -154,6 +158,41 @@ module('Pretui | components/select', function (hooks) {
     await fillIn(input, 'oo');
     let shown = Array.from(document.querySelectorAll("[role='listbox'] [data-test-pretui-select-option]")).map((o) => o.textContent?.trim());
     assert.deepEqual(shown, ['Oolong'], 'typing filters the options by label');
+  });
+
+  test('the search box tells password managers to leave it alone', async function (assert) {
+    await render(<template><Select @options={{OPTIONS}} @searchEnabled={{true}} /></template>);
+    await click(trigger());
+    let input = '[data-test-pretui-select-search-input]';
+    assert.dom(input).hasAttribute('data-1p-ignore', '');
+    assert.dom(input).hasAttribute('data-lpignore', 'true');
+    assert.dom(input).hasAttribute('data-form-type', 'other');
+    assert.dom(input).hasAttribute('data-bwignore', '');
+  });
+
+  test("an option's glyph leads its label on the trigger and in the list, hidden from assistive technology", async function (assert) {
+    await render(<template><Select @options={{FLAGGED}} @defaultValue='pt' /></template>);
+    let face = trigger().querySelector('[data-test-pretui-select-option-glyph]') as HTMLElement;
+    assert.dom(face).hasText('🇵🇹', "the trigger draws the chosen option's glyph");
+    assert.dom(face).hasAttribute('aria-hidden', 'true');
+    assert.strictEqual(face.nextElementSibling?.textContent?.trim(), 'Portugal', 'before its label');
+    await click(trigger());
+    let glyphs = Array.from(document.querySelectorAll("[role='listbox'] [data-test-pretui-select-option-glyph]"));
+    assert.deepEqual(glyphs.map((g) => g.textContent?.trim()), ['🇯🇵', '🇵🇹'], 'each row draws its glyph');
+    assert.true(glyphs.every((g) => g.getAttribute('aria-hidden') === 'true'), 'each one hidden from assistive technology');
+  });
+
+  test('the search and the trigger typeahead read the label, not the glyph', async function (assert) {
+    let chosen: string | undefined;
+    let choose = (value: string) => (chosen = value);
+    await render(<template><Select @options={{FLAGGED}} @searchEnabled={{true}} @onValueChange={{choose}} /></template>);
+    await triggerKeyEvent(trigger(), 'keydown', 'P');
+    assert.strictEqual(chosen, 'pt', "typing a label's first letter on the closed trigger chooses that option");
+    await click(trigger());
+    let input = document.querySelector('[data-test-pretui-select-search-input]') as HTMLInputElement;
+    await fillIn(input, 'jap');
+    let shown = Array.from(document.querySelectorAll("[role='listbox'] [data-test-pretui-select-option]")).map((o) => o.textContent?.trim());
+    assert.deepEqual(shown, ['Japan'], 'the search filters by label');
   });
 
   test('a label pointing at @controlId names the trigger, then the value', async function (assert) {

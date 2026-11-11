@@ -12,11 +12,18 @@
 // its history operations answer `history-unavailable`.
 
 import type { Querier } from './expression.ts';
+import {
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
+  sanitizeLoggingCorrelationId,
+} from './prerender-headers.ts';
 
-// How a write was made. The realm server sets `operations`, `system`,
-// `deploy` and `mcp` itself. `host`, `ai-assistant` and `boxel-cli` are what
-// a client may claim in `X-Boxel-Write-Channel`. `api` is a write whose
-// request names no channel.
+// How a write was made: the client that made it, not the endpoint it reached,
+// so a batch sent through `/_operations` records the channel its request
+// claims. `host`, `ai-assistant` and `boxel-cli` are what a client may claim
+// in `X-Boxel-Write-Channel`. `operations`, `system`, `deploy` and `mcp` are
+// the realm server's own: only a writer in the realm server names one, in
+// code, and a header claiming one is ignored. `api` is a write whose request
+// names no channel.
 export type WriteChannel =
   | 'host'
   | 'ai-assistant'
@@ -128,6 +135,161 @@ export interface WriteContext {
   pushId?: string;
   pushFinal?: boolean;
   intent?: ChangeIntent;
+}
+
+// The longest value a write's context keeps. Values become git trailers, so
+// a value is also refused when it holds anything but printable ASCII: a
+// newline in one would forge a trailer of its own.
+const MAX_CONTEXT_VALUE_LENGTH = 256;
+const CONTEXT_VALUE_PATTERN = /^[\x20-\x7E]+$/;
+
+function contextValue(raw: string | null | undefined): string | undefined {
+  let trimmed = raw?.trim();
+  if (
+    !trimmed ||
+    trimmed.length > MAX_CONTEXT_VALUE_LENGTH ||
+    !CONTEXT_VALUE_PATTERN.test(trimmed)
+  ) {
+    return undefined;
+  }
+  return trimmed;
+}
+
+// A write's context as its request states it. The headers are advisory, and
+// none of them can change who the author is.
+//
+// - The channel is the client's claim only when it is one a client may make
+//   (`CLIENT_WRITE_CHANNELS`). A request that claims one of the realm
+//   server's own channels, names an unknown one, or names none is `api`.
+// - `agent`, `room` and the tool call describe an AI write, so they are kept
+//   only on `ai-assistant`. A stray one on another channel would split
+//   realm-historian's grouping for nothing.
+// - The correlation id is the tool call on an AI write, so each tool call
+//   is its own revision. Otherwise, and on an AI write that names no tool
+//   call, it is the request's logging correlation id.
+// - The push id and its final mark group the requests of one
+//   `boxel realm push`, so they are kept only on `boxel-cli`. A push group
+//   stays open past realm-historian's quiet period and maximum age, so a
+//   stray push id on another channel would hold that writer's revision open.
+//   `pushFinal` marks the push's last request, so it is kept only beside a
+//   push id. It closes the group early; a push whose last request records no
+//   event (it was refused, or changed nothing) closes at realm-historian's
+//   push timeout instead.
+//
+// A writer with no request sets its context itself. `mcp` is the channel for
+// writes made through the MCP connector, with the OAuth client as `agent` and
+// the connector's write id as `correlationId`.
+export function writeContextFromHeaders(headers: {
+  get(name: string): string | null;
+}): WriteContext {
+  let claimed = headers.get(WRITE_CHANNEL_HEADER)?.trim().toLowerCase();
+  let channel: WriteChannel =
+    claimed && (CLIENT_WRITE_CHANNELS as readonly string[]).includes(claimed)
+      ? (claimed as WriteChannel)
+      : 'api';
+  let loggingCorrelationId =
+    sanitizeLoggingCorrelationId(
+      headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    ) ?? undefined;
+  let agent: string | undefined;
+  let room: string | undefined;
+  let correlationId = loggingCorrelationId;
+  if (channel === 'ai-assistant') {
+    agent = contextValue(headers.get(WRITE_AGENT_HEADER));
+    room = contextValue(headers.get(WRITE_ROOM_HEADER));
+    correlationId =
+      contextValue(headers.get(WRITE_TOOL_CALL_HEADER)) ?? loggingCorrelationId;
+  }
+  let pushId: string | undefined;
+  let pushFinal = false;
+  if (channel === 'boxel-cli') {
+    pushId = contextValue(headers.get(PUSH_ID_HEADER));
+    pushFinal =
+      pushId !== undefined &&
+      headers.get(PUSH_FINAL_HEADER)?.trim().toLowerCase() === 'true';
+  }
+  return {
+    channel,
+    ...(agent ? { agent } : {}),
+    ...(room ? { room } : {}),
+    ...(correlationId ? { correlationId } : {}),
+    ...(pushId ? { pushId } : {}),
+    ...(pushFinal ? { pushFinal: true } : {}),
+  };
+}
+
+// The context a change event records, from whatever its writer set. A
+// writer with no request sets its context in code, sometimes from values it
+// doesn't control (the OAuth client a connector acts for names itself), so
+// every free-text field passes the same check a header value does, and a
+// field that fails it is dropped. A channel the event can't name is `api`.
+// An intent is checked too (`eventIntent`).
+export function writeContextForEvent(context: WriteContext): WriteContext {
+  let channel: WriteChannel = WRITE_CHANNELS.includes(context.channel)
+    ? context.channel
+    : 'api';
+  let agent = contextValue(context.agent);
+  let room = contextValue(context.room);
+  let operationId = contextValue(context.operationId);
+  let correlationId = contextValue(context.correlationId);
+  let pushId = contextValue(context.pushId);
+  let intent = eventIntent(context.intent);
+  return {
+    channel,
+    ...(agent ? { agent } : {}),
+    ...(room ? { room } : {}),
+    ...(operationId ? { operationId } : {}),
+    ...(correlationId ? { correlationId } : {}),
+    ...(pushId ? { pushId } : {}),
+    ...(pushId && context.pushFinal ? { pushFinal: true } : {}),
+    ...(intent ? { intent } : {}),
+  };
+}
+
+// A string in an intent reaches the revision message, as `Boxel-Revert-Of`
+// and in the subject. A realm path may legally hold a line break, and git
+// can't carry one there, or a NUL anywhere in a message.
+const CONTROL_CHARACTER = /\p{Cc}/u;
+
+function intentString(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !CONTROL_CHARACTER.test(value)
+  );
+}
+
+// The intent a change event records: one of the known kinds, rebuilt from
+// its own fields. An intent whose kind is unknown, or one of whose strings
+// is empty or holds a control character, is dropped whole, and its event
+// records an ordinary write.
+function eventIntent(
+  intent: ChangeIntent | undefined,
+): ChangeIntent | undefined {
+  switch (intent?.kind) {
+    case 'revert':
+      return intentString(intent.revision) && intentString(intent.path)
+        ? {
+            kind: 'revert',
+            revision: intent.revision,
+            path: intent.path,
+            forced: intent.forced === true,
+          }
+        : undefined;
+    case 'scan':
+      return (intent.source === undefined || intentString(intent.source)) &&
+        (intent.commit === undefined || intentString(intent.commit))
+        ? {
+            kind: 'scan',
+            ...(intent.source !== undefined ? { source: intent.source } : {}),
+            ...(intent.commit !== undefined ? { commit: intent.commit } : {}),
+          }
+        : undefined;
+    case 'delete-realm':
+      return { kind: 'delete-realm' };
+    default:
+      return undefined;
+  }
 }
 
 // What the write path hands the journal for one write. `author` is the

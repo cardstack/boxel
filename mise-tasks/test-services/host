@@ -62,7 +62,7 @@ REPO_ROOT="$(cd "../.." && pwd)"
 if [ -n "${CI:-}" ]; then
   pnpm --dir=../skills-realm skills:setup
   node "$REPO_ROOT/scripts/normalize-realm-mtimes.mjs" \
-    ../base ../skills-realm/contents ../openrouter-realm
+    ../base ../skills-realm/contents/skills ../openrouter-realm
 fi
 
 # Seeding the index tables from a cached snapshot is `mise run ci:import-index`,

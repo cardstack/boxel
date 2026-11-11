@@ -10,6 +10,7 @@ import SearchIcon from '@cardstack/boxel-icons/search';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import { POPUPS_IN_PLACE } from '../internal/overlay';
+import { ignoredByPasswordManagers } from '../password-managers';
 import type { ControlNotifyArgs } from '../pretui-primitives';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
@@ -21,6 +22,11 @@ export interface SelectOption {
    * an address that tells two options with the same label apart. The
    * search matches the label alone. */
   meta?: string;
+  /** a character drawn before the label, on the trigger and in the list,
+   * such as a country's flag. It is decorative: hidden from assistive
+   * technology, and the search and the trigger's typeahead read the label
+   * alone, so typing a name's first letter still finds it. */
+  glyph?: string;
 }
 
 export const SELECT_DISPLAYS = ['full', 'icon'] as const;
@@ -189,6 +195,9 @@ interface SelectSearchSignature {
   Element: HTMLDivElement;
 }
 
+// The search box always tells password managers to leave it alone. It
+// filters a list, so no login belongs in it, the secure origin's included,
+// and it renders in the wormhole, where a caller's modifier can't reach it.
 class SelectSearch extends Component<SelectSearchSignature> {
   // Runs as the list opens, from a marker this template always renders
   // inside it. It gives the list the marker's scope attribute: the list
@@ -201,7 +210,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
     if (!list) {
       return;
     }
-    for (let { name } of [...marker.attributes]) {
+    for (let { name } of Array.from(marker.attributes)) {
       if (name.startsWith('data-scopedcss-')) {
         list.setAttribute(name, '');
       }
@@ -279,6 +288,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
           {{on 'focus' @onFocus}}
           {{on 'blur' @onBlur}}
           {{this.focusOnOpen}}
+          {{ignoredByPasswordManagers}}
           data-test-pretui-select-search-input
         />
       </div>
@@ -339,11 +349,11 @@ class SelectSearch extends Component<SelectSearchSignature> {
           translate: 0 -50%;
           pointer-events: none;
         }
-        /* the trigger's type, its 1px edge, and its 2px focus ring laid
-           over it */
+        /* the trigger's type, copied onto the list on each open as the
+           options' is, its 1px edge, and its 2px focus ring laid over it */
         .ember-power-select-search-input {
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--boxel-line-height-xs);
+          font-size: var(--pretui-select-list-font-size);
+          line-height: var(--pretui-select-list-line-height);
           letter-spacing: var(--boxel-lsp-xs);
           min-height: var(--_select-h);
           padding-block: 0;
@@ -538,6 +548,13 @@ export class Select extends Component<SelectSignature> {
         data-test-pretui-select-trigger
         as |option|
       >
+        {{#if option.glyph}}
+          <span
+            class='pretui-select-glyph'
+            aria-hidden='true'
+            data-test-pretui-select-option-glyph
+          >{{option.glyph}}</span>
+        {{/if}}
         <span data-test-pretui-select-option>{{option.label}}</span>
         {{#if option.meta}}
           <span

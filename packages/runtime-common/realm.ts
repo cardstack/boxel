@@ -205,10 +205,13 @@ import {
   getContentMeta,
   getFileMetaForPaths,
 } from './file-meta.ts';
-import type {
-  ChangeEventChange,
-  ChangeEventInput,
-  RealmHistory,
+import {
+  writeContextForEvent,
+  writeContextFromHeaders,
+  type ChangeEventChange,
+  type ChangeEventInput,
+  type RealmHistory,
+  type WriteContext,
 } from './realm-history.ts';
 import {
   systemError,
@@ -2426,6 +2429,16 @@ export interface WriteOptions {
   // config names a dedicated account for that reason, not a person who edits
   // the realm.
   initiatingUser?: string | null;
+  // How this write was made, recorded on its change event beside the author:
+  // its channel and, where they apply, the AI agent and room, the correlation
+  // id, the push it belongs to and an intent that names its own revision. A
+  // request handler fills it from the request's headers
+  // (`writeContextFromHeaders`). A writer with no request sets it itself,
+  // naming one of the realm server's own channels, such as `mcp` for a write
+  // made through the MCP connector, or an intent, such as `revert` for a
+  // write that restores an earlier revision. Absent, the write is recorded
+  // as `api`. It never decides the author, which is `initiatingUser`.
+  history?: WriteContext;
   // Where a caller reporting where its write's time went wants this commit's
   // stages stamped. The commit drains prior indexing, makes the bytes
   // durable, queues an index job, waits for a worker to run it and then
@@ -6031,6 +6044,7 @@ export class Realm {
             updatedFiles,
             appendedPaths,
             initiatingUser,
+            history: options?.history,
             partial: true,
           });
         } catch (persistErr: unknown) {
@@ -6079,6 +6093,7 @@ export class Realm {
       updatedFiles,
       appendedPaths,
       initiatingUser,
+      history: options?.history,
       partial: false,
     });
     // Everything the caller asked for is durable at this point: the bytes, the
@@ -6452,6 +6467,7 @@ export class Realm {
     updatedFiles,
     appendedPaths,
     initiatingUser,
+    history,
     partial,
   }: {
     fileMetaRows: {
@@ -6464,6 +6480,7 @@ export class Realm {
     updatedFiles: LocalPath[];
     appendedPaths: Set<LocalPath>;
     initiatingUser: string | null;
+    history: WriteContext | undefined;
     partial: boolean;
   }): Promise<
     Map<
@@ -6499,14 +6516,19 @@ export class Realm {
       await this.removeFileMeta(removedFiles);
       return createdMap;
     }
+    // How the write was made, checked here whoever set it. A write that
+    // names nothing is `api`.
+    let context = writeContextForEvent(history ?? { channel: 'api' });
     let event: ChangeEventInput | undefined =
       changes.length > 0
         ? {
+            // Spread first, so nothing in it can stand in for the fields
+            // below.
+            ...context,
             realmURL: this.url,
             // The effective authenticated user, never a client-supplied
             // header. A write with no user is the realm's own Matrix user's.
             author: initiatingUser ?? this.#matrixClientUserId,
-            channel: 'api',
             ...(partial ? { partial: true } : {}),
             changes,
           }
@@ -6881,6 +6903,7 @@ export class Realm {
               serializeFile: true,
               waitForIndex,
               initiatingUser: requestContext.authenticatedUser ?? null,
+              history: writeContextFromHeaders(request.headers),
               broadcastRealmEvents: !realmEventsSuppressed(request),
               policyAudit: policyAuditOptionsFor(
                 request,
@@ -7350,6 +7373,7 @@ export class Realm {
           {
             clientRequestId: caller.clientRequestId || null,
             actor: caller.actor || undefined,
+            history: writeContextFromHeaders(request.headers),
             ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
             // One request, several cards, and not all of them from the same
             // place — which is the case the event's authorship naming exists
@@ -8040,6 +8064,8 @@ export class Realm {
     options?: {
       waitForIndex?: boolean;
       initiatingUser?: string | null;
+      // See `WriteOptions.history`.
+      history?: WriteContext;
       // See `WriteOptions.broadcastRealmEvents`.
       broadcastRealmEvents?: boolean;
     },
@@ -8054,6 +8080,7 @@ export class Realm {
     options?: {
       waitForIndex?: boolean;
       initiatingUser?: string | null;
+      history?: WriteContext;
       broadcastRealmEvents?: boolean;
     },
   ): Promise<void> {
@@ -8080,6 +8107,7 @@ export class Realm {
       updatedFiles: [],
       appendedPaths: new Set(),
       initiatingUser: options?.initiatingUser ?? null,
+      history: options?.history,
       partial: false,
     });
     let waitForIndex = options?.waitForIndex !== false;
@@ -8141,6 +8169,8 @@ export class Realm {
       // The user whose request removes the files, recorded as the author of
       // the change. Absent for a system-originated removal.
       initiatingUser?: string | null;
+      // See `WriteOptions.history`.
+      history?: WriteContext;
     },
   ): Promise<void> {
     await this.#dbAdapter.withFileWriteLocks(this.url, paths, () =>
@@ -8150,7 +8180,7 @@ export class Realm {
 
   private async _deleteAllUnlocked(
     paths: LocalPath[],
-    options?: { initiatingUser?: string | null },
+    options?: { initiatingUser?: string | null; history?: WriteContext },
   ): Promise<void> {
     let urls: URL[] = [];
     let trackPromises: Promise<void>[] = [];
@@ -8183,6 +8213,7 @@ export class Realm {
       updatedFiles: [],
       appendedPaths: new Set(),
       initiatingUser: options?.initiatingUser ?? null,
+      history: options?.history,
       partial: false,
     });
     let { invalidations, generation, invalidatedTypes, sharedPass } =
@@ -12566,6 +12597,7 @@ export class Realm {
         {
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
           actor: requestContext.authenticatedUser ?? undefined,
+          history: writeContextFromHeaders(request.headers),
           waitForIndex: false,
           broadcastRealmEvents: !realmEventsSuppressed(request),
           policyAudit: policyAuditOptionsFor(
@@ -12959,6 +12991,7 @@ export class Realm {
     await this.delete(handle.path, {
       waitForIndex: false,
       initiatingUser: requestContext.authenticatedUser ?? null,
+      history: writeContextFromHeaders(request.headers),
       broadcastRealmEvents: !realmEventsSuppressed(request),
     });
     return createResponse({
@@ -13610,6 +13643,7 @@ export class Realm {
         await commitBatch(this.batchCore, [entry], {
           ...admission.batch,
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          history: writeContextFromHeaders(request.headers),
           policyAudit: policyAuditOptionsFor(
             request,
             requestContext.authenticatedUser,
@@ -14141,6 +14175,7 @@ export class Realm {
           {
             ...admission.batch,
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            history: writeContextFromHeaders(request.headers),
             policyAudit: policyAuditOptionsFor(
               request,
               requestContext.authenticatedUser,
@@ -16003,6 +16038,7 @@ export class Realm {
         [{ op: 'delete', href: url.href, ...admission.entry }],
         {
           ...admission.batch,
+          history: writeContextFromHeaders(request.headers),
           // A 204 reads nothing from the index, so the removal's own pass is
           // waited for only as long as `indexWaitOptions` allows.
           ...indexWaitOptions(request, { bounded: true }),
