@@ -26,6 +26,7 @@ import {
   prepareTestDB,
   testRealm,
 } from './helpers/index.ts';
+import { withFacetFields } from './helpers/facet-fields.ts';
 
 // Facets beyond plain values, on Postgres (docs/search-intent.md, Facets):
 // counting without a facet's own selection, statistics, range and date
@@ -51,6 +52,7 @@ const conceptDef: Definition = {
       isPrimitive: true,
       isComputed: false,
       fieldOrCard: stringRef,
+      search: { facet: true },
     },
   },
 } as Definition;
@@ -73,7 +75,7 @@ const talkDef: Definition = {
       isPrimitive: true,
       isComputed: false,
       fieldOrCard: stringRef,
-      search: { role: 'title' },
+      search: { role: 'title', facet: true },
     },
     f1: {
       type: 'contains',
@@ -96,7 +98,7 @@ const talkDef: Definition = {
       isComputed: false,
       fieldOrCard: numberRef,
       serializerName: 'number',
-      search: { facet: 'date' },
+      search: { facet: true },
     },
     f4: {
       type: 'contains',
@@ -239,7 +241,11 @@ module(basename(import.meta.filename), function (hooks) {
         },
         lastModified: Date.now(),
         resourceCreatedAt: Date.now(),
-        searchData,
+        searchData: await withFacetFields(
+          searchData,
+          talkDef,
+          makeDefinitionLookup(),
+        ),
         markdown: String(searchData.title),
         deps: new Set(),
         displayNames: ['Talk'],
@@ -357,10 +363,12 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(facetStats?.hnScore?.max, 50);
   });
 
-  test("a field declared facet: 'date' comes back as a monthly histogram", async function (assert) {
+  test('a number holding a timestamp counts by month when the query names an interval', async function (assert) {
+    // `facet` is a boolean: a number is range buckets by default, and the
+    // query asks for a histogram of a timestamp with `interval`.
     let { facets, facetStats } = await meta({
       filter: { type: on },
-      facets: [{ by: 'lastDiscussed' }],
+      facets: [{ by: 'lastDiscussed', interval: 'month' }],
     });
     assert.deepEqual(
       facets?.lastDiscussed,
@@ -439,7 +447,11 @@ module(basename(import.meta.filename), function (hooks) {
           },
           lastModified: Date.now(),
           resourceCreatedAt: Date.now(),
-          searchData,
+          searchData: await withFacetFields(
+            searchData,
+            types[0] === talkKey ? talkDef : conceptDef,
+            makeDefinitionLookup(),
+          ),
           markdown: String(searchData._title ?? ''),
           deps: new Set(),
           displayNames: [types[0] === talkKey ? 'Talk' : 'Concept'],
@@ -455,15 +467,27 @@ module(basename(import.meta.filename), function (hooks) {
     await write(otherRealm, [
       [
         `${elsewhere}.json`,
-        { _title: 'Secret plan', name: 'Secret plan' },
+        {
+          _title: 'Secret plan',
+          cardTitle: 'Secret plan',
+          name: 'Secret plan',
+        },
         [conceptKey],
       ],
     ]);
     await write(testRealm, [
-      [`${here}.json`, { _title: 'CRDT', name: 'CRDT' }, [conceptKey]],
+      [
+        `${here}.json`,
+        { _title: 'CRDT', cardTitle: 'CRDT', name: 'CRDT' },
+        [conceptKey],
+      ],
       [
         `${gone}.json`,
-        { _title: 'Retired idea', name: 'Retired idea' },
+        {
+          _title: 'Retired idea',
+          cardTitle: 'Retired idea',
+          name: 'Retired idea',
+        },
         [conceptKey],
       ],
       [

@@ -108,31 +108,6 @@ type SearchableTargetResult =
   | { status: 'loaded'; card: CardDef }
   | { status: 'broken'; sentinel: LinkErrorValue | LinkNotFoundValue };
 
-// The fields a link declares `search: { include: [...] }`, or undefined.
-function includedFieldsOf(
-  field: Field<BaseDefConstructor>,
-): string[] | undefined {
-  if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
-    return undefined;
-  }
-  let intent = field.searchIntent;
-  return intent && intent.include?.length ? intent.include : undefined;
-}
-
-// A loaded link target reduced to its id and its included fields.
-function projectIncluded(value: any, include: string[]): any {
-  if (value == null || typeof value !== 'object') {
-    return value;
-  }
-  let out: Record<string, unknown> = { id: value.id };
-  for (let name of include) {
-    if (name in value) {
-      out[name] = value[name];
-    }
-  }
-  return out;
-}
-
 // Run independent async branches concurrently, preserving declaration order
 // in the returned values. Concurrency is what lets a single walk fire every
 // link load the current store state permits: a card's independent
@@ -288,13 +263,6 @@ async function searchableQueryableValue(
       continue;
     }
     let { matched, tails } = matchSearchableRoutes(routes, fieldName);
-    // A link of the indexed card declared `search: { include: [...] }`
-    // (docs/search-intent.md) loads its target like a searchable link, then
-    // keeps only the target's id and the included fields: enough to find and
-    // label the card by, while showing it delegates to its prerendered HTML by
-    // id. A `searchable` route on the same link keeps the whole expansion.
-    let include =
-      path === '' && !matched ? includedFieldsOf(field!) : undefined;
     // Search-doc generation is a pure read: reading a declared relationship
     // through the getter writes `emptyValue` into the data bucket, which marks
     // an otherwise-unset link "used" and pulls it into the owner card's
@@ -387,7 +355,7 @@ async function searchableQueryableValue(
             value,
             field!,
             rawValue,
-            matched || include !== undefined,
+            matched,
             tails,
             nextStack,
             store,
@@ -402,7 +370,7 @@ async function searchableQueryableValue(
           entryValue = await searchableLinksToMany(
             field!,
             rawValue,
-            matched || include !== undefined,
+            matched,
             tails,
             nextStack,
             store,
@@ -416,11 +384,6 @@ async function searchableQueryableValue(
         default: {
           return undefined;
         }
-      }
-      if (include) {
-        entryValue = Array.isArray(entryValue)
-          ? entryValue.map((slot) => projectIncluded(slot, include!))
-          : projectIncluded(entryValue, include);
       }
       if (timings?.fieldsMs) {
         // Accumulate rather than assign: a plural field's items (and a card

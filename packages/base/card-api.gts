@@ -127,6 +127,7 @@ import {
   SearchTextBuilder,
   type CardSearchIntent,
   type FieldSearchIntent,
+  type IndexFieldDeclarations,
   type FieldSearchOption,
   type SearchText,
 } from '@cardstack/runtime-common';
@@ -134,6 +135,7 @@ import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   queryFieldHasUnreachableRealms,
+  queryFieldRefusal,
   resolveQueryFieldEagerly,
   resolveSavedFieldQuery,
   validateRelationshipQuery,
@@ -2992,6 +2994,19 @@ export class BaseDef {
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
   static icon: CardOrFieldTypeIcon;
+  // What the index holds for every row of this type beside its fields, with
+  // the same `search` options a field declares (docs/search.md, Facets):
+  // its type (the row's own type, labeled with its display name, as the
+  // realm's type summary shows it), its realm, and when it was created and
+  // last modified. They are index columns rather than fields, so they never
+  // serialize; declaring `facet: true` here is what lets any query facet by
+  // them, cards and files alike.
+  static indexFields: IndexFieldDeclarations = {
+    _type: { search: { facet: true } },
+    _realm: { search: { facet: true } },
+    createdAt: { search: { facet: true } },
+    lastModified: { search: { facet: true } },
+  };
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;
@@ -3911,6 +3926,11 @@ export class FieldDef extends BaseDef {
   // none (docs/search-intent.md, Defaults). A subclass inherits its parent's.
   static searchDefaults: FieldSearchIntent | undefined;
 
+  // The subfield a field of this type counts by when a facet names the
+  // field itself (`facets: [{ by: 'price' }]` over `price.amount`), once its
+  // usage declares `search: { facet: true }` (docs/search.md, Facets).
+  static facetValue: string | undefined;
+
   static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
@@ -4307,8 +4327,12 @@ export class FileDef extends BaseDef {
     ReadOnlyField,
   ) as unknown as RealmResourceIdentifier;
   @field sourceUrl = contains(StringField);
-  @field url = contains(StringField);
-  @field name = contains(StringField);
+  // A file is found by its path and its name with a glob
+  // (`pattern: { url: '**/components/*.gts' }`), on every file type. The
+  // file indexer stamps both into the row's pattern text
+  // (`FILE_PATTERN_FIELDS`).
+  @field url = contains(StringField, { search: { patterns: true } });
+  @field name = contains(StringField, { search: { patterns: true } });
   @field contentType = contains(StringField);
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
@@ -4750,6 +4774,12 @@ export class CardDef extends BaseDef {
   });
   static displayName = 'Card';
   static isCardDef = true;
+  // A card also has its type's display name under `_cardType`, the key
+  // `eq: { _cardType }` filters by.
+  static indexFields: IndexFieldDeclarations = {
+    ...BaseDef.indexFields,
+    _cardType: { search: { facet: true } },
+  };
   // Search defaults for the whole type: which field is its title, which
   // fields rank it, its language. See docs/search-intent.md. Not `search`,
   // which a card may declare as an `@operation`.
@@ -5428,6 +5458,12 @@ registerRelationshipProbe((instance, field) => {
         source: 'card-api:relationship-probe',
       }),
     );
+    // Read after the resource is asked for: resolving the query is what
+    // finds a refusal on this side.
+    let queryError = queryFieldRefusal(instance, field.name);
+    if (queryError) {
+      return { isLoading: false, isQueryField: true, queryError };
+    }
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;

@@ -958,6 +958,10 @@ export interface RelationshipStatus<T extends CardDef = CardDef> {
   // membership is unresolved, and for a singular query-backed field, whose one
   // slot is the field working as declared.
   isPartial: boolean;
+  // A query-backed field whose query was refused (an unknown member in the
+  // newer spelling, say): the refusal's code and message. Such a field links
+  // no cards. Absent when the query was not refused, and for a declared link.
+  queryError?: { code: string; message: string };
 }
 
 // `getRelationshipMembershipState` reports `isLoading` and query-field membership, both of
@@ -983,6 +987,9 @@ export interface RelationshipProbeResult<T extends CardDef = CardDef> {
   // contributes no rows and no count, so membership is short and the shortfall
   // is not measurable. Ignored for declared fields.
   queryHasUnreachableRealms?: boolean;
+  // The refusal of the field's query, when it was refused. Ignored for
+  // declared fields.
+  queryError?: { code: string; message: string };
 }
 type RelationshipProbe = (
   instance: CardDef,
@@ -1032,6 +1039,21 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
   let isLoading = probe?.isLoading ?? false;
 
   if (field.queryDefinition) {
+    // A refused query has no search behind it: the field links no cards, and
+    // says why.
+    if (probe?.queryError) {
+      return {
+        isLoading: false,
+        isLoaded: true,
+        membership:
+          field.fieldType === 'linksTo'
+            ? [relationshipStateForEntry<T>(null)]
+            : [],
+        totalMatchCount: undefined,
+        isPartial: false,
+        queryError: probe.queryError,
+      };
+    }
     // Query-backed: membership and loading both come from the field's search
     // resource (supplied by the probe), not the data bucket. `membership` is
     // `undefined` until the search has produced a result set.
