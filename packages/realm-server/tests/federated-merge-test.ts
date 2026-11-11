@@ -8,6 +8,7 @@ import {
   type SearchEntryQuery,
 } from '@cardstack/runtime-common/search-entry';
 import {
+  hasWarning,
   IndexQueryEngine,
   IndexWriter,
   InvalidQueryError,
@@ -96,7 +97,9 @@ function query(payload: Record<string, unknown>) {
 
 const blend = [
   {
-    blend: [{ by: 'item.price', 'item.on': { module: 'm', name: 'P' } }],
+    blend: [
+      { by: 'item.price', 'item.on': { module: 'http://m.test/m', name: 'P' } },
+    ],
     k: 60,
   },
 ];
@@ -214,7 +217,7 @@ function engineRealms(hooks: NestedHooks, corpus: Record<string, Note[]>) {
           '_blendScore',
           '_collapseSize',
           '_explain',
-          '_rerank',
+          '_window',
           '_expression',
           '_sortValues',
         ];
@@ -308,7 +311,7 @@ module(basename(import.meta.filename), function () {
         sort: [
           {
             by: 'item.price',
-            'item.on': { module: 'm', name: 'P' },
+            'item.on': { module: 'http://m.test/m', name: 'P' },
             direction,
           },
         ],
@@ -321,13 +324,51 @@ module(basename(import.meta.filename), function () {
         byPrice('asc', { number: 0, size: 4 }),
       );
       assert.deepEqual(ids(doc), ['a:a1', 'b:b1', 'b:b2', 'a:a2']);
-      assert.deepEqual(doc.meta.federation, { results: 'merged' });
+      assert.deepEqual(doc.meta.federation, {
+        results: 'merged',
+        path: 'merge',
+      });
       assert.strictEqual(doc.meta.page.total, 7);
       let desc = await searchEntryRealms(
         [realm(A, rowsA), realm(B, rowsB)],
         byPrice('desc', { number: 0, size: 3 }),
       );
       assert.deepEqual(ids(desc), ['a:a4', 'b:b3', 'a:a3']);
+      assert.false(
+        hasWarning(doc.meta, 'approximate-order'),
+        'a field sort compares exactly across realms: no approximate-order',
+      );
+    });
+
+    test('a score sort marks the merged order approximate', async function (assert) {
+      let doc = await searchEntryRealms(
+        [realm(A, rowsA), realm(B, rowsB)],
+        query({
+          federation: { results: 'merged' },
+          sort: blend,
+          page: { number: 0, size: 4 },
+        }),
+      );
+      assert.true(
+        hasWarning(doc.meta, 'approximate-order'),
+        'meta.warnings holds approximate-order',
+      );
+      assert.false(
+        'approximateOrder' in doc.meta,
+        'a caveat is a warning, not a flag on meta',
+      );
+      let one = await searchEntryRealms(
+        [realm(A, rowsA)],
+        query({
+          federation: { results: 'merged' },
+          sort: blend,
+          page: { number: 0, size: 4 },
+        }),
+      );
+      assert.false(
+        hasWarning(one.meta, 'approximate-order'),
+        'one realm orders exactly',
+      );
     });
 
     test('pages are one global sequence: no repeats, no gaps', async function (assert) {
@@ -383,6 +424,24 @@ module(basename(import.meta.filename), function () {
         }),
       );
       assert.deepEqual(short(doc), ['a1', 'b1', 'b2', 'a2']);
+      assert.true(
+        hasWarning(doc.meta, 'approximate-order'),
+        'the order is approximate',
+      );
+      let swapped = await searchEntryRealms(
+        [ctx.realm(B), ctx.realm(A)],
+        query({
+          federation: { results: 'merged' },
+          filter: { matches: 'loop' },
+          sort: [{ by: 'item.textRelevance' }],
+          page: { number: 0, size: 4 },
+        }),
+      );
+      assert.deepEqual(
+        short(swapped),
+        short(doc),
+        'the realms in another order give the same page',
+      );
       let scores = doc.data.map((e) => e.meta?._matchRelevance as number);
       assert.deepEqual(
         [...scores].sort((x, y) => y - x),
@@ -392,42 +451,47 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('merged reranks, on the real engine', function (hooks) {
-    let ctx = engineRealms(hooks, {
-      [A]: [
-        { id: 'a1', text: 'loop loop loop loop loop', score: 1 },
-        { id: 'a2', text: 'loop', score: 4 },
-      ],
-      [B]: [
-        { id: 'b1', text: 'loop loop loop loop', score: 2 },
-        { id: 'b2', text: 'loop loop', score: 3 },
-      ],
-    });
-    let short = (doc: { data: { id: string }[] }) =>
-      doc.data.map((e) => e.id.replace(/^http:\/\/(\w)\/(\w+)\.json$/, '$2'));
+  module(
+    'merged windows (expression sort entries with top), on the real engine',
+    function (hooks) {
+      let ctx = engineRealms(hooks, {
+        [A]: [
+          { id: 'a1', text: 'loop loop loop loop loop', score: 1 },
+          { id: 'a2', text: 'loop', score: 4 },
+        ],
+        [B]: [
+          { id: 'b1', text: 'loop loop loop loop', score: 2 },
+          { id: 'b2', text: 'loop loop', score: 3 },
+        ],
+      });
+      let short = (doc: { data: { id: string }[] }) =>
+        doc.data.map((e) => e.id.replace(/^http:\/\/(\w)\/(\w+)\.json$/, '$2'));
 
-    test('a merged rerank orders the realms together by its value', async function (assert) {
-      let doc = await searchEntryRealms(
-        [ctx.realm(A), ctx.realm(B)],
-        query({
-          federation: { results: 'merged' },
-          filter: { matches: 'loop' },
-          sort: [{ by: 'item.textRelevance' }],
-          rerank: { expression: 'score' },
-          page: { number: 0, size: 4 },
-        }),
-      );
-      assert.deepEqual(short(doc), ['a2', 'b2', 'b1', 'a1']);
-      assert.deepEqual(
-        doc.data.map((e) => (e.meta as Record<string, unknown>)?._rerank),
-        [4, 3, 2, 1],
-      );
-      assert.true(
-        doc.data.every((e) => typeof e.meta?._matchRelevance === 'number'),
-        'each row keeps its text relevance',
-      );
-    });
-  });
+      test('a merged window orders the realms together by its value', async function (assert) {
+        let doc = await searchEntryRealms(
+          [ctx.realm(A), ctx.realm(B)],
+          query({
+            federation: { results: 'merged' },
+            filter: { matches: 'loop' },
+            sort: [
+              { expression: 'score', top: 100 },
+              { by: 'item.textRelevance' },
+            ],
+            page: { number: 0, size: 4 },
+          }),
+        );
+        assert.deepEqual(short(doc), ['a2', 'b2', 'b1', 'a1']);
+        assert.deepEqual(
+          doc.data.map((e) => (e.meta as Record<string, unknown>)?._window),
+          [4, 3, 2, 1],
+        );
+        assert.true(
+          doc.data.every((e) => typeof e.meta?._matchRelevance === 'number'),
+          'each row keeps its text relevance',
+        );
+      });
+    },
+  );
 
   module('each realm reports how it answered', function () {
     test('a refusal with a code, an outage and a timeout read differently', async function (assert) {
@@ -454,6 +518,11 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(realms[C].status, 'unavailable');
       assert.strictEqual(realms['http://d/'].status, 'timeout');
       assert.true(doc.meta.incomplete, 'kept for the clients that read it');
+      assert.deepEqual(
+        doc.meta.warnings?.filter((w) => w.code === 'incomplete').length,
+        1,
+        'and said once in meta.warnings',
+      );
     });
 
     test('a slow realm times out on its own, and the others still answer', async function (assert) {
@@ -494,7 +563,10 @@ module(basename(import.meta.filename), function () {
         url: B,
         searchEntries: async () => ({
           data: [],
-          meta: { page: { total: 1000, totalIsEstimate: true } },
+          meta: {
+            page: { total: 1000 },
+            warnings: [{ code: 'total-estimated', message: 'a lower bound' }],
+          },
         }),
       };
       for (let results of ['byRealm', 'merged'] as const) {
@@ -503,13 +575,20 @@ module(basename(import.meta.filename), function () {
           query({ federation: { results } }),
         );
         assert.strictEqual(doc.meta.page.total, 1001, `${results}: summed`);
-        assert.true(doc.meta.page.totalIsEstimate, `${results}: flagged`);
+        assert.true(
+          hasWarning(doc.meta, 'total-estimated'),
+          `${results}: the warning carries over`,
+        );
+        assert.false(
+          'totalIsEstimate' in doc.meta.page,
+          `${results}: no flag on the page`,
+        );
       }
       let exact = await searchEntryRealms(
         [realm(A, [{ id: 'a1', price: 1, score: 1 }])],
         query({}),
       );
-      assert.strictEqual(exact.meta.page.totalIsEstimate, undefined);
+      assert.false(hasWarning(exact.meta, 'total-estimated'));
     });
 
     test("a realm's ms covers its whole part: its search and its mount", async function (assert) {
@@ -631,6 +710,75 @@ module(basename(import.meta.filename), function () {
         facetQuery(1),
       );
       assert.deepEqual(doc.meta.facets?.color, [{ value: 'blue', count: 6 }]);
+    });
+  });
+
+  module("each realm's warnings", function () {
+    type Warning = { code: string; message: string };
+    // A realm whose engine answered with these warnings.
+    function warning(url: string, warnings: Warning[]) {
+      return {
+        url,
+        searchEntries: async () => ({
+          data: [],
+          meta: { page: { total: 0 }, warnings },
+        }),
+      };
+    }
+    const truncated = { code: 'binding-truncated', message: 'cut to 1,000' };
+    const timeout = { code: 'page-size-clamped', message: 'clamped to 2,000' };
+
+    for (let results of ['byRealm', 'merged'] as const) {
+      test(`${results}: a warning reaches the answer once, naming the realms it came from when not all gave it`, async function (assert) {
+        let doc = await searchEntryRealms(
+          [
+            warning(A, [truncated, timeout]),
+            warning(B, [truncated]),
+            warning(C, [truncated, truncated]),
+          ],
+          query({ realms: [A, B, C], federation: { results } }),
+        );
+        let byCode = Object.fromEntries(
+          (doc.meta.warnings ?? []).map((w) => [w.code, w]),
+        );
+        assert.strictEqual(
+          doc.meta.warnings?.length,
+          2,
+          'one warning per code and message, however many realms gave it',
+        );
+        assert.deepEqual(
+          byCode['binding-truncated'],
+          truncated,
+          'every realm gave it: the search warns, with no realms named',
+        );
+        assert.deepEqual(
+          byCode['page-size-clamped'],
+          { ...timeout, realms: [A] },
+          'only A gave it: it names A',
+        );
+      });
+    }
+
+    test('the same code with another message is another warning', async function (assert) {
+      let doc = await searchEntryRealms(
+        [
+          warning(A, [truncated]),
+          warning(B, [{ ...truncated, message: 'cut to 500' }]),
+        ],
+        query({}),
+      );
+      assert.deepEqual(doc.meta.warnings, [
+        { ...truncated, realms: [A] },
+        { ...truncated, message: 'cut to 500', realms: [B] },
+      ]);
+    });
+
+    test('no realm warning, no warnings member', async function (assert) {
+      let doc = await searchEntryRealms(
+        [warning(A, []), realm(B, [{ id: 'b1', price: 1, score: 1 }])],
+        query({}),
+      );
+      assert.strictEqual(doc.meta.warnings, undefined);
     });
   });
 

@@ -1,6 +1,7 @@
 import {
   assertQuery,
   InvalidQueryError,
+  isLogBinding,
   nearestMember,
   isRelevanceSort,
   type Facet,
@@ -17,15 +18,31 @@ import {
   DEFAULT_FACET_SIZE,
   MAX_FACET_SIZE,
 } from './query.ts';
+import { assertTimeZone } from './time-zone.ts';
 import {
   emitSearchTiming,
   SearchRequestError,
   type SearchOpts,
 } from './search-utils.ts';
 import { RequestTimings } from './request-timings.ts';
-import { SearchBoundError } from './search-bounds.ts';
+import {
+  APPROXIMATE_ORDER,
+  incompleteWarning,
+  SearchBoundError,
+  withWarningOnce,
+} from './search-bounds.ts';
+import { setSignalDeadline, signalDeadline } from './db.ts';
 import { internalSortKeyIn } from './internal-sort-keys.ts';
-import { lowerQuery, usesNewSyntax } from './query-syntax.ts';
+import {
+  assertPlainQueryData,
+  DEFAULT_RERANK_TOP,
+  lowerQuery,
+  MAX_OLDER_QUERY_DEPTH,
+  RERANK_REFUSAL,
+  sameTypeRef,
+  setOwn,
+  usesNewSyntax,
+} from './query-syntax.ts';
 import { BXL_FORMULA_FUNCTIONS } from '@cardstack/bxl/compiler';
 import type {
   EntryCollectionDocument,
@@ -50,12 +67,17 @@ import {
   type EntryResource,
 } from './resource-types.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
+import type { LogAccess } from './log-query.ts';
 import {
   isValidPrerenderedHtmlFormat,
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from './prerendered-html-format.ts';
 import { isCodeRef, isResolvedCodeRef } from './card-document-shape.ts';
+import {
+  resolveTypeReferences,
+  type TypeReferenceContext,
+} from './type-reference.ts';
 import {
   generalSortFields,
   MATCH_RELEVANCE_SORT_KEY,
@@ -142,6 +164,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'let',
   'explain',
   'rerank',
+  'timeZone',
   'realms',
   'fields',
   'select',
@@ -159,6 +182,28 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
 export type SearchEntryScope = 'cards' | 'files' | 'all';
 
 const SEARCH_ENTRY_SCOPES: SearchEntryScope[] = ['cards', 'files', 'all'];
+
+// What a wire filter node may hold, for the nearest name to a slip.
+const WIRE_FILTER_MEMBERS = [
+  'eq',
+  'in',
+  'range',
+  'contains',
+  'matches',
+  'near',
+  'pattern',
+  'regex',
+  'linkedFrom',
+  'every',
+  'any',
+  'not',
+  'item.on',
+  'fields',
+  'within',
+  'prefix',
+  'typos',
+  'scope',
+];
 
 // The operator members whose value is an object keyed by field paths.
 const FIELD_KEYED_OPERATORS = [
@@ -222,6 +267,11 @@ export interface SearchEntryQuery {
   // for reads of cards of another type than the query's. Internal; in
   // process only.
   grantsForType?: (type: CodeRef) => Promise<Filter[] | null>;
+  // Set for a caller a realm policy scopes: what they may read of each log a
+  // `let` binding reads (`isLogBinding`). `policyScopedQuery` sets it to
+  // admit nothing, and the realm, which knows its log-line grants, replaces
+  // it. Internal; in process only.
+  logAccess?: (url: string) => LogAccess | Promise<LogAccess>;
   // `select`: values to read off each row's search doc, by path, in order.
   // The response is then a table (`{ columns, rows }`), not entries.
   columns?: SearchColumn[];
@@ -232,10 +282,6 @@ export interface SearchEntryQuery {
   // the values the query sorted it by (`meta._sortValues`), so rows from
   // different realms can be ordered by the query's own sort. Internal.
   exposeSortValues?: boolean;
-  // The query's rerank is an expression it placed over the top window (see
-  // `lowerEntryPayload`), so the engine reports it as the query's
-  // expression. Internal.
-  expressionOverTopWindow?: boolean;
 }
 
 // One requested column: the name it goes out under, and the search-doc path
@@ -323,7 +369,12 @@ function parseColumns(value: unknown): SearchColumn[] {
   return out;
 }
 
-function invalidQuery(message: string, code?: string): SearchRequestError {
+// Every refusal carries the grammar's code: a value of the wrong kind or
+// shape (`invalid-value`) unless the caller names another.
+function invalidQuery(
+  message: string,
+  code = 'invalid-value',
+): SearchRequestError {
   return new SearchRequestError(
     'invalid-query',
     `Invalid query: ${message}`,
@@ -332,7 +383,7 @@ function invalidQuery(message: string, code?: string): SearchRequestError {
 }
 
 function invalidHtmlQuery(message: string): SearchRequestError {
-  return new SearchRequestError('invalid-render', message);
+  return new SearchRequestError('invalid-render', message, 'invalid-value');
 }
 
 // The htmlQuery binding captured out of the filter's top-level `eq`. The
@@ -568,7 +619,10 @@ function translateFilterNode(
   capture?: HtmlQueryCapture,
 ): Record<string, unknown> {
   if (typeof node !== 'object' || node == null || Array.isArray(node)) {
-    throw invalidQuery(`${pointer}: filter must be an object`);
+    throw invalidQuery(
+      `${pointer}: filter must be an object`,
+      Array.isArray(node) ? 'invalid-value' : 'missing-member',
+    );
   }
   let out: Record<string, unknown> = {};
   for (let [key, value] of Object.entries(node)) {
@@ -607,8 +661,12 @@ function translateFilterNode(
       // checks they sit beside matches.
       out[key] = value;
     } else if (key === 'typeahead') {
-      // Type-ahead over the `_typeahead` text — no field path to address.
-      out.typeahead = value;
+      // An earlier draft's operator: type-ahead is a title-scoped prefix
+      // matches.
+      throw invalidQuery(
+        `${pointer}/typeahead: "typeahead" is not a filter operator; write type-ahead as { matches, prefix: true, scope: 'title' }`,
+        'unknown-key',
+      );
     } else if (key === 'linkedFrom') {
       // another card's links: its URL and its own field name, neither of
       // them a path on the cards being searched.
@@ -637,8 +695,9 @@ function translateFilterNode(
         `${pointer}/${HTML_QUERY}: ${HTML_QUERY} is a field — bind it with eq: { "${HTML_QUERY}": … }`,
       );
     } else {
+      let near = nearestMember(key, WIRE_FILTER_MEMBERS);
       throw invalidQuery(
-        `${pointer}: unknown filter member "${key}" — the type anchor is item.on and field paths are addressed through item. inside the filter operators (${FIELD_KEYED_OPERATORS.join(
+        `${pointer}: unknown filter member "${key.slice(0, 80)}"${near ? `; did you mean "${near}"?` : ''} — the type anchor is item.on and field paths are addressed through item. inside the filter operators (${FIELD_KEYED_OPERATORS.join(
           '/',
         )})`,
         'unknown-key',
@@ -676,7 +735,13 @@ function translateFieldKeys(
       }
       continue;
     }
-    out[stripItemPrefix(fieldPath, `${pointer}/${fieldPath}`)] = fieldValue;
+    // an own member even when the path is `__proto__`, so it is read (and
+    // refused as no field) rather than dropped with the operator
+    setOwn(
+      out,
+      stripItemPrefix(fieldPath, `${pointer}/${fieldPath}`),
+      fieldValue,
+    );
   }
   return out;
 }
@@ -692,7 +757,7 @@ function translateSort(
   return value.map((entry, i) => {
     let pointer = `${path}[${i}]`;
     if (typeof entry !== 'object' || entry == null) {
-      throw invalidQuery(`${pointer}: missing sort object`);
+      throw invalidQuery(`${pointer}: missing sort object`, 'missing-member');
     }
     let out: Record<string, unknown> = {};
     for (let [key, v] of Object.entries(entry)) {
@@ -737,6 +802,7 @@ function translateSort(
       } else if (key === 'on') {
         throw invalidQuery(
           `${pointer}: the sort type anchor is addressed as item.on`,
+          'unknown-key',
         );
       } else {
         let near = nearestMember(key, WIRE_SORT_MEMBERS);
@@ -890,10 +956,12 @@ const QUERY_MEMBERS = new Set([
   'let',
   'explain',
   'rerank',
+  'timeZone',
 ]);
 // The wire's spellings back to the card grammar's: `item.on` → `on`, and
 // `item.` off every field path (operator keys, `by`, `select`, `collapse`,
-// a comparison's `by` and `near`, `fields`). Values stay as written.
+// a comparison's `by` and `near`, `fields`, `within`, `exists`/`missing`, a
+// facet's `measure`). Values stay as written.
 const WIRE_PATH_OPS = new Set([
   'eq',
   'in',
@@ -914,12 +982,21 @@ function unwireAnchors(node: unknown, key?: string): unknown {
       : node.map((n) => unwireAnchors(n));
   }
   if (node == null || typeof node !== 'object') {
-    return ['by', 'select', 'collapse'].includes(key ?? '')
+    return ['by', 'select', 'collapse', 'within', 'exists', 'missing'].includes(
+      key ?? '',
+    )
       ? unprefix(node)
       : node;
   }
+  let entries = Object.entries(node as Record<string, unknown>);
+  // A node that is only `item.on` is the wire's own spelling of every card
+  // of the type, in the older spelling as in the newer: it reads as that
+  // type filter, not as the newer spelling's bare anchor.
+  if (entries.length === 1 && entries[0][0] === ITEM_ANCHOR) {
+    return { type: entries[0][1] };
+  }
   let out: Record<string, unknown> = {};
-  for (let [k, v] of Object.entries(node as Record<string, unknown>)) {
+  for (let [k, v] of entries) {
     let name = k === 'item.on' ? 'on' : k === 'item.type' ? 'type' : k;
     if (name === 'on' || name === 'type') {
       out[name] = v; // a code ref is a value
@@ -937,11 +1014,29 @@ function unwireAnchors(node: unknown, key?: string): unknown {
           x,
         ]),
       );
-    } else if (k === 'compare' && v && typeof v === 'object') {
+    } else if (
+      k === 'compare' &&
+      v &&
+      typeof v === 'object' &&
+      !Array.isArray(v)
+    ) {
       let c = unwireAnchors(v) as Record<string, unknown>;
       out[k] = { ...c, ...(c.near ? { near: unprefix(c.near) } : {}) };
+    } else if (
+      k === 'measure' &&
+      v &&
+      typeof v === 'object' &&
+      !Array.isArray(v)
+    ) {
+      // a facet's measure, `{ sum: 'item.units' }`: its field is a path
+      out[k] = Object.fromEntries(
+        Object.entries(v as Record<string, unknown>).map(([op, p]) => [
+          op,
+          unprefix(p),
+        ]),
+      );
     } else {
-      out[k] = unwireAnchors(v, k);
+      setOwn(out, k, unwireAnchors(v, k));
     }
   }
   return out;
@@ -959,9 +1054,13 @@ function refuseInternalSortKeys(sort: unknown) {
 
 function lowerEntryPayload(record: Record<string, unknown>): {
   record: Record<string, unknown>;
-  expressionOverTopWindow?: boolean;
 } {
   refuseInternalSortKeys(record.sort);
+  // re-ranking is a sort entry (`{ expression, top, compare }`); the wire's
+  // own `rerank` is what this parser re-wires a lowered query into
+  if (Object.prototype.hasOwnProperty.call(record, 'rerank')) {
+    throw invalidQuery(RERANK_REFUSAL, 'unknown-key');
+  }
   let query: Record<string, any> = {};
   let rest: Record<string, unknown> = {};
   for (let [k, v] of Object.entries(record)) {
@@ -987,8 +1086,9 @@ function lowerEntryPayload(record: Record<string, unknown>): {
     lowered = lowerQuery(query, {
       knownFunctions: BXL_FORMULA_FUNCTIONS,
     });
-    // checked before it is wired again, which carries known members only
-    assertQuery(lowered.query);
+    // checked strictly, as the newer spelling it was written in, before it
+    // is wired again (which carries known members only)
+    assertQuery(lowered.query, ['', '']);
   } catch (e) {
     if (e instanceof InvalidQueryError) {
       throw invalidQuery(e.message, e.code);
@@ -1011,12 +1111,7 @@ function lowerEntryPayload(record: Record<string, unknown>): {
       eq: { ...(wire.filter?.eq ?? {}), htmlQuery },
     };
   }
-  return {
-    record: { ...wire, ...rest },
-    ...(lowered.notes.expression?.placement === 'top'
-      ? { expressionOverTopWindow: true }
-      : {}),
-  };
+  return { record: { ...wire, ...rest } };
 }
 
 // `let` in the wire grammar: each binding's query is a wire query (field
@@ -1029,6 +1124,11 @@ function translateLets(lets: unknown): unknown {
   return Object.fromEntries(
     Object.entries(lets as Record<string, any>).map(([name, b]) => {
       if (typeof b !== 'object' || b == null) {
+        return [name, b];
+      }
+      // A binding read from a log carries a log query, whose paths are a
+      // line's (`what.postUri`), never an item's: it passes as written.
+      if (isLogBinding(b)) {
         return [name, b];
       }
       let at = `let/${name}`;
@@ -1059,20 +1159,39 @@ function translateLets(lets: unknown): unknown {
 
 export function parseSearchEntryQueryFromPayload(
   payload: unknown,
+  // Where the request's `$REALM/` modules resolve: the realm a `_search`
+  // addresses, or the one realm a federated search names (type-reference.ts).
+  typeReferences?: TypeReferenceContext,
 ): SearchEntryQuery {
   if (
     payload == null ||
     typeof payload !== 'object' ||
     Array.isArray(payload)
   ) {
-    throw invalidQuery(`request body must be a JSON object`);
+    throw invalidQuery(
+      `request body must be a JSON object`,
+      Array.isArray(payload) ? 'invalid-value' : 'invalid-json',
+    );
   }
-  let { record, expressionOverTopWindow } = lowerEntryPayload(
-    payload as Record<string, unknown>,
-  );
+  try {
+    // the older spelling's bound; a newer spelling meets its own when lowered
+    assertPlainQueryData(payload, MAX_OLDER_QUERY_DEPTH);
+    // every type reference as the absolute { module, name }, in either
+    // spelling, before anything reads one
+    payload = resolveTypeReferences(payload, typeReferences);
+  } catch (e) {
+    if (e instanceof InvalidQueryError) {
+      throw invalidQuery(e.message, e.code);
+    }
+    throw e;
+  }
+  let { record } = lowerEntryPayload(payload as Record<string, unknown>);
   for (let key of Object.keys(record)) {
     if (!SEARCH_ENTRY_QUERY_MEMBERS.includes(key)) {
-      let near = nearestMember(key, [...SEARCH_ENTRY_QUERY_MEMBERS, 'type']);
+      let near = nearestMember(key, [
+        ...SEARCH_ENTRY_QUERY_MEMBERS.filter((m) => m !== 'rerank'),
+        'type',
+      ]);
       throw invalidQuery(
         `unknown member "${key}" in entry query${near ? `; did you mean "${near}"?` : ''}`,
         'unknown-key',
@@ -1089,6 +1208,7 @@ export function parseSearchEntryQueryFromPayload(
       throw new SearchRequestError(
         'missing-realms',
         'realms must be an array of strings',
+        'invalid-value',
       );
     }
     realms = record.realms
@@ -1169,11 +1289,14 @@ export function parseSearchEntryQueryFromPayload(
   if (record.explain !== undefined) {
     itemQuery.explain = record.explain;
   }
+  if (record.timeZone !== undefined) {
+    itemQuery.timeZone = assertTimeZone(record.timeZone);
+  }
   if (record.rerank !== undefined) {
     let r = record.rerank as Record<string, any>;
     let compare = r && typeof r === 'object' ? r.compare : undefined;
     itemQuery.rerank =
-      compare && typeof compare === 'object'
+      compare && typeof compare === 'object' && !Array.isArray(compare)
         ? {
             ...r,
             compare: {
@@ -1246,7 +1369,6 @@ export function parseSearchEntryQueryFromPayload(
 
   return {
     itemQuery: itemQuery as Query,
-    ...(expressionOverTopWindow ? { expressionOverTopWindow } : {}),
     htmlQuery,
     fieldset,
     realms,
@@ -1348,13 +1470,17 @@ export function policyScopedQuery(
   let lets: Record<string, LetBinding> = Object.fromEntries(
     Object.entries(query.itemQuery.let ?? {}).map(([name, b]) => [
       name,
-      {
-        ...b,
-        from: {
-          ...b.from,
-          filter: composePolicyScopedFilter(b.from.filter, grantFilters),
-        },
-      },
+      // A binding read from a log is scoped by the realm's log-line grants
+      // when it runs (`QueryOptions.logAccess`), not by card grants.
+      isLogBinding(b)
+        ? b
+        : {
+            ...b,
+            from: {
+              ...b.from,
+              filter: composePolicyScopedFilter(b.from.filter, grantFilters),
+            },
+          },
     ]),
   );
   // `linkedFrom` reads its card's links directly, so under a policy it runs
@@ -1369,7 +1495,7 @@ export function policyScopedQuery(
       // A name of its own: one the caller's bindings do not already use.
       let name: string;
       do {
-        name = `__linkedFrom${serial++}`;
+        name = `$__linkedFrom${serial++}`;
       } while (name in lets);
       count++;
       let id = node.linkedFrom.card.replace(/\.json$/, '');
@@ -1432,7 +1558,7 @@ export function policyScopedQuery(
   }
   refuseLinkedFrom(
     query.itemQuery.rerank?.compare?.filter,
-    '/rerank/compare/filter',
+    '/sort/0/compare/filter',
   );
   // The bindings the rewrite adds are capped apart from the caller's own, so
   // a query that runs without a policy runs with one, and a policy cannot be
@@ -1447,6 +1573,8 @@ export function policyScopedQuery(
   return {
     ...query,
     anonymizeStatistics: true,
+    // No log line is read under a policy until the realm says which are.
+    logAccess: () => 'none' as const,
     labelFilter: composePolicyScopedFilter(undefined, grantFilters),
     grantFilter: composePolicyScopedFilter(undefined, grantFilters),
     itemQuery: {
@@ -1675,7 +1803,12 @@ export function wireFilterHasMatches(
   if (!filter) {
     return false;
   }
-  if (filter.matches !== undefined) {
+  // Type-ahead (`prefix` with `scope: 'title'`) reads the card's names
+  // from its search doc, never its markdown.
+  if (
+    filter.matches !== undefined &&
+    !(filter.prefix === true && filter.scope === 'title' && !filter.within)
+  ) {
     return true;
   }
   if (filter.any) {
@@ -1731,13 +1864,15 @@ export function wireFilterTypeAnchors(
   }
   let member = soleShapeMember(filter);
   if (member === 'every' && filter.every?.length) {
+    // Every anchored branch's anchors, whichever is written first: a match
+    // adopts from all of them, so any one bounds it, and naming them all
+    // keeps the answer from depending on the order of a set. (A `select`
+    // reads its columns only when this is one type.)
+    let anchors: CodeRef[] = [];
     for (let branch of filter.every) {
-      let anchors = wireFilterTypeAnchors(branch);
-      if (anchors) {
-        return anchors;
-      }
+      anchors.push(...(wireFilterTypeAnchors(branch) ?? []));
     }
-    return undefined;
+    return anchors.length ? distinctAnchors(anchors) : undefined;
   }
   if (member === 'any' && filter.any?.length) {
     let anchors: CodeRef[] = [];
@@ -1748,9 +1883,19 @@ export function wireFilterTypeAnchors(
       }
       anchors.push(...branchAnchors);
     }
-    return anchors;
+    return distinctAnchors(anchors);
   }
   return undefined;
+}
+
+// Each type once, in one order whatever order they were written in.
+function distinctAnchors(anchors: CodeRef[]): CodeRef[] {
+  let out: CodeRef[] = [];
+  for (let a of anchors) {
+    if (!out.some((b) => sameTypeRef(a, b))) out.push(a);
+  }
+  let key = (r: CodeRef) => JSON.stringify(r, Object.keys(r).sort());
+  return out.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
 }
 
 // The card types a policy is asked about for an ad-hoc search with this
@@ -1822,7 +1967,6 @@ const SHAPE_MEMBERS = [
   'contains',
   'range',
   'matches',
-  'typeahead',
   'near',
   'pattern',
   'regex',
@@ -1905,7 +2049,6 @@ export type SearchEntryWireFilter = {
   within?: string;
   fields?: string[];
   linkedFrom?: { card: string; field: string };
-  typeahead?: string;
   near?: Record<string, unknown>;
   pattern?: Record<string, string>;
   regex?: Record<string, string>;
@@ -1940,6 +2083,8 @@ export interface SearchEntryWireQuery {
   >;
   // each result explains its rank in `meta._explain`
   explain?: boolean;
+  // the IANA zone whose calendar the query's dates are reckoned in
+  timeZone?: string;
   // re-rank the top of the result by a BXL expression (see `Rerank`)
   rerank?: {
     expression: string;
@@ -1956,6 +2101,9 @@ export interface SearchEntryWireQuery {
   // one result per group; `by` through `item.` (see `Collapse`)
   collapse?: string | { by: string; 'item.on'?: CodeRef; keep?: number };
   fields?: { entry: string[] };
+  // answer a table: columns read off each row, paths as the wire's `select`
+  // takes them (see `parseColumns`)
+  select?: (string | Record<string, string>)[];
   cardUrls?: string[];
   realms?: string[];
   scope?: SearchEntryScope;
@@ -1987,8 +2135,6 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
       out.matches = value as string;
     } else if (key === 'prefix' || key === 'typos' || key === 'scope') {
       (out as Record<string, unknown>)[key] = value;
-    } else if (key === 'typeahead') {
-      out.typeahead = value as string;
     } else if (key === 'within') {
       out.within = `${ITEM_PREFIX}${value as string}`;
     } else if (key === 'fields') {
@@ -2015,7 +2161,9 @@ function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
     if (entry.by === '_blend' && Array.isArray(entry.of)) {
       return {
         blend: entry.of.map(wireSortFromSort),
+        ...(entry.method ? { method: entry.method } : {}),
         ...(entry.k != null ? { k: entry.k } : {}),
+        ...(entry.direction ? { direction: entry.direction } : {}),
       } as unknown as SearchEntryWireSortExpression;
     }
     if (entry.by === '_expr') {
@@ -2063,10 +2211,47 @@ function wireSortFromSort(entry: any): SearchEntryWireSortExpression {
   };
 }
 
+// One card-query binding as the wire spells it: its paths under `item.`.
+function wireLetBinding(
+  name: string,
+  b: LetBinding,
+): [string, Record<string, unknown>] {
+  return [
+    name,
+    {
+      from: {
+        ...(b.from.filter
+          ? { filter: wireFilterFromFilter(b.from.filter) }
+          : {}),
+        ...(b.from.sort
+          ? { sort: (b.from.sort as Sort).map(wireSortFromSort) }
+          : {}),
+        ...(b.from.page ? { page: b.from.page } : {}),
+      },
+      ...(b.one
+        ? { one: true as const }
+        : { select: `${ITEM_PREFIX}${b.select}` }),
+    },
+  ];
+}
+
 export function searchEntryWireQueryFromQuery(
   query: Query,
   opts?: { fields?: string[]; scope?: SearchEntryScope },
 ): SearchEntryWireQuery {
+  // A query in the newer spelling is lowered first, as the parser lowers a
+  // request (`lowerEntryPayload`): this translator reads the older spelling,
+  // which would otherwise drop a top-level `type` and refuse `exists`. The
+  // lowering yields an older-spelling query, so a query lowered already, or
+  // written in the older spelling, is translated exactly as before. A type's
+  // shorthand reads as its code ref in either spelling; a `$REALM/` module
+  // is carried for the realm the request reaches to resolve.
+  query = resolveTypeReferences(query);
+  if (usesNewSyntax(query)) {
+    query = lowerQuery(query as Record<string, any>, {
+      knownFunctions: BXL_FORMULA_FUNCTIONS,
+    }).query as Query;
+  }
   // the legacy `realm`/`realms` members are deliberately not carried — the
   // caller addresses realms at the request level; `asData`/`fields` are the
   // legacy data path's members and have no wire spelling here (the
@@ -2090,9 +2275,12 @@ export function searchEntryWireQueryFromQuery(
   if (query.explain) {
     wire.explain = true;
   }
+  if (query.timeZone !== undefined) {
+    wire.timeZone = query.timeZone;
+  }
   if (query.rerank) {
     let { compare, ...rest } = query.rerank;
-    wire.rerank = {
+    let window = {
       ...rest,
       ...(compare
         ? {
@@ -2112,26 +2300,24 @@ export function searchEntryWireQueryFromQuery(
           }
         : {}),
     };
+    // The engine's form of a leading expression sort entry with `top`: the
+    // parser's own rewire keeps it; any other caller writes the sort entry.
+    if (emitEngineSortKeys) {
+      wire.rerank = window;
+    } else {
+      let { expression, ...more } = window as Record<string, unknown>;
+      wire.sort = [
+        { expression, top: DEFAULT_RERANK_TOP, ...more },
+        ...((wire.sort as unknown[] | undefined) ?? []),
+      ] as typeof wire.sort;
+    }
   }
   if (query.let) {
     wire.let = Object.fromEntries(
-      Object.entries(query.let).map(([name, b]) => [
-        name,
-        {
-          from: {
-            ...(b.from.filter
-              ? { filter: wireFilterFromFilter(b.from.filter) }
-              : {}),
-            ...(b.from.sort
-              ? { sort: (b.from.sort as Sort).map(wireSortFromSort) }
-              : {}),
-            ...(b.from.page ? { page: b.from.page } : {}),
-          },
-          ...(b.one
-            ? { one: true as const }
-            : { select: `${ITEM_PREFIX}${b.select}` }),
-        },
-      ]),
+      Object.entries(query.let).map(([name, b]) =>
+        // A binding read from a log is a log query on the wire as here.
+        isLogBinding(b) ? [name, b] : wireLetBinding(name, b),
+      ),
     );
   }
   if (query.collapse) {
@@ -2144,6 +2330,12 @@ export function searchEntryWireQueryFromQuery(
             ...(c.on ? { [ITEM_ANCHOR]: c.on } : {}),
             ...(c.keep != null ? { keep: c.keep } : {}),
           };
+  }
+  // `select` is a request member, not a `Query` one, but a caller may carry
+  // it on the query it wires
+  let select = (query as { select?: unknown }).select;
+  if (Array.isArray(select)) {
+    wire.select = select as SearchEntryWireQuery['select'];
   }
   if (opts?.fields) {
     wire.fields = { entry: [...opts.fields] };
@@ -2247,13 +2439,38 @@ export function combineSearchEntryResults(
   };
   let included: EntryIncludedResource[] = [];
   let includedByIdentity = new Set<string>();
+  // Each realm's engine warnings, once per code and message, with the realms
+  // that gave each (a doc's realm is the one key of its `realmTotals`).
+  let warnings = new Map<
+    string,
+    { code: string; message: string; realms: Set<string>; docs: number }
+  >();
 
   for (let doc of docs) {
     combined.data.push(...doc.data);
-    combined.meta.page.total += doc.meta?.page?.total ?? 0;
-    if (doc.meta?.page?.totalIsEstimate) {
-      combined.meta.page.totalIsEstimate = true;
+    let docRealms = Object.keys(doc.meta?.realmTotals ?? {});
+    let seenInDoc = new Set<string>();
+    for (let w of doc.meta?.warnings ?? []) {
+      let key = JSON.stringify([w.code, w.message]);
+      let entry = warnings.get(key);
+      if (!entry) {
+        entry = {
+          code: w.code,
+          message: w.message,
+          realms: new Set(),
+          docs: 0,
+        };
+        warnings.set(key, entry);
+      }
+      for (let realm of [...docRealms, ...(w.realms ?? [])]) {
+        entry.realms.add(realm);
+      }
+      if (!seenInDoc.has(key)) {
+        seenInDoc.add(key);
+        entry.docs++;
+      }
     }
+    combined.meta.page.total += doc.meta?.page?.total ?? 0;
     // More follows the combined rows when more follows any realm's.
     if (doc.meta?.page?.hasMore !== undefined) {
       combined.meta.page.hasMore =
@@ -2340,6 +2557,10 @@ export function combineSearchEntryResults(
     if (combined.meta.htmlQuery == null && doc.meta?.htmlQuery != null) {
       combined.meta.htmlQuery = doc.meta.htmlQuery;
     }
+    // one zone for every realm of a federated search (see searchEntryRealms)
+    if (combined.meta.timeZone == null && doc.meta?.timeZone != null) {
+      combined.meta.timeZone = doc.meta.timeZone;
+    }
     // Any realm that clipped its closure clips the merged one: the combined
     // `included[]` is the union, so a consumer holding it is short by whatever
     // that realm withheld. Each realm holds its own ceiling, which is why the
@@ -2386,11 +2607,29 @@ export function combineSearchEntryResults(
     });
   }
 
+  if (warnings.size) {
+    // A warning every answering realm gave is the search's own; one only some
+    // realms gave names them.
+    combined.meta.warnings = [...warnings.values()].map(
+      ({ code, message, realms, docs: count }) => ({
+        code,
+        message,
+        ...(count < docs.length && realms.size
+          ? { realms: [...realms].sort() }
+          : {}),
+      }),
+    );
+  }
+
   if (attemptedRealmCount != null && docs.length < attemptedRealmCount) {
     // Say the sum is short rather than letting it read as the match count. How
     // many instances the missing realm holds is exactly what its failure
     // withheld, so the total cannot be repaired here — only labelled.
     combined.meta.incomplete = true;
+    combined.meta.warnings = withWarningOnce(
+      combined.meta.warnings,
+      incompleteWarning(),
+    );
   }
 
   if (included.length > 0) {
@@ -2427,6 +2666,16 @@ export async function searchEntryRealms(
   let timings =
     opts?.timings ?? (ownsTimings ? new RequestTimings() : undefined);
   let perRealmOpts = ownsTimings && opts ? { ...opts, timings } : opts;
+  // One zone for every realm: the query's own, else UTC across several
+  // realms, so no realm's default zone decides another realm's days. A
+  // search over one realm reckons in that realm's default.
+  if (
+    realms.length > 1 &&
+    searchEntryQuery.itemQuery.timeZone === undefined &&
+    perRealmOpts?.timeZone === undefined
+  ) {
+    perRealmOpts = { ...perRealmOpts, timeZone: 'UTC' };
+  }
   let startedAt = ownsTimings ? Date.now() : 0;
   let results = searchEntryQuery.federation?.results ?? 'byRealm';
   let page = searchEntryQuery.itemQuery.page as
@@ -2508,9 +2757,6 @@ export async function searchEntryRealms(
           status: {
             status: 'ok' as const,
             total: doc.meta?.page?.total ?? 0,
-            ...(doc.meta?.page?.totalIsEstimate
-              ? { totalIsEstimate: true }
-              : {}),
             ...(doc.meta?.page?.hasMore !== undefined
               ? { hasMore: doc.meta.page.hasMore }
               : {}),
@@ -2582,19 +2828,29 @@ export async function searchEntryRealms(
     // Each entry in the direction the engine sorted it: scores (an `_expr`
     // formula, a blend, a near similarity, text relevance) default to `desc`.
     // Under a rerank each row's values lead with its rerank value (highest
-    // first unless the rerank says `asc`), then the query's own sort.
+    // first unless the rerank says `asc`), then the query's own sort. Rows
+    // with no value go where the engine puts them: last, or first for a
+    // field sort that says `missing: 'first'` (scores are always last). A
+    // sort by `cardURL` orders in byte order, as the url tiebreak does.
     let rerank = searchEntryQuery.itemQuery.rerank;
-    let directions = [
-      ...(rerank ? [rerank.direction === 'asc' ? 1 : -1] : []),
-      ...(searchEntryQuery.itemQuery.sort ?? []).map((s: any) =>
-        (s.direction ?? defaultSortDirection(s)) === 'desc' ? -1 : 1,
-      ),
+    let sortKeys: MergeSortKey[] = [
+      ...(rerank ? [{ direction: rerank.direction === 'asc' ? 1 : -1 }] : []),
+      ...(searchEntryQuery.itemQuery.sort ?? []).map((s: any) => {
+        // A field (or general) key is the one kind that defaults to `asc`.
+        let isField = defaultSortDirection(s) === 'asc';
+        return {
+          direction:
+            (s.direction ?? defaultSortDirection(s)) === 'desc' ? -1 : 1,
+          missingFirst: isField && s.missing === 'first',
+          byteOrder: isField && !s.on && s.by === 'cardURL',
+        };
+      }),
     ];
     combined.data.sort((a, b) =>
       compareSortValues(
         a.meta?._sortValues as unknown[] | undefined,
         b.meta?._sortValues as unknown[] | undefined,
-        directions,
+        sortKeys,
       ),
     );
     if (page) {
@@ -2605,6 +2861,20 @@ export async function searchEntryRealms(
       // a realm held back rows beyond what it was asked for.
       combined.meta.page.hasMore =
         Boolean(combined.meta.page.hasMore) || union > start + page.size;
+    }
+    // Scores each realm computes over its own matches order the union only
+    // approximately; a field sort's values compare exactly.
+    if (
+      realms.length > 1 &&
+      (searchEntryQuery.itemQuery.sort ?? []).some(
+        (s: any) => defaultSortDirection(s) === 'desc',
+      )
+    ) {
+      combined.meta.warnings = withWarningOnce(combined.meta.warnings, {
+        code: APPROXIMATE_ORDER,
+        message:
+          'each realm scored its own matches, so the order across realms is approximate; ties are broken deterministically',
+      });
     }
     for (let entry of combined.data) {
       if (entry.meta && '_sortValues' in entry.meta) {
@@ -2660,7 +2930,8 @@ export async function searchEntryRealms(
     }
     combined.meta.facetErrors = errors;
   }
-  combined.meta.federation = { results };
+  combined.meta.federation =
+    results === 'merged' ? { results, path: 'merge' } : { results };
   combined.meta.realms = statuses;
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);
@@ -2680,7 +2951,7 @@ export async function searchEntryRealms(
 // the realm's own signal aborts (so its link fan-out stops) and the search
 // fails as a timeout, which the merge reports for that realm alone. The
 // caller's own signal still aborts it.
-async function withRealmDeadline<T>(
+export async function withRealmDeadline<T>(
   deadline: number | undefined,
   opts: SearchOpts | undefined,
   run: (opts: SearchOpts | undefined) => Promise<T>,
@@ -2690,6 +2961,12 @@ async function withRealmDeadline<T>(
   }
   let controller = new AbortController();
   let outer = opts?.signal;
+  // the realm's deadline, or the request's when that comes first
+  setSignalDeadline(controller.signal, deadline);
+  let outerDeadline = signalDeadline(outer);
+  if (outerDeadline !== undefined) {
+    setSignalDeadline(controller.signal, outerDeadline);
+  }
   let onAbort = () => controller.abort(outer?.reason);
   if (outer?.aborted) {
     controller.abort(outer.reason);
@@ -2724,7 +3001,7 @@ async function withRealmDeadline<T>(
 
 // How a realm's failed search reads in `meta.realms`: a refusal the query
 // grammar raised (with its code), a time-budget cutoff, or anything else.
-function realmFailureStatus(e: any): {
+export function realmFailureStatus(e: any): {
   status: 'refused' | 'timeout' | 'unavailable';
   code?: string;
 } {
@@ -2744,13 +3021,28 @@ function realmFailureStatus(e: any): {
   return { status: 'unavailable' };
 }
 
+// One sort key as the merge reads it: its direction (1 ascending, -1
+// descending), whether rows with no value come first, and whether its text
+// orders in byte order (the url) rather than in the language's order.
+interface MergeSortKey {
+  direction: number;
+  missingFirst?: boolean;
+  byteOrder?: boolean;
+}
+
 // Orders two rows by the values each realm sorted them by, key by key, each
-// in its sort's direction (keys past the sort list, the engine's tiebreaks,
-// ascending). A row with no values sorts last; nulls sort after values.
+// in its sort's direction. Values past the sort list are the engine's url
+// tiebreak: ascending, in byte order. A row with no values sorts last. A row
+// with no value for a key goes where the engine puts it whichever way the
+// key runs: last, or first when the key says `missing: 'first'`.
+//
+// Values arrive typed by the engine (`sortValuesOf`): a number key's value is
+// a number (or `{ bigint }` for a whole number past 2^53), a text key's a
+// string. Nothing is coerced here, so text holding digits orders as text.
 function compareSortValues(
   a: unknown[] | undefined,
   b: unknown[] | undefined,
-  directions: number[],
+  keys: MergeSortKey[],
 ): number {
   if (!a || !b) {
     return !a && !b ? 0 : !a ? 1 : -1;
@@ -2759,16 +3051,79 @@ function compareSortValues(
     let x = a[i];
     let y = b[i];
     if (x === y) continue;
-    if (x == null || y == null) return x == null ? 1 : -1;
-    let d = directions[i] ?? 1;
-    if (typeof x === 'number' && typeof y === 'number') return (x - y) * d;
-    let nx = Number(x);
-    let ny = Number(y);
-    if (!Number.isNaN(nx) && !Number.isNaN(ny) && typeof x !== 'boolean')
-      return (nx - ny) * d;
-    return String(x).localeCompare(String(y)) * d;
+    let key = keys[i] ?? { direction: 1, byteOrder: true };
+    if (x == null || y == null) {
+      if (x == null && y == null) continue;
+      let missing = key.missingFirst ? -1 : 1;
+      return x == null ? missing : -missing;
+    }
+    let nx = sortNumber(x);
+    let ny = sortNumber(y);
+    let cmp: number;
+    if (nx !== undefined && ny !== undefined) {
+      // A number and a bigint compare exactly with `<`.
+      cmp = nx < ny ? -1 : nx > ny ? 1 : 0;
+    } else if (nx !== undefined || ny !== undefined) {
+      // A number key's value that is no number (`numeric`'s NaN) follows
+      // every number, as it does in Postgres.
+      cmp = nx !== undefined ? -1 : 1;
+    } else if (key.byteOrder) {
+      cmp = compareByteOrder(String(x), String(y));
+    } else {
+      cmp = compareText(String(x), String(y));
+    }
+    if (cmp !== 0) return cmp * key.direction;
   }
   return 0;
+}
+
+// A number sort value: a JS number, or the exact value of a `{ bigint }`.
+function sortNumber(v: unknown): number | bigint | undefined {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'object' && v !== null) {
+    let digits = (v as { bigint?: unknown }).bigint;
+    if (typeof digits === 'string' && /^[+-]?\d+$/.test(digits)) {
+      return BigInt(digits);
+    }
+  }
+  return undefined;
+}
+
+// UTF-8 byte order, which is what `COLLATE "POSIX"` gives the engine's url
+// order. UTF-8 sorts as code points do, and UTF-16 code units sort as code
+// points except that a surrogate (half of a code point past U+FFFF) is
+// numbered below U+E000..U+FFFF; so compare code units, with a surrogate
+// above any other unit.
+function compareByteOrder(a: string, b: string): number {
+  let length = Math.min(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    let x = a.charCodeAt(i);
+    let y = b.charCodeAt(i);
+    if (x === y) continue;
+    let xSurrogate = x >= 0xd800 && x <= 0xdfff;
+    let ySurrogate = y >= 0xd800 && y <= 0xdfff;
+    if (xSurrogate !== ySurrogate) return xSurrogate ? 1 : -1;
+    return x < y ? -1 : 1;
+  }
+  return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
+}
+
+// A text field's order. The engine's ORDER BY names no collation for a field
+// (only the url is POSIX), so Postgres uses the database's default, which for
+// Boxel's databases is glibc's `en_US.utf8`: letters and digits first, case
+// and accents after, spaces and punctuation ignored until all else ties.
+// JavaScript has no glibc tables; the nearest is the Unicode (ICU) English
+// collation with punctuation ignored, then byte order between strings that
+// differ only in what was ignored. That agrees with the database for letters,
+// digits, case, accents and common punctuation. It can still differ: for
+// symbols and scripts the two tables rank differently, for strings that
+// differ only in punctuation or spacing in several places, in a database
+// created with another default collation, and under SQLite, which orders text
+// by bytes. Fixed to `en-US` so every server and browser merges alike.
+let textCollator: Intl.Collator | undefined;
+function compareText(a: string, b: string): number {
+  textCollator ??= new Intl.Collator('en-US', { ignorePunctuation: true });
+  return textCollator.compare(a, b) || compareByteOrder(a, b);
 }
 
 // ---------------------------------------------------------------------------
@@ -2808,8 +3163,8 @@ export function buildEntryResource(args: {
   blendScore?: number;
   // Under `explain`, each signal's part in that score — `meta._explain`.
   explanation?: ResultExplanation;
-  // Under `rerank`, the row's formula value — `meta._rerank`.
-  rerankValue?: number | null;
+  // Under a window (a leading `{ expression, top }`), the row's value — `meta._window`.
+  windowValue?: number | null;
   // Under `collapse`, the row's group size — `meta._collapseSize`.
   collapseSize?: number;
   // For a federated merge, the row's sort values — `meta._sortValues`.
@@ -2827,7 +3182,7 @@ export function buildEntryResource(args: {
     nearSimilarity,
     blendScore,
     explanation,
-    rerankValue,
+    windowValue,
     formulaValue,
     collapseSize,
     sortValues,
@@ -2856,7 +3211,7 @@ export function buildEntryResource(args: {
     nearSimilarity !== undefined ||
     blendScore !== undefined ||
     explanation !== undefined ||
-    rerankValue !== undefined ||
+    windowValue !== undefined ||
     formulaValue !== undefined ||
     collapseSize !== undefined ||
     sortValues !== undefined
@@ -2871,7 +3226,7 @@ export function buildEntryResource(args: {
         : {}),
       ...(blendScore !== undefined ? { _blendScore: blendScore } : {}),
       ...(explanation !== undefined ? { _explain: explanation } : {}),
-      ...(rerankValue !== undefined ? { _rerank: rerankValue } : {}),
+      ...(windowValue !== undefined ? { _window: windowValue } : {}),
       ...(collapseSize !== undefined ? { _collapseSize: collapseSize } : {}),
       ...(sortValues !== undefined ? { _sortValues: sortValues } : {}),
       ...(formulaValue !== undefined

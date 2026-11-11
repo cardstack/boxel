@@ -2,12 +2,17 @@ import type Koa from 'koa';
 import { respondToLogSearch } from './log-search.ts';
 import {
   applyServerSearchPageBound,
+  pageSizeClampWarning,
+  withPageSizeClampWarning,
+  takesDefaultPage,
+  withDefaultPageTruncation,
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
   emptySearchEntryDocument,
   ifNoneMatchMatches,
   isCodeRef,
   isItemLegSearch,
+  isLogBinding,
   isLogQuery,
   logger,
   markPolicyScoped,
@@ -23,6 +28,12 @@ import {
   SearchBoundError,
   SearchRequestError,
   searchEntryRealms,
+  searchEntryUnion,
+  unionPathRefusal,
+  type UnionRealm,
+  InvalidQueryError,
+  resolveTypeReferences,
+  searchTypeReferenceContext,
   sanitizeLoggingCorrelationId,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
@@ -159,6 +170,30 @@ export default function handleSearch(opts: {
     let named = parseRealmsFromPayload(payload, (realm) =>
       registeredRealmURL(virtualNetwork, realm),
     );
+    // The request's type references, as the absolute code refs they name: a
+    // shorthand parsed, and a `$REALM/` module resolved against the one realm
+    // the request names, or refused when it names several. Resolved here,
+    // where the request arrives, so the policy lookup, the checks, the cache
+    // and the engine read one spelling.
+    let typeReferences = searchTypeReferenceContext(named, (url) =>
+      virtualNetwork.unresolveURL(url),
+    );
+    try {
+      payload = resolveTypeReferences(payload, typeReferences);
+    } catch (e) {
+      if (e instanceof InvalidQueryError) {
+        await respondToInvalidSearch(
+          ctxt,
+          new SearchRequestError(
+            'invalid-query',
+            `Invalid query: ${e.message}`,
+            e.code,
+          ),
+        );
+        return;
+      }
+      throw e;
+    }
     // The realms the request named, before a declaration narrows them. The
     // policy-scoped mark names these, so it never says which of them a
     // declaration searched.
@@ -166,7 +201,11 @@ export default function handleSearch(opts: {
     // A search over one of the realm's logs (`from: { log }`) is answered
     // from its line rows, not the card index (`log-search.ts`).
     if (isLogQuery(payload)) {
-      await respondToLogSearch(ctxt, payload, named, realmList, dbAdapter);
+      await respondToLogSearch(ctxt, payload, named, realmList, dbAdapter, {
+        realmFor: (url) => reconciler.mounted.get(url),
+        grantCandidates,
+        user: principal?.kind === 'user' ? principal.user : undefined,
+      });
       return;
     }
     // What a policy fragment is looked up by: a named query runs under the
@@ -642,6 +681,9 @@ export default function handleSearch(opts: {
           payload === undefined
             ? await parseSearchRequestPayload(request)
             : payload,
+          searchTypeReferenceContext(requested, (url) =>
+            virtualNetwork.unresolveURL(url),
+          ),
         );
       parsed = timings
         ? await timings.time('parse', parseRequest)
@@ -702,8 +744,18 @@ export default function handleSearch(opts: {
     // maximum and clamped to it above, which is logged. Either way the server
     // never assembles/serializes an unbounded result set, and the true match
     // count rides `meta.page.total` so a short page is visible to the caller.
+    // A clamped page says so in `meta.warnings` (see `pageSizeClampWarning`).
+    let pageClamp: ReturnType<typeof pageSizeClampWarning>;
+    // The page the default gave a query that named none, so an answer it cut
+    // short says so (`default-page-truncated`, see `withDefaultPageTruncation`).
+    let defaultPage: { size?: unknown; number?: unknown } | undefined;
     if (itemLegBounded) {
-      parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
+      let asked = parsed.itemQuery;
+      parsed.itemQuery = applyServerSearchPageBound(asked);
+      pageClamp = pageSizeClampWarning(asked, parsed.itemQuery);
+      if (takesDefaultPage(asked)) {
+        defaultPage = parsed.itemQuery.page;
+      }
     }
 
     // The query each policy-scoped realm runs. Composed here, off the bounded
@@ -813,14 +865,10 @@ export default function handleSearch(opts: {
       cacheKeyOpts.scope = parsed.scope;
     }
     // A merged federation orders, pages and sections the body differently
-    // from a per-realm one, and an expression placed over the top window
-    // comes from lowering rather than the item query: both key the body.
-    // Folded only when set, so other keys stay as they were.
+    // from a per-realm one, so it keys the body. Folded only when set, so
+    // other keys stay as they were.
     if (parsed.federation?.results === 'merged') {
       cacheKeyOpts.federation = 'merged';
-    }
-    if (parsed.expressionOverTopWindow) {
-      cacheKeyOpts.expressionOverTopWindow = true;
     }
     // The mark is part of the body, and it is the one part a declared query
     // and the ad-hoc query it resolves to do not share, so it keys the cache
@@ -830,6 +878,12 @@ export default function handleSearch(opts: {
     }
     if (refusal) {
       cacheKeyOpts.refusedNamedQuery = refusal.key;
+    }
+    // A clamped page's notice is part of the body, and it names the size
+    // asked for, so that size keys the cache too (folded only when it was
+    // clamped, so other keys stay as they were).
+    if (pageClamp) {
+      cacheKeyOpts.pageSizeAsked = pageClamp.message;
     }
     // What each realm the caller does not read contributed: the grant filters
     // composed into its query, or that it contributed no rows, or that its
@@ -929,27 +983,49 @@ export default function handleSearch(opts: {
           unread.length === 0
             ? workingInstances
             : realmInstancesFor(realmList, working, workingInstances, access);
-        let merged = await searchEntryRealms(
-          realmInstances,
-          parsed,
-          {
-            ...runSearchOpts,
-            ...(signal ? { signal } : {}),
-            ...(realmDeadline !== undefined ? { realmDeadline } : {}),
-            ...(mountRealms.mountMs
-              ? { realmPreparedMs: mountRealms.mountMs }
-              : {}),
-          },
-          scopedQueries.size === 0
-            ? undefined
-            : queryForRealmInstance(
-                realmInstances,
-                realmList,
-                scopedQueries,
-                parsed,
-              ),
+        let fanOutOpts = {
+          ...runSearchOpts,
+          ...(signal ? { signal } : {}),
+          ...(realmDeadline !== undefined ? { realmDeadline } : {}),
+          ...(mountRealms.mountMs
+            ? { realmPreparedMs: mountRealms.mountMs }
+            : {}),
+        };
+        // A merged search over realms that all share this server's index
+        // database runs as one statement over all of them (the union path);
+        // any other runs in each realm and is merged.
+        let unionRealms = unionRealmsFor(
+          realmList,
+          working,
+          workingInstances,
+          access,
         );
-        let doc = markPolicyScoped(merged, scopedRealms);
+        let merged = !unionPathRefusal(parsed, unionRealms)
+          ? await searchEntryUnion(
+              unionRealms as UnionRealm[],
+              parsed,
+              fanOutOpts,
+            )
+          : await searchEntryRealms(
+              realmInstances,
+              parsed,
+              fanOutOpts,
+              scopedQueries.size === 0
+                ? undefined
+                : queryForRealmInstance(
+                    realmInstances,
+                    realmList,
+                    scopedQueries,
+                    parsed,
+                  ),
+            );
+        let doc = withDefaultPageTruncation(
+          withPageSizeClampWarning(
+            markPolicyScoped(merged, scopedRealms),
+            pageClamp,
+          ),
+          defaultPage,
+        );
         // If the budget already fired, skip stringifying a document we're about
         // to discard (the time-budget race has already resolved with the 408).
         signal?.throwIfAborted();
@@ -1004,9 +1080,16 @@ export default function handleSearch(opts: {
     };
 
     let jobId = searchCache ? prerenderJobId : null;
+    // A query that binds a log's lines (`isLogBinding`) is never served from
+    // a cache: the caches are keyed by the realms' index generations, which
+    // an append the realm indexes as it lands (`appendThroughLogIndex`) does
+    // not move, so a cached answer would miss the appended lines.
+    let bindsLog = Object.values(parsed.itemQuery.let ?? {}).some((binding) =>
+      isLogBinding(binding),
+    );
     try {
       await respondWithJobScopedSearchCache(ctxt, {
-        searchCache,
+        searchCache: bindsLog ? undefined : searchCache,
         jobId,
         consumingRealm,
         realms: realmList,
@@ -1017,25 +1100,27 @@ export default function handleSearch(opts: {
         recordCacheOutcome: (outcome) => {
           cacheOutcome = outcome;
         },
-        liveSearch: {
-          cache: liveSearchCache,
-          dbAdapter,
-          virtualNetwork,
-          typeAnchors: refusal ? refusal.typeAnchors : parsed.typeAnchors,
-          // Only realms this process already holds. Resolving an anchor's
-          // canonical spelling must never be the thing that forces a mount —
-          // this request may well be a cache hit, which skips mounting
-          // entirely.
-          mountedRealm: () => {
-            for (let url of realmList) {
-              let realm = reconciler.mounted.get(url);
-              if (realm) {
-                return realm;
-              }
-            }
-            return undefined;
-          },
-        },
+        liveSearch: bindsLog
+          ? undefined
+          : {
+              cache: liveSearchCache,
+              dbAdapter,
+              virtualNetwork,
+              typeAnchors: refusal ? refusal.typeAnchors : parsed.typeAnchors,
+              // Only realms this process already holds. Resolving an anchor's
+              // canonical spelling must never be the thing that forces a mount —
+              // this request may well be a cache hit, which skips mounting
+              // entirely.
+              mountedRealm: () => {
+                for (let url of realmList) {
+                  let realm = reconciler.mounted.get(url);
+                  if (realm) {
+                    return realm;
+                  }
+                }
+                return undefined;
+              },
+            },
       });
     } catch (e) {
       // The per-request time budget fired inside `runSearch`. A bounded search
@@ -1118,6 +1203,39 @@ function realmInstancesFor(
       url,
       searchEntries: async (query: SearchEntryQuery) =>
         emptySearchEntryDocument(query),
+    };
+  });
+}
+
+// The realms a search names as the union path reads them (see
+// `searchEntryUnion`), positional with `realmURLs`: each with the access the
+// caller has, and the mounted realm where rows are read from it (missing when
+// it would not mount, which sends the search to the merge).
+function unionRealmsFor(
+  realmURLs: string[],
+  working: string[],
+  workingInstances: Array<Realm | null | undefined>,
+  access: RealmAccess,
+) {
+  let byURL = new Map<string, Realm | null | undefined>();
+  working.forEach((url, index) => byURL.set(url, workingInstances[index]));
+  return realmURLs.map((url) => {
+    let realm = byURL.get(url);
+    if (access.readable.has(url)) {
+      return { url: realm?.url ?? url, realm, access: 'readable' as const };
+    }
+    let grants = access.scoped.get(url);
+    if (grants) {
+      return {
+        url: realm?.url ?? url,
+        realm,
+        access: 'scoped' as const,
+        grants,
+      };
+    }
+    return {
+      url,
+      access: access.failed.has(url) ? ('failed' as const) : ('none' as const),
     };
   });
 }
