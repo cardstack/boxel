@@ -182,8 +182,9 @@ transfer and storage in. Every per-GB quantity in this skill, `downloaded_gb`
 and the GB-months included, is in that unit, and code that meters bytes into
 GB divides by `BYTES_PER_GB` rather than its own constant, or the estimate and
 the charge disagree by about 7%. Two charges the payer also pays are outside the
-estimate, and the result lists them in `uncountedChargeKinds`: run indexing
-and storage, which depends on what the realm keeps rather than on any one run.
+estimate, and the result lists them in `uncountedChargeKinds`: run indexing,
+covered below, and storage, which depends on what the realm keeps rather than
+on any one run.
 
 **Indexing is outside the ceiling** (ADR 029 §1.5). The index and prerender
 time a run's writes cause includes re-indexing every card that links to what
@@ -194,8 +195,15 @@ the index's internals. So `runCostCeiling` prices compute, network and AI
 only, and the minimum balance built on it doesn't cover indexing either. The
 `run_indexing` charge is priced as measured when the index pass completes,
 and `spendCredits` draws only what the balance holds then, so a large pass
-can go partly unpaid. The charge records its full usage regardless, so the
-unpaid part is its usage at its pricing version less the credits it drew:
+can go partly unpaid. The pass completes after its run ends, so it can also
+draw down the balance a later run was admitted against.
+
+A partial charge records all the usage it priced, so its unpaid part is that
+usage at its pricing version less the credits it drew. The prices for a
+pricing version are only in the `pricing check passed … pricing version
+<hash>` line each process logs at startup (see the `tail-logs` skill), so
+this works only as far back as those logs are kept. Credits are whole
+numbers, so allow for the charge's rounding to a whole credit.
 
 ```sql
 -- A run's indexing: credits drawn beside the usage they priced.

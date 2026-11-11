@@ -67,7 +67,7 @@ Each process MUST log its prices and a pricing version, a hash of them, at
 startup. Every metered charge (§1.1) MUST record the pricing version it was
 priced at.
 
-### 1.5. The minimum balance covers a run
+### 1.5. The minimum balance covers a run's compute, network and AI
 
 An automation's caps MUST include a cap on its runs' AI spending, in credits.
 Before it sends an AI request for a run, the server MUST compute the most the
@@ -86,8 +86,8 @@ The most one run can cost covers its compute, network and AI. It MUST NOT
 include the indexing the run's writes cause, and an automation's caps MUST
 NOT include a cap on that indexing. The minimum balance and the estimate
 shown when an automation is switched on MUST both use that one per-run cost,
-so neither covers indexing. A run's indexing is charged as measured when its
-index pass completes (§1.1), against whatever the balance it is charged to
+so neither covers indexing. A run's indexing MUST be charged as measured when
+its index pass completes (§1.1), against whatever the balance it is charged to
 holds then.
 
 ### 1.6. A ledger entry says what it paid for, once
@@ -161,10 +161,13 @@ number about the index's internals that they can neither see nor predict.
 The index pass also can't be cut short once it starts: the run's writes are
 already committed, and a realm whose index stops partway serves stale cards
 to everyone who reads it. So a run's indexing is charged as measured, and an
-index pass that costs more than the balance holds goes partly unpaid.
-The charge records all the usage it priced (§1.6), so the unpaid part
-is the difference between that usage at its pricing version and the credits
-the charge drew.
+index pass that costs more than the balance holds goes partly unpaid. The
+pass completes after its run ends, so it can also draw down the balance a
+later run was admitted against, and that run's own charges can then go partly
+unpaid as well. When the balance holds anything, the charge records all the
+usage it priced (§1.6), so the unpaid part is that usage at its pricing
+version less the credits the charge drew. When the balance holds nothing, no
+charge is written, and that pass leaves no ledger entry and no usage.
 
 The margin pays for the infrastructure the platform runs and operates. AI is
 already priced by its provider, and plain AI calls carry no margin, so AI
@@ -198,6 +201,13 @@ rows and some charges price two units.
   worker-seconds cap can't stop a pass that has started without leaving the
   index stale, and a dependents cap would refuse a run's commit because of
   links other people made.
+- **A reserve for indexing the server estimates on its own**, such as the
+  realm's recent indexing cost per run or the dependents of what the run
+  will write counted at admission. Neither bounds the charge: a run can write
+  a card that more cards link to than any recent run did, and at admission
+  the server doesn't know what the run will write. The minimum balance would
+  also move with other people's edits, so a payer couldn't tell from the
+  automation's caps whether a run will start.
 - **A per-write indexing allowance in the per-run cost.** It doesn't cover
   dependents, so it under-covers a run that writes a card many others
   link to, and it adds a price that has to be re-measured as rendering
