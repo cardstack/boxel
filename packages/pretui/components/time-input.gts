@@ -139,7 +139,7 @@ function typeDigit(
 export interface TimeInputSignature {
   Args: {
     /** wire value — 'HH:MM', or 'HH:MM:SS' when @withSeconds */
-    value?: string;
+    value?: string | null;
     defaultValue?: string;
     withSeconds?: boolean;
     /** '24' (default) or '12' — 12 adds the AM/PM segment */
@@ -172,7 +172,9 @@ export class TimeInput extends Component<TimeInputSignature> {
   // last wire string this component emitted (or accepted at construction) —
   // while @value echoes it, internal partial edits stay on display; a
   // different external @value wins and repaints the segments
-  @tracked emitted: string | undefined = this.args.value;
+  // A null value is empty, as card fields hand an unset time in, not a value
+  // set from outside: read as one, it would repaint over the hour being typed.
+  @tracked emitted: string | undefined = this.args.value ?? undefined;
 
   // two-digit type-through buffer; plain fields — display rides the
   // tracked segment values, the buffer only shapes the next keystroke
@@ -195,8 +197,8 @@ export class TimeInput extends Component<TimeInputSignature> {
     return { hh: s.hh ?? 0, mm: s.mm ?? 0, ss: s.ss ?? 0, dp: s.dp ?? 0 };
   }
   get effective(): TimeSegs {
-    let external = this.args.value;
-    if (external !== undefined && external !== this.emitted) {
+    let external = this.args.value === null ? '' : this.args.value;
+    if (external !== undefined && external !== (this.emitted ?? '')) {
       return parseWire(external);
     }
     return { hh: this.hh, mm: this.mm, ss: this.ss, dp: this.dp };
@@ -416,6 +418,20 @@ export class TimeInput extends Component<TimeInputSignature> {
       }
     }
   };
+  // A click on the field's face, between or beside the digits, starts at the
+  // first empty segment, or the first one, as a native time input does.
+  handleGroupClick = (ev: Event) => {
+    if (this.args.disabled) return;
+    let target = ev.target as HTMLElement;
+    if (target.closest('.pretui-time-seg, .pretui-time-native')) return;
+    let segments = [
+      ...(ev.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+        '.pretui-time-seg',
+      ),
+    ];
+    (segments.find((s) => s.dataset['empty'] === 'true') ?? segments[0])?.focus();
+  };
+
   handleSegmentBlur = (_ev: Event) => {
     this.clearBufferState();
   };
@@ -452,6 +468,9 @@ export class TimeInput extends Component<TimeInputSignature> {
   };
 
   <template>
+    {{! The face's click only moves focus to a segment, which the keyboard
+        reaches on its own; it isn't a control of its own. }}
+    {{! template-lint-disable no-invalid-interactive }}
     <div
       class='pretui-time'
       role='group'
@@ -460,8 +479,9 @@ export class TimeInput extends Component<TimeInputSignature> {
       data-disabled={{if @disabled 'true'}}
       data-test-pretui-time-input
       ...attributes
+      {{on 'click' this.handleGroupClick}}
     >
-      {{#each this.segmentViews as |seg|}}
+      {{#each this.segmentViews key='part' as |seg|}}
         <div
           class='pretui-time-seg'
           role='spinbutton'
@@ -510,14 +530,26 @@ export class TimeInput extends Component<TimeInputSignature> {
           letter-spacing: var(--track-ui, 0.01em);
           font-variant-numeric: tabular-nums;
           color: var(--foreground);
+          cursor: pointer;
+        }
+        /* the face rings while any segment has focus, like the other
+           inputs; the segment itself is highlighted below */
+        .pretui-time:focus-within {
+          box-shadow:
+            0 0 0 1px var(--input),
+            0 0 0 2px var(--ring);
         }
         .pretui-time[data-disabled] {
           opacity: 0.45;
         }
+        .pretui-time[data-disabled],
+        .pretui-time[data-disabled] .pretui-time-seg {
+          cursor: not-allowed;
+        }
         .pretui-time-seg {
           padding: 1px 3px;
           border-radius: 5px;
-          cursor: default;
+          cursor: pointer;
           user-select: none;
         }
         .pretui-time-seg[data-empty] {
@@ -527,8 +559,10 @@ export class TimeInput extends Component<TimeInputSignature> {
            segment is HIGHLIGHTED rather than ringed, because a ring inside a
            one-field face reads as a second field. The transparent outline is
            inert normally and becomes the visible indicator under
-           forced-colors, where a background swap is discarded. */
-        .pretui-time-seg:focus-visible {
+           forced-colors, where a background swap is discarded. It follows
+           focus however it arrived, a click included, as a native time
+           input's selected segment does. */
+        .pretui-time-seg:focus {
           outline: 2px solid transparent;
           outline-offset: -1px;
           background: var(--ring);
