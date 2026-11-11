@@ -1,11 +1,12 @@
 ---
 status: proposed
-date: 2026-09-10
+date: 2026-09-16
 retroactive: true
 recorded: 2026-11-09
 scope:
   - packages/runtime-common/clock.ts
   - packages/base/**
+  - packages/school-example-realm/**
   - packages/host/app/**
   - packages/pretui/components/**
   - packages/boxel-ui/src/components/**
@@ -43,8 +44,9 @@ one timeline.
 
 ### 1.3. Timing, expiry and telemetry
 
-Code that reads the time to schedule work, time out, expire a token, or measure
-duration SHOULD read the real clock, not the seam.
+Outside the code that §1.7 covers, code that reads the time to schedule work,
+time out, expire a token, or measure duration SHOULD read the real clock, not
+the seam.
 
 ### 1.4. The test instant
 
@@ -53,8 +55,11 @@ The host test suite MUST pin the seam to one fixed absolute instant,
 
 ### 1.5. Hiding from Percy
 
-A test SHOULD NOT hide a time-dependent value from Percy (for example with
-`data-test-percy-hide`) when pinning the seam makes the value stable.
+A test SHOULD NOT hide a value derived from the current time from Percy (for
+example with `data-test-percy-hide`) when pinning the seam makes the value
+stable. The pin does not make two kinds of value stable: a value derived from a
+file's mtime, and a stamp that the realm server minted. Hiding them is not a
+departure from this requirement.
 
 ### 1.6. Components that cannot import the seam
 
@@ -62,6 +67,11 @@ A shared component in a package that does not depend on
 `@cardstack/runtime-common` MUST NOT read the clock for a rendered value
 without letting its caller supply the time, for example as an argument. A
 caller that renders such a component MUST pass the time from the seam.
+
+### 1.7. Card code
+
+In `packages/base` and `packages/school-example-realm`, every read of the
+current time MUST go through the seam, including a read for timing.
 
 ## 2. Rationale
 
@@ -72,10 +82,9 @@ fingerprints of their content, spread across decades, so a label changes when
 real time crosses a unit boundary, not when the code changes [#6012]. Before
 the seam, the only remedy was `data-test-percy-hide`, which stops comparing the
 element and so loses the coverage [#6012]. The file inspector's created date
-was hidden that way [#5907], until #6043 stamped it through the seam. With the
-time pinned, the value stays
-in the snapshot, and a change in how it is formatted still shows as a diff
-[#6012, #6043].
+was hidden that way [#5907]. With the time pinned, a value stays in the
+snapshot, and a change in how it is formatted still shows as a diff [#6012,
+#6043].
 
 The seam is a global, `globalThis.__boxelNow`, because the card loader gives
 card code its own module instances, so a module-level variable is not shared
@@ -101,9 +110,23 @@ its field's bounds came from the seam, so a host test failed once the real
 month left the pinned one. The fix gave the picker an argument for the day it
 opens on, which the field reads from the seam [#6433].
 
-`packages/base` enforces §1.1 with a lint rule [#6022,
-`eslint/ambient-clock-selectors.cjs`]. The host has no such rule, because most
-host reads are §1.3 cases, where a blanket rule would be wrong [`clock.ts`].
+Some values stay unstable under the pin (§1.5). CI sets the mtime of each file
+it serves from disk to a hash of the file's content, so a date derived from it
+changes when the bytes change, not when the code does
+[`scripts/normalize-realm-mtimes.mjs`, `file-shell-fitted.gts`]. The realm
+server reads the seam too, but nothing pins it there [`clock.ts`]. So a stamp
+it mints, such as the `created_at` of a file in a realm served from the index
+cache, is the real time of the index build [`file-meta.ts`]. #6043 moved that
+stamp onto the seam, which pins it only in realms the suite indexes in the
+browser [#6043].
+
+In card code, the seam covers timing reads too (§1.7). #6022 also routed the
+reads that nothing displays, such as a parser's reference date, so that the
+lint rule that guards the seam stays a flat rule with no exceptions [#6022].
+That rule is `eslint/ambient-clock-selectors.cjs`, which both
+`packages/base` and `packages/school-example-realm` apply. The host has no
+such rule, because most host reads are §1.3 cases, where a blanket rule would
+be wrong [`clock.ts`].
 
 ## 3. Considered options
 
@@ -128,8 +151,10 @@ host reads are §1.3 cases, where a blanket rule would be wrong [`clock.ts`].
 - #6043 (075e844d0b): pins the suite's clock and moves the stamps with it.
 - #6433: opens the date range picker on a day its caller supplies.
 - #7308: reads the dashboard greeting's hour through the seam.
-- `packages/runtime-common/clock.ts`, `packages/host/tests/helpers/test-clock.ts`,
-  `eslint/ambient-clock-selectors.cjs`.
+- `packages/runtime-common/clock.ts`, `packages/runtime-common/file-meta.ts`,
+  `packages/host/tests/helpers/test-clock.ts`,
+  `packages/base/file-formats/file-shell-fitted.gts`,
+  `scripts/normalize-realm-mtimes.mjs`, `eslint/ambient-clock-selectors.cjs`.
 
 ## 5. Remediation
 
