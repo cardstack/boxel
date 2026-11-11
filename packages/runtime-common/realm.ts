@@ -9198,7 +9198,27 @@ export class Realm {
       this.#dbAdapter,
       new URL(this.url),
     );
+    return this.#ownerUserIdFrom(permissions);
+  }
 
+  // The realm's owner and its visibility read from one fetch of its
+  // permissions: a definition lookup needs both, and two fetches would be two
+  // round trips for the same rows.
+  async ownerAndVisibility(): Promise<{
+    ownerUserId: string;
+    visibility: RealmVisibility;
+  }> {
+    let permissions = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+    return {
+      ownerUserId: this.#ownerUserIdFrom(permissions),
+      visibility: visibilityFrom(permissions),
+    };
+  }
+
+  #ownerUserIdFrom(permissions: RealmPermissions): string {
     let userIds = Object.entries(permissions)
       .filter(([_, realmActions]) => realmActions.includes('realm-owner'))
       .map(([userId]) => userId);
@@ -19750,17 +19770,7 @@ export class Realm {
       this.#dbAdapter,
       new URL(this.url),
     );
-
-    let usernames = Object.keys(permissions).filter(
-      (username) => !username.startsWith('@realm/'),
-    );
-    if (usernames.includes('*')) {
-      return 'public';
-    } else if (usernames.includes('users') || usernames.length > 1) {
-      return 'shared';
-    } else {
-      return 'private';
-    }
+    return visibilityFrom(permissions);
   }
 
   #logRequestPerformance(
@@ -19773,6 +19783,19 @@ export class Realm {
         request.url
       } ${request.headers.get('Accept') ?? ''}`,
     );
+  }
+}
+
+function visibilityFrom(permissions: RealmPermissions): RealmVisibility {
+  let usernames = Object.keys(permissions).filter(
+    (username) => !username.startsWith('@realm/'),
+  );
+  if (usernames.includes('*')) {
+    return 'public';
+  } else if (usernames.includes('users') || usernames.length > 1) {
+    return 'shared';
+  } else {
+    return 'private';
   }
 }
 

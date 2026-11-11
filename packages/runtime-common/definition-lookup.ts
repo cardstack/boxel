@@ -221,7 +221,8 @@ function parseJsonValue<T>(value: T | string | null): T | null {
 }
 
 export type CacheScope = 'public' | 'realm-auth';
-type LocalRealm = Pick<Realm, 'url' | 'getRealmOwnerUserId' | 'visibility'>;
+type LocalRealm = Pick<Realm, 'url' | 'getRealmOwnerUserId' | 'visibility'> &
+  Partial<Pick<Realm, 'ownerAndVisibility'>>;
 
 export interface DefinitionCacheEntry {
   definitions: Record<string, ModuleDefinitionResult | ErrorEntry>;
@@ -1533,8 +1534,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
 
     if (localRealm) {
-      let prerenderUserId = await localRealm.getRealmOwnerUserId();
-      let isPublic = (await localRealm.visibility()) === 'public';
+      // One permissions read where the realm offers it, not one per value.
+      let { ownerUserId: prerenderUserId, visibility } =
+        localRealm.ownerAndVisibility
+          ? await localRealm.ownerAndVisibility()
+          : {
+              ownerUserId: await localRealm.getRealmOwnerUserId(),
+              visibility: await localRealm.visibility(),
+            };
+      let isPublic = visibility === 'public';
       let cacheScope: CacheScope = isPublic ? 'public' : 'realm-auth';
 
       return {
