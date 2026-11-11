@@ -157,6 +157,11 @@ module(
       );
 
       await click('[data-test-automation-script-save]');
+      assert.strictEqual(
+        codeEditorContent(SCRIPT_EDITOR),
+        `${SCRIPT}// checked nightly\n`,
+        'the editor keeps the saved text, without waiting for the file to be read again',
+      );
       await waitUntil(
         async () => (await scriptOnDisk()) === `${SCRIPT}// checked nightly\n`,
         { timeoutMessage: 'Save writes the script file' },

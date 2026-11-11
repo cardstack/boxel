@@ -156,10 +156,11 @@ function section(title: string): HTMLElement {
       '[data-test-pretui-form-section], [data-test-pretui-fieldset]',
     ),
   ].find((element) => {
-    let legend = element.querySelector(':scope > legend');
     let heading = element.hasAttribute('data-test-pretui-form-section')
-      ? legend?.firstElementChild
-      : legend;
+      ? element.querySelector(
+          ':scope > legend [data-test-pretui-form-section-title]',
+        )
+      : element.querySelector(':scope > legend');
     return heading?.textContent?.trim() === title;
   });
   if (!match) {
@@ -592,6 +593,19 @@ module('Acceptance | automation edit format', function (hooks) {
     );
   });
 
+  test('two triggers may not share a label', async function (assert) {
+    await openEdit();
+    assert.dom('[data-test-automation-triggers-problem]').doesNotExist();
+    await fillIn(inputOf('Label', triggerItem(1)), 'nightly');
+    assert
+      .dom('[data-test-automation-triggers-problem]')
+      .hasText('Two triggers share the label “nightly”: each needs its own');
+    await fillIn(inputOf('Label', triggerItem(1)), 'kickoff');
+    assert
+      .dom('[data-test-automation-triggers-problem]')
+      .doesNotExist('a label of its own clears the problem');
+  });
+
   test('every limit is saved, in the units it is entered in', async function (assert) {
     await openEdit();
     let limits = section('Limits');
@@ -784,6 +798,16 @@ module('Acceptance | automation edit format', function (hooks) {
         "realm.operations.invoke('trackers/main', 'openTickets', {})",
         'and how the script makes it',
       );
+    // Another card can be chosen from the dialog: it steps aside so the
+    // chooser can be used, and comes back with the new card.
+    await click('[data-test-automation-choose-another-service]');
+    await waitFor('[data-test-card-chooser-modal]');
+    assert
+      .dom('[data-test-automation-service-calls]')
+      .doesNotExist('the dialog closes while the chooser is open');
+    await click(`[data-test-item-button="${testRealmURL}trackers/main"]`);
+    await click('[data-test-card-chooser-go-button]');
+    await waitFor('[data-test-automation-service-calls]');
     await click('[data-test-automation-add-service-confirm]');
     await waitForSave(
       (d) =>
@@ -818,10 +842,14 @@ module('Acceptance | automation edit format', function (hooks) {
   test('params are added, edited and removed', async function (assert) {
     await openEdit();
     await click('[data-test-automation-add-param]');
+    assert
+      .dom('[data-test-automation-params-problem]')
+      .hasText('Every param needs a name');
     let param = document.querySelector(
       '[data-test-automation-param="0"]',
     ) as HTMLElement;
     await fillIn(inputOf('Name', param), 'repository');
+    assert.dom('[data-test-automation-params-problem]').doesNotExist();
     await fillIn(inputOf('Value', param), 'cardstack/boxel');
     await waitForSave(
       (d) =>
@@ -830,12 +858,23 @@ module('Acceptance | automation edit format', function (hooks) {
         d.attributes.params[0].value === 'cardstack/boxel',
       'the param is saved',
     );
+    await click('[data-test-automation-add-param]');
+    await fillIn(
+      inputOf(
+        'Name',
+        document.querySelector('[data-test-automation-param="1"]')!,
+      ),
+      'repository',
+    );
+    assert
+      .dom('[data-test-automation-params-problem]')
+      .hasText('Two params share the name “repository”');
+    await click('[data-test-automation-remove-param="1"]');
     await click('[data-test-automation-remove-param="0"]');
     await waitForSave(
       (d) => d.attributes.params.length === 0,
       'removing it is saved',
     );
-    assert.ok(true);
   });
   test('the fitted view says when it runs, and flags a missing script and batched AI', async function (assert) {
     await visitOperatorMode({
