@@ -1,7 +1,11 @@
 import { service } from '@ember/service';
 
 import type { Filter } from '@cardstack/runtime-common';
-import { assertQuery } from '@cardstack/runtime-common';
+import {
+  assertQuery,
+  InvalidQueryError,
+  SearchBoundError,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { lowerForWire } from '../utils/search/lower-for-wire';
@@ -96,6 +100,13 @@ export class SearchCardsByQueryTool extends HostBaseTool<
       // newer one is lowered first.
       instances = await this.store.search(lowerForWire(query), realmUrls);
     } catch (e) {
+      // A refused query (`mixed-spelling`, `unknown-field`, a page bound)
+      // goes back through the tool's error path with its code and rewrite,
+      // as search-entries reports one: answered as an empty result, it would
+      // read to the assistant as a genuine zero-match.
+      if (e instanceof InvalidQueryError || e instanceof SearchBoundError) {
+        throw e;
+      }
       console.error(`Error searching in realms:`, e, query);
     }
 

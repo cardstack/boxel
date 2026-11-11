@@ -231,4 +231,28 @@ module('Integration | tools | search', function (hooks) {
       'mark has one',
     );
   });
+
+  // A refusal goes back through the tool's error path with its code and
+  // rewrite; only a query that ran and matched nothing is an empty result.
+  test('a refused query is an error; no match is an empty result', async function (assert) {
+    let type = {
+      module: rri('http://test-realm/test/author'),
+      name: 'Author',
+    };
+    await assert.rejects(
+      runQuerySearch({
+        type,
+        filter: { on: type, eq: { firstName: 'Mark' } },
+      } as unknown as Query),
+      (e: any) =>
+        e?.code === 'mixed-spelling' &&
+        /Put the type at the top and drop "on"/.test(e.message),
+      'mixed-spelling, with the rewrite',
+    );
+    let none = await runQuerySearch({
+      type,
+      filter: { eq: { firstName: 'Nobody' } },
+    } as unknown as Query);
+    assert.deepEqual(none.cardIds, [], 'no match is a successful empty result');
+  });
 });
