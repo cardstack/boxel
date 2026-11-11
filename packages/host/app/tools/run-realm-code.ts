@@ -1315,7 +1315,10 @@ class RealmFsSession {
             );
           }
           let { path, operation, payload } = item as Record<string, unknown>;
-          if ('type' in item) {
+          // A type is refused under either spelling: as its own member, and
+          // as { module, name } where the path goes, which `operationEntry`
+          // otherwise reads as a type.
+          if ('type' in item || (path !== null && typeof path === 'object')) {
             // A batch commits in the realm of the card it is anchored on, and
             // an operation on a type names no card to anchor it.
             throw new TypeError(
@@ -2888,10 +2891,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'declares one for the change; each runs at once and answers { path, ' +
     'operation, id, version } for a write). To run an operation on a type ' +
     'itself, such as a create where the workspace holds no card of the ' +
-    'type, pass the type as { module, name } in place of the path (a ' +
-    'relative module is read from the realm root); it runs in this ' +
-    "workspace, and its answer's path is the card it wrote. invoke in a " +
-    'loop sends one ' +
+    'type, pass the type as { module, name } in place of the path to ' +
+    'realm.operations.invoke (a relative module is read from the realm ' +
+    "root); it runs in this workspace, and its answer's path is the card " +
+    'it wrote. A batch entry always names a card. invoke in a loop sends ' +
+    'one ' +
     'request per card, and when one fails the cards before it stay ' +
     'changed; invokeBatchOperation sends all of them in one request that ' +
     'the realm carries out whole or not at all, so use it when the changes ' +

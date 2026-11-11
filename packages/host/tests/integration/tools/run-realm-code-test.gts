@@ -5834,20 +5834,28 @@ try {
       );
     });
 
-    test('a batch entry names a card rather than a type', async function (assert) {
+    test('a batch entry names a card rather than a type, however the type is spelled', async function (assert) {
       let result = await run(`
-try {
-  await realm.operations.invokeBatchOperation([
-    { type: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'South' } },
-  ]);
-  return 'ran';
-} catch (e) {
-  return e.message;
-}`);
+let refusals = [];
+for (let entry of [
+  { type: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'South' } },
+  { path: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'East' } },
+]) {
+  try {
+    await realm.operations.invokeBatchOperation([entry]);
+    refusals.push('ran');
+  } catch (e) {
+    refusals.push(e.message);
+  }
+}
+return refusals;`);
 
-      assert.strictEqual(
+      let refusal =
+        'a realm.operations.invokeBatchOperation entry names a card by its path; run an operation on a type with realm.operations.invoke(type, operation, payload)';
+      assert.deepEqual(
         JSON.parse(result.scriptResult!),
-        'a realm.operations.invokeBatchOperation entry names a card by its path; run an operation on a type with realm.operations.invoke(type, operation, payload)',
+        [refusal, refusal],
+        'a type as its own member and a type where the path goes are both refused',
       );
     });
 
