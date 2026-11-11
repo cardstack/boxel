@@ -75,23 +75,30 @@ class CodeEditorUsage extends Component {
       '@value={{this.source}}',
       `@language='${this.language}'`,
       '@controlId={{controlId}}',
+      '@labelledBy={{labelId}}',
+      '@describedBy={{describedBy}}',
     ];
     if (this.readOnly) bits.push('@readOnly={{true}}');
     if (!this.lineNumbers) bits.push('@lineNumbers={{false}}');
     bits.push(`@maxLines={{${this.maxLines}}}`);
     bits.push('@onInput={{this.setSource}}');
-    return `<Field @label='Script' as |controlId|>\n  <CodeEditor ${bits.join(' ')} />\n</Field>`;
+    return `<Field @label='Script' @labelTag='span' as |controlId describedBy labelId|>\n  <CodeEditor ${bits.join(' ')} />\n</Field>`;
   }
 
   <template>
     <FreestyleUsage
       @name='CodeEditor'
-      @description='Source code edited in CodeMirror, which the host loads on demand. Before it loads, and where it cannot (a prerender), the same code shows read-only through CodeBlock.'
+      @description='Source code edited in CodeMirror, which the host loads on demand. Before it loads, and where it never does (a prerender), the same code shows read-only through CodeBlock.'
       @source={{this.usage}}
     >
       <:example>
         <div class='pretui-codeeditor-demo'>
-          <Field @label='Script' @hint={{this.lineCount}} as |controlId|>
+          <Field
+            @label='Script'
+            @labelTag='span'
+            @hint={{this.lineCount}}
+            as |controlId describedBy labelId|
+          >
             <CodeEditor
               @value={{this.value}}
               @language={{this.language}}
@@ -100,6 +107,8 @@ class CodeEditorUsage extends Component {
               @minLines={{this.minLines}}
               @maxLines={{this.maxLines}}
               @controlId={{controlId}}
+              @labelledBy={{labelId}}
+              @describedBy={{describedBy}}
               @onInput={{this.setValue}}
             />
           </Field>
@@ -158,12 +167,20 @@ class CodeEditorUsage extends Component {
         />
         <Args.Base
           @name='controlId'
-          @description="Lands on CodeMirror's editable element, so a Field's label names the editor. Supplied by the wrapping Field's yielded controlId."
+          @description="An id for CodeMirror's editable element, so other elements can point at it. Supplied by the wrapping Field's yielded controlId."
+        />
+        <Args.Base
+          @name='labelledBy'
+          @description="The id of the element that names the editor, set as aria-labelledby. A label's for can't name CodeMirror's contenteditable, so wrap the editor in a Field with labelTag='span' and pass its yielded labelId."
+        />
+        <Args.Base
+          @name='describedBy'
+          @description="The id(s) of elements that describe the editor, set as aria-describedby: the Field's yielded message-line id, so its hint and errors are read with the editor."
         />
         <Args.Base
           @name='label'
           @typeLabel='String'
-          @description='The accessible name when no label points at the editor.'
+          @description='The accessible name, when no element on the page names the editor.'
           @hideControls={{true}}
         />
       </:api>

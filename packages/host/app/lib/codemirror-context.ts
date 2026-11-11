@@ -38,6 +38,7 @@ import {
   EditorState,
   StateEffect,
   StateField,
+  Transaction,
   type Extension,
 } from '@codemirror/state';
 import {
@@ -1312,14 +1313,21 @@ export interface CreateCodeEditorStateOptions {
   language?: CodeEditorLanguage;
   readOnly?: boolean;
   lineNumbers?: boolean;
-  // Lands on the editable element, so a `<label for>` can name it.
+  // An id for the editable element, so other elements can point at it.
   controlId?: string;
-  // The accessible name when no label points at the editor.
+  // The accessible name, when no element on the page names the editor.
   label?: string;
+  // The id of the element that names the editor. A `<label for>` can't: the
+  // editable element is a contenteditable, which isn't labelable.
+  labelledBy?: string;
+  // The id(s) of elements that describe the editor.
+  describedBy?: string;
   // An `EditorView.theme` spec from the component hosting the editor, so it
   // styles CodeMirror's DOM from its own tokens. A theme takes precedence
   // over CodeMirror's base theme, which a stylesheet in a cascade layer
-  // can't, since CodeMirror injects its base theme unlayered.
+  // can't, since CodeMirror injects its base theme unlayered. Pass the same
+  // object each time: each spec becomes one theme, made once and reused, as
+  // every theme CodeMirror makes adds a stylesheet to the page for good.
   theme?: Parameters<typeof EditorView.theme>[0];
   onDocChange?: (text: string) => void;
 }
@@ -1343,6 +1351,17 @@ function languageExtension(language: CodeEditorLanguage | undefined) {
 // (`classHighlighter`) rather than coloured here, so the component that hosts
 // the editor colours them from its theme. Tab is left to move focus, so the
 // editor is never a keyboard trap.
+const codeEditorThemes = new WeakMap<object, Extension>();
+
+function codeEditorTheme(spec: Parameters<typeof EditorView.theme>[0]) {
+  let theme = codeEditorThemes.get(spec);
+  if (!theme) {
+    theme = EditorView.theme(spec);
+    codeEditorThemes.set(spec, theme);
+  }
+  return theme;
+}
+
 function createCodeEditorState(
   options: CreateCodeEditorStateOptions,
 ): EditorState {
@@ -1353,6 +1372,12 @@ function createCodeEditorState(
   }
   if (options.label) {
     attributes['aria-label'] = options.label;
+  }
+  if (options.labelledBy) {
+    attributes['aria-labelledby'] = options.labelledBy;
+  }
+  if (options.describedBy) {
+    attributes['aria-describedby'] = options.describedBy;
   }
   if (readOnly) {
     attributes['aria-readonly'] = 'true';
@@ -1370,7 +1395,7 @@ function createCodeEditorState(
     syntaxHighlighting(classHighlighter),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     ...languageExtension(options.language),
-    ...(options.theme ? [EditorView.theme(options.theme)] : []),
+    ...(options.theme ? [codeEditorTheme(options.theme)] : []),
     EditorState.tabSize.of(2),
     EditorState.readOnly.of(readOnly),
     EditorView.editable.of(!readOnly),
@@ -1391,6 +1416,7 @@ function createCodeEditorState(
 export interface CodeMirrorContext {
   EditorState: typeof EditorState;
   EditorView: typeof EditorView;
+  Transaction: typeof Transaction;
   createEditorState: typeof createEditorState;
   createCodeEditorState: typeof createCodeEditorState;
   undo: typeof undo;
@@ -1404,6 +1430,7 @@ export interface CodeMirrorContext {
 const codemirrorContext: CodeMirrorContext = {
   EditorState,
   EditorView,
+  Transaction,
   createEditorState,
   createCodeEditorState,
   undo,

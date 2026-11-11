@@ -33,13 +33,24 @@ export function codeEditorContent(selector = CODE_EDITOR_SELECTOR): string {
   return codeEditorView(selector).state.doc.toString();
 }
 
+// Typing goes through the same transactions CodeMirror's input makes, which
+// a read-only editor doesn't stop on its own; it refuses the keyboard, so the
+// helpers refuse too, and a test can't type into what a person couldn't.
+function editableView(selector: string): EditorView {
+  let view = codeEditorView(selector);
+  if (view.state.readOnly) {
+    throw new Error(`the CodeMirror view in ${selector} is read-only`);
+  }
+  return view;
+}
+
 // Types at the end of the document, focused, the way CodeMirror's own input
 // handling does: a transaction tagged as user input.
 export async function typeInCodeEditor(
   selector: string,
   text: string,
 ): Promise<void> {
-  let view = codeEditorView(selector);
+  let view = editableView(selector);
   view.focus();
   let end = view.state.doc.length;
   view.dispatch({
@@ -55,7 +66,7 @@ export async function setCodeEditorContent(
   selector: string,
   text: string,
 ): Promise<void> {
-  let view = codeEditorView(selector);
+  let view = editableView(selector);
   view.focus();
   view.dispatch({
     changes: { from: 0, to: view.state.doc.length, insert: text },

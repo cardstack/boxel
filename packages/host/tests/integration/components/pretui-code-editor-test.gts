@@ -5,12 +5,15 @@ import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { CodeEditor } from '@cardstack/pretui/components/code-editor';
+import { Field } from '@cardstack/pretui/components/field';
+import { undo } from '@codemirror/commands';
 import { module, test } from 'qunit';
 
 import cmContext from '@cardstack/host/lib/codemirror-context';
 
 import {
   codeEditorView,
+  setCodeEditorContent,
   typeInCodeEditor,
   waitForCodeEditor,
 } from '../../helpers/code-editor';
@@ -151,6 +154,83 @@ module('Integration | pretui code editor', function (hooks) {
     );
   });
 
+  test('undo does not bring back what an outside value replaced', async function (assert) {
+    class State {
+      @tracked value = SOURCE;
+    }
+    let state = new State();
+    class Driver extends GlimmerComponent {
+      setValue = (value: string) => (state.value = value);
+      replace = () => (state.value = 'export const saved = true;');
+      <template>
+        <CodeEditor
+          @value={{state.value}}
+          @language='javascript'
+          @onInput={{this.setValue}}
+        />
+        <button type='button' {{on 'click' this.replace}} data-test-replace>
+          Replace
+        </button>
+      </template>
+    }
+    await renderComponent(Driver);
+    await waitForCodeEditor();
+    await typeInCodeEditor('[data-test-pretui-code-editor]', '\n// typed');
+    await click('[data-test-replace]');
+    let view = codeEditorView();
+    assert.strictEqual(view.state.doc.toString(), 'export const saved = true;');
+
+    undo(view);
+    assert.strictEqual(
+      view.state.doc.toString(),
+      'export const saved = true;',
+      'undo leaves the replacement in place',
+    );
+    assert.strictEqual(state.value, 'export const saved = true;');
+  });
+
+  test('inside a Field, the label names the editor and the hint describes it', async function (assert) {
+    await renderComponent(
+      class Driver extends GlimmerComponent {
+        <template>
+          <Field
+            @label='Script'
+            @labelTag='span'
+            @hint='Runs on every save'
+            as |controlId describedBy labelId|
+          >
+            <CodeEditor
+              @value={{SOURCE}}
+              @language='javascript'
+              @controlId={{controlId}}
+              @labelledBy={{labelId}}
+              @describedBy={{describedBy}}
+            />
+          </Field>
+        </template>
+      },
+    );
+    await waitForCodeEditor();
+    let content = document.querySelector(
+      '[data-test-pretui-code-editor-host] .cm-content',
+    )!;
+    let name = content
+      .getAttribute('aria-labelledby')
+      ?.split(' ')
+      .map((id) => document.getElementById(id)?.textContent?.trim())
+      .join(' ');
+    assert.strictEqual(name, 'Script', 'the Field label names the editor');
+    let description = content
+      .getAttribute('aria-describedby')
+      ?.split(' ')
+      .map((id) => document.getElementById(id)?.textContent?.trim())
+      .join(' ');
+    assert.true(
+      description?.includes('Runs on every save'),
+      'the hint describes the editor',
+    );
+  });
+
   test('read-only shows the code and refuses edits', async function (assert) {
     await renderComponent(
       class Driver extends GlimmerComponent {
@@ -170,5 +250,36 @@ module('Integration | pretui code editor', function (hooks) {
       .dom('[data-test-pretui-code-editor-host] .cm-content')
       .hasAttribute('contenteditable', 'false')
       .hasAttribute('aria-readonly', 'true');
+    await assert.rejects(
+      setCodeEditorContent('[data-test-pretui-code-editor]', 'changed'),
+      /read-only/,
+      'the test helpers refuse to type into a read-only editor',
+    );
+    assert.strictEqual(view.state.doc.toString(), SOURCE);
+  });
+
+  test('editors with the same theme add its rules once', async function (assert) {
+    let theme = { '.cm-content': { color: 'rgb(1, 2, 3)' } };
+    // CodeMirror adds each theme's rules to a shared sheet, so count rules.
+    let count = () =>
+      [
+        ...document.adoptedStyleSheets,
+        ...[...document.querySelectorAll('style')].map((s) => s.sheet!),
+      ].reduce((n, sheet) => n + (sheet?.cssRules.length ?? 0), 0);
+    let first = cmContext.createCodeEditorState({ doc: 'a', theme });
+    let parent = document.createElement('div');
+    document.body.append(parent);
+    let views = [new cmContext.EditorView({ state: first, parent })];
+    try {
+      let before = count();
+      for (let i = 0; i < 3; i++) {
+        let state = cmContext.createCodeEditorState({ doc: 'b', theme });
+        views.push(new cmContext.EditorView({ state, parent }));
+      }
+      assert.strictEqual(count(), before, 'no rules are added per editor');
+    } finally {
+      views.forEach((v) => v.destroy());
+      parent.remove();
+    }
   });
 });
