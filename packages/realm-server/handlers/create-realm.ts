@@ -176,6 +176,14 @@ export async function createRealm(
   // concurrency concern — the endpoint was already checked above for
   // collision.
   await dbAdapter.withWriteLock(url, async (txQuerier) => {
+    // The registry row and the realm's scan event commit on the lock's
+    // transaction (below). Only an adapter with no cross-connection locking
+    // passes none, and the realm server never runs on one.
+    if (!txQuerier) {
+      throw new Error(
+        `cannot create the realm ${url}: the database adapter's write lock has no transaction to register it on`,
+      );
+    }
     await insertPermissions(dbAdapter, new URL(url), {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
@@ -254,28 +262,19 @@ export async function createRealm(
     // appended on the same transaction as the registry row: the write lock's
     // own. No instance can mount the realm before both commit, so the scan
     // comes before any write to it.
-    let register = async (querier: Querier) => {
-      await insertSourceRealmInRegistry(
-        dbAdapter,
-        {
-          url,
-          diskId: `${ownerUsername}/${endpoint}`,
-          ownerUsername,
-        },
-        querier,
-      );
-      if (changeJournal) {
-        await appendSeedScan(querier, changeJournal, {
-          realmURL: url,
-          author: ownerUserId,
-        });
-      }
-    };
-    if (txQuerier) {
-      await register(txQuerier);
-    } else {
-      await dbAdapter.withTransaction(register, {
-        label: `register realm ${url}`,
+    await insertSourceRealmInRegistry(
+      dbAdapter,
+      {
+        url,
+        diskId: `${ownerUsername}/${endpoint}`,
+        ownerUsername,
+      },
+      txQuerier,
+    );
+    if (changeJournal) {
+      await appendSeedScan(txQuerier, changeJournal, {
+        realmURL: url,
+        author: ownerUserId,
       });
     }
   });
