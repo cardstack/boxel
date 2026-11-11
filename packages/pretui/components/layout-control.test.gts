@@ -77,6 +77,31 @@ module('Pretui | components/layout-control | folding', function (hooks) {
     { label: 'List', value: 'list', group: 'view' },
   ];
 
+  test('@controlHeight sets --pretui-row-h on the bar, and none without it', async function (assert) {
+    // Scoped CSS is inert in this harness, so the controls' own height is
+    // checked on the usage page; this pins the value they read.
+    await render(
+      <template>
+        <LayoutControl @label='Sized' @controlHeight='2rem' data-test-sized as |lc|>
+          <lc.Slot @id='add' @forms={{PIN}} @pinned={{true}}>
+            <button type='button'>Add</button>
+          </lc.Slot>
+        </LayoutControl>
+        <LayoutControl @label='Plain' data-test-plain as |lc|>
+          <lc.Slot @id='add' @forms={{PIN}} @pinned={{true}}>
+            <button type='button'>Add</button>
+          </lc.Slot>
+        </LayoutControl>
+      </template>,
+    );
+    let sized = document.querySelector<HTMLElement>('[data-test-sized]')!;
+    assert.strictEqual(sized.style.getPropertyValue('--pretui-row-h'), '2rem');
+    assert.strictEqual(sized.style.getPropertyValue('--control-height'), '2rem');
+    assert
+      .dom('[data-test-plain]')
+      .doesNotHaveAttribute('style', 'a row with no @controlHeight sets no height');
+  });
+
   test('folded slots become ⋯ menu items, the pinned slot stays, the fallback opens the slot', async function (assert) {
     await render(
       <template>
