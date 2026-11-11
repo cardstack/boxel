@@ -3,6 +3,12 @@
 // transaction so the event commits with the write's `realm_file_meta` update
 // or not at all.
 //
+// The realm server's write path appends through it, and so do the writers
+// that change a realm's files from outside the realm: create-realm, and
+// realm-historian's `scripts/scan.ts`, which the deploy runs after its rsync.
+// They share this one statement so that every event obeys the same rule for
+// which realms record.
+//
 // Whether a realm records history is read in that same transaction. One
 // statement looks the realm up by URL in `realm_registry`, takes it only when
 // it is not published and `realm_history_state.enabled` is true, inserts the

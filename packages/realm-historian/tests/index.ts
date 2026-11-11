@@ -9,5 +9,6 @@ import './consumer-test.ts';
 import './health-test.ts';
 import './historian-test.ts';
 import './process-test.ts';
+import './scan-test.ts';
 
 QUnit.start();
