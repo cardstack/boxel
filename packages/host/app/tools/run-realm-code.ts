@@ -4326,14 +4326,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
   }
 
   // Whether the user may run a script in the realm: they can read or write
-  // it, or its policy judges them. A realm answers its info to a caller its
-  // permissions don't let read only when its policy judges them, so info the
-  // host holds for a user who can't read the realm says the policy does.
+  // it, or the realm admits them only through its policy (ADR 022 §1.8).
   private mayRunIn(realm: RealmIdentifier): boolean {
     return (
       this.realm.canRead(realm) ||
       this.realm.canWrite(realm) ||
-      this.realm.isInfoLoaded(realm)
+      this.realm.admitsOnlyThroughPolicy(realm)
     );
   }
 

@@ -1286,6 +1286,17 @@ export default class RealmService extends Service {
     return this.knownRealm(this.toLookupURL(realm))?.info !== undefined;
   };
 
+  // Whether the realm admits the user only through its policy: its
+  // permissions give them neither read nor write, and its policy judges them.
+  // A realm answers its info to a caller its permissions don't let read only
+  // when its policy judges them, so info the host holds for such a user is
+  // the sign. The realm decides each request such a user makes.
+  admitsOnlyThroughPolicy = (realm: RealmIdentifier): boolean => {
+    return (
+      !this.canRead(realm) && !this.canWrite(realm) && this.isInfoLoaded(realm)
+    );
+  };
+
   url = (url: string): string | undefined => {
     return this.knownRealm(url)?.url;
   };
