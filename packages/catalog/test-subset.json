@@ -12,7 +12,7 @@
     },
     {
       "path": "automation/automation.gts",
-      "reason": "Automation: the automation definition the server reads from the index as data (its script, triggers, callApi operations, caps, params, milestones and batchedAI)"
+      "reason": "Automation: the automation definition the server reads from the index as data (its script, triggers, callApi operations, caps, params and batchedAI)"
     },
     {
       "path": "automation/describe-cron.ts",
