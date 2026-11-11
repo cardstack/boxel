@@ -473,6 +473,7 @@ module(basename(import.meta.filename), function () {
         issuer: 'http://127.0.0.1:0',
         response_types_supported: ['code'],
         code_challenge_methods_supported: ['S256'],
+        token_endpoint_auth_methods_supported: ['none'],
         grant_types_supported: ['authorization_code'],
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
         registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',

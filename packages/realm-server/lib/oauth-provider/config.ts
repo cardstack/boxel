@@ -71,7 +71,7 @@ export function readNewClientLimit(
   let limit = parseNewClientLimit(spec);
   if (!limit) {
     throw new OAuthProviderConfigError(
-      `${OAUTH_CLIENT_RATE_LIMIT_VAR} must be two limits, per address and overall, each as requests/windowSeconds, for example 20/3600,500/3600, not "${spec}"`,
+      `${OAUTH_CLIENT_RATE_LIMIT_VAR} must be named parts, each optional: address, network and all as requests/windowSeconds, and alert as a count below all's requests, for example address=20/3600,network=100/3600,all=2000/3600,alert=500, not "${spec}"`,
     );
   }
   return limit;

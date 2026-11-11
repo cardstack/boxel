@@ -19,6 +19,7 @@ import {
   testOAuthProviderConfig,
   testOAuthSecureOriginURL,
 } from './helpers/oauth-provider.ts';
+import { oauthProviderAdapter } from '../lib/oauth-provider/adapter.ts';
 import type { NewClientLimit } from '../lib/oauth-provider/new-client-limit.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
@@ -39,7 +40,9 @@ const APP_ORIGINS = ['https://*.app-origin.test'];
 // Generous enough that no test but the limit's own reaches it.
 const ROOMY_LIMIT: NewClientLimit = {
   perAddress: { requests: 100, windowSeconds: 3600 },
+  perNetwork: { requests: 100, windowSeconds: 3600 },
   overall: { requests: 100, windowSeconds: 3600 },
+  alertAfter: 99,
 };
 
 interface StartOptions {
@@ -137,6 +140,7 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
       );
       return row?.metadata as Record<string, unknown> | undefined;
     },
+    clientAdapter: () => oauthProviderAdapter(db!)('Client'),
     storedClientCount: async () => {
       let [{ count }] = await db!.execute(
         `SELECT count(*)::int AS count FROM oauth_provider_clients`,
@@ -325,6 +329,81 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(await server.storedClientCount(), 0, 'none stored');
     });
 
+    test("a client's name is stored as sent when it can be shown as it is", async function (assert) {
+      let name = 'Example Editor – Ünïcode 編集 🙂';
+      let response = await server.register({
+        ...loopbackClient,
+        client_name: name,
+      });
+      assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+      let stored = await server.storedClient(response.body.client_id);
+      assert.strictEqual(stored?.client_name, name);
+    });
+
+    test('a name, scope or redirect URI that is too long, or a name that hides or reorders text, is refused', async function (assert) {
+      let cases: [string, Record<string, unknown>][] = [
+        ['a long name', { client_name: 'x'.repeat(257) }],
+        [
+          'a right-to-left override',
+          { client_name: 'Example\u202Eppa detsurt' },
+        ],
+        ['a zero-width space', { client_name: 'Exam\u200Bple' }],
+        ['a line break', { client_name: 'Example\nAllow this app' }],
+        ['a line separator', { client_name: 'Example\u2028App' }],
+        ['a name that is not text', { client_name: ['Example'] }],
+        ['a control character', { client_name: 'Example\u0007' }],
+        ['a long scope', { scope: 'boxel:read '.repeat(103) }],
+        [
+          'a long redirect URI',
+          {
+            redirect_uris: [
+              `http://127.0.0.1/${'x'.repeat(2048 - 'http://127.0.0.1/'.length + 1)}`,
+            ],
+          },
+        ],
+      ];
+      for (let [label, fields] of cases) {
+        let response = await server.register({ ...loopbackClient, ...fields });
+        assert.strictEqual(response.status, 400, label);
+        assert.true(
+          ['invalid_client_metadata', 'invalid_redirect_uri'].includes(
+            response.body.error,
+          ),
+          `${label}: ${response.body.error}`,
+        );
+      }
+      assert.strictEqual(await server.storedClientCount(), 0, 'none stored');
+
+      let longest = await server.register({
+        ...loopbackClient,
+        client_name: 'x'.repeat(256),
+        redirect_uris: [
+          `http://127.0.0.1/${'x'.repeat(2048 - 'http://127.0.0.1/'.length)}`,
+        ],
+      });
+      assert.strictEqual(
+        longest.status,
+        201,
+        `the longest allowed are stored: ${JSON.stringify(longest.body)}`,
+      );
+    });
+
+    test('a client is stored once: another under the same ID is refused, and the first is left as it was', async function (assert) {
+      let response = await server.register(loopbackClient);
+      assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+      let clientId = response.body.client_id;
+      let adapter = server.clientAdapter();
+      await assert.rejects(
+        adapter.upsert(clientId, {
+          client_id: clientId,
+          redirect_uris: ['https://client.example.test/elsewhere'],
+        }),
+        'a second store under the same ID fails',
+      );
+      let stored = await server.storedClient(clientId);
+      assert.deepEqual(stored?.redirect_uris, loopbackClient.redirect_uris);
+    });
+
     test('a registration that is not a JSON object is refused', async function (assert) {
       let notJSON = await server
         .post(REGISTRATION)
@@ -346,7 +425,7 @@ module(basename(import.meta.filename), function () {
 
       let tooLarge = await server.register({
         ...loopbackClient,
-        client_name: 'x'.repeat(60 * 1024),
+        logo_uri: `https://client.example.test/${'x'.repeat(9 * 1024)}`,
       });
       assert.strictEqual(tooLarge.status, 400, 'a body over the limit');
       assert.strictEqual(tooLarge.body.error, 'invalid_client_metadata');
@@ -360,7 +439,9 @@ module(basename(import.meta.filename), function () {
       trustedProxyHops: 1,
       newClientLimit: {
         perAddress: { requests: 2, windowSeconds: 3600 },
-        overall: { requests: 3, windowSeconds: 3600 },
+        perNetwork: { requests: 3, windowSeconds: 3600 },
+        overall: { requests: 5, windowSeconds: 3600 },
+        alertAfter: 4,
       },
     });
 
@@ -402,15 +483,38 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(refused.status, 429);
     });
 
-    test('the overall limit refuses every address', async function (assert) {
-      for (let address of ['192.0.2.31', '192.0.2.32', '192.0.2.33']) {
+    test('the addresses of one network share its limit', async function (assert) {
+      for (let address of ['198.51.100.1', '198.51.100.2', '198.51.100.3']) {
         let response = await server.register(loopbackClient, {
           forwardedFor: address,
         });
         assert.strictEqual(response.status, 201, address);
       }
       let refused = await server.register(loopbackClient, {
-        forwardedFor: '192.0.2.34',
+        forwardedFor: '198.51.100.4',
+      });
+      assert.strictEqual(refused.status, 429, 'a fourth address in the /24');
+      let elsewhere = await server.register(loopbackClient, {
+        forwardedFor: '203.0.113.1',
+      });
+      assert.strictEqual(elsewhere.status, 201, 'another network');
+    });
+
+    test('the overall limit refuses every network', async function (assert) {
+      for (let address of [
+        '192.0.2.31',
+        '198.51.100.31',
+        '203.0.113.31',
+        '2001:db8:1::31',
+        '2001:db8:2::31',
+      ]) {
+        let response = await server.register(loopbackClient, {
+          forwardedFor: address,
+        });
+        assert.strictEqual(response.status, 201, address);
+      }
+      let refused = await server.register(loopbackClient, {
+        forwardedFor: '2001:db8:3::31',
       });
       assert.strictEqual(refused.status, 429);
     });

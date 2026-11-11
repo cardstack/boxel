@@ -18,6 +18,7 @@ import {
 } from '../lib/oauth-provider/redirect-uris.ts';
 import {
   DEFAULT_NEW_CLIENT_LIMIT,
+  NewClientAlert,
   parseNewClientLimit,
   takeNewClient,
   type NewClientOutcome,
@@ -207,20 +208,35 @@ module(basename(import.meta.filename), function () {
   });
 
   module('the new-client limit', function () {
-    test('reads two limits, per address and overall', function (assert) {
-      assert.deepEqual(parseNewClientLimit('20/3600,500/3600'), {
-        perAddress: { requests: 20, windowSeconds: 3600 },
-        overall: { requests: 500, windowSeconds: 3600 },
+    test('reads named parts, each defaulting when left out', function (assert) {
+      assert.deepEqual(
+        parseNewClientLimit(
+          'address=20/3600,network=100/3600,all=2000/3600,alert=500',
+        ),
+        DEFAULT_NEW_CLIENT_LIMIT,
+      );
+      assert.deepEqual(parseNewClientLimit(' all = 50/60 , alert = 10 '), {
+        ...DEFAULT_NEW_CLIENT_LIMIT,
+        overall: { requests: 50, windowSeconds: 60 },
+        alertAfter: 10,
       });
-      assert.deepEqual(parseNewClientLimit(' 2/60 , 5/60 '), {
-        perAddress: { requests: 2, windowSeconds: 60 },
-        overall: { requests: 5, windowSeconds: 60 },
+      assert.deepEqual(parseNewClientLimit('network=5/60'), {
+        ...DEFAULT_NEW_CLIENT_LIMIT,
+        perNetwork: { requests: 5, windowSeconds: 60 },
       });
       for (let spec of [
-        '20/3600',
-        '20/3600,500/3600,1/1',
-        '20,500',
-        '0/60,5/60',
+        '20/3600,500/3600',
+        'address=20/3600,',
+        'address=20/3600,address=30/3600',
+        'everyone=20/3600',
+        'address=20',
+        'address=0/60',
+        'alert=0',
+        'alert=1.5',
+        'alert=x',
+        'all=100/3600',
+        'all=500/3600,alert=500',
+        'address=20/3600=1',
       ]) {
         assert.strictEqual(parseNewClientLimit(spec), undefined, spec);
       }
@@ -229,27 +245,38 @@ module(basename(import.meta.filename), function () {
     test('defaults when unset, and stops the server when malformed', function (assert) {
       assert.deepEqual(readNewClientLimit({}), DEFAULT_NEW_CLIENT_LIMIT);
       assert.deepEqual(
-        readNewClientLimit({ BOXEL_OAUTH_CLIENT_RATE_LIMIT: '3/60,9/60' }),
+        readNewClientLimit({
+          BOXEL_OAUTH_CLIENT_RATE_LIMIT:
+            'address=3/60,network=6/60,all=9/60,alert=4',
+        }),
         {
           perAddress: { requests: 3, windowSeconds: 60 },
+          perNetwork: { requests: 6, windowSeconds: 60 },
           overall: { requests: 9, windowSeconds: 60 },
+          alertAfter: 4,
         },
       );
       assert.throws(
-        () => readNewClientLimit({ BOXEL_OAUTH_CLIENT_RATE_LIMIT: '20/3600' }),
+        () =>
+          readNewClientLimit({
+            BOXEL_OAUTH_CLIENT_RATE_LIMIT: '20/3600,500/3600',
+          }),
         (error: unknown) =>
           error instanceof OAuthProviderConfigError &&
-          /BOXEL_OAUTH_CLIENT_RATE_LIMIT must be two limits/.test(
+          /BOXEL_OAUTH_CLIENT_RATE_LIMIT must be named parts/.test(
             error.message,
           ),
       );
     });
 
     module('counting', function (hooks) {
-      // Two per address, three in all, each refilling over a minute.
+      // Two per address, three per network, four in all, each refilling over
+      // a minute. Busy after two.
       const LIMIT = {
         perAddress: { requests: 2, windowSeconds: 60 },
-        overall: { requests: 3, windowSeconds: 60 },
+        perNetwork: { requests: 3, windowSeconds: 60 },
+        overall: { requests: 4, windowSeconds: 60 },
+        alertAfter: 2,
       };
       let nowMs: number;
       let store: DBRateLimitStore;
@@ -263,90 +290,156 @@ module(basename(import.meta.filename), function () {
 
       test('admits an address up to its limit, then says when to retry', async function (assert) {
         for (let i = 0; i < 2; i++) {
-          assert.deepEqual(await takeNewClient(store, '192.0.2.7', LIMIT), {
-            admitted: true,
-          });
+          assert.strictEqual(
+            outcomeOf(await takeNewClient(store, '192.0.2.7', LIMIT)),
+            'admitted',
+          );
         }
         let refused = await takeNewClient(store, '192.0.2.7', LIMIT);
         assert.strictEqual(outcomeOf(refused), 'limited');
-        let retryAfter = retryAfterOf(refused);
         assert.strictEqual(
-          retryAfter,
+          retryAfterOf(refused),
           30,
           'retry once one has refilled, every thirty seconds',
         );
         nowMs += 30_000;
-        assert.deepEqual(
-          await takeNewClient(store, '192.0.2.7', LIMIT),
-          { admitted: true },
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '192.0.2.7', LIMIT)),
+          'admitted',
           'one refills every thirty seconds',
         );
       });
 
-      test('the overall limit refuses every address', async function (assert) {
+      test('the addresses of one network share its limit', async function (assert) {
         for (let address of ['192.0.2.1', '192.0.2.2', '192.0.2.3']) {
-          assert.deepEqual(await takeNewClient(store, address, LIMIT), {
-            admitted: true,
-          });
+          assert.strictEqual(
+            outcomeOf(await takeNewClient(store, address, LIMIT)),
+            'admitted',
+            address,
+          );
         }
         assert.strictEqual(
           outcomeOf(await takeNewClient(store, '192.0.2.4', LIMIT)),
           'limited',
+          'a fourth address in the /24',
         );
-      });
-
-      test("a caller over its own limit doesn't spend the overall one", async function (assert) {
-        for (let i = 0; i < 4; i++) {
-          await takeNewClient(store, '192.0.2.7', LIMIT);
-        }
-        assert.deepEqual(
-          await takeNewClient(store, '192.0.2.8', LIMIT),
-          { admitted: true },
-          'only the first two counted overall',
-        );
-      });
-
-      test('a caller the overall limit refuses keeps its own allowance', async function (assert) {
-        // The caller's own bucket refills over an hour, the overall one over
-        // a minute, so only a refund leaves the caller its two.
-        const SLOW_OWN = {
-          perAddress: { requests: 2, windowSeconds: 3600 },
-          overall: { requests: 3, windowSeconds: 60 },
-        };
-        for (let address of ['192.0.2.1', '192.0.2.2', '192.0.2.3']) {
-          await takeNewClient(store, address, SLOW_OWN);
-        }
-        for (let i = 0; i < 3; i++) {
-          assert.strictEqual(
-            outcomeOf(await takeNewClient(store, '192.0.2.9', SLOW_OWN)),
-            'limited',
-            `refused overall, attempt ${i + 1}`,
-          );
-        }
-        nowMs += 60_000;
-        for (let i = 0; i < 2; i++) {
-          assert.deepEqual(
-            await takeNewClient(store, '192.0.2.9', SLOW_OWN),
-            { admitted: true },
-            `its own two are still there once the overall limit refills (${i + 1})`,
-          );
-        }
-      });
-
-      test('counts an IPv6 caller by its /64', async function (assert) {
-        await takeNewClient(store, '2001:db8:1:2::1', LIMIT);
-        await takeNewClient(store, '2001:db8:1:2:ffff::9', LIMIT);
-        let sameBlock = await takeNewClient(store, '2001:db8:1:2::abcd', LIMIT);
         assert.strictEqual(
-          outcomeOf(sameBlock),
+          outcomeOf(await takeNewClient(store, '198.51.100.1', LIMIT)),
+          'admitted',
+          'another /24',
+        );
+      });
+
+      test('the /64s of one IPv6 /48 share its limit, and each /64 is one address', async function (assert) {
+        await takeNewClient(store, '2001:db8:1:2::1', LIMIT);
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '2001:db8:1:2:ffff::9', LIMIT)),
+          'admitted',
+        );
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '2001:db8:1:2::abcd', LIMIT)),
           'limited',
           'a third address in the same /64 is the same caller',
         );
-        assert.deepEqual(
-          await takeNewClient(store, '2001:db8:1:3::1', LIMIT),
-          { admitted: true },
-          'the next /64 is another caller',
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '2001:db8:1:3::1', LIMIT)),
+          'admitted',
+          'another /64 is another address',
         );
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '2001:db8:1:4::1', LIMIT)),
+          'limited',
+          'but in the same /48, which has had three',
+        );
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '2001:db8:2::1', LIMIT)),
+          'admitted',
+          'another /48',
+        );
+      });
+
+      test('the overall limit refuses every network', async function (assert) {
+        for (let address of [
+          '192.0.2.1',
+          '198.51.100.1',
+          '203.0.113.1',
+          '2001:db8:1::1',
+        ]) {
+          assert.strictEqual(
+            outcomeOf(await takeNewClient(store, address, LIMIT)),
+            'admitted',
+            address,
+          );
+        }
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '2001:db8:2::1', LIMIT)),
+          'limited',
+        );
+      });
+
+      test('a refusal further on leaves what was taken before it spent', async function (assert) {
+        // The address and network buckets refill over an hour, the overall
+        // one over a minute, so whatever a refused attempt took from the
+        // first two is still gone once the overall one has refilled.
+        const SLOW = {
+          ...LIMIT,
+          perAddress: { requests: 2, windowSeconds: 3600 },
+          perNetwork: { requests: 3, windowSeconds: 3600 },
+        };
+        for (let address of [
+          '198.51.100.1',
+          '203.0.113.1',
+          '2001:db8:1::1',
+          '2001:db8:2::1',
+        ]) {
+          await takeNewClient(store, address, SLOW);
+        }
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '192.0.2.9', SLOW)),
+          'limited',
+          'refused overall',
+        );
+        nowMs += 60_000;
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '192.0.2.9', SLOW)),
+          'admitted',
+          'one left of its own two',
+        );
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '192.0.2.9', SLOW)),
+          'limited',
+          'the refused attempt spent the other',
+        );
+      });
+
+      test("a caller over its own limit doesn't spend its network's or the overall one", async function (assert) {
+        for (let i = 0; i < 4; i++) {
+          await takeNewClient(store, '192.0.2.7', LIMIT);
+        }
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '192.0.2.8', LIMIT)),
+          'admitted',
+          'its network has had only two',
+        );
+        assert.strictEqual(
+          outcomeOf(await takeNewClient(store, '198.51.100.1', LIMIT)),
+          'admitted',
+          'the overall limit has had only three',
+        );
+      });
+
+      test('is busy once more than the alert mark is taken overall', async function (assert) {
+        let busy = [];
+        for (let address of [
+          '192.0.2.1',
+          '198.51.100.1',
+          '203.0.113.1',
+          '2001:db8:1::1',
+        ]) {
+          let outcome = await takeNewClient(store, address, LIMIT);
+          busy.push(outcome.admitted && outcome.busy);
+        }
+        assert.deepEqual(busy, [false, false, true, true]);
       });
 
       test('refuses an address it cannot read', async function (assert) {
@@ -368,6 +461,28 @@ module(basename(import.meta.filename), function () {
         ),
         { admitted: false, reason: 'unavailable' },
       );
+    });
+
+    test('warns while busy, at most once a minute, with no detail of who', function (assert) {
+      let nowMs = 0;
+      let warnings: string[] = [];
+      let alert = new NewClientAlert(DEFAULT_NEW_CLIENT_LIMIT, {
+        now: () => nowMs,
+        warn: (message) => warnings.push(message),
+      });
+      alert.note({ admitted: true, busy: false });
+      alert.note({ admitted: false, reason: 'limited', retryAfterSeconds: 9 });
+      assert.strictEqual(warnings.length, 0, 'not busy, or refused');
+
+      alert.note({ admitted: true, busy: true });
+      nowMs += 59_999;
+      alert.note({ admitted: true, busy: true });
+      assert.deepEqual(warnings, [
+        'more than 500 new OAuth clients within 3600 seconds; registration is refused for everyone at 2000',
+      ]);
+      nowMs += 1;
+      alert.note({ admitted: true, busy: true });
+      assert.strictEqual(warnings.length, 2, 'again a minute later');
     });
   });
 });

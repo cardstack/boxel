@@ -10,6 +10,10 @@ import { parseListedOrigin } from '@cardstack/secure-origin/security/app-origins
 // as `URL.hostname` writes them (RFC 8252 §7.3). The library's own list.
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
+// Longer than any callback a client needs, and short enough that a stored
+// client stays small.
+const MAX_REDIRECT_URI_LENGTH = 2048;
+
 // The hosts where Boxel serves its own pages or users' files. An openly
 // registered client may not redirect to one, nor be identified by a URL on
 // one: anyone can publish a page there, and consent would name the client by
@@ -100,7 +104,8 @@ export function isLoopbackRedirect(url: URL): boolean {
 }
 
 // Why a redirect URI is refused, or undefined when it is allowed. Allowed:
-// HTTPS on a host that isn't Boxel's, or plain HTTP on a loopback host. A
+// HTTPS on a host that isn't Boxel's, or plain HTTP on a loopback host, at
+// most `MAX_REDIRECT_URI_LENGTH` characters. A
 // private-use scheme such as `cursor://` is refused, since any app on the
 // device can claim one (RFC 8252 §8.1). So is user information, which only
 // serves to make a URI read as another host.
@@ -110,6 +115,9 @@ export function redirectURIRefusal(
 ): string | undefined {
   if (typeof uri !== 'string') {
     return 'each redirect URI must be a string';
+  }
+  if (uri.length > MAX_REDIRECT_URI_LENGTH) {
+    return `a redirect URI must be at most ${MAX_REDIRECT_URI_LENGTH} characters`;
   }
   let url = URL.parse(uri);
   if (!url) {

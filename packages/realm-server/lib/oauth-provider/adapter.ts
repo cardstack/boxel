@@ -29,8 +29,11 @@ export function oauthProviderAdapter(
 
 // Clients registered by dynamic client registration, in
 // `oauth_provider_clients`. The library finds a client by its ID and stores
-// one once, on registration. It never consumes a client, and finds none by
-// grant, user code or interaction.
+// one once, on registration: never a client identified by a metadata
+// document, and never again under the same ID, since registration management
+// is off. A second store under an ID fails rather than replacing the client.
+// It never consumes a client, and finds none by grant, user code or
+// interaction.
 class ClientAdapter implements Adapter {
   #dbAdapter: DBAdapter;
 
@@ -41,8 +44,7 @@ class ClientAdapter implements Adapter {
   async upsert(id: string, payload: AdapterPayload): Promise<void> {
     await this.#dbAdapter.execute(
       `INSERT INTO oauth_provider_clients (client_id, metadata)
-         VALUES ($1, $2::jsonb)
-         ON CONFLICT (client_id) DO UPDATE SET metadata = EXCLUDED.metadata`,
+         VALUES ($1, $2::jsonb)`,
       { bind: [id, JSON.stringify(payload)] },
     );
   }

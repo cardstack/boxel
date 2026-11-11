@@ -49,10 +49,17 @@ export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 // assumes the implicit grant is supported (RFC 8414 §2). It is set, not
 // copied: the library lists `refresh_token` as soon as a client may register
 // for it, before the token endpoint serves a refresh.
+//
+// `token_endpoint_auth_methods_supported` is listed, before the token
+// endpoint is, because a client that finds it missing assumes
+// `client_secret_basic` (RFC 8414 §2) and registers asking for a secret,
+// which registration refuses. The library lists `none`, from
+// `clientAuthMethods`.
 const DISCOVERY_FIELDS = [
   'issuer',
   'response_types_supported',
   'code_challenge_methods_supported',
+  'token_endpoint_auth_methods_supported',
 ] as const;
 const GRANT_TYPES_SERVED = ['authorization_code'];
 

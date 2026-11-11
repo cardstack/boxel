@@ -9,23 +9,38 @@ import {
   CLIENT_IP_HEADER,
   type RateLimitStore,
 } from '@cardstack/runtime-common';
-import { takeNewClient, type NewClientLimit } from './new-client-limit.ts';
+import {
+  NewClientAlert,
+  takeNewClient,
+  type NewClientLimit,
+} from './new-client-limit.ts';
 import {
   applicationTypeFor,
   redirectURIsRefusal,
   type BoxelHosts,
 } from './redirect-uris.ts';
 
-// The library's own limit on a request body.
-const MAX_BODY_BYTES = 56 * 1024;
+// A registration is a few hundred bytes. Every stored client counts against
+// the overall new-client limit, which is sized from what storing them costs,
+// so each one is kept small.
+const MAX_BODY_BYTES = 8 * 1024;
 
 // A client registers the redirect URIs it uses, which is a handful at most.
 const MAX_REDIRECT_URIS = 10;
 
+// A client's name is kept as text a page can show as it is: short, on one
+// line, and without control or formatting characters, which can make one name
+// display as another (a right-to-left override, say) or hide characters in it.
+const MAX_NAME_LENGTH = 256;
+const UNSHOWABLE_CHARACTER = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
+const MAX_SCOPE_LENGTH = 1024;
+
 // The fields a registration may set. Anything else is dropped: `logo_uri` and
-// `client_uri`, since consent never shows a client's logo or website, and
-// every field that would make the library fetch a URL (`jwks_uri`,
-// `sector_identifier_uri`, `request_uris`) or sign or encrypt anything.
+// `client_uri`, since consent never shows a client's logo or website, every
+// field that would make the library fetch a URL (`jwks_uri`,
+// `sector_identifier_uri`, `request_uris`) or sign or encrypt anything, and
+// fields the library doesn't store, such as `software_id`.
 // `application_type` and `token_endpoint_auth_method` are Boxel's to set.
 const ALLOWED_FIELDS = [
   'redirect_uris',
@@ -33,8 +48,6 @@ const ALLOWED_FIELDS = [
   'grant_types',
   'response_types',
   'scope',
-  'software_id',
-  'software_version',
 ] as const;
 
 export type RegistrationCheck =
@@ -91,6 +104,24 @@ export function checkRegistration(
   if (body.scope !== undefined && typeof body.scope !== 'string') {
     return refuse('invalid_client_metadata', 'scope must be a string');
   }
+  if (typeof body.scope === 'string' && body.scope.length > MAX_SCOPE_LENGTH) {
+    return refuse(
+      'invalid_client_metadata',
+      `scope must be at most ${MAX_SCOPE_LENGTH} characters`,
+    );
+  }
+  let name = body.client_name;
+  if (
+    name !== undefined &&
+    (typeof name !== 'string' ||
+      name.length > MAX_NAME_LENGTH ||
+      UNSHOWABLE_CHARACTER.test(name))
+  ) {
+    return refuse(
+      'invalid_client_metadata',
+      `client_name must be text of at most ${MAX_NAME_LENGTH} characters, on one line, with no control or formatting characters`,
+    );
+  }
 
   let registration: Record<string, unknown> = {};
   for (let field of ALLOWED_FIELDS) {
@@ -130,6 +161,7 @@ export function registrationHandler({
   rateLimitStore: RateLimitStore;
   newClientLimit: NewClientLimit;
 }) {
+  let alert = new NewClientAlert(newClientLimit);
   return async function handleRegistration(ctxt: Koa.Context, next: Koa.Next) {
     let address = ctxt.req.headers[CLIENT_IP_HEADER];
     let admitted = await takeNewClient(
@@ -137,6 +169,7 @@ export function registrationHandler({
       typeof address === 'string' ? address : undefined,
       newClientLimit,
     );
+    alert.note(admitted);
     if (!admitted.admitted) {
       switch (admitted.reason) {
         case 'limited':
