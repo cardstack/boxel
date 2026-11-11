@@ -34,7 +34,9 @@ catalog code ref, as `realmPolicyRef` names `RealmPolicy`.
 
 The server MUST read the definition from the index, as data. It MUST NOT run
 card code to learn what an automation says. It MUST accept only instances of the
-catalog `Automation` type or of a type that descends from it.
+catalog `Automation` type or of a type that descends from it. It MUST decide
+that from the adoption chain the index records for the instance, as
+`realmPolicyRef`'s key is matched in a policy card's chain.
 
 ### 1.2. Only administrators edit what an automation does
 
