@@ -243,12 +243,12 @@ const keyRouteQuery = new RegExp(
 );
 
 // The OAuth provider's routes whose path names a bearer secret: a flow's
-// interaction ID (the interaction route and those beneath it, and the
-// library's resume route) and an error reference. Telemetry names each such
+// interaction ID (the interaction route and those beneath it, the library's
+// resume route, and consent's details and decision) and an error reference. Telemetry names each such
 // route by a fixed label in place of the secret, wherever its path is
 // written.
 const oauthProviderSecretSegment = new RegExp(
-  `(${escapeRegExp(OAUTH_PROVIDER_PATH)}/(interaction|auth|error)/)[^/\\s?#"'<>]+`,
+  `(${escapeRegExp(OAUTH_PROVIDER_PATH)}/(interaction|auth|error|consent)/)[^/\\s?#"'<>]+`,
   'gi',
 );
 

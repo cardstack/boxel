@@ -27,6 +27,11 @@ import {
   renderLibraryError,
 } from './authorization.ts';
 import { OAuthProviderConfigError } from './config.ts';
+import {
+  consentDecisionHandler,
+  consentDetailsHandler,
+  type AccountContactLookup,
+} from './consent.ts';
 import type { OAuthProviderConfig } from './config.ts';
 import {
   DEFAULT_NEW_CLIENT_LIMIT,
@@ -82,8 +87,8 @@ const SESSION_TTL_SECONDS = 10 * 60;
 
 // The running provider: the library, and Boxel's handling of the requests that
 // run before or beside the library's: registration, the start of a flow, the
-// interaction route that hands a flow to the secure origin, and the error
-// page's details and "Return".
+// interaction route that hands a flow to the secure origin, the error page's
+// details and "Return", and a flow's consent.
 export interface OAuthProviderService {
   provider: Provider;
   handleRegistration: Koa.Middleware;
@@ -91,6 +96,17 @@ export interface OAuthProviderService {
   handleInteraction: Koa.Middleware;
   handleErrorDetails: Koa.Middleware;
   handleErrorReturn: Koa.Middleware;
+  // Consent's details and decision. They verify the secure window's session
+  // and look up its account, which the realm server's routes supply.
+  consentHandlers(deps: ConsentRouteDeps): {
+    handleConsentDetails: Koa.Middleware;
+    handleConsentDecision: Koa.Middleware;
+  };
+}
+
+export interface ConsentRouteDeps {
+  realmSecretSeed: string;
+  accountContact: AccountContactLookup;
 }
 
 // Starts the provider for a realm server. Its issuer is the server's URL
@@ -171,6 +187,21 @@ export function startOAuthProvider({
       dbAdapter,
       secureOriginURL,
     }),
+    consentHandlers: ({ realmSecretSeed, accountContact }) => {
+      let deps = {
+        provider,
+        registry,
+        preRegistered,
+        dbAdapter,
+        secureOriginURL,
+        realmSecretSeed,
+        accountContact,
+      };
+      return {
+        handleConsentDetails: consentDetailsHandler(deps),
+        handleConsentDecision: consentDecisionHandler(deps),
+      };
+    },
     handleRegistration: registrationHandler({
       hosts: boxelHosts({
         serverURL,

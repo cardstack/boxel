@@ -7,9 +7,11 @@ import {
   OAUTH_ERROR_PATH,
   OAUTH_INTERACTION_PATH,
 } from './authorization.ts';
+import { OAUTH_CONSENT_PATH } from './consent.ts';
 import {
   OAUTH_DISCOVERY_PATH,
   OAUTH_REGISTRATION_PATH,
+  type ConsentRouteDeps,
   type OAuthProviderService,
 } from './provider.ts';
 
@@ -28,7 +30,7 @@ import {
 //
 // A registration, and the request that starts a flow, go through Boxel's own
 // handling first, which hands them on to the library only once Boxel allows
-// them. The interaction and error routes are Boxel's alone.
+// them. The interaction, error and consent routes are Boxel's alone.
 export function registerOAuthProviderRoutes(
   router: Router,
   {
@@ -38,8 +40,12 @@ export function registerOAuthProviderRoutes(
     handleInteraction,
     handleErrorDetails,
     handleErrorReturn,
+    consentHandlers,
   }: OAuthProviderService,
+  consentDeps: ConsentRouteDeps,
 ) {
+  let { handleConsentDetails, handleConsentDecision } =
+    consentHandlers(consentDeps);
   let issuerURL = new URL(provider.issuer);
   let issuerHost = issuerURL.host;
   let callback = provider.callback();
@@ -83,6 +89,14 @@ export function registerOAuthProviderRoutes(
   router.get(
     `${OAUTH_ERROR_PATH}/:ref/return`,
     onIssuerHost(boxelOnly(handleErrorReturn)),
+  );
+  router.get(
+    `${OAUTH_CONSENT_PATH}/:uid`,
+    onIssuerHost(boxelOnly(handleConsentDetails)),
+  );
+  router.post(
+    `${OAUTH_CONSENT_PATH}/:uid`,
+    onIssuerHost(boxelOnly(handleConsentDecision)),
   );
 }
 

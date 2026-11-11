@@ -1,9 +1,11 @@
 // The provider's short-lived objects, in `oauth_provider_objects`: the
-// library's interactions, and the error references Boxel's error page reads
-// (ADR 021 §1.8).
+// library's interactions, the error references Boxel's error page reads
+// (ADR 021 §1.8), and each flow's consent decision and the ticket that
+// finishes it (§1.7).
 //
 // Each object's value is a bearer secret: an interaction's ID is in the
-// browser's URL, and an error reference is too. A row is stored and found only
+// browser's URL, and an error reference and a ticket are too. A decision is
+// stored under its flow's interaction ID. A row is stored and found only
 // by the SHA-256 of that value, and never holds the value itself (ADR 021
 // §1.2). The library copies an interaction's ID into its payload twice, as
 // `jti` and in `returnTo`, the URL the flow resumes at. The interaction
@@ -57,6 +59,36 @@ async function storeObject(
       bind: [kind, sha256Hex(value), stored, expiresInSeconds],
     },
   );
+}
+
+// Stores an object only when none is stored under its value, and answers
+// whether it was. Two requests creating the same object can't both succeed.
+async function createObject(
+  dbAdapter: DBAdapter,
+  kind: string,
+  value: string,
+  payload: Record<string, unknown>,
+  expiresInSeconds: number,
+): Promise<boolean> {
+  let stored = JSON.stringify(payload);
+  if (stored.includes(jsonEscaped(value))) {
+    throw new OAuthProviderObjectError(
+      `the OAuth provider's ${kind} holds its own value, so it can't be stored`,
+    );
+  }
+  await dbAdapter.execute(
+    `DELETE FROM oauth_provider_objects WHERE expires_at <= now()`,
+  );
+  let inserted = await dbAdapter.execute(
+    `INSERT INTO oauth_provider_objects (kind, id_hash, payload, expires_at)
+       VALUES ($1, decode($2, 'hex'), $3::jsonb, now() + make_interval(secs => $4))
+       ON CONFLICT (kind, id_hash) DO NOTHING
+       RETURNING kind`,
+    {
+      bind: [kind, sha256Hex(value), stored, expiresInSeconds],
+    },
+  );
+  return inserted.length > 0;
 }
 
 async function findObject(
@@ -244,5 +276,88 @@ export async function takeAuthorizationError(
 ): Promise<AuthorizationErrorRecord | undefined> {
   return (await takeObject(dbAdapter, ERROR_REFERENCE_KIND, reference)) as
     | AuthorizationErrorRecord
+    | undefined;
+}
+
+const CONSENT_DECISION_KIND = 'ConsentDecision';
+const CONSENT_TICKET_KIND = 'ConsentTicket';
+
+// How long a consent ticket lasts, at most (spec A2): the time it takes the
+// authorize page to send the browser on to finish the flow.
+export const CONSENT_TICKET_TTL_SECONDS = 60;
+
+// The user's answer on a flow's consent (ADR 021 §1.7), stored under the
+// flow's interaction ID until the interaction expires. It always covers
+// exactly the scopes the flow asked for at each resource.
+export interface ConsentDecisionRecord {
+  // The secure session's user: a Matrix user ID.
+  user: string;
+  allowed: boolean;
+  // Whether the grant renews (ADR 021 §1.9). Never true when the client
+  // can't use the refresh grant.
+  renew: boolean;
+  clientId: string;
+  // Resource identifier to the scopes asked for there.
+  scopes: Record<string, string[]>;
+}
+
+// What a consent ticket names: the SHA-256 of the interaction ID it finishes,
+// never the ID itself.
+export interface ConsentTicketRecord {
+  interaction: string;
+}
+
+// Records a flow's decision. Answers false when the flow already has one: a
+// flow is decided once.
+export async function createConsentDecision(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+  record: ConsentDecisionRecord,
+  expiresInSeconds: number,
+): Promise<boolean> {
+  return await createObject(
+    dbAdapter,
+    CONSENT_DECISION_KIND,
+    interactionId,
+    { ...record },
+    expiresInSeconds,
+  );
+}
+
+export async function findConsentDecision(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+): Promise<ConsentDecisionRecord | undefined> {
+  return (await findObject(dbAdapter, CONSENT_DECISION_KIND, interactionId)) as
+    | ConsentDecisionRecord
+    | undefined;
+}
+
+// Stores a ticket for a decided flow and answers it: a long random value that
+// finishes the flow once, in the browser that started it.
+export async function storeConsentTicket(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+  expiresInSeconds: number,
+): Promise<string> {
+  let ticket = randomBytes(32).toString('base64url');
+  let record: ConsentTicketRecord = { interaction: sha256Hex(interactionId) };
+  await storeObject(
+    dbAdapter,
+    CONSENT_TICKET_KIND,
+    ticket,
+    { ...record },
+    expiresInSeconds,
+  );
+  return ticket;
+}
+
+// Finds a ticket and deletes it, so it is spent on its first presentation.
+export async function takeConsentTicket(
+  dbAdapter: DBAdapter,
+  ticket: string,
+): Promise<ConsentTicketRecord | undefined> {
+  return (await takeObject(dbAdapter, CONSENT_TICKET_KIND, ticket)) as
+    | ConsentTicketRecord
     | undefined;
 }
