@@ -16,7 +16,7 @@
 // "Tried to find the browser at the configured path". The dev prerender task
 // (`mise-tasks/services/prerender`) fetches the build itself; anywhere else,
 // run `pnpm exec puppeteer browsers install` in `packages/realm-server`.
-const CHROME_FOR_TESTING_VERSION = '157.0.8103.38';
+const CHROME_FOR_TESTING_VERSION = '157.0.8103.50';
 
 /** @type {import('puppeteer').Configuration} */
 module.exports = {
